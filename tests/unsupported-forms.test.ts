@@ -173,6 +173,18 @@ const POSITIVE: readonly Case[] = [
       ['author-date', 1, 'Cho (2015a)'],
     ],
   ],
+  // ACM's author-year narrative puts the year in brackets; a citation may carry two prefixes.
+  [
+    'bracketed narrative years and stacked prefixes',
+    'Smith et al. [2019] showed it. As shown by Park and Lee [2018], it held. Kim [2017] argued it. It rose (see e.g. Diaz 2016). It fell (see, e.g., Cho & Ahn, 2015).',
+    [
+      ['author-date', 1, 'Smith et al. [2019]'],
+      ['author-date', 1, 'Park and Lee [2018]'],
+      ['author-date', 1, 'Kim [2017]'],
+      ['author-date', 1, '(see e.g. Diaz 2016)'],
+      ['author-date', 1, '(see, e.g., Cho & Ahn, 2015)'],
+    ],
+  ],
 ];
 
 const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
@@ -203,6 +215,7 @@ const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
   ['a note label over prose', 'Notes: values are means of three runs.'],
   ['links and emphasis that attribute nothing', 'We used [Python 3](https://python.org), see the [methods](#methods) section, and a *large* effect (n = 12) held.'],
   ['math with a TeX environment', 'The system $$\\begin{aligned}a &= b\\end{aligned}$$ holds.'],
+  ['a bracketed year that is not a citation', 'The Treaty of Versailles [1919] ended the war, see the [2019](https://example.org) report, and ![2019](fig.png) shows it. Results for [2019]: good. The data [1999, 2019] cover two decades.'],
 ];
 
 function crlf(s: string): string {

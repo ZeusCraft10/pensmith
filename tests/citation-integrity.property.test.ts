@@ -198,6 +198,7 @@ const unsupported: fc.Arbitrary<Segment> = fc.oneof(
     'shade helps\\footnote{Nguyen, T. (2019). Street trees. Urban Climate, 3, 1-9.}', 'shade\\endnote{Nguyen 2019}', 'heat\\marginpar{Okafor 2021}',
     'asthma fell (Source: Okafor 2021)', 'Nguyen (2019) argued it', 'According to Nguyen (2019), it rose', "Nguyen's (2019) review agrees",
     'Nguyen and colleagues (2019) found it', 'Nguyen (2019, p. 5) wrote it', 'Nguyen (2019a) agrees',
+    'Nguyen et al. [2019] showed it', 'as shown by Nguyen and Patel [2019]', 'it rose (see e.g. Nguyen 2019)', 'it rose (see, e.g., Nguyen & Patel, 2019)',
   ).map(bad),
 );
 
@@ -210,7 +211,7 @@ const noise: fc.Arbitrary<Segment> = fc.oneof(
   // Intervals, shapes, indices and numbered labels are not citation markers.
   fc.constantFrom('scores normalized to [0, 1]', 'a tensor of shape [32, 224, 224, 3]', 'values lie in [1, 5]', 'array indices [1] and [2]', 'as in (Figure 3) and (Apollo 11)').map(ok),
   // A lone name before a year the prose does not cite, emphasis and links that are not attributions.
-  fc.constantFrom('Washington, D.C. (2019) hosted it', 'the Treaty of Versailles (1919) ended the war', 'a *large* effect', 'see the [methods](#methods) section', 'the [data](https://example.org/data) are open').map(ok),
+  fc.constantFrom('Washington, D.C. (2019) hosted it', 'the Treaty of Versailles (1919) ended the war', 'a *large* effect', 'see the [methods](#methods) section', 'the [data](https://example.org/data) are open', 'the Treaty of Versailles [1919] ended the war').map(ok),
 );
 
 const segment = fc.oneof({ weight: 4, arbitrary: citation }, { weight: 2, arbitrary: unsupported }, { weight: 3, arbitrary: noise });

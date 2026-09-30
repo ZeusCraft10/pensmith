@@ -775,7 +775,7 @@ const PREFIX = String.raw`(?:see(?:\s+also)?|but\s+see|e\.g\.,?|i\.e\.,?|cf\.|co
 
 /** A parenthetical / bracketed segment that is an author-date citation (APA, Harvard, Chicago author-date, MLA with et al. or two names). */
 const SEGMENT_RE = new RegExp(
-  String.raw`^\s*(?:${PREFIX}\s+)?(?<names>${AUTHOR}(?:\s*,\s*${AUTHOR})*(?:\s*,?\s*(?:&|and)\s+${AUTHOR})?(?:\s*,?\s+${ET_AL})?)\s*(?:'s|’s)?(?:\s*,\s*|\s+)(?:${YEAR}(?:\s*[,:].*)?|(?<page>\d{1,4}(?:[-–]\d{1,4})?))\s*$`,
+  String.raw`^\s*(?:${PREFIX},?\s+){0,2}(?<names>${AUTHOR}(?:\s*,\s*${AUTHOR})*(?:\s*,?\s*(?:&|and)\s+${AUTHOR})?(?:\s*,?\s+${ET_AL})?)\s*(?:'s|’s)?(?:\s*,\s*|\s+)(?:${YEAR}(?:\s*[,:].*)?|(?<page>\d{1,4}(?:[-–]\d{1,4})?))\s*$`,
   'u',
 );
 
@@ -815,7 +815,7 @@ const NUMBERED_LABELS: ReadonlySet<string> = new Set([
 const TITLE_PART = String.raw`(?:\*[^*\n]{2,120}\*|_[^_\n]{2,120}_|"[^"\n]{2,120}"|“[^”\n]{2,120}”)`;
 /** MLA / Chicago with a title: "(Nguyen, *Street Trees*, 2019)", "(Nguyen, *Street Trees* 45)", "(Nguyen, \"Shade\" 12)". */
 const TITLE_SEGMENT_RE = new RegExp(
-  String.raw`^\s*(?:${PREFIX}\s+)?${AUTHOR}(?:\s*,\s*${AUTHOR})*(?:\s*,?\s*(?:&|and)\s+${AUTHOR})?(?:\s*,?\s+${ET_AL})?\s*,\s*${TITLE_PART}\s*(?:,\s*(?:${YEAR}|p{1,2}\.\s*\d+[^,]*)|\s+\d{1,4}(?:[-–]\d{1,4})?)?\s*$`,
+  String.raw`^\s*(?:${PREFIX},?\s+){0,2}${AUTHOR}(?:\s*,\s*${AUTHOR})*(?:\s*,?\s*(?:&|and)\s+${AUTHOR})?(?:\s*,?\s+${ET_AL})?\s*,\s*${TITLE_PART}\s*(?:,\s*(?:${YEAR}|p{1,2}\.\s*\d+[^,]*)|\s+\d{1,4}(?:[-–]\d{1,4})?)?\s*$`,
   'u',
 );
 
@@ -857,12 +857,14 @@ function authorDate(md: string): RawFinding[] {
       out.push({ form: 'author-date', start: m.index, end: m.index + m[0].length });
     }
   }
-  // Narrative with two names or et al.: "Nguyen and Patel (2019)", "Smith et al. (2019, p. 4)".
+  // Narrative with two names or et al.: "Nguyen and Patel (2019)", "Smith et al. (2019, p. 4)", "Smith et al. [2019]".
   const narrative = new RegExp(
     String.raw`(?<![\p{L}\p{M}])(?:${NARRATIVE_AUTHOR}(?:\s*,\s*${NARRATIVE_AUTHOR})*\s*,?\s*(?:and|&)\s+${NARRATIVE_AUTHOR}|${NARRATIVE_AUTHOR}\s+${ET_AL})\s*(?:'s|’s)?\s*$`,
     'u',
   );
-  const dated = new RegExp(String.raw`\(\s*${YEAR}(?:\s*[,:][^()\n]*)?\)`, 'gu');
+  // The year in parentheses, or in brackets (ACM's author-year narrative "Smith et al. [2019]") — a
+  // bracket that is not a link, an image, a reference or a definition.
+  const dated = new RegExp(String.raw`\(\s*${YEAR}(?:\s*[,:][^()\n]*)?\)|(?<![!\]\\])\[\s*${YEAR}(?:\s*[,:][^[\]\n]*)?\](?![([:])`, 'gu');
   for (const m of md.matchAll(dated)) {
     const windowStart = Math.max(0, m.index - 120);
     const window = md.slice(windowStart, m.index);
@@ -904,8 +906,8 @@ function singleAuthorCitation(head: string, dated: string, after: string): { ind
   if (NOT_AUTHORS.has(last.toLowerCase()) || NUMBERED_LABELS.has(last.toLowerCase())) return null;
   // A possessive may be read into the name itself (a name word may hold an apostrophe: O'Neil).
   const tail = (m.groups['tail'] ?? '') || (/['’]s$/u.test(name) ? "'s" : '');
-  const locator = new RegExp(String.raw`^\(\s*${YEAR}\s*(?:,\s*(?:pp?\.|para\.|ch(?:ap)?\.|sec\.|§)\s*\d|:\s*\d)`, 'u').test(dated);
-  const letter = /^\(\s*(?:1[5-9]|20)\d{2}[a-z]\b/u.test(dated);
+  const locator = new RegExp(String.raw`^[([]\s*${YEAR}\s*(?:,\s*(?:pp?\.|para\.|ch(?:ap)?\.|sec\.|§)\s*\d|:\s*\d)`, 'u').test(dated);
+  const letter = /^[([]\s*(?:1[5-9]|20)\d{2}[a-z]\b/u.test(dated);
   const verb = new RegExp(String.raw`^${BETWEEN}\s*${REPORTING_VERB}\b`, 'iu').test(after);
   const cue = CITING_CUE_RE.test(head.slice(0, m.index));
   return tail !== '' || locator || letter || verb || cue ? { index: m.index } : null;
