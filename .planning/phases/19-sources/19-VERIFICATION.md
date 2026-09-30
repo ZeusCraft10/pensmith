@@ -295,4 +295,4 @@ Gate after the round (Linux, as root):
 | `npm run validate:manifests` | exit 0 | exit 0 |
 | `git status --porcelain` after the run | clean | clean |
 
-The one failure is the root-only `tests/atomic-write.test.ts` case (CLAUDE.md). The Node 24 run is the final `node scripts/run-tests.mjs` over Phase 19's new tests too.
+The one failure is the root-only `tests/atomic-write.test.ts` case (CLAUDE.md). The Node 24 run is the final `node scripts/run-tests.mjs` over Phase 19's new tests too. `npm run test:coverage` (Node 22) ran the same 2401 tests with the same single failure: 93.44 % lines / statements, 84.07 % branches, 90.09 % functions (gate 80 / 66).
