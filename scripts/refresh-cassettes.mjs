@@ -514,7 +514,8 @@ async function runChild(adapter, files = []) {
 //     expected section count and the run bound (5 + N bare runs).
 //
 // Recording runs six isolated children (each with a fresh, empty data dir):
-//   1. search   (live)    discoverSources for each scripted query, recorded;
+//   1. search   (live)    discoverCandidates (research-orchestrator.ts) for each
+//                         scripted query, recorded;
 //   2. stage    (no net)  write the search cassettes (≤ 51200 bytes each; a
 //                         response over the cap, a 429/5xx or an error body is
 //                         an expected miss, never truncated or hand-written);
@@ -523,7 +524,12 @@ async function runChild(adapter, files = []) {
 //   4. lookups  (live)    record each preselected source's retraction
 //                         cross-check and Pass-1 lookups, with its live verdict;
 //   5. assemble (no net)  keep ≤ 6 sources whose live Pass 1 is OK, write their
-//                         lookup cassettes, mock-script.json and MANIFEST.json;
+//                         lookup cassettes, mock-script.json and MANIFEST.json.
+//                         This filter is a LIMIT of the GRND-18 acceptance the
+//                         corpus replays: it shows that the chain reaches done
+//                         over sources that verify, not that every live search
+//                         hit verifies — a source whose live Pass 1 fails is
+//                         never in the corpus (the live lane covers that);
 //   6. verify   (offline) replay research and Pass 1 of every kept source.
 // Any failure restores the previous corpus. Keys another committed cassette
 // already answers are not duplicated (tests/cassette-provenance.test.ts keeps

@@ -23,9 +23,13 @@ isolation means re-writing section N never touches the other sections).
 must be planned first: on the outline's stub PLAN.md, `write N` stops with
 "section N is not planned yet — run `pensmith plan N` first". `write N` verifies
 the draft right away and reports the verify status (`--no-verify` leaves the
-section `written`). A draft that cites a source outside the section's
-`assigned_sources` twice is not kept (it goes to `DRAFT.rejected.md`, the section
-is marked failed with the reason, exit 4); adjust the plan or sources, then run
+section `written`). A draft that breaks the section's source rules twice is not
+kept (it goes to `DRAFT.rejected.md`, the section is marked failed with the
+reason, exit 4): one that cites a source outside the section's
+`assigned_sources`, or one that quotes a source directly although its full text
+is not available to check the quote (GRND-14: only a source marked `full_text`
+— your own hash-verified PDF, an open-access PDF, or an arXiv PDF — may be
+quoted; the others are paraphrased). Adjust the plan or sources, then run
 `pensmith write N` again.
 
 ## No 17th verb

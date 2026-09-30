@@ -83,7 +83,7 @@ import { migrateLegacyLayout } from './lib/state.js';
 import { migratePaperConfigFile, parseCostCapEnv } from './lib/config.js';
 import { enforceDryRunBoundary } from './lib/dry-run-paper.js';
 import { acquireSessionLock, releaseSessionLock } from './lib/session-lock.js';
-import { runGate, declineGate, canPrompt, yoloFlagDescription } from './lib/gates.js';
+import { runGate, declineGate, canPrompt, yoloFlagDescription, yoloNeverList } from './lib/gates.js';
 import { EXIT_CODES, EXIT_OK, EXIT_USAGE, EXIT_ERROR, PensmithError, type ExitCode } from './lib/exit-codes.js';
 import { classifyFailure, finalExitCode, failureLine, stripAnsi } from './lib/verb-outcome.js';
 import { setMirrorPromptsToStderr, setSessionArgv } from './lib/session-log.js';
@@ -1253,7 +1253,8 @@ export const ENVIRONMENT_DOCS: ReadonlyArray<readonly [string, string]> = Object
 
 const GLOBAL_FLAG_DOCS: ReadonlyArray<readonly [string, string]> = Object.freeze([
   ['--paper <name|path>', 'work on this paper (a name from `pensmith list`, or a folder containing .paper/)'],
-  ['--yolo', 'skip the gates --yolo may skip; never the cost cap, detector consent, the active-paper choice, your own PDF folder / Zotero collection, or attaching an unmatched PDF'],
+  // Generated from the gate registry, like the OPTIONS block (review round 1: the hand-written list drifted).
+  ['--yolo', `skip the gates --yolo may skip; never ${yoloNeverList()}`],
   ['--dry-run', 'trial run in ./.paper-dry-run/ (seeded from .paper/, never writing it): no network or model call'],
   ['--estimate', 'project the remaining cost, then offer to proceed'],
   ['--show-prompts', 'mirror outbound requests and LLM prompts to stderr before they are sent'],

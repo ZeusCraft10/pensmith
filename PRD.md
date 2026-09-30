@@ -437,7 +437,7 @@ For power users / batch processing / CI testing:
 | `outline-approval` | Approve this outline and register its sections? | skip: approve the outline | refuse: 3 | 3 | PRD §7.20 |
 | `export-confirm` | Export the paper now? | skip: export | refuse: 3 | 3 | PRD §7.20 |
 | `research-scope` | Which research scope should I use? | skip: use the first proposed scope | refuse: 3 | 3 | SRC-08 |
-| `research-prune` | Select the candidate sources to keep | skip: keep every candidate | refuse: 3 | 3 | SRC-09 |
+| `research-prune` | Select the candidate sources to keep | skip: keep the evaluator's picks | refuse: 3 | 3 | SRC-09 |
 | `add-remap` | Map this source to a section now? | skip: skip the remap | skip: 0 | 0 | SRC-14 |
 | `revise-swap` | Apply this citation swap to the section? | skip: apply the proposed swap | refuse: 3 | 3 | PRD §7.5 |
 | `cost-cap` | This call would exceed your cost cap. Continue? | never | refuse: 5 | 5 | RUN-18 |
@@ -447,7 +447,7 @@ For power users / batch processing / CI testing:
 | `sketch-confirm` | Proceed to intake with this thesis? | skip: proceed to intake | refuse: 3 | 3 | ERGO-05 |
 | `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |
 | `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 |
-| `plan-research` | Add these research hits to the section? | skip: add every hit to the section | refuse: 3 | 3 | GRND-17 |
+| `plan-research` | Add these research hits to the section? | skip: add the hits the evaluator kept to the section | refuse: 3 | 3 | GRND-17 |
 | `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
 | `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
 | `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (a model re-outline also needs --force) | refuse: 3 | 3 | GRND-09 |

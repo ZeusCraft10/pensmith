@@ -72,7 +72,7 @@ export const GATES: readonly GateDef[] = Object.freeze([
   { id: 'outline-approval', label: 'Approve this outline and register its sections?', yolo: 'skip', yoloChoice: 'approve the outline', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'PRD §7.20', summary: 'outline approval' },
   { id: 'export-confirm', label: 'Export the paper now?', yolo: 'skip', yoloChoice: 'export', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'PRD §7.20', summary: 'export confirmation' },
   { id: 'research-scope', label: 'Which research scope should I use?', yolo: 'skip', yoloChoice: 'use the first proposed scope', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-08', summary: 'research scope' },
-  { id: 'research-prune', label: 'Select the candidate sources to keep', yolo: 'skip', yoloChoice: 'keep every candidate', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-09', summary: 'research pruning' },
+  { id: 'research-prune', label: 'Select the candidate sources to keep', yolo: 'skip', yoloChoice: "keep the evaluator's picks", nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-09', summary: 'research pruning' },
   { id: 'add-remap', label: 'Map this source to a section now?', yolo: 'skip', yoloChoice: 'skip the remap', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-14', summary: 'the `add` remap' },
   { id: 'revise-swap', label: 'Apply this citation swap to the section?', yolo: 'skip', yoloChoice: 'apply the proposed swap', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'PRD §7.5', summary: 'the revise swap' },
   { id: 'cost-cap', label: 'This call would exceed your cost cap. Continue?', yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_COST_CAP, declineExit: EXIT_COST_CAP, requirement: 'RUN-18', summary: 'the cost cap' },
@@ -83,7 +83,7 @@ export const GATES: readonly GateDef[] = Object.freeze([
   { id: 'assignment-pickup', label: 'Use the assignment file in this folder?', yolo: 'skip', yoloChoice: 'use the file', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'GRND-01', summary: 'the assignment-file pickup' },
   { id: 'intake-defaults', label: 'Accept the intake defaults?', yolo: 'skip', yoloChoice: 'accept the defaults', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-02', summary: 'the intake defaults' },
   { id: 'reoutline', label: 'Re-outline a paper that already has drafts?', yolo: 'skip', yoloChoice: 're-outline (a model re-outline also needs --force)', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-09', summary: 'the re-outline confirmation (a model re-outline also needs `--force`)' },
-  { id: 'plan-research', label: 'Add these research hits to the section?', yolo: 'skip', yoloChoice: 'add every hit to the section', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-17', summary: 'the `plan N --research` hits' },
+  { id: 'plan-research', label: 'Add these research hits to the section?', yolo: 'skip', yoloChoice: 'add the hits the evaluator kept to the section', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-17', summary: 'the `plan N --research` hits' },
   { id: 'byo-folder', label: 'Read the PDFs in this folder outside the paper and copy them into it?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-15', summary: 'reading a PDF folder outside the paper' },
   { id: 'zotero-collection', label: 'Pull this Zotero collection from your library into the paper?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-16', summary: 'pulling a Zotero collection a paper\'s config names' },
   { id: 'pdf-attach-unmatched', label: "Attach this PDF although its first page does not show the work's title and first author?", yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-13', summary: 'attaching a PDF whose first page does not show the work' },
@@ -102,14 +102,21 @@ export function yoloGateSummary(): { skips: string[]; never: string[] } {
   };
 }
 
+/** A plain-text list (backticks dropped): `a, b and c` / `a, b or c`. */
+function plainList(xs: readonly string[], last: 'and' | 'or'): string {
+  const ys = xs.map((x) => x.replace(/`/g, ''));
+  return ys.length < 2 ? ys.join('') : `${ys.slice(0, -1).join(', ')} ${last} ${ys[ys.length - 1] as string}`;
+}
+
 /** The `--yolo` description for `pensmith --help` (plain text: backticks dropped). */
 export function yoloFlagDescription(): string {
   const { skips, never } = yoloGateSummary();
-  const plain = (xs: string[], last: string): string => {
-    const ys = xs.map((x) => x.replace(/`/g, ''));
-    return ys.length < 2 ? ys.join('') : `${ys.slice(0, -1).join(', ')} ${last} ${ys[ys.length - 1] as string}`;
-  };
-  return `Answer the approval gates --yolo may answer (${plain(skips, 'and')}). Never answers ${plain(never, 'or')}.`;
+  return `Answer the approval gates --yolo may answer (${plainList(skips, 'and')}). Never answers ${plainList(never, 'or')}.`;
+}
+
+/** What --yolo never answers, as one plain-text list (the GLOBAL FLAGS footer of `pensmith --help`). */
+export function yoloNeverList(): string {
+  return plainList(yoloGateSummary().never, 'or');
 }
 
 export function gateDef(id: GateId): GateDef {

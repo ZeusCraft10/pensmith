@@ -83,10 +83,10 @@ function digest(dir: string): string {
 const assigned = (sb: LlmSandbox): unknown =>
   parseFrontmatter(fs.readFileSync(path.join(sb.paper, 'sections', '02-background', 'PLAN.md'), 'utf8')).frontmatter['assigned_sources'];
 
-test('RUN-28 plan-research: the registry row — --yolo adds every hit, no terminal refuses with 3, an explicit decline is 3', () => {
+test('RUN-28 plan-research: the registry row — --yolo adds the hits the evaluator kept, no terminal refuses with 3, an explicit decline is 3', () => {
   const g = gateDef('plan-research');
   assert.equal(g.yolo, 'skip');
-  assert.equal(g.yoloChoice, 'add every hit to the section');
+  assert.equal(g.yoloChoice, 'add the hits the evaluator kept to the section');
   assert.equal(g.nonInteractive, 'refuse');
   assert.equal(g.nonTtyExit, EXIT_APPROVAL);
   assert.equal(g.declineExit, EXIT_APPROVAL);
@@ -124,7 +124,7 @@ test('GRND-17: choosing no hit is the gate\'s decline — exit 3, nothing change
     const calls = sb.mock!.callCount();
     const refused = await sb.runTsx(driver, [], { env: { PENSMITH_PROMPT_MODE: undefined } });
     assert.equal(refused.status, EXIT_APPROVAL, `${refused.stdout}\n${refused.stderr}`);
-    assert.match(refused.stdout, /needs an answer: re-run in a terminal, or pass --yolo to add every hit to the section/);
+    assert.match(refused.stdout, /needs an answer: re-run in a terminal, or pass --yolo to add the hits the evaluator kept to the section/);
     assert.equal(sb.mock!.callCount(), calls, 'no model request');
     assert.equal(digest(sb.paper), before);
 

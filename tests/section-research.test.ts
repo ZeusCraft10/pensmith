@@ -252,7 +252,7 @@ test('GRND-17: without a terminal and without --yolo it refuses (exit 3) before 
     const before = tree(sb.paper);
     const r = await run({ root: sb.root, n: 2, slug: 'background', query: QUERY, yolo: false });
     assert.ok(isPensmithError(r.error) && r.error.exitCode === EXIT_APPROVAL, String(r.error));
-    assert.match((r.error as Error).message, /^Add these research hits to the section\? \(section 2: nothing was searched, sent or written\) needs an answer: re-run in a terminal, or pass --yolo to add every hit to the section\.$/);
+    assert.match((r.error as Error).message, /^Add these research hits to the section\? \(section 2: nothing was searched, sent or written\) needs an answer: re-run in a terminal, or pass --yolo to add the hits the evaluator kept to the section\.$/);
     assert.equal(calls.length, 0);
     assert.equal(sb.mock!.callCount(), 0);
     assert.deepEqual(tree(sb.paper), before, 'no file changed (content or mtime)');

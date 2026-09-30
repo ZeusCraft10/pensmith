@@ -76,6 +76,25 @@ test('RUN-28: GATES is one table of unique gates; --yolo never skips cost-cap, e
   assert.throws(() => gateDef('nope' as GateId), /unknown gate/);
 });
 
+test('review round 1: the research gates tell the user what --yolo really does — the evaluator\'s picks, never every candidate (SRC-09)', async () => {
+  // research.ts: "--yolo keeps the evaluator's picks and adds nothing"; section-research.ts: --yolo → pass.kept.
+  assert.equal(gateDef('research-prune').yoloChoice, "keep the evaluator's picks");
+  assert.equal(gateDef('plan-research').yoloChoice, 'add the hits the evaluator kept to the section');
+  for (const g of GATES) assert.doesNotMatch(g.yoloChoice, /\bevery (candidate|hit)\b/, `${g.id}: --yolo never keeps every candidate`);
+  const prevMode = process.env['PENSMITH_PROMPT_MODE'];
+  delete process.env['PENSMITH_PROMPT_MODE'];
+  try {
+    if (canPrompt()) return; // an interactive runner cannot exercise the refusal text
+    await assert.rejects(runGate('research-prune', { yolo: false, detail: 'nothing was searched, sent or written' }), (e: unknown) => {
+      assert.match((e as Error).message, /pass --yolo to keep the evaluator's picks/);
+      return true;
+    });
+  } finally {
+    if (prevMode === undefined) delete process.env['PENSMITH_PROMPT_MODE'];
+    else process.env['PENSMITH_PROMPT_MODE'] = prevMode;
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 2. Every gate without a terminal, with and without --yolo
 // ---------------------------------------------------------------------------
@@ -187,7 +206,7 @@ test('RUN-28 add-remap: no terminal → the source is added, the remap skipped w
   assert.match(y.stdout, /added [a-z0-9_-]+\.$/m);
 });
 
-test('RUN-28 research-prune: no terminal → 3 before any search, and nothing written; --yolo keeps every candidate', () => {
+test('RUN-28 research-prune: no terminal → 3 before any search, and nothing written; --yolo keeps the evaluator\'s picks', () => {
   const sb = sandbox('gate-prune');
   const root = sb.project('p');
   assert.equal(runCli(sb, root, ['new', '--yolo', '--from', ASSIGNMENT_FIXTURE]).status, EXIT_OK);
@@ -197,7 +216,7 @@ test('RUN-28 research-prune: no terminal → 3 before any search, and nothing wr
   const before = snapshot(root);
   const r = runCli(sb, root, ['research']);
   assert.equal(r.status, EXIT_APPROVAL, `${r.stdout}\n${r.stderr}`);
-  assert.match(r.stderr, /^pensmith: Select the candidate sources to keep \(nothing was searched, sent or written\) needs an answer: re-run in a terminal, or pass --yolo to keep every candidate\.$/m);
+  assert.match(r.stderr, /^pensmith: Select the candidate sources to keep \(nothing was searched, sent or written\) needs an answer: re-run in a terminal, or pass --yolo to keep the evaluator's picks\.$/m);
   assert.deepEqual(changedPaths(before, snapshot(root), IGNORE_LOGS), [], 'nothing written (no RESEARCH.md, no LIBRARY.json)');
   const y = runCli(sb, root, ['research', '--yolo']);
   assert.equal(y.status, EXIT_OK, `${y.stdout}\n${y.stderr}`);
@@ -373,6 +392,10 @@ test('RUN-28: the --yolo lists in `pensmith --help` and the README name exactly 
   const flat = `${help.stdout}${help.stderr}`.replace(/\s+/g, ' ');
   assert.ok(flat.includes(yoloFlagDescription()), `--help carries the generated --yolo text:\n${flat}`);
   for (const g of GATES) assert.ok(yoloFlagDescription().includes(g.summary.replace(/`/g, '')), `--help names ${g.id}`);
+  // The GLOBAL FLAGS footer's never-list is generated too (review round 1: the hand-written one left out the estimate confirmation).
+  const footer = /--yolo\s+skip the gates --yolo may skip; never (.*?)(?= --dry-run )/.exec(flat);
+  assert.ok(footer, `the GLOBAL FLAGS footer names what --yolo never answers:\n${flat}`);
+  for (const s of never) assert.ok((footer[1] as string).includes(s.replace(/`/g, '')), `the footer's never-list names ${s}`);
   // README: the global-flags paragraph names every gate on the right side.
   const readme = readFileSync(join(REPO, 'README.md'), 'utf8');
   const m = /`--yolo` \(answer the gates `--yolo` may answer: (.*?) — never (.*?)\)/.exec(readme);
