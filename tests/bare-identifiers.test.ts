@@ -102,7 +102,10 @@ test('VRFY-10: a bare doi:10.9999/x is FABRICATED; a bare real DOI, arXiv id and
   assert.match(byKey.get('PMID:31978945')?.reason ?? '', /PubMed has "A Novel Coronavirus from Patients with Pneumonia in China, 2019"/);
   // The row round-trips through the verdict-row parser as a blocking row keyed by the identifier.
   const md = rows.map((r) => renderPass1VerdictRow(r.citekey, r.verdict, r.titleJW, r.authorJW, r.reason)).join('\n');
-  assert.deepEqual(parseBlockingVerdictRows(md), [{ citekey: 'doi:10.9999/x', verdict: 'FABRICATED' }]);
+  assert.deepEqual(
+    parseBlockingVerdictRows(md).map((r) => ({ citekey: r.citekey, verdict: r.verdict })),
+    [{ citekey: 'doi:10.9999/x', verdict: 'FABRICATED' }],
+  );
 });
 
 test('VRFY-10: a bare identifier with no answer is UNVERIFIABLE-NETWORK — never FABRICATED', async () => {

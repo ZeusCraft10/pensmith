@@ -28,6 +28,19 @@ export interface BlockingVerdictRow {
   retraction?: boolean;
   /** A Pass-3 row's quote id (`q1`), when the row carries one (Phase 20 format). */
   quoteId?: string;
+  /**
+   * The row's reason (the text after its score), when it has one — what an
+   * UNVERIFIABLE row's refusal names (the agency that cannot be asked and the
+   * remedy) and a RETRACTED row's notice.
+   */
+  reason?: string;
+}
+
+/** The reason of a verdict row: what follows `**VERDICT**` and its `titleJW=…, authorJW=…` / `lev=…` score. */
+function rowReason(afterVerdict: string): string | undefined {
+  const m = /^\s*—\s*(?:titleJW=\S+,\s*authorJW=\S+\s*—\s*|lev=\S+\s*—\s*)?(.*)$/u.exec(afterVerdict);
+  const reason = m?.[1]?.replace(/ — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/, '').trim();
+  return reason !== undefined && reason.length > 0 ? reason : undefined;
 }
 
 /**
@@ -107,6 +120,7 @@ export function parseBlockingVerdictRows(verificationMd: string): BlockingVerdic
     const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
     const any = pass3 || pass1 ? null : /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
     const verdict = pass3?.[3] ?? pass1?.[2] ?? any?.[1];
+    const matched = pass3 ?? pass1 ?? any;
     if (verdict === undefined || !BLOCKING_VERDICTS.has(verdict)) continue;
     // An UNVERIFIABLE-QUOTE row the section's verification says the user
     // accepted (verification-md.ts) passes like its section status did. This is
@@ -118,11 +132,13 @@ export function parseBlockingVerdictRows(verificationMd: string): BlockingVerdic
     // cannot be read still blocks — it is never treated as absent.
     const retraction = /\bcited work is retracted\b/.test(line);
     const quoteId = pass3?.[2];
+    const reason = matched !== null ? rowReason(line.slice(matched.index + matched[0].length)) : undefined;
     out.push({
       citekey: citekey ?? UNREADABLE_CITEKEY,
       verdict,
       ...(retraction ? { retraction: true } : {}),
       ...(quoteId !== undefined ? { quoteId } : {}),
+      ...(reason !== undefined ? { reason } : {}),
     });
   }
   return out;
@@ -180,8 +196,18 @@ export function verdictRowReason(row: BlockingVerdictRow): string {
 /** The refusal wording for one blocking row (compile refuse-gate, done re-check). */
 export function blockingRowReason(row: BlockingVerdictRow): string {
   const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
-  if (row.verdict === 'UNVERIFIABLE' || RETRY_ONLINE_VERDICTS.has(row.verdict)) {
+  if (RETRY_ONLINE_VERDICTS.has(row.verdict)) {
     return `${cite} is ${row.verdict} (its source could not be checked: offline, --dry-run or a failed lookup) — re-run online`;
+  }
+  // D-20-03 / D-20-10: UNVERIFIABLE is an ANSWER that cannot be compared (an
+  // agency with no record of the DOI, a record with no title) — its reason names
+  // the agency and the remedy; re-running online would change nothing.
+  if (row.verdict === 'UNVERIFIABLE') {
+    return `${cite} is UNVERIFIABLE — ${row.reason ?? "its registrar's answer cannot be compared with the entry"}`;
+  }
+  // VRFY-15: the retraction notice.
+  if (row.verdict === 'RETRACTED') {
+    return `${cite} is RETRACTED — ${row.reason ?? 'the cited work is retracted'}`;
   }
   if (row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
     return (

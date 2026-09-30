@@ -42,7 +42,8 @@ import type { Pass1Result } from '../lib/verify/pass1.js';
 import type { Pass3Result } from '../lib/verify/pass3.js';
 import { runPass2, renderPass2Section, pass2NotRun, NO_LLM_SKIP_REASON, type Pass2Result } from '../lib/verify/pass2.js';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
-import { isFatalLlmError } from '../lib/anthropic.js';
+import { assertLlmConfigured, isFatalLlmError } from '../lib/anthropic.js';
+import { sourceTextPassage } from '../lib/verify/source-text.js';
 import { rerenderCitations, recordLastVerified, LibraryNotFoundError } from '../lib/library.js';
 import { extractCitedKeysForVerification } from '../lib/citation-token.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
@@ -385,15 +386,31 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
   let pass2: Pass2Result[] = [];
   let pass4: Pass4Result[] | null = null;
   if (advisory) {
-    if (bib.exists && bib.problems.length === 0) freshness = await runFreshnessForDraft(draftMd, bib.path);
-    else if (bib.exists) freshnessNote = 'freshness not probed: .paper/CITATIONS.bib has entries that do not parse';
+    // D-20-15: the parsed entries (no second parse); with the root the probe
+    // also re-checks every LIBRARY `unknown` retraction status live (VRFY-15).
+    if (bib.exists && bib.problems.length === 0) {
+      freshness = await runFreshnessForDraft(draftMd, bib.path, { bibEntries: bib.entries, ...(writePaperFiles ? { root } : {}) });
+    } else if (bib.exists) freshnessNote = 'freshness not probed: .paper/CITATIONS.bib has entries that do not parse';
     type BibValue = { DOI?: string; title?: string | string[]; author?: Array<{ family?: string; given?: string }> | string[]; abstract?: string };
     const bibByCitekey = new Map<string, BibValue>(bib.entries.map((e) => [String(e['id'] ?? ''), e as BibValue]));
     try {
       // `[verification] send_byo_passages` (default off, PRD §9): only then do
       // the user's own PDFs' passages go to the model provider.
       const shareByoPassages = tryReadPaperConfigSync(root)?.verification?.send_byo_passages === true;
-      pass2 = await runPass2(draftMd, bibByCitekey, { n: logged, root, shareByoPassages });
+      // VRFY-21 (D-20-28): the open-access passage nearest each claim goes
+      // with the abstract (`[verification] fetch_full_text`, default on) —
+      // fetched only when a model will read it (no provider configured: the
+      // pairs are skipped, so nothing is downloaded for them).
+      const modelReady = await assertLlmConfigured('verify').then(
+        () => true,
+        () => false,
+      );
+      pass2 = await runPass2(draftMd, bibByCitekey, {
+        n: logged,
+        root,
+        shareByoPassages,
+        ...(modelReady ? { fullText: (key: string, claim: string) => sourceTextPassage(root, key, claim) } : {}),
+      });
     } catch (err) {
       if (!isFatalLlmError(err)) throw err;
       advisoryStop = err;

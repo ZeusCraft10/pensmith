@@ -261,9 +261,14 @@ export function unverifiableSectionDetail(verificationPath: string, label: strin
   if (rows.some((r) => r.verdict === 'PLACEHOLDER')) {
     parts.push(`its draft is stub text written with no model configured (PLACEHOLDER) — re-draft it with a model: \`pensmith write ${label}\``);
   }
-  const network = rows.filter((r) => r.verdict === 'UNVERIFIABLE' || RETRY_ONLINE_VERDICTS.has(r.verdict));
+  const network = rows.filter((r) => RETRY_ONLINE_VERDICTS.has(r.verdict));
   if (network.length > 0) {
     parts.push(`${network.map((r) => `[@${r.citekey}]`).join(', ')} could not be checked (offline or a failed lookup) — re-run \`pensmith verify ${label}\` online`);
+  }
+  // An UNVERIFIABLE row is an answer that cannot be compared (D-20-10): its
+  // reason names the agency and the remedy — re-running online changes nothing.
+  for (const r of rows.filter((x) => x.verdict === 'UNVERIFIABLE')) {
+    parts.push(`[@${r.citekey}] cannot be checked by its registrar${r.reason !== undefined ? ` — ${r.reason}` : ''}`);
   }
   if (parts.length === 0) parts.push(verificationBlockers(verificationPath).join('; '));
   return `section ${label} could not be verified: ${parts.join('; ')}`;

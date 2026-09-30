@@ -172,27 +172,42 @@ test('GATE-02 (audit #2): uppercase-first citekey (Smith2020) IS parsed and bloc
 // offline / under --dry-run) BLOCKS, and its refusal says "re-run online".
 // Pass-3 PDF_UNAVAILABLE / TEXT_UNAVAILABLE stay advisory (non-blocking).
 // ---------------------------------------------------------------------------
-test('D-17-07: an UNVERIFIABLE Pass-1 row is blocking with a "re-run online" refusal; unavailable Pass-3 rows are not', async () => {
+test('D-17-07 / D-20-03: a retry-online row blocks with a "re-run online" refusal; an UNVERIFIABLE row names its reason; unavailable Pass-3 rows are not blocking', async () => {
   const mod = await import('../bin/lib/verify/verdict-rows.js');
   const md = [
-    mod.renderPass1VerdictRow('jumper2021', 'UNVERIFIABLE', 0, 0, 'offline: no recorded fixture — re-run online'),
+    mod.renderPass1VerdictRow('jumper2021', 'UNVERIFIABLE-NETWORK', 0, 0, 'offline: no recorded fixture — re-run online'),
+    mod.renderPass1VerdictRow('zenodo2018', 'UNVERIFIABLE', Number.NaN, Number.NaN, 'mEDRA holds 10.1234/x but has no record of it — give the work\'s arXiv id, PMID or ISBN (pensmith add)'),
     mod.renderPass1VerdictRow('ok2020', 'OK', 1, 1, 'D-11 AND-gate passed'),
     mod.renderPass3VerdictRow('ok2020', 'a quoted passage', 'PDF_UNAVAILABLE', 0, 'text unavailable (offline)'),
     mod.renderPass3VerdictRow('ok2020', 'a quoted passage', 'TEXT_UNAVAILABLE', 0, 'no text layer'),
   ].join('\n');
   assert.ok(mod.BLOCKING_VERDICTS.has('UNVERIFIABLE'));
-  assert.deepEqual(mod.parseVerdictRows(md), ['jumper2021']);
+  assert.ok(mod.BLOCKING_VERDICTS.has('UNVERIFIABLE-NETWORK'));
+  assert.deepEqual(mod.parseVerdictRows(md), ['jumper2021', 'zenodo2018']);
   const rows = mod.parseBlockingVerdictRows(md);
-  assert.deepEqual(rows, [{ citekey: 'jumper2021', verdict: 'UNVERIFIABLE' }]);
+  assert.deepEqual(rows.map((r) => [r.citekey, r.verdict]), [['jumper2021', 'UNVERIFIABLE-NETWORK'], ['zenodo2018', 'UNVERIFIABLE']]);
+  assert.equal(rows[0]!.reason, 'offline: no recorded fixture — re-run online', 'the reason after the score');
   assert.match(
     mod.blockingRowReason(rows[0]!),
-    /^citation \[@jumper2021\] is UNVERIFIABLE \(its source could not be checked: offline, --dry-run or a failed lookup\) — re-run online$/,
+    /^citation \[@jumper2021\] is UNVERIFIABLE-NETWORK \(its source could not be checked: offline, --dry-run or a failed lookup\) — re-run online$/,
+  );
+  // An answer that cannot be compared: re-running online changes nothing, so the refusal names the agency and the remedy.
+  assert.equal(
+    mod.blockingRowReason(rows[1]!),
+    "citation [@zenodo2018] is UNVERIFIABLE — mEDRA holds 10.1234/x but has no record of it — give the work's arXiv id, PMID or ISBN (pensmith add)",
   );
   assert.match(mod.blockingRowReason({ citekey: 'x', verdict: 'FABRICATED' }), /has a blocking verdict \(FABRICATED\)$/);
-  // Review round 2: a retraction row is named as one (the label becomes RETRACTED with VRFY-15).
+  // Review round 2: a pre-Phase-20 retraction row (MIS-CITED) is named as one.
   const retracted = mod.parseBlockingVerdictRows(
     '- wakefield1998: **MIS-CITED** — titleJW=0.81, authorJW=1.00 — cited work is retracted (Crossref\'s record of 10.1016/x at verify time)',
   );
-  assert.deepEqual(retracted, [{ citekey: 'wakefield1998', verdict: 'MIS-CITED', retraction: true }]);
+  assert.deepEqual(retracted, [
+    { citekey: 'wakefield1998', verdict: 'MIS-CITED', retraction: true, reason: "cited work is retracted (Crossref's record of 10.1016/x at verify time)" },
+  ]);
   assert.match(mod.blockingRowReason(retracted[0]!), /^citation \[@wakefield1998\] has a blocking verdict \(MIS-CITED: the cited work is retracted\)$/);
+  // VRFY-15: the RETRACTED label names the notice.
+  const [r] = mod.parseBlockingVerdictRows(
+    '- wakefield1998: **RETRACTED** — titleJW=0.98, authorJW=1.00 — cited work is retracted (Crossref: retraction notice 10.1016/S0140-6736(10)60175-4)',
+  );
+  assert.equal(mod.blockingRowReason(r!), 'citation [@wakefield1998] is RETRACTED — cited work is retracted (Crossref: retraction notice 10.1016/S0140-6736(10)60175-4)');
 });

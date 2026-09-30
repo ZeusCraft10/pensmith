@@ -31,7 +31,8 @@ import { join } from 'node:path';
 import { runPass1 as defaultRunPass1, type Pass1Options, type Pass1Result } from './pass1.js';
 import { runPass3 as defaultRunPass3, type Pass3Options, type Pass3Result } from './pass3.js';
 import { parseBibEntries, type BibEntryProblem } from '../citations.js';
-import { extractCitedKeysForVerification } from '../citation-token.js';
+import { extractCitedKeysForVerification, findUnparseableCitations } from '../citation-token.js';
+import { findUnsupportedForms } from './unsupported-forms.js';
 import { paperDir } from '../paths.js';
 import { tryLoadLibrary } from '../library.js';
 import { tryReadPaperConfigSync } from '../config.js';
@@ -150,8 +151,15 @@ export type TextScanner = (md: string) => readonly TextFinding[];
 /**
  * The text scanners every gate run applies (VRFY-09, VRFY-10): each returns
  * the findings of one family of forms. Their rows are keyed `L<line>`.
+ *   - findUnparseableCitations (citation-token.ts, D-20-07): citation-shaped
+ *     text the one grammar cannot read — `[@]`, `[@k`, `@{k`, `[@k [note]]` —
+ *     is UNPARSEABLE, never silently absent;
+ *   - findUnsupportedForms (unsupported-forms.ts, D-20-08): every attribution
+ *     the verifier cannot check — author-date prose, footnotes and inline
+ *     notes, a typed reference list, raw TeX, HTML `<cite>` / `<sup>`,
+ *     numbered markers — is UNSUPPORTED-FORM.
  */
-export const TEXT_SCANNERS: readonly TextScanner[] = Object.freeze([]);
+export const TEXT_SCANNERS: readonly TextScanner[] = Object.freeze([findUnparseableCitations, findUnsupportedForms]);
 
 /** The paper's CITATIONS.bib as the gate reads it. */
 export interface LoadedBibliography {
@@ -378,7 +386,10 @@ export async function recomputeGate(input: GateInput): Promise<GateResult> {
     }
   }
 
-  const pass3 = await runPass3(input.text, bibMap(bib.entries), { root: input.root });
+  const pass3 = await runPass3(input.text, bibMap(bib.entries), {
+    root: input.root,
+    ...(input.refresh !== undefined ? { refresh: input.refresh } : {}),
+  });
   for (const r of pass3) {
     rows.push({
       kind: 'pass3',
@@ -429,7 +440,7 @@ export function gateRowReason(row: GateRow, scope: GateScope): string {
   const n = scope.kind === 'section' ? scope.id : '<N>';
   switch (row.kind) {
     case 'pass1':
-      if (row.verdict === 'UNVERIFIABLE' || RETRY_ONLINE_VERDICTS.has(row.verdict)) {
+      if (RETRY_ONLINE_VERDICTS.has(row.verdict)) {
         return `citation [@${row.key}] is ${row.verdict} (${row.reason}) — its source could not be checked; re-run online`;
       }
       return `citation [@${row.key}] is ${row.verdict} — ${row.reason}`;

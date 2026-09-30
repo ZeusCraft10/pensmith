@@ -33,11 +33,11 @@ test('verdict rows: every CITEKEY_GRAMMAR key shape is named; an unreadable bloc
     '| ghost.2099 | **FABRICATED** | a table row is never a verdict row |',
   ].join('\n');
   assert.deepEqual(parseBlockingVerdictRows(md), [
-    { citekey: 'ghost.2099', verdict: 'FABRICATED' },
-    { citekey: 'müller2020', verdict: 'MIS-CITED' },
-    { citekey: 'doe:2020/x', verdict: 'FABRICATED' },
-    { citekey: 'smith#1', verdict: 'NOT_FOUND' },
-    { citekey: UNREADABLE_CITEKEY, verdict: 'FABRICATED' },
+    { citekey: 'ghost.2099', verdict: 'FABRICATED', reason: 'not in bib' },
+    { citekey: 'müller2020', verdict: 'MIS-CITED', reason: 'wrong paper' },
+    { citekey: 'doe:2020/x', verdict: 'FABRICATED', reason: 'not in bib' },
+    { citekey: 'smith#1', verdict: 'NOT_FOUND', reason: 'not in the text' },
+    { citekey: UNREADABLE_CITEKEY, verdict: 'FABRICATED', reason: 'a row with no key at all' },
   ]);
   // `Status: failed` alone blocks, with or without a parseable row.
   assert.deepEqual(sectionVerificationReasons('Status: failed\n\n- ???\n', false), ["VERIFICATION.md Status is 'failed'"]);
