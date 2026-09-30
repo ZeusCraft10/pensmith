@@ -65,7 +65,7 @@ test('review round 2: `plan 1 --revise` — the remedy the surfaces used to name
     const before = fs.readFileSync(path.join(dir, 'DRAFT.md'), 'utf8');
     const res = await runRevise({ paperRoot: sb.root, n: 1, slug: 'intro', yolo: true, proposeSwap: () => Promise.reject(new Error('no model call expected')) });
     assert.equal(res.accepted, false);
-    assert.match(res.message, /--revise cannot repair this: quote\(s\) q1 could not be checked against any source text — paraphrase \(re-draft with `pensmith write 1`/);
+    assert.match(res.message, /revise cannot paraphrase quote\(s\) q1, which no source text could be checked against: paraphrase \(re-draft with `pensmith write 1`/);
     assert.equal(fs.readFileSync(path.join(dir, 'DRAFT.md'), 'utf8'), before, 'DRAFT.md unchanged');
   });
 });

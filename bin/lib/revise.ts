@@ -44,9 +44,10 @@ import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
 import { extractCitedKeysForVerification, findCitations, removeCitekey, renameCitekey } from './citation-token.js';
 import { sectionDraft, sectionPlan, sectionVerification } from './paths.js';
+import { ACCEPTABLE_QUOTE_VERDICT, UNATTRIBUTED_CITEKEY } from './verify/verdicts.js';
+import { parseBlockingVerdictRows } from './verify/verdict-rows.js';
+import { DRAFT_ROW_KEY } from './verify/verification-md.js';
 import { formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
-import { isTextFindingRow, parseBlockingVerdictRows } from './verify/verdict-rows.js';
-import { ACCEPTABLE_QUOTE_VERDICT } from './verify/verdicts.js';
 
 // --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
@@ -57,11 +58,7 @@ const YOLO_RETRY_CAP = 2;
  * RETRACTED, UNASSIGNED, UNPARSEABLE and UNRESOLVABLE join FABRICATED,
  * MIS-CITED and NOT_FOUND). The rows without a citekey (a citation form the
  * grammar cannot read, an unattributed quote, NO-CITATIONS) need a re-plan —
- * REV-03 (Phase 22). UNPARSEABLE is revisable only on a bibliography entry's
- * row, keyed by its citekey: a text scanner's UNPARSEABLE row is keyed
- * `L<line>` (isTextFindingRow) and failingCitations skips it (review round 2
- * of the Phase 20 + 23a merge — it was read as a citekey and reported "already
- * gone" while the unreadable citation stayed in the draft).
+ * REV-03 (Phase 22).
  */
 export const REVISABLE_VERDICTS = ['FABRICATED', 'MIS-CITED', 'RETRACTED', 'UNASSIGNED', 'UNPARSEABLE', 'UNRESOLVABLE', 'NOT_FOUND'] as const;
 
@@ -150,52 +147,66 @@ interface FailingCitation {
  * citekey once). A failing line looks like:
  *   - jones2019: **FABRICATED** — ... — <reason>
  *   - jones2019 [q2] ("…"): **NOT_FOUND** — ... — <reason>
- * i.e. a row whose verdict is one of REVISABLE_VERDICTS — never a text
- * scanner's row (`- L3: **UNPARSEABLE** — …`), whose key is a draft line.
+ * i.e. a row whose verdict is one of REVISABLE_VERDICTS.
  */
 export function failingCitations(verificationMd: string): FailingCitation[] {
-  const out: FailingCitation[] = [];
-  const seen = new Set<string>();
-  for (const line of verificationMd.split(/\r?\n/)) {
-    const row = verdictRowOf(line);
-    if (row === null || isTextFindingRow(row) || seen.has(row.citekey)) continue;
-    if ((REVISABLE_VERDICTS as readonly string[]).includes(row.verdict)) {
-      seen.add(row.citekey);
-      out.push({ citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, '').trim()}` });
-    }
-  }
-  return out;
+  return failingRows(verificationMd).citations;
 }
 
 /**
- * The blocking rows of VERIFICATION.md that --revise cannot repair, as one
- * sentence naming what does, or null (review round 2 of the Phase 20 + 23a
- * merge). Revise swaps or removes one citekey; it cannot rewrite the prose:
- *   - a text finding (key `L<line>`: a citation that does not parse, or a
- *     form the verifier cannot check) is fixed by a re-draft or an edit that
- *     writes the citation as `[@citekey]`;
- *   - an UNVERIFIABLE-QUOTE needs a paraphrase (a re-draft or an edit), the
- *     source's PDF, or the user's acceptance of that one quote.
+ * The key slot of a row that names no citation (review round 2): a text
+ * finding (`L<line>` — an UNPARSEABLE or UNSUPPORTED-FORM text), an
+ * identifier written in the prose (`doi:10.…`, `arXiv:…`, `PMID:…`), a draft
+ * check (`draft`) or an unattributed quote. revise cannot swap one: the text
+ * needs a hand edit or a re-draft.
  */
-export function unrevisableRows(verificationMd: string, id: string): string | null {
-  const rows = parseBlockingVerdictRows(verificationMd);
-  const lines = [...new Set(rows.filter(isTextFindingRow).map((r) => r.citekey.slice(1)))];
-  const quotes = [...new Set(rows.filter((r) => r.verdict === ACCEPTABLE_QUOTE_VERDICT).map((r) => r.quoteId ?? '?'))];
-  const parts: string[] = [];
-  if (lines.length > 0) {
-    parts.push(
-      `line(s) ${lines.join(', ')} of the draft hold a citation the verifier cannot check (UNPARSEABLE / UNSUPPORTED-FORM) — ` +
-        `re-draft the section with \`pensmith write ${id}\`, or edit its DRAFT.md so each citation reads [@citekey] and run \`pensmith verify ${id}\``,
-    );
+function isTextRowKey(key: string, rest: string): boolean {
+  if (key === DRAFT_ROW_KEY || key === UNATTRIBUTED_CITEKEY) return true;
+  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key)) return true;
+  return /^L\d+$/.test(key) && /titleJW=n\/a, authorJW=n\/a/.test(rest);
+}
+
+/** The failing rows of VERIFICATION.md: the citations revise can repair, and the text rows it cannot (each once). */
+function failingRows(verificationMd: string): { citations: FailingCitation[]; textRows: FailingCitation[] } {
+  const citations: FailingCitation[] = [];
+  const textRows: FailingCitation[] = [];
+  const seen = new Set<string>();
+  for (const line of verificationMd.split(/\r?\n/)) {
+    const row = verdictRowOf(line);
+    if (row === null || seen.has(row.citekey)) continue;
+    if (!(REVISABLE_VERDICTS as readonly string[]).includes(row.verdict)) continue;
+    seen.add(row.citekey);
+    const f = { citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, '').trim()}` };
+    (isTextRowKey(row.citekey, row.rest) ? textRows : citations).push(f);
   }
-  if (quotes.length > 0) {
-    parts.push(
-      `quote(s) ${quotes.join(', ')} could not be checked against any source text — paraphrase (re-draft with \`pensmith write ${id}\`, ` +
-        `or edit its DRAFT.md and run \`pensmith verify ${id}\`), add the source's PDF (\`pensmith add <pdf>\`), ` +
-        `or accept a quote (\`pensmith verify ${id} --accept-quote ${quotes[0] as string}\`)`,
-    );
-  }
-  return parts.length > 0 ? `--revise cannot repair ${parts.length > 1 ? 'these' : 'this'}: ${parts.join('; ')}.` : null;
+  return { citations, textRows };
+}
+
+/**
+ * The sentence for the open UNVERIFIABLE-QUOTE rows of VERIFICATION.md (quotes
+ * no source text could be checked against, not accepted), or '' (Phase 20 +
+ * 23a merge, review round 2). revise swaps or removes a citekey; it cannot
+ * paraphrase, so it names what can: a re-draft (`write N`, whose drafter may
+ * quote only a source with full text) or an edit and `verify N`, the source's
+ * PDF, or the user's acceptance of that one quote.
+ */
+function unverifiableQuoteAdvice(verificationMd: string, id: string): string {
+  const quotes = [...new Set(parseBlockingVerdictRows(verificationMd).filter((r) => r.verdict === ACCEPTABLE_QUOTE_VERDICT).map((r) => r.quoteId ?? '?'))];
+  if (quotes.length === 0) return '';
+  return (
+    `revise cannot paraphrase quote(s) ${quotes.join(', ')}, which no source text could be checked against: paraphrase (re-draft with ` +
+    `\`pensmith write ${id}\`, or edit DRAFT.md and run \`pensmith verify ${id}\`), add the source's PDF (\`pensmith add <pdf>\`), ` +
+    `or accept a quote (\`pensmith verify ${id} --accept-quote ${quotes[0] as string}\`).`
+  );
+}
+
+/** The sentence naming the rows revise cannot repair and what to do instead. */
+function textRowsAdvice(textRows: readonly FailingCitation[], id: string): string {
+  const named = textRows.map((f) => `${f.citekey} (${f.reason.split(':')[0]})`).join(', ');
+  return (
+    `VERIFICATION.md also flags text that is not a citation revise can swap — ${named}: edit that text in DRAFT.md ` +
+    `(a citation written as [@citekey]) or re-draft the section (\`pensmith write ${id}\`), then \`pensmith verify ${id}\`.`
+  );
 }
 
 /**
@@ -423,12 +434,15 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     return { ...base, message: `${base.message} No VERIFICATION.md at section ${opts.n} — nothing to revise.`.trim() };
   }
   const verificationMd = readFileSync(verifPath, 'utf8');
-  const flagged = failingCitations(verificationMd);
+  const { citations: flagged, textRows } = failingRows(verificationMd);
   const sectionId = formatSectionId(sectionIdOf(opts.n, opts.suffix));
-  const unrevisable = unrevisableRows(verificationMd, sectionId);
+  const quoteAdvice = unverifiableQuoteAdvice(verificationMd, sectionId);
+  const withQuoteAdvice = (message: string): string => (quoteAdvice === '' ? message : `${message} ${quoteAdvice}`);
   if (flagged.length === 0) {
-    const none = `No FABRICATED/MIS-CITED/NOT_FOUND citation (nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE) in section ${opts.n}.`;
-    return { ...base, message: `${base.message} ${none}${unrevisable !== null ? ` ${unrevisable}` : ''}`.trim() };
+    if (textRows.length > 0) {
+      return { ...base, message: withQuoteAdvice(`No citation in section ${sectionId} for revise to swap. ${textRowsAdvice(textRows, sectionId).replace(/^VERIFICATION\.md also flags/, 'VERIFICATION.md flags')}`) };
+    }
+    return { ...base, message: withQuoteAdvice(`${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation (nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE) in section ${opts.n}.`.trim()) };
   }
 
   if (!existsSync(planPath) || !existsSync(draftPath)) {
@@ -443,11 +457,14 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   const stillCited = new Set(extractCitedKeysForVerification(draftMd));
   const failing = flagged.find((f) => stillCited.has(f.citekey));
   if (!failing) {
+    const id = sectionId;
     return {
       ...base,
       message:
-        `Nothing to change: every citation VERIFICATION.md flags in section ${sectionId} (${flagged.map((f) => f.citekey).join(', ')}) ` +
-        `is already gone from DRAFT.md — re-check the section with \`pensmith verify ${sectionId}\`.${unrevisable !== null ? ` ${unrevisable}` : ''}`,
+        `Nothing to change: every citation VERIFICATION.md flags in section ${id} (${flagged.map((f) => f.citekey).join(', ')}) ` +
+        `is already gone from DRAFT.md — re-check the section with \`pensmith verify ${id}\`.` +
+        (textRows.length > 0 ? ` ${textRowsAdvice(textRows, id)}` : '') +
+        (quoteAdvice !== '' ? ` ${quoteAdvice}` : ''),
     };
   }
   base.flagged_citekey = failing.citekey;

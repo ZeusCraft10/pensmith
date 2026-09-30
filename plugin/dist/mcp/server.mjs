@@ -106025,14 +106025,11 @@ function sectionVerificationReasons(verificationMd, dryRunNow) {
   for (const row2 of parseBlockingVerdictRows(verificationMd)) reasons.push(verdictRowReason(row2));
   return reasons;
 }
-function isTextFindingRow(row2) {
-  return /^L\d+$/.test(row2.citekey) && (row2.verdict === "UNPARSEABLE" || row2.verdict === "UNSUPPORTED-FORM");
-}
 function verdictRowReason(row2) {
   if (row2.citekey === "draft" && DRAFT_VERDICTS.includes(row2.verdict)) {
     return row2.verdict === "PLACEHOLDER" ? "the draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model configured (`pensmith write <N>`)" : "the draft cites none of its assigned sources (NO-CITATIONS) \u2014 re-draft it (`pensmith write <N>`)";
   }
-  if (isTextFindingRow(row2)) {
+  if (/^L\d+$/.test(row2.citekey) && (row2.verdict === "UNPARSEABLE" || row2.verdict === "UNSUPPORTED-FORM")) {
     return `line ${row2.citekey.slice(1)} of the draft holds a citation the verifier cannot check (${row2.verdict})`;
   }
   if (row2.quoteId !== void 0 && row2.verdict === ACCEPTABLE_QUOTE_VERDICT) {
@@ -106072,7 +106069,6 @@ var init_verdict_rows = __esm({
     __name(parseBlockingVerdictRows, "parseBlockingVerdictRows");
     UNREADABLE_CITEKEY = "(unreadable verdict row)";
     __name(sectionVerificationReasons, "sectionVerificationReasons");
-    __name(isTextFindingRow, "isTextFindingRow");
     __name(verdictRowReason, "verdictRowReason");
     __name(blockingRowReason, "blockingRowReason");
     DRY_RUN_VERIFICATION_MARKER = "> OFFLINE MODE (--dry-run)";
@@ -112057,35 +112053,33 @@ function verdictRowOf(line) {
   if (!m3 || m3[1] === void 0 || m3[2] === void 0) return null;
   return { citekey: m3[1], verdict: m3[2], rest: m3[3] ?? "" };
 }
-function failingCitations(verificationMd) {
-  const out2 = [];
+function isTextRowKey(key2, rest) {
+  if (key2 === DRAFT_ROW_KEY || key2 === UNATTRIBUTED_CITEKEY) return true;
+  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key2)) return true;
+  return /^L\d+$/.test(key2) && /titleJW=n\/a, authorJW=n\/a/.test(rest);
+}
+function failingRows(verificationMd) {
+  const citations = [];
+  const textRows = [];
   const seen = /* @__PURE__ */ new Set();
   for (const line of verificationMd.split(/\r?\n/)) {
     const row2 = verdictRowOf(line);
-    if (row2 === null || isTextFindingRow(row2) || seen.has(row2.citekey)) continue;
-    if (REVISABLE_VERDICTS.includes(row2.verdict)) {
-      seen.add(row2.citekey);
-      out2.push({ citekey: row2.citekey, reason: `${row2.verdict}: ${row2.rest.replace(/^—\s*/, "").trim()}` });
-    }
+    if (row2 === null || seen.has(row2.citekey)) continue;
+    if (!REVISABLE_VERDICTS.includes(row2.verdict)) continue;
+    seen.add(row2.citekey);
+    const f2 = { citekey: row2.citekey, reason: `${row2.verdict}: ${row2.rest.replace(/^—\s*/, "").trim()}` };
+    (isTextRowKey(row2.citekey, row2.rest) ? textRows : citations).push(f2);
   }
-  return out2;
+  return { citations, textRows };
 }
-function unrevisableRows(verificationMd, id) {
-  const rows = parseBlockingVerdictRows(verificationMd);
-  const lines2 = [...new Set(rows.filter(isTextFindingRow).map((r2) => r2.citekey.slice(1)))];
-  const quotes = [...new Set(rows.filter((r2) => r2.verdict === ACCEPTABLE_QUOTE_VERDICT).map((r2) => r2.quoteId ?? "?"))];
-  const parts = [];
-  if (lines2.length > 0) {
-    parts.push(
-      `line(s) ${lines2.join(", ")} of the draft hold a citation the verifier cannot check (UNPARSEABLE / UNSUPPORTED-FORM) \u2014 re-draft the section with \`pensmith write ${id}\`, or edit its DRAFT.md so each citation reads [@citekey] and run \`pensmith verify ${id}\``
-    );
-  }
-  if (quotes.length > 0) {
-    parts.push(
-      `quote(s) ${quotes.join(", ")} could not be checked against any source text \u2014 paraphrase (re-draft with \`pensmith write ${id}\`, or edit its DRAFT.md and run \`pensmith verify ${id}\`), add the source's PDF (\`pensmith add <pdf>\`), or accept a quote (\`pensmith verify ${id} --accept-quote ${quotes[0]}\`)`
-    );
-  }
-  return parts.length > 0 ? `--revise cannot repair ${parts.length > 1 ? "these" : "this"}: ${parts.join("; ")}.` : null;
+function unverifiableQuoteAdvice(verificationMd, id) {
+  const quotes = [...new Set(parseBlockingVerdictRows(verificationMd).filter((r2) => r2.verdict === ACCEPTABLE_QUOTE_VERDICT).map((r2) => r2.quoteId ?? "?"))];
+  if (quotes.length === 0) return "";
+  return `revise cannot paraphrase quote(s) ${quotes.join(", ")}, which no source text could be checked against: paraphrase (re-draft with \`pensmith write ${id}\`, or edit DRAFT.md and run \`pensmith verify ${id}\`), add the source's PDF (\`pensmith add <pdf>\`), or accept a quote (\`pensmith verify ${id} --accept-quote ${quotes[0]}\`).`;
+}
+function textRowsAdvice(textRows, id) {
+  const named = textRows.map((f2) => `${f2.citekey} (${f2.reason.split(":")[0]})`).join(", ");
+  return `VERIFICATION.md also flags text that is not a citation revise can swap \u2014 ${named}: edit that text in DRAFT.md (a citation written as [@citekey]) or re-draft the section (\`pensmith write ${id}\`), then \`pensmith verify ${id}\`.`;
 }
 function claimContext(draftMd, citekey) {
   for (const line of draftMd.split(/\r?\n/)) {
@@ -112210,12 +112204,15 @@ async function runRevise(opts) {
     return { ...base, message: `${base.message} No VERIFICATION.md at section ${opts.n} \u2014 nothing to revise.`.trim() };
   }
   const verificationMd = readFileSync21(verifPath, "utf8");
-  const flagged = failingCitations(verificationMd);
+  const { citations: flagged, textRows } = failingRows(verificationMd);
   const sectionId = formatSectionId(sectionIdOf(opts.n, opts.suffix));
-  const unrevisable = unrevisableRows(verificationMd, sectionId);
+  const quoteAdvice = unverifiableQuoteAdvice(verificationMd, sectionId);
+  const withQuoteAdvice = /* @__PURE__ */ __name((message) => quoteAdvice === "" ? message : `${message} ${quoteAdvice}`, "withQuoteAdvice");
   if (flagged.length === 0) {
-    const none = `No FABRICATED/MIS-CITED/NOT_FOUND citation (nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE) in section ${opts.n}.`;
-    return { ...base, message: `${base.message} ${none}${unrevisable !== null ? ` ${unrevisable}` : ""}`.trim() };
+    if (textRows.length > 0) {
+      return { ...base, message: withQuoteAdvice(`No citation in section ${sectionId} for revise to swap. ${textRowsAdvice(textRows, sectionId).replace(/^VERIFICATION\.md also flags/, "VERIFICATION.md flags")}`) };
+    }
+    return { ...base, message: withQuoteAdvice(`${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation (nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE) in section ${opts.n}.`.trim()) };
   }
   if (!existsSync17(planPath) || !existsSync17(draftPath)) {
     base.flagged_citekey = flagged[0].citekey;
@@ -112225,9 +112222,10 @@ async function runRevise(opts) {
   const stillCited = new Set(extractCitedKeysForVerification(draftMd));
   const failing = flagged.find((f2) => stillCited.has(f2.citekey));
   if (!failing) {
+    const id = sectionId;
     return {
       ...base,
-      message: `Nothing to change: every citation VERIFICATION.md flags in section ${sectionId} (${flagged.map((f2) => f2.citekey).join(", ")}) is already gone from DRAFT.md \u2014 re-check the section with \`pensmith verify ${sectionId}\`.${unrevisable !== null ? ` ${unrevisable}` : ""}`
+      message: `Nothing to change: every citation VERIFICATION.md flags in section ${id} (${flagged.map((f2) => f2.citekey).join(", ")}) is already gone from DRAFT.md \u2014 re-check the section with \`pensmith verify ${id}\`.` + (textRows.length > 0 ? ` ${textRowsAdvice(textRows, id)}` : "") + (quoteAdvice !== "" ? ` ${quoteAdvice}` : "")
     };
   }
   base.flagged_citekey = failing.citekey;
@@ -112283,9 +112281,10 @@ var init_revise = __esm({
     init_lock();
     init_citation_token();
     init_paths();
-    init_section_id();
-    init_verdict_rows();
     init_verdicts();
+    init_verdict_rows();
+    init_verification_md();
+    init_section_id();
     YOLO_RETRY_CAP = 2;
     REVISABLE_VERDICTS = ["FABRICATED", "MIS-CITED", "RETRACTED", "UNASSIGNED", "UNPARSEABLE", "UNRESOLVABLE", "NOT_FOUND"];
     __name(verdictRowOf, "verdictRowOf");
@@ -112299,8 +112298,10 @@ var init_revise = __esm({
         after_excerpt: external_exports.string()
       })
     });
-    __name(failingCitations, "failingCitations");
-    __name(unrevisableRows, "unrevisableRows");
+    __name(isTextRowKey, "isTextRowKey");
+    __name(failingRows, "failingRows");
+    __name(unverifiableQuoteAdvice, "unverifiableQuoteAdvice");
+    __name(textRowsAdvice, "textRowsAdvice");
     __name(claimContext, "claimContext");
     __name(voiceHint, "voiceHint");
     __name(mechanicalRemove, "mechanicalRemove");

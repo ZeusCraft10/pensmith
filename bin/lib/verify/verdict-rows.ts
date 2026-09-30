@@ -173,16 +173,6 @@ export function sectionVerificationReasons(verificationMd: string, dryRunNow: bo
 }
 
 /**
- * True for a text scanner's row (gate.ts TEXT_SCANNERS, key slot `L<line>`:
- * an UNPARSEABLE or UNSUPPORTED-FORM citation form in the draft's prose). Its
- * key names a place in the draft, never a citekey — a bibliography entry that
- * does not parse is an UNPARSEABLE row keyed by its citekey instead.
- */
-export function isTextFindingRow(row: { readonly citekey: string; readonly verdict: string }): boolean {
-  return /^L\d+$/.test(row.citekey) && (row.verdict === 'UNPARSEABLE' || row.verdict === 'UNSUPPORTED-FORM');
-}
-
-/**
  * The refusal wording for any blocking row a VERIFICATION.md lists: a draft
  * check (`- draft: **PLACEHOLDER**`, `**NO-CITATIONS**`) and a text finding
  * (key slot `L<line>`) are worded as what they are; every citation row goes
@@ -194,7 +184,7 @@ export function verdictRowReason(row: BlockingVerdictRow): string {
       ? 'the draft is stub text written with no model configured (PLACEHOLDER) — re-draft it with a model configured (`pensmith write <N>`)'
       : 'the draft cites none of its assigned sources (NO-CITATIONS) — re-draft it (`pensmith write <N>`)';
   }
-  if (isTextFindingRow(row)) {
+  if (/^L\d+$/.test(row.citekey) && (row.verdict === 'UNPARSEABLE' || row.verdict === 'UNSUPPORTED-FORM')) {
     return `line ${row.citekey.slice(1)} of the draft holds a citation the verifier cannot check (${row.verdict})`;
   }
   if (row.quoteId !== undefined && row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
