@@ -11,9 +11,12 @@
 //                         with no identifier, a strict metadata-search match (the row
 //                         names the matched identifier)
 //   OK-BYO                the entry has no registrar identifier, or its lookup got no
-//                         answer, and the user's own PDF still re-hashes to its
+//                         answer, the user's own PDF still re-hashes to its
 //                         recorded sha256 (byo-text.ts; the row names the file and
-//                         hash; never an `asserted` PDF) — VRFY-14
+//                         hash; never an `asserted` PDF), AND the entry's title,
+//                         first author and year match the work LIBRARY.json records
+//                         that PDF was identified as at ingest (a mismatch is
+//                         MIS-CITED naming the field) — VRFY-14
 //   FABRICATED            the key is not in the bibliography; or the DOI's registrar
 //                         definitively does not know it (Crossref's 404 for a Crossref
 //                         prefix or a prefix no agency holds, DataCite's or doi.org's
@@ -27,7 +30,7 @@
 //                         or the notice recorded in the library) — VRFY-15; echoed on
 //                         stderr as `pensmith verify: RETRACTED — <key>: <notice>`
 //   UNRESOLVABLE          no identifier, and the metadata search definitively matched
-//                         nothing (add the work's identifier) — VRFY-12
+//                         nothing (add the work's identifier, or its PDF) — VRFY-12
 //   UNVERIFIABLE-NETWORK  NO ANSWER (D-20-03): an offline fixture miss, --dry-run, a
 //                         transport error or timeout, 429 / 5xx after retries, an
 //                         exhausted host, an open breaker, a failed retraction lookup.
@@ -52,9 +55,11 @@
 //   - no DOI: the arXiv id (arXiv), PMID (PubMed), ISBN (the books
 //     registries), in that order; FABRICATED only when every one said
 //     not-found.
-//   - no identifier: the user's own PDF (OK-BYO), else the metadata search
-//     (verify/metadata-search.ts: Crossref `query.bibliographic`, and the books
-//     registries' title search for a book).
+//   - no identifier: the user's own PDF (OK-BYO, when the entry describes the
+//     work that PDF was ingested as), else the metadata search
+//     (verify/metadata-search.ts: the books registries' title search for a
+//     book, Crossref `query.bibliographic`, arXiv, PubMed, DataCite and
+//     OpenAlex, strict matches only).
 //
 // Aliases (VRFY-14, D-20-12): a Crossref answer under a DOI other than the one
 // claimed passes only when the registrar asserts the relation at verification
@@ -664,15 +669,40 @@ async function verdictByIdentifiers(c: Claimed, claimed: BibEntry, facts: Librar
 async function byoEvidence(
   c: Claimed,
   facts: LibraryFacts,
-): Promise<{ kind: 'ok'; file: string; sha256: string } | { kind: 'altered'; reason: string } | null> {
+): Promise<{ kind: 'ok'; file: string; sha256: string; entry: LibraryEntry } | { kind: 'altered'; reason: string } | null> {
   const entry = facts.byo.get(c.ck);
   if (entry === undefined || entry.byo === null || facts.root === undefined) return null;
   const res = await byoText(facts.root, entry);
   if (res.available || res.code === 'no-text' || res.code === 'unreadable' || res.code === 'text-mismatch') {
-    return { kind: 'ok', file: entry.byo.file, sha256: entry.byo.sha256 };
+    return { kind: 'ok', file: entry.byo.file, sha256: entry.byo.sha256, entry };
   }
   if (res.code === 'asserted' || res.code === 'none') return null;
   return { kind: 'altered', reason: res.reason };
+}
+
+/**
+ * Whether the entry the bibliography claims is the work the user's own PDF was
+ * identified as when it was ingested (VRFY-14): the PDF's hash vouches for the
+ * FILE, and LIBRARY.json's record of it (the registrar record `add` / `new
+ * --pdfs` / the Zotero ingest matched it to, or the PDF's own title and
+ * authors) says which WORK the file is. The claimed title, first author and
+ * year — what the export prints — are compared with that record exactly as
+ * with a registrar's (name-match.ts), so a bibliography edited after ingest,
+ * or a mistyped own-source entry, is never passed on the file's hash alone.
+ * `uncomparable` when the record holds no title or no author / editor.
+ */
+function byoIdentity(c: Claimed, entry: LibraryEntry): { kind: 'match' } | { kind: 'mismatch'; match: MatchResult } | { kind: 'uncomparable' } {
+  const title = (entry.title ?? '').trim();
+  if (title === '' || (entry.authors.length === 0 && entry.editors.length === 0)) return { kind: 'uncomparable' };
+  const match = matchWork(c.work, { title, authors: entry.authors, editors: entry.editors, year: entry.year, type: entry.type });
+  return match.ok ? { kind: 'match' } : { kind: 'mismatch', match };
+}
+
+/** How the ingested identity of a PDF reads in a row: `"Title" (First Author, 2015)`. */
+function byoIdentityLabel(entry: LibraryEntry): string {
+  const first = entry.authors[0] ?? entry.editors[0] ?? '';
+  const who = first.replace(/[{}]/g, '');
+  return `"${entry.title ?? ''}" (${[who, entry.year !== null ? String(entry.year) : ''].filter((x) => x !== '').join(', ')})`;
 }
 
 /** The OK-BYO row: the file and the first 12 hex digits of its hash, and why no registrar decided. */
@@ -680,10 +710,31 @@ function okByoRow(c: Claimed, ev: { file: string; sha256: string }, because: str
   return row(c.ck, 'OK-BYO', `your own PDF ${ev.file} (sha256 ${ev.sha256.slice(0, 12)}) still matches what you ingested; ${because}`);
 }
 
-/** A lookup that got no answer: OK-BYO when the user's own PDF still matches (VRFY-14), else the row as it is. */
+/** The MIS-CITED row of an entry that does not describe the work its own PDF was ingested as. */
+function byoMisCitedRow(c: Claimed, ev: { file: string; sha256: string; entry: LibraryEntry }, m: MatchResult, because: string): Pass1Result {
+  return row(
+    c.ck,
+    'MIS-CITED',
+    `the entry does not describe the work your own PDF ${ev.file} (sha256 ${ev.sha256.slice(0, 12)}) was identified as when you added it, ` +
+      `${byoIdentityLabel(ev.entry)} — ${m.detail}; ${because} — cite the work as the PDF shows it, or re-add the right PDF (pensmith add <pdf>)`,
+    { titleJW: m.titleJW, authorJW: m.authorJW },
+  );
+}
+
+/**
+ * A lookup that got no answer: OK-BYO when the user's own PDF still matches
+ * (VRFY-14) AND the entry describes the work that PDF was ingested as
+ * (byoIdentity; a mismatch is MIS-CITED naming the field), else the row as it
+ * is — a PDF whose ingested identity cannot be compared stands in for nothing.
+ */
 async function orByo(c: Claimed, failed: Pass1Result, facts: LibraryFacts): Promise<Pass1Result> {
   const ev = await byoEvidence(c, facts);
-  return ev?.kind === 'ok' ? okByoRow(c, ev, `the registrar lookup got no answer (${failed.reason})`) : failed;
+  if (ev?.kind !== 'ok') return failed;
+  const because = `the registrar lookup got no answer (${failed.reason})`;
+  const id = byoIdentity(c, ev.entry);
+  if (id.kind === 'mismatch') return byoMisCitedRow(c, ev, id.match, because);
+  if (id.kind === 'uncomparable') return failed;
+  return okByoRow(c, ev, because);
 }
 
 /**
@@ -696,7 +747,14 @@ async function orByo(c: Claimed, failed: Pass1Result, facts: LibraryFacts): Prom
  */
 async function verdictWithoutIdentifier(c: Claimed, claimed: BibEntry, facts: LibraryFacts): Promise<Pass1Result> {
   const ev = await byoEvidence(c, facts);
-  if (ev?.kind === 'ok') return okByoRow(c, ev, 'the entry has no DOI, arXiv id, PMID or ISBN');
+  const noId = 'the entry has no DOI, arXiv id, PMID or ISBN';
+  let uncomparableByo = false;
+  if (ev?.kind === 'ok') {
+    const id = byoIdentity(c, ev.entry);
+    if (id.kind === 'match') return okByoRow(c, ev, noId);
+    if (id.kind === 'mismatch') return byoMisCitedRow(c, ev, id.match, noId);
+    uncomparableByo = true;
+  }
   const found = await metadataSearch(c.work, { isBook: claimed.type === 'book', ...refreshOf(c.ck, facts) });
   if (found.kind === 'match') {
     const crossrefRecord = found.candidate.source === 'crossref' && typeof found.candidate.doi === 'string';
@@ -716,10 +774,18 @@ async function verdictWithoutIdentifier(c: Claimed, claimed: BibEntry, facts: Li
     return row(c.ck, 'UNVERIFIABLE', `your own PDF can no longer stand in for this entry (${ev.reason}), and ${found.reason} — re-add the PDF (pensmith add <pdf>) or give the work's identifier`);
   }
   if (found.kind === 'no-answer') return row(c.ck, 'UNVERIFIABLE-NETWORK', `no DOI, arXiv id, PMID or ISBN, and ${found.reason} — ${RETRY_ONLINE}`);
+  if (uncomparableByo) {
+    return row(
+      c.ck,
+      'UNVERIFIABLE',
+      `LIBRARY.json records no title or author for the work your own PDF was identified as, so the PDF cannot stand in for this entry, and ${found.reason} — re-add the PDF (pensmith add <pdf>) or give the work's identifier`,
+    );
+  }
   return row(
     c.ck,
     'UNRESOLVABLE',
-    `no DOI, arXiv id, PMID or ISBN, and ${found.reason} — add the work's identifier (pensmith add <DOI, arXiv id, PMID or ISBN>)`,
+    `no DOI, arXiv id, PMID or ISBN, and ${found.reason} — add the work's identifier (pensmith add <DOI, arXiv id, PMID or ISBN>), ` +
+      `or its PDF (pensmith add <folder holding the PDF>: a PDF no registrar knows is kept as your own copy, OK-BYO), and cite the key it is added under`,
     { titleJW: 0, authorJW: 0 },
   );
 }

@@ -1,0 +1,27 @@
+[
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois?query=titles.title%3A%22A+Work+That+Was+Never+Published%22&page%5Bsize%5D=5",
+    "status": 200,
+    "response": {
+      "data": [],
+      "meta": {
+        "total": 0,
+        "totalPages": 0,
+        "page": 1
+      },
+      "links": {
+        "self": "https://api.datacite.org/dois?query=titles.title%3A%22A%20Work%20That%20Was%20Never%20Published%22&page%5Bsize%5D=5"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T17:56:07.313Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "datacite"
+    }
+  }
+]

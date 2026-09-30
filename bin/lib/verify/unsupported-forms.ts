@@ -16,6 +16,28 @@
 // Notes the exporter generates for a note style are produced after the gate
 // and never re-enter it.
 //
+// What a reader of the export sees decides (review round 2): the scanners for
+// author-date text, numbered markers and typed reference entries also read a
+// "reader view" of the draft — emphasis marks, backslash escapes, HTML
+// entities and inline HTML tags removed, a link reduced to its text,
+// blockquote / definition / table / fenced-div syntax around an entry set
+// aside — so `(*Smith*, 2019)`, `(Smith&nbsp;et&nbsp;al., 2019)`, `\[1\]`,
+// `(see [Nguyen & Patel, 2019](https://…))`, `<p>Nguyen, T. (2019). …</p>` or a
+// `> Nguyen, T. (2019). …` entry are refused like their plain forms (a row
+// still names the line and the text as written). A link's or an inline HTML
+// element's own text is checked as an author-date segment ("[Nguyen et al.,
+// 2019](…)", `<span>Nguyen 2019</span>`); a run-in label ("**References:**
+// Nguyen, T. (2019). …", "Source: Okafor 2021") is a reference list; a raw
+// TeX note (`\footnote{…}`, `\endnote`, `\footnotetext`, `\marginpar`,
+// `\sidenote`, …) is a footnote, and any other raw TeX environment
+// (`\begin{…}`) is refused as raw TeX (the exporter reads Markdown without
+// raw TeX too, so a command left in the text prints as text). A single
+// author before a year is a citation when the prose treats it as one —
+// "Nguyen (2019) argued", "According to Nguyen (2019)", "Nguyen's (2019)
+// meta-analysis", "Nguyen and colleagues (2019)", "Nguyen (2019, p. 5)",
+// "Nguyen (2019a)" — while "the Treaty of Versailles (1919) ended the war"
+// stays text (D-20-08, narrowed in review round 2).
+//
 // Fail closed: only the spans citation-token.ts PROVES are code (fenced blocks,
 // inline code spans — provableCodeSpans, D-18-42) and TeX math (`$…$`, `$$…$$`)
 // are skipped; everything else is scanned. A few shapes that are not
@@ -44,6 +66,7 @@ export const UNSUPPORTED_FORMS = [
   'superscript-marker',
   'metadata-block',
   'raw-output',
+  'raw-tex',
 ] as const;
 export type UnsupportedForm = (typeof UNSUPPORTED_FORMS)[number];
 
@@ -67,6 +90,9 @@ export const UNSUPPORTED_FORM_REASONS: Readonly<Record<UnsupportedForm, string>>
   'raw-output':
     'raw output (a {=format} block or span) that the export would copy into the document unread and the verifier cannot check — ' +
     'remove it and write Markdown, citing as [@citekey]',
+  'raw-tex':
+    'a raw TeX environment the verifier cannot check (the export prints raw TeX as text) — write Markdown, citing as [@citekey] ' +
+    '(math belongs in $…$ or $$…$$)',
 };
 
 interface RawFinding {
@@ -227,7 +253,10 @@ function vocabularyHeading(name: string): boolean {
 // initials or a given name, then a year in parentheses (APA, Harvard) or a
 // title in quotes or emphasis (MLA, Chicago), or a Vancouver author list, a
 // title and a journal with its year.
-const ENTRY_MARKER = String.raw`^[ \t]{0,3}(?:(?:[-*+]|\d{1,3}[.)]|\[\d{1,3}\])[ \t]+)?`;
+// The line may sit in a container — a block quote (`> `), a definition (`:   `),
+// a list item, any indentation (an indented block is scanned, fail closed) —
+// and a table cell is tested on its own (lineHasEntry).
+const ENTRY_MARKER = String.raw`^[ \t]*(?:>[ \t]?)*[ \t]*(?:[:~][ \t]+)?(?:(?:[-*+]|\d{1,3}[.)]|\[\d{1,3}\])[ \t]+)?`;
 const FAMILY = String.raw`(?:${PARTICLE}\s+)*\p{Lu}[\p{L}\p{M}'’]+(?:-\p{Lu}[\p{L}\p{M}'’]+)?(?:\s+\p{Lu}[\p{L}\p{M}'’]+)?`;
 const INITIALS = String.raw`\p{Lu}\.(?:[\s-]*\p{Lu}\.)*`;
 const GIVEN = String.raw`\p{Lu}[\p{L}\p{M}'’-]+(?:\s+(?:\p{Lu}\.|\p{Lu}[\p{L}\p{M}'’-]+))*`;
@@ -249,13 +278,23 @@ function referenceEntryShape(text: string): boolean {
   return ENTRY_SHAPES.some((re) => re.test(text));
 }
 
+/** True when a line holds a typed reference entry: the line itself, or one of its table cells. */
+function lineHasEntry(text: string): boolean {
+  if (referenceEntryShape(text)) return true;
+  if (!text.includes('|')) return false;
+  return text.split(/(?<!\\)\|/).some((cell) => cell.trim().length > 0 && referenceEntryShape(cell.trim()));
+}
+
+/** A fenced div's fence (`::: {.references}`, `:::`) separates entries like a blank line. */
+const DIV_FENCE_RE = /^[ \t]*:{3,}/;
+
 /** The entries of a block of lines: each list item, or each paragraph, as [start line, end line] (inclusive). */
 function blockEntries(lines: readonly Line[], from: number, to: number): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   let open: [number, number] | null = null;
   for (let j = from; j < to; j += 1) {
     const l = lines[j] as Line;
-    if (BLANK_RE.test(l.text)) {
+    if (BLANK_RE.test(l.text) || DIV_FENCE_RE.test(l.text)) {
       if (open !== null) out.push(open);
       open = null;
       continue;
@@ -269,11 +308,51 @@ function blockEntries(lines: readonly Line[], from: number, to: number): Array<[
   return out;
 }
 
+/** Reference-list names a run-in label is refused for whatever follows it ("References: …", "**Works Cited:** …"). */
+const STRONG_LIST_NAMES: ReadonlySet<string> = new Set([
+  'references', 'reference list', 'list of references', 'bibliography', 'selected bibliography', 'works cited', 'works consulted',
+  'cited works', 'literature cited', 'sources cited',
+]);
+/** A run-in label opening a line: the name, a colon, then text on the same line. */
+const RUN_IN_RE = /^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+][ \t]+)?([\p{L}][\p{L} ]{1,38}?)[ \t]*:[ \t]+(\S.*)$/u;
+
+/** True when the text after a label names a source: an entry's shape or an author and a year. */
+function namesASource(rest: string): boolean {
+  if (referenceEntryShape(rest)) return true;
+  if (rest.split(';').some((seg) => authorDateSegment(seg.replace(/[.\s]+$/u, '').replace(/\s+/g, ' ')))) return true;
+  return new RegExp(String.raw`(?<![\p{L}\p{M}])${NARRATIVE_AUTHOR}\s*\(\s*${YEAR}`, 'u').test(rest);
+}
+
+/**
+ * A run-in reference list: "References: Nguyen, T. (2019). …", "**Works
+ * Cited:** …", "Sources: World Bank (2020); IMF (2021).", "Source: Okafor
+ * 2021". A strong name is refused whatever follows; "Notes:" / "Sources:" /
+ * "Source:" only when what follows names a source ("Notes: values are means"
+ * is prose).
+ */
+function runInLabel(text: string): boolean {
+  const m = RUN_IN_RE.exec(text);
+  if (m === null) return false;
+  const name = listName(m[1] as string);
+  if (!REFERENCE_LIST_NAMES.has(name) && name !== 'source' && !vocabularyHeading(name)) return false;
+  return STRONG_LIST_NAMES.has(name) || namesASource(m[2] as string);
+}
+
 function referenceLists(md: string, lines: readonly Line[]): RawFinding[] {
+  void md;
   const out: RawFinding[] = [];
   const covered = new Set<number>(); // lines already reported under a heading
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] as Line;
+    // A run-in label: the rest of its paragraph is the list.
+    if (runInLabel(line.text)) {
+      let j = i;
+      while (j + 1 < lines.length && !BLANK_RE.test((lines[j + 1] as Line).text) && headingKind(lines, j + 1) === null) j += 1;
+      out.push({ form: 'reference-list', start: line.start, end: (lines[j] as Line).end });
+      for (let x = i; x <= j; x += 1) covered.add(x);
+      i = j;
+      continue;
+    }
     let kind = headingKind(lines, i);
     let name = kind === null ? '' : listName(headingText(lines, i, kind));
     let exact = REFERENCE_LIST_NAMES.has(name);
@@ -305,10 +384,22 @@ function referenceLists(md: string, lines: readonly Line[]): RawFinding[] {
     }
     i = j - 1;
   }
-  // Entries typed with no heading at all (or under any other heading).
+  // Entries typed with no heading at all (or under any other heading): a
+  // paragraph or list item whose first line has an entry's shape, then any
+  // other line that holds one (in a table cell, a block quote, after a
+  // soft line break, an HTML element's text).
+  const reported = new Set<number>();
   for (const [a, b] of blockEntries(lines, 0, lines.length)) {
     if (covered.has(a) || headingKind(lines, a) !== null) continue;
-    if (referenceEntryShape((lines[a] as Line).text)) out.push({ form: 'reference-list', start: (lines[a] as Line).start, end: (lines[b] as Line).end });
+    if (lineHasEntry((lines[a] as Line).text)) {
+      out.push({ form: 'reference-list', start: (lines[a] as Line).start, end: (lines[b] as Line).end });
+      for (let x = a; x <= b; x += 1) reported.add(x);
+    }
+  }
+  for (let j = 0; j < lines.length; j += 1) {
+    if (covered.has(j) || reported.has(j) || headingKind(lines, j) !== null) continue;
+    const l = lines[j] as Line;
+    if (lineHasEntry(l.text)) out.push({ form: 'reference-list', start: l.start, end: l.end });
   }
   return out;
 }
@@ -441,6 +532,59 @@ const TEX_CITE_RE =
 
 function texCites(md: string): RawFinding[] {
   return [...md.matchAll(TEX_CITE_RE)].map((m) => ({ form: 'tex-cite' as const, start: m.index, end: m.index + m[0].length }));
+}
+
+/** The offset just past the `}` closing the `{` at `open` (nesting and escapes counted), or the end of its paragraph. */
+function closeBrace(md: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < md.length; i += 1) {
+    const c = md[i];
+    if (c === '\n' && /^\r?\n[ \t]*\r?\n/.test(md.slice(i))) return i;
+    if (c === '\\') {
+      i += 1; // an escaped character (`\{`, `\}`) is text
+      continue;
+    }
+    if (c === '{') depth += 1;
+    else if (c === '}') {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return md.length;
+}
+
+/** Raw TeX note commands: a footnote, an endnote, a margin or side note (their text is a note Pandoc's LaTeX writer typesets). */
+const TEX_NOTE_RE = /\\(?:footnote|footnotetext|footnotemark|endnote|endnotetext|endnotemark|marginpar|marginnote|sidenote|sidenotetext|tablefootnote|mpfootnote)(?![A-Za-z@])\*?/g;
+
+/** Raw TeX notes (`\footnote{…}` …), reported as footnotes: from the command through its brace group. */
+function texNotes(md: string): RawFinding[] {
+  const out: RawFinding[] = [];
+  for (const m of md.matchAll(TEX_NOTE_RE)) {
+    if (escaped(md, m.index)) continue; // `\\footnote` is a printed backslash, then text
+    let end = m.index + m[0].length;
+    for (;;) {
+      const opt = /^[ \t]*\[[^\]\n]*\]/.exec(md.slice(end));
+      if (opt === null) break;
+      end += opt[0].length;
+    }
+    const brace = /^[ \t]*\{/.exec(md.slice(end));
+    if (brace !== null) end = closeBrace(md, end + brace[0].length - 1);
+    out.push({ form: 'footnote', start: m.index, end });
+  }
+  return out;
+}
+
+/** A raw TeX environment (`\begin{…}` … `\end{…}`); a TeX bibliography is tex-cite's. */
+function texEnvironments(md: string): RawFinding[] {
+  const out: RawFinding[] = [];
+  for (const m of md.matchAll(/\\begin[ \t]*\{([A-Za-z@*]+)\}/g)) {
+    if (escaped(md, m.index) || m[1] === 'thebibliography') continue;
+    const name = (m[1] as string).replace(/\*/g, '\\*');
+    const close = new RegExp(String.raw`\\end[ \t]*\{${name}\}`).exec(md.slice(m.index + m[0].length));
+    const end = close !== null ? m.index + m[0].length + close.index + close[0].length : m.index + m[0].length;
+    out.push({ form: 'raw-tex', start: m.index, end });
+  }
+  return out;
 }
 
 /** True when a plain superscript number right after `before` reads as an exponent (`m²`, `10⁶`, `x²`), not a marker. */
@@ -627,7 +771,7 @@ const NARRATIVE_AUTHOR = String.raw`(?:${PARTICLE}\s+)*${CAPWORD}(?:[ \t]+${CAPW
 const ET_AL = String.raw`et\.?\s+al\.?`;
 /** A publication year: `2019`, `2019a`, `1900/1953`, `n.d.`, `in press`, `forthcoming` — never a range. */
 const YEAR = String.raw`(?:(?:1[5-9]|20)\d{2}[a-z]?(?:\/(?:1[5-9]|20)\d{2}[a-z]?)?(?![\d–—-])|n\.\s?d\.|in\s+press|forthcoming|in\s+preparation|under\s+review)`;
-const PREFIX = String.raw`(?:see(?:\s+also)?|but\s+see|e\.g\.,?|i\.e\.,?|cf\.|compare|for\s+example,?|for\s+a\s+review,?\s+see|as\s+cited\s+in|as\s+reviewed\s+in|reviewed\s+in|quoted\s+in|cited\s+in|following|contra)`;
+const PREFIX = String.raw`(?:see(?:\s+also)?|but\s+see|e\.g\.,?|i\.e\.,?|cf\.|compare|for\s+example,?|for\s+a\s+review,?\s+see|as\s+cited\s+in|as\s+reviewed\s+in|reviewed\s+in|quoted\s+in|cited\s+in|following|contra|(?:[Ss]ources?|[Dd]ata|[Aa]dapted\s+from|[Rr]eproduced\s+from|[Rr]eprinted\s+from|[Dd]ata\s+from|[Bb]ased\s+on|[Aa]fter)\s*:?)`;
 
 /** A parenthetical / bracketed segment that is an author-date citation (APA, Harvard, Chicago author-date, MLA with et al. or two names). */
 const SEGMENT_RE = new RegExp(
@@ -724,10 +868,261 @@ function authorDate(md: string): RawFinding[] {
     const window = md.slice(windowStart, m.index);
     const lastBreak = Math.max(window.lastIndexOf('\n\n'), window.lastIndexOf('\n\r\n'));
     const head = lastBreak === -1 ? window : window.slice(lastBreak + 1);
-    const n = narrative.exec(head);
+    const n = narrative.exec(head) ?? singleAuthorCitation(head, m[0], md.slice(m.index + m[0].length, m.index + m[0].length + 80));
     if (n === null) continue;
     const start = m.index - head.length + n.index;
     out.push({ form: 'author-date', start, end: m.index + m[0].length });
+  }
+  return out;
+}
+
+/** Verbs of reporting and finding: "Nguyen (2019) argued / found / showed …" (D-20-08, narrowed in review round 2). */
+const REPORTING_VERB = String.raw`(?:argue[sd]?|arguing|f(?:ind|inds|ound)|show(?:s|ed|n)?|report(?:s|ed)?|note[sd]?|suggest(?:s|ed)?|demonstrate[sd]?|conclude[sd]?|observe[sd]?|claim(?:s|ed)?|propose[sd]?|state[sd]?|wr(?:ite|ites|ote|itten)|contend(?:s|ed)?|maintain(?:s|ed)?|assert(?:s|ed)?|emphasi[sz]e[sd]?|highlight(?:s|ed)?|document(?:s|ed)?|estimate[sd]?|describe[sd]?|explain(?:s|ed)?|examine[sd]?|investigate[sd]?|identifie[sd]|identify|review(?:s|ed)?|analy[sz]e[sd]?|survey(?:s|ed)?|hypothesi[sz]e[sd]?|posit(?:s|ed)?|caution(?:s|ed)?|warn(?:s|ed)?|recommend(?:s|ed)?|acknowledge[sd]?|confirm(?:s|ed)?|replicate[sd]?|reveal(?:s|ed)?|indicate[sd]?|discover(?:s|ed)?|assess(?:es|ed)?|evaluate[sd]?|explore[sd]?|discuss(?:es|ed)?|question(?:s|ed)?|challenge[sd]?|critici[sz]e[sd]?|dispute[sd]?|stress(?:es|ed)?|insist(?:s|ed)?|speculate[sd]?|theori[sz]e[sd]?|point(?:s|ed)?\s+out|summari[sz]e[sd]?|measure[sd]?|predict(?:s|ed)?|reason(?:s|ed)?|tested|studied|studies|modell?ed|put\s+it|says|said|writes|agree[sd]?|disagree[sd]?|den(?:y|ies|ied)|doubt(?:s|ed)?|recogni[sz]e[sd]?|reject(?:s|ed)?)`;
+/** Words a writer puts between the citation and its verb: "Nguyen (2019) also found", "Nguyen (2019), however, argued". */
+const BETWEEN = String.raw`(?:\s*,?\s*(?:also|further|furthermore|recently|similarly|previously|later|first|then|subsequently|convincingly|famously|notably|rightly|correctly|persuasively|explicitly|originally|elsewhere|however|moreover|in\s+contrast|by\s+contrast|for\s+example|for\s+instance|in\s+turn|instead|too|even|only|each|both|all|clearly|repeatedly|consistently|independently|\p{L}+ly)\s*,?)*`;
+/** Cues before a lone name that make it a citation: "According to Nguyen (2019)", "as shown by Nguyen (2019)". */
+const CITING_CUE_RE = /(?:according\s+to|as\s+(?:shown|noted|reported|described|argued|demonstrated|suggested|observed|found|stated|discussed|explained|proposed|pointed\s+out|documented|reviewed|summari[sz]ed|outlined|detailed|put)\s+by|following|\bsee(?:\s+also)?|\bcf\.)\s+$/iu;
+/** A lone name and what may follow it in the head: "Nguyen", "van der Berg", "Nguyen's", "Nguyen and colleagues". */
+const LONE_AUTHOR_RE = new RegExp(
+  String.raw`(?<![\p{L}\p{M}])(?<name>${NARRATIVE_AUTHOR})(?<tail>\s*(?:'s|’s)|\s+(?:and|&)\s+(?:colleagues|coworkers|co-workers|associates|collaborators|coauthors|co-authors|others|team))?\s*$`,
+  'u',
+);
+
+/**
+ * A lone author before a year that the prose treats as a citation (see the
+ * header): followed by a reporting verb, after a citing cue ("according to",
+ * "as shown by"), possessive, "and colleagues", or with a page locator or a
+ * year letter. A lone name before a year otherwise stays text ("the Treaty
+ * of Versailles (1919) ended the war"). Returns where the name starts in
+ * `head`, or null.
+ */
+function singleAuthorCitation(head: string, dated: string, after: string): { index: number } | null {
+  const m = LONE_AUTHOR_RE.exec(head);
+  if (m === null || m.groups === undefined) return null;
+  const name = (m.groups['name'] ?? '').trim();
+  const last = name.split(/\s+/).pop() ?? '';
+  if (NOT_AUTHORS.has(last.toLowerCase()) || NUMBERED_LABELS.has(last.toLowerCase())) return null;
+  // A possessive may be read into the name itself (a name word may hold an apostrophe: O'Neil).
+  const tail = (m.groups['tail'] ?? '') || (/['’]s$/u.test(name) ? "'s" : '');
+  const locator = new RegExp(String.raw`^\(\s*${YEAR}\s*(?:,\s*(?:pp?\.|para\.|ch(?:ap)?\.|sec\.|§)\s*\d|:\s*\d)`, 'u').test(dated);
+  const letter = /^\(\s*(?:1[5-9]|20)\d{2}[a-z]\b/u.test(dated);
+  const verb = new RegExp(String.raw`^${BETWEEN}\s*${REPORTING_VERB}\b`, 'iu').test(after);
+  const cue = CITING_CUE_RE.test(head.slice(0, m.index));
+  return tail !== '' || locator || letter || verb || cue ? { index: m.index } : null;
+}
+
+// ---------------------------------------------------------------------------
+// The reader view: the draft's text as the export shows it (see the header).
+// ---------------------------------------------------------------------------
+
+interface ReaderView {
+  readonly text: string;
+  /** `starts[i]` / `ends[i]`: where in the draft `text[i]` is written (an escape `\[` or an entity `&nbsp;` spans several characters). */
+  readonly starts: readonly number[];
+  readonly ends: readonly number[];
+}
+
+/** The HTML entities a draft may write for text a citation is made of (the rest by number). */
+const TEXT_ENTITIES: Readonly<Record<string, string>> = {
+  nbsp: ' ', ensp: ' ', emsp: ' ', thinsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", ndash: '–', mdash: '—', hellip: '…',
+  lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', laquo: '«', raquo: '»', sect: '§', middot: '·', lpar: '(', rpar: ')', lsqb: '[', rsqb: ']',
+  lbrack: '[', rbrack: ']', comma: ',', period: '.', colon: ':', semi: ';', num: '#',
+};
+const ENTITY_RE = /&(?:([A-Za-z]+)|#(\d{1,7})|#[xX]([0-9A-Fa-f]{1,6}));/y;
+const TAG_RE = /<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>/y;
+const COMMENT_RE = /<!--[\s\S]*?-->/y;
+const ASCII_PUNCT_RE = /[!-/:-@[-`{-~]/;
+
+/** The offset of the `]` closing the `[` at `open` (nesting and escapes counted, within its paragraph), or -1. */
+function matchingBracket(md: string, open: number, to: number): number {
+  let depth = 0;
+  for (let i = open; i < to; i += 1) {
+    const c = md[i];
+    if (c === '\\') {
+      i += 1;
+      continue;
+    }
+    if (c === '\n' && /^\r?\n[ \t]*\r?\n/.test(md.slice(i, i + 4))) return -1;
+    if (c === '[') depth += 1;
+    else if (c === ']') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** The offset of the `)` closing the `(` at `open` (nesting counted, on its line), or -1. */
+function matchingParen(md: string, open: number, to: number): number {
+  let depth = 0;
+  for (let i = open; i < to; i += 1) {
+    const c = md[i];
+    if (c === '\n') return -1;
+    if (c === '\\') {
+      i += 1;
+      continue;
+    }
+    if (c === '(') depth += 1;
+    else if (c === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** Append the reader view of `md[from, to)` (see readerView). */
+function readerWalk(md: string, from: number, to: number, out: string[], starts: number[], ends: number[]): void {
+  const push = (ch: string, at: number, end = at + 1): void => {
+    for (const unit of ch.split('')) {
+      out.push(unit);
+      starts.push(at);
+      ends.push(end);
+    }
+  };
+  let i = from;
+  while (i < to) {
+    const c = md[i] as string;
+    if (c === '\\') {
+      const n = md[i + 1];
+      if (n !== undefined && i + 1 < to && ASCII_PUNCT_RE.test(n)) {
+        push(n, i, i + 2); // an escaped mark prints as itself
+        i += 2;
+        continue;
+      }
+      push(c, i);
+      i += 1;
+      continue;
+    }
+    if (c === '&') {
+      ENTITY_RE.lastIndex = i;
+      const e = ENTITY_RE.exec(md);
+      if (e !== null && e.index + e[0].length <= to) {
+        const [, name, dec, hex] = e;
+        let ch: string | null = null;
+        if (name !== undefined) ch = TEXT_ENTITIES[name.toLowerCase()] ?? null;
+        else {
+          const code = dec !== undefined ? Number(dec) : Number.parseInt(hex ?? '', 16);
+          ch = Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code === 0xa0 ? 0x20 : code) : null;
+        }
+        if (ch !== null) {
+          push(ch, i, i + e[0].length);
+          i += e[0].length;
+          continue;
+        }
+      }
+    }
+    if (c === '<') {
+      COMMENT_RE.lastIndex = i;
+      const cm = COMMENT_RE.exec(md);
+      if (cm !== null && cm.index + cm[0].length <= to) {
+        i += cm[0].length; // an HTML comment is not shown
+        continue;
+      }
+      TAG_RE.lastIndex = i;
+      const t = TAG_RE.exec(md);
+      if (t !== null && t.index + t[0].length <= to) {
+        if (/^<br\b/i.test(t[0])) push(' ', i, i + t[0].length);
+        i += t[0].length; // a tag is markup; its element's text stays
+        continue;
+      }
+    }
+    if (c === '*' || c === '`') {
+      i += 1; // emphasis marks and code-span delimiters are not shown
+      continue;
+    }
+    if (c === '~' && md[i + 1] === '~') {
+      i += 2; // strikethrough
+      continue;
+    }
+    if (c === '_') {
+      const prev = md[i - 1] ?? ' ';
+      const next = md[i + 1] ?? ' ';
+      if (!(/[\p{L}\p{N}]/u.test(prev) && /[\p{L}\p{N}]/u.test(next))) {
+        i += 1; // an emphasis underscore (one inside a word is text)
+        continue;
+      }
+    }
+    if (c === '[' || (c === '!' && md[i + 1] === '[')) {
+      const open = c === '!' ? i + 1 : i;
+      const close = matchingBracket(md, open, to);
+      if (close !== -1) {
+        const after = md[close + 1];
+        let end = -1;
+        if (after === '(') end = matchingParen(md, close + 1, to);
+        else if (after === '[') {
+          const r = md.indexOf(']', close + 2);
+          end = r !== -1 && r < to && !md.slice(close + 2, r).includes('\n') ? r : -1;
+        } else if (after === '{') {
+          const r = md.indexOf('}', close + 2);
+          end = r !== -1 && r < to && !md.slice(close + 2, r).includes('\n') ? r : -1;
+        }
+        if (end !== -1) {
+          readerWalk(md, open + 1, close, out, starts, ends); // a link, an image or a span: its text
+          i = end + 1;
+          continue;
+        }
+      }
+    }
+    push(c, i);
+    i += 1;
+  }
+}
+
+/** The draft as a reader of the export sees its text (see the header), with each character's offset in the draft. */
+function readerView(md: string): ReaderView {
+  const out: string[] = [];
+  const starts: number[] = [];
+  const ends: number[] = [];
+  readerWalk(md, 0, md.length, out, starts, ends);
+  return { text: out.join(''), starts, ends };
+}
+
+/**
+ * A finding in the reader view, placed on the draft. A reference-list finding
+ * starts at its line when only markup precedes it there (`**References:** …`,
+ * `<p>Lee, K. …`), so its row shows the line as written.
+ */
+function onDraft(f: RawFinding, view: ReaderView, md: string): RawFinding {
+  let start = view.starts[f.start] ?? 0;
+  const end = f.end > f.start ? (view.ends[f.end - 1] ?? start + 1) : start;
+  if (f.form === 'reference-list') {
+    const lineStart = md.lastIndexOf('\n', start - 1) + 1;
+    if (/^[ \t*_`~]*(?:<[^<>\n]*>[ \t*_]*)*$/.test(md.slice(lineStart, start))) start = lineStart;
+  }
+  return { form: f.form, start, end: Math.max(end, start) };
+}
+
+/**
+ * Author-date text a link or an inline HTML element shows ("[Nguyen et al.,
+ * 2019](https://…)", "<span class=\"citation\">Nguyen 2019</span>"): the
+ * element's reader-view text is an author-date segment.
+ */
+function linkedAuthorDate(md: string): RawFinding[] {
+  const out: RawFinding[] = [];
+  const check = (start: number, end: number, inner: string): void => {
+    const text = readerView(inner).text.replace(/\s+/g, ' ').trim();
+    if (text.length < 4) return;
+    if (text.split(';').some((seg) => authorDateSegment(seg.replace(/^[\s(\[]+|[\s)\].,]+$/gu, '')))) out.push({ form: 'author-date', start, end });
+  };
+  for (let at = md.indexOf('['); at !== -1; at = md.indexOf('[', at + 1)) {
+    if (escaped(md, at)) continue;
+    const close = matchingBracket(md, at, md.length);
+    if (close === -1) continue;
+    const after = md[close + 1];
+    let end = -1;
+    if (after === '(') end = matchingParen(md, close + 1, md.length);
+    else if (after === '[' || after === '{') {
+      const r = md.indexOf(after === '[' ? ']' : '}', close + 2);
+      end = r !== -1 && !md.slice(close + 2, r).includes('\n') ? r : -1;
+    }
+    if (end === -1) continue;
+    const inner = md.slice(at + 1, close);
+    if (/(?:^|[\s[;(-])@/.test(inner)) continue; // a Pandoc citation, not a link
+    check(md[at - 1] === '!' ? at - 1 : at, end + 1, inner);
+  }
+  for (const m of md.matchAll(/<(a|span|em|i|b|strong|small|q|u|mark|abbr|dfn|s|del|ins|font)\b[^>]*>([\s\S]{2,400}?)<\/\1\s*>/gi)) {
+    check(m.index, m.index + m[0].length, m[2] as string);
   }
   return out;
 }
@@ -748,6 +1143,8 @@ export function findUnsupportedForms(md: string): TextFinding[] {
   const code = provableCodeSpans(md);
   const skip = [...code, ...mathSpans(md, code)];
   const lines = linesOf(md);
+  const view = readerView(md);
+  const viewLines = linesOf(view.text);
   const raw = [
     ...metadataBlocks(lines),
     ...rawOutput(md, lines),
@@ -755,10 +1152,15 @@ export function findUnsupportedForms(md: string): TextFinding[] {
     ...footnotes(md, lines),
     ...inlineNotes(md),
     ...texCites(md),
+    ...texNotes(md),
+    ...texEnvironments(md),
     ...htmlCites(md),
     ...superscriptMarkers(md),
     ...numericMarkers(md),
     ...authorDate(md),
+    ...linkedAuthorDate(md),
+    // What the reader sees: emphasis, escapes, entities, tags and links undone.
+    ...[...referenceLists(view.text, viewLines), ...numericMarkers(view.text), ...authorDate(view.text)].map((f) => onDraft(f, view, md)),
   ]
     .filter((f) => !offsetInSpans(f.start, skip))
     .sort((a, b) => a.start - b.start || b.end - a.end);

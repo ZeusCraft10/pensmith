@@ -704,9 +704,11 @@ function buildPandocArgs(
     inputPath,
     // Defence in depth behind the gate's UNSUPPORTED-FORM rows (VRFY-10): a
     // YAML metadata block in the text never sets `references` / `bibliography`
-    // / `csl` / `nocite` / `header-includes`, and a `{=format}` block or span
-    // is never copied into the output raw — both read as ordinary text.
-    '--from', 'markdown-yaml_metadata_block-raw_attribute',
+    // / `csl` / `nocite` / `header-includes`, a `{=format}` block or span is
+    // never copied into the output raw, and raw TeX (`\footnote{…}`,
+    // `\begin{…}`, any command) is never passed to the LaTeX / PDF writer —
+    // all read as ordinary text, so the export shows what the gate read.
+    '--from', 'markdown-yaml_metadata_block-raw_attribute-raw_tex',
     '--to', to,
     '--output', outputPath,
     '--metadata', 'title=',

@@ -46,6 +46,8 @@
 //   iterations of garbage / valid / trailing-punct corpora and serves as
 //   a fuzz harness against pathological input.
 
+import { offsetInSpans, provableCodeSpans } from './citation-token.js';
+
 // The resolver-URL prefix forms (D-15 step 1, extended by SRC-13): an
 // https/http doi.org or dx.doi.org URL (with or without `www.`, or with no
 // scheme at all). A DOI given as a URL may be percent-encoded
@@ -349,11 +351,12 @@ export function isPmcid(s: string): boolean {
 // `doi:10.…`, a doi.org link, a bare `10.….` DOI, `arXiv:…`, an arxiv.org
 // abs / pdf link, `PMID: …` or a PubMed link. Pass 1 verifies each one at its
 // registrar (a fabricated identifier is FABRICATED, never silently absent).
-// Everything is scanned except spans that are provably code: a fenced code
-// block (``` / ~~~, closed) and an inline code span (a backtick run closed by
-// the same run in its paragraph). Anything else — an unclosed fence, an
-// indented block, a link target — is scanned (fail closed). Every pattern is
-// linear (T-01-DOS-03).
+// Everything is scanned except spans the one citation grammar proves are code
+// (citation-token.ts provableCodeSpans — a closed fence, a closed inline code
+// span; an escaped backtick opens none). Anything else — an unclosed fence, an
+// indented block, a link target — is scanned (fail closed). Emphasis marks
+// closing around an identifier are not part of it. Every pattern is linear
+// (T-01-DOS-03).
 // ---------------------------------------------------------------------------
 
 export type BareIdentifierKind = 'doi' | 'arxiv' | 'pmid';
@@ -391,48 +394,17 @@ const BARE_ID_PATTERNS: ReadonlyArray<{ kind: BareIdentifierKind; re: RegExp }> 
   { kind: 'pmid', re: /\bPMID:?\s*\d{1,9}\b/gi },
 ];
 
-/** The spans of `md` that are provably code (closed fences, closed inline code spans). */
-export function provableCodeSpans(md: string): Array<[number, number]> {
-  const spans: Array<[number, number]> = [];
-  // Fenced code blocks: an opening ``` / ~~~ line (≤ 3 spaces of indent) closed
-  // by a fence of the same character at least as long. An unclosed fence is
-  // not provable code.
-  const lineStarts: number[] = [0];
-  for (let i = 0; i < md.length; i++) if (md[i] === '\n') lineStarts.push(i + 1);
-  const lineText = (k: number): string => md.slice(lineStarts[k]!, (lineStarts[k + 1] ?? md.length + 1) - 1).replace(/\r$/, '');
-  for (let k = 0; k < lineStarts.length; k++) {
-    const open = /^ {0,3}(`{3,}|~{3,})/.exec(lineText(k));
-    if (!open) continue;
-    const fence = open[1]!;
-    let close = -1;
-    for (let j = k + 1; j < lineStarts.length; j++) {
-      const m = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(lineText(j));
-      if (m && m[1]![0] === fence[0] && m[1]!.length >= fence.length) {
-        close = j;
-        break;
-      }
-    }
-    if (close < 0) continue;
-    spans.push([lineStarts[k]!, (lineStarts[close + 1] ?? md.length + 1) - 1]);
-    k = close;
-  }
-  // Inline code: a backtick run closed by a run of the same length in its paragraph.
-  const inFence = (i: number): boolean => spans.some(([a, b]) => i >= a && i < b);
-  const tick = /`+/g;
-  for (let m = tick.exec(md); m !== null; m = tick.exec(md)) {
-    if (inFence(m.index)) continue;
-    const run = m[0];
-    const rest = md.slice(m.index + run.length);
-    const paragraphEnd = rest.search(/\r?\n[ \t]*\r?\n/);
-    const scope = paragraphEnd >= 0 ? rest.slice(0, paragraphEnd) : rest;
-    const closeRe = new RegExp(`(?<!\`)${run}(?!\`)`, 'g');
-    const close = closeRe.exec(scope);
-    if (!close) continue;
-    const end = m.index + run.length + close.index + run.length;
-    spans.push([m.index, end]);
-    tick.lastIndex = end;
-  }
-  return spans;
+/**
+ * Emphasis or strikethrough closing around an identifier (`*doi:10.1038/x*`,
+ * `**https://doi.org/10.1038/x**`, `~~…~~`, with any punctuation after them):
+ * the marks are markup, not part of the id — a DOI never ends in `*` or `~`.
+ * A trailing `_` is markup only when one also opens the word
+ * (`_doi:10.1038/x_`).
+ */
+function withoutClosingEmphasis(text: string, opensWithUnderscore: boolean): string {
+  let t = text.replace(/[*~]+[.,;:!?)\]'"”’]*$/u, '');
+  if (opensWithUnderscore) t = t.replace(/_+[.,;:!?)\]'"”’]*$/u, '');
+  return t;
 }
 
 function canonicalBareId(kind: BareIdentifierKind, text: string): string | null {
@@ -448,8 +420,9 @@ function canonicalBareId(kind: BareIdentifierKind, text: string): string | null 
  * appearance, one per canonical id (the first occurrence).
  */
 export function findBareIdentifiers(md: string): BareIdentifier[] {
-  const code = md.includes('`') || md.includes('~') ? provableCodeSpans(md) : [];
-  const inCode = (i: number): boolean => code.some(([a, b]) => i >= a && i < b);
+  // The one grammar's code proof (citation-token.ts, checked against pandoc):
+  // an escaped backtick (`` \` ``) opens no code span, so what it wraps is text.
+  const code = provableCodeSpans(md);
   const claimed: Array<[number, number]> = [];
   const overlaps = (a: number, b: number): boolean => claimed.some(([x, y]) => a < y && x < b);
   const found: BareIdentifier[] = [];
@@ -457,14 +430,17 @@ export function findBareIdentifiers(md: string): BareIdentifier[] {
     re.lastIndex = 0;
     for (let m = re.exec(md); m !== null; m = re.exec(md)) {
       const start = m.index;
-      const end = start + m[0].length;
-      if (inCode(start) || overlaps(start, end)) continue;
-      const id = canonicalBareId(kind, m[0]);
+      // The word the identifier stands in (`_doi:10.…_`): does an emphasis underscore open it?
+      const wordStart = Math.max(md.lastIndexOf(' ', start - 1), md.lastIndexOf('\n', start - 1), md.lastIndexOf('\t', start - 1)) + 1;
+      const text = withoutClosingEmphasis(m[0], md[wordStart] === '_');
+      const end = start + text.length;
+      if (offsetInSpans(start, code) || overlaps(start, end)) continue;
+      const id = canonicalBareId(kind, text);
       if (id === null) continue;
       claimed.push([start, end]);
       let line = 1;
       for (let i = 0; i < start; i++) if (md.charCodeAt(i) === 10) line++;
-      found.push({ kind, id, text: m[0], start, end, line });
+      found.push({ kind, id, text, start, end, line });
     }
   }
   found.sort((a, b) => a.start - b.start);

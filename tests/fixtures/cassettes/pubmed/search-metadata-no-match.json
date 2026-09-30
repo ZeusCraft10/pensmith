@@ -1,0 +1,45 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=%22A+Work+That+Was+Never+Published%22%5Bti%5D+AND+Nobody%5Bau%5D&retmode=json&retmax=5",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "0",
+        "retmax": "0",
+        "retstart": "0",
+        "idlist": [],
+        "translationset": [],
+        "querytranslation": "\"A Work That Was Never Published\"[ti] AND Nobody[au]",
+        "errorlist": {
+          "phrasesnotfound": [
+            "Nobody"
+          ],
+          "fieldsnotfound": []
+        },
+        "warninglist": {
+          "phrasesignored": [],
+          "quotedphrasesnotfound": [
+            "\"A Work That Was Never Published\"[ti]"
+          ],
+          "outputmessages": [
+            "No items found."
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T17:56:09.211Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

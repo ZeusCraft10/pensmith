@@ -16,7 +16,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bareIdentifierKey, findBareIdentifiers, provableCodeSpans } from '../bin/lib/doi.js';
+import { bareIdentifierKey, findBareIdentifiers } from '../bin/lib/doi.js';
+import { provableCodeSpans } from '../bin/lib/citation-token.js';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
 import { parseBlockingVerdictRows, renderPass1VerdictRow } from '../bin/lib/verify/verdict-rows.js';
 
@@ -67,6 +68,17 @@ test('VRFY-10: identifiers in provable code are skipped; an unclosed fence is sc
   assert.deepEqual(provableCodeSpans('no code here'), []);
   // An unclosed backtick is not code either.
   assert.deepEqual(keys('a ` doi:10.5555/e'), ['doi:10.5555/e']);
+  // Escaped backticks open no code span (the one grammar, checked against pandoc): Pandoc prints the DOI as text.
+  assert.deepEqual(keys('See \\`doi:10.5555/fake-work-2017\\` for the data.'), ['doi:10.5555/fake-work-2017']);
+});
+
+test('VRFY-10: emphasis around an identifier is markup, not part of it', () => {
+  assert.deepEqual(keys('See *doi:10.1038/nature12373*.'), ['doi:10.1038/nature12373']);
+  assert.deepEqual(keys('See **https://doi.org/10.1038/nature12373**.'), ['doi:10.1038/nature12373']);
+  assert.deepEqual(keys('See ~~doi:10.1038/nature12373~~ and _doi:10.1038/nature14539_.'), ['doi:10.1038/nature12373', 'doi:10.1038/nature14539']);
+  assert.deepEqual(keys('See *arXiv:1706.03762* and **PMID: 31535829**.'), ['arXiv:1706.03762', 'PMID:31535829']);
+  // An underscore inside a DOI is kept when no emphasis opens before it.
+  assert.deepEqual(keys('See doi:10.5555/a_b_.'), ['doi:10.5555/a_b_']);
 });
 
 test('VRFY-10: not identifiers — a version number, an email, a year range', () => {

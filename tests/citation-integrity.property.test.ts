@@ -187,6 +187,18 @@ const unsupported: fc.Arbitrary<Segment> = fc.oneof(
   fc.constant(bad('asthma fell (Nguyen 45)')),
   fc.constant(bad('(Nguyen, *Street Trees*, 2019)')),
   fc.constant(bad('(T. Nguyen, personal communication, May 3, 2019)')),
+  // Review round 2: forms whose markup hides them from a raw-text scan — the
+  // reader sees the plain citation (emphasis, entities, escapes, link text,
+  // inline HTML) — raw TeX notes, a table-source label, and single-author
+  // narrative citations.
+  fc.constantFrom(
+    '(*Smith*, 2019)', '(**Smith**, 2019)', '(Smith&nbsp;et&nbsp;al., 2019)', 'attention \\[3\\]', 'memory \\[Smith, 2019\\]',
+    '([Smith](http://example.org/s), 2019)', '(see [Nguyen & Patel, 2019](https://example.org/trees))', 'as [Nguyen et al., 2019](https://example.org) showed',
+    '<a href="https://example.org">Nguyen et al., 2019</a>', '<span class="citation">Nguyen 2019</span>',
+    'shade helps\\footnote{Nguyen, T. (2019). Street trees. Urban Climate, 3, 1-9.}', 'shade\\endnote{Nguyen 2019}', 'heat\\marginpar{Okafor 2021}',
+    'asthma fell (Source: Okafor 2021)', 'Nguyen (2019) argued it', 'According to Nguyen (2019), it rose', "Nguyen's (2019) review agrees",
+    'Nguyen and colleagues (2019) found it', 'Nguyen (2019, p. 5) wrote it', 'Nguyen (2019a) agrees',
+  ).map(bad),
 );
 
 const noise: fc.Arbitrary<Segment> = fc.oneof(
@@ -197,6 +209,8 @@ const noise: fc.Arbitrary<Segment> = fc.oneof(
   fc.constant(ok('the interval $[1]$')),
   // Intervals, shapes, indices and numbered labels are not citation markers.
   fc.constantFrom('scores normalized to [0, 1]', 'a tensor of shape [32, 224, 224, 3]', 'values lie in [1, 5]', 'array indices [1] and [2]', 'as in (Figure 3) and (Apollo 11)').map(ok),
+  // A lone name before a year the prose does not cite, emphasis and links that are not attributions.
+  fc.constantFrom('Washington, D.C. (2019) hosted it', 'the Treaty of Versailles (1919) ended the war', 'a *large* effect', 'see the [methods](#methods) section', 'the [data](https://example.org/data) are open').map(ok),
 );
 
 const segment = fc.oneof({ weight: 4, arbitrary: citation }, { weight: 2, arbitrary: unsupported }, { weight: 3, arbitrary: noise });
@@ -231,6 +245,23 @@ const block: fc.Arbitrary<{ text: string; flagged: boolean; note?: string }> = f
       .map((text) => ({ text, flagged: true })),
   },
   { weight: 1, arbitrary: fc.tuple(fc.integer({ min: 1, max: 9 }), key).map(([n, k]) => ({ text: `A claim.[^n${n}]`, flagged: true, note: `[^n${n}]: Fakeson, A. (2019). See @${k}.` })) },
+  // Review round 2: typed entries in containers, run-in labels and raw TeX environments.
+  {
+    weight: 1,
+    arbitrary: fc
+      .constantFrom(
+        '**References:** Nguyen, T., & Patel, R. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10.',
+        '<p>Nguyen, T. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10.</p>',
+        '<ol><li>Nguyen, T. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10.</li></ol>',
+        '::: {.references}\nNguyen, T. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10.\n:::',
+        '> Nguyen, T. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10.',
+        'Term\n:   Nguyen, T. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10.',
+        '| n | entry |\n|---|---|\n| 1 | Nguyen, T. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10. |',
+        'Sources: World Bank (2020); Okafor 2021.',
+        '\\begin{quote}\nNguyen said so.\n\\end{quote}',
+      )
+      .map((text) => ({ text, flagged: true })),
+  },
 );
 
 /**

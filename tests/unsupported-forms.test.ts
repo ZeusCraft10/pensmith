@@ -118,6 +118,61 @@ const POSITIVE: readonly Case[] = [
     'Text [@k].\n\n```{=latex}\n\\section*{References}\nFakename, Z. (1999) \\cite{fake2019}.\n```\n\n~~~{=openxml}\n<w:p/>\n~~~\n\nInline `(Nguyen, 2019)`{=html} too.',
     [['raw-output', 3, '```{=latex}'], ['raw-output', 8, '~~~{=openxml}'], ['raw-output', 12, '`(Nguyen, 2019)`{=html}']],
   ],
+  // Review round 2: raw TeX notes are footnotes; any other raw TeX environment is refused.
+  [
+    'raw TeX notes',
+    'Deep networks learn [@lecun2015].\\footnote{Nobody, N. A study. Journal of Nothing 12, 2017.} And \\endnote{Nguyen 2019} and \\marginpar{x}.',
+    [['footnote', 1, '\\footnote{Nobody, N. A study. Journal of Nothing 12, 2017.}'], ['footnote', 1, '\\endnote{Nguyen 2019}'], ['footnote', 1, '\\marginpar{x}']],
+  ],
+  ['a raw TeX environment', 'Text [@k].\n\n\\begin{quote}\nNguyen said so.\n\\end{quote}', [['raw-tex', 3, '\\begin{quote}']]],
+  // What the reader sees: emphasis, entities and escapes do not hide a citation.
+  [
+    'emphasis, entities and escapes',
+    'Sleep (*Nobody*, 2017) and (Smith&nbsp;et&nbsp;al., 2019) and attention \\[3\\] and \\[Smith, 2019\\].',
+    [['author-date', 1, '(*Nobody*, 2017)'], ['author-date', 1, '(Smith&nbsp;et&nbsp;al., 2019)'], ['numeric-marker', 1, '\\[3\\]'], ['author-date', 1, '\\[Smith, 2019\\]']],
+  ],
+  [
+    'author-date in a link or an HTML element',
+    '(see [Nguyen & Patel, 2019](https://example.org/trees)) and [Nguyen et al., 2019](https://example.org) and <span class="citation">Nguyen 2019</span>.',
+    [
+      ['author-date', 1, '(see [Nguyen & Patel, 2019](https://example.org/trees))'],
+      ['author-date', 1, '[Nguyen et al., 2019](https://example.org)'],
+      ['author-date', 1, '<span class="citation">Nguyen 2019</span>'],
+    ],
+  ],
+  [
+    'run-in labels',
+    '**References:** Nguyen, T., & Patel, R. (2019). Street trees. Urban Climate, 3(2), 1-10.\n\nTrees help (Source: Okafor 2021).\n\nSources: World Bank (2020); IMF (2021).',
+    [
+      ['reference-list', 1, '**References:** Nguyen, T., & Patel, R. (2019). Street trees. Urban Climate, 3(2), 1-10.'],
+      ['author-date', 3, '(Source: Okafor 2021)'],
+      ['reference-list', 5, 'Sources: World Bank (2020); IMF (2021).'],
+    ],
+  ],
+  [
+    'typed entries in a fenced div, an HTML block, a block quote and a table',
+    '::: {.references}\nNguyen, T. (2019). Street trees. Urban Climate, 3, 1-10.\n:::\n\n<p>Lee, K. (2021). Canopy. Nature, 1, 2.</p>\n\n> Park, J. (2019). Heat. Urban Climate, 2, 3-4.\n\n' +
+      '| n | entry |\n|---|---|\n| 1 | Kim, S. (2018). Shade. Urban Climate, 1, 5-6. |',
+    [
+      ['reference-list', 2, 'Nguyen, T. (2019). Street trees. Urban Climate, 3, 1-10.'],
+      ['reference-list', 5, '<p>Lee, K. (2021). Canopy. Nature, 1, 2.'],
+      ['reference-list', 7, '> Park, J. (2019). Heat. Urban Climate, 2, 3-4.'],
+      ['reference-list', 11, '| 1 | Kim, S. (2018). Shade. Urban Climate, 1, 5-6. |'],
+    ],
+  ],
+  // A single author before a year that the prose cites (D-20-08, narrowed in review round 2).
+  [
+    'single-author narrative citations',
+    "Nguyen (2019) argued it. According to Lee (2020), it rose. Park's (2018) review agrees. Kim and colleagues (2017) found it. Diaz (2016, p. 5) wrote it. Cho (2015a) agrees.",
+    [
+      ['author-date', 1, 'Nguyen (2019)'],
+      ['author-date', 1, 'Lee (2020)'],
+      ['author-date', 1, "Park's (2018)"],
+      ['author-date', 1, 'Kim and colleagues (2017)'],
+      ['author-date', 1, 'Diaz (2016, p. 5)'],
+      ['author-date', 1, 'Cho (2015a)'],
+    ],
+  ],
 ];
 
 const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
@@ -143,6 +198,11 @@ const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
   ['intervals', 'Scores are normalized to the interval [0, 1] [@k]. Probabilities lie in [0,1]. Values lie in [1, 5]; ages in the range [18, 65] were eligible.'],
   ['shapes and indices', 'The input tensor has shape [32, 224, 224, 3] [@k], embeddings have shape [32, 128], and array indices [1] and [2] refer to rows.'],
   ['relations and operators', 'We map x ∈ [2, 7], set w = [1, 3], and cover the square [1, 5] × [1, 5]. Weights are scaled to [1, 10].'],
+  // Review round 2: a lone name before a year the prose does not cite, a note label over prose, links and emphasis.
+  ['a lone name the prose does not cite', 'The Treaty of Versailles (1919) established peace, and Washington, D.C. (2019) was the host.'],
+  ['a note label over prose', 'Notes: values are means of three runs.'],
+  ['links and emphasis that attribute nothing', 'We used [Python 3](https://python.org), see the [methods](#methods) section, and a *large* effect (n = 12) held.'],
+  ['math with a TeX environment', 'The system $$\\begin{aligned}a &= b\\end{aligned}$$ holds.'],
 ];
 
 function crlf(s: string): string {

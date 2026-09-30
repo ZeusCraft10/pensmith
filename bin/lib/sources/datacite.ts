@@ -1,8 +1,11 @@
 // bin/lib/sources/datacite.ts — DataCite REST API adapter (Phase 20, VRFY-11,
 // D-20-10).
 //
-// Endpoint:
-//   lookupById: GET https://api.datacite.org/dois/<doi>
+// Endpoints:
+//   lookupById:  GET https://api.datacite.org/dois/<doi>
+//   searchTitle: GET https://api.datacite.org/dois?query=titles.title:"<title>"&page[size]=5
+//                (Pass 1's metadata search for an entry with no identifier,
+//                VRFY-12 — the title only leaves the machine)
 //
 // DataCite registers the DOIs of Zenodo (10.5281), figshare (10.6084), Dryad
 // (10.5061), arXiv (10.48550) and many data repositories and institutional
@@ -223,4 +226,53 @@ export async function lookupById(id: string, opts: LookupOptions = {}): Promise<
 
 export async function fetchById(doi: string): Promise<SourceCandidate | null> {
   return unwrapLookup(await lookupById(doi), 'datacite', doi);
+}
+
+const DOI_LIST: ShapeCheck = jsonShape((b) => isObject(b) && Array.isArray(b['data']), 'DataCite DOI list (data[])');
+
+/** The title as a DataCite (Elasticsearch) phrase: letters, digits and spaces only. */
+function phrase(title: string): string {
+  return plainText(title)
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/** The title-search URL (Pass 1's metadata search, VRFY-12) — exported for the recorder and tests (the exact request). */
+export function titleSearchUrl(title: string, rows = 5): string {
+  return `${BASE}/dois?query=${encodeURIComponent(`titles.title:"${phrase(title)}"`)}&page%5Bsize%5D=${rows}`;
+}
+
+/** A title search's outcome: the records DataCite found, or why it did not answer. */
+export type TitleSearchResult =
+  | { readonly kind: 'ok'; readonly candidates: SourceCandidate[] }
+  | { readonly kind: 'failed'; readonly reason: string };
+
+/**
+ * Pass 1's metadata search for an entry with no identifier (VRFY-12): the
+ * DataCite records whose title holds the claimed title as a phrase. An empty
+ * list is DataCite's definitive "nothing matches"; `failed` is no answer. The
+ * typed OfflineEgressError is rethrown.
+ */
+export async function searchTitle(title: string, opts: LookupOptions = {}): Promise<TitleSearchResult> {
+  if (phrase(title) === '') return { kind: 'ok', candidates: [] };
+  const ex = await exchange(
+    () =>
+      httpFetch(titleSearchUrl(title), {
+        source: 'datacite',
+        maxBytes: MAX_JSON_RESPONSE_BYTES,
+        validate: validator(DOI_LIST),
+        ...(opts.refresh === true ? { refresh: true } : {}),
+      }),
+    { service: SERVICE, check: DOI_LIST },
+  );
+  if (ex.kind === 'failed') return { kind: 'failed', reason: ex.reason };
+  if (ex.kind === 'status') return { kind: 'failed', reason: statusReason(ex.res) };
+  const at = answeredAt(ex.res);
+  const data = (JSON.parse(ex.res.body) as { data: Array<{ attributes?: DataCiteAttributes }> }).data;
+  return {
+    kind: 'ok',
+    candidates: data
+      .map((d) => (isObject(d) && isObject(d.attributes) ? dataCiteToCandidate(d.attributes, at) : null))
+      .filter((c): c is SourceCandidate => c !== null),
+  };
 }

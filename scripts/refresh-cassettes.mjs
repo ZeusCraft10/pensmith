@@ -115,6 +115,18 @@ export const BIBLIOGRAPHIC_QUERIES = Object.freeze({
   'search-bibliographic-vaswani-2017': 'Attention is All You Need Vaswani 2017',
   'search-bibliographic-kuhn-1996': 'The Structure of Scientific Revolutions Kuhn 1996',
 });
+/**
+ * Pass 1's metadata searches past Crossref (VRFY-12, review round 2): the
+ * requests verify/metadata-search.ts makes for an identifier-less entry — the
+ * work of no registrar ("A Work That Was Never Published", Nobody 2017) at
+ * arXiv, PubMed, DataCite and OpenAlex, and Vaswani et al. 2017 at arXiv
+ * (tests/metadata-search.test.ts checks the builders give these strings).
+ */
+export const METADATA_SEARCH_NO_MATCH_TITLE = 'A Work That Was Never Published';
+export const METADATA_SEARCH_ARXIV_NO_MATCH = 'ti:"A Work That Was Never Published" AND au:Nobody';
+export const METADATA_SEARCH_ARXIV_VASWANI = 'ti:"Attention is All You Need" AND au:Vaswani';
+export const METADATA_SEARCH_PUBMED_NO_MATCH = '"A Work That Was Never Published"[ti] AND Nobody[au]';
+export const METADATA_SEARCH_ROWS = 5;
 /** An arXiv id recorded for lookups. */
 export const RECORDED_ARXIV_ID = '1706.03762';
 /** An old-style arXiv id (archive/number) recorded for lookups. */
@@ -225,6 +237,8 @@ const QUERY_SETS = {
   datacite: [
     { file: 'doi-zenodo-1212303', calls: [{ fn: 'lookupById', arg: VRFY11_ZENODO_DOI }] },
     { file: 'doi-zenodo-fake-404', calls: [{ fn: 'lookupById', arg: DATACITE_FAKE_DOI }] },
+    // VRFY-12: Pass 1's DataCite title search for an identifier-less entry of no work.
+    { file: 'title-search-no-match', calls: [{ fn: 'searchTitle', arg: [METADATA_SEARCH_NO_MATCH_TITLE] }] },
   ],
   openalex: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3 }] },
@@ -233,6 +247,8 @@ const QUERY_SETS = {
     { file: 'works-W2919115771', calls: [{ fn: 'lookupById', arg: 'W2919115771' }] },
     // A W-id OpenAlex does not know: a real 404 (not-found).
     { file: 'works-W2963403868-404', calls: [{ fn: 'lookupById', arg: 'W2963403868' }] },
+    // VRFY-12: Pass 1's OpenAlex search for an identifier-less entry of no work.
+    { file: 'search-metadata-no-match', calls: [{ fn: 'search', arg: METADATA_SEARCH_NO_MATCH_TITLE, limit: METADATA_SEARCH_ROWS, minLimit: METADATA_SEARCH_ROWS }] },
     // Title searches only: research's own queries ask OpenAlex for 10 works
     // with abstracts, which exceeds the 51200-byte cassette cap at any size
     // research requests — the fixture lane reports those as `offline: no
@@ -251,6 +267,9 @@ const QUERY_SETS = {
     // PDF identification's arXiv title search (source-input.ts arxivTitleQuery),
     // asked when OpenAlex's only match is a later re-post (review round 2).
     { file: 'search-title-attention', calls: [{ fn: 'search', arg: `ti:"${BYO_PDF_TITLE}"`, limit: TITLE_LIMIT, minLimit: TITLE_LIMIT, pauseMs: 3500 }] },
+    // VRFY-12: Pass 1's arXiv title-and-author search for identifier-less entries.
+    { file: 'search-metadata-no-match', calls: [{ fn: 'search', arg: METADATA_SEARCH_ARXIV_NO_MATCH, limit: METADATA_SEARCH_ROWS, minLimit: METADATA_SEARCH_ROWS, pauseMs: 3500 }] },
+    { file: 'search-metadata-vaswani-2017', calls: [{ fn: 'search', arg: METADATA_SEARCH_ARXIV_VASWANI, limit: METADATA_SEARCH_ROWS, minLimit: METADATA_SEARCH_ROWS, pauseMs: 3500 }] },
     // (No from-2015 file: the arXiv API has no date filter, so research's
     // request with min_year set is search-attention-neural-networks — the
     // [sources] policy drops the older works afterwards.)
@@ -267,6 +286,8 @@ const QUERY_SETS = {
     // answer is over the cassette cap (its collaborator list and references),
     // so only the Pass-1 esummary is recorded.
     { file: 'esummary-31535829', calls: [{ fn: 'lookupById', arg: VRFY11_PMID, opts: { abstract: false } }] },
+    // VRFY-12: Pass 1's PubMed title-and-author search for an identifier-less entry of no work.
+    { file: 'search-metadata-no-match', calls: [{ fn: 'search', arg: METADATA_SEARCH_PUBMED_NO_MATCH, limit: METADATA_SEARCH_ROWS, minLimit: METADATA_SEARCH_ROWS }] },
     researchFrom2015(),
     ...planResearch(),
   ],
@@ -505,8 +526,8 @@ async function runChild(adapter, files = []) {
       return;
     }
     if (call.fn === 'searchTitle') {
-      const [title, author] = call.arg;
-      const r = await mod.searchTitle(title, author);
+      // Open Library takes the title and the first author; DataCite the title only.
+      const r = await mod.searchTitle(...call.arg);
       if (r.kind === 'failed') throw new Error(`title search failed: ${r.reason}`);
       return;
     }

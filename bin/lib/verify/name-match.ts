@@ -12,10 +12,19 @@
 //     U+FE63, U+FF0D) to `-`, lower case, whitespace collapsed. Non-Latin
 //     scripts are compared as they are written — nothing is transliterated on
 //     either side.
-//   - A title is compared whole and without its subtitle (the text after the
-//     first `: `, ` - `, ` – `, ` — ` or `. `), as plain text (registrar
-//     markup out, markup.ts); a record's separate subtitle is joined back as
-//     one more form. The best score counts.
+//   - A title is compared as plain text (registrar markup out, markup.ts).
+//     The RECORD's title counts whole, without its subtitle (the text after
+//     the first `: `, ` - `, ` – `, ` — ` or `. `), and with its separate
+//     subtitle joined back: a citation may leave a subtitle out. The CLAIMED
+//     title counts whole — a subtitle the citation adds is printed by the
+//     export, so it must be the record's too ("Attention Is All You Need: Why
+//     Recurrence Still Wins" is not "Attention is all you need"). One
+//     exception: a BOOK record that carries no subtitle at all (Crossref often
+//     deposits a book's main title only — the ESL book, VRFY-13) is also
+//     compared with the claimed title's main part. A metadata search
+//     (`strictTitle`) never takes that exception: with no identifier to
+//     anchor it, "Introduction: …" must not match a record titled
+//     "Introduction". The best score counts.
 //   - A name's surname forms: the family name of "Family, Given"; the family
 //     of a display name ("Given Family", "A. B. Family"), with lower-case
 //     particles (van, der, de, von, …) joined to it; PubMed's compact
@@ -34,6 +43,16 @@
 //     also matches crosswise, when BOTH parts match (an initial matches the
 //     name it begins).
 //   - An editor-only work (an edited volume) compares its first editor.
+//   - A consortium or corporate first author ("{LIGO Scientific
+//     Collaboration and Virgo Collaboration}", "CMS Collaboration", "GBD 2019
+//     … Collaborators" — a braced name, or one naming a collaboration,
+//     consortium, collaborators, investigators, group, …) is compared with
+//     EVERY corporate author the record lists, not only its first author
+//     (Crossref lists LIGO's group after 1,011 people). A record that lists
+//     persons only (CMS, ATLAS and GBD 2019 at Crossref) passes the author
+//     check for such a claim when its title matches at STRICT_TITLE_JW and
+//     both years are known and within YEAR_TOLERANCE; a record naming another
+//     group, or any mismatch of a personal name, stays MIS-CITED.
 //   - The year, when both the citation and the record carry one, must be
 //     within YEAR_TOLERANCE (an online-first year versus the issue's year);
 //     a larger gap is a mismatch of its own.
@@ -100,10 +119,34 @@ export function titleForms(title: string, subtitle?: string | null): string[] {
   return [...forms];
 }
 
-/** The best Jaro-Winkler score between the claimed title's forms (only its whole form with `whole`) and the record's. */
-export function titleSimilarity(record: { title: string | null | undefined; subtitle?: string | null | undefined }, claimed: string, whole = false): number {
+/** The CSL types of a book record (a registrar may deposit only its main title). */
+const BOOK_TYPES: ReadonlySet<string> = new Set(['book']);
+
+/**
+ * True when the claimed title may be compared without its subtitle: the
+ * record is a book that carries no subtitle at all (no separate subtitle and
+ * none in its title — see the header).
+ */
+export function recordMayOmitSubtitle(record: { title: string | null | undefined; subtitle?: string | null | undefined; type?: string | null | undefined }): boolean {
+  if (typeof record.type !== 'string' || !BOOK_TYPES.has(record.type)) return false;
+  if (typeof record.subtitle === 'string' && record.subtitle.trim() !== '') return false;
+  return mainTitle(record.title ?? '') === null;
+}
+
+/**
+ * The best Jaro-Winkler score between the claimed title and the record's
+ * title forms (see the header): the claimed title whole, and its main part
+ * too only for a book record with no subtitle — never with `whole` (a
+ * biblatex `subtitle` / `titleaddon` the entry adds, or a metadata search).
+ */
+export function titleSimilarity(
+  record: { title: string | null | undefined; subtitle?: string | null | undefined; type?: string | null | undefined },
+  claimed: string,
+  whole = false,
+): number {
   const a = titleForms(record.title ?? '', record.subtitle ?? null);
-  const b = whole ? [foldText(tidyTitle(claimed))].filter((x) => x !== '') : titleForms(claimed);
+  const claimedWhole = foldText(tidyTitle(claimed));
+  const b = !whole && recordMayOmitSubtitle(record) ? titleForms(claimed) : [claimedWhole].filter((x) => x !== '');
   let best = 0;
   for (const x of a) for (const y of b) best = Math.max(best, jaroWinkler(x, y));
   return best;
@@ -265,6 +308,8 @@ export interface RecordWork {
   readonly authors?: readonly string[] | undefined;
   readonly editors?: readonly string[] | undefined;
   readonly year?: number | null | undefined;
+  /** The record's CSL type (a book record may omit its subtitle — see the header). */
+  readonly type?: string | null | undefined;
 }
 
 export type MatchField = 'title' | 'first author' | 'year';
@@ -281,12 +326,46 @@ export interface MatchResult {
   readonly detail: string;
 }
 
+/** Words that make a name a group's, not a person's ("CMS Collaboration", "GBD 2019 … Collaborators"). */
+const GROUP_WORDS =
+  /\b(?:collaborations?|consortium|consortia|collaborators|collaborative|investigators|group|groups|committee|network|team|alliance|initiative|project|working\s+party|task\s+force|study)\b/iu;
+
+/** True when an author string names a consortium or another corporate author (braced, or a group word). */
+export function isCorporateAuthor(author: string | null | undefined): boolean {
+  const s = String(author ?? '').trim();
+  if (s === '') return false;
+  if (/^\{.*\}$/su.test(s)) return true;
+  return GROUP_WORDS.test(s.replace(/,/g, ' '));
+}
+
+/** A corporate name compared whole: braces, a leading "The" and the comma BibTeX puts in an unbraced one ("Collaboration, CMS") folded away. */
+function corporateForm(author: string): string {
+  let s = author.trim().replace(/^\{(.*)\}$/su, '$1');
+  // An unbraced "CMS Collaboration" reads to BibTeX as family "Collaboration", given "CMS".
+  const parts = s.split(',').map((x) => x.trim());
+  if (parts.length === 2 && parts[0] !== undefined && parts[1] !== undefined && GROUP_WORDS.test(parts[0])) s = `${parts[1]} ${parts[0]}`;
+  return foldText(s).replace(/^the\s+/, '');
+}
+
+/** The best score of a corporate claimed first author against every corporate author the record lists (0 when it lists none). */
+function corporateScore(claimedFirst: string, record: RecordWork): number {
+  const want = corporateForm(claimedFirst);
+  let best = 0;
+  for (const r of [...(record.authors ?? []), ...(record.editors ?? [])]) {
+    if (!isCorporateAuthor(r)) continue;
+    best = Math.max(best, jaroWinkler(corporateForm(r), want));
+  }
+  return best;
+}
+
 /** The first-author score: the claimed first author (or first editor of an editor-only work) against the record's. */
 function firstAuthorScore(claimed: ClaimedWork, record: RecordWork): number {
   const claimedFirst = claimed.authors[0] ?? claimed.editors?.[0];
   const recordFirsts = [record.authors?.[0], ...(claimed.authors.length === 0 || (record.authors ?? []).length === 0 ? [record.editors?.[0]] : [])];
   let best = 0;
   for (const r of recordFirsts) if (r !== undefined) best = Math.max(best, authorSimilarity(r, claimedFirst));
+  // A consortium claim: any group the record lists (see the header).
+  if (claimedFirst !== undefined && isCorporateAuthor(claimedFirst)) best = Math.max(best, corporateScore(claimedFirst, record));
   return best;
 }
 
@@ -297,24 +376,40 @@ function firstAuthorScore(claimed: ClaimedWork, record: RecordWork): number {
 export function matchWork(
   claimed: ClaimedWork,
   record: RecordWork,
-  opts: { titleThreshold?: number; authorThreshold?: number; yearTolerance?: number } = {},
+  opts: {
+    titleThreshold?: number;
+    authorThreshold?: number;
+    yearTolerance?: number;
+    /** Compare the claimed title only whole (a metadata search: nothing anchors a subtitle-less match). */
+    strictTitle?: boolean;
+  } = {},
 ): MatchResult {
   const tt = opts.titleThreshold ?? TITLE_JW_THRESHOLD;
   const at = opts.authorThreshold ?? AUTHOR_JW_THRESHOLD;
   const tol = opts.yearTolerance ?? YEAR_TOLERANCE;
-  const titleJW = titleSimilarity(record, claimed.title, claimed.wholeTitle === true);
+  const titleJW = titleSimilarity(record, claimed.title, claimed.wholeTitle === true || opts.strictTitle === true);
   const authorJW = firstAuthorScore(claimed, record);
   const years =
     typeof claimed.year === 'number' && Number.isInteger(claimed.year) && typeof record.year === 'number' && Number.isInteger(record.year)
       ? { claimed: claimed.year, record: record.year }
       : null;
+  // A consortium claim against a record that lists persons only (see the header).
+  const claimedFirst = claimed.authors[0] ?? claimed.editors?.[0];
+  const groupByTitle =
+    authorJW < at &&
+    claimedFirst !== undefined &&
+    isCorporateAuthor(claimedFirst) &&
+    ![...(record.authors ?? []), ...(record.editors ?? [])].some(isCorporateAuthor) &&
+    titleJW >= Math.max(tt, STRICT_TITLE_JW) &&
+    years !== null &&
+    Math.abs(years.claimed - years.record) <= tol;
   const failing: MatchField[] = [];
   const parts: string[] = [];
   if (titleJW < tt) {
     failing.push('title');
     parts.push(`title (${titleJW.toFixed(2)} < ${tt})`);
   }
-  if (authorJW < at) {
+  if (authorJW < at && !groupByTitle) {
     failing.push('first author');
     parts.push(`first author (${authorJW.toFixed(2)} < ${at})`);
   }
@@ -324,12 +419,13 @@ export function matchWork(
   }
   const ok = failing.length === 0;
   const yearNote = years === null ? '' : years.claimed === years.record ? ` (year ${years.claimed})` : ` (year ${years.claimed}, record ${years.record}: within ${tol})`;
+  const groupNote = groupByTitle ? '; a consortium author, and the record lists its members only: title and year matched strictly' : '';
   return {
     titleJW,
     authorJW,
     years,
     failing,
     ok,
-    detail: ok ? `D-11 AND-gate passed${yearNote}` : `mismatch: ${parts.join(', ')}`,
+    detail: ok ? `D-11 AND-gate passed${yearNote}${groupNote}` : `mismatch: ${parts.join(', ')}`,
   };
 }
