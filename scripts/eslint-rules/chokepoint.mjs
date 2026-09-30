@@ -34,6 +34,11 @@
 //   import-graph    enforced only by the harness (tests/chokepoints.test.ts): no
 //                   in-scope module may reach a module whose repo-relative path
 //                   matches, through static or dynamic relative imports.
+//   regex-literal   a regular-expression literal whose pattern (`node.regex.pattern`)
+//                   matches, or a `new RegExp(…)` / `RegExp(…)` whose pattern
+//                   argument's static text does (a string or template literal, a
+//                   String.raw template, a `+` concatenation of those, or a
+//                   same-file const holding one). Phase 20 D-20-06 (VRFY-09).
 //
 // Why a separate rule instead of more no-restricted-syntax selectors: flat config
 // lets the LAST matching block win per rule name, so file-scoped overrides of
@@ -49,7 +54,7 @@ import { fileURLToPath } from 'node:url';
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const CHOKEPOINT_DIR = path.join(REPO_ROOT, 'scripts', 'chokepoints');
-export const MATCH_KINDS = ['string-literal', 'import', 'call', 'member', 'file-regex', 'import-graph'];
+export const MATCH_KINDS = ['string-literal', 'import', 'call', 'member', 'file-regex', 'import-graph', 'regex-literal'];
 
 // ---------------------------------------------------------------------------
 // Globs (repo-relative, '/'-separated): ** (any depth), * and ? (within a
@@ -324,6 +329,60 @@ function argTexts(arg, sourceCode, context) {
   return texts;
 }
 
+/** The initializer of the same-file `const`/`let` that `id` names, or null. */
+function initializerOf(id, sourceCode, context) {
+  let scope = sourceCode.getScope ? sourceCode.getScope(id) : context.getScope();
+  while (scope) {
+    const v = scope.set.get(id.name);
+    if (v) {
+      const def = v.defs.find((d) => d.type === 'Variable' && d.node.init);
+      return def ? def.node.init : null;
+    }
+    scope = scope.upper;
+  }
+  return null;
+}
+
+/**
+ * The static text(s) a RegExp pattern argument evaluates to: a string literal,
+ * a regex literal's pattern, a template literal (its cooked and raw text,
+ * interpolations left empty), a String.raw template (raw), a `+` concatenation
+ * of those, or a same-file const initialised with one. [] when not static.
+ */
+export function staticPatternTexts(node, sourceCode, context, depth = 0) {
+  if (!node || depth > 4) return [];
+  switch (node.type) {
+    case 'Literal':
+      if (typeof node.value === 'string') return [node.value];
+      if (node.regex) return [node.regex.pattern];
+      return [];
+    case 'TemplateLiteral':
+      return [node.quasis.map((q) => q.value.cooked ?? q.value.raw).join(''), node.quasis.map((q) => q.value.raw).join('')];
+    case 'TaggedTemplateExpression':
+      return [node.quasi.quasis.map((q) => q.value.raw).join(''), node.quasi.quasis.map((q) => q.value.cooked ?? q.value.raw).join('')];
+    case 'BinaryExpression': {
+      if (node.operator !== '+') return [];
+      const left = staticPatternTexts(node.left, sourceCode, context, depth + 1);
+      const right = staticPatternTexts(node.right, sourceCode, context, depth + 1);
+      return left.flatMap((l) => right.map((r) => l + r)).slice(0, 16);
+    }
+    case 'Identifier':
+      return staticPatternTexts(initializerOf(node, sourceCode, context), sourceCode, context, depth + 1);
+    case 'TSAsExpression':
+    case 'TSSatisfiesExpression':
+    case 'TSNonNullExpression':
+      return staticPatternTexts(node.expression, sourceCode, context, depth + 1);
+    default:
+      return [];
+  }
+}
+
+/** True for a `RegExp(…)` / `new RegExp(…)` / `globalThis.RegExp(…)` callee. */
+function isRegExpCallee(callee) {
+  if (callee.type === 'Identifier') return callee.name === 'RegExp';
+  return callee.type === 'MemberExpression' && !callee.computed && callee.property.type === 'Identifier' && callee.property.name === 'RegExp';
+}
+
 function importedNames(node) {
   if (node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration') {
     if (!node.specifiers || node.specifiers.length === 0) return ['*'];
@@ -445,6 +504,24 @@ const rule = {
         const text = memberText(node, sourceCode);
         for (const { row, re } of members) if (re.test(text)) report(row, node, text);
       });
+    }
+
+    const regexLiterals = byKind('regex-literal');
+    if (regexLiterals.length > 0) {
+      add('Literal', (node) => {
+        if (!node.regex) return;
+        for (const { row, re } of regexLiterals) if (re.test(node.regex.pattern)) report(row, node, `/${node.regex.pattern}/${node.regex.flags}`);
+      });
+      const onRegExp = (node) => {
+        if (!isRegExpCallee(node.callee) || node.arguments.length === 0) return;
+        const texts = staticPatternTexts(node.arguments[0], sourceCode, context);
+        for (const { row, re } of regexLiterals) {
+          const hit = texts.find((t) => re.test(t));
+          if (hit !== undefined) report(row, node, `RegExp(${JSON.stringify(hit)})`);
+        }
+      };
+      add('CallExpression', onRegExp);
+      add('NewExpression', onRegExp);
     }
 
     const regexes = byKind('file-regex');

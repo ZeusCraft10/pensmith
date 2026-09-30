@@ -27,6 +27,7 @@
 import { fetch as httpFetch } from './http.js';
 import { networkMode } from './http-mock.js';
 import { Semaphore } from './budget.js';
+import { replaceCitations } from './citation-token.js';
 
 // ============================================================
 //   Public types
@@ -92,15 +93,15 @@ function isDistinctive(phrase: string): boolean {
 }
 
 /**
- * Strip `[@citekey]` / `[@a; @b]` citation tokens and surrounding markdown
- * punctuation from a chunk of draft text so citation keys are never searched as
- * plagiarism phrases (behavior block), then collapse whitespace. Deterministic.
+ * Strip every Pandoc citation (`[@citekey]`, `[@a; @b, p. 4]`, `[-@k]`,
+ * `@{k}`, a narrative `@k` — read by the one citation grammar,
+ * citation-token.ts, VRFY-09) and surrounding markdown punctuation from a
+ * chunk of draft text so citation keys are never searched as plagiarism
+ * phrases (behavior block), then collapse whitespace. Deterministic.
  */
 function stripCitationsAndMarkdown(text: string): string {
-  return text
-    // bracketed pandoc citations: [@key], [@a; @b, p. 4]
-    .replace(/\[@[^\]]*\]/g, ' ')
-    // stray inline @citekey tokens (no brackets)
+  return replaceCitations(text, () => ' ')
+    // stray inline @tokens the grammar reads as code or as no citation
     .replace(/(^|\s)@[A-Za-z0-9_:-]+/g, ' ')
     // markdown emphasis / code / heading / link punctuation → space
     .replace(/[*_`#>~|]+/g, ' ')
