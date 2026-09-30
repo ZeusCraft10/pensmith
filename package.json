@@ -22,11 +22,14 @@
     "pensmith": "tsx bin/pensmith.ts",
     "mock-llm": "tsx scripts/mock-llm.mjs",
     "validate:manifests": "node scripts/validate-plugin-manifest.cjs",
+    "bundle": "npm run prebuild && node scripts/bundle.mjs",
+    "bundle:check": "npm run bundle -- --check",
+    "plugin:smoke": "node scripts/plugin-smoke.mjs",
     "test:tier-contract": "node scripts/run-tests.mjs tests/tier-contract/ tests/tier-contract.test.ts",
     "test:cassettes": "node --import tsx --test tests/tier-contract.test.ts",
     "cassettes:refresh": "node scripts/refresh-cassettes.mjs",
     "live:sources": "node scripts/live-sources.mjs",
-    "check": "npm run prebuild && npm run lint && npm run typecheck && npm run build && npm run test:tier-contract && npm test && npm run validate:manifests",
+    "check": "npm run prebuild && npm run lint && npm run typecheck && npm run build && npm run test:tier-contract && npm test && npm run validate:manifests && npm run bundle:check",
     "test:coverage": "c8 node scripts/run-tests.mjs"
   },
   "files": [
