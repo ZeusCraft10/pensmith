@@ -33,7 +33,7 @@ import {
   type GateRow,
 } from '../bin/lib/verify/gate.js';
 import { quoteTextSha256 } from '../bin/lib/verify/verdicts.js';
-import type { Pass1Result, Pass1Options } from '../bin/lib/verify/pass1.js';
+import type { Pass1Result } from '../bin/lib/verify/pass1.js';
 import type { Pass3Result } from '../bin/lib/verify/pass3.js';
 import { needsRecheck, verificationNow, TEST_NOW_ENV } from '../bin/lib/verify/clock.js';
 import { upsertSources } from '../bin/lib/library.js';
@@ -55,7 +55,7 @@ const GOOD = '@article{lecun2015,\n  title = {Deep learning},\n  author = {LeCun
 
 /** A Pass 1 stand-in: every cited key OK with a checkedAt, except the ones listed. */
 function fakePass1(verdicts: Record<string, Pass1Result['verdict']> = {}, checkedAt = '2026-09-01T00:00:00.000Z') {
-  return async (text: string, _bibPath: string, _opts: Pass1Options): Promise<Pass1Result[]> => {
+  return async (text: string): Promise<Pass1Result[]> => {
     const { extractCitedKeysForVerification } = await import('../bin/lib/citation-token.js');
     return extractCitedKeysForVerification(text).map((k) => ({
       citekey: k,
