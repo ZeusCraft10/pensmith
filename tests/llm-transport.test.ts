@@ -92,8 +92,8 @@ test('T-11-01: complete() returns the offline stub under PENSMITH_NO_LLM=1 with 
     assert.equal(text.inputTokens, 0);
     assert.equal(text.outputTokens, 0);
     assert.equal(text.costUsd, 0);
-    const structured = await complete<{ label: string }>({ slug: 'orphan-label', system: '', messages: [{ role: 'user', content: 'x' }] });
-    assert.ok(structured.data?.label, 'structured slugs get a schema-valid stub object');
+    const structured = await complete<{ claims: unknown[] }>({ slug: 'orphan-label', system: '', messages: [{ role: 'user', content: 'x' }] });
+    assert.ok(Array.isArray(structured.data?.claims), 'structured slugs get a schema-valid stub object (orphan-label: the per-paragraph audit, D-20-29)');
     assert.equal(sb.mock!.callCount(), 0, 'no request was sent');
     assert.equal(fs.existsSync(path.join(sb.paper, 'COSTS.jsonl')), false, 'nothing billed');
   });
