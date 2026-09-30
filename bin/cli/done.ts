@@ -43,7 +43,7 @@ import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
 import { sectionWriteBlockReason } from '../lib/plan-status.js';
 import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
-import { PASS2_TABLE_HEADER, PASS2_TABLE_HEADER_V1 } from '../lib/verify/verdicts.js';
+import { PASS2_TABLE_HEADER, PASS2_TABLE_HEADER_V1, quoteTextSha256 } from '../lib/verify/verdicts.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { outlineIdentitiesSync, registeredSectionsSync, sectionRegistryProblem, type SectionIdentity } from '../lib/section-registry.js';
 import { compileRecordProblems } from '../lib/compile-inputs.js';
@@ -59,7 +59,10 @@ import {
   type ByoQuote,
   type GateResult,
   type LoadedBibliography,
+  type SectionQuoteRef,
 } from '../lib/verify/gate.js';
+import { extractQuotes } from '../lib/quote-extractor.js';
+import { tryReadPaperConfigSync } from '../lib/config.js';
 import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
 import { readQuoteAcceptances, sectionDirOfPlan } from '../lib/quote-acceptance.js';
 import { recordLastVerified, LibraryNotFoundError } from '../lib/library.js';
@@ -396,7 +399,36 @@ export async function recomputeExportGate(
     acceptanceSets: exportAcceptanceSets(sections),
     bib: opts.bib ?? loadBibliography(paperRoot),
   });
-  return { gate, refusals: gateRefusals(gate, { kind: 'paper' }) };
+  return { gate, refusals: gateRefusals(gate, { kind: 'paper', quoteSections: sectionQuoteIndex(paperRoot, sections) }) };
+}
+
+/**
+ * Every quote of the registered sections' drafts, by text hash → its section
+ * and its id in that section (what `pensmith verify <section> --accept-quote`
+ * takes): the paper-wide gate numbers quotes across the whole text, so its
+ * refusals name the section's own id. Never throws.
+ */
+export function sectionQuoteIndex(paperRoot: string, sections: readonly DoneSection[]): Map<string, SectionQuoteRef> {
+  const out = new Map<string, SectionQuoteRef>();
+  let minWords: number | undefined;
+  try {
+    minWords = tryReadPaperConfigSync(paperRoot)?.verification?.quote_min_words;
+  } catch {
+    minWords = undefined;
+  }
+  for (const s of sections) {
+    let draft: string;
+    try {
+      draft = readFileSync(sectionDraft(s.identity.n, s.identity.slug, paperRoot), 'utf8');
+    } catch {
+      continue;
+    }
+    for (const q of extractQuotes(draft, minWords !== undefined ? { minWords } : {})) {
+      const hash = quoteTextSha256(q.text);
+      if (!out.has(hash)) out.set(hash, { section: s.id, id: q.id });
+    }
+  }
+  return out;
 }
 
 /**

@@ -159,6 +159,22 @@ test('VRFY-22 / D-08 (built CLI): a section compile re-verified after an edit ha
   assert.match(report, /^- §1 \(intro\): claim support \(Pass 2, advisory\) was not run on the current draft/m);
 });
 
+test('VRFY-20 (paper scope): every section quote is indexed by its text with its own section and section-level id', async () => {
+  const { sectionQuoteIndex, doneSections } = await import('../bin/cli/done.js');
+  const { quoteTextSha256 } = await import('../bin/lib/verify/verdicts.js');
+  const a = 'deep networks learn layered representations of their input data';
+  const b = 'measurement in quantum physics shapes what an observer can record';
+  const c = 'what an observer records depends on how the measurement is made';
+  const p = seedGatePaper('done-quote-index', [
+    { n: 1, slug: 'intro', assigned: ['lecun2015'], draft: `# Introduction\n\nThey write that "${a}" [@lecun2015].\n` },
+    { n: 2, slug: 'measurement', assigned: ['aspelmeyer2009'], draft: `# Measurement\n\nFirst, "${b}" [@aspelmeyer2009]. Then "${c}" [@aspelmeyer2009].\n` },
+  ], RECORDED_BIB);
+  const index = sectionQuoteIndex(p.root, doneSections(p.root));
+  assert.deepEqual(index.get(quoteTextSha256(a)), { section: '1', id: 'q1' });
+  assert.deepEqual(index.get(quoteTextSha256(b)), { section: '2', id: 'q1' }, 'the paper-wide q2 is §2\'s q1');
+  assert.deepEqual(index.get(quoteTextSha256(c)), { section: '2', id: 'q2' });
+});
+
 function runCliWithInput(p: GatePaper, args: readonly string[], input: string): { status: number | null; stdout: string; stderr: string } {
   const r = runCli(p.sb, p.root, args, { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input, timeoutMs: 120_000 });
   assert.doesNotMatch(r.stderr, STACK_LINE, r.stderr);

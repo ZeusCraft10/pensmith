@@ -187,7 +187,25 @@ export function loadBibliography(root: string): LoadedBibliography {
 }
 
 /** Who the text belongs to — it words the remedies. */
-export type GateScope = { readonly kind: 'section'; readonly id: string } | { readonly kind: 'paper' };
+/** Where a quote of the compiled paper sits: its section and its id in that section's own VERIFICATION.md. */
+export interface SectionQuoteRef {
+  /** `1`, `1a`. */
+  readonly section: string;
+  /** The quote's id in its section (`q1`, …) — what `pensmith verify <section> --accept-quote` takes. */
+  readonly id: string;
+}
+
+export type GateScope =
+  | { readonly kind: 'section'; readonly id: string }
+  | {
+      readonly kind: 'paper';
+      /**
+       * The paper's quotes by text hash (quoteTextSha256) → their section and
+       * section-level id: a paper-wide id (`q3`) is not the id a section's
+       * `--accept-quote` takes, so a refusal names the section's own.
+       */
+      readonly quoteSections?: ReadonlyMap<string, SectionQuoteRef>;
+    };
 
 /** The acceptances of one section, with that section's CURRENT draft hash. */
 export interface AcceptanceSet {
@@ -443,7 +461,6 @@ export async function recomputeGate(input: GateInput): Promise<GateResult> {
 
 /** One line naming why a blocking row refuses and what fixes it. */
 export function gateRowReason(row: GateRow, scope: GateScope): string {
-  const n = scope.kind === 'section' ? scope.id : '<N>';
   switch (row.kind) {
     case 'pass1':
       if (RETRY_ONLINE_VERDICTS.has(row.verdict)) {
@@ -454,11 +471,18 @@ export function gateRowReason(row: GateRow, scope: GateScope): string {
       return `line ${row.line}: ${row.verdict} \`${row.text.replace(/`/g, "'").slice(0, 80)}\` — ${row.reason}`;
     case 'pass3': {
       const who = row.key === UNATTRIBUTED_CITEKEY ? 'with no citation' : `[@${row.key}]`;
-      const head = `quote ${row.id} ("${row.snippet}…") ${who} is ${row.verdict} — ${row.reason}`;
+      // At paper scope, the quote's own section and its id there (the paper numbers quotes across sections).
+      const ref = scope.kind === 'paper' ? scope.quoteSections?.get(row.quoteSha256) : { section: scope.id, id: row.id };
+      const where = scope.kind === 'paper' && ref !== undefined ? ` (§${ref.section}'s ${ref.id})` : '';
+      const head = `quote ${row.id}${where} ("${row.snippet}…") ${who} is ${row.verdict} — ${row.reason}`;
       if (row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
+        if (ref === undefined) {
+          // Not in any section draft (added after compile): nothing to accept it in.
+          return `${head} — it is in no section draft: remove it, or add it to its section and re-verify and recompile`;
+        }
         return (
-          `${head} — add the source's PDF (\`pensmith add <pdf>\`), paraphrase the quote (\`pensmith plan ${n} --revise\`), ` +
-          `or accept this one quote (\`pensmith verify ${n} --accept-quote ${row.id}\`)`
+          `${head} — add the source's PDF (\`pensmith add <pdf>\`), paraphrase the quote (\`pensmith plan ${ref.section} --revise\`), ` +
+          `or accept this one quote (\`pensmith verify ${ref.section} --accept-quote ${ref.id}\`)`
         );
       }
       if (RETRY_ONLINE_VERDICTS.has(row.verdict)) return `${head}; re-run online`;
