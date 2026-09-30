@@ -423,7 +423,7 @@ Fourteen findings on `v1/int-23a` at `131306f`. Each was reproduced or read befo
 
 ## 12. Merge review round 2 (fixer, 2026-09-30)
 
-Ten findings on `v1/int-23a` at `d4eeaad`. Each was reproduced or read before it was fixed. Commits: `e82fbaf` (1), `8d1e6f8` (2), `7d99cb1` (3, 4, 6, 11), `2b15495` (found while re-checking 6), `a3ca12a` (4, aligned with Phase 20; 5's CLAUDE.md text rode along), `f99ff85` (7–10), then this record.
+Ten findings on `v1/int-23a` at `d4eeaad`. Each was reproduced or read before it was fixed. Commits: `e82fbaf` (1), `8d1e6f8` (2), `7d99cb1` (3, 4, 6, 11), `2b15495` (found while re-checking 6), `a3ca12a` (4, aligned with Phase 20; 5's CLAUDE.md text rode along), `f99ff85` (7–10), `58cde6d` (what the full gate showed), then this record.
 
 | # | Finding | Sev. | Disposition |
 |---|---|---|---|
@@ -440,7 +440,15 @@ Ten findings on `v1/int-23a` at `d4eeaad`. Each was reproduced or read before it
 | 10 | ROADMAP progress rows said 6/8 for 23a and "Not started" for Phase 20 | minor | **Fixed**: 5/8 with PLUG-04, CI-05 and PLUG-14's CI leg open; Phase 20 "in progress on its own branch; merged here at `7eb0cbf`". |
 | 11 | In Tier 1 "redo section 3" stops at the revise-swap question, and the skill named neither the question nor the tools' `yolo` | minor | **Fixed** in the skill: the revise swap is listed among the questions; the MCP server never asks; `pensmith_plan` / `pensmith_write` / `pensmith_verify` take `yolo: true`, never passed on Claude's own; for the swap only after the user approves the swap the fenced line names, saying first that the call asks the provider again and applies the swap it then proposes, which can differ (the exact swap is approved with `pensmith plan N --revise` in a terminal). The Tier-1 question itself (AskUserQuestion) stays PLUG-10's. |
 
-**Gate after the fixes**: see below.
+**Gate after the fixes** (`58cde6d`, as root in the cloud container, `CI=true`, pandoc 3.9 on PATH):
+- Node 22.22.2 and Node 24.21.0: `prebuild`, `lint`, `typecheck`, `build`, `validate:manifests` and `bundle:check` exit 0, and the tree is clean after the build.
+- `npm run test:tier-contract`: 61/61 on both.
+- `npm test`: 2839 tests, 2838 pass on both. The one failure is the root-only `tests/atomic-write.test.ts` case.
+- `node scripts/e2e-smoke.mjs`: PASS=17, FINDING=0, FAIL=0.
+- `CLAUDE_BIN=/opt/node22/bin/claude npm run plugin:smoke`: all checks passed (validate --strict ×3 with the server `timeout`, negative control, fresh-clone install, 8 skills / 4 hooks / 1 server, the installed server's 11 tools, no-node refusal, git-marketplace install and update).
+- `node scripts/plugin-session-check.mjs --only slow-call` (live, Claude Code 2.1.285): PASS, 81 s, only `pensmith_plan` called.
+
+The first full gate run (before `58cde6d`) failed two tests this round's changes had broken: `tests/verify-identifiers-cli.test.ts` pinned PubMed's `Zhu, N.` for `add PMID:31978945` (now Crossref's names — intended, finding 1) and `tests/nl-triggers.test.ts` pinned two phrasings of the skill's redo row and revise paragraph (restored; the new routes sit after them).
 
 **For the merge into the main branch**, in addition to §10 and §11's lists (Phase 20 commits after `7eb0cbf` that meet this round's edits):
 - `bin/lib/revise.ts`: identical to Phase 20's `c7566bf` hunk plus `unverifiableQuoteAdvice` and its two call sites; keep both. `tests/revise-swap.test.ts`'s text-rows test is Phase 20's verbatim; keep this branch's second test. `plugin/workflows/plan.md` holds `c7566bf`'s text plus one sentence on UNVERIFIABLE-QUOTE.
