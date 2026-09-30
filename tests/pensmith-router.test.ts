@@ -544,7 +544,9 @@ test('GRND-18 / D-18-39 (review round 2): with COMPILE-INPUTS.json the compiled 
     await resolveNextAction(root);
     const { createHash } = await import('node:crypto');
     const compiledSha = createHash('sha256').update(readFileSync(join(root, '.paper', 'DRAFT.md'))).digest('hex');
-    await writeCompileInputs(root, [{ n: 1, slug: 'intro' }], new Date().toISOString(), { compiledDraftSha256: compiledSha, verifiedHashes: new Map() });
+    // The verified hash compile records for §1 (any 64-hex value: the router only needs one recorded).
+    const verifiedHashes = new Map([['1', 'a'.repeat(64)]]);
+    await writeCompileInputs(root, [{ n: 1, slug: 'intro' }], new Date().toISOString(), { compiledDraftSha256: compiledSha, verifiedHashes });
     writePaperFile(root, 'FINAL.md');
     const t = (s: number): Date => new Date(Date.UTC(2026, 0, 1, 0, 0, s));
     const sec = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
@@ -576,6 +578,18 @@ test('GRND-18 / D-18-39 (review round 2): with COMPILE-INPUTS.json the compiled 
     writeFileSync(compiledPath, compiledBytes);
     utimesSync(compiledPath, t(2), t(2));
     assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' }, 'the bytes compile wrote');
+    // VRFY-27: a v1 record (an older pensmith's compile: no hash of the compiled
+    // draft or of the verifications) cannot show done what compile wrote → compile.
+    const inputsPath = join(root, '.paper', 'COMPILE-INPUTS.json');
+    const v2 = readFileSync(inputsPath, 'utf8');
+    const rec = JSON.parse(v2) as { compiled_at: string; sections: Array<Record<string, unknown>> };
+    writeFileSync(
+      inputsPath,
+      JSON.stringify({ $schemaVersion: 1, compiled_at: rec.compiled_at, sections: rec.sections.map((sec) => ({ id: sec['id'], slug: sec['slug'], draft_sha256: sec['draft_sha256'], verification_sha256: sec['verification_sha256'] })) }),
+    );
+    assert.equal((await resolveNextAction(root)).verb, 'compile', 'a v1 compile record is stale');
+    writeFileSync(inputsPath, v2);
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' });
     // A second registered (verified) section the compiled draft does not hold → compile.
     const statePath = join(root, '.paper', 'STATE.json');
     const state = JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, unknown>;

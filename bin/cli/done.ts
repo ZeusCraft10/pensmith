@@ -921,8 +921,11 @@ export const doneCommand = defineCommand({
 
     // RUN-09 / RUN-28: the export confirmation needs an answer. Without a
     // terminal (and without --yolo) refuse NOW — EXIT_APPROVAL, before the
-    // plagiarism / detector / humanizer work — instead of after it.
+    // plagiarism / detector / humanizer work — instead of after it, listing
+    // what the answer is about (the UNSUPPORTED claims with their evidence and
+    // the quotes the gate took on the user's word) first.
     if (args.yolo !== true && !canPrompt()) {
+      writeExportFindings(claims, draftGate.gate.accepted, draftGate.gate.byoQuotes);
       await runGate(confirmGate, { yolo: false, detail: 'nothing was exported' });
     }
 

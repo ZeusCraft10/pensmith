@@ -293,9 +293,11 @@ function compiledSectionCount(pDir: string): number | null {
  * COMPILE-INPUTS.json (compile-inputs.ts) says it was compiled from other
  * sections or other section DRAFT.md / VERIFICATION.md bytes than the paper has
  * now. Decided from CONTENT, so a git checkout, a sync client or the --dry-run
- * seed that reorders mtimes never re-sends a finished paper to compile. A paper
- * compiled before that record existed falls back to the mtimes and COMPILE-
- * REPORT.md `sections_count`. Never throws.
+ * seed that reorders mtimes never re-sends a finished paper to compile. A v1
+ * record (migrated with null hashes) cannot show done the compiled draft is the
+ * one compile wrote (VRFY-27), so it is compiled again. A paper compiled before
+ * that record existed falls back to the mtimes and COMPILE-REPORT.md
+ * `sections_count` (done then asks for a recompile). Never throws.
  */
 function compiledDraftStale(
   pDir: string,
@@ -304,6 +306,8 @@ function compiledDraftStale(
 ): boolean {
   const compiledAt = mtimeOf(join(pDir, 'DRAFT.md'));
   if (compiledAt === null) return true;
+  const record = readCompileInputs(paperRoot);
+  if (record !== null && (record.compiled_draft_sha256 === null || record.sections.some((s) => s.verified_against_draft_hash === null))) return true;
   const current = compiledInputsCurrent(paperRoot, sections);
   if (current !== null) return !current;
   for (const { n, slug } of sections) {
