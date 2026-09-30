@@ -396,8 +396,11 @@ const SLUG_LIST: readonly SlugSpec[] = [
   // ~80 output tokens each, so its budget fits a full batch with headroom.
   s('topic-disambiguator', 'research', 'judgment', 'low', 4_000, 1_200, 2_500, true, true),
   s('source-evaluator', 'research', 'judgment', 'low', 24_000, 12_000, 37_000, true, true),
-  s('claim-support', 'verify', 'judgment', 'low', 2_000, 350, 1_200, true, true),
-  s('orphan-label', 'verify', 'judgment', 'low', 1_000, 120, 700, true, true),
+  // Phase 20 (D-20-28, D-20-29): claim-support reads the source text — the
+  // abstract (<= 4000 chars) plus a full-text passage (<= 2400) — and
+  // orphan-label audits one paragraph (<= 4000 chars) and lists its claims.
+  s('claim-support', 'verify', 'judgment', 'low', 2_000, 350, 2_200, true, true),
+  s('orphan-label', 'verify', 'judgment', 'low', 2_000, 500, 1_800, true, true),
 ];
 
 export const SLUGS: Readonly<Record<string, SlugSpec>> = Object.freeze(
