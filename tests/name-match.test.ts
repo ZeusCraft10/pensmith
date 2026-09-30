@@ -56,6 +56,10 @@ const SAME_AUTHOR: ReadonlyArray<readonly [string, string, string]> = [
   ['A. N. Gomez', 'Gomez, Aidan N.', 'initials before the family'],
   ['Reid Chassiakos, Yolanda (Linda)', 'Chassiakos, Yolanda Reid', 'a compound surname (Crossref) cited from a display name split at its last word (OpenAlex; live self-consistency)'],
   ['García Márquez, Gabriel', 'García, Gabriel', 'a Spanish compound surname cited by its first surname'],
+  ['Qi, Lin', 'Lin, Qi', 'family and given deposited the other way round (Crossref, live e2e recording: 10.1109/SSITCON66133.2025.11342115)'],
+  ['Xiulian, Du', 'Du, Xiulian', 'the same swap (10.1109/PEEEC67807.2025.00045)'],
+  ['Qi, Lin', 'Lin, Q.', 'the swap cited with an initial'],
+  ['Qi, Lin', 'Lin Qi', 'the swap against a display name'],
 ];
 
 test('VRFY-13: the same person spelled the ways registrars and bibliographies spell them — first-author score ≥ AUTHOR_JW_THRESHOLD', () => {
@@ -75,6 +79,10 @@ test('VRFY-13: different people still fail', () => {
     ['van der Maaten, Ernst', 'Spiecker, Heinrich'],
     ['Reid Chassiakos, Yolanda', 'Radesky, Jenny S.'],
     ['García Márquez, Gabriel', 'Vargas Llosa, Mario'],
+    // A swap matches only when BOTH parts match crosswise.
+    ['Qi, Lin', 'Lin, Wei'],
+    ['Qi, Lin', 'Wang, Qi'],
+    ['Qi, Lin', 'Lin, M.'],
   ] as const) {
     assert.ok(authorSimilarity(a, b) < AUTHOR_JW_THRESHOLD, `${a} vs ${b}: ${authorSimilarity(a, b)}`);
   }

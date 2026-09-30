@@ -29,6 +29,10 @@
 //     ("Reid Chassiakos" — Crossref's family — and "Chassiakos", the family
 //     of OpenAlex's display name "Yolanda Reid Chassiakos"; "García Márquez"
 //     and "García"): a bibliography often keeps one. The best pair counts.
+//   - A name whose family and given parts a registrar deposited the other way
+//     round ("Qi, Lin" for Lin Qi — common for names written family-first)
+//     also matches crosswise, when BOTH parts match (an initial matches the
+//     name it begins).
 //   - An editor-only work (an edited volume) compares its first editor.
 //   - The year, when both the citation and the record carry one, must be
 //     within YEAR_TOLERANCE (an online-first year versus the issue's year);
@@ -182,13 +186,57 @@ export function surnameForms(author: string | null | undefined): string[] {
   return [...forms];
 }
 
-/** The best Jaro-Winkler score between two authors' surname forms (0 when either has none). */
+/**
+ * A personal name's family and first given name, folded ("Family, Given…" or a
+ * two-word "Given Family"), or null (a corporate name, one word, a longer
+ * display name). The given name loses a trailing period (`Q.` → `q`).
+ */
+function nameParts(author: string | null | undefined): { family: string; given: string } | null {
+  let s = String(author ?? '').normalize('NFC').replace(/\s+/g, ' ').trim();
+  s = s.replace(/[,\s]*\bet\s+al\b\.?$/iu, '').trim();
+  if (!s || s.startsWith('{')) return null;
+  let family: string;
+  let given: string;
+  if (s.includes(',')) {
+    const [f, ...rest] = s.split(',');
+    family = (f ?? '').trim();
+    given = (rest.join(',').trim().split(' ')[0] ?? '').trim();
+  } else {
+    const tokens = s.split(' ');
+    if (tokens.length !== 2) return null;
+    [given, family] = [tokens[0] ?? '', tokens[1] ?? ''];
+  }
+  const g = foldText(given).replace(/\.$/u, '');
+  const f = foldText(family);
+  return f && g && !f.includes(' ') ? { family: f, given: g } : null;
+}
+
+/**
+ * The score of two names read the other way round: one side's family name is
+ * the other's given name AND its given name the other's family name ("Qi, Lin"
+ * — a registrar deposit with the parts swapped, common for names written
+ * family-first — against "Lin, Qi"). Both halves must match; an initial
+ * matches a name it begins (`Q.` ↔ `Qi`). 0 when either is not a personal name.
+ */
+function swappedNameScore(a: string | null | undefined, b: string | null | undefined): number {
+  const x = nameParts(a);
+  const y = nameParts(b);
+  if (x === null || y === null) return 0;
+  const half = (family: string, given: string): number => (given.length === 1 ? (family.startsWith(given) ? 1 : 0) : jaroWinkler(family, given));
+  return Math.min(half(x.family, y.given), half(y.family, x.given));
+}
+
+/**
+ * The best Jaro-Winkler score between two authors' surname forms (0 when
+ * either has none), or the two names read the other way round when that
+ * scores higher (swappedNameScore).
+ */
 export function authorSimilarity(recordAuthor: string | null | undefined, claimedAuthor: string | null | undefined): number {
   const a = surnameForms(recordAuthor);
   const b = surnameForms(claimedAuthor);
   let best = 0;
   for (const x of a) for (const y of b) best = Math.max(best, jaroWinkler(x, y));
-  return best;
+  return Math.max(best, swappedNameScore(recordAuthor, claimedAuthor));
 }
 
 /** What a citation claims about the work (D-14 author strings). */
