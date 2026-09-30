@@ -46,6 +46,7 @@ import { sources } from './sources/index.js';
 import * as dryRunProvider from './sources/dry-run.js';
 import type { SearchOptions } from './sources/search-failure.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
+import { confirmRegistrarRecords, type CrossrefLookup } from './sources/registrar-confirm.js';
 import type { SourceTier } from './schemas/source-types.js';
 import type { LibraryEntry } from './schemas/library.js';
 import { normalizeDoi, isReservedDryRunId } from './doi.js';
@@ -815,13 +816,32 @@ export async function runResearchPass(args: {
     perQuery: discovery.perQuery,
     found: discovery.found,
     distinct: discovery.candidates.length,
-    kept: rankItems(kept),
+    kept: await confirmKept(rankItems(kept), args.registry, now),
     rejected: rankItems(rejected),
     excluded,
     notEvaluated: kept.filter((k) => k.decision === 'not-evaluated').length,
     evaluator: { calls: run.calls, failures: run.failures, unknownVerdicts: applied.unknownVerdicts },
     own,
   };
+}
+
+/**
+ * The kept candidates an aggregator found, confirmed at Crossref (Phase 20,
+ * VRFY-13; sources/registrar-confirm.ts): a record that pairs the journal
+ * DOI with another version's year gets the DOI's own fields, so what research
+ * writes is what verify finds. Only with a registry whose `crossref` adapter
+ * can look a DOI up (never the --dry-run provider or a test's fakes without
+ * one).
+ */
+async function confirmKept(items: ResearchItem[], registry: AdapterRegistry, now: string): Promise<ResearchItem[]> {
+  const crossref = registry['crossref'] as { lookupById?: unknown } | undefined;
+  if (crossref === undefined || typeof crossref.lookupById !== 'function') return items;
+  const lookupById = crossref.lookupById as CrossrefLookup;
+  const { candidates } = await confirmRegistrarRecords(items.map((i) => i.candidate), (doi) => lookupById(doi));
+  return items.map((item, i) => {
+    const c = candidates[i] ?? item.candidate;
+    return c === item.candidate ? item : { ...item, candidate: c, view: candidateToEntry(c, [], now) };
+  });
 }
 
 // ---------------------------------------------------------------------------
