@@ -51,6 +51,18 @@ const ADDED: ReadonlyArray<readonly [string, string]> = [
   ['a metadata block redefining a cited key', 'The effect is large.\n\n---\nreferences:\n- id: lecun2015\n  type: article-journal\n  title: A totally fabricated title\n...'],
   ['a raw block', 'The effect is large.\n\n```{=openxml}\n<w:p><w:r><w:t>(Nguyen &amp; Patel, 2019)</w:t></w:r></w:p>\n```'],
   ['a raw span', 'The effect is large `(Nguyen, 2019)`{=latex}.'],
+  // Review round 2: forms a raw-text scan missed but the export shows as attributions.
+  ['a raw TeX footnote', 'The effect is large.\\footnote{Nobody, N. A study that does not exist. Journal of Nothing 12, 2017.}'],
+  ['a raw TeX environment', 'The effect is large.\n\n\\begin{quote}\nNguyen said so.\n\\end{quote}'],
+  ['author-date in emphasis', 'The effect is large (*Nobody*, 2017).'],
+  ['an escaped numbered marker', 'The effect is large \\[3\\].'],
+  ['author-date in link text', 'The effect is large (see [Nguyen & Patel, 2019](https://example.org/trees)).'],
+  ['author-date in an HTML element', 'The effect is large <span class="citation">Nguyen 2019</span>.'],
+  ['a run-in reference label', 'The effect is large.\n\n**References:** Nguyen, T., & Patel, R. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10.'],
+  ['a typed entry in an HTML block', 'The effect is large.\n\n<p>Nguyen, T. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10.</p>'],
+  ['a typed entry in a block quote', 'The effect is large.\n\n> Nguyen, T. (2019). Street trees and asthma. Journal of Urban Health, 3(2), 1-10.'],
+  ['a single-author narrative citation', 'Nguyen (2019) argued that the effect is large.'],
+  ['a table-source label', 'The effect is large (Source: Okafor 2021).'],
 ];
 
 test('VRFY-26 (in process): a humanized FINAL.md is gated on its own bytes — every added citation form is refused (exit 4, nothing exported, sections/ untouched); one that keeps the citations exports', async () => {

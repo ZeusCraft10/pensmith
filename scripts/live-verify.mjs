@@ -24,6 +24,9 @@
 //     10.99999/fake.001 is FABRICATED;
 //   - VRFY-12: an identifier-less entry of a real work is OK naming the DOI the
 //     metadata search found; one of no work is UNRESOLVABLE;
+//   - review round 2: consortium works cited as the journals print them
+//     (LIGO/Virgo, CMS, ATLAS, GBD 2019) and identifier-less JMLR / NeurIPS /
+//     ICLR works (arXiv, OpenAlex) verify OK;
 //   - VRFY-29: every row of tests/fixtures/known-bad-citations.json is
 //     FABRICATED and every row of tests/fixtures/known-mis-cited.json MIS-CITED;
 //   - VRFY-15: the Wakefield paper is RETRACTED, in VERIFICATION.md and as the
@@ -73,6 +76,24 @@ const VRFY11 = [
   // VRFY-12: no identifier — the metadata search.
   ['lecun2015noid', 'OK', '@article{lecun2015noid, author = {LeCun, Yann and Bengio, Yoshua}, title = {Deep learning}, year = {2015}}'],
   ['nobody2017', 'UNRESOLVABLE', '@article{nobody2017, author = {Nobody, Ann}, title = {A Work That Was Never Published}, year = {2017}}'],
+];
+
+/**
+ * Review round 2: consortium works cited as the journals print them (VRFY-13)
+ * and identifier-less works no registrar holds a DOI for (VRFY-12: JMLR,
+ * NeurIPS, ICLR — arXiv and OpenAlex find them). A row a throttled service
+ * left UNVERIFIABLE-NETWORK is reported, not counted (OpenAlex's keyless
+ * budget is shared per address).
+ */
+const ROUND2 = [
+  ['ligo2016', 'OK', '@article{ligo2016, author = {{LIGO Scientific Collaboration and Virgo Collaboration}}, title = {Observation of Gravitational Waves from a Binary Black Hole Merger}, journal = {Physical Review Letters}, year = {2016}, doi = {10.1103/PhysRevLett.116.061102}}'],
+  ['cms2012', 'OK', '@article{cms2012, author = {{CMS Collaboration}}, title = {Observation of a new boson at a mass of 125 GeV with the CMS experiment at the LHC}, journal = {Physics Letters B}, year = {2012}, doi = {10.1016/j.physletb.2012.08.021}}'],
+  ['atlas2012', 'OK', '@article{atlas2012, author = {{ATLAS Collaboration}}, title = {Observation of a new particle in the search for the Standard Model Higgs boson with the ATLAS detector at the LHC}, journal = {Physics Letters B}, year = {2012}, doi = {10.1016/j.physletb.2012.08.020}}'],
+  ['gbd2020', 'OK', '@article{gbd2020, author = {{GBD 2019 Diseases and Injuries Collaborators}}, title = {Global burden of 369 diseases and injuries in 204 countries and territories, 1990--2019: a systematic analysis for the Global Burden of Disease Study 2019}, journal = {The Lancet}, year = {2020}, doi = {10.1016/S0140-6736(20)30925-9}}'],
+  ['vaswani_noid', 'OK', '@inproceedings{vaswani_noid, author = {Vaswani, Ashish and Shazeer, Noam}, title = {Attention Is All You Need}, booktitle = {Advances in Neural Information Processing Systems}, year = {2017}}'],
+  ['kingma_noid', 'OK', '@inproceedings{kingma_noid, author = {Kingma, Diederik P. and Ba, Jimmy}, title = {Adam: A Method for Stochastic Optimization}, booktitle = {International Conference on Learning Representations}, year = {2015}}'],
+  ['maaten_noid', 'OK', '@article{maaten_noid, author = {van der Maaten, Laurens and Hinton, Geoffrey}, title = {Visualizing Data using t-SNE}, journal = {Journal of Machine Learning Research}, year = {2008}}'],
+  ['srivastava_noid', 'OK', '@article{srivastava_noid, author = {Srivastava, Nitish and Hinton, Geoffrey}, title = {Dropout: A Simple Way to Prevent Neural Networks from Overfitting}, journal = {Journal of Machine Learning Research}, year = {2014}}'],
 ];
 
 /** The CS and medicine self-consistency topics (the audit's FU3-1 sample; PLAN VRFY-13). */
@@ -164,6 +185,19 @@ async function runChild(work) {
     const noid = v.rows.get('lecun2015noid');
     if (noid && !/metadata search matched DOI 10\.1038\/nature14539/.test(noid.line)) fail('VRFY-12: the metadata-search row names the DOI it found', noid.line);
     else if (noid) pass('VRFY-12: the metadata-search row names the DOI it found');
+  }
+
+  // --- Review round 2: consortium works and identifier-less works ---
+  {
+    const { root, dir } = await seedPaper(work, 'round2', ROUND2.map(([k]) => k), `${ROUND2.map(([, , bib]) => bib).join('\n')}\n`);
+    const v = verifySection(root, dir);
+    const counted = [];
+    for (const [key, want] of ROUND2) {
+      const got = v.rows.get(key);
+      if (got?.verdict === 'UNVERIFIABLE-NETWORK') line('INFO', `round 2 ${key} not counted (no answer)`, got.line);
+      else counted.push([key, want]);
+    }
+    expectRows('VRFY-12 / VRFY-13 (review round 2): consortium works and identifier-less JMLR / NeurIPS / ICLR works verify OK', v, counted);
   }
 
   // --- VRFY-29 controls ---
