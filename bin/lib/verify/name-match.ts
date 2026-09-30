@@ -25,7 +25,10 @@
 //     initials dropped; a braced corporate name ({The ENCODE Project
 //     Consortium}) compared whole, without a leading "The". A surname with
 //     particles counts both with and without them ("van der Maaten" and
-//     "Maaten"). The best pair counts.
+//     "Maaten"), and a compound surname also counts each of its words
+//     ("Reid Chassiakos" — Crossref's family — and "Chassiakos", the family
+//     of OpenAlex's display name "Yolanda Reid Chassiakos"; "García Márquez"
+//     and "García"): a bibliography often keeps one. The best pair counts.
 //   - An editor-only work (an edited volume) compares its first editor.
 //   - The year, when both the citation and the record carry one, must be
 //     within YEAR_TOLERANCE (an online-first year versus the issue's year);
@@ -109,14 +112,23 @@ function isInitialToken(t: string): boolean {
   return INITIALS_TOKEN.test(t);
 }
 
-/** A surname and its form without leading particles (when it has any). */
+/**
+ * A surname, its form without leading particles (when it has any), and — for
+ * a compound surname — each of its words that is neither a particle nor an
+ * initial ("reid chassiakos" → "chassiakos", "reid").
+ */
 function withAndWithoutParticles(surname: string): string[] {
   const s = foldText(surname);
   if (!s) return [];
   const words = s.split(' ');
   let i = 0;
   while (i < words.length - 1 && PARTICLES.has(words[i]!)) i++;
-  return i > 0 ? [s, words.slice(i).join(' ')] : [s];
+  const forms = i > 0 ? [s, words.slice(i).join(' ')] : [s];
+  const core = words.slice(i);
+  if (core.length > 1) {
+    for (const w of core) if (w.length >= 2 && !PARTICLES.has(w) && !/^\p{L}\.?$/u.test(w)) forms.push(w);
+  }
+  return forms;
 }
 
 /** The family name of a display name with no comma ("A. B. Family", "Given van der Family", "Family INITIALS"). */

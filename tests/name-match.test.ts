@@ -54,6 +54,8 @@ const SAME_AUTHOR: ReadonlyArray<readonly [string, string, string]> = [
   ['北本, 朝展', '北本, 朝展', 'a Japanese name, compared in its own script'],
   ['Лебедев, А. Н.', 'Лебедев, Алексей', 'a Cyrillic name, compared in its own script'],
   ['A. N. Gomez', 'Gomez, Aidan N.', 'initials before the family'],
+  ['Reid Chassiakos, Yolanda (Linda)', 'Chassiakos, Yolanda Reid', 'a compound surname (Crossref) cited from a display name split at its last word (OpenAlex; live self-consistency)'],
+  ['García Márquez, Gabriel', 'García, Gabriel', 'a Spanish compound surname cited by its first surname'],
 ];
 
 test('VRFY-13: the same person spelled the ways registrars and bibliographies spell them — first-author score ≥ AUTHOR_JW_THRESHOLD', () => {
@@ -71,6 +73,8 @@ test('VRFY-13: different people still fail', () => {
     ['{The ENCODE Project Consortium}', '{1000 Genomes Project Consortium}'],
     ['北本, 朝展', '山田, 太郎'],
     ['van der Maaten, Ernst', 'Spiecker, Heinrich'],
+    ['Reid Chassiakos, Yolanda', 'Radesky, Jenny S.'],
+    ['García Márquez, Gabriel', 'Vargas Llosa, Mario'],
   ] as const) {
     assert.ok(authorSimilarity(a, b) < AUTHOR_JW_THRESHOLD, `${a} vs ${b}: ${authorSimilarity(a, b)}`);
   }
