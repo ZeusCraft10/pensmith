@@ -216,12 +216,16 @@ function nameParts(author: string | null | undefined): { family: string; given: 
  * the other's given name AND its given name the other's family name ("Qi, Lin"
  * — a registrar deposit with the parts swapped, common for names written
  * family-first — against "Lin, Qi"). Both halves must match; an initial
- * matches a name it begins (`Q.` ↔ `Qi`). 0 when either is not a personal name.
+ * matches a name it begins (`Q.` ↔ `Qi`), but at least one side must spell
+ * its given name out: two initials prove nothing ("Jones, S." read crosswise
+ * is not "Smith, J.", "Li, W." is not "Wang, L."). 0 when either is not a
+ * personal name.
  */
 function swappedNameScore(a: string | null | undefined, b: string | null | undefined): number {
   const x = nameParts(a);
   const y = nameParts(b);
   if (x === null || y === null) return 0;
+  if (x.given.length === 1 && y.given.length === 1) return 0;
   const half = (family: string, given: string): number => (given.length === 1 ? (family.startsWith(given) ? 1 : 0) : jaroWinkler(family, given));
   return Math.min(half(x.family, y.given), half(y.family, x.given));
 }

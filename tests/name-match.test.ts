@@ -83,11 +83,25 @@ test('VRFY-13: different people still fail', () => {
     ['Qi, Lin', 'Lin, Wei'],
     ['Qi, Lin', 'Wang, Qi'],
     ['Qi, Lin', 'Lin, M.'],
+    // Two initials never match crosswise: a different person (the second author cited as first).
+    ['Smith, J.', 'Jones, S.'],
+    ['Wang, L.', 'Li, W.'],
+    ['Wang L', 'Li W'],
   ] as const) {
     assert.ok(authorSimilarity(a, b) < AUTHOR_JW_THRESHOLD, `${a} vs ${b}: ${authorSimilarity(a, b)}`);
   }
   assert.deepEqual(surnameForms('et al.'), []);
   assert.equal(authorSimilarity('', 'Smith, J.'), 0);
+});
+
+test('VRFY-13: a record whose authors are "Wang, L." and "Li, W." cited with "Li, W." first is MIS-CITED (first author), not OK crosswise', () => {
+  const m = matchWork({ title: 'Deep learning', authors: ['Jones, S.'], year: 2015 }, { title: 'Deep learning', authors: ['Smith, J.'], year: 2015 });
+  assert.equal(m.ok, false);
+  assert.deepEqual(m.failing, ['first author']);
+  const w = matchWork({ title: 'A study', authors: ['Li, W.', 'Wang, L.'], year: 2020 }, { title: 'A study', authors: ['Wang, L.', 'Li, W.'], year: 2020 });
+  assert.deepEqual(w.failing, ['first author']);
+  // A spelled-out given name on one side still reads crosswise.
+  assert.equal(matchWork({ title: 'A study', authors: ['Lin, Q.'], year: 2020 }, { title: 'A study', authors: ['Qi, Lin'], year: 2020 }).ok, true);
 });
 
 test('VRFY-13: a title is compared whole and without its subtitle (":", " - ", " – ", " — ", ". "); a record\'s separate subtitle is joined back', () => {
