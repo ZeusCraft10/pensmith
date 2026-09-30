@@ -24,21 +24,13 @@ import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { parseBib } from '../bin/lib/citations.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { LECUN_BIB, ASPELMEYER_BIB } from './helpers/gate-paper.js';
 
-const SEED_BIB = `@article{smith2020,
-  title = {A Real Title},
-  author = {Smith, Jane},
-  year = {2020},
-  doi = {10.1000/smith2020}
-}
-
-@article{jones2019,
-  title = {Another Real Title},
-  author = {Jones, Bob},
-  year = {2019},
-  doi = {10.1000/jones2019}
-}
-
+// Recorded works (Crossref + Retraction Watch replay offline): compile
+// recomputes every section's gate (VRFY-25), so the cited sources must really
+// verify. The uncited entry stays a plain library record.
+const SEED_BIB = `${LECUN_BIB}
+${ASPELMEYER_BIB}
 @article{unused2018,
   title = {Uncited Work},
   author = {Nobody, A},
@@ -57,8 +49,8 @@ function seed(): string {
       '',
       '| # | slug | title | depends_on | word target | assigned_sources |',
       '| --- | --- | --- | --- | --- | --- |',
-      '| 1 | intro | Intro | | 300 | smith2020 |',
-      '| 2 | body | Body | | 300 | jones2019 |',
+      '| 1 | intro | Intro | | 300 | lecun2015 |',
+      '| 2 | body | Body | | 300 | aspelmeyer2009 |',
       '',
     ].join('\n'),
   );
@@ -77,8 +69,8 @@ function seed(): string {
       [`# VERIFICATION (Section ${n}, ${slug})`, '', 'Status: verified', '', '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)', '', `- ${sources[0]}: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed`, '', ''].join('\n'),
     );
   };
-  seedSec(1, 'intro', '# Intro\n\nA grounded claim [@smith2020].\n', ['smith2020']);
-  seedSec(2, 'body', '# Body\n\nAnother grounded claim [@jones2019].\n', ['jones2019']);
+  seedSec(1, 'intro', '# Intro\n\nA grounded claim [@lecun2015].\n', ['lecun2015']);
+  seedSec(2, 'body', '# Body\n\nAnother grounded claim [@aspelmeyer2009].\n', ['aspelmeyer2009']);
   return root;
 }
 
@@ -94,7 +86,7 @@ test('BRDTH-01: compile leaves CITATIONS.bib byte-identical — the uncited key 
   assert.ok(after.equals(before), 'compile must not rewrite .paper/CITATIONS.bib');
   assert.equal(statSync(bibPath).mtimeMs, mtimeBefore, 'not even an identical rewrite (mtime unchanged)');
   const ids = new Set((await parseBib(after.toString('utf8'))).map((e) => String((e as { id?: string }).id ?? '')));
-  assert.deepEqual([...ids].sort(), ['jones2019', 'smith2020', 'unused2018'], 'the uncited key is still in the library');
+  assert.deepEqual([...ids].sort(), ['aspelmeyer2009', 'lecun2015', 'unused2018'], 'the uncited key is still in the library');
   // The compiled draft is written as before.
   assert.ok(existsSync(join(root, '.paper', 'DRAFT.md')));
 });
@@ -113,7 +105,8 @@ test('BRDTH-01 (was audit #17): a DOI-less source (book, ISBN only) is untouched
       '',
     ].join('\n'),
   );
-  const bib = '@book{kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas},\n  year = {1962},\n  isbn = {9780226458120}\n}\n';
+  // The recorded ISBN (books registries replay offline): Pass 1 checks the book at its own registrar.
+  const bib = '@book{kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas S.},\n  year = {1996},\n  isbn = {9780226458083}\n}\n';
   writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bib);
   const dir = join(root, '.paper', 'sections', '01-intro');
   mkdirSync(dir, { recursive: true });
@@ -130,7 +123,7 @@ test('BRDTH-01 (was audit #17): a DOI-less source (book, ISBN only) is untouched
   );
 
   const result = await runCompile({ paperRoot: root, yolo: true });
-  assert.equal(result.refused, false);
+  assert.equal(result.refused, false, (result.refuseReasons ?? []).join(' | '));
   assert.equal(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'), bib, 'the book entry is untouched');
 });
 
