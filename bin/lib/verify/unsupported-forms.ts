@@ -32,21 +32,31 @@
 // `\sidenote`, …) is a footnote, and any other raw TeX environment
 // (`\begin{…}`) is refused as raw TeX (the exporter reads Markdown without
 // raw TeX too, so a command left in the text prints as text). A single
-// author before a year is a citation when the prose treats it as one —
-// "Nguyen (2019) argued", "According to Nguyen (2019)", "Nguyen's (2019)
-// meta-analysis", "Nguyen and colleagues (2019)", "Nguyen (2019, p. 5)",
-// "Nguyen (2019a)" — while "the Treaty of Versailles (1919) ended the war"
-// stays text (D-20-08, narrowed in review round 2).
+// author before a year is a citation — FAIL CLOSED since review round 3:
+// "Nguyen (2019) argued", "introduced by Okonkwo (2017)", "Following Brandt
+// (2016),", "Okonkwo [2017]", "In Germany (2015)" — unless the name is not a
+// person's: a month or a numbered label, an abbreviation with dots
+// ("Washington, D.C. (2019)"), or part of an event's or a document's name
+// ("the Treaty of Versailles (1919)", "Hurricane Katrina (2005)", "the Brexit
+// (2016) referendum" — EVENT_NOUNS); a possessive, "and colleagues", a page
+// locator or a year letter makes it a citation whatever the name. A name and
+// a bare year after a citing cue ("As shown in Okonkwo, 2017,") is one too.
+// Numbered markers are read in parentheses as well as brackets (Vancouver's
+// "(3, 4)", "(3–5)", "(ref. 12)", "(refs. 3 and 4)", "as reported in (12)"),
+// with the bracket rule's value exemptions (review round 3).
 //
 // Fail closed: only the spans citation-token.ts PROVES are code (fenced blocks,
 // inline code spans — provableCodeSpans, D-18-42) and TeX math (`$…$`, `$$…$$`)
 // are skipped; everything else is scanned. A few shapes that are not
-// citations are left alone because they cannot be mistaken for one: a lone
-// name before a year ("the Treaty of Versailles (1919)"), a parenthetical
-// with no name ("(n = 2019)", "(1919)", "(COVID-19)"), a year range
+// citations are left alone because they cannot be mistaken for one: an event
+// or a document before a year ("the Treaty of Versailles (1919)"), a
+// parenthetical with no name ("(n = 2019)", "(1919)", "(COVID-19)"), a year range
 // ("(World War II, 1939–1945)"), a numbered label ("(Figure 3)", "(Apollo
-// 11)"), an interval, shape or index in brackets ("[0, 1]", "shape [32,
-// 128]"), an exponent ("m<sup>2</sup>", "x²"), an email address.
+// 11)"), an interval, shape or index in brackets or parentheses ("[0, 1]",
+// "shape [32, 128]", "a Likert scale (1–5)", "the point (3, 4)"), an
+// enumeration ("(1) collect, (2) clean"), an exponent ("m<sup>2</sup>",
+// "x²"), an email address. A leading byte-order mark is stripped first, as
+// Pandoc strips it (review round 3).
 //
 // PURE: no I/O. Line numbers are 1-based and count `\n`, so an LF and a CRLF
 // copy of a draft report the same lines.
@@ -72,7 +82,9 @@ export type UnsupportedForm = (typeof UNSUPPORTED_FORMS)[number];
 
 /** One line per form: why it blocks and what to write instead. */
 export const UNSUPPORTED_FORM_REASONS: Readonly<Record<UnsupportedForm, string>> = {
-  'author-date': 'an author-date citation the verifier cannot check against CITATIONS.bib — cite the source as [@citekey]',
+  'author-date':
+    'an author-date citation the verifier cannot check against CITATIONS.bib — cite the source as [@citekey] ' +
+    '(a name and a year that are not a citation, such as a place, reads without the parentheses: "in 2015, Germany …")',
   footnote: 'a footnote the verifier cannot check — cite the source in the text as [@citekey] (a note citation style makes the notes at export)',
   'inline-note': 'an inline note the verifier cannot check — cite the source in the text as [@citekey] (a note citation style makes the notes at export)',
   'reference-list':
@@ -751,6 +763,61 @@ function numericMarkers(md: string): RawFinding[] {
     }
     out.push({ form: 'numeric-marker', start, end });
   }
+  out.push(...parenMarkers(md));
+  return out;
+}
+
+/** Words after which a parenthesised number group is a value, a range or a label ("a Likert scale (1–5)", "ages (3–5)", "Tables (2, 3)"). */
+const PAREN_VALUE_WORDS: ReadonlySet<string> = new Set([
+  'scale', 'scales', 'score', 'scores', 'rating', 'ratings', 'aged', 'age', 'ages', 'grade', 'grades', 'levels', 'stages', 'steps', 'items',
+  'questions', 'figures', 'tables', 'chapters', 'sections', 'pages', 'equations', 'eqs', 'lines', 'phases', 'waves', 'groups', 'conditions',
+  'options', 'choices', 'answers', 'responses', 'categories', 'classes', 'types', 'years', 'months', 'weeks', 'days', 'hours', 'numbers',
+  'digits', 'integers', 'dice', 'die', 'grid', 'cards', 'rounds', 'trials', 'blocks', 'sessions', 'parts', 'units',
+]);
+/** A unit or a count right after a group ("(3–5) years", "(2, 3) times"): a value. */
+const PAREN_VALUE_AFTER_RE = /^\s*(?:years?|months?|weeks?|days?|hours?|minutes?|seconds?|%|percent|times|fold|points?|items?|per\b|kg|g|mg|ml|cm|mm|km|°)/iu;
+/** A parenthesised numbered marker: "(3, 4)", "(3–5)", "(12)", "(ref. 12)", "(refs. 3 and 4)" (review round 3). */
+const PAREN_MARKER_RE = /\((?<ref>\s*(?:[Rr]efs?\.?|[Rr]eferences?)\s+)?\s*(?<nums>\d{1,3}(?:\s*(?:[-–—,]|,?\s*(?:and|&))\s*\d{1,3})*)\s*\)/gu;
+
+/**
+ * Numbered markers in parentheses (Vancouver's in-text form, review round 3):
+ * with a `ref.` / `refs.` / `reference` prefix always; otherwise a group of
+ * two or more citation numbers — "older adults (3, 4).", "(3–5)" — unless it
+ * reads as a value, as the bracket rule reads one (a value word, preposition
+ * or operator before it, a unit after it); and a single number only after a
+ * citing cue ("as reported in (12)", "see (12)"). An enumeration "(1) first,
+ * (2) second", a function call "f(3, 4)" and an equation label "Eq. (12)"
+ * stay text.
+ */
+function parenMarkers(md: string): RawFinding[] {
+  const out: RawFinding[] = [];
+  for (const m of md.matchAll(PAREN_MARKER_RE)) {
+    const start = m.index;
+    const end = start + m[0].length;
+    const before = start > 0 ? (md[start - 1] as string) : '';
+    if (/[\p{L}\p{N}\]!\\^_$]/u.test(before)) continue; // f(3, 4), x_(2), an escape
+    if (m.groups?.['ref'] !== undefined) {
+      out.push({ form: 'numeric-marker', start, end });
+      continue;
+    }
+    const nums = (m.groups?.['nums'] ?? '').replace(/,?\s*(?:and|&)\s*/gu, ', ');
+    if (!citationNumbers(`[${nums}]`)) continue;
+    const several = /[-–—,]/.test(nums);
+    const lineStart = md.lastIndexOf('\n', start - 1) + 1;
+    const head = md.slice(lineStart, start);
+    const [word, previous] = wordsBefore(md, start);
+    const citing = CITING_BEFORE_PREPOSITION.has(word) || ((word === 'in' || word === 'to' || word === 'by') && CITING_BEFORE_PREPOSITION.has(previous));
+    if (!several && !citing) continue;
+    const value =
+      !citing &&
+      (PAREN_VALUE_WORDS.has(word) || VALUE_WORDS.has(word) || NUMBERED_LABELS.has(word) ||
+        ((VALUE_PREPOSITIONS.has(word) || word === 'at' || word === 'from') && !CITING_BEFORE_PREPOSITION.has(previous)) ||
+        VALUE_BEFORE_RE.test(head) ||
+        VALUE_AFTER_RE.test(md.slice(end, end + 12)) ||
+        PAREN_VALUE_AFTER_RE.test(md.slice(end, end + 12)));
+    if (value) continue;
+    out.push({ form: 'numeric-marker', start, end });
+  }
   return out;
 }
 
@@ -875,15 +942,48 @@ function authorDate(md: string): RawFinding[] {
     const start = m.index - head.length + n.index;
     out.push({ form: 'author-date', start, end: m.index + m[0].length });
   }
+  out.push(...narrativeCommaYear(md));
   return out;
 }
 
-/** Verbs of reporting and finding: "Nguyen (2019) argued / found / showed …" (D-20-08, narrowed in review round 2). */
-const REPORTING_VERB = String.raw`(?:argue[sd]?|arguing|f(?:ind|inds|ound)|show(?:s|ed|n)?|report(?:s|ed)?|note[sd]?|suggest(?:s|ed)?|demonstrate[sd]?|conclude[sd]?|observe[sd]?|claim(?:s|ed)?|propose[sd]?|state[sd]?|wr(?:ite|ites|ote|itten)|contend(?:s|ed)?|maintain(?:s|ed)?|assert(?:s|ed)?|emphasi[sz]e[sd]?|highlight(?:s|ed)?|document(?:s|ed)?|estimate[sd]?|describe[sd]?|explain(?:s|ed)?|examine[sd]?|investigate[sd]?|identifie[sd]|identify|review(?:s|ed)?|analy[sz]e[sd]?|survey(?:s|ed)?|hypothesi[sz]e[sd]?|posit(?:s|ed)?|caution(?:s|ed)?|warn(?:s|ed)?|recommend(?:s|ed)?|acknowledge[sd]?|confirm(?:s|ed)?|replicate[sd]?|reveal(?:s|ed)?|indicate[sd]?|discover(?:s|ed)?|assess(?:es|ed)?|evaluate[sd]?|explore[sd]?|discuss(?:es|ed)?|question(?:s|ed)?|challenge[sd]?|critici[sz]e[sd]?|dispute[sd]?|stress(?:es|ed)?|insist(?:s|ed)?|speculate[sd]?|theori[sz]e[sd]?|point(?:s|ed)?\s+out|summari[sz]e[sd]?|measure[sd]?|predict(?:s|ed)?|reason(?:s|ed)?|tested|studied|studies|modell?ed|put\s+it|says|said|writes|agree[sd]?|disagree[sd]?|den(?:y|ies|ied)|doubt(?:s|ed)?|recogni[sz]e[sd]?|reject(?:s|ed)?)`;
-/** Words a writer puts between the citation and its verb: "Nguyen (2019) also found", "Nguyen (2019), however, argued". */
-const BETWEEN = String.raw`(?:\s*,?\s*(?:also|further|furthermore|recently|similarly|previously|later|first|then|subsequently|convincingly|famously|notably|rightly|correctly|persuasively|explicitly|originally|elsewhere|however|moreover|in\s+contrast|by\s+contrast|for\s+example|for\s+instance|in\s+turn|instead|too|even|only|each|both|all|clearly|repeatedly|consistently|independently|\p{L}+ly)\s*,?)*`;
-/** Cues before a lone name that make it a citation: "According to Nguyen (2019)", "as shown by Nguyen (2019)". */
-const CITING_CUE_RE = /(?:according\s+to|as\s+(?:shown|noted|reported|described|argued|demonstrated|suggested|observed|found|stated|discussed|explained|proposed|pointed\s+out|documented|reviewed|summari[sz]ed|outlined|detailed|put)\s+by|following|\bsee(?:\s+also)?|\bcf\.)\s+$/iu;
+/**
+ * Words that make a capitalised phrase before a year an event, a document or
+ * a place in time — not an author: "the Treaty of Versailles (1919)", "the
+ * Paris Agreement (2015)", "Hurricane Katrina (2005)", "the Brexit (2016)
+ * referendum". The one allow-list of the lone-name rule (review round 3).
+ */
+const EVENT_NOUNS: ReadonlySet<string> = new Set([
+  'act', 'acts', 'treaty', 'treaties', 'agreement', 'agreements', 'accord', 'accords', 'convention', 'conventions', 'protocol', 'declaration',
+  'constitution', 'charter', 'pact', 'doctrine', 'deal', 'settlement', 'armistice', 'ceasefire', 'compromise', 'resolution', 'amendment',
+  'bill', 'law', 'laws', 'directive', 'regulation', 'regulations', 'reform', 'reforms', 'ruling', 'judgment', 'judgement', 'verdict',
+  'revolution', 'war', 'wars', 'battle', 'siege', 'crisis', 'pandemic', 'epidemic', 'outbreak', 'hurricane', 'typhoon', 'cyclone', 'storm',
+  'earthquake', 'tsunami', 'flood', 'floods', 'famine', 'drought', 'fire', 'eruption', 'disaster', 'spill', 'crash', 'collapse', 'recession',
+  'depression', 'boom', 'bubble', 'olympics', 'games', 'cup', 'championship', 'summit', 'conference', 'congress', 'council', 'election',
+  'elections', 'referendum', 'plan', 'program', 'programme', 'strike', 'strikes', 'riot', 'riots', 'massacre', 'uprising', 'rebellion',
+  'movement', 'era', 'dynasty', 'empire', 'republic', 'expedition', 'mission', 'exhibition', 'expo', 'fair', 'festival', 'census', 'accident',
+  'attack', 'attacks', 'bombing', 'invasion', 'occupation', 'partition', 'independence', 'incident', 'scandal', 'trial', 'trials',
+]);
+/** Lower-case words inside an event's or a document's name ("Treaty of Versailles", "Act for the …"). */
+const PHRASE_JOINERS: ReadonlySet<string> = new Set(['of', 'for', 'the', 'on', 'in', 'and', 'to', 'de', 'du', 'des', 'at']);
+
+/**
+ * The capitalised phrase `head` ends with, as lower-case words ("…the Treaty
+ * of Versailles " → treaty, of, versailles), at most eight words back.
+ */
+function trailingPhrase(head: string): string[] {
+  const words = head.trimEnd().split(/\s+/u).filter((w) => w !== '');
+  const out: string[] = [];
+  for (let i = words.length - 1; i >= 0 && out.length < 8; i -= 1) {
+    const w = (words[i] as string).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}.]+$/gu, '');
+    if (w === '') break;
+    if (/^\p{Lu}/u.test(w) || (out.length > 0 && PHRASE_JOINERS.has(w.toLowerCase()))) out.unshift(w.toLowerCase().replace(/\.$/, ''));
+    else break;
+  }
+  return out;
+}
+
+/** Cues before a lone name at the start of a sentence (`Following Brandt (2016)`, `See Brandt (2016)`), read into the name by NARRATIVE_AUTHOR. */
+const LEADING_CUE_WORDS: ReadonlySet<string> = new Set(['following', 'see', 'cf', 'cf.', 'according', 'after', 'unlike', 'like', 'per', 'contra']);
 /** A lone name and what may follow it in the head: "Nguyen", "van der Berg", "Nguyen's", "Nguyen and colleagues". */
 const LONE_AUTHOR_RE = new RegExp(
   String.raw`(?<![\p{L}\p{M}])(?<name>${NARRATIVE_AUTHOR})(?<tail>\s*(?:'s|’s)|\s+(?:and|&)\s+(?:colleagues|coworkers|co-workers|associates|collaborators|coauthors|co-authors|others|team))?\s*$`,
@@ -891,26 +991,54 @@ const LONE_AUTHOR_RE = new RegExp(
 );
 
 /**
- * A lone author before a year that the prose treats as a citation (see the
- * header): followed by a reporting verb, after a citing cue ("according to",
- * "as shown by"), possessive, "and colleagues", or with a page locator or a
- * year letter. A lone name before a year otherwise stays text ("the Treaty
- * of Versailles (1919) ended the war"). Returns where the name starts in
- * `head`, or null.
+ * A lone author before a year (see the header) — FAIL CLOSED since review
+ * round 3: `Name (year)` / `Name [year]` is a citation unless the name is not
+ * a person's: a month, a numbered label or another NOT_AUTHORS /
+ * NUMBERED_LABELS word, an abbreviation written with dots and no lower-case
+ * letter ("Washington, D.C. (2019)"), or part of an event's or a document's
+ * name (EVENT_NOUNS: "the Treaty of Versailles (1919)", "Hurricane Katrina
+ * (2005)", "the Brexit (2016) referendum"). A possessive, "and colleagues", a
+ * page locator or a year letter makes it a citation whatever the name.
+ * Returns where the name starts in `head`, or null.
  */
 function singleAuthorCitation(head: string, dated: string, after: string): { index: number } | null {
   const m = LONE_AUTHOR_RE.exec(head);
   if (m === null || m.groups === undefined) return null;
-  const name = (m.groups['name'] ?? '').trim();
+  const rawName = (m.groups['name'] ?? '').trim();
+  const nameWords = rawName.split(/\s+/);
+  // A cue word read into the name ("Following Brandt"): the name is the rest.
+  const first = (nameWords[0] ?? '').toLowerCase();
+  const name = nameWords.length > 1 && LEADING_CUE_WORDS.has(first) ? nameWords.slice(1).join(' ') : rawName;
   const last = name.split(/\s+/).pop() ?? '';
-  if (NOT_AUTHORS.has(last.toLowerCase()) || NUMBERED_LABELS.has(last.toLowerCase())) return null;
   // A possessive may be read into the name itself (a name word may hold an apostrophe: O'Neil).
   const tail = (m.groups['tail'] ?? '') || (/['’]s$/u.test(name) ? "'s" : '');
   const locator = new RegExp(String.raw`^[([]\s*${YEAR}\s*(?:,\s*(?:pp?\.|para\.|ch(?:ap)?\.|sec\.|§)\s*\d|:\s*\d)`, 'u').test(dated);
   const letter = /^[([]\s*(?:1[5-9]|20)\d{2}[a-z]\b/u.test(dated);
-  const verb = new RegExp(String.raw`^${BETWEEN}\s*${REPORTING_VERB}\b`, 'iu').test(after);
-  const cue = CITING_CUE_RE.test(head.slice(0, m.index));
-  return tail !== '' || locator || letter || verb || cue ? { index: m.index } : null;
+  if (tail !== '' || locator || letter) return { index: m.index };
+  if (NOT_AUTHORS.has(last.toLowerCase()) || NUMBERED_LABELS.has(last.toLowerCase())) return null;
+  if (/\./u.test(name) && !/\p{Ll}/u.test(name)) return null; // an abbreviation: "D.C.", "U.S."
+  const phrase = trailingPhrase(head);
+  const next = /^\s*([\p{L}]+)/u.exec(after)?.[1]?.toLowerCase() ?? '';
+  if (phrase.some((w) => EVENT_NOUNS.has(w)) || EVENT_NOUNS.has(next)) return null;
+  return { index: m.index };
+}
+
+/** Citing cues before a lone name and a bare year in prose: "As shown in Okonkwo, 2017, …", "see Okonkwo et al., 2017". */
+const NARRATIVE_COMMA_YEAR_RE = new RegExp(
+  String.raw`(?:\b(?:[Aa]ccording\s+to|[Aa]s\s+(?:shown|noted|reported|described|argued|demonstrated|suggested|observed|found|stated|discussed|explained|proposed|documented|reviewed|summari[sz]ed|outlined|detailed)\s+(?:in|by)|(?:[Rr]eported|[Dd]escribed|[Ss]hown|[Dd]iscussed|[Rr]eviewed|[Cc]ited|[Qq]uoted)\s+in|[Ff]ollowing|[Ss]ee(?:\s+also)?|[Cc]f\.|[Pp]er)\s+)(?<name>${NARRATIVE_AUTHOR}(?:\s+${ET_AL}|\s+(?:and|&)\s+${NARRATIVE_AUTHOR})?)\s*,\s*${YEAR}\b`,
+  'gu',
+);
+
+/** "As shown in Okonkwo, 2017, …": a name and a bare year after a citing cue (review round 3). */
+function narrativeCommaYear(md: string): RawFinding[] {
+  const out: RawFinding[] = [];
+  for (const m of md.matchAll(NARRATIVE_COMMA_YEAR_RE)) {
+    const name = (m.groups?.['name'] ?? '').trim();
+    const last = name.split(/\s+/).pop() ?? '';
+    if (NOT_AUTHORS.has(last.toLowerCase()) || NUMBERED_LABELS.has(last.toLowerCase())) continue;
+    out.push({ form: 'author-date', start: m.index, end: m.index + m[0].length });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

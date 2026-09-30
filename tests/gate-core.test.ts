@@ -7,7 +7,8 @@
 //     and the line; a key in a missing or empty bib is FABRICATED (no stack);
 //   - UNASSIGNED next to the key's registrar row (VRFY-17), with the remedy;
 //   - NO-CITATIONS / PLACEHOLDER draft rows (VRFY-24);
-//   - text findings keyed `L<line>` (the scanners, VRFY-09 / VRFY-10);
+//   - text findings keyed `(L<line>)` (the scanners, VRFY-09 / VRFY-10), a
+//     leading byte-order mark stripped as Pandoc strips it (review round 3);
 //   - the quote-acceptance lift ONLY for a recomputed UNVERIFIABLE-QUOTE with
 //     the same citekey, quote hash and current draft hash (VRFY-20, D-20-22);
 //   - checkedAt from passing rows only (VRFY-28);
@@ -149,7 +150,7 @@ test('gate core: the stub-draft marker is PLACEHOLDER (unverifiable, blocking) o
   assert.ok(!hasStubMarker(`Prose quoting ${STUB_DRAFT_MARKER} inline is not the marker line.\n`));
 });
 
-test('gate core: scanner findings become rows keyed L<line> and block (VRFY-09 / VRFY-10 plumbing)', async () => {
+test('gate core: scanner findings become rows keyed (L<line>) and block (VRFY-09 / VRFY-10 plumbing)', async () => {
   const root = paper(GOOD);
   const r = await recomputeGate(
     input(root, 'Line one [@lecun2015].\nAs shown (Nguyen & Patel, 2019).\n', {
@@ -161,6 +162,27 @@ test('gate core: scanner findings become rows keyed L<line> and block (VRFY-09 /
   assert.ok(text && text.key === '(L2)' && text.verdict === 'UNSUPPORTED-FORM');
   assert.equal(r.outcome.status, 'failed');
   assert.match(gateRefusals(r, { kind: 'section', id: '1' })[0] ?? '', /^line 2: UNSUPPORTED-FORM `\(Nguyen & Patel, 2019\)` — author-date prose/);
+});
+
+test('gate core (review round 3): a leading byte-order mark is read as Pandoc reads it — a block quote, a metadata block or a raw fence on line 1 blocks as it does without the mark', async () => {
+  const root = paper(GOOD);
+  const quoteDraft = '> Deep networks will soon replace every radiologist in all hospitals, and no human reader will be needed.\n\nLeCun and colleagues wrote this [@lecun2015].\n';
+  const metaDraft = '---\nreferences:\n- id: lecun2015\n  title: Totally Invented Work\n---\n\nDeep learning [@lecun2015].\n';
+  const rawDraft = '```{=openxml}\n<w:p><w:t>(Nguyen, 2019)</w:t></w:p>\n```\n\nDeep learning [@lecun2015].\n';
+  for (const [name, draft, want] of [
+    ['block quote', quoteDraft, 'pass3:UNATTRIBUTED'],
+    ['metadata block', metaDraft, 'text:UNSUPPORTED-FORM:metadata-block'],
+    ['raw fence', rawDraft, 'text:UNSUPPORTED-FORM:raw-output'],
+  ] as const) {
+    const run = async (text: string): Promise<string[]> => {
+      const r = await recomputeGate(input(root, text, { deps: { runPass1: fakePass1() } }));
+      assert.equal(r.outcome.status, 'failed', `${name}: ${JSON.stringify(r.rows)}`);
+      return r.rows.filter((x) => x.kind !== 'pass1').map((x) => (x.kind === 'text' ? `text:${x.verdict}:${x.form}` : x.kind === 'pass3' ? `pass3:${x.verdict}` : `${x.kind}:${x.verdict}`));
+    };
+    const plain = await run(draft);
+    assert.ok(plain.includes(want), `${name} without the mark: ${plain.join(', ')}`);
+    assert.deepEqual(await run(`\uFEFF${draft}`), plain, `${name}: the same rows with the mark`);
+  }
 });
 
 test('gate core: an acceptance lifts ONLY a recomputed UNVERIFIABLE-QUOTE with the same citekey, quote and current draft hash (VRFY-20, S-17)', async () => {

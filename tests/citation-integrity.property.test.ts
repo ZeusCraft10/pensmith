@@ -7,10 +7,12 @@
 // shapes, the VRFY-10 unsupported forms (footnotes, inline notes, in-draft
 // reference lists, raw TeX and HTML citations, numbered and superscript
 // markers, author-date prose, metadata blocks, raw {=format} output), and
-// noise (emails, escapes, code, math, intervals, numbered labels), with
-// LF or CRLF line endings. The drafts are batched into a few `pandoc -t json`
-// calls (one fenced Div per draft; a batch whose Divs do not come back one per
-// draft is re-run draft by draft), and every draft is checked for:
+// noise (emails, escapes, code, math, intervals, numbered labels, events and
+// enumerations), with LF or CRLF line endings, some with a leading byte-order
+// mark. The drafts are batched into a few `pandoc -t json` calls (one fenced
+// Div per draft; a batch whose Divs do not come back one per draft is re-run
+// draft by draft, and a draft with a byte-order mark runs alone, since Pandoc
+// strips the mark only at the start of its input), and every draft is checked for:
 //
 //   Property A — every citationId in Pandoc's Cite nodes is in the Pass-1 key
 //                set (extractCitedKeysForVerification), or the draft carries a
@@ -105,7 +107,8 @@ function pandocKeysAll(drafts: readonly string[]): string[][] {
     const batch: number[] = [];
     for (const i of idx) {
       const own = [...new Set([...(drafts[i] as string).matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1] as string))];
-      if (own.some((l) => labels.has(l))) {
+      // A leading byte-order mark is stripped only at the start of Pandoc's input: such a draft runs alone.
+      if (own.some((l) => labels.has(l)) || (drafts[i] as string).charCodeAt(0) === 0xfeff) {
         out[i] = pandocKeysOne(drafts[i] as string);
         continue;
       }
@@ -200,6 +203,13 @@ const unsupported: fc.Arbitrary<Segment> = fc.oneof(
     'Nguyen and colleagues (2019) found it', 'Nguyen (2019, p. 5) wrote it', 'Nguyen (2019a) agrees',
     'Nguyen et al. [2019] showed it', 'as shown by Nguyen and Patel [2019]', 'it rose (see e.g. Nguyen 2019)', 'it rose (see, e.g., Nguyen & Patel, 2019)',
   ).map(bad),
+  // Review round 3: forms outside the scanner's cue and verb lists — a lone name with any verb or none
+  // (fail closed), a sentence-initial cue, a bare year after a citing cue, numbered markers in parentheses.
+  fc.constantFrom(
+    'Okonkwo (2017) developed it', 'it was introduced by Okonkwo (2017)', 'Kahneman (2011) coined it', 'Following Brandt (2016), it holds',
+    'See Brandt (2016) for more', 'Okonkwo [2017] introduced it', 'As shown in Okonkwo, 2017, it holds', 'In Germany (2015), it fell',
+    'common in older adults (3, 4)', 'rates vary (3–5)', 'As reported in (12), it rose', 'it rose (ref. 12)', 'it rose (refs. 3 and 4)',
+  ).map(bad),
 );
 
 const noise: fc.Arbitrary<Segment> = fc.oneof(
@@ -212,6 +222,8 @@ const noise: fc.Arbitrary<Segment> = fc.oneof(
   fc.constantFrom('scores normalized to [0, 1]', 'a tensor of shape [32, 224, 224, 3]', 'values lie in [1, 5]', 'array indices [1] and [2]', 'as in (Figure 3) and (Apollo 11)').map(ok),
   // A lone name before a year the prose does not cite, emphasis and links that are not attributions.
   fc.constantFrom('Washington, D.C. (2019) hosted it', 'the Treaty of Versailles (1919) ended the war', 'a *large* effect', 'see the [methods](#methods) section', 'the [data](https://example.org/data) are open', 'the Treaty of Versailles [1919] ended the war').map(ok),
+  // Review round 3: events and documents before a year, values and enumerations in parentheses.
+  fc.constantFrom('Hurricane Katrina (2005) flooded it', 'the Paris Agreement (2015) set targets', 'a Likert scale (1–5) was used', 'Steps: (1) collect, (2) clean', 'the point (3, 4) lies above').map(ok),
 );
 
 const segment = fc.oneof({ weight: 4, arbitrary: citation }, { weight: 2, arbitrary: unsupported }, { weight: 3, arbitrary: noise });
@@ -282,10 +294,12 @@ const cleanBlock: fc.Arbitrary<{ text: string; flagged: boolean; note?: string }
 const draft: fc.Arbitrary<Draft> = fc.tuple(
   fc.oneof({ weight: 3, arbitrary: fc.array(block, { minLength: 1, maxLength: 4 }) }, { weight: 1, arbitrary: fc.array(cleanBlock, { minLength: 1, maxLength: 4 }) }),
   fc.boolean(),
-).map(([blocks, crlf]) => {
+  // Review round 3: a draft saved with a leading byte-order mark (Pandoc strips it and reads line 1 normally).
+  fc.integer({ min: 0, max: 7 }).map((n) => n === 0),
+).map(([blocks, crlf, bom]) => {
   const notes = blocks.flatMap((b) => (b.note !== undefined ? [b.note] : []));
   const md = [...blocks.map((b) => b.text), ...notes].join('\n\n') + '\n';
-  return { md: crlf ? md.replace(/\n/g, '\r\n') : md, flagged: blocks.some((b) => b.flagged) };
+  return { md: (bom ? '\uFEFF' : '') + (crlf ? md.replace(/\n/g, '\r\n') : md), flagged: blocks.some((b) => b.flagged) };
 });
 
 // ---- The properties -----------------------------------------------------------------

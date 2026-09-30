@@ -185,6 +185,27 @@ const POSITIVE: readonly Case[] = [
       ['author-date', 1, '(see, e.g., Cho & Ahn, 2015)'],
     ],
   ],
+  // Review round 3: a lone name before a year is a citation (fail closed) unless it names an event, a
+  // document or an abbreviation; a cue word at the start of a sentence; a bare year after a citing cue;
+  // numbered markers in parentheses.
+  [
+    'a lone name with any verb, in the passive, or after a sentence-initial cue',
+    'The squeezed-light protocol was introduced by Okonkwo (2017), and Okonkwo (2017) developed the first working prototype. Following Brandt (2016), we treat decoherence as noise.',
+    [['author-date', 1, 'Okonkwo (2017)'], ['author-date', 1, 'Okonkwo (2017)'], ['author-date', 1, 'Following Brandt (2016)']],
+  ],
+  [
+    'a lone name before a verb the round-2 list lacked',
+    'Kahneman (2011) coined it. Tversky (1974) pioneered it. Simon (1955) formalized it. Okonkwo [2017] introduced it. See Brandt (2016) for details. Cf. Brandt (2016) too.',
+    [['author-date', 1, 'Kahneman (2011)'], ['author-date', 1, 'Tversky (1974)'], ['author-date', 1, 'Simon (1955)'], ['author-date', 1, 'Okonkwo [2017]'], ['author-date', 1, 'See Brandt (2016)'], ['author-date', 1, 'Cf. Brandt (2016)']],
+  ],
+  ['a place or an acronym the prose gives a year (fail closed)', 'In Germany (2015), unemployment fell, and the WHO (2020) guidelines agree.', [['author-date', 1, 'In Germany (2015)'], ['author-date', 1, 'WHO (2020)']]],
+  ['a name and a bare year after a citing cue', 'As shown in Okonkwo, 2017, the effect holds; see Brandt et al., 2016.', [['author-date', 1, 'As shown in Okonkwo, 2017'], ['author-date', 1, 'see Brandt et al., 2016']]],
+  [
+    'numbered markers in parentheses',
+    'Falls are common in older adults (3, 4). Rates vary (3–5). As reported in (12), rates rose (ref. 12) and fell (refs. 3 and 4). Prior studies (6, 7) agree.',
+    [['numeric-marker', 1, '(3, 4)'], ['numeric-marker', 1, '(3–5)'], ['numeric-marker', 1, '(12)'], ['numeric-marker', 1, '(ref. 12)'], ['numeric-marker', 1, '(refs. 3 and 4)'], ['numeric-marker', 1, '(6, 7)']],
+  ],
+  ['a form on line 1 after a byte-order mark', '\uFEFF---\nreferences:\n- id: lecun2015\n  title: Totally Invented Work\n---\n\nText [@lecun2015].', [['metadata-block', 1, '---']]],
 ];
 
 const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
@@ -215,7 +236,9 @@ const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
   ['a note label over prose', 'Notes: values are means of three runs.'],
   ['links and emphasis that attribute nothing', 'We used [Python 3](https://python.org), see the [methods](#methods) section, and a *large* effect (n = 12) held.'],
   ['math with a TeX environment', 'The system $$\\begin{aligned}a &= b\\end{aligned}$$ holds.'],
-  ['a bracketed year that is not a citation', 'The Treaty of Versailles [1919] ended the war, see the [2019](https://example.org) report, and ![2019](fig.png) shows it. Results for [2019]: good. The data [1999, 2019] cover two decades.'],
+  ['a bracketed year that is not a citation', 'The Treaty of Versailles [1919] ended the war, see the [2019](https://example.org) report, and ![2019](fig.png) shows it. Results for [2019]: good. The data [1999, 2019] cover two decades.'],  // Review round 3: events, documents and abbreviations before a year; values, enumerations and labels in parentheses.
+  ['events and documents before a year', 'Hurricane Katrina (2005) flooded the city, the Paris Agreement (2015) set targets, the Brexit (2016) referendum split the country and the Great Depression (1929) hurt everyone.'],
+  ['values, enumerations and labels in parentheses', 'A Likert scale (1–5) was used. Steps: (1) collect data, (2) clean it. f(3, 4) is a value, the point (3, 4) lies above, see Eq. (12), and ages (3–5) years.'],
 ];
 
 function crlf(s: string): string {

@@ -27,8 +27,9 @@
 //     quote or a quoted term, not a quotation.
 // Excluded by rule (inline only): a quoted title — text written in Title Case
 // with no sentence-ending punctuation inside and at most 12 words, either
-// right after an explicit title cue (`titled`, `entitled`, `the article`,
-// `the book`, `the paper`, … with only spaces before the mark) or with no
+// right after an explicit title cue (`titled`, `entitled`, `called`, `named`,
+// `the article`, `the book`, `the paper`, … with only spaces before the
+// mark) or with no
 // citation right after it — and a Markdown link title (`[text](url
 // "title")`). Never after a reporting colon or verb (`wrote:`, `states that`,
 // `put it,`, `predicted`, `In LeCun's words,`): that quote is a quotation
@@ -213,14 +214,14 @@ function looksLikeTitle(text: string): boolean {
  * paper, "…"`, `in the paper: "…"` — introduces a quotation; review round 3).
  */
 const TITLE_INTRO_RE =
-  /\b(?:titled|entitled|the\s+(?:article|book|paper|chapter|report|essay|study|novel|poem|film|song|album|play|series|volume|monograph|thesis|dissertation|editorial|column|lecture|talk|speech|section|journal|magazine))[ \t]*$/iu;
+  /\b(?:titled|entitled|called|named|dubbed|the\s+(?:article|book|paper|chapter|report|essay|study|novel|poem|film|song|album|play|series|volume|monograph|thesis|dissertation|editorial|column|lecture|talk|speech|section|journal|magazine))[ \t]*$/iu;
 /**
  * A reporting colon or verb right before the opening mark (`wrote:`, `states
  * that`, `put it,`, `according to Smith,`): what follows is a quotation, never
  * a title, whatever its capitals.
  */
 const REPORTING_INTRO_RE =
-  /(?::|\b(?:wr(?:ote|ites?|itten)|sa(?:id|ys|y)|state[sd]?|argue[sd]?|note[sd]?|conclude[sd]?|observe[sd]?|claim(?:s|ed)?|explain(?:s|ed)?|add(?:s|ed)?|remark(?:s|ed)?|insist(?:s|ed)?|assert(?:s|ed)?|report(?:s|ed)?|declare[sd]?|warn(?:s|ed)?|emphasi[sz]e[sd]?|stress(?:es|ed)?|suggest(?:s|ed)?|contend(?:s|ed)?|maintain(?:s|ed)?|predict(?:s|ed)?|propose[sd]?|posit(?:s|ed)?|acknowledge[sd]?|admit(?:s|ted)?|concede[sd]?|caution(?:s|ed)?|recall(?:s|ed)?|repl(?:y|ies|ied)|respond(?:s|ed)?|answer(?:s|ed)?|announce[sd]?|proclaim(?:s|ed)?|put\s+it|puts\s+it|as\s+follows|that|according\s+to\s+[^,\n]{1,60},|in\s+(?:his|her|their|its)\s+words,?|in\s+[\p{L}\p{M}'’. -]{1,60}(?:'s|’s|s'|s’)\s+words,?))[\s,]*$/iu;
+  /(?::|\b(?:wr(?:ote|ites?|itten)|sa(?:id|ys|y)|state[sd]?|argue[sd]?|note[sd]?|conclude[sd]?|observe[sd]?|claim(?:s|ed)?|explain(?:s|ed)?|add(?:s|ed)?|remark(?:s|ed)?|insist(?:s|ed)?|assert(?:s|ed)?|(?<!\b(?:the|a|an|this|that|their|its|his|her|our)\s+)report(?:s|ed)?|declare[sd]?|warn(?:s|ed)?|emphasi[sz]e[sd]?|stress(?:es|ed)?|suggest(?:s|ed)?|contend(?:s|ed)?|maintain(?:s|ed)?|predict(?:s|ed)?|propose[sd]?|posit(?:s|ed)?|acknowledge[sd]?|admit(?:s|ted)?|concede[sd]?|caution(?:s|ed)?|recall(?:s|ed)?|repl(?:y|ies|ied)|respond(?:s|ed)?|answer(?:s|ed)?|announce[sd]?|proclaim(?:s|ed)?|put\s+it|puts\s+it|as\s+follows|that|according\s+to\s+[^,\n]{1,60},|in\s+(?:his|her|their|its)\s+words,?|in\s+[\p{L}\p{M}'’. -]{1,60}(?:'s|’s|s'|s’)\s+words,?))[\s,]*$/iu;
 /** A Markdown link or image destination whose title the mark opens: `](url "…`. */
 const LINK_TITLE_RE = /\]\([^()\s]*[ \t]+$/;
 
@@ -289,6 +290,8 @@ const ANY_QUOTE_MARK_RE = /["“”‘’«»‹›„‚「」『』]/u;
  * words between, no sentence end and no other quotation mark; or null.
  */
 function citationAfterPhrase(md: string, at: number, cites: readonly CitationCluster[], to: number): CitationCluster | null {
+  // A quote that ends its own sentence (`…."`, `…?"`) is not continued by what follows.
+  if (/[.!?]["”’»›“‘«‹」』']?$/u.test(md.slice(Math.max(0, at - 3), at).replace(/\\(?=["'])/g, ''))) return null;
   const next = cites.filter((c) => c.start >= at && c.start < to).sort((a, b) => a.start - b.start)[0];
   if (next === undefined) return null;
   const between = md.slice(at, next.start);

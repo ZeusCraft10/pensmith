@@ -62,6 +62,24 @@ test('VRFY-18: the acceptance list — each form yields its entries (keys, locat
   }
 });
 
+test('VRFY-18 (review round 3): a citation after a short reporting phrase attributes the quote — "…," wrote @k; "…," as LeCun argued [@k]; "…" (LeCun et al.) [@k]', () => {
+  const q = 'Deep networks will soon replace every radiologist in hospitals';
+  assert.deepEqual(both(`"${q}," wrote @lecun2015 [p. 3].`).map((x) => [x.citekey, x.locator ?? null]), [['lecun2015', 'p. 3']]);
+  assert.deepEqual(keys(`"${q}," as LeCun argued [@lecun2015].`), ['lecun2015']);
+  assert.deepEqual(keys(`"${q}" (LeCun et al.) [@lecun2015].`), ['lecun2015']);
+  assert.deepEqual(keys(`"${q}," @lecun2015 argued.`), ['lecun2015']);
+  // Not past a sentence end, another quote, or more than six words.
+  assert.deepEqual(keys(`"${q}." Later work disagreed [@lee2019].`), [null]);
+  assert.deepEqual(keys(`"${q}," and "a second quoted phrase of five words" [@lee2019].`), [null, 'lee2019']);
+  assert.deepEqual(keys(`"${q}," said one reviewer in a long and winding aside about it [@lee2019].`), [null]);
+});
+
+test('VRFY-18 (review round 3): a leading byte-order mark is read as Pandoc reads it — a block quote or quote on line 1 is extracted', () => {
+  const bq = '\uFEFF> Deep networks will soon replace every radiologist in all hospitals, and no human reader will be needed.\n\nLeCun and colleagues wrote this [@lecun2015].\n';
+  assert.deepEqual(both(bq).map((x) => [x.id, x.citekey, x.line]), [['q1', null, 1]]);
+  assert.deepEqual(both('\uFEFF"deep networks will soon replace every radiologist" [@lecun2015].\n').map((x) => [x.citekey, x.line]), [['lecun2015', 1]]);
+});
+
 test('VRFY-18: a quote no citation claims is one UNATTRIBUTED entry (citekey null)', () => {
   assert.deepEqual(both(`Critics say "${Q}" and move on.`), [{ id: 'q1', text: Q, citekey: null, kind: 'inline', line: 1 }]);
   // A citation in an EARLIER sentence does not claim the quote.
@@ -101,12 +119,31 @@ test('VRFY-18: [verification] quote_min_words — the default is 5; fewer words 
   assert.deepEqual(keys('The "so-called" effect and the “best” one.'), []);
 });
 
-test('VRFY-18: a quoted title is not a quote — introduced as one, or Title Case without a sentence end (≤ 12 words)', () => {
-  assert.deepEqual(keys('She read the paper titled "attention is all you need in the end" [@k].'), []);
-  assert.deepEqual(keys('In the book "war and peace and other long stories" [@k] the plot turns.'), []);
+test('VRFY-18: a quoted title is not a quote — Title Case (≤ 12 words, no sentence end) right after a title cue, or with no citation right after it', () => {
+  assert.deepEqual(keys('She read the paper titled "Attention Is All You Need In The End" [@k].'), []);
+  assert.deepEqual(keys('In the book "War and Peace and Other Long Stories" [@k] the plot turns.'), []);
   for (const intro of ['entitled', 'the article', 'the paper', 'the report']) {
-    assert.deepEqual(keys(`It appeared in ${intro} "some words that make a title" [@k].`), [], intro);
+    assert.deepEqual(keys(`It appeared in ${intro} "Some Words That Make a Title" [@k].`), [], intro);
   }
+  // Review round 3: a title cue is a title only right before the mark and with a title's shape —
+  // a sentence after it, or a comma or colon between, is a quotation (fail toward extracting).
+  assert.deepEqual(keys('She read the paper titled "attention is all you need in the end" [@k].'), ['k']);
+  assert.deepEqual(keys('In the book "war and peace and other long stories" [@k] the plot turns.'), ['k']);
+  for (const md of [
+    'As stated in the paper, "deep networks have already replaced radiologists in most European hospitals since 2012" [@lecun2015].',
+    'As the authors conclude in the study, "convolutional networks need no labelled data at all for any vision task" [@lecun2015].',
+    'As LeCun et al. write in the paper, "deep networks replaced every radiologist in every hospital" [@lecun2015].',
+    'In the report, "deep networks replaced every radiologist in every hospital" [@lecun2015].',
+    'According to the journal, "deep networks replaced every radiologist in every hospital" [@lecun2015].',
+    'LeCun et al. conclude in the paper: "deep networks replaced every radiologist in every hospital" [@lecun2015].',
+    'In the paper, "Deep Networks Replaced Every Radiologist In Every Hospital" [@lecun2015].',
+  ]) {
+    assert.deepEqual(keys(md), ['lecun2015'], md);
+  }
+  // Title Case that a citation claims, or after a reporting verb or "In X's words", is checked.
+  assert.deepEqual(keys('LeCun and colleagues predicted "Deep Networks Will Soon Replace Every Radiologist In Every Hospital" [@lecun2015].'), ['lecun2015']);
+  assert.deepEqual(keys('In LeCun\'s words, "Deep Networks Will Soon Replace Every Radiologist" [@lecun2015].'), ['lecun2015']);
+  assert.deepEqual(keys('Vaswani et al. titled their paper "Attention Is All You Need For Language" and it spread.'), [], 'Title Case no citation claims');
   // After `called` / `named` only what looks like a title is one (review round 2): a sentence of any length is a quote.
   for (const intro of ['called', 'named']) {
     assert.deepEqual(keys(`A policy ${intro} "Clean Air For All Our Children" [@k] passed.`), [], intro);
@@ -116,8 +153,10 @@ test('VRFY-18: a quoted title is not a quote — introduced as one, or Title Cas
   assert.deepEqual(keys('LeCun wrote: “Deep Networks Are Nothing More Than Lookup Tables For Bananas In Disguise” [@k].'), ['k']);
   assert.deepEqual(keys('The review states that "Attention Is All You Need For Everything" [@k].'), ['k']);
   assert.deepEqual(keys('As Smith put it, "Attention Is All You Need For Everything" [@k].'), ['k']);
-  assert.deepEqual(keys('"Attention Is All You Need for Language Tasks" [@vaswani2017] changed things.'), []);
-  assert.deepEqual(keys('"Deep Learning: A Review of the Field and Its Methods" [@k].'), []);
+  // A Title Case quote a citation follows is checked (a real title of the cited work passes against its own text).
+  assert.deepEqual(keys('"Attention Is All You Need for Language Tasks" [@vaswani2017] changed things.'), ['vaswani2017']);
+  assert.deepEqual(keys('"Deep Learning: A Review of the Field and Its Methods" [@k].'), ['k']);
+  assert.deepEqual(keys('"Deep Learning: A Review of the Field and Its Methods" changed things.'), []);
   // Not a title: a sentence (it ends), lower-case words, or more than 12 words.
   assert.deepEqual(keys('"Attention Is All You Need. For Everything." [@k]'), ['k']);
   assert.deepEqual(keys('"Attention is all you need for most tasks" [@k]'), ['k']);

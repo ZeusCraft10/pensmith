@@ -197,7 +197,8 @@ function draftOf(r: () => number): string {
     }
     paragraphs.push(sentences.join(' '));
   }
-  return `${paragraphs.join('\n\n')}\n`;
+  // Review round 3: a draft saved with a byte-order mark (Pandoc strips it and reads line 1 normally).
+  return `${r() < 0.15 ? '\uFEFF' : ''}${paragraphs.join('\n\n')}\n`;
 }
 
 /** Each draft's Pandoc quotes, a few pandoc calls in all (one fenced Div per draft; a batch that does not come back intact runs draft by draft). */
@@ -207,10 +208,18 @@ function pandocQuotesAll(drafts: readonly string[]): string[][] {
   const out: string[][] = [];
   for (let from = 0; from < drafts.length; from += BATCH) {
     const batch = drafts.slice(from, from + BATCH);
-    const doc = batch.map((d, j) => `::: {#qd${from + j}}\n\n${d}\n\n:::\n\n`).join('');
-    const blocks = json(doc).blocks as Array<{ t: string; c: [[string, unknown, unknown], unknown[]] }>;
-    const intact = blocks.length === batch.length && blocks.every((b, j) => b.t === 'Div' && b.c[0][0] === `qd${from + j}`);
-    batch.forEach((d, j) => out.push(pandocQuotes(intact ? (blocks[j] as { c: [unknown, unknown[]] }).c[1] : json(d).blocks)));
+    // A draft that starts with a byte-order mark runs on its own: Pandoc strips the
+    // mark only at the start of its input (inside a Div it would be a character).
+    const alone = (d: string): boolean => d.charCodeAt(0) === 0xfeff;
+    const inDoc = batch.map((d, j) => [d, from + j] as const).filter(([d]) => !alone(d));
+    const doc = inDoc.map(([d, i]) => `::: {#qd${i}}\n\n${d}\n\n:::\n\n`).join('');
+    const blocks = (inDoc.length > 0 ? json(doc).blocks : []) as Array<{ t: string; c: [[string, unknown, unknown], unknown[]] }>;
+    const intact = blocks.length === inDoc.length && blocks.every((b, j) => b.t === 'Div' && b.c[0][0] === `qd${inDoc[j]![1]}`);
+    const byIndex = new Map(inDoc.map(([, i], j) => [i, j] as const));
+    batch.forEach((d, j) => {
+      const at = byIndex.get(from + j);
+      out.push(pandocQuotes(at !== undefined && intact ? (blocks[at] as { c: [unknown, unknown[]] }).c[1] : json(d).blocks));
+    });
   }
   return out;
 }
@@ -232,6 +241,12 @@ test('VRFY-18: every quote Pandoc reads in the reviewers\' forms is extracted �
     `Le rapport affirme «${q}» [@smith2020].`,
     `Der Bericht sagt „${q}“ [@smith2020].`,
     `They wrote ‹${q}› [@smith2020].`,
+    // Review round 3: a title cue with a comma or colon after it, a byte-order mark before a block quote or a quote.
+    `As stated in the paper, "${q}" [@smith2020].`,
+    `In the report, "${q}" [@smith2020].`,
+    `They conclude in the paper: "${q}" [@smith2020].`,
+    `\uFEFF> ${q}\n\nThey wrote this [@smith2020].`,
+    `\uFEFF"${q}" [@smith2020].`,
   ];
   const pandoc = pandocQuotesAll(forms);
   forms.forEach((md, i) => {
