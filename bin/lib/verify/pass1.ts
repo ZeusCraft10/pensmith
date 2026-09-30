@@ -105,11 +105,13 @@ import { tryLoadLibrary } from '../library.js';
 import { registrationAgency, doiPrefix } from '../sources/doi-ra.js';
 import { doilessIdentifiers as routeIdentifiers, type CitationIdentifiers, type NoDoiRegistrar } from './pass1-identifiers.js';
 import type { LibraryEntry } from '../schemas/library.js';
+import type { Pass1RowVerdict } from './verdicts.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
 
-export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED' | 'UNVERIFIABLE';
+/** The Pass-1 verdict vocabulary (verify/verdicts.ts, Phase 20 seam S-C). */
+export type Pass1Verdict = Pass1RowVerdict;
 
 /** The fixed UNVERIFIABLE reasons (D-17-07). */
 export const UNVERIFIABLE_OFFLINE_REASON = 'offline: no recorded fixture — re-run online';
@@ -131,6 +133,13 @@ export interface Pass1Result {
   reason: string;
   /** True when the MIS-CITED verdict is a retraction (VRFY-15 labels it RETRACTED). */
   retraction?: boolean;
+  /**
+   * When the registrar answer this verdict rests on was obtained (ISO-8601):
+   * the live fetch time, or the HTTP-cache entry's savedAt (Phase 20 seam S-C;
+   * VRFY-28 records it as the entry's last_verified). Absent when no registrar
+   * answered.
+   */
+  checkedAt?: string;
 }
 
 interface BibAuthor {
@@ -711,6 +720,19 @@ export interface Pass1Options {
    * compile pass it.
    */
   readonly root?: string;
+  /**
+   * The bibliography's entries, already parsed (Phase 20 seam S-C): verify
+   * parses CITATIONS.bib entry by entry (VRFY-16) and passes the entries that
+   * parsed; `citationsBibPath` is then only named in messages. Absent: the file
+   * at `citationsBibPath` is read and parsed.
+   */
+  readonly bibEntries?: ReadonlyArray<Record<string, unknown>>;
+  /**
+   * Citekeys whose registrar lookups bypass the HTTP cache (the answer is
+   * fetched live and written back): the citations whose last_verified is older
+   * than `[verification] recheck_after_days` (VRFY-28; Phase 20 seam S-C).
+   */
+  readonly refresh?: ReadonlySet<string>;
 }
 
 export async function runPass1(
@@ -718,8 +740,9 @@ export async function runPass1(
   citationsBibPath: string,
   opts: Pass1Options = {},
 ): Promise<Pass1Result[]> {
-  const bibText = readFileSync(citationsBibPath, 'utf8');
-  const entries = await parseBibFileAt(bibText, citationsBibPath);
+  const entries = opts.bibEntries !== undefined
+    ? [...opts.bibEntries]
+    : await parseBibFileAt(readFileSync(citationsBibPath, 'utf8'), citationsBibPath);
   const bibByCitekey = new Map<string, BibEntry>(
     entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]),
   );
