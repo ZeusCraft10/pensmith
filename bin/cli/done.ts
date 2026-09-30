@@ -48,7 +48,7 @@ import { computeDraftHash } from '../lib/draft-hash.js';
 import { outlineIdentitiesSync, registeredSectionsSync, sectionRegistryProblem, type SectionIdentity } from '../lib/section-registry.js';
 import { compileRecordProblems } from '../lib/compile-inputs.js';
 import { verificationRecordReasons } from '../lib/verify/verification-md.js';
-import { parseBlockingVerdictRows, verdictRowReason } from '../lib/verify/verdict-rows.js';
+import { dryRunVerificationReason, parseBlockingVerdictRows, verdictRowReason } from '../lib/verify/verdict-rows.js';
 import {
   recomputeGate,
   gateRefusals,
@@ -353,7 +353,7 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
       reasons.push(`${label}: ${r}`);
       if (md !== null && md !== '') verdictReasons.push(`${label}: ${r}`);
     }
-    if (md !== null && md !== '' && record.length === 0) {
+    if (md !== null && md !== '' && dryRunVerificationReason(md, dryRun) === null) {
       for (const row of parseBlockingVerdictRows(md)) recordedBlocks.push(`${label}: ${verdictRowReason(row).replace(/<N>/g, s.id)}`);
     }
     // VRFY-27: the section's draft must be the one its verification judged.

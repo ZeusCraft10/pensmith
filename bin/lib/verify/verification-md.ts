@@ -24,8 +24,9 @@
 //
 // The Summary lists every Pass-1, Pass-3 and draft label with a non-zero
 // count, the Pass-2 verdict counts, the Pass-4 orphan total and the freshness
-// WARN / unknown counts. parseVerificationMd reads the file back and
-// summaryMismatches proves the counts equal the rows (tests/verify-summary).
+// WARN / not-probed counts (plus the retraction statuses no registrar holds
+// data for). parseVerificationMd reads the file back and summaryMismatches
+// proves the counts equal the rows (tests/verify-summary).
 //
 // A VERIFICATION.md is a REPORT: compile and done recompute the verdicts from
 // the draft (verify/gate.ts, D-20-04) and read this file only for what can
@@ -168,7 +169,11 @@ export function summaryRows(doc: Pick<VerificationDoc, 'rows' | 'freshness' | 'p
   if (doc.pass4Orphans !== null && doc.pass4Orphans !== undefined) out.push({ pass: 'Pass-4', verdict: 'orphans', count: doc.pass4Orphans });
   if (doc.freshness) {
     out.push({ pass: 'Freshness', verdict: 'WARN', count: doc.freshness.reduce((n, r) => n + r.warnings.length, 0) });
-    out.push({ pass: 'Freshness', verdict: 'unknown', count: doc.freshness.reduce((n, r) => n + (r.skipped?.length ?? 0), 0) });
+    // A probe that got no answer (offline, a failed lookup): its status is not known — never "ok".
+    out.push({ pass: 'Freshness', verdict: 'not probed', count: doc.freshness.reduce((n, r) => n + (r.skipped?.length ?? 0), 0) });
+    // D-20-13: a DOI no registrar holds retraction data for — reported, never shown as clean.
+    const unknownRetraction = doc.freshness.reduce((n, r) => n + (r.info ?? []).filter((i) => i.probe === 'retraction-watch' && i.status === 'unknown').length, 0);
+    if (unknownRetraction > 0) out.push({ pass: 'Freshness', verdict: 'retraction status unknown', count: unknownRetraction });
   }
   return out;
 }

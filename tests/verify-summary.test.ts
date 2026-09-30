@@ -95,7 +95,7 @@ test('VRFY-24: the Summary counts equal the rows — a parser proves it, and cat
       'Pass-2|UNSUPPORTED|1',
       'Pass-4|orphans|2',
       'Freshness|WARN|0',
-      'Freshness|unknown|1',
+      'Freshness|not probed|1',
     ],
   );
   assert.deepEqual(parsed.pass3.map((r) => [r.key, r.quoteId, r.verdict, r.accepted]), [
@@ -143,7 +143,7 @@ test('VRFY-24 (built CLI): a real `pensmith verify` writes the summary table fir
   assert.deepEqual(parsed.pass1.map((x) => `${x.key}:${x.verdict}`), ['lecun2015:OK', 'ghost2099:FABRICATED', 'ghost2099:UNASSIGNED']);
   assert.ok(parsed.summary.some((s) => s.pass === 'Pass-1' && s.verdict === 'FABRICATED' && s.count === 1));
   assert.ok(parsed.summary.some((s) => s.pass === 'Pass-4' && s.verdict === 'orphans'));
-  assert.ok(parsed.summary.some((s) => s.pass === 'Freshness' && s.verdict === 'unknown'));
+  assert.ok(parsed.summary.some((s) => s.pass === 'Freshness' && s.verdict === 'not probed'));
   // An introduction with no assigned sources and no citations verifies (exit 0).
   writePlan(root, 1, 'intro', { assigned_sources: '[]', status: 'written' });
   writeFileSync(join(sectionDirOf(root, 1, 'intro'), 'DRAFT.md'), '# Intro\n\nThis paper argues a point without citing anything yet.\n');
