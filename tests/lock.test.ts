@@ -146,12 +146,20 @@ test('cross-process: child holds, parent waits (TEST-07)', async () => {
   let childAcquiredAt = 0;
   let childReleasingAt = 0;
   let stderr = '';
+  // Read whole lines: a chunk may end inside `ACQUIRED <ms>`, so a match on
+  // the chunk alone could miss the line or read a truncated timestamp.
+  let pending = '';
   child.stdout.on('data', (chunk: Buffer) => {
-    const line = chunk.toString();
-    const ackd = line.match(/ACQUIRED (\d+)/);
-    if (ackd) childAcquiredAt = parseInt(ackd[1] ?? '0', 10);
-    const rel = line.match(/RELEASING (\d+)/);
-    if (rel) childReleasingAt = parseInt(rel[1] ?? '0', 10);
+    pending += chunk.toString();
+    let nl: number;
+    while ((nl = pending.indexOf('\n')) !== -1) {
+      const line = pending.slice(0, nl);
+      pending = pending.slice(nl + 1);
+      const ackd = line.match(/ACQUIRED (\d+)/);
+      if (ackd) childAcquiredAt = parseInt(ackd[1] ?? '0', 10);
+      const rel = line.match(/RELEASING (\d+)/);
+      if (rel) childReleasingAt = parseInt(rel[1] ?? '0', 10);
+    }
   });
   child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString();
