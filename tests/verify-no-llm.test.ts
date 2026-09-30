@@ -27,8 +27,12 @@ import {
   sectionDirOf,
 } from './helpers/paper-cli-harness.js';
 
-/** The recorded Crossref work (tests/fixtures/cassettes/crossref/works-nphys1170.json). */
-const BIB = '@article{aspelmeyer2009,\n  title = {Measured measurement},\n  author = {Aspelmeyer, Markus},\n  doi = {10.1038/nphys1170},\n  year = {2009}\n}\n';
+/**
+ * The recorded Crossref work (tests/fixtures/cassettes/crossref/works-nphys1170.json).
+ * Its abstract gives Pass 2 source text to judge: with none, Pass 2 makes no
+ * model call at all (D-20-28), and these tests are about the call.
+ */
+const BIB = '@article{aspelmeyer2009,\n  title = {Measured measurement},\n  author = {Aspelmeyer, Markus},\n  doi = {10.1038/nphys1170},\n  year = {2009},\n  abstract = {Measurement in optomechanics reaches the quantum limit.}\n}\n';
 const NO_KEY = { PENSMITH_NO_LLM: undefined, ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined };
 
 function seedCitingSection(root: string): void {
