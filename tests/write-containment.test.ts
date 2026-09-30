@@ -143,6 +143,7 @@ test('FEED-04: a drafter citing an unassigned key gets one retry, then exit 4 �
     // §1 is still next (planned); once §1 is verified the router reports §2's failure instead of a paid loop.
     const p1 = path.join(sections, '01-introduction', 'PLAN.md');
     fs.writeFileSync(p1, fs.readFileSync(p1, 'utf8').replace('status: planned', 'status: verified'));
+    fs.writeFileSync(path.join(sections, '01-introduction', 'DRAFT.md'), 'Attention mechanisms [@bahdanau2015].\n'); // a verified section has its draft (VRFY-16)
     const d = await resolveNextAction(sb.root);
     assert.equal(d.verb, 'status');
     assert.match(d.verb === 'status' ? d.detail ?? '' : '', /section 2 failed: citekey evil9999 not assigned to section 2 — .*`pensmith write 2`/);
@@ -165,6 +166,7 @@ test('FEED-04: a failed RE-write keeps the older DRAFT.md byte-identical, report
     for (const d of ['01-introduction']) {
       const p = path.join(sections, d, 'PLAN.md');
       fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace('status: planned', 'status: verified'));
+      fs.writeFileSync(path.join(sections, d, 'DRAFT.md'), 'Attention mechanisms [@bahdanau2015].\n'); // a verified section has its draft (VRFY-16)
     }
     sb.mock!.script('section-drafter', { text: 'Attention predates transformers.\n' });
     assert.equal((await write(sb, '2', '--no-verify')).status, 0);

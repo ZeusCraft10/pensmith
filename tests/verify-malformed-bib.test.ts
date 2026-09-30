@@ -9,7 +9,8 @@
 //     never leaves an earlier `verified` in place;
 //   - with DRAFT.md deleted, verify sets PLAN.md back to `writing`, and the
 //     router sends the section to write — three bare runs never repeat an
-//     identical verify.
+//     identical verify; a VERIFIED section whose DRAFT.md is deleted is sent to
+//     write as well (compile could only refuse it, run after run).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -128,4 +129,18 @@ test('VRFY-16 (built CLI): DRAFT.md deleted from a written section → verify se
   assert.match(verifies[0] ?? '', /^write §?1/, `the first bare run re-drafts: ${verifies.join(' | ')}`);
   const verifyOnly = verifies.filter((s) => /^verify /.test(s));
   assert.equal(verifyOnly.length, 0, `no bare run re-verifies an unchanged draft: ${verifies.join(' | ')}`);
+});
+
+test('VRFY-16 (built CLI): DRAFT.md deleted from a VERIFIED section → the next bare run routes to write, never to a compile that can only refuse', () => {
+  const p = seedGatePaper('bib-verified-nodraft', [{ n: 1, slug: 'intro', assigned: ['lecun2015'], draft: '# Intro\n\nDeep learning [@lecun2015].\n' }], LECUN_BIB);
+  const v = p.cli(['verify', '1']);
+  assert.equal(v.status, EXIT_OK, `${v.stdout}\n${v.stderr}`);
+  assert.match(readFileSync(join(p.sectionDir(1, 'intro'), 'PLAN.md'), 'utf8'), /^status: verified$/m);
+  rmSync(join(p.sectionDir(1, 'intro'), 'DRAFT.md'));
+  const st = p.cli(['status']);
+  assert.match(st.stdout + st.stderr, /next: write #1$/m, 'status names the re-draft');
+  const r = p.cli(['--yolo']);
+  assert.doesNotMatch(r.stderr, STACK_LINE);
+  assert.match(r.stderr, /^pensmith: ran write §?1/m, `the bare run re-drafts the section:\n${r.stderr}`);
+  assert.ok(existsSync(join(p.sectionDir(1, 'intro'), 'DRAFT.md')), 'the section has a draft again');
 });

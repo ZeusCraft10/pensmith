@@ -55,11 +55,16 @@ attention decision carries a detail naming the command that fixes it (a rejected
 `pensmith outline`; an OUTLINE.md that cannot be read, or is missing while sections are
 registered: fix or restore it, or `pensmith outline --force`; a section whose draft was
 refused: `pensmith write N`; a section that failed verification and whose draft has not
-changed since: `pensmith plan N --revise` or `pensmith write N`; a section verify could not
-check — a blocking UNVERIFIABLE row on an unchanged draft: `pensmith verify N` once the
-source can be reached), so a failed paid step is never re-run by the next bare invocation. A
-section left `unverifiable` with advisory rows only (a quoted source's full text was
-unavailable) passes on to compile, as compile accepts it.
+changed since: `pensmith plan N --revise` or `pensmith write N`; a compiled `DRAFT.md`
+edited by hand after compile: make the edit in the section drafts, then `pensmith compile`),
+so a failed paid step is never re-run by the next bare invocation. A section verify could not
+check (`unverifiable`: a source that could not be reached, a quote no source text could be
+checked against, or stub text written with no model) does not stop the others (S-13): on an
+unchanged draft the walk goes past it, and compile then refuses it naming its options
+(`pensmith verify N` online, `pensmith add <pdf>`, a paraphrase with
+`pensmith plan N --revise`, `pensmith verify N --accept-quote qK`, or `pensmith write N`
+with a model configured), which `pensmith status` shows too. A section whose `DRAFT.md` is
+gone, verified or not, is re-drafted (`write N`), never re-verified (VRFY-16).
 Once every section is verified, compile runs whenever the compiled `DRAFT.md` is missing or
 `COMPILE-INPUTS.json` says it was made from other sections or other section draft/verification
 bytes (a redone, re-verified, added or dropped section — decided from content, so a git checkout

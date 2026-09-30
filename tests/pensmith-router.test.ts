@@ -78,6 +78,9 @@ function writeSectionPlan(root: string, n: number, slug: string, status: string,
   const dir = join(root, '.paper', 'sections', `${pad(n)}-${slug}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'PLAN.md'), `---\nstatus: ${status}\n${extra}---\n# Section ${n}\n`);
+  // A verified section has the draft verify judged (VRFY-16: without it the
+  // section is re-drafted — the case below that deletes it says so).
+  if (status === 'verified' && !existsSync(join(dir, 'DRAFT.md'))) writeFileSync(join(dir, 'DRAFT.md'), 'Draft text.\n');
 }
 
 /** The stub PLAN.md outline approval writes (GRND-09): `stub: true`, status planned. */
@@ -176,6 +179,26 @@ test('UX-01 (e): all verified, no DRAFT.md → { verb: "compile" }', { skip: !bu
   writeSectionPlan(root, 2, 'methods', 'verified');
   const decision = await resolveNextAction(root);
   assert.equal(decision.verb, 'compile', 'UX-01: all-verified + no DRAFT.md routes to compile');
+});
+
+// === (e2) a verified section whose DRAFT.md is gone → write (VRFY-16) ===
+test('VRFY-16: a verified section whose DRAFT.md is gone → { verb: "write" } — never compile, which could only refuse it', { skip: !built }, async () => {
+  const resolveNextAction = await loadResolve();
+  const root = freshRoot();
+  writeState(root, [{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
+  writePaperFile(root, 'RESEARCH.md');
+  writePaperFile(root, 'OUTLINE.md');
+  writeSectionPlan(root, 1, 'intro', 'verified');
+  writeSectionPlan(root, 2, 'methods', 'verified');
+  assert.equal((await resolveNextAction(root)).verb, 'compile', 'both drafts in place: compile');
+  rmSync(join(root, '.paper', 'sections', '02-methods', 'DRAFT.md'));
+  const decision = await resolveNextAction(root);
+  assert.equal(decision.verb, 'write', 'VRFY-16: the draft is gone — re-draft it');
+  assert.equal(decision.n, 2);
+  assert.equal(decision.slug, 'methods');
+  // Also after a compile: the compiled DRAFT.md does not stand in for a section's draft.
+  writePaperFile(root, 'DRAFT.md');
+  assert.equal((await resolveNextAction(root)).verb, 'write');
 });
 
 // === (f) DRAFT.md present, no FINAL.md → done ===

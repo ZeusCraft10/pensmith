@@ -41,6 +41,7 @@ Four streams built Phase 20 in parallel on seam S-C, then an integration pass me
 - "an Europe PMC answer" → "a Europe PMC answer".
 - With a missing or empty CITATIONS.bib the gate core rewrote every FABRICATED row to "the bibliography is missing / has no entries", including a bare identifier found in the prose, whose verdict came from its registrar; only cited keys' rows are rewritten now (`tests/gate-core.test.ts`).
 - The live e2e recording found two IEEE records that Crossref holds with the family and given names swapped ("Qi, Lin", "Xiulian, Du"), which Pass 1 called MIS-CITED. `name-match.ts` `authorSimilarity` now also reads the two names crosswise; both parts must match, and an initial matches the name it begins, so a different person still fails (`tests/name-match.test.ts`).
+- A **verified** section whose DRAFT.md was deleted still let the walk go on to compile, which could only refuse it (`missing … DRAFT.md — run \`pensmith write 1\``), and every bare run then said `ran compile (exit 4); next: compile`. The router now sends it to write like a written, verifying or unverifiable section without its draft (VRFY-16; `tests/pensmith-router.test.ts`, `tests/verify-malformed-bib.test.ts` through the built CLI). `workflows/next.md` still described the pre-S-13 routing (an unverifiable section as attention naming `verify N`, and "compile accepts" an unverifiable section); it now says the walk goes past it and compile refuses it with its options.
 - The test runner leaked every test's mkdtemp dir into the system temp dir (the streams filled a disk with ~85k of them): `scripts/run-tests.mjs` points `TMPDIR` / `TEMP` / `TMP` at the per-run dir (the data dir is its `data/`), deleted with the run.
 
 **Cross-stream acceptance suites (§7.3).**
@@ -67,6 +68,7 @@ Edited in place, no new files there:
 | `skills/verify-section.md` | gate + integration | the `--accept-quote` route; the verdict list |
 | `workflows/add.md` | integration | DataCite / content-negotiation DOIs are added |
 | `workflows/write.md` | integration | containment also refuses citation forms the verifier cannot check; the quote floor is `quote_min_words` |
+| `workflows/next.md` | integration | S-13 routing (an unverifiable section does not stop the others; compile refuses it with its options); a section whose DRAFT.md is gone is re-drafted (VRFY-16) |
 | `workflows/outline.md`, `workflows/plan.md`, `skills/plan-section.md` | integration | Zenodo / figshare / Dryad DOIs are no longer withheld |
 
 ## Hand-offs

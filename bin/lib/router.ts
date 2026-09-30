@@ -34,14 +34,14 @@
 // component does a raw unguarded parseFrontmatter(readFileSync(planPath)).
 //
 // SECTION-STATE → VERB MAP (Phase 18: GRND-08, GRND-13, FEED-04). Sections are
-// walked in (n, suffix) order (§1 < §1a < §2); the first one not `verified`
-// decides:
+// walked in (n, suffix) order (§1 < §1a < §2); the first one that is not
+// `verified` with its DRAFT.md in place decides:
 //   PLAN.md absent                        → plan
 //   planned + `stub: true` (the outline's) → plan
 //   planned (a planner-written PLAN.md)   → write
 //   writing                               → write
 //   written / verifying                   → verify (a crashed verify left `verifying`)
-//   written / verifying / unverifiable WITHOUT a DRAFT.md → write (VRFY-16)
+//   verified / written / verifying / unverifiable WITHOUT a DRAFT.md → write (VRFY-16)
 //   unverifiable, draft changed           → verify
 //   unverifiable, the draft verify judged → continue (S-13: the other sections
 //     go on; compile recomputes it and refuses with its options — never a
@@ -451,8 +451,10 @@ export async function resolveNextAction(
     if (opts.stopAfterOutline) return { verb: 'status', reason: 'done', detail: OUTLINE_ONLY_DONE };
 
     // Walk sections in (n, suffix) order (GRND-09: 1 < 1a < 2); the FIRST
-    // non-'verified' section decides the verb (C3-HIGH-1: TOTAL over
-    // SectionStateSchema; 'verified' is the ONLY continue case).
+    // section still to do decides the verb (C3-HIGH-1: TOTAL over
+    // SectionStateSchema). The walk goes on only past a 'verified' section
+    // whose DRAFT.md is in place, and past an 'unverifiable' one on the draft
+    // verify judged (S-13).
     for (const { n, slug, suffix } of sortBySectionId(sections)) {
       const id = suffix !== undefined ? { n, slug, suffix } : { n, slug };
       const label = formatSectionId(sectionIdOf(n, suffix));
@@ -471,7 +473,11 @@ export async function resolveNextAction(
 
       switch (r.status) {
         case 'verified':
-          continue; // compile refuses a verified section whose DRAFT.md is gone, naming `pensmith write N`
+          // VRFY-16: a verified section whose DRAFT.md is gone (deleted, or lost
+          // to a sync conflict) is re-drafted — compile could only refuse it,
+          // and a bare run would then name compile again on every run.
+          if (!existsSync(sectionDraft(n, slug, paperRoot))) return { verb: 'write', ...id };
+          continue;
         case 'planned':
           // GRND-13: the outline's stub still needs its plan; a planned
           // section (no `stub`) is ready to draft. Only write sets 'writing'.
