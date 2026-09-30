@@ -262,3 +262,22 @@ test('VRFY-28: recheckKeys selects the cited keys whose last_verified is null or
     else process.env[TEST_NOW_ENV] = prev;
   }
 });
+
+test('VRFY-10 / VRFY-16: a bare identifier\'s row keeps its registrar reason — a missing or empty bibliography rewrites only cited keys\' rows', async () => {
+  for (const bib of [null, '']) {
+    const root = paper(bib);
+    const gate = await recomputeGate({
+      root,
+      text: 'A claim [@ghost2099]. See also doi:10.9999/x for details.\n',
+      allowedKeys: new Set(['ghost2099']),
+      scope: { kind: 'section', id: '1' },
+      dryRun: false,
+    });
+    const byKey = new Map(gate.rows.filter((r) => r.kind === 'pass1').map((r) => [r.key, r] as const));
+    const bare = byKey.get('doi:10.9999/x');
+    assert.equal(bare?.kind === 'pass1' ? bare.verdict : null, 'FABRICATED');
+    assert.match(bare?.kind === 'pass1' ? bare.reason : '', /^bare identifier in the text \(line 1\): DOI 10\.9999\/x did not resolve via Crossref/, 'the registrar\'s answer, not the bibliography\'s state');
+    const cited = byKey.get('ghost2099');
+    assert.match(cited?.kind === 'pass1' ? cited.reason : '', /CITATIONS\.bib (is missing|has no entries)/, 'the cited key names the bibliography');
+  }
+});

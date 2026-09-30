@@ -249,8 +249,13 @@ function bibProblemLine(p: BibEntryProblem): string {
   return `line ${p.line}${p.key !== null ? ` (${p.key})` : ''}: ${p.detail}`;
 }
 
-/** Rewrite the Pass-1 rows the bibliography's state decides: an unparseable entry, a missing or empty file. */
-function bibAwareRow(r: Pass1Result, bib: LoadedBibliography, parsedKeys: ReadonlySet<string>): Pass1GateRow {
+/**
+ * Rewrite the Pass-1 rows the bibliography's state decides: an unparseable
+ * entry, a missing or empty file. Only a cited key's row — a bare identifier
+ * in the prose (`doi:…`, `arXiv:…`, `PMID:…`) was looked up at its registrar
+ * and has nothing to do with the bibliography.
+ */
+function bibAwareRow(r: Pass1Result, bib: LoadedBibliography, parsedKeys: ReadonlySet<string>, cited: ReadonlySet<string>): Pass1GateRow {
   const base: Pass1GateRow = {
     kind: 'pass1',
     key: r.citekey,
@@ -261,7 +266,7 @@ function bibAwareRow(r: Pass1Result, bib: LoadedBibliography, parsedKeys: Readon
     ...(r.retraction === true ? { retraction: true } : {}),
     ...(r.checkedAt !== undefined ? { checkedAt: r.checkedAt } : {}),
   };
-  if (parsedKeys.has(r.citekey)) return base;
+  if (parsedKeys.has(r.citekey) || !cited.has(r.citekey)) return base;
   const bad = bib.problems.find((p) => p.key === r.citekey);
   if (bad !== undefined) {
     return {
@@ -373,8 +378,9 @@ export async function recomputeGate(input: GateInput): Promise<GateResult> {
     ...(input.refresh !== undefined ? { refresh: input.refresh } : {}),
   });
   const rows: GateRow[] = [];
+  const cited = new Set(citedKeys);
   for (const r of pass1) {
-    rows.push(bibAwareRow(r, bib, parsedKeys));
+    rows.push(bibAwareRow(r, bib, parsedKeys, cited));
     // VRFY-17: a cited key outside the allowed set — its own row next to its registrar row.
     if (citedKeys.includes(r.citekey) && !input.allowedKeys.has(r.citekey)) {
       rows.push({ kind: 'pass1', key: r.citekey, verdict: 'UNASSIGNED', titleJW: Number.NaN, authorJW: Number.NaN, reason: unassignedReason(input.scope, r.citekey) });
