@@ -123,6 +123,8 @@ Only provable code and TeX math are skipped; everything else is scanned (fail cl
 | `tests/chokepoints.test.ts` | The regex-literal harness and semantics tests. |
 | `tests/citation-token.test.ts`, `tests/citation-density.test.ts`, `tests/citation-grammar-pandoc.test.ts` | New grammar cases. |
 | `tests/export-gate.test.ts` (gate's) | Separate commit `test(20-grammar): export-gate …`. Its `Pass4Result` literal gains the new required `orphans` field. No assertion changed. |
+| `tests/llm-transport.test.ts` (unowned) | Separate commit `test(20-grammar): llm-transport …`. T-11-01 probed the orphan-label stub for `.label`; it now asserts the stub's `claims` array. |
+| `tests/verify-no-llm.test.ts` (gate's) | Separate commit `test(20-grammar): verify-no-llm …`. The seeded bib entry gains an abstract. Three cases (no key → skipped; the MCP tool with no key; the cost cap after the verdict) are about Pass 2's model call, and a source with no text now makes none (D-20-28). No assertion changed. |
 
 New tests: `citation-integrity.property.test.ts`, `unsupported-forms.test.ts`, `citation-unparseable.test.ts`, `pass2-pairs.test.ts`, `pass4-floor.test.ts`.
 
@@ -139,7 +141,7 @@ No workflow, skill, agent or reference file was touched.
 - `bin/lib/llm-models.ts`: the orphan-label and claim-support request-size estimates.
 - `bin/lib/estimator.ts`: one comment line.
 - `scripts/record-pandoc-cites.mjs`: now also records `unparseable.json`.
-- `tests/export-gate.test.ts`: see above.
+- `tests/export-gate.test.ts`, `tests/llm-transport.test.ts`, `tests/verify-no-llm.test.ts`: see above.
 - `CLAUDE.md`: the chokepoint row, the kinds list and the Verify-paragraph grammar sentence.
 - `PRD.md`: the §7.7 Pass 2 and Pass 4 bullets.
 
@@ -160,7 +162,33 @@ No workflow, skill, agent or reference file was touched.
 5. **HARDEN-03 Property C through the gate core.** Run the generated drafts through `recomputeGate`.
 6. **Docs (integration docs sweep).** CONTRIBUTING (the property test, pandoc, `PENSMITH_PROPERTY_SEED`, re-recording the corpora) and README (the verdict names).
 7. **Phase 23a.** The concurrent `ci.yml` edit (CI-05) must keep the pandoc step before the test steps.
+8. **Tests in other streams.** Any test that expects a Pass-2 model call (the "skipped (no LLM configured)" line, a cost-cap stop in Pass 2, a scripted claim-support reply) must seed a source with text — an abstract in the bib or LIBRARY.json. A source with no text is now UNCLEAR "no source text" and makes no request (D-20-28). Three such tests on this branch were updated; the others' tests may hit the same after the merge.
 
 ## Verification
 
-See the stream's final report: the stream gate, the chokepoint fixture, the property test (with pandoc: 1000 runs in about 12 s, 3 × 4000 runs green; without pandoc: one skip line; `CI=true` without pandoc: fails), the pandoc agreement tests, and the scratch-paper `verify 1` with the mock LLM.
+All results are on this branch in the worktree.
+
+- **Stream gate.**
+  - `npm run prebuild && npm run lint && npm run typecheck && npm run build` are green, and the tree is clean after the build.
+  - `npm run validate:manifests` is green.
+  - `npm run test:tier-contract`: 57/57.
+- **Full suite (`npm test`).**
+  - Without pandoc: 2488 tests. Every failure is either the root-only `atomic-write` case or one of the three `verify-no-llm` cases, since fixed and re-run green (6/6). The four HARDEN-03 tests are skipped with the one stderr line.
+  - With pandoc 3.9 on PATH and `CI=true` (as CI runs it): 2487/2488. The only failure is the root-only `tests/atomic-write.test.ts` "preserves OLD content on rename/write failure" case.
+- **The chokepoint row.** `tests/chokepoints.test.ts` 35/35: the citation-grammar fixture fails lint, and the real tree passes both the ESLint rule and the inline-disable-immune harness.
+- **HARDEN-03.** `node scripts/run-tests.mjs tests/citation-integrity.property.test.ts`:
+  - with pandoc: 1000 drafts in 6–15 s, with the real-exporter and Pass-1 samples, 4/4; 3 × 4000 drafts (random seeds) also green;
+  - without pandoc: one "HARDEN-03 SKIPPED" line, 4 skipped;
+  - `CI=true` without pandoc: 4 failures, "CI=true requires it".
+- **The pandoc agreement tests.** `tests/citation-grammar-pandoc.test.ts` 6/6 against recorded pandoc 3.9 readings, and live with pandoc 3.9 on PATH (which also drift-checks the recordings).
+- **User path.** A scratch paper, built CLI, `PENSMITH_OFFLINE=1` sources, and the RUN-21 mock LLM configured through the isolated global runtime.json; `verify 1 --yolo` exits 0 and VERIFICATION.md shows:
+  - the Pass-2 table with the Evidence column (`SUPPORTED` rows quoting the abstract; an `UNSUPPORTED` row with evidence);
+  - the per-paragraph Pass-4 table;
+  - the two register sentences uncited: "Orphan claims: 2", both sentences listed in paragraph 2;
+  - the same sentences cited (`[@lecun2015]`, `[@aspelmeyer2009, p. 4]`): "Orphan claims: 0".
+  The captured requests carry the abstract inside the fenced `<source_text>` block.
+- **Scanner cost.** On a 180 KB draft the three scanners take 30 ms, 130 ms and 320 ms; pathological inputs (20 000 open brackets, 50 000 `@`, long capitalised runs) stay under 150 ms.
+
+## Environment note
+
+During this stream the container's disk filled up (ENOSPC). The test suites of every stream leak `/tmp/pensmith-*` temp dirs, about 85 000 of them over the session. Leaked dirs older than three hours were removed to finish the runs. The leak itself (tests that never remove their `mkdtemp` dirs) is worth a CI-09 / HARDEN follow-up.
