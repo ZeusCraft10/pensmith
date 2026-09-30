@@ -62,6 +62,7 @@ const ORPHAN: Pass4Result = {
   claimsDetected: 1,
   orphanCount: 1,
   claims: [],
+  orphans: ['Every adolescent who uses social media clearly becomes depressed.'],
 };
 
 // RED-by-skip module-presence consistency (mirrors known-bad-pass2).
