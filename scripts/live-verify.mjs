@@ -5,6 +5,9 @@
 //   npm run build
 //   PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org npm run live:verify
 //
+// (`npm run live:verify` runs this script, then scripts/live-verify-quotes.mjs,
+// the live lane for Pass 3's sources — VRFY-19.)
+//
 // Runs `pensmith verify 1` through the BUILT CLI (dist/bin/pensmith.js) on
 // seeded sections against the REAL registrars — the default `npm test` never
 // does (it replays the recordings `npm run cassettes:refresh` made from these

@@ -99,8 +99,10 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    the one bibliography (read entry by entry; an unreadable or missing file is a
    refusal naming why, never a stack). Every blocking row is a refuse reason
    naming the section, the citation and its remedy — FABRICATED, MIS-CITED,
-   UNASSIGNED, UNPARSEABLE, NO-CITATIONS, NOT_FOUND, UNVERIFIABLE ("re-run
-   online"), UNVERIFIABLE-QUOTE (add the source's PDF, paraphrase, or
+   RETRACTED, UNASSIGNED, UNPARSEABLE, UNSUPPORTED-FORM, UNRESOLVABLE,
+   NO-CITATIONS, NOT_FOUND, UNATTRIBUTED, UNVERIFIABLE-NETWORK ("re-run
+   online"), UNVERIFIABLE (the reason names the agency and what would help),
+   UNVERIFIABLE-QUOTE (add the source's PDF, paraphrase, or
    `pensmith verify N --accept-quote qN`) and PLACEHOLDER (re-draft with a
    model; under `--dry-run` it passes and compile removes the stub marker lines
    from the compiled dry-run draft). An unverifiable section does not stop the

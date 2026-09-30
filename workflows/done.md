@@ -111,8 +111,9 @@ never a silent clean.
    - the gate core recomputes every row over `.paper/DRAFT.md`'s exact bytes
      (`bin/lib/verify/gate.ts`): a cited key outside the union of the sections'
      `assigned_sources` is UNASSIGNED, and every blocking row (FABRICATED,
-     MIS-CITED, UNVERIFIABLE, UNPARSEABLE, NOT_FOUND, an UNVERIFIABLE-QUOTE the
-     user did not accept for the current draft, …) is listed with the
+     MIS-CITED, RETRACTED, UNVERIFIABLE-NETWORK, UNVERIFIABLE, UNPARSEABLE,
+     UNSUPPORTED-FORM, NOT_FOUND, an UNVERIFIABLE-QUOTE the user did not accept
+     for the current draft, …) is listed with the
      staleness reasons — so a hand-appended fake citation is named as both.
    Citations whose `last_verified` is older than `[verification]
    recheck_after_days` are re-checked past the HTTP cache (VRFY-28). With no
