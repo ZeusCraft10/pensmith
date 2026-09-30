@@ -167,3 +167,29 @@ test('VRFY-20 (built CLI): a hand-written acceptance lifts nothing — an "(acce
   assert.match(d.stdout, /quote q1 \(§1's q1\) \("deep learning has already solved every o…"\) \[@lecun2015\] is NOT_FOUND/);
   assert.ok(!existsSync(join(root, '.paper', 'export')));
 });
+
+test('VRFY-15 / D-20-13 (built CLI): done re-checks a cited source LIBRARY.json holds as `unknown` — found retracted now, the export is refused naming it, and nothing is written', async () => {
+  const { upsertSources } = await import('../bin/lib/library.js');
+  const sb = sandbox('forged-retraction-recheck');
+  const root = sb.project('p');
+  writeState(root, [{ n: 1, slug: 'background' }], 'forged-retraction-recheck');
+  await upsertSources(
+    root,
+    [{ source: 'crossref', id: '10.1016/s0140-6736(97)11096-0', doi: '10.1016/s0140-6736(97)11096-0', title: 'RETRACTED: Ileal-lymphoid-nodular hyperplasia, non-specific colitis, and pervasive developmental disorder in children', authors: ['Wakefield, A.J.'], year: 1998, retraction_status: 'unknown', last_verified: new Date().toISOString(), citekey: 'wakefield1998', raw: {} }],
+    { provenance: 'research' },
+  );
+  writeOutline(root, [{ n: 1, slug: 'background', sources: ['wakefield1998'] }]);
+  writePlan(root, 1, 'background', { status: 'written', assigned_sources: '[wakefield1998]' });
+  const dir = sectionDirOf(root, 1, 'background');
+  writeFileSync(join(dir, 'DRAFT.md'), '# Background\n\nAn early case series proposed a link [@wakefield1998].\n');
+  // A record that says verified, and a compile record to match (the forgery done must not trust).
+  forgeClean(root, dir, 1, 'background', ['wakefield1998']);
+  writeFileSync(join(root, '.paper', 'DRAFT.md'), readFileSync(join(dir, 'DRAFT.md')));
+  writeCompileRecord(root, [{ n: 1, slug: 'background' }]);
+  const libBefore = readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8');
+  const d = runCli(sb, root, ['done', '--yolo', '--format', 'md'], { timeoutMs: 120_000 });
+  assert.equal(d.status, EXIT_BLOCKED, `${d.stdout}\n${d.stderr}`);
+  assert.match(d.stdout, /citation \[@wakefield1998\] is RETRACTED — .*\(re-checked now: LIBRARY\.json had its retraction status unknown\)/);
+  assert.ok(!existsSync(join(root, '.paper', 'export')), 'nothing exported');
+  assert.equal(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8'), libBefore, 'a refused done writes nothing');
+});
