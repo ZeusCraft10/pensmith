@@ -14,8 +14,10 @@
 //      OK at arXiv, compiled and exported.
 //
 // Offline under the test runner (every request is answered by a recording);
-// the model is the deterministic PENSMITH_NO_LLM stub (the outline stub
-// allocates the offered sources; the drafter stub cites every assigned key).
+// the model is the RUN-21 mock LLM serving the deterministic contract stubs
+// (the outline stub allocates the offered sources; the drafter stub cites
+// every assigned key) — a real draft to the gate, where a PENSMITH_NO_LLM
+// draft would be PLACEHOLDER (VRFY-24, D-20-21).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,7 +30,8 @@ import { parseOutline } from '../bin/lib/outline-parse.js';
 import { loadFrontmatterDocSync } from '../bin/lib/frontmatter.js';
 import { formatSectionId, sectionIdOf } from '../bin/lib/section-id.js';
 
-const NO_LLM = { PENSMITH_NO_LLM: '1' };
+/** The mock LLM answers every model call (its key is a placeholder the mock accepts). */
+const MOCK_ENV = { ANTHROPIC_API_KEY: 'sk-ant-test-verifiable-sources-0001', PENSMITH_NO_LLM: undefined };
 
 function outlineRows(sb: LlmSandbox): ReturnType<typeof parseOutline>['sections'] {
   return parseOutline(fs.readFileSync(path.join(sb.paper, 'OUTLINE.md'), 'utf8')).sections;
@@ -40,28 +43,28 @@ function sectionDir(sb: LlmSandbox, n: number, slug: string): string {
 
 /** outline → (plan, write) the section holding `key`; returns its folder. */
 async function allocatePlanWrite(sb: LlmSandbox, key: string): Promise<string> {
-  const o = await runBuilt(sb, ['outline', '--yolo'], { env: NO_LLM });
+  const o = await runBuilt(sb, ['outline', '--yolo']);
   assert.equal(o.status, 0, `outline\n${o.stdout}\n${o.stderr}`);
   assert.doesNotMatch(o.stderr, /not offered to the outline/, `${key} is offered to the outline`);
   const row = outlineRows(sb).find((r) => r.assigned_sources.includes(key));
   assert.ok(row, `the outline allocates ${key}:\n${fs.readFileSync(path.join(sb.paper, 'OUTLINE.md'), 'utf8')}`);
   const id = formatSectionId(sectionIdOf(row.n, row.suffix));
 
-  const p = await runBuilt(sb, ['plan', id, '--yolo'], { env: NO_LLM });
+  const p = await runBuilt(sb, ['plan', id, '--yolo']);
   assert.equal(p.status, 0, `plan ${id}\n${p.stdout}\n${p.stderr}`);
   assert.doesNotMatch(p.stderr, /leaves out|has no assigned sources/, 'the planner keeps the source');
   const dir = sectionDir(sb, row.n, row.slug);
   const plan = loadFrontmatterDocSync('plan', path.join(dir, 'PLAN.md'));
   assert.ok((plan.frontmatter['assigned_sources'] as string[]).includes(key), `PLAN.md keeps ${key}`);
 
-  const w = await runBuilt(sb, ['write', id, '--yolo'], { env: NO_LLM });
+  const w = await runBuilt(sb, ['write', id, '--yolo']);
   assert.equal(w.status, 0, `write ${id}\n${w.stdout}\n${w.stderr}`);
   assert.match(fs.readFileSync(path.join(dir, 'DRAFT.md'), 'utf8'), new RegExp(`@${key}\\b`), 'the draft cites it');
   return dir;
 }
 
 test('D-18-37 / criterion 7 (built CLI): a History paper\'s ISBN-only book is allocated by the outline, kept by the planner, cited and verified OK', async () => {
-  await withLlmSandbox({ env: NO_LLM }, async (sb) => {
+  await withLlmSandbox({ mock: 'anthropic', env: MOCK_ENV }, async (sb) => {
     await seedBriefPaper(
       sb.root,
       {
@@ -82,11 +85,11 @@ test('D-18-37 / criterion 7 (built CLI): a History paper\'s ISBN-only book is al
 });
 
 test('D-18-37 / SRC-15 (built CLI): your own PDF identified by its arXiv id is allocated, cited, verified OK at arXiv, compiled and exported', async () => {
-  await withLlmSandbox({ paper: false, env: NO_LLM }, async (sb) => {
+  await withLlmSandbox({ paper: false, mock: 'anthropic', env: MOCK_ENV }, async (sb) => {
     fs.copyFileSync(path.join(REPO, 'tests', 'fixtures', 'assignment.txt'), path.join(sb.root, 'a.txt'));
     fs.mkdirSync(path.join(sb.root, 'pdfs'));
     fs.copyFileSync(path.join(REPO, 'tests', 'fixtures', 'byo', 'attention-arxiv-layout.pdf'), path.join(sb.root, 'pdfs', 'attention-arxiv-layout.pdf'));
-    const n = await runBuilt(sb, ['new', '--from', 'a.txt', '--pdfs', 'pdfs', '--yolo'], { env: NO_LLM });
+    const n = await runBuilt(sb, ['new', '--from', 'a.txt', '--pdfs', 'pdfs', '--yolo']);
     assert.equal(n.status, 0, `new\n${n.stdout}\n${n.stderr}`);
     const lib = JSON.parse(fs.readFileSync(path.join(sb.paper, 'LIBRARY.json'), 'utf8')) as { entries: Array<Record<string, unknown>> };
     const vas = lib.entries.find((e) => e['citekey'] === 'vaswani2017');
@@ -103,14 +106,14 @@ test('D-18-37 / SRC-15 (built CLI): your own PDF identified by its arXiv id is a
     for (const row of outlineRows(sb)) {
       if (fs.existsSync(path.join(sectionDir(sb, row.n, row.slug), 'VERIFICATION.md'))) continue;
       const id = formatSectionId(sectionIdOf(row.n, row.suffix));
-      const p = await runBuilt(sb, ['plan', id, '--yolo'], { env: NO_LLM });
+      const p = await runBuilt(sb, ['plan', id, '--yolo']);
       assert.equal(p.status, 0, `plan ${id}\n${p.stdout}\n${p.stderr}`);
-      const w = await runBuilt(sb, ['write', id, '--yolo'], { env: NO_LLM });
+      const w = await runBuilt(sb, ['write', id, '--yolo']);
       assert.equal(w.status, 0, `write ${id}\n${w.stdout}\n${w.stderr}`);
     }
-    const c = await runBuilt(sb, ['compile', '--yolo'], { env: NO_LLM });
+    const c = await runBuilt(sb, ['compile', '--yolo']);
     assert.equal(c.status, 0, `compile\n${c.stdout}\n${c.stderr}`);
-    const d = await runBuilt(sb, ['done', '--yolo', '--format', 'md'], { env: NO_LLM });
+    const d = await runBuilt(sb, ['done', '--yolo', '--format', 'md']);
     assert.equal(d.status, 0, `done\n${d.stdout}\n${d.stderr}`);
     const exported = fs.readdirSync(path.join(sb.paper, 'export'));
     const bib = exported.find((f) => f.endsWith('.bib'));
