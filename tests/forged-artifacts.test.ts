@@ -195,3 +195,59 @@ test('VRFY-15 / D-20-13 (built CLI): done re-checks a cited source LIBRARY.json 
   assert.ok(!existsSync(join(root, '.paper', 'export')), 'nothing exported');
   assert.equal(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8'), libBefore, 'a refused done writes nothing');
 });
+
+test('VRFY-14 (built CLI, review round 2): the user\'s own PDF vouches for the FILE, not for what the bibliography says — an entry edited after ingest is MIS-CITED when the registrar gives no answer, and compile refuses it', async () => {
+  const { upsertSources } = await import('../bin/lib/library.js');
+  const { createHash } = await import('node:crypto');
+  const { mkdirSync } = await import('node:fs');
+  const sb = sandbox('forged-byo-metadata');
+  const root = sb.project('p');
+  writeState(root, [{ n: 1, slug: 'background' }], 'forged-byo-metadata');
+  const pdf = Buffer.from('%PDF-1.4\n% the user\'s own copy\n');
+  mkdirSync(join(root, '.paper', 'sources'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'sources', 'offline2021.pdf'), pdf);
+  await upsertSources(
+    root,
+    [{
+      source: 'byo',
+      id: 'byo:offline2021',
+      doi: '10.5555/pensmith-byo-unrecorded',
+      title: 'A Paper Whose Lookup Gets No Answer',
+      authors: ['Offline, Olga'],
+      year: 2021,
+      byo: { file: 'sources/offline2021.pdf', sha256: createHash('sha256').update(pdf).digest('hex'), text_sha256: null },
+      last_verified: new Date().toISOString(),
+      citekey: 'offline2021',
+      raw: {},
+    }],
+    { provenance: 'byo' },
+  );
+  writeOutline(root, [{ n: 1, slug: 'background', sources: ['offline2021'] }]);
+  writePlan(root, 1, 'background', { status: 'written', assigned_sources: '[offline2021]' });
+  const dir = sectionDirOf(root, 1, 'background');
+  writeFileSync(join(dir, 'DRAFT.md'), '# Background\n\nThe method works [@offline2021].\n');
+
+  // As ingested: the registrar lookup gets no answer (offline, no recording) and the PDF re-hashes — OK-BYO.
+  const v1 = runCli(sb, root, ['verify', '1', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(v1.status, EXIT_OK, `${v1.stdout}\n${v1.stderr}`);
+  assert.match(readFileSync(join(dir, 'VERIFICATION.md'), 'utf8'), /^- offline2021: \*\*OK-BYO\*\* — /m);
+
+  // The bibliography edited afterwards (what the export would print): never OK-BYO on the hash alone.
+  const bib = join(root, '.paper', 'CITATIONS.bib');
+  writeFileSync(
+    bib,
+    readFileSync(bib, 'utf8')
+      .replace(/author = \{[^}]*\}/, 'author = {Fabricator, Totally}')
+      .replace(/title = \{[^}]*\}/, 'title = {Deep learning cures all cancers: a definitive trial}')
+      .replace(/year = \{[^}]*\}/, 'year = {2031}'),
+  );
+  const v2 = runCli(sb, root, ['verify', '1', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(v2.status, EXIT_BLOCKED, `${v2.stdout}\n${v2.stderr}`);
+  const md = readFileSync(join(dir, 'VERIFICATION.md'), 'utf8');
+  assert.match(md, /^Status: failed$/m);
+  assert.match(md, /^- offline2021: \*\*MIS-CITED\*\* — .*the entry does not describe the work your own PDF sources\/offline2021\.pdf \(sha256 [0-9a-f]{12}\) was identified as when you added it/m);
+  const c = runCli(sb, root, ['compile', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(c.status, EXIT_BLOCKED, `${c.stdout}\n${c.stderr}`);
+  assert.match(c.stdout, /citation \[@offline2021\] is MIS-CITED/);
+  assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')), 'no compiled draft');
+});

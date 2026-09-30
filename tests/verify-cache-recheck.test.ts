@@ -324,7 +324,7 @@ test('VRFY-26 (review round 2): done exports the bytes its gate judged — a DRA
   });
 });
 
-test('VRFY-15 / VRFY-26 (review round 2): done\'s retraction re-check sends no DOI HEAD, asks the prefix\'s agency before any registrar, and records a DataCite DOI\'s status as unknown for good — a second done asks nothing', async () => {
+test('VRFY-15 / VRFY-26 (review round 2): done\'s retraction re-check sends no DOI HEAD and records a DataCite DOI\'s status as unknown for good — a second done asks nothing', async () => {
   await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' } }, async (sb) => {
     const doi = '10.5281/zenodo.1234567';
     await upsertSources(
@@ -356,7 +356,7 @@ test('VRFY-15 / VRFY-26 (review round 2): done\'s retraction re-check sends no D
       const first = await recheckUnknownRetractions(sb.root, text);
       assert.deepEqual(first.retracted, []);
       assert.deepEqual(first.decided, { doe2020: { status: 'unknown', details: 'no retraction data for DataCite DOIs' } });
-      assert.deepEqual(counts, { head: 0, crossref: 0, ra: 1 }, 'the prefix\'s agency only: no DOI HEAD, no Crossref lookup');
+      assert.deepEqual(counts, { head: 0, crossref: 1, ra: 1 }, 'Crossref has no record, doi.org names DataCite — no DOI HEAD');
       // done records the answers once it exports.
       await recordRetractionStatuses(sb.root, first.decided);
       const e = (await tryLoadLibrary(sb.root))?.entries.find((x) => x.citekey === 'doe2020');
@@ -364,7 +364,7 @@ test('VRFY-15 / VRFY-26 (review round 2): done\'s retraction re-check sends no D
       assert.equal(e?.retraction_details, 'no retraction data for DataCite DOIs');
       const second = await recheckUnknownRetractions(sb.root, text);
       assert.deepEqual(second, { retracted: [], decided: {} });
-      assert.deepEqual(counts, { head: 0, crossref: 0, ra: 1 }, 'a second done asks nothing');
+      assert.deepEqual(counts, { head: 0, crossref: 1, ra: 1 }, 'a second done asks nothing');
     }, { contactEmail: EMAIL });
   });
 });

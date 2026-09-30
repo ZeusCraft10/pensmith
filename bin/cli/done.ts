@@ -814,8 +814,8 @@ export interface RetractionRecheck {
  * LIBRARY.json status is `unknown` because a lookup failed (research or an
  * earlier verify could not decide it) — never one whose agency publishes no
  * retraction data (recorded; it stays unknown for good). The re-check sends no
- * DOI HEAD and learns the agency from doi.org's (cached) prefix lookup, so a
- * second done on an unchanged paper asks nothing (VRFY-26). Nothing is written
+ * DOI HEAD, and a status it decides (or records for good) is never asked
+ * again, so a second done on an unchanged paper asks nothing (VRFY-26). Nothing is written
  * here. Skipped under --dry-run and for a bibliography that does not parse;
  * never throws (a failed re-check leaves the status unknown, as verify does —
  * the gate core's Pass 1 still decides).

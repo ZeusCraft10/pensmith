@@ -303,7 +303,7 @@ test('VRFY-15 (live): a retraction status LIBRARY.json holds as unknown is re-ch
   });
 });
 
-test('D-20-13: runFreshnessForDraft with onlyRecheck probes only the cited keys whose LIBRARY.json status is unknown (done\'s re-check: no DOI HEAD, the prefix\'s agency first)', async () => {
+test('D-20-13: runFreshnessForDraft with onlyRecheck probes only the cited keys whose LIBRARY.json status is unknown (done\'s re-check: no DOI HEAD)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-freshness-only-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
   const unknownDoi = `10.5555/${uniq('only-unknown')}`;
@@ -323,7 +323,6 @@ test('D-20-13: runFreshnessForDraft with onlyRecheck probes only the cited keys 
       heads += 1;
       return { statusCode: 200, data: '' };
     }).persist();
-    agent.get('https://doi.org').intercept({ path: '/ra/10.5555', method: 'GET' }).reply(200, JSON.stringify([{ DOI: '10.5555', RA: 'Crossref' }]), JSON_HEADERS).persist();
     const crossref = agent.get('https://api.crossref.org');
     crossref.intercept({ path: (p: string) => decodeURIComponent(p) === `/works/${unknownDoi}`, method: 'GET' }).reply(() => {
       works += 1;
@@ -333,7 +332,7 @@ test('D-20-13: runFreshnessForDraft with onlyRecheck probes only the cited keys 
     const results = await runFreshnessForDraft('Claims [@doe2020] and [@roe2021].', join(root, '.paper', 'CITATIONS.bib'), { root, onlyRecheck: true });
     assert.deepEqual(results.map((r) => r.citekey), ['doe2020'], 'the decided source is not probed');
     assert.equal(heads, 0, 'done\'s re-check sends no DOI HEAD (its answer is not used there)');
-    assert.equal(works, 0, 'the agency comes from doi.org\'s prefix lookup, not a Crossref record request');
+    assert.equal(works, 1, 'Crossref\'s record of the DOI names its agency');
     const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<{ citekey: string; retraction_status: string }> };
     assert.equal(lib.entries.find((e) => e.citekey === 'doe2020')?.retraction_status, 'clear');
   });

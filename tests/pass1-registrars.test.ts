@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPass1, retractionWarningLine, type Pass1Result } from '../bin/lib/verify/pass1.js';
@@ -155,6 +155,68 @@ test('VRFY-14: OK-BYO also covers a lookup that got no answer (offline), and onl
   const [r] = await runPass1('A claim [@offline2021].\n', bibPath, { root });
   assert.equal(r?.verdict, 'OK-BYO', r?.reason);
   assert.match(r?.reason ?? '', /^your own PDF sources\/offline2021\.pdf \(sha256 [0-9a-f]{12}\) still matches what you ingested; the registrar lookup got no answer \(offline: no recorded fixture/);
+});
+
+/** A bring-your-own entry (a PDF that re-hashes) whose DOI has no recorded answer, and the paper's bib path. */
+async function byoPaper(key: string, entry: { title: string; authors: string[]; year: number; doi?: string }): Promise<{ root: string; bibPath: string; sha: string }> {
+  const { root, bibPath } = paper('');
+  const pdf = Buffer.from(`%PDF-1.4\n% the user's own copy of ${key}\n`);
+  const sha = createHash('sha256').update(pdf).digest('hex');
+  mkdirSync(join(root, '.paper', 'sources'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'sources', `${key}.pdf`), pdf);
+  await upsertSources(
+    root,
+    [{
+      source: 'byo',
+      id: `byo:${key}`,
+      ...(entry.doi !== undefined ? { doi: entry.doi } : {}),
+      title: entry.title,
+      authors: entry.authors,
+      year: entry.year,
+      byo: { file: `sources/${key}.pdf`, sha256: sha, text_sha256: null },
+      last_verified: new Date().toISOString(),
+      citekey: key,
+      raw: {},
+    }],
+    { provenance: 'byo' },
+  );
+  return { root, bibPath, sha };
+}
+
+test('VRFY-14 (review round 2): OK-BYO needs the entry to describe the work its PDF was ingested as — a bibliography edited after ingest is MIS-CITED naming the fields, on the no-answer path and the no-identifier path', async () => {
+  // A lookup that got no answer (offline, no recording): the PDF's hash alone never passes a changed entry.
+  const off = await byoPaper('offline2021', { doi: '10.5555/pensmith-byo-unrecorded', title: 'A Paper Whose Lookup Gets No Answer', authors: ['Offline, Olga'], year: 2021 });
+  const [ok] = await runPass1('A claim [@offline2021].\n', off.bibPath, { root: off.root });
+  assert.equal(ok?.verdict, 'OK-BYO', ok?.reason);
+  writeFileSync(
+    off.bibPath,
+    readFileSync(off.bibPath, 'utf8')
+      .replace(/author = \{[^}]*\}/, 'author = {Fabricator, Totally}')
+      .replace(/title = \{[^}]*\}/, 'title = {Deep learning cures all cancers: a definitive trial}')
+      .replace(/year = \{[^}]*\}/, 'year = {2031}'),
+  );
+  const [forged] = await runPass1('A claim [@offline2021].\n', off.bibPath, { root: off.root });
+  assert.equal(forged?.verdict, 'MIS-CITED', forged?.reason);
+  assert.match(
+    forged?.reason ?? '',
+    new RegExp(`^the entry does not describe the work your own PDF sources/offline2021\\.pdf \\(sha256 ${off.sha.slice(0, 12)}\\) was identified as when you added it, "A Paper Whose Lookup Gets No Answer" \\(Offline, Olga, 2021\\) — mismatch: title .*first author .*year \\(claimed 2031, record 2021\\); the registrar lookup got no answer \\(offline`),
+  );
+
+  // No identifier at all: the same comparison before the metadata search.
+  const moss = await byoPaper('moss2019', { title: 'Field Notes on Moss Growth Beside the Old Mill Stream', authors: ['Moss, Mary'], year: 2019 });
+  writeFileSync(moss.bibPath, readFileSync(moss.bibPath, 'utf8').replace(/year = \{[^}]*\}/, 'year = {1999}'));
+  const [year] = await runPass1('A claim [@moss2019].\n', moss.bibPath, { root: moss.root });
+  assert.equal(year?.verdict, 'MIS-CITED', year?.reason);
+  assert.match(year?.reason ?? '', /mismatch: year \(claimed 1999, record 2019\); the entry has no DOI, arXiv id, PMID or ISBN — cite the work as the PDF shows it/);
+});
+
+test('VRFY-14 (review round 2): a PDF whose ingested identity LIBRARY.json cannot compare (no author recorded) stands in for nothing — the lookup\'s own no-answer row stays', async () => {
+  const p = await byoPaper('noauthor2021', { doi: '10.5555/pensmith-byo-unrecorded', title: 'A Paper Whose Lookup Gets No Answer', authors: [], year: 2021 });
+  // The bibliography names an author the library never recorded for the PDF.
+  writeFileSync(p.bibPath, readFileSync(p.bibPath, 'utf8').replace(/title = \{/, 'author = {Offline, Olga},\n  title = {'));
+  const [r] = await runPass1('A claim [@noauthor2021].\n', p.bibPath, { root: p.root });
+  assert.equal(r?.verdict, 'UNVERIFIABLE-NETWORK', r?.reason);
+  assert.doesNotMatch(r?.reason ?? '', /your own PDF/);
 });
 
 test('VRFY-14: a forged alternate DOI in LIBRARY.json pointing at a real work never makes a fabricated primary DOI pass', async () => {

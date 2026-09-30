@@ -36,9 +36,8 @@
 // mEDRA, …) stays `unknown` for good: the first re-check records that reason
 // (`no retraction data for <agency> DOIs`, library `retraction_details`) and
 // nothing asks again. done's re-check sends no DOI HEAD (its answer is not
-// used there) and asks doi.org's agency lookup of the prefix (cached) before
-// any registrar, so a second done on an unchanged paper makes no request
-// (VRFY-26, review round 2).
+// used there), so once a status is decided or recorded for good a second done
+// on an unchanged paper makes no request (VRFY-26, review round 2).
 //
 // SSRF mitigation (T-04-05): the DOI is format-validated via doi.ts BEFORE any
 // request, and the HEAD target is always `https://doi.org/<normalized-doi>`.
@@ -77,10 +76,7 @@ export interface FreshnessSource {
   readonly registrar: string | null;
   /** LIBRARY.json records its retraction status as `unknown`: re-check it live, never from the cache. */
   readonly recheck?: boolean;
-  /**
-   * done's re-check (runFreshnessForDraft `onlyRecheck`): the retraction
-   * status only — no DOI HEAD, and the agency from doi.org's prefix lookup.
-   */
+  /** done's re-check (runFreshnessForDraft `onlyRecheck`): the retraction status only — no DOI HEAD. */
   readonly recheckOnly?: boolean;
 }
 
@@ -126,17 +122,9 @@ type Agency = { kind: 'agency'; agency: string } | { kind: 'none'; reason: strin
  * of it (the answer Pass 1 fetched — cache or fixture), else doi.org's agency
  * of the prefix. Never throws.
  */
-async function registrationAgencyOf(doi: string, prefixFirst = false): Promise<Agency> {
+async function registrationAgencyOf(doi: string): Promise<Agency> {
   if (isDataCiteArxivDoi(doi)) return { kind: 'agency', agency: 'DataCite' };
   try {
-    if (prefixFirst) {
-      // done's re-check: doi.org's (cached) agency lookup of the prefix answers
-      // without asking Crossref for a DOI Crossref never registered.
-      const ra = await registrationAgency(doi);
-      if (ra.kind === 'agency') return ra;
-      if (ra.kind === 'unknown-prefix') return { kind: 'none', reason: 'no registration agency holds its prefix — see its Pass-1 row' };
-      return { kind: 'unavailable', note: `the registration agency of ${doi} is unknown: ${cell(ra.reason)} — re-run verify` };
-    }
     const r = await sources.crossref.lookupById(doi);
     if (r.kind === 'found') return { kind: 'agency', agency: 'Crossref' };
     if (r.kind === 'failed') return { kind: 'unavailable', note: `${cell(r.reason)} — re-run verify` };
@@ -218,7 +206,7 @@ export async function probeFreshness(source: FreshnessSource): Promise<Freshness
     info.push({ probe: 'retraction-watch', status: 'not probed', detail: 'a synthetic --dry-run source' });
     return done(normalized);
   }
-  const agency = await registrationAgencyOf(normalized, source.recheckOnly === true);
+  const agency = await registrationAgencyOf(normalized);
   if (agency.kind === 'skipped') {
     skipped.push({ probe: 'retraction-watch', detail: agency.detail });
     return done(normalized);
