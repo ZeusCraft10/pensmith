@@ -17,6 +17,16 @@
 // section's finished plan/write steps), compile when DRAFT.md exists and done
 // when FINAL.md exists. Nothing left → `nothing left to run ($0.00)`.
 //
+// The advisory verify passes are priced from the text they will read
+// (D-20-28, D-20-29; review round 2): a section's verify is one claim-support
+// call per (citing sentence, key) pair and one orphan-label call per prose
+// paragraph — counted in its DRAFT.md (verify/draft-text.ts, the splitter the
+// passes use) when it has one, else from its plan's word target at
+// WORDS_PER_PARAGRAPH and the discipline band's highest citations per
+// paragraph (at least one pair per assigned source). done runs Pass 4 over the
+// whole paper: one orphan-label call per paragraph of the compiled DRAFT.md,
+// or of the sections' drafts and plans before compile.
+//
 // NO network and NO LLM call: this module reads files only (STATE.json,
 // PLAN.md frontmatter, SESSION.log, config files, the assignment text). It
 // never writes COSTS.jsonl. Under PENSMITH_NO_LLM every model row is $0.00.
@@ -34,7 +44,9 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadState } from './state.js';
 import { readSectionInfo } from './router.js';
-import { paperDir, sectionPlan } from './paths.js';
+import { paperDir, sectionDraft, sectionPlan } from './paths.js';
+import { loadFrontmatterDocSync } from './frontmatter.js';
+import { claimPairs, proseParagraphs } from './verify/draft-text.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import { slugSpec } from './llm-models.js';
 import { costOf, resolvePrice, type ResolvedPrice } from './pricing.js';
@@ -162,8 +174,38 @@ export interface EstimateResult {
   lengthWords: number;
 }
 
-/** Calls per section for the advisory verify passes (Pass 2 per (citing sentence, key) pair, Pass 4 per paragraph with a claim; D-20-28/29). */
-export const VERIFY_CALLS_PER_SECTION = Object.freeze({ 'claim-support': 6, 'orphan-label': 4 });
+/**
+ * How many words a prose paragraph holds, for a section not drafted yet: the
+ * advisory passes' calls are counted per paragraph (Pass 4's audit, and Pass
+ * 2's pairs through the discipline's citations per paragraph).
+ */
+export const WORDS_PER_PARAGRAPH = 110;
+
+/** A section's advisory work: the (citing sentence, key) pairs Pass 2 judges and the paragraphs Pass 4 audits. */
+export interface AdvisoryWork {
+  readonly pairs: number;
+  readonly paragraphs: number;
+}
+
+/** The advisory work of a drafted text: one claim-support call per pair (D-20-28), one orphan-label call per prose paragraph at most (D-20-29). */
+export function draftAdvisoryWork(md: string): AdvisoryWork {
+  return { pairs: claimPairs(md).length, paragraphs: proseParagraphs(md).length };
+}
+
+/**
+ * The advisory work of a section not drafted yet: its words in paragraphs, and
+ * as many citations per paragraph as the discipline's band allows at most — at
+ * least one pair per assigned source.
+ */
+export function plannedAdvisoryWork(words: number, assignedSources: number, citationsPerParagraph: number): AdvisoryWork {
+  const paragraphs = Math.max(1, Math.ceil(Math.max(1, words) / WORDS_PER_PARAGRAPH));
+  return { pairs: Math.max(assignedSources, Math.ceil(paragraphs * citationsPerParagraph)), paragraphs };
+}
+
+/** The model calls of one section's verify: claim-support per pair, orphan-label per paragraph. */
+export function verifyCallsFor(work: AdvisoryWork): Array<[string, number]> {
+  return [['claim-support', work.pairs], ['orphan-label', work.paragraphs]];
+}
 
 const DEFAULT_LENGTH_WORDS = 1500;
 
@@ -318,6 +360,30 @@ export function sectionResearchCalls(root: string, env: Readonly<Record<string, 
   return [['source-evaluator', Math.max(1, evaluatorCallsFor(candidates))]];
 }
 
+/** The highest citations per paragraph of the paper's discipline band (the drafter writes within it). */
+function citationsPerParagraph(root: string): number {
+  let intakeDiscipline: string | undefined;
+  try {
+    intakeDiscipline = readIntakeBrief(root)?.brief.discipline;
+  } catch {
+    intakeDiscipline = undefined;
+  }
+  const config = tryReadPaperConfigSync(root);
+  return resolveDiscipline({ discipline: { intake: intakeDiscipline, config: config?.project?.discipline_preset } }).densityPerParagraph.max;
+}
+
+/** A section's PLAN.md word target and assigned-source count (never throws: a missing or unreadable plan has neither). */
+function planFacts(planPath: string): { words: number | null; assigned: number } {
+  try {
+    if (!existsSync(planPath)) return { words: null, assigned: 0 };
+    const fm = loadFrontmatterDocSync('plan', planPath).frontmatter as { word_target?: unknown; assigned_sources?: unknown };
+    const words = typeof fm.word_target === 'number' && fm.word_target > 0 ? fm.word_target : null;
+    return { words, assigned: Array.isArray(fm.assigned_sources) ? fm.assigned_sources.length : 0 };
+  } catch {
+    return { words: null, assigned: 0 };
+  }
+}
+
 /** How many adapters this paper's research plan would ask (its preset and `[sources] allowed_databases`). */
 function researchAdapterCount(root: string, env: Readonly<Record<string, string | undefined>>): number {
   const config = tryReadPaperConfigSync(root);
@@ -336,13 +402,12 @@ function researchAdapterCount(root: string, env: Readonly<Record<string, string 
   return plan.entries.length;
 }
 
-/** The model calls one run of each cost-incurring verb makes (other verbs make none; research: researchCalls). */
+/** The model calls one run of each cost-incurring verb makes (other verbs make none; research: researchCalls; verify and done: per section / paper). */
 const STEP_SLUGS: Readonly<Record<string, ReadonlyArray<readonly [string, number]>>> = Object.freeze({
   new: [['intake-clarifier', 1]],
   outline: [['outline-author', 1]],
   plan: [['section-planner', 1]],
   write: [['section-drafter', 1]],
-  verify: Object.entries(VERIFY_CALLS_PER_SECTION),
 });
 
 /**
@@ -360,6 +425,10 @@ function scopeRows(
   price: (step: string, slugs: Array<[string, number]>) => EstimateRow,
   research: ReadonlyArray<readonly [string, number]>,
   sectionResearch: ReadonlyArray<readonly [string, number]>,
+  /** A section's verify calls (its draft's pairs and paragraphs, or its plan's). */
+  verifyCalls: (id: number | string) => Array<[string, number]>,
+  /** done's whole-paper Pass 4 calls. */
+  doneCalls: Array<[string, number]>,
 ): EstimateRow[] {
   if (scope.research === true && scope.verb === 'plan') {
     // GRND-17: the section pass's evaluator calls; `plan --revise` re-plans after it.
@@ -370,15 +439,16 @@ function scopeRows(
     const at = scope.section !== undefined ? ` §${scope.section}` : '';
     return [price(`${scope.verb}${at} --research`, calls)];
   }
-  const slugs = scope.verb === 'research' ? research : STEP_SLUGS[scope.verb];
+  if (scope.verb === 'done') return [all.find((r) => r.step === 'done') ?? price('done', doneCalls)];
+  const slugs = scope.verb === 'research' ? research : scope.verb === 'verify' ? [] : STEP_SLUGS[scope.verb];
   if (!slugs) {
-    // compile, done, add, status, … make no model call.
+    // compile, add, status, … make no model call.
     return [{ step: scope.verb, calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' }];
   }
   const calls = slugs.map(([s, c]) => [s, c] as [string, number]);
   const sectionRow = (n: number | string): EstimateRow => {
     const step = `${scope.verb} §${n}`;
-    return all.find((r) => r.step === step) ?? price(step, calls);
+    return all.find((r) => r.step === step) ?? price(step, scope.verb === 'verify' ? verifyCalls(n) : calls);
   };
   if (scope.verb === 'plan' || scope.verb === 'write' || scope.verb === 'verify') {
     if (scope.section !== undefined) return [sectionRow(scope.section)];
@@ -428,14 +498,32 @@ export async function projectEstimate(args: {
     rows.push(row(rt, root, 'research', research, stubbed));
   }
 
-  const verifyCalls: Array<[string, number]> = Object.entries(VERIFY_CALLS_PER_SECTION);
+  // The advisory passes' calls come from the text they will read (D-20-28/29):
+  // a section's draft when it has one, else its plan's words at the
+  // discipline's highest citation density.
+  const perParagraph = citationsPerParagraph(root);
+  const sectionCount = sections.length > 0 ? sections.length : sectionCountForLength(lengthWords);
+  const defaultWords = Math.max(1, Math.round(lengthWords / sectionCount));
+  const workOf = new Map<string, AdvisoryWork>();
+  const sectionWork = (id: string, n: number, slug: string): AdvisoryWork => {
+    const known = workOf.get(id);
+    if (known !== undefined) return known;
+    const draft = readText(sectionDraft(n, slug, root));
+    const plan = planFacts(sectionPlan(n, slug, root));
+    const work = draft !== null && draft.trim() !== '' ? draftAdvisoryWork(draft) : plannedAdvisoryWork(plan.words ?? defaultWords, plan.assigned, perParagraph);
+    workOf.set(id, work);
+    return work;
+  };
+  const verifyCallsOf = (key: number | string): Array<[string, number]> => {
+    const s = sections.find((x) => formatSectionId(sectionIdOf(x.n, x.suffix)) === String(key));
+    return verifyCallsFor(s !== undefined ? sectionWork(String(key), s.n, s.slug) : plannedAdvisoryWork(defaultWords, 0, perParagraph));
+  };
   if (sections.length === 0) {
     rows.push(row(rt, root, 'outline', [['outline-author', 1]], stubbed));
-    const count = sectionCountForLength(lengthWords);
-    for (let n = 1; n <= count; n += 1) {
+    for (let n = 1; n <= sectionCount; n += 1) {
       rows.push(row(rt, root, `plan §${n}`, [['section-planner', 1]], stubbed));
       rows.push(row(rt, root, `write §${n}`, [['section-drafter', 1]], stubbed));
-      rows.push(row(rt, root, `verify §${n}`, verifyCalls, stubbed));
+      rows.push(row(rt, root, `verify §${n}`, verifyCallsFor(plannedAdvisoryWork(defaultWords, 0, perParagraph)), stubbed));
     }
   } else {
     for (const { n, suffix, slug } of sections) {
@@ -449,15 +537,27 @@ export async function projectEstimate(args: {
       const writeDone = ['written', 'verifying', 'failed', 'unverifiable'].includes(status);
       if (!planDone) rows.push(row(rt, root, `plan §${id}`, [['section-planner', 1]], stubbed));
       if (!writeDone) rows.push(row(rt, root, `write §${id}`, [['section-drafter', 1]], stubbed));
-      rows.push(row(rt, root, `verify §${id}`, verifyCalls, stubbed));
+      // A section that will be (re-)drafted is priced from its plan, not the draft it replaces.
+      const work = writeDone ? sectionWork(id, n, slug) : plannedAdvisoryWork(planFacts(sectionPlan(n, slug, root)).words ?? defaultWords, st.assignedSources.length, perParagraph);
+      if (!writeDone) workOf.set(id, work);
+      rows.push(row(rt, root, `verify §${id}`, verifyCallsFor(work), stubbed));
     }
   }
 
-  if (!existsSync(path.join(pDir, 'DRAFT.md'))) {
+  // done runs Pass 4 over the whole exported paper (VRFY-23): one orphan-label call per paragraph at most.
+  const compiled = readText(path.join(pDir, 'DRAFT.md'));
+  const paperParagraphs =
+    compiled !== null
+      ? draftAdvisoryWork(compiled).paragraphs
+      : sections.length > 0
+        ? sections.reduce((sum, s) => sum + sectionWork(formatSectionId(sectionIdOf(s.n, s.suffix)), s.n, s.slug).paragraphs, 0)
+        : sectionCount * plannedAdvisoryWork(defaultWords, 0, perParagraph).paragraphs;
+  const doneCalls: Array<[string, number]> = [['orphan-label', paperParagraphs]];
+  if (compiled === null) {
     rows.push({ step: 'compile', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' });
   }
   if (!existsSync(path.join(pDir, 'FINAL.md'))) {
-    rows.push({ step: 'done', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' });
+    rows.push(row(rt, root, 'done', doneCalls, stubbed));
   }
 
   if (args.scope !== undefined) {
@@ -468,7 +568,7 @@ export async function projectEstimate(args: {
         return !r.absent && !r.stub;
       })
       .map((s) => formatSectionId(sectionIdOf(s.n, s.suffix)));
-    rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed), research, sectionResearchCalls(root));
+    rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed), research, sectionResearchCalls(root), verifyCallsOf, doneCalls);
   }
 
   const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);
@@ -485,7 +585,7 @@ export async function projectEstimate(args: {
     provider: rt.provider,
     generationModel: gen,
     judgmentModel: judg,
-    sectionCount: sections.length > 0 ? sections.length : sectionCountForLength(lengthWords),
+    sectionCount,
     sectionSource,
     lengthWords,
   };

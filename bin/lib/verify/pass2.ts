@@ -8,9 +8,10 @@
 // tests/verify-advisory-isolation.test.ts is the structural gate).
 //
 // Every (citing sentence, citekey) pair of the draft is judged once:
-//   1. the sentences come from Pass 4's splitter (pass4.ts draftSentences —
-//      never split inside a citation), and the keys of each sentence from the
-//      one citation grammar (citation-token.ts citationItems), so
+//   1. the sentences come from the shared splitter (verify/draft-text.ts
+//      claimPairs over draftSentences — never split inside a citation), and
+//      the keys of each sentence from the one citation grammar
+//      (citation-token.ts citationItems), so
 //      `[@smith2020, p. 5]`, `[@a; @b]`, `[-@k]`, `@{k}` and a narrative `@k`
 //      all yield their keys;
 //   2. the SOURCE TEXT the judge reads is the LIBRARY.json abstract (clipped by
@@ -47,14 +48,14 @@
 import { complete, isFatalLlmError, MissingApiKeyError } from '../anthropic.js';
 import { Semaphore } from '../budget.js';
 import { byoText, byoPassages, BYO_PASSAGE_CHARS, type ByoTextResult } from '../byo-text.js';
-import { citationItems } from '../citation-token.js';
 import { tryReadPaperConfigSync } from '../config.js';
 import { tryLoadLibrary } from '../library.js';
 import type { ClaimSupport } from '../llm-contracts.js';
 import { buildPromptRequest, requestHints, type PromptRequest } from '../prompt-request.js';
 import type { LibraryEntry } from '../schemas/library.js';
 import { claimSupportAbstract, clip } from '../source-context.js';
-import { draftSentences, reportAdvisoryFailure } from './pass4.js';
+import { reportAdvisoryFailure } from './pass4.js';
+import { claimPairs, type ClaimPair as DraftClaimPair } from './draft-text.js';
 import { PASS2_TABLE_HEADER } from './verdicts.js';
 
 export { reportAdvisoryFailure } from './pass4.js';
@@ -108,30 +109,11 @@ export const NO_LLM_SKIP_REASON = 'skipped (no LLM configured)';
 export const PASS2_SENTENCE_CHARS = 120;
 export const PASS2_EVIDENCE_CHARS = 160;
 
-interface ClaimPair {
-  citekey: string;
-  claimSentence: string;
-}
+type ClaimPair = DraftClaimPair;
 
-/**
- * Every (citing sentence, citekey) pair of `draftMd`, in document order, each
- * once: a sentence citing A and B yields two pairs; the same sentence citing A
- * twice, or repeated word for word, yields one.
- */
+/** Every (citing sentence, citekey) pair of `draftMd` (verify/draft-text.ts claimPairs). */
 function collectClaimPairs(draftMd: string): ClaimPair[] {
-  const seen = new Set<string>();
-  const out: ClaimPair[] = [];
-  for (const s of draftSentences(draftMd)) {
-    for (const c of s.citations) {
-      for (const item of citationItems(c)) {
-        const id = `${item.key}\u0000${s.text}`;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        out.push({ citekey: item.key, claimSentence: s.text });
-      }
-    }
-  }
-  return out;
+  return claimPairs(draftMd).map((p) => ({ ...p }));
 }
 
 /** Conservative placeholder under PENSMITH_NO_LLM (UNCLEAR-bias, deterministic). */

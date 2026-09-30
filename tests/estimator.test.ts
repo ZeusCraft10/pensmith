@@ -25,9 +25,13 @@ import {
   parseLengthWords,
   projectEstimate,
   sectionCountForLength,
-  VERIFY_CALLS_PER_SECTION,
+  draftAdvisoryWork,
+  plannedAdvisoryWork,
+  verifyCallsFor,
+  WORDS_PER_PARAGRAPH,
 } from '../bin/lib/estimator.js';
 import { initSection, initState } from '../bin/lib/state.js';
+import { writePlan } from './helpers/paper-cli-harness.js';
 
 async function twoSectionPaper(sb: LlmSandbox): Promise<void> {
   await initState(sb.root);
@@ -48,8 +52,15 @@ test('ERGO-02: projectEstimate returns rows + totalUsd === sum(row.usd) + the ca
       for (const k of ['step', 'inputTokens', 'outputTokens', 'usd']) assert.ok(k in r, `row carries "${k}"`);
     }
     assert.deepEqual(res.rows.map((r) => r.step), ['plan §1', 'write §1', 'verify §1', 'plan §2', 'write §2', 'verify §2', 'compile', 'done']);
+    // Not drafted yet: the 1,500-word default over two sections, at the discipline band's highest density (3 per paragraph).
     const verify = res.rows.find((r) => r.step === 'verify §1')!;
-    assert.deepEqual(verify.calls.map((c) => [c.slug, c.calls]), Object.entries(VERIFY_CALLS_PER_SECTION));
+    const planned = plannedAdvisoryWork(750, 0, 3);
+    assert.deepEqual(planned, { pairs: 3 * Math.ceil(750 / WORDS_PER_PARAGRAPH), paragraphs: Math.ceil(750 / WORDS_PER_PARAGRAPH) });
+    assert.deepEqual(verify.calls.map((c) => [c.slug, c.calls]), verifyCallsFor(planned));
+    // done audits the whole paper: one orphan-label call per paragraph.
+    const done = res.rows.find((r) => r.step === 'done')!;
+    assert.deepEqual(done.calls.map((c) => [c.slug, c.calls]), [['orphan-label', 2 * planned.paragraphs]]);
+    assert.ok(done.usd > 0, 'done is priced (whole-paper Pass 4)');
     assert.equal(res.capUsd, 100);
     assert.equal(res.sectionSource, 'state');
   });
@@ -171,5 +182,32 @@ test('GRND-17: `plan N --research` is priced as the section research pass — ev
     assert.deepEqual(revise.rows[0]!.calls.map((c) => [c.slug, c.calls]), [['source-evaluator', evaluator], ['section-planner', 1]]);
     const plain = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'plan', section: 2 } });
     assert.deepEqual(plain.rows[0]!.calls.map((c) => [c.slug, c.calls]), [['section-planner', 1]], 'a plain plan is the planner call');
+  });
+});
+
+test('D-20-28 / D-20-29 (review round 2): a drafted section\'s verify is priced from its draft — one claim-support call per (citing sentence, key) pair, one orphan-label call per paragraph; done from the compiled paper', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    await twoSectionPaper(sb);
+    const draft = [
+      '# Intro',
+      '',
+      'Trees cool cities [@a; @b]. Shade lowers heat [@a]. Canopy matters [@c, p. 4].',
+      '',
+      'A second paragraph with one claim [@b] and a quiet sentence.',
+      '',
+    ].join('\n');
+    const dir = path.dirname(writePlan(sb.root, 1, 'intro', { status: 'written', assigned_sources: '[a, b, c]' }));
+    fs.writeFileSync(path.join(dir, 'DRAFT.md'), draft);
+    const work = draftAdvisoryWork(draft);
+    assert.deepEqual(work, { pairs: 5, paragraphs: 2 }, 'a, b | a | c | b — the (sentence, key) pairs; two prose paragraphs');
+    const res = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 });
+    const verify = res.rows.find((r) => r.step === 'verify §1')!;
+    assert.deepEqual(verify.calls.map((c) => [c.slug, c.calls]), verifyCallsFor(work));
+    assert.ok(!res.rows.some((r) => r.step === 'write §1'), 'the written section is not re-priced');
+    // A compiled paper: done's audit counts its paragraphs.
+    fs.writeFileSync(path.join(sb.paper, 'DRAFT.md'), `${draft}\nOne more paragraph [@c].\n`);
+    const compiled = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 });
+    assert.deepEqual(compiled.rows.find((r) => r.step === 'done')!.calls.map((c) => [c.slug, c.calls]), [['orphan-label', 3]]);
+    assert.ok(!compiled.rows.some((r) => r.step === 'compile'), 'compiled already');
   });
 });
