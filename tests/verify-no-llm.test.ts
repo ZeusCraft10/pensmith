@@ -15,7 +15,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { EXIT_ERROR, EXIT_OK } from '../bin/lib/exit-codes.js';
+import { EXIT_BLOCKED, EXIT_ERROR, EXIT_OK } from '../bin/lib/exit-codes.js';
 import {
   MCP_BIN,
   STACK_LINE,
@@ -126,14 +126,16 @@ test('RUN-09: a missing DRAFT.md sends the section back to write; a missing CITA
   const sb = sandbox('verify-early');
   const root = sb.project('p');
   seedCitingSection(root);
-  // No CITATIONS.bib: the cited source cannot be checked — Status: failed, exit 1, PLAN untouched.
+  // No CITATIONS.bib: the cited source cannot be checked — a FABRICATED row per
+  // cited key, Status: failed, EXIT_BLOCKED, and the status persisted (VRFY-16,
+  // D-20-20; it was EXIT_ERROR with PLAN.md untouched before Phase 20).
   rmSync(join(root, '.paper', 'CITATIONS.bib'));
   const noBib = runCli(sb, root, ['verify', '1']);
-  assert.equal(noBib.status, EXIT_ERROR, `${noBib.stdout}\n${noBib.stderr}`);
+  assert.equal(noBib.status, EXIT_BLOCKED, `${noBib.stdout}\n${noBib.stderr}`);
   const v = readFileSync(join(sectionDirOf(root, 1, 'intro'), 'VERIFICATION.md'), 'utf8');
   assert.match(v, /^Status: failed$/m);
-  assert.match(v, /CITATIONS\.bib is missing, so the 1 source\(s\) DRAFT\.md cites cannot be checked — run `pensmith research`/);
-  assert.equal(planStatus(root), 'written');
+  assert.match(v, /^- aspelmeyer2009: \*\*FABRICATED\*\* — .*\.paper\/CITATIONS\.bib is missing, so this citation cannot be checked — rebuild it with `pensmith research`/m);
+  assert.equal(planStatus(root), 'failed');
 
   // No DRAFT.md: the section needs writing again (the router re-drafts it).
   rmSync(join(sectionDirOf(root, 1, 'intro'), 'DRAFT.md'));
