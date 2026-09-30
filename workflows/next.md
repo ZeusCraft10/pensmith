@@ -60,11 +60,14 @@ edited by hand after compile: make the edit in the section drafts, then `pensmit
 so a failed paid step is never re-run by the next bare invocation. A section verify could not
 check (`unverifiable`: a source that could not be reached, a quote no source text could be
 checked against, or stub text written with no model) does not stop the others (S-13): on an
-unchanged draft the walk goes past it, and compile re-verifies it (Pass 1 + 3) — a section
-that now passes is compiled and recorded `verified` — or refuses it naming its options
-(`pensmith verify N` online, `pensmith add <pdf>`, a paraphrase with
-`pensmith plan N --revise`, `pensmith verify N --accept-quote qK`, or `pensmith write N`
-with a model configured), which `pensmith status` shows too. A section whose `DRAFT.md` is
+unchanged draft the walk goes past it, and compile re-verifies it (Pass 1 + 3, keeping the
+claim-support and orphan results its record judged on that draft) — a section that now passes
+is compiled and recorded `verified` — or refuses it naming its options (`pensmith verify N`
+online, `pensmith add <pdf>`, a paraphrase with `pensmith plan N --revise`, or
+`pensmith verify N --accept-quote qK`), which `pensmith status` shows too. Stub text written
+with no model (PLACEHOLDER) is the one thing compile can never pass outside `--dry-run`: once
+the walk is past every section it stops as attention naming `pensmith write N` (with a model
+configured) instead of running compile again. A section whose `DRAFT.md` is
 gone, verified or not, is re-drafted (`write N`), never re-verified (VRFY-16).
 Once every section is verified, compile runs whenever the compiled `DRAFT.md` is missing or
 `COMPILE-INPUTS.json` says it was made from other sections or other section draft/verification

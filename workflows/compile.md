@@ -121,9 +121,12 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    step 3a recomputes the section whatever it answered. A section whose record
    says `unverifiable` (an earlier run could not reach a source or check a
    quote) is re-verified the same way (`WARN: section <N> is unverifiable —
-   re-verifying`): when step 3a now passes it (online again, the PDF added,
-   the quote accepted), its VERIFICATION.md and PLAN.md say `verified`; when
-   it still cannot be checked, step 3a refuses it with its options.
+   re-verifying (Pass 1+3; its claim-support and orphan results for this
+   unchanged draft are kept)`) — its draft did not change, so the Pass-2 and
+   Pass-4 sections of its VERIFICATION.md are carried over, never replaced by
+   `not run`: when step 3a now passes it (online again, the PDF added, the
+   quote accepted), its VERIFICATION.md and PLAN.md say `verified`; when it
+   still cannot be checked, step 3a refuses it with its options.
 
 5. **Refuse if any reason was collected**: do NOT write `.paper/DRAFT.md`. Return
    the refusal naming every offending section + citekey (the verifier-blocks-
