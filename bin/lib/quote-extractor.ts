@@ -13,8 +13,9 @@
 //     apostrophe inside a word (`it's`, `the authors'`) never opens one; the
 //     marks may be written as HTML entities (`&ldquo;`, `&#8220;`, `&quot;`,
 //     `&#39;` …) or escaped (`\"`): the export shows them as quotation marks;
-//   - inline text in the other languages' quotation marks — guillemets «…»,
-//     »…« and »…», ‹…› and ›…‹, low-high „…“ / „…” and ‚…‘ / ‚…’, corner
+//   - inline text in the other languages' quotation marks — guillemets «…»
+//     (with or without French spacing inside: `« texte »`), »…« and »…», ‹…›
+//     and ›…‹, low-high „…“ / „…” and ‚…‘ / ‚…’, corner
 //     brackets 「…」 and 『…』 (or their entities, `&laquo;`, `&bdquo;` …):
 //     Pandoc leaves them as they are and the export shows them as quotation
 //     marks (review round 2);
@@ -575,8 +576,9 @@ function singleQuoteSpans(md: string, from: number, to: number, cites: readonly 
 /**
  * The other languages' quotation marks (see the header): each opening mark and
  * the marks that close it. `»` opens a quote only where no `«` is open
- * (German »…«, Swedish »…»); a closing mark must follow a non-space, and a
- * `’` followed by a letter is an apostrophe.
+ * (German »…«, Swedish »…»); a closing mark must follow a non-space (after
+ * `«` and `‹`, French spacing aside — SPACED_OPENERS), and a `’` followed by
+ * a letter is an apostrophe.
  */
 const FOREIGN_MARKS: Readonly<Record<string, readonly string[]>> = {
   '«': ['»'],
@@ -589,17 +591,43 @@ const FOREIGN_MARKS: Readonly<Record<string, readonly string[]>> = {
   '『': ['』'],
 };
 
+/**
+ * French typography sets a space inside guillemets (`« texte »`, `‹ texte ›`):
+ * a space, a no-break space, a narrow no-break space or a thin space between
+ * the mark and the text. The other marks (»…« and „…“ in German, 「…」) touch
+ * their text.
+ */
+const SPACED_OPENERS: ReadonlySet<string> = new Set(['«', '‹']);
+const TYPO_SPACE_RE = /[ \u00A0\u202F\u2009]/u;
+
+/** The first offset at or after `i` (before `to`) that is not a typographic space. */
+function skipTypoSpaces(md: string, i: number, to: number): number {
+  let k = i;
+  while (k < to && TYPO_SPACE_RE.test(md[k] as string)) k += 1;
+  return k;
+}
+
+/** The last offset at or before `j` (after `from`) that is not a typographic space. */
+function backTypoSpaces(md: string, j: number, from: number): number {
+  let k = j;
+  while (k > from && TYPO_SPACE_RE.test(md[k] as string)) k -= 1;
+  return k;
+}
+
 /** The spans of one paragraph in the other languages' quotation marks (see FOREIGN_MARKS). */
 function foreignQuoteSpans(md: string, from: number, to: number): Span[] {
   const out: Span[] = [];
   let i = from;
   while (i < to) {
     const closers = FOREIGN_MARKS[md[i] as string];
-    if (closers !== undefined && /\S/u.test(md[i + 1] ?? ' ')) {
+    const spaced = SPACED_OPENERS.has(md[i] as string);
+    const first = spaced ? skipTypoSpaces(md, i + 1, to) : i + 1;
+    if (closers !== undefined && /\S/u.test(md[first] ?? ' ')) {
       let close = -1;
-      for (let j = i + 1; j < to; j += 1) {
+      for (let j = first; j < to; j += 1) {
         const d = md[j] as string;
-        if (!closers.includes(d) || !/\S/u.test(md[j - 1] ?? ' ')) continue;
+        const before = spaced ? backTypoSpaces(md, j - 1, first) : j - 1;
+        if (!closers.includes(d) || !/\S/u.test(md[before] ?? ' ')) continue;
         if (d === '’' && ALNUM_RE.test(md[j + 1] ?? ' ')) continue;
         close = j;
         break;

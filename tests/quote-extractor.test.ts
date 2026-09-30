@@ -129,6 +129,15 @@ test('VRFY-18: a quoted title is not a quote — introduced as one, or Title Cas
 
 test('VRFY-18: quotes in other languages\' quotation marks are quotes — guillemets, low-high marks, angle and corner brackets (and their entities)', () => {
   assert.deepEqual(keys('Le rapport affirme «que la politique a échoué dans toutes les régions étudiées» [@smith].'), ['smith']);
+  // French typography: a space, a no-break space or a narrow no-break space inside the guillemets.
+  assert.deepEqual(keys('Le rapport affirme « que la politique a échoué dans toutes les régions étudiées » [@smith].'), ['smith']);
+  assert.deepEqual(keys('Le rapport affirme «\u00A0que la politique a échoué dans toutes les régions étudiées\u00A0» [@smith].'), ['smith']);
+  assert.deepEqual(keys('Le rapport affirme «\u202Fque la politique a échoué dans toutes les régions étudiées\u202F» [@smith].'), ['smith']);
+  assert.deepEqual(keys('Il écrit ‹ les données ne montrent aucun effet du traitement › [@smith].'), ['smith']);
+  assert.deepEqual(
+    extractQuotes('Le rapport affirme « que la politique a échoué dans toutes les régions » [@smith].').map((q) => q.text),
+    ['que la politique a échoué dans toutes les régions'],
+  );
   assert.deepEqual(keys('Der Bericht sagt „dass die Politik in allen Regionen gescheitert ist“ [@smith].'), ['smith']);
   assert.deepEqual(keys('Der Bericht sagt „dass die Politik in allen Regionen gescheitert ist” [@smith].'), ['smith']);
   assert.deepEqual(keys('Der Bericht sagt »dass die Politik in allen Regionen gescheitert ist« [@smith].'), ['smith']);

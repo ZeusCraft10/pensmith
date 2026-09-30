@@ -159,6 +159,11 @@ const MARKS: ReadonlyArray<readonly [string, string]> = [
   ['&#39;', '&#39;'],
   // Other languages' marks (review round 2).
   ['«', '»'],
+  // French spacing inside guillemets: a space, a no-break space, a narrow no-break space.
+  ['« ', ' »'],
+  ['«\u00A0', '\u00A0»'],
+  ['«\u202F', '\u202F»'],
+  ['‹ ', ' ›'],
   ['»', '«'],
   ['„', '“'],
   ['‹', '›'],
