@@ -216,15 +216,42 @@ export function arxivIdOfDataCiteDoi(doi: string): string | null {
   return isDataCiteArxivDoi(doi) ? normArxiv(doi) : null;
 }
 
-/** What Pass 1 reads from the paper's LIBRARY.json (with `opts.root`). */
+/** What Pass 1 reads from the paper's LIBRARY.json (with `opts.root`), and the answers it asked for up front. */
 interface LibraryFacts {
   /** Recorded retraction notices, by citekey. */
   readonly retractionDetails: ReadonlyMap<string, string>;
   /** Bring-your-own entries no registrar identified: citekey → the stored PDF. */
   readonly unidentifiedByo: ReadonlyMap<string, string>;
+  /**
+   * arXiv's answers for the draft's arXiv-routed citations, asked in one
+   * batched request (runPass1): an id with no answer here is asked on its own.
+   */
+  readonly arxivAnswers?: ReadonlyMap<string, LookupResult>;
 }
 
 const NO_LIBRARY_FACTS: LibraryFacts = { retractionDetails: new Map(), unidentifiedByo: new Map() };
+
+/**
+ * The arXiv ids Pass 1 will ask arXiv for (a DOI-less entry's arXiv id, a
+ * DataCite arXiv DOI's id), so runPass1 can ask for them in one request
+ * rather than one request per citation (arXiv's floor is one request per 3 s;
+ * with one request each, a section of arXiv preprints trips the SRC-17
+ * breaker and the rest go UNVERIFIABLE unasked).
+ */
+function arxivIdsToAsk(keys: readonly string[], bibByCitekey: ReadonlyMap<string, BibEntry>): string[] {
+  const ids = new Set<string>();
+  for (const ck of keys) {
+    const claimed = bibByCitekey.get(ck);
+    if (!claimed) continue;
+    if (!claimed.DOI) {
+      for (const { registrar, id } of doilessIdentifiers(claimed)) if (registrar === 'arxiv') ids.add(id);
+      continue;
+    }
+    const dataCiteArxiv = arxivIdOfDataCiteDoi(claimed.DOI);
+    if (dataCiteArxiv !== null) ids.add(dataCiteArxiv);
+  }
+  return [...ids];
+}
 
 async function libraryFacts(root: string | undefined): Promise<LibraryFacts> {
   if (root === undefined) return NO_LIBRARY_FACTS;
@@ -555,10 +582,10 @@ function doilessIdentifiers(claimed: BibEntry): Array<{ registrar: NoDoiRegistra
   return routeIdentifiers(bibIdentifiers(claimed));
 }
 
-async function lookupAt(registrar: NoDoiRegistrar, id: string): Promise<LookupResult> {
+async function lookupAt(registrar: NoDoiRegistrar, id: string, facts: LibraryFacts): Promise<LookupResult> {
   switch (registrar) {
     case 'arxiv':
-      return sources.arxiv.lookupById(id);
+      return facts.arxivAnswers?.get(id) ?? sources.arxiv.lookupById(id);
     case 'pubmed':
       return sources.pubmed.lookupById(id);
     case 'books':
@@ -600,7 +627,7 @@ async function verdictWithoutDoi(
     const who = REGISTRAR_LABEL[registrar];
     let res: LookupResult;
     try {
-      res = await lookupAt(registrar, id);
+      res = await lookupAt(registrar, id, facts);
     } catch (err) {
       if (isOfflineEgressError(err)) {
         undecided ??= unverifiable(ck, err, `${who} lookup of ${label}`);
@@ -704,7 +731,9 @@ export async function runPass1(
   // key not present in the (lowercase-keyed) bib falls through to FABRICATED.
   const unique = extractCitedKeysForVerification(draftMd);
 
-  const facts = unique.length > 0 ? await libraryFacts(opts.root) : NO_LIBRARY_FACTS;
+  let facts = unique.length > 0 ? await libraryFacts(opts.root) : NO_LIBRARY_FACTS;
+  const arxivIds = arxivIdsToAsk(unique, bibByCitekey);
+  if (arxivIds.length > 1) facts = { ...facts, arxivAnswers: await sources.arxiv.lookupByIds(arxivIds) };
   const results: Pass1Result[] = [];
   for (const ck of unique) {
     results.push(await verdictForCitekey(ck, bibByCitekey.get(ck), facts));

@@ -4,6 +4,7 @@
 // Endpoints (https — the http:// host answers 301, CI-07):
 //   search:     GET https://export.arxiv.org/api/query?search_query=<encoded>&max_results=<n>
 //   lookupById: GET https://export.arxiv.org/api/query?id_list=<arxiv-id>
+//   lookupByIds: GET https://export.arxiv.org/api/query?id_list=<id>,<id>,…&max_results=<n>
 //
 // Atom-XML response. We parse with a tiny regex-based extractor instead of
 // pulling in fast-xml-parser / xml2js — keeps zero extra deps and the shape
@@ -33,7 +34,7 @@
 // typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
 import { texToText } from '../markup.js';
-import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES } from '../http.js';
+import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
 import { exchange, statusReason, validator, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
@@ -250,6 +251,79 @@ export async function lookupById(id: string): Promise<LookupResult> {
   const match = parseFeed(ex.res.body).find((c) => c.arxiv === canonical);
   if (!match) return lookupNotFound(`arXiv has no paper ${canonical}`);
   return lookupFound(match);
+}
+
+/** How many ids one batched request asks for (arXiv takes far more; the answer stays small). */
+export const ARXIV_BATCH_IDS = 50;
+
+/**
+ * arXiv's answers for several identifiers, asked once per ARXIV_BATCH_IDS
+ * distinct ids (`id_list=a,b,c`) instead of once each: arXiv's documented
+ * floor is one request per 3 s, and Pass 1 re-fetches every arXiv-only
+ * citation of a section. Keys are the ids as given; each value is what
+ * lookupById would say — found, not-found (arXiv's feed has no entry for it,
+ * or it is not an arXiv id), or failed: a batch that failed is that failure
+ * for every id in it (never one request per id after it).
+ *
+ * An id with no answer here is asked on its own (lookupById): a lone id (the
+ * request would be lookupById's anyway), a batch arXiv rejects as a whole (an
+ * error entry names no id), and a batch that no recorded fixture answers in
+ * the offline or dry-run mode.
+ */
+export async function lookupByIds(ids: readonly string[]): Promise<Map<string, LookupResult>> {
+  const out = new Map<string, LookupResult>();
+  const byCanonical = new Map<string, string[]>();
+  for (const id of ids) {
+    const canonical = canonicalArxivId(id);
+    if (canonical === null) {
+      out.set(id, lookupNotFound(`not an arXiv identifier: ${JSON.stringify(id.slice(0, 80))}`));
+      continue;
+    }
+    byCanonical.set(canonical, [...(byCanonical.get(canonical) ?? []), id]);
+  }
+  const canonicals = [...byCanonical.keys()];
+  for (let i = 0; i < canonicals.length; i += ARXIV_BATCH_IDS) {
+    const batch = canonicals.slice(i, i + ARXIV_BATCH_IDS);
+    if (batch.length < 2) continue;
+    const answers = await lookupBatch(batch);
+    if (answers === null) continue;
+    for (const [canonical, answer] of answers) {
+      for (const id of byCanonical.get(canonical) ?? []) out.set(id, answer);
+    }
+  }
+  return out;
+}
+
+/** One batched request's answers by canonical id, or null when each id must be asked on its own (see lookupByIds). */
+async function lookupBatch(batch: readonly string[]): Promise<Map<string, LookupResult> | null> {
+  const url = `${BASE}/api/query?id_list=${batch.map(encodeURIComponent).join(',')}&max_results=${batch.length}`;
+  let ex: Awaited<ReturnType<typeof exchange>>;
+  try {
+    ex = await exchange(
+      () => httpFetch(url, { source: 'arxiv', headers: ATOM_HEADERS, maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(FEED) }),
+      { service: SERVICE, check: FEED },
+    );
+  } catch (e) {
+    if (isOfflineEgressError(e)) return null;
+    throw e;
+  }
+  const every = (answer: LookupResult): Map<string, LookupResult> => new Map(batch.map((c) => [c, answer]));
+  if (ex.kind === 'failed') {
+    return every(lookupFailed(ex.reason, {
+      ...(ex.status !== undefined ? { status: ex.status } : {}),
+      ...(ex.retryAfterMs !== undefined ? { retryAfterMs: ex.retryAfterMs } : {}),
+    }));
+  }
+  if (ex.kind === 'status') {
+    if (ex.res.status === 404) return null;
+    return every(lookupFailed(statusReason(ex.res), { status: ex.res.status }));
+  }
+  if (extractAll(ex.res.body, 'entry').some(isErrorEntry)) return null;
+  const found = new Map(parseFeed(ex.res.body).map((c) => [c.arxiv, c]));
+  return new Map(batch.map((c) => {
+    const match = found.get(c);
+    return [c, match ? lookupFound(match) : lookupNotFound(`arXiv has no paper ${c}`)];
+  }));
 }
 
 export async function fetchById(id: string): Promise<SourceCandidate | null> {
