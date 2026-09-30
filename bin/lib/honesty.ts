@@ -23,9 +23,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetch as httpFetch } from './http.js';
 import { networkMode } from './http-mock.js';
+import { out } from './output-sink.js';
 import { assertBudget, appendCost } from './budget.js';
 import { runGate } from './gates.js';
-import { out } from './output-sink.js';
 
 // ============================================================
 //   Public types

@@ -36,12 +36,12 @@ import { promisify } from 'node:util';
 import JSZip from 'jszip';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { parseBib, renderStyle, renderCitationItems, type CitationItemInput } from './citations.js';
+import { out as writeOut } from './output-sink.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
 import { paperDir, projectRoot, dryRunWorkspaceActive } from './paths.js';
 import { exportCitedCitations } from './library.js';
 import { citationItems, extractCitedKeysForVerification, findRenderedCitations, type CitationItem } from './citation-token.js';
-import { out as writeOut } from './output-sink.js';
 
 // =====================================================================
 //   PKG_ROOT — locate templates/citation-styles/ relative to this file
