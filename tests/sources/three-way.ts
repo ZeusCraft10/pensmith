@@ -15,9 +15,20 @@
 //     breaker open)                      → failed with the adapter's reason, and
 //                                          fetchById throws SourceLookupError;
 //   - HTTP 503 after the transport's retries → failed (never not-found);
-//   - offline with no recorded fixture   → the typed OfflineEgressError.
-// Every identifier is unique per process, so no case can be answered from a
-// cache entry another case (or another test file) wrote.
+//   - offline with no recorded fixture   → the typed OfflineEgressError;
+//   - idFor gives every token its own identifier (checked, not assumed).
+//
+// The HTTP cache is one directory for the whole `npm test` run (every test file,
+// every case), and http.ts keeps a 404 there for an hour (WR-07). So every case
+// asks for an identifier no other case of the run asks for: distinct tokens
+// (uniq) must map to distinct identifiers. An adapter whose identifier carries
+// the token (a DOI) gets that for free; one whose identifier is a few digits
+// (an arXiv id, a PMID) builds it from idDigits, never from a hash of the token.
+// CI run 72 (ubuntu, Node 22): the arXiv idFor hashed the token into 100 000
+// ids, and the 404 case's `missing-…-3` and the invalid case's `invalid-…-4`
+// (equal-length tags, read one arXiv rate interval, ~3.16 s, apart) fell on one
+// id for a few percent of clock readings with a five-digit pid, so the invalid
+// case was answered by the 404 the previous case had just cached.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -108,6 +119,28 @@ export function uniq(tag: string): string {
   return `${tag}-${process.pid}-${Date.now().toString(36)}-${counter}`;
 }
 
+/** The largest serial idDigits hands out (its serial field is five digits, the first always 0). */
+export const MAX_ID_SERIAL = 9_999;
+const serials = new Map<string, number>();
+
+/**
+ * Eight decimal digits that belong to `token` alone: this process's pid (mod
+ * 1000, three digits), then a five-digit serial — 1, 2, 3 … in the order this
+ * process first asks for a token, so two distinct tokens of one process never
+ * share digits (a hash folded into this few digits does collide; see the file
+ * header). The same token always gets the same digits. For an adapter whose
+ * identifier is too short to carry the token itself (an arXiv id, a PMID).
+ */
+export function idDigits(token: string): string {
+  let serial = serials.get(token);
+  if (serial === undefined) {
+    serial = serials.size + 1;
+    if (serial > MAX_ID_SERIAL) throw new Error(`three-way idDigits: more than ${MAX_ID_SERIAL} tokens in one process`);
+    serials.set(token, serial);
+  }
+  return `${String(process.pid % 1000).padStart(3, '0')}${String(serial).padStart(5, '0')}`;
+}
+
 const JSON_HEADERS = { headers: { 'content-type': 'application/json' } } as const;
 
 export interface ThreeWayCase {
@@ -117,7 +150,12 @@ export interface ThreeWayCase {
   readonly fetchById: (id: string) => Promise<SourceCandidate | null>;
   /** The service origin the adapter calls (`https://api.crossref.org`). */
   readonly origin: string;
-  /** An identifier for `token` (unique per case). */
+  /**
+   * The identifier a case asks for with `token`: a different one for every
+   * distinct token (the contract checks it), so no case is ever answered from
+   * the run-wide HTTP cache by what another case stored. Carry the token itself,
+   * or build the identifier from idDigits(token).
+   */
   readonly idFor: (token: string) => string;
   /** The request path a lookup of idFor(token) makes starts with this (matched on the decoded path). */
   readonly pathPrefixFor: (token: string) => string;
@@ -154,6 +192,36 @@ function reply(agent: MockAgentT, origin: string, prefix: string, status: number
 export function threeWayContract(c: ThreeWayCase): void {
   const lane = <T>(fn: (agent: MockAgentT) => Promise<T>): Promise<T> =>
     liveLane(fn, c.contactEmail !== undefined ? { contactEmail: c.contactEmail } : {});
+
+  test(`${c.adapter}: idFor gives every token its own identifier (no case is answered by what another case cached)`, () => {
+    const tokens: string[] = [];
+    // The tokens the cases below make: the same tags, the same or the next clock reading.
+    for (let i = 0; i < 40; i += 1) {
+      for (const tag of ['found', 'missing', 'invalid', 'exhausted', 'breaker', 'down']) tokens.push(uniq(tag));
+    }
+    // Tokens that differ only in an equal-length tag, the counter and the clock:
+    // the 404 case's second token and the invalid case's, read one arXiv rate
+    // interval (~3.16 s) apart. The hash-based arXiv idFor sent a few percent of
+    // these pairs to one id when the pid had five digits (CI run 72).
+    const t0 = Date.parse('2026-09-30T20:03:19.000Z');
+    for (const pid of [4821, 20009, 73115]) {
+      for (let ms = 0; ms < 50; ms += 1) {
+        for (const gap of [3149, 3154, 3158]) {
+          tokens.push(`missing-${pid}-${(t0 + ms).toString(36)}-3`, `invalid-${pid}-${(t0 + ms + gap).toString(36)}-4`);
+        }
+      }
+    }
+    // The pair that collided (both were arXiv id 2290.20290).
+    tokens.push('missing-20009-muoj4pko-3', 'invalid-20009-muoj4s0a-4');
+    const owner = new Map<string, string>();
+    for (const token of new Set(tokens)) {
+      const id = c.idFor(token);
+      const other = owner.get(id);
+      assert.equal(other, undefined, `${JSON.stringify(token)} and ${JSON.stringify(other)} both ask for ${id}`);
+      owner.set(id, token);
+      assert.equal(c.idFor(token), id, 'a token always asks for the same identifier');
+    }
+  });
 
   test(`${c.adapter}: lookupById → found (a registrar record, parsed)`, async () => {
     await lane(async (agent) => {

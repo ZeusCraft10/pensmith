@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import * as pubmed from '../../bin/lib/sources/pubmed.js';
 import { SourceCandidateSchema } from '../../bin/lib/schemas/source-candidate.js';
 import { RECORDED_QUERY, recorded, assertOfflineMiss } from './recorded.js';
-import { threeWayContract, liveLane, uniq } from './three-way.js';
+import { threeWayContract, liveLane, uniq, idDigits } from './three-way.js';
 
 interface Esearch { esearchresult: { idlist: string[] } }
 interface Esummary { result: Record<string, { uid?: string; title?: string; authors?: Array<{ name?: string }> }> }
@@ -89,12 +89,12 @@ test('not-found: esummary answers a per-record error for an unknown PMID', async
   });
 });
 
-/** A PMID per token (the contract needs unique ids). */
-const idFor = (t: string): string => {
-  let h = 7;
-  for (const ch of t) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return String(100_000_000 + (h % 800_000_000));
-};
+/**
+ * A PMID of its own per token (the contract needs unique ids): `9<pid>0<serial>`
+ * from idDigits, never a hash of the token (CI run 72). Nine digits from
+ * 900000001 to 999909999: no real PMID, and none of this file's fixed ones.
+ */
+const idFor = (t: string): string => `9${idDigits(t)}`;
 
 threeWayContract({
   adapter: 'pubmed',
