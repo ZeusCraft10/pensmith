@@ -507,6 +507,26 @@ function oneLine(msg: string): string {
  * skipped; `@string` definitions are applied to every entry.
  */
 export function parseBibEntries(text: string): BibEntriesResult {
+  const { entries, problems } = parseBibEntriesRaw(text);
+  return { entries: entries.map(detachGraph), problems };
+}
+
+/**
+ * citation-js keeps, on every entry, a `_graph` of the parse that holds the
+ * whole input text's raw entries: serialized, a bibliography of n entries is
+ * n² in size (a 60-entry library became megabytes in the MCP verify reply).
+ * The graph stays readable (the raw fields CSL has no slot for — rawBibFields)
+ * but is not enumerable, so JSON and object spreads leave it out.
+ */
+function detachGraph(entry: Record<string, unknown>): Record<string, unknown> {
+  if (!Object.prototype.hasOwnProperty.call(entry, '_graph')) return entry;
+  const graph = entry['_graph'];
+  delete entry['_graph'];
+  Object.defineProperty(entry, '_graph', { value: graph, enumerable: false, configurable: true, writable: true });
+  return entry;
+}
+
+function parseBibEntriesRaw(text: string): BibEntriesResult {
   if (typeof text !== 'string' || text.trim().length === 0) return { entries: [], problems: [] };
   const blocks = splitBibBlocks(text);
   const strings = blocks.filter((b) => b.type === 'string' && b.closed).map((b) => b.text).join('\n');

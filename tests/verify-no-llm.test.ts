@@ -88,6 +88,35 @@ test('D-V1-04: the MCP pensmith_verify tool (Tier 1, no key) is not an error and
   assert.equal(planStatus(root), 'verified');
 });
 
+test('D-20-20: the MCP pensmith_verify reply stays small for a large library — no parsed bibliography entries, no uncited abstracts', async () => {
+  const sb = sandbox('verify-mcp-size');
+  const root = sb.project('p');
+  seedCitingSection(root);
+  const abstract = 'An uncited abstract that must never reach the tool reply. '.repeat(18);
+  const uncited = Array.from({ length: 60 }, (_, i) => `@article{uncited${i},\n  title = {Uncited work ${i}},\n  author = {Author, Some},\n  year = {2020},\n  abstract = {${abstract}}\n}\n`).join('\n');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), `${BIB}\n${uncited}`);
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(sb.env({ ...NO_KEY, PENSMITH_PAPER_ROOT: root }))) if (v !== undefined) env[k] = v;
+  const transport = new StdioClientTransport({ command: process.execPath, args: [MCP_BIN], env, cwd: root, stderr: 'pipe' });
+  const client = new Client({ name: 'verify-size', version: '0.0.0' }, { capabilities: {} });
+  await client.connect(transport);
+  let text = '';
+  try {
+    const res = await client.callTool({ name: 'pensmith_verify', arguments: { n: 1, slug: 'intro', yolo: true } });
+    assert.notEqual(res.isError, true, JSON.stringify(res.content).slice(0, 2000));
+    text = (res.content as Array<{ type: string; text?: string }>).map((c) => c.text ?? '').join('');
+  } finally {
+    await client.close();
+  }
+  assert.ok(text.length < 20_000, `the tool reply is ${text.length} characters`);
+  assert.doesNotMatch(text, /An uncited abstract/);
+  assert.doesNotMatch(text, /_graph/);
+  const result = JSON.parse(text) as { status: string; gate: { rows: unknown[]; bib: Record<string, unknown> } };
+  assert.equal(result.status, 'verified');
+  assert.ok(result.gate.rows.length > 0, 'the gate rows are in the reply');
+  assert.deepEqual(Object.keys(result.gate.bib).sort(), ['exists', 'path', 'problems']);
+});
+
 test('RUN-09: a draft that cites nothing (an empty library) is verified, so bare `pensmith --yolo` moves on to compile', () => {
   const sb = sandbox('verify-empty-lib');
   const root = sb.project('p');

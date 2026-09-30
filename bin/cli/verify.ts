@@ -147,6 +147,21 @@ export interface VerifySectionOptions {
   readonly gateDeps?: GateInput['deps'];
 }
 
+/**
+ * The gate result verifySection returns: every row and the outcome, with the
+ * bibliography reduced to where it is and what did not parse. The parsed
+ * entries stay in the process — the MCP `pensmith_verify` tool serializes this
+ * result into its reply, and every entry of a real library (with its abstract)
+ * would make that reply megabytes long.
+ */
+export type VerifyGateResult = Omit<GateResult, 'bib'> & { readonly bib: Omit<LoadedBibliography, 'entries'> };
+
+/** A gate result without the parsed bibliography entries (VerifyGateResult). */
+function compactGate(gate: GateResult): VerifyGateResult {
+  const { entries: _entries, ...bib } = gate.bib;
+  return { ...gate, bib };
+}
+
 /** What verifySection returns (the exit code follows exitCodeForResult). */
 export interface VerifySectionResult {
   readonly ok: boolean;
@@ -154,7 +169,7 @@ export interface VerifySectionResult {
   readonly blocked?: boolean;
   readonly path: string;
   readonly exitCode?: number;
-  readonly gate?: GateResult;
+  readonly gate?: VerifyGateResult;
   readonly pass1?: Pass1Result[];
   readonly pass3?: Pass3Result[];
   readonly freshness?: FreshnessResult[] | null;
@@ -504,7 +519,7 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
     status,
     blocked,
     path: verifPath,
-    gate,
+    gate: compactGate(gate),
     pass1: asPass1Results(gate.rows),
     pass3: asPass3Results(gate.rows),
     freshness,
