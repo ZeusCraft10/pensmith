@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // scripts/live-sources.mjs — the live lane for the source adapters (D-19-25;
-// SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-11).
+// SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-11; Phase 20: DataCite, doi.org
+// content negotiation, PubMed efetch, Crossref's bibliographic search and the
+// agency-aware retraction cross-check — VRFY-11, VRFY-12, VRFY-15, D-20-16).
 //
 //   PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org npm run live:sources
 //   (optional) OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… npm run live:sources
@@ -46,6 +48,9 @@ async function runChild() {
   const unpaywall = await import(lib('sources/unpaywall.js'));
   const books = await import(lib('sources/books.js'));
   const rw = await import(lib('sources/retraction-watch.js'));
+  const datacite = await import(lib('sources/datacite.js'));
+  const doiCn = await import(lib('sources/doi-cn.js'));
+  const doiRa = await import(lib('sources/doi-ra.js'));
   const { crossCheckRetractions } = await import(lib('sources/retraction-cross-check.js'));
 
   const results = { pass: 0, fail: 0, skip: 0 };
@@ -109,6 +114,37 @@ async function runChild() {
     expect(hits.length > 0 && hits.every((h) => (h.doi ?? '').startsWith('10.3386/')), JSON.stringify(hits.map((h) => h.doi)));
   });
 
+  await check('crossref: the bibliographic search for "Deep learning LeCun 2015" finds 10.1038/nature14539 (VRFY-12)', async () => {
+    const r = await crossref.searchBibliographic('Deep learning LeCun 2015');
+    expect(r.kind === 'ok', `search ${r.kind}${r.reason ? ` (${r.reason})` : ''}`);
+    expect(r.candidates.some((c) => c.doi === '10.1038/nature14539'), JSON.stringify(r.candidates.map((c) => c.doi)));
+  });
+
+  // --- DataCite and doi.org content negotiation (VRFY-11) ---
+  await check('doi.org: the prefix 10.5281 is registered with DataCite', async () => {
+    const ra = await doiRa.registrationAgency('10.5281/zenodo.1212303');
+    expect(ra.kind === 'agency' && ra.agency === 'DataCite', JSON.stringify(ra));
+  });
+  await check('datacite: 10.5281/zenodo.1212303 is the spaCy software record (Zenodo), retraction status unknown', async () => {
+    const c = await found(datacite, '10.5281/zenodo.1212303');
+    expect(/spaCy/.test(c.title), `title ${c.title}`);
+    expect(c.publisher === 'Zenodo' && c.retraction_status === 'unknown', `${c.publisher} ${c.retraction_status}`);
+    expect(c.authors.some((a) => /Montani/.test(a)), `authors ${JSON.stringify(c.authors.slice(0, 3))}`);
+  });
+  await check('datacite: an unregistered Zenodo DOI is not-found (HTTP 404)', async () => {
+    const r = await datacite.lookupById('10.5281/zenodo.pensmith-fake-2099');
+    expect(r.kind === 'not-found', `${r.kind}${r.reason ? ` (${r.reason})` : ''}`);
+  });
+  for (const [doi, agency, title] of [['10.1400/19806', 'mEDRA', /historia y la literatura/], ['10.11501/3140078', 'JaLC', /類似画像検索/]]) {
+    await check(`doi.org content negotiation: ${doi} (${agency}) is a CSL record`, async () => {
+      const ra = await doiRa.registrationAgency(doi);
+      expect(ra.kind === 'agency' && ra.agency === agency, JSON.stringify(ra));
+      const c = await found(doiCn, doi);
+      expect(title.test(c.title), `title ${c.title}`);
+      expect(c.retraction_status === 'unknown', c.retraction_status);
+    });
+  }
+
   // --- Retraction lookups (SRC-04) ---
   await check('retraction lookup: Wakefield 1998 has a Retraction Watch notice', async () => {
     const hit = await rw.fetchById('10.1016/S0140-6736(97)11096-0');
@@ -121,6 +157,13 @@ async function runChild() {
     ];
     await crossCheckRetractions(cands);
     expect(cands[0].retraction_status === 'retracted' && cands[1].retraction_status === 'clear', JSON.stringify(cands.map((c) => c.retraction_status)));
+  });
+  await check('retraction cross-check: a DataCite DOI is "unknown" (no retraction data for DataCite DOIs), never "clear" (VRFY-15)', async () => {
+    const cands = [
+      { source: 'openalex', id: 'W2', doi: '10.5281/zenodo.1212303', title: 'spaCy', authors: ['Ines Montani'], retracted: false, last_verified: new Date().toISOString(), citekey: 'montani2023', raw: {} },
+    ];
+    await crossCheckRetractions(cands);
+    expect(cands[0].retraction_status === 'unknown' && cands[0].retraction_details === 'no retraction data for DataCite DOIs', JSON.stringify([cands[0].retraction_status, cands[0].retraction_details]));
   });
 
   // --- arXiv (SRC-02) ---
@@ -149,6 +192,15 @@ async function runChild() {
     expect(c.doi === '10.1056/NEJMoa2001017' && c.pmcid === 'PMC7092803', `${c.doi} ${c.pmcid}`);
     // SRC-12: PubMed's compact "Zhu N" is stored surname first.
     expect(c.authors[0] === 'Zhu, N.', `first author ${c.authors[0]}`);
+    // D-20-16: the abstract comes from efetch.
+    expect(/^In December 2019, a cluster of patients with pneumonia/.test(c.abstract ?? ''), `abstract ${JSON.stringify((c.abstract ?? '').slice(0, 60))}`);
+  });
+  await check('pubmed: a search returns abstracts (efetch, one batch) and names no failure (D-20-16)', async () => {
+    const warnings = [];
+    const hits = await pubmed.search('dapagliflozin heart failure', { limit: 5, onWarning: (w) => warnings.push(w) });
+    expect(hits.length > 0, 'no hits');
+    expect(warnings.length === 0, warnings.join('; '));
+    expect(hits.filter((h) => (h.abstract ?? '').length > 100).length >= Math.ceil(hits.length / 2), `abstracts ${hits.map((h) => (h.abstract ?? '').length).join(',')}`);
   });
 
   // --- Unpaywall (SRC-03) ---
@@ -209,11 +261,12 @@ async function runChild() {
   // --- Freshness (RSCH-10): doi.org's redirect is the answer ---
   const { probeFreshness } = await import(lib('verify/freshness.js'));
   for (const doi of ['10.1038/nature14539', '10.1016/j.foreco.2013.06.030']) {
-    await check(`freshness: DOI HEAD of ${doi} (a resolving Crossref DOI) raises no WARN`, async () => {
-      const r = await probeFreshness('live', doi);
+    await check(`freshness: DOI HEAD of ${doi} (a resolving Crossref DOI) raises no WARN and is an answered probe`, async () => {
+      const r = await probeFreshness({ citekey: 'live', inBib: true, doi, registrar: null });
       const head = r.warnings.filter((w) => w.probe === 'DOI HEAD');
       expect(head.length === 0, head.map((w) => w.detail).join('; '));
       expect(!(r.skipped ?? []).some((x) => x.probe === 'DOI HEAD'), JSON.stringify(r.skipped));
+      expect((r.ok ?? []).some((x) => x.probe === 'DOI HEAD'), JSON.stringify(r.ok));
     });
   }
 

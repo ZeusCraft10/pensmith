@@ -15,6 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as datacite from '../../bin/lib/sources/datacite.js';
 import { SourceCandidateSchema } from '../../bin/lib/schemas/source-candidate.js';
+import { normalizeDoi } from '../../bin/lib/doi.js';
 import { recorded } from './recorded.js';
 import { threeWayContract } from './three-way.js';
 import { authorSimilarity } from '../../bin/lib/verify/name-match.js';
@@ -41,7 +42,7 @@ test('VRFY-11: a Zenodo DOI is found at DataCite — the recorded record, parsed
   assert.equal(c.retraction_status, 'unknown', 'DataCite carries no retraction data (VRFY-15)');
   assert.equal(c.retracted, false);
   assert.ok((c.relations ?? []).some((rel) => rel.type === 'has-version' && rel.doi.startsWith('10.5281/zenodo.')), 'HasVersion → has-version');
-  assert.ok((c.relations ?? []).every((rel) => /^10\./.test(rel.doi)), 'only DOI relations are kept (a URL relation is not)');
+  assert.ok((c.relations ?? []).every((rel) => normalizeDoi(rel.doi) === rel.doi), 'only DOI relations are kept (a URL relation is not)');
   assert.ok(typeof c.last_verified === 'string' && !Number.isNaN(Date.parse(c.last_verified)));
   assert.ok(SourceCandidateSchema.safeParse(c).success, 'validates');
 });
