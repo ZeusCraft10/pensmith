@@ -265,6 +265,8 @@ function seedDryRunVerifiedPaper(): string {
   mkdirSync(secDir, { recursive: true });
   const bibPath = bib({ key: 'syn', doi: s.doi ?? '', title: s.title, author: s.authors[0] ?? '', year: s.year ?? 2020 });
   writeFileSync(join(root, '.paper', 'CITATIONS.bib'), readFileSync(bibPath, 'utf8'));
+  // VRFY-26: the export gate reads the sections STATE.json registers.
+  writeFileSync(join(root, '.paper', 'STATE.json'), JSON.stringify({ $schemaVersion: 3, paperId: 'dryrun-verified', createdAt: '2026-01-01T00:00:00.000Z', sections: [{ n: 1, slug: 'intro' }] }));
   writeFileSync(
     join(root, '.paper', 'OUTLINE.md'),
     ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', '| 1 | intro | Introduction | | 300 | syn |', ''].join('\n'),

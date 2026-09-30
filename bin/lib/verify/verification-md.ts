@@ -351,11 +351,12 @@ export function summaryMismatches(md: string): string[] {
  * What a section's VERIFICATION.md adds to compile's and done's refusals
  * (D-20-04 — a local record can only make the gate stricter): missing, no
  * Status line, `Status: failed`, a --dry-run verification outside --dry-run
- * (RUN-27), or a `Draft:` hash of another draft than `draftHash`. Its verdict
- * rows are never trusted either way: the gate core recomputes them.
+ * (RUN-27), or a `Draft:` hash of another draft than `draftHash` (null skips
+ * that comparison — compile's staleness re-verify rewrites the record). Its
+ * verdict rows are never trusted either way: the gate core recomputes them.
  */
-export function verificationRecordReasons(md: string | null, id: string, draftHash: string, dryRun: boolean): string[] {
-  if (md === null) return [`missing VERIFICATION.md (the section was never verified) — run \`pensmith verify ${id}\``];
+export function verificationRecordReasons(md: string | null, id: string, draftHash: string | null, dryRun: boolean): string[] {
+  if (md === null) return [`no verifiable VERIFICATION.md (missing VERIFICATION.md: the section was never verified) — run \`pensmith verify ${id}\``];
   const doc = parseVerificationMd(md);
   if (doc.status === null) {
     return [`no verifiable VERIFICATION.md (no Status line: the section was never verified, or the verifier output is unreadable) — run \`pensmith verify ${id}\``];
@@ -368,7 +369,7 @@ export function verificationRecordReasons(md: string | null, id: string, draftHa
       `VERIFICATION.md Status is 'failed' — repair the flagged citations (\`pensmith plan ${id} --revise\`) or re-draft (\`pensmith write ${id}\`), then \`pensmith verify ${id}\``,
     );
   }
-  if (doc.draftHash !== null && doc.draftHash !== draftHash) {
+  if (draftHash !== null && doc.draftHash !== null && doc.draftHash !== draftHash) {
     out.push(`VERIFICATION.md judged another draft than DRAFT.md holds — run \`pensmith verify ${id}\``);
   }
   return out;

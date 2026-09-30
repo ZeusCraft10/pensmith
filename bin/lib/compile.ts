@@ -349,9 +349,28 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         continue;
       }
 
-      // Staleness (COMP-01 / D-08): recompute the per-section hash.
+      // A section's own record can only add refusals (D-20-04): never
+      // verified (no VERIFICATION.md / no Status line), `Status: failed`, a
+      // --dry-run verification outside --dry-run, a failed PLAN.md. Such a
+      // section is refused as it stands — compile never verifies it in the
+      // user's place — and the recomputation below still runs, so the refusal
+      // names the rows.
       const freshHash = computeDraftHash(sec.draftBytes, sec.assignedSources);
-      if (sec.storedHash !== freshHash) {
+      const stale = sec.storedHash !== freshHash;
+      const verifPath = sectionVerification(os.n, os.slug, opts.paperRoot);
+      const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : null;
+      // A stale section's record judged its older draft by definition; the
+      // staleness re-verify below rewrites it, so only a current section's
+      // record is compared with the draft it holds.
+      const recordReasons = verificationRecordReasons(verificationMd, id, stale ? null : freshHash, dryRun);
+      if (sec.planStatus === 'failed' && !recordReasons.some((r) => r.startsWith("VERIFICATION.md Status is 'failed'"))) {
+        recordReasons.push(`PLAN.md status is 'failed' — repair the section, then \`pensmith verify ${id}\``);
+      }
+      for (const reason of recordReasons) refuseReasons.push(`${label}: ${reason}`);
+
+      // Staleness (COMP-01 / D-08): the draft changed since its (sound)
+      // verification — re-verify it now.
+      if (recordReasons.length === 0 && stale) {
         warn(`WARN: ${label} stale — re-verifying (Pass 1+3)`);
         const reVerify =
           opts.reVerify ??
@@ -380,16 +399,6 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
           new_hash: freshHash.slice(0, 12),
           re_verify_passed: true,
         });
-      } else {
-        // A current verification's own record can only add refusals (D-20-04);
-        // the recomputation below still runs, so the refusal names the rows.
-        const verifPath = sectionVerification(os.n, os.slug, opts.paperRoot);
-        const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : null;
-        const recordReasons = verificationRecordReasons(verificationMd, id, freshHash, dryRun);
-        if (sec.planStatus === 'failed' && !recordReasons.some((r) => r.startsWith("VERIFICATION.md Status is 'failed'"))) {
-          recordReasons.push(`PLAN.md status is 'failed' — repair the section, then \`pensmith verify ${id}\``);
-        }
-        for (const reason of recordReasons) refuseReasons.push(`${label}: ${reason}`);
       }
 
       // VRFY-25 (D-20-23): the ONE gate core over the EXACT bytes compile

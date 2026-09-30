@@ -158,9 +158,10 @@ test('GRND-19: an existing paper — the dry run stops at the outline gate witho
   // cannot be checked in a dry run, so §1's verification blocks honestly.
   assert.match(dry.run.stderr, /seeded the dry-run workspace .+\.paper-dry-run from .+\.paper \(\d+ files\); the dry run never writes \.paper\//);
   assert.equal(dry.run.status, 4, outOf(dry.run));
-  // Review round 3 (D-18-43): the dry run's verdict judged this draft, so the
-  // next step is attention naming the re-run — never a re-billed verify.
-  assert.match(dry.run.stderr, /^pensmith: ran plan §1, write §1 \(exit 4\); next: status \(attention: section 1 could not be verified: .*UNVERIFIABLE .*`pensmith verify 1`/m);
+  // Review round 3 (D-18-43): the dry run's verdict judged this draft, so it
+  // is never re-billed; S-13 (Phase 20): an unverifiable section does not stop
+  // the others — the next step is §2, and compile refuses §1 with its options.
+  assert.match(dry.run.stderr, /^pensmith: ran plan §1, write §1 \(exit 4\); next: plan §2$/m);
   const wsSection = readdirSync(join(ws, 'sections')).find((d) => d.startsWith('01-'));
   assert.ok(wsSection, 'the workspace holds §1');
   assert.match(readFileSync(join(ws, 'sections', wsSection, 'VERIFICATION.md'), 'utf8'), /UNVERIFIABLE/, 'a real citation is UNVERIFIABLE in a dry run — never a faked verdict');
