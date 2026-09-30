@@ -144,7 +144,7 @@ test('Pass 1 (built CLI): a DOI-less entry is UNVERIFIABLE-NETWORK when its regi
       '',
       '@misc{nobody2017,',
       '  author = {Nobody, Ann},',
-      '  title = {A Work That Was Never Published},',
+      '  title = {Field Notes on Moss Growth Beside the Old Mill Stream},',
       '  year = {2017},',
       '}',
       '',
@@ -158,7 +158,7 @@ test('Pass 1 (built CLI): a DOI-less entry is UNVERIFIABLE-NETWORK when its regi
   const v = verify(sb, root);
   assert.equal(v.status, 4, v.out);
   assert.match(v.md, /- smith2001: \*\*UNVERIFIABLE-NETWORK\*\* — .*offline: no recorded fixture — re-run online \(the books registries lookup of ISBN 9780000000002\)/);
-  // The recorded Crossref bibliographic search for it answers with no strict match.
+  // The recorded searches for it (Crossref, arXiv, PubMed, DataCite, OpenAlex) answer with no strict match.
   assert.match(v.md, /- nobody2017: \*\*UNRESOLVABLE\*\* — .*no registrar record matches its title, first author and year/);
   assert.ok(!/\*\*(OK|FABRICATED)\*\*/.test(v.md), 'never OK, never FABRICATED');
 });

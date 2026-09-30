@@ -2,7 +2,7 @@
   {
     "scope": "https://eutils.ncbi.nlm.nih.gov",
     "method": "GET",
-    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=%22A+Work+That+Was+Never+Published%22%5Bti%5D+AND+Nobody%5Bau%5D&retmode=json&retmax=5",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=%22Field+Notes+on+Moss+Growth+Beside+the+Old+Mill+Stream%22%5Bti%5D+AND+Nobody%5Bau%5D&retmode=json&retmax=5",
     "status": 200,
     "response": {
       "header": {
@@ -15,7 +15,7 @@
         "retstart": "0",
         "idlist": [],
         "translationset": [],
-        "querytranslation": "\"A Work That Was Never Published\"[ti] AND Nobody[au]",
+        "querytranslation": "\"Field Notes on Moss Growth Beside the Old Mill Stream\"[ti] AND Nobody[au]",
         "errorlist": {
           "phrasesnotfound": [
             "Nobody"
@@ -25,7 +25,7 @@
         "warninglist": {
           "phrasesignored": [],
           "quotedphrasesnotfound": [
-            "\"A Work That Was Never Published\"[ti]"
+            "\"Field Notes on Moss Growth Beside the Old Mill Stream\"[ti]"
           ],
           "outputmessages": [
             "No items found."
@@ -37,7 +37,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T17:56:09.211Z",
+      "recordedAt": "2026-09-30T19:22:02.111Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }

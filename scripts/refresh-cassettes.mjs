@@ -111,21 +111,24 @@ export const KNOWN_BAD_DOIS = Object.freeze([
 /** Pass 1's metadata searches (VRFY-12): the citations tests/metadata-search.test.ts and the tier contract send. */
 export const BIBLIOGRAPHIC_QUERIES = Object.freeze({
   'search-bibliographic-lecun-2015': 'Deep learning LeCun 2015',
-  'search-bibliographic-no-match': 'A Work That Was Never Published Nobody 2017',
+  'search-bibliographic-no-match': 'Field Notes on Moss Growth Beside the Old Mill Stream Nobody 2017',
   'search-bibliographic-vaswani-2017': 'Attention is All You Need Vaswani 2017',
   'search-bibliographic-kuhn-1996': 'The Structure of Scientific Revolutions Kuhn 1996',
 });
 /**
  * Pass 1's metadata searches past Crossref (VRFY-12, review round 2): the
  * requests verify/metadata-search.ts makes for an identifier-less entry — the
- * work of no registrar ("A Work That Was Never Published", Nobody 2017) at
- * arXiv, PubMed, DataCite and OpenAlex, and Vaswani et al. 2017 at arXiv
- * (tests/metadata-search.test.ts checks the builders give these strings).
+ * work of no registrar (the title of tests/fixtures/byo/no-match.pdf, "Nobody"
+ * 2017) at arXiv, PubMed and DataCite, and Vaswani et al. 2017 at arXiv
+ * (tests/metadata-search.test.ts checks the builders give these strings). Its
+ * OpenAlex search is the same request as PDF identification's title search of
+ * that PDF (openalex/search-title-no-match: the title, 5 rows), so it is
+ * recorded once, there.
  */
-export const METADATA_SEARCH_NO_MATCH_TITLE = 'A Work That Was Never Published';
-export const METADATA_SEARCH_ARXIV_NO_MATCH = 'ti:"A Work That Was Never Published" AND au:Nobody';
+export const METADATA_SEARCH_NO_MATCH_TITLE = 'Field Notes on Moss Growth Beside the Old Mill Stream';
+export const METADATA_SEARCH_ARXIV_NO_MATCH = 'ti:"Field Notes on Moss Growth Beside the Old Mill Stream" AND au:Nobody';
 export const METADATA_SEARCH_ARXIV_VASWANI = 'ti:"Attention is All You Need" AND au:Vaswani';
-export const METADATA_SEARCH_PUBMED_NO_MATCH = '"A Work That Was Never Published"[ti] AND Nobody[au]';
+export const METADATA_SEARCH_PUBMED_NO_MATCH = '"Field Notes on Moss Growth Beside the Old Mill Stream"[ti] AND Nobody[au]';
 export const METADATA_SEARCH_ROWS = 5;
 /** An arXiv id recorded for lookups. */
 export const RECORDED_ARXIV_ID = '1706.03762';
@@ -247,8 +250,6 @@ const QUERY_SETS = {
     { file: 'works-W2919115771', calls: [{ fn: 'lookupById', arg: 'W2919115771' }] },
     // A W-id OpenAlex does not know: a real 404 (not-found).
     { file: 'works-W2963403868-404', calls: [{ fn: 'lookupById', arg: 'W2963403868' }] },
-    // VRFY-12: Pass 1's OpenAlex search for an identifier-less entry of no work.
-    { file: 'search-metadata-no-match', calls: [{ fn: 'search', arg: METADATA_SEARCH_NO_MATCH_TITLE, limit: METADATA_SEARCH_ROWS, minLimit: METADATA_SEARCH_ROWS }] },
     // Title searches only: research's own queries ask OpenAlex for 10 works
     // with abstracts, which exceeds the 51200-byte cassette cap at any size
     // research requests — the fixture lane reports those as `offline: no

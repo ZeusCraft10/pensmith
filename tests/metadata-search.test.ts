@@ -61,9 +61,10 @@ test('VRFY-12: a book with no ISBN is searched at the books registries, then Cro
 });
 
 test('VRFY-12: an entry matching nothing is UNRESOLVABLE (blocking), naming the fix', async () => {
-  const none = await metadataSearch({ title: 'A Work That Was Never Published', authors: ['Nobody, Ann'], year: 2017 });
+  // The work of no registrar: every search's recorded answer (Crossref, arXiv, PubMed, DataCite, OpenAlex) holds no strict match.
+  const none = await metadataSearch({ title: 'Field Notes on Moss Growth Beside the Old Mill Stream', authors: ['Nobody, Ann'], year: 2017 });
   assert.equal(none.kind, 'no-match');
-  const [r] = await runPass1('A claim [@nobody2017].\n', bibWith('@article{nobody2017,\n  author = {Nobody, Ann},\n  title = {A Work That Was Never Published},\n  year = {2017},\n}\n'));
+  const [r] = await runPass1('A claim [@nobody2017].\n', bibWith('@article{nobody2017,\n  author = {Nobody, Ann},\n  title = {Field Notes on Moss Growth Beside the Old Mill Stream},\n  year = {2017},\n}\n'));
   assert.equal(r?.verdict, 'UNRESOLVABLE');
   assert.match(r?.reason ?? '', /no registrar record matches its title, first author and year .* — add the work's identifier \(pensmith add/);
 });
@@ -77,9 +78,9 @@ test('D-20-11: a later re-post of the same title does not pass — the 2025 copi
   assert.equal(found.kind === 'match' ? found.candidate.year : 0, 2017);
   // The exact requests the recordings hold.
   assert.equal(arxivTitleQuery({ title: 'Attention is All You Need', authors: ['Vaswani, Ashish'], year: 2017 }), 'ti:"Attention is All You Need" AND au:Vaswani');
-  assert.equal(arxivTitleQuery({ title: 'A Work That Was Never Published', authors: ['Nobody, Ann'], year: 2017 }), 'ti:"A Work That Was Never Published" AND au:Nobody');
-  assert.equal(pubmedTitleQuery({ title: 'A Work That Was Never Published', authors: ['Nobody, Ann'], year: 2017 }), '"A Work That Was Never Published"[ti] AND Nobody[au]');
-  assert.equal(dataciteTitleSearchUrl('A Work That Was Never Published'), 'https://api.datacite.org/dois?query=titles.title%3A%22A%20Work%20That%20Was%20Never%20Published%22&page%5Bsize%5D=5');
+  assert.equal(arxivTitleQuery({ title: 'Field Notes on Moss Growth Beside the Old Mill Stream', authors: ['Nobody, Ann'], year: 2017 }), 'ti:"Field Notes on Moss Growth Beside the Old Mill Stream" AND au:Nobody');
+  assert.equal(pubmedTitleQuery({ title: 'Field Notes on Moss Growth Beside the Old Mill Stream', authors: ['Nobody, Ann'], year: 2017 }), '"Field Notes on Moss Growth Beside the Old Mill Stream"[ti] AND Nobody[au]');
+  assert.equal(dataciteTitleSearchUrl('Field Notes on Moss Growth Beside the Old Mill Stream'), 'https://api.datacite.org/dois?query=titles.title%3A%22Field%20Notes%20on%20Moss%20Growth%20Beside%20the%20Old%20Mill%20Stream%22&page%5Bsize%5D=5');
 });
 
 /** The registrars past Crossref answer "nothing" (arXiv, PubMed, DataCite, OpenAlex — less those `skip` names), each call counted. */
