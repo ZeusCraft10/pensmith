@@ -9,6 +9,7 @@
     "The text is from Vaswani et al. 2017 (arXiv 1706.03762), shortened; the DOI and PMCID are test identifiers.",
     "Rows past the artifact classes: whole-word edits (an inserted negator, a changed number or word) and elisions that stitch",
     "distant passages or single words must be NOT_FOUND even when close by characters; an editorial [bracket] is not quoted text.",
+    "Review round 2: quotes in other languages' quotation marks (guillemets, low-high marks) and a Title Case quote after a reporting colon are extracted and checked like any other.",
     "Hash-pinned in tests/repo-files.test.ts."
   ],
   "citekey": "vaswani2017",
@@ -250,6 +251,38 @@
       "draft": "As @vaswani2017 [p. 2] put it, \"[the] Transformer is the first transduction model relying entirely on self-attention\".\n",
       "expected_verdict": "PASS",
       "note": "An editorial insertion in square brackets is not part of the quoted words."
+    },
+    {
+      "id": "guillemets-1",
+      "distortion": "fabrication",
+      "claimed_quote": "the Transformer is nothing more than a lookup table for bananas",
+      "draft": "Les auteurs concluent que «the Transformer is nothing more than a lookup table for bananas» [@vaswani2017].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "A fabricated quote in guillemets: Pandoc leaves «…» as they are, and the export shows them as quotation marks."
+    },
+    {
+      "id": "low-high-1",
+      "distortion": "fabrication",
+      "claimed_quote": "attention mechanisms dispense with every form of training data",
+      "draft": "Die Autoren schreiben „attention mechanisms dispense with every form of training data“ [@vaswani2017].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "A fabricated quote in German low-high marks; the closing “ never opens a quote of its own."
+    },
+    {
+      "id": "title-case-after-colon-1",
+      "distortion": "fabrication",
+      "claimed_quote": "Attention Mechanisms Are Nothing More Than Lookup Tables For Bananas",
+      "draft": "Vaswani and colleagues wrote: “Attention Mechanisms Are Nothing More Than Lookup Tables For Bananas” [@vaswani2017].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "Title Case after a reporting colon is a quotation, not a title: it is checked, and it is fabricated."
+    },
+    {
+      "id": "genuine-guillemets",
+      "distortion": "guillemets",
+      "claimed_quote": "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms",
+      "draft": "Les auteurs écrivent «We propose a new simple network architecture, the Transformer, based solely on attention mechanisms» [@vaswani2017].\n",
+      "expected_verdict": "PASS",
+      "note": "A genuine quote in guillemets is found in the source text."
     }
   ]
 }

@@ -104,9 +104,18 @@ test('VRFY-18: [verification] quote_min_words — the default is 5; fewer words 
 test('VRFY-18: a quoted title is not a quote — introduced as one, or Title Case without a sentence end (≤ 12 words)', () => {
   assert.deepEqual(keys('She read the paper titled "attention is all you need in the end" [@k].'), []);
   assert.deepEqual(keys('In the book "war and peace and other long stories" [@k] the plot turns.'), []);
-  for (const intro of ['entitled', 'called', 'named', 'the article', 'the paper']) {
+  for (const intro of ['entitled', 'the article', 'the paper', 'the report']) {
     assert.deepEqual(keys(`It appeared in ${intro} "some words that make a title" [@k].`), [], intro);
   }
+  // After `called` / `named` only what looks like a title is one (review round 2): a sentence of any length is a quote.
+  for (const intro of ['called', 'named']) {
+    assert.deepEqual(keys(`A policy ${intro} "Clean Air For All Our Children" [@k] passed.`), [], intro);
+    assert.deepEqual(keys(`Smith ${intro} "for an immediate halt to all funding of the program until the review is complete" [@k].`), ['k'], intro);
+  }
+  // Title Case after a reporting colon or verb is a quotation, never a title.
+  assert.deepEqual(keys('LeCun wrote: “Deep Networks Are Nothing More Than Lookup Tables For Bananas In Disguise” [@k].'), ['k']);
+  assert.deepEqual(keys('The review states that "Attention Is All You Need For Everything" [@k].'), ['k']);
+  assert.deepEqual(keys('As Smith put it, "Attention Is All You Need For Everything" [@k].'), ['k']);
   assert.deepEqual(keys('"Attention Is All You Need for Language Tasks" [@vaswani2017] changed things.'), []);
   assert.deepEqual(keys('"Deep Learning: A Review of the Field and Its Methods" [@k].'), []);
   // Not a title: a sentence (it ends), lower-case words, or more than 12 words.
@@ -116,6 +125,23 @@ test('VRFY-18: a quoted title is not a quote — introduced as one, or Title Cas
   // A Markdown link or image title is not a quote.
   assert.deepEqual(keys('See [the site](https://example.org "a link title of many words here") for more.'), []);
   assert.deepEqual(keys('![A figure](fig.png "the caption of the figure goes here")'), []);
+});
+
+test('VRFY-18: quotes in other languages\' quotation marks are quotes — guillemets, low-high marks, angle and corner brackets (and their entities)', () => {
+  assert.deepEqual(keys('Le rapport affirme «que la politique a échoué dans toutes les régions étudiées» [@smith].'), ['smith']);
+  assert.deepEqual(keys('Der Bericht sagt „dass die Politik in allen Regionen gescheitert ist“ [@smith].'), ['smith']);
+  assert.deepEqual(keys('Der Bericht sagt „dass die Politik in allen Regionen gescheitert ist” [@smith].'), ['smith']);
+  assert.deepEqual(keys('Der Bericht sagt »dass die Politik in allen Regionen gescheitert ist« [@smith].'), ['smith']);
+  assert.deepEqual(keys('Rapporten säger »att politiken har misslyckats i alla regioner» [@smith].'), ['smith']);
+  assert.deepEqual(keys('They wrote ‹the data show no effect of the treatment› [@smith].'), ['smith']);
+  assert.deepEqual(keys('Er schrieb ‚die Daten zeigen keinerlei Wirkung der Behandlung‘ [@smith].'), ['smith']);
+  assert.deepEqual(keys('報告は「the policy failed in every region we studied」[@smith]。'), ['smith']);
+  assert.deepEqual(keys('Entity &laquo;que la politique a échoué dans toutes les régions&raquo; [@smith].'), ['smith']);
+  assert.deepEqual(keys('Entity &bdquo;dass die Politik in allen Regionen gescheitert ist&ldquo; [@smith].'), ['smith']);
+  // The text is the words, without the marks; a closing “ opens no quote of its own.
+  assert.deepEqual(extractQuotes('„dass die Politik in allen Regionen gescheitert ist“. Then more text follows here [@x].').map((q) => q.text), ['dass die Politik in allen Regionen gescheitert ist']);
+  // Fewer than five words is a quoted term, whatever the marks.
+  assert.deepEqual(keys('Le «mot juste» [@smith].'), []);
 });
 
 test('VRFY-18: quotes in provable code are skipped; code the grammar cannot prove is text (fail closed)', () => {

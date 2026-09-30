@@ -3,7 +3,10 @@
 // (straight or typographic, double or single marks, HTML entity marks) and
 // each BlockQuote (at the top level, in a list item or a definition) of at
 // least five words in a generated draft must be inside a quote
-// extractQuotes returns. The extractor may extract more (escaped `\"…\"` and
+// extractQuotes returns. Pandoc leaves other languages' quotation marks
+// («…», „…“, ‹…›, 「…」) as literal characters, which a reader of the export
+// sees as quotation marks: the oracle also reads those spans in the text
+// Pandoc renders for each paragraph (review round 2). The extractor may extract more (escaped `\"…\"` and
 // entity marks `&ldquo;…&rdquo;`, which Pandoc prints as literal marks); it
 // may never extract less.
 //
@@ -105,8 +108,15 @@ function pandocQuotes(node: unknown, out: string[] = []): string[] {
     return out;
   }
   if (n.t === 'Cite' || n.t === 'Note' || n.t === 'Code' || n.t === 'CodeBlock') return out;
+  if (n.t === 'Para' || n.t === 'Plain') out.push(...foreignQuotes(inlineText(n.c as Node[])));
   for (const v of Object.values(n)) pandocQuotes(v, out);
   return out;
+}
+
+/** Spans in other languages' quotation marks in the text Pandoc renders (the marks stay literal there). */
+function foreignQuotes(text: string): string[] {
+  const re = /«([^«»]+)»|»([^«»]+)[«»]|„([^„“”]+)[“”]|‚([^‚‘’]+)[‘’]|‹([^‹›]+)›|「([^「」]+)」|『([^『』]+)』/gu;
+  return [...text.matchAll(re)].map((m) => m.slice(1).find((g) => g !== undefined) ?? '');
 }
 
 /** Text compared the way a reader compares it: marks, dashes and ellipses in one form, whitespace collapsed. */
@@ -147,6 +157,14 @@ const MARKS: ReadonlyArray<readonly [string, string]> = [
   ['&#8220;', '&#8221;'],
   ['&lsquo;', '&rsquo;'],
   ['&#39;', '&#39;'],
+  // Other languages' marks (review round 2).
+  ['«', '»'],
+  ['»', '«'],
+  ['„', '“'],
+  ['‹', '›'],
+  ['「', '」'],
+  ['&laquo;', '&raquo;'],
+  ['&bdquo;', '&ldquo;'],
 ];
 
 function draftOf(r: () => number): string {
@@ -206,6 +224,9 @@ test('VRFY-18: every quote Pandoc reads in the reviewers\' forms is extracted �
     `Intro.\n\n1. > ${q} [@smith2020]`,
     `Term\n:   > ${q} [@smith2020]`,
     `As Harris and colleagues put it, 'NumPy was invented on the moon by a committee of forty seven penguins' [@harris2020, p. 357].`,
+    `Le rapport affirme «${q}» [@smith2020].`,
+    `Der Bericht sagt „${q}“ [@smith2020].`,
+    `They wrote ‹${q}› [@smith2020].`,
   ];
   const pandoc = pandocQuotesAll(forms);
   forms.forEach((md, i) => {

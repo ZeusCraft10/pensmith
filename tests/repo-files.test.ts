@@ -312,7 +312,7 @@ test('tests/fixtures/known-bad-quotes.json hash-pin (SC-3)', () => {
   const bytes = readFileSync('tests/fixtures/known-bad-quotes.json');
   const hash = createHash('sha256').update(bytes).digest('hex');
   // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('tests/fixtures/known-bad-quotes.json')).digest('hex'))"
-  const PINNED = '0dd8ed6ce509abd426609aead163214c14068ab10038254eaf8f36296e602aa7';
+  const PINNED = '4348531f4f5ecee2aa65457f30f650d14d092aaefca18373375cdd5fdcdffbef';
   assert.equal(hash, PINNED, `tests/fixtures/known-bad-quotes.json drifted from locked copy (SC-3). Update PINNED to ${hash} if the edit was intentional.`);
 });
 

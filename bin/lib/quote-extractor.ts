@@ -13,16 +13,24 @@
 //     apostrophe inside a word (`it's`, `the authors'`) never opens one; the
 //     marks may be written as HTML entities (`&ldquo;`, `&#8220;`, `&quot;`,
 //     `&#39;` …) or escaped (`\"`): the export shows them as quotation marks;
+//   - inline text in the other languages' quotation marks — guillemets «…»,
+//     »…« and »…», ‹…› and ›…‹, low-high „…“ / „…” and ‚…‘ / ‚…’, corner
+//     brackets 「…」 and 『…』 (or their entities, `&laquo;`, `&bdquo;` …):
+//     Pandoc leaves them as they are and the export shows them as quotation
+//     marks (review round 2);
 //   - a block quote: one quote per `>` run, lazy continuation lines included
 //     (Pandoc continues a block-quote paragraph on a line without `>`), also
 //     inside a list item or a definition (`- > …`, `1. > …`, `:   > …`);
 //   - with at least `[verification] quote_min_words` words once citations are
 //     stripped (default 5: DEFAULT_QUOTE_MIN_WORDS). Fewer words is a scare
 //     quote or a quoted term, not a quotation.
-// Excluded by rule (inline only): a quoted title — preceded by `titled`,
-// `entitled`, `called`, `named`, `the article`, `the book` or `the paper`, or
+// Excluded by rule (inline only): a quoted title — after an explicit title
+// cue (`titled`, `entitled`, `the article`, `the book`, `the paper`, …), or
 // written in Title Case with no sentence-ending punctuation inside and at most
-// 12 words — and a Markdown link title (`[text](url "title")`).
+// 12 words (after `called` / `named` it must look like one too) — and a
+// Markdown link title (`[text](url "title")`). The Title Case rule never
+// applies after a reporting colon or verb (`wrote:`, `states that`, `put it,`):
+// that quote is a quotation whatever its capitals (review round 2).
 //
 // Who a quote is attributed to (every Pandoc citation form, read through
 // citation-token.ts; a cluster attributes the quote to EVERY key in it — one
@@ -122,10 +130,12 @@ function quoteText(raw: string): string {
 }
 
 /** The quotation-mark entities Pandoc's smart reader reads as marks (charOrRef), by name. */
-const QUOTE_ENTITY_NAMES: Readonly<Record<string, string>> = { quot: '"', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', apos: "'" };
+const QUOTE_ENTITY_NAMES: Readonly<Record<string, string>> = {
+  quot: '"', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', apos: "'", laquo: '«', raquo: '»', lsaquo: '‹', rsaquo: '›', bdquo: '„', sbquo: '‚',
+};
 /** Windows-1252 code points HTML maps to quotation marks (`&#147;` is “). */
-const CP1252_QUOTES: Readonly<Record<number, string>> = { 145: '‘', 146: '’', 147: '“', 148: '”' };
-const QUOTE_CHARS = new Set(['"', "'", '“', '”', '‘', '’']);
+const CP1252_QUOTES: Readonly<Record<number, string>> = { 130: '‚', 132: '„', 139: '‹', 145: '‘', 146: '’', 147: '“', 148: '”', 155: '›' };
+const QUOTE_CHARS = new Set(['"', "'", '“', '”', '‘', '’', '«', '»', '‹', '›', '„', '‚', '「', '」', '『', '』']);
 
 /** The character an entity reference stands for, or null. */
 function entityChar(name: string | undefined, dec: string | undefined, hex: string | undefined): string | null {
@@ -187,7 +197,15 @@ function looksLikeTitle(text: string): boolean {
 }
 
 /** True when the words right before the opening mark introduce a title (`a paper titled "…"`). */
-const TITLE_INTRO_RE = /\b(?:titled|entitled|called|named|the\s+article|the\s+book|the\s+paper)[\s,:]*$/iu;
+const TITLE_INTRO_RE =
+  /\b(?:titled|entitled|the\s+(?:article|book|paper|chapter|report|essay|study|novel|poem|film|song|album|play|series|volume|monograph|thesis|dissertation|editorial|column|lecture|talk|speech|section|journal|magazine))[\s,:]*$/iu;
+/**
+ * A reporting colon or verb right before the opening mark (`wrote:`, `states
+ * that`, `put it,`, `according to Smith,`): what follows is a quotation, never
+ * a title, whatever its capitals.
+ */
+const REPORTING_INTRO_RE =
+  /(?::|\b(?:wr(?:ote|ites?|itten)|sa(?:id|ys|y)|state[sd]?|argue[sd]?|note[sd]?|conclude[sd]?|observe[sd]?|claim(?:s|ed)?|explain(?:s|ed)?|add(?:s|ed)?|remark(?:s|ed)?|insist(?:s|ed)?|assert(?:s|ed)?|report(?:s|ed)?|declare[sd]?|warn(?:s|ed)?|emphasi[sz]e[sd]?|stress(?:es|ed)?|suggest(?:s|ed)?|contend(?:s|ed)?|maintain(?:s|ed)?|put\s+it|puts\s+it|as\s+follows|that|according\s+to\s+[^,\n]{1,60},|in\s+(?:his|her|their|its)\s+words,?))[\s,]*$/iu;
 /** A Markdown link or image destination whose title the mark opens: `](url "…`. */
 const LINK_TITLE_RE = /\]\([^()\s]*[ \t]+$/;
 
@@ -440,6 +458,9 @@ interface Span {
 
 const ALNUM_RE = /[\p{L}\p{N}]/u;
 
+/** No offsets set aside. */
+const NO_MARKS: ReadonlySet<number> = new Set();
+
 /** True when an odd run of backslashes ends just before `i` (the mark there is escaped). */
 function oddBackslashesBefore(md: string, i: number): boolean {
   let n = 0;
@@ -457,11 +478,11 @@ function oddBackslashesBefore(md: string, i: number): boolean {
  * pair among themselves (`\"…\"`): Pandoc prints them as straight `"`, which
  * a reader of the export sees as quotation marks.
  */
-function doubleQuoteSpans(md: string, from: number, to: number): Span[] {
-  const out = smartDoubleQuoteSpans(md, from, to);
+function doubleQuoteSpans(md: string, from: number, to: number, taken: ReadonlySet<number> = NO_MARKS): Span[] {
+  const out = smartDoubleQuoteSpans(md, from, to, taken);
   let open = -1;
   for (let i = from; i < to; i += 1) {
-    if (md[i] !== '"' || !oddBackslashesBefore(md, i) || out.some((s) => i >= s.open && i <= s.close)) continue;
+    if (md[i] !== '"' || taken.has(i) || !oddBackslashesBefore(md, i) || out.some((s) => i >= s.open && i <= s.close)) continue;
     if (open === -1) {
       if (/\S/u.test(md[i + 1] ?? ' ')) open = i;
     } else {
@@ -473,12 +494,13 @@ function doubleQuoteSpans(md: string, from: number, to: number): Span[] {
 }
 
 /** The double-quoted spans Pandoc's smart reader makes (escaped marks are literals). */
-function smartDoubleQuoteSpans(md: string, from: number, to: number): Span[] {
+function smartDoubleQuoteSpans(md: string, from: number, to: number, taken: ReadonlySet<number>): Span[] {
   const out: Span[] = [];
   let open = -1;
   for (let i = from; i < to; i += 1) {
     const c = md[i];
     if (c !== '"' && c !== '“' && c !== '”') continue;
+    if (taken.has(i)) continue; // a mark of another language's quote (`„…“`)
     if (oddBackslashesBefore(md, i)) continue;
     if (open !== -1 && c === '“' && /\S/u.test(md[i + 1] ?? ' ')) {
       open = i;
@@ -505,7 +527,8 @@ const ELISION_RE = /^'(?:\d\d?s\b|tis\b|twas\b|em\b|n'|til\b|cause\b)/iu;
  * that is not inside a word (`it's`, `the authors'` — right after a letter
  * or digit) and not an elision; either followed by a non-space.
  */
-function singleOpener(md: string, i: number): boolean {
+function singleOpener(md: string, i: number, taken: ReadonlySet<number> = NO_MARKS): boolean {
+  if (taken.has(i)) return false;
   const c = md[i];
   if (c !== '‘' && c !== "'") return false;
   if (!/\S/u.test(md[i + 1] ?? ' ')) return false;
@@ -514,7 +537,8 @@ function singleOpener(md: string, i: number): boolean {
 }
 
 /** True when the mark at `i` can close a single quote: `’` or `'` not followed by a letter or digit (`it’s` is an apostrophe), a `'` not after a space. */
-function singleCloser(md: string, i: number): boolean {
+function singleCloser(md: string, i: number, taken: ReadonlySet<number> = NO_MARKS): boolean {
+  if (taken.has(i)) return false;
   const c = md[i];
   if (c !== '’' && c !== "'") return false;
   if (ALNUM_RE.test(md[i + 1] ?? ' ')) return false;
@@ -528,10 +552,10 @@ function singleCloser(md: string, i: number): boolean {
  * without one, the last does (a plural possessive `the students’` inside the
  * quote never cuts it short).
  */
-function singleQuoteSpans(md: string, from: number, to: number, cites: readonly CitationCluster[]): Span[] {
+function singleQuoteSpans(md: string, from: number, to: number, cites: readonly CitationCluster[], taken: ReadonlySet<number> = NO_MARKS): Span[] {
   const out: Span[] = [];
   const nextOpener = (at: number): number => {
-    for (let j = at; j < to; j += 1) if (singleOpener(md, j)) return j;
+    for (let j = at; j < to; j += 1) if (singleOpener(md, j, taken)) return j;
     return -1;
   };
   let open = nextOpener(from);
@@ -539,11 +563,54 @@ function singleQuoteSpans(md: string, from: number, to: number, cites: readonly 
     const nextOpen = nextOpener(open + 1);
     const limit = nextOpen === -1 ? to : nextOpen;
     const closers: number[] = [];
-    for (let j = open + 1; j < limit; j += 1) if (singleCloser(md, j)) closers.push(j);
+    for (let j = open + 1; j < limit; j += 1) if (singleCloser(md, j, taken)) closers.push(j);
     const cited = closers.find((j) => citationRightAfter(md, j + 1, cites, to) !== null);
     const close = cited ?? closers[closers.length - 1];
     if (close !== undefined) out.push({ open, close });
     open = close !== undefined ? nextOpener(close + 1) : nextOpen;
+  }
+  return out;
+}
+
+/**
+ * The other languages' quotation marks (see the header): each opening mark and
+ * the marks that close it. `»` opens a quote only where no `«` is open
+ * (German »…«, Swedish »…»); a closing mark must follow a non-space, and a
+ * `’` followed by a letter is an apostrophe.
+ */
+const FOREIGN_MARKS: Readonly<Record<string, readonly string[]>> = {
+  '«': ['»'],
+  '»': ['«', '»'],
+  '‹': ['›'],
+  '›': ['‹', '›'],
+  '„': ['“', '”'],
+  '‚': ['‘', '’'],
+  '「': ['」'],
+  '『': ['』'],
+};
+
+/** The spans of one paragraph in the other languages' quotation marks (see FOREIGN_MARKS). */
+function foreignQuoteSpans(md: string, from: number, to: number): Span[] {
+  const out: Span[] = [];
+  let i = from;
+  while (i < to) {
+    const closers = FOREIGN_MARKS[md[i] as string];
+    if (closers !== undefined && /\S/u.test(md[i + 1] ?? ' ')) {
+      let close = -1;
+      for (let j = i + 1; j < to; j += 1) {
+        const d = md[j] as string;
+        if (!closers.includes(d) || !/\S/u.test(md[j - 1] ?? ' ')) continue;
+        if (d === '’' && ALNUM_RE.test(md[j + 1] ?? ' ')) continue;
+        close = j;
+        break;
+      }
+      if (close !== -1) {
+        out.push({ open: i, close });
+        i = close + 1;
+        continue;
+      }
+    }
+    i += 1;
   }
   return out;
 }
@@ -574,7 +641,10 @@ function inlineCandidates(
 ): Candidate[] {
   const out: Candidate[] = [];
   for (const [from, to] of paragraphs(lines, blocked)) {
-    const spans = [...doubleQuoteSpans(md, from, to), ...singleQuoteSpans(md, from, to, cites)].sort((a, b) => a.open - b.open);
+    // The other languages' marks first: a `“` closing „…“ never opens a quote of its own.
+    const foreign = foreignQuoteSpans(md, from, to);
+    const marks = new Set(foreign.flatMap((f) => [f.open, f.close]));
+    const spans = [...foreign, ...doubleQuoteSpans(md, from, to, marks), ...singleQuoteSpans(md, from, to, cites, marks)].sort((a, b) => a.open - b.open);
     let outerEnd = -1;
     for (const s of spans) {
       if (s.open < outerEnd) continue; // a quote inside a quote is part of the outer one
@@ -586,7 +656,11 @@ function inlineCandidates(
       const lineStart = md.lastIndexOf('\n', s.open) + 1;
       const before = md.slice(lineStart, s.open);
       if (LINK_TITLE_RE.test(before)) continue;
-      if (TITLE_INTRO_RE.test(before) || looksLikeTitle(text)) continue;
+      // A title (see the header) — never after a reporting colon or verb.
+      if (TITLE_INTRO_RE.test(before)) continue;
+      // (After `called` / `named` only what looks like a title is one: `Smith called
+      // "for an immediate halt to all funding …"` is a quote.)
+      if (!REPORTING_INTRO_RE.test(before) && looksLikeTitle(text)) continue;
       const after = citationRightAfter(md, s.close + 1, cites, to);
       const cite = after ?? citationBefore(md, s.open, from, cites);
       out.push({
