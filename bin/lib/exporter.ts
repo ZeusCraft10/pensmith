@@ -40,7 +40,7 @@ import { atomicWriteFile } from './atomic-write.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
 import { paperDir, projectRoot, dryRunWorkspaceActive } from './paths.js';
 import { exportCitedCitations } from './library.js';
-import { citationItems, extractCitedKeysForVerification, findRenderedCitations, type CitationItem } from './citation-token.js';
+import { citationItems, extractCitedKeysForVerification, findRenderedCitations, splitLocator, type CitationItem } from './citation-token.js';
 
 // =====================================================================
 //   PKG_ROOT — locate templates/citation-styles/ relative to this file
@@ -528,51 +528,19 @@ async function writeMarkdown(md: string, outputPath: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Locator terms Pandoc recognises after a citekey (`[@k, p. 5]`, `[@k, chap. 3]`),
- * with their CSL labels. A bare number (`[@k, 33]`) is a page, as in Pandoc.
+ * One citation item for citeproc: a `[see @k, p. 5, emphasis added]` segment →
+ * prefix, key, locator, label, suffix. The locator grammar (LOCATOR_TERMS,
+ * splitLocator) is citation-token.ts's — the one citation grammar (VRFY-09).
  */
-const LOCATOR_TERMS: ReadonlyArray<readonly [RegExp, string]> = [
-  [/^(?:pp?\.|pages?\b)/i, 'page'],
-  [/^(?:chaps?\.|chapters?\b)/i, 'chapter'],
-  [/^(?:secs?\.|sections?\b|§§?)/i, 'section'],
-  [/^(?:figs?\.|figures?\b)/i, 'figure'],
-  [/^(?:vols?\.|volumes?\b)/i, 'volume'],
-  [/^(?:paras?\.|paragraphs?\b|¶¶?)/i, 'paragraph'],
-  [/^(?:ll?\.|lines?\b)/i, 'line'],
-  [/^(?:nn?\.|notes?\b)/i, 'note'],
-  [/^(?:nos?\.|numbers?\b)/i, 'issue'],
-  [/^(?:cols?\.|columns?\b)/i, 'column'],
-  [/^(?:pts?\.|parts?\b)/i, 'part'],
-  [/^(?:vv?\.|verses?\b)/i, 'verse'],
-  [/^(?:bks?\.|books?\b)/i, 'book'],
-  [/^(?:fols?\.|folios?\b)/i, 'folio'],
-  [/^(?:s\.vv?\.|sub verbo\b)/i, 'sub-verbo'],
-];
-const LOCATOR_VALUE_RE = /^[\p{N}ivxlcdm]+(?:[-–—][\p{N}ivxlcdm]+)?(?:,\s*[\p{N}]+(?:[-–—][\p{N}]+)?)*/iu;
-
-/** One citation item for citeproc: a `[see @k, p. 5, emphasis added]` segment → prefix, key, locator, label, suffix. */
 function toCslItem(item: CitationItem): CitationItemInput {
   const base: CitationItemInput = {
     id: item.key,
     ...(item.prefix ? { prefix: `${item.prefix} ` } : {}),
     ...(item.suppressAuthor ? { suppressAuthor: true } : {}),
   };
-  const rest = item.suffix.replace(/^\s*,?\s*/, '');
-  if (rest === '') return base;
-  for (const [term, label] of LOCATOR_TERMS) {
-    const t = term.exec(rest);
-    if (t === null) continue;
-    const after = rest.slice(t[0].length).trimStart();
-    const v = LOCATOR_VALUE_RE.exec(after);
-    if (v === null || !/\p{N}|^[ivxlcdm]+$/iu.test(v[0])) break;
-    const tail = after.slice(v[0].length);
-    return { ...base, locator: v[0], label, ...(tail.trim() ? { suffix: tail } : {}) };
-  }
-  const page = /^,\s*/.test(item.suffix) ? /^\p{N}+(?:[-–—]\p{N}+)?/u.exec(rest) : null;
-  if (page !== null) {
-    const tail = rest.slice(page[0].length);
-    return { ...base, locator: page[0], label: 'page', ...(tail.trim() ? { suffix: tail } : {}) };
-  }
+  if (item.suffix.replace(/^\s*,?\s*/, '') === '') return base;
+  const loc = splitLocator(item.suffix);
+  if (loc !== null) return { ...base, locator: loc.locator, label: loc.label, ...(loc.rest.trim() ? { suffix: loc.rest } : {}) };
   return { ...base, suffix: item.suffix.startsWith(' ') || item.suffix.startsWith(',') ? item.suffix : ` ${item.suffix}` };
 }
 

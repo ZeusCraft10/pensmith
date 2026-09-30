@@ -17,6 +17,17 @@
 //
 // PURE module: no I/O, no side effects. Every function is referentially
 // transparent (same input → same output).
+//
+// Phase 20 (VRFY-09, D-20-06): this module is the ONLY citation parser. A
+// regular expression holding `\[@` or `@\{` anywhere else in bin/, mcp/ or
+// hooks/ fails lint (chokepoint row `citation-grammar`,
+// scripts/chokepoints/citation-grammar.json). Consumers read citations with
+// findCitations / citationItems (key, prefix, suffix, locator and label,
+// suppress-author, narrative), count or strip them with countCitations /
+// replaceCitations, and the verifier reports text it cannot read with
+// findUnparseableCitations (UNPARSEABLE, D-20-07).
+
+import type { TextFinding } from './verify/verdicts.js';
 
 /**
  * LOCKED bare-citekey token regex. Group 1 captures the citekey body.
@@ -654,12 +665,71 @@ function inlineCodeSpans(md: string, lines: readonly SourceLine[], fences: Reado
   return out;
 }
 
-/** The spans of `md` Pandoc provably reads as code (see above); empty when that cannot be proved. */
+/**
+ * Characters that change where Pandoc's lines end or what it reads anywhere in
+ * the document — a bare carriage return is a line break to Pandoc (so a fence
+ * interior may end sooner than the proof thinks) and a byte-order mark — turn
+ * the proof off even inside a fenced block.
+ */
+const GLOBALLY_UNMODELLED_RE = /\r(?!\n)|﻿/;
+
+/**
+ * `md` with the interior lines of each proven fenced block blanked (offsets
+ * kept). Pandoc reads a fenced block's interior verbatim, so a construct inside
+ * it (raw TeX, HTML, a comment opener) cannot swallow anything outside it; only
+ * the text outside the blocks can make a fence line mean something else.
+ */
+function outsideFenceInteriors(md: string, lines: readonly SourceLine[], fences: ReadonlyArray<readonly [number, number]>): string {
+  if (fences.length === 0) return md;
+  let out = '';
+  let at = 0;
+  for (const [start, end] of fences) {
+    const open = lines.find((l) => l.start === start) as SourceLine;
+    const closeStart = lines.filter((l) => l.end === end).map((l) => l.start)[0] ?? end;
+    const from = Math.min(open.end, closeStart);
+    out += md.slice(at, from) + md.slice(from, closeStart).replace(/[^\n]/g, ' ');
+    at = closeStart;
+  }
+  return out + md.slice(at);
+}
+
+/**
+ * The spans of `md` Pandoc provably reads as code (see above); empty when that
+ * cannot be proved. The unmodelled constructs are looked for outside the
+ * interiors of the fenced blocks (a `\cite{}` or `<div>` shown in a code block
+ * does not void the proof), a bare carriage return, a byte-order mark and a
+ * table rule anywhere (checked against pandoc 3.9 by
+ * tests/citation-grammar-pandoc.test.ts).
+ */
 function codeSpans(md: string): Array<[number, number]> {
-  if (UNMODELLED_RE.test(md) || tableMayCut(md)) return [];
+  if (GLOBALLY_UNMODELLED_RE.test(md) || tableMayCut(md)) return [];
   const lines = sourceLines(md);
   const fences = fencedCodeBlocks(lines);
+  if (UNMODELLED_RE.test(outsideFenceInteriors(md, lines, fences))) return [];
   return [...fences, ...inlineCodeSpans(md, lines, fences)];
+}
+
+/**
+ * The spans of `md` that Pandoc provably reads as code — fenced code blocks
+ * and inline code spans — as `[start, end)` offsets, in document order. Empty
+ * whenever the proof fails (every construct then counts as text: fail closed).
+ * The text scanners (UNPARSEABLE, UNSUPPORTED-FORM) skip exactly these spans.
+ */
+export function provableCodeSpans(md: string): Array<[number, number]> {
+  if (!md.includes('`') && !md.includes('~')) return [];
+  return codeSpans(md).sort((a, b) => a[0] - b[0]);
+}
+
+/** True when offset `at` lies inside one of `spans`. */
+export function offsetInSpans(at: number, spans: ReadonlyArray<readonly [number, number]>): boolean {
+  return inSpans(at, spans);
+}
+
+/** The 1-based line of offset `at` in `md` (LF and CRLF alike: lines end at `\n`). */
+export function lineOfOffset(md: string, at: number): number {
+  let line = 1;
+  for (let i = md.indexOf('\n'); i !== -1 && i < at; i = md.indexOf('\n', i + 1)) line += 1;
+  return line;
 }
 
 function inSpans(at: number, spans: ReadonlyArray<readonly [number, number]>): boolean {
@@ -700,6 +770,166 @@ export function findRenderedCitations(md: string): CitationCluster[] {
   return findCitations(md).filter((c) => !inSpans(c.start, code));
 }
 
+// ---------------------------------------------------------------------------
+// UNPARSEABLE — citation-shaped text the grammar cannot read the way Pandoc
+// renders it (VRFY-09, D-20-07). Each form is a blocking Pass-1 row naming
+// the text and its line: a citation that does not parse must never look
+// "absent" (AUDIT-FINDINGS #2/#3). The rules are checked against pandoc 3.9 by
+// tests/citation-grammar-pandoc.test.ts (tests/fixtures/citation-grammar/
+// unparseable.json): Pandoc prints the first three as text (or reads a
+// narrative citation where a bracketed one was meant) and reads the fourth as
+// one bracketed citation whose prefix or suffix holds a bracket — a structure
+// findCitations does not model (it reads a narrative citation there).
+// ---------------------------------------------------------------------------
+
+const UNPARSEABLE_REASONS: Readonly<Record<string, string>> = {
+  'empty-key': 'a citation with no key — Pandoc prints it as text; write [@citekey] with a key from CITATIONS.bib',
+  'unbalanced-bracket':
+    'a citation bracket that is never closed in its paragraph — Pandoc prints the "[" as text around a narrative citation; close it: [@citekey]',
+  'unterminated-braced-key':
+    'a braced key "@{" with no closing "}" before a space — Pandoc prints it as text; write @{citekey} or [@citekey]',
+  'nested-bracket':
+    'a citation bracket that holds another bracket — Pandoc renders a form the verifier does not model; take the inner brackets out (e.g. [@citekey, p. 5, see note])',
+};
+
+/** A paragraph of `md`: a run of lines between blank lines (a heading line is a paragraph of its own). */
+function paragraphSpans(md: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  let start = -1;
+  let end = -1;
+  for (const line of sourceLines(md)) {
+    const blank = BLANK_LINE_RE.test(line.text);
+    const heading = /^ {0,3}#{1,6}(?:[ \t]|$)/.test(line.text);
+    if (blank || heading) {
+      if (start !== -1) out.push([start, end]);
+      start = -1;
+      if (heading) out.push([line.start, line.end]);
+      continue;
+    }
+    if (start === -1) start = line.start;
+    end = line.end;
+  }
+  if (start !== -1) out.push([start, end]);
+  return out;
+}
+
+/** The text of a finding: `md[start, end)` cut at its line end and at `max` characters. */
+function findingText(md: string, start: number, end: number, max = 80): string {
+  const nl = md.indexOf('\n', start);
+  const stop = Math.min(end, nl === -1 ? md.length : nl, start + max);
+  return md.slice(start, stop).replace(/\r$/, '');
+}
+
+interface OpenBracket {
+  readonly open: number;
+  /** A citation-start `@key` sits in this bracket at its own depth. */
+  hasKey: boolean;
+  /** Another bracket opened inside this one. */
+  nested: boolean;
+}
+
+/**
+ * Every citation-shaped token of `md` that does not parse (VRFY-09, D-20-07),
+ * outside provable code (provableCodeSpans), in document order:
+ *   - `empty-key`: `[@` / `[-@` — or a `;` segment start inside a citation
+ *     bracket — not followed by a key: `[@]`, `[@ k]`, `[-@]`, `[@k; @]`;
+ *   - `unbalanced-bracket`: a `[` whose own `@key` run is never closed in its
+ *     paragraph: `[@k`, `[see @k and more`;
+ *   - `unterminated-braced-key`: `@{` with no balanced `}` before whitespace:
+ *     `@{unterminated`, `[@{a b}]`;
+ *   - `nested-bracket`: a bracket holding a citation-start `@key` and a nested
+ *     bracket: `[@smith2020 [see note]]`, `[see [x] @k]`, `[@k, p. [5]]`.
+ * An `@` Pandoc cannot read as a citation start (`name@host`, `\@k`) is never
+ * reported, and neither is an escaped bracket (`\[`). Line numbers are 1-based
+ * and count `\n`, so an LF and a CRLF copy of a draft report the same lines.
+ */
+export function findUnparseableCitations(md: string): TextFinding[] {
+  if (!md.includes('@')) return [];
+  const code = provableCodeSpans(md);
+  const loose = tableMayCut(md);
+  const out: Array<TextFinding & { readonly at: number }> = [];
+  const report = (form: string, at: number, end: number): void => {
+    if (offsetInSpans(at, code)) return;
+    out.push({ verdict: 'UNPARSEABLE', form, text: findingText(md, at, end), line: lineOfOffset(md, at), reason: UNPARSEABLE_REASONS[form] as string, at });
+  };
+  for (const [pStart, pEnd] of paragraphSpans(md)) {
+    const para = md.slice(pStart, pEnd);
+    if (!para.includes('@')) continue;
+    // Citation starts Pandoc can read (the `@` of every key match), and those
+    // whose key does not parse.
+    const keyAt = new Set<number>();
+    for (const m of keyMatches(para, loose)) keyAt.add(para.indexOf('@', m.index));
+    const failedStarts = failedCitationStarts(para, loose);
+    const paraCode = code.filter(([s, e]) => e > pStart && s < pEnd).map(([s, e]) => [s - pStart, e - pStart] as const);
+    const stack: OpenBracket[] = [];
+    for (let i = 0; i < para.length; i += 1) {
+      const inCode = paraCode.find(([s, e]) => i >= s && i < e);
+      if (inCode !== undefined) {
+        i = inCode[1] - 1; // a bracket or `@` in code is not citation syntax
+        continue;
+      }
+      const c = para[i] as string;
+      if (c === '[' && !escapedAt(para, i)) {
+        const top = stack[stack.length - 1];
+        if (top !== undefined) top.nested = true;
+        stack.push({ open: i, hasKey: false, nested: false });
+        continue;
+      }
+      if (c === ']' && !escapedAt(para, i)) {
+        const b = stack.pop();
+        if (b !== undefined && b.hasKey && b.nested) report('nested-bracket', pStart + b.open, pStart + i + 1);
+        continue;
+      }
+      if (c !== '@') continue;
+      const top = stack[stack.length - 1];
+      if (keyAt.has(i)) {
+        if (top !== undefined) top.hasKey = true;
+        continue;
+      }
+      if (!failedStarts.has(i)) continue;
+      const lead = i > 0 && para[i - 1] === '-' ? i - 1 : i;
+      if (para[i + 1] === '{') {
+        const ws = /\s/.exec(para.slice(i));
+        report('unterminated-braced-key', pStart + lead, pStart + (ws === null ? para.length : i + ws.index));
+        continue;
+      }
+      if (top === undefined) continue;
+      // A key-less `@` opening a citation item: right after the bracket, or
+      // after a `;` of a bracket that already cites (`[@k; @]`).
+      const before = para.slice(top.open, lead).replace(/[ \t]+$/, '');
+      if (before === '[') report('empty-key', pStart + top.open, pStart + closingBracketAfter(para, i));
+      else if (before.endsWith(';') && top.hasKey) report('empty-key', pStart + lead, pStart + closingBracketAfter(para, i));
+    }
+    for (const b of stack) if (b.hasKey) report('unbalanced-bracket', pStart + b.open, pEnd);
+  }
+  return out.sort((a, b) => a.at - b.at).map(({ at: _at, ...f }) => f);
+}
+
+/** The offset just past the `]` closing the bracket around offset `i` on its line, or its line end. */
+function closingBracketAfter(text: string, i: number): number {
+  const nl = text.indexOf('\n', i);
+  const lineEnd = nl === -1 ? text.length : nl;
+  const close = text.indexOf(']', i);
+  return close !== -1 && close < lineEnd ? close + 1 : lineEnd;
+}
+
+/**
+ * The `@` offsets of `text` where Pandoc could start a citation (not escaped,
+ * not right after a word — keyMatches' rule) but no key follows (`@]`, `@ k`,
+ * `@{a b}`).
+ */
+function failedCitationStarts(text: string, loose: boolean): Set<number> {
+  const out = new Set<number>();
+  const keys = new Set(keyMatches(text, loose).map((m) => text.indexOf('@', m.index)));
+  for (let at = text.indexOf('@'); at !== -1; at = text.indexOf('@', at + 1)) {
+    if (keys.has(at) || escapedAt(text, at)) continue;
+    const before = charBefore(text, at);
+    if (!loose && before !== undefined && ALNUM_RE.test(before) && !afterTexCommand(text, at)) continue;
+    if (readKey(text, at) === null) out.add(at);
+  }
+  return out;
+}
+
 /** One cited source of a cluster, as Pandoc splits it: `[see @a, p. 5; -@b]` → two items. */
 export interface CitationItem {
   /** Text before the key (`see`), trimmed. */
@@ -707,23 +937,93 @@ export interface CitationItem {
   readonly key: string;
   /** True for `-@key` (author suppressed). */
   readonly suppressAuthor: boolean;
-  /** Text after the key (`, p. 5`), trailing space trimmed. */
+  /** Text after the key (`, p. 5`), trailing space trimmed — the locator included. */
   readonly suffix: string;
+  /** The locator value when the suffix opens with one (`5` in `, p. 5`; `33-35` in `, 33-35`). */
+  readonly locator?: string;
+  /** The locator's CSL label (`page`, `chapter`, …) when there is a locator. */
+  readonly label?: string;
+  /** True for a narrative (in-text) citation `@key` outside brackets. */
+  readonly narrative: boolean;
 }
 
-/** The items of one citation (a cluster's `;` segments, or a narrative citation's one key). */
+/**
+ * Locator terms Pandoc recognises after a citekey (`[@k, p. 5]`, `[@k, chap. 3]`),
+ * with their CSL labels. A bare number (`[@k, 33]`) is a page, as in Pandoc.
+ * The offline exporter (exporter.ts) renders locators from this table too.
+ */
+export const LOCATOR_TERMS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^(?:pp?\.|pages?\b)/i, 'page'],
+  [/^(?:chaps?\.|chapters?\b)/i, 'chapter'],
+  [/^(?:secs?\.|sections?\b|§§?)/i, 'section'],
+  [/^(?:figs?\.|figures?\b)/i, 'figure'],
+  [/^(?:vols?\.|volumes?\b)/i, 'volume'],
+  [/^(?:paras?\.|paragraphs?\b|¶¶?)/i, 'paragraph'],
+  [/^(?:ll?\.|lines?\b)/i, 'line'],
+  [/^(?:nn?\.|notes?\b)/i, 'note'],
+  [/^(?:nos?\.|numbers?\b)/i, 'issue'],
+  [/^(?:cols?\.|columns?\b)/i, 'column'],
+  [/^(?:pts?\.|parts?\b)/i, 'part'],
+  [/^(?:vv?\.|verses?\b)/i, 'verse'],
+  [/^(?:bks?\.|books?\b)/i, 'book'],
+  [/^(?:fols?\.|folios?\b)/i, 'folio'],
+  [/^(?:s\.vv?\.|sub verbo\b)/i, 'sub-verbo'],
+];
+/** A locator value: a number or roman numeral, an optional range, more comma-separated numbers. */
+export const LOCATOR_VALUE_RE = /^[\p{N}ivxlcdm]+(?:[-–—][\p{N}ivxlcdm]+)?(?:,\s*[\p{N}]+(?:[-–—][\p{N}]+)?)*/iu;
+
+/** A citation item's locator: its value, its CSL label and the suffix text after it. */
+export interface LocatorSplit {
+  readonly locator: string;
+  readonly label: string;
+  /** The suffix after the locator (`, emphasis added`), as written. */
+  readonly rest: string;
+}
+
+/**
+ * The locator a citation item's suffix opens with (`, p. 5` → 5 / page;
+ * ` chap. 3, note` → 3 / chapter, rest `, note`; `, 33-35` → a page range),
+ * or null. A term needs a value (`p. 5`, `chap. iv`); a bare number is a page
+ * only after a comma, as in Pandoc.
+ */
+export function splitLocator(suffix: string): LocatorSplit | null {
+  const rest = suffix.replace(/^\s*,?\s*/, '');
+  if (rest === '') return null;
+  for (const [term, label] of LOCATOR_TERMS) {
+    const t = term.exec(rest);
+    if (t === null) continue;
+    const after = rest.slice(t[0].length).trimStart();
+    const v = LOCATOR_VALUE_RE.exec(after);
+    if (v === null || !/\p{N}|^[ivxlcdm]+$/iu.test(v[0])) break;
+    return { locator: v[0], label, rest: after.slice(v[0].length) };
+  }
+  const page = /^,\s*/.test(suffix) ? /^\p{N}+(?:[-–—]\p{N}+)?/u.exec(rest) : null;
+  if (page !== null) return { locator: page[0], label: 'page', rest: rest.slice(page[0].length) };
+  return null;
+}
+
+/**
+ * The items of one citation (a cluster's `;` segments, or a narrative
+ * citation's one key): prefix, key, suffix, locator and its label,
+ * suppress-author and narrative, for every Pandoc form (VRFY-09).
+ */
 export function citationItems(c: CitationCluster): CitationItem[] {
-  const segments = c.narrative ? [c.text] : c.text.slice(1, -1).split(';');
+  const narrative = c.narrative === true;
+  const segments = narrative ? [c.text] : c.text.slice(1, -1).split(';');
   const out: CitationItem[] = [];
   for (const segment of segments) {
     const m = keyMatches(segment)[0];
     if (m === undefined) continue;
     const token = segment.slice(m.index, m.index + m.length);
+    const suffix = segment.slice(m.index + m.length).trimEnd();
+    const loc = splitLocator(suffix);
     out.push({
       prefix: segment.slice(0, m.index).trim(),
       key: m.key,
       suppressAuthor: token.startsWith('-'),
-      suffix: segment.slice(m.index + m.length).trimEnd(),
+      suffix,
+      ...(loc !== null ? { locator: loc.locator, label: loc.label } : {}),
+      narrative,
     });
   }
   return out;
