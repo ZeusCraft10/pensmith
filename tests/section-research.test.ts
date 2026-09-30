@@ -275,6 +275,10 @@ test('GRND-17: zero hits → the per-adapter reasons, exit 1, nothing written', 
     assert.ok(isPensmithError(r.error) && r.error.exitCode === EXIT_ERROR, String(r.error));
     assert.match((r.error as Error).message, /^pensmith plan --research: no research hits for "instagram adolescent depression longitudinal" — pubmed 0 \(no results\), openalex 0 \(failed \(keyless daily budget exhausted — set OPENALEX_API_KEY \(free\)\)\), semanticscholar 0 \(no results\), crossref 0 \(no results\)/);
     assert.match((r.error as Error).message, /nothing was changed$/);
+    // GRND-17 (merge review round 2): the WARN names this verb and points at its adapter table — this pass never writes RESEARCH.md.
+    assert.match(r.err, /^pensmith plan --research: WARN — openalex failed \(keyless daily budget exhausted — set OPENALEX_API_KEY \(free\)\) for \d of \d quer(?:y|ies); its results are missing from this run \(see the adapter table below\)$/m, r.err);
+    assert.doesNotMatch(r.err, /pensmith research:|RESEARCH\.md/, r.err);
+    assert.match(r.out, /pensmith plan --research: sources by adapter/);
     const after = tree(sb.paper);
     for (const k of Object.keys(after)) {
       if (/SESSION\.log|COSTS\.jsonl/.test(k)) delete after[k];

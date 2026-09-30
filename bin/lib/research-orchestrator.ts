@@ -307,6 +307,19 @@ function aggregateStatus(rows: readonly QueryOutcome[], total: number): string {
 }
 
 /**
+ * Whose search a discovery WARN line names, and where its adapter outcomes
+ * are shown: `pensmith research` writes them to RESEARCH.md's run log;
+ * `plan N --research` never touches RESEARCH.md (GRND-17) and prints its
+ * adapter table instead.
+ */
+export interface ResearchWarnContext {
+  readonly label: string;
+  readonly see: string;
+}
+
+const RESEARCH_WARN_CONTEXT: ResearchWarnContext = { label: 'pensmith research', see: 'RESEARCH.md' };
+
+/**
  * Run every query against every plan entry (adapters in parallel per query).
  * Never throws for an adapter failure: it becomes that adapter's status.
  */
@@ -317,8 +330,11 @@ export async function discoverCandidates(args: {
   fromYear?: number | undefined;
   /** Stderr sink for the per-adapter WARN lines (default process.stderr). */
   warn?: (line: string) => void;
+  /** Who is searching and where its adapter outcomes are shown (see ResearchWarnContext). */
+  context?: ResearchWarnContext;
 }): Promise<DiscoveryResult> {
   const warn = args.warn ?? ((line: string): void => void process.stderr.write(`${line}\n`));
+  const { label, see } = args.context ?? RESEARCH_WARN_CONTEXT;
   const mode = networkMode();
   const raw: Found[] = [];
   const perQuery: QueryOutcome[] = [];
@@ -363,7 +379,7 @@ export async function discoverCandidates(args: {
         const parsed = SourceCandidateSchema.safeParse(item);
         if (!parsed.success) {
           warn(
-            `pensmith research: WARN — adapter "${entry.id}" returned a candidate that failed SourceCandidateSchema ` +
+            `${label}: WARN — adapter "${entry.id}" returned a candidate that failed SourceCandidateSchema ` +
               `validation (dropped, T-11-10): ${parsed.error.message.slice(0, 120)}`,
           );
           continue;
@@ -371,7 +387,7 @@ export async function discoverCandidates(args: {
         // RUN-27: outside --dry-run a reserved dry-run identifier never enters the library.
         if (!mode.dryRun && isReservedCandidate(parsed.data)) {
           warn(
-            `pensmith research: WARN — dropped a reserved dry-run identifier from "${entry.id}" ` +
+            `${label}: WARN — dropped a reserved dry-run identifier from "${entry.id}" ` +
               `(${parsed.data.doi ?? parsed.data.id}); synthetic sources exist only under --dry-run.`,
           );
           continue;
@@ -400,8 +416,8 @@ export async function discoverCandidates(args: {
     const reason = (rows[0] as QueryOutcome).status.slice('failed ('.length, -1);
     const n = args.queries.length;
     warn(
-      `pensmith research: WARN — ${entry.id} failed (${reason}) for ${rows.length} of ${n} ` +
-        `quer${n === 1 ? 'y' : 'ies'}; its results are missing from this run (see RESEARCH.md)`,
+      `${label}: WARN — ${entry.id} failed (${reason}) for ${rows.length} of ${n} ` +
+        `quer${n === 1 ? 'y' : 'ies'}; its results are missing from this run (see ${see})`,
     );
   }
   for (const s of args.plan.skipped) adapters.push({ adapter: s.id, count: 0, status: s.status });
@@ -693,6 +709,8 @@ export async function runResearchPass(args: {
   /** The evaluator's `<scope>` block: the chosen scope (or the section query). */
   scope: string;
   warn?: (line: string) => void;
+  /** Whose search the WARN lines name (default `pensmith research`, see RESEARCH.md). */
+  context?: ResearchWarnContext;
   /**
    * The user's own library entries to annotate (ownSourcesToEvaluate): they
    * join the evaluator's batch after the discovered candidates, and their
@@ -706,6 +724,7 @@ export async function runResearchPass(args: {
     registry: args.registry,
     fromYear: args.policy.minYear ?? undefined,
     ...(args.warn ? { warn: args.warn } : {}),
+    ...(args.context ? { context: args.context } : {}),
   });
   const now = new Date().toISOString();
   const base = discovery.candidates.map((d) => {

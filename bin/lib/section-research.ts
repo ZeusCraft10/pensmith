@@ -266,6 +266,8 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
     topic,
     discipline,
     scope: query,
+    // GRND-17: this pass never writes RESEARCH.md; its adapter table follows.
+    context: { label, see: 'the adapter table below' },
   });
   out(`${label}: sources by adapter`);
   for (const line of renderAdapterTable(pass.adapters)) out(line);
