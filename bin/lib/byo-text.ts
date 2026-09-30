@@ -32,7 +32,7 @@ import * as path from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { extractPdf } from './pdf-text.js';
 import { libraryPaths } from './library.js';
-import { pensmithDataDir } from './paths.js';
+import { dryRunWorkspaceActive, pensmithDataDir } from './paths.js';
 import type { LibraryEntry } from './schemas/library.js';
 
 export type ByoTextResult =
@@ -84,9 +84,11 @@ function cacheFile(pdfSha256: string): string {
 /**
  * Cache `text` for the PDF with sha256 `pdfSha256` (ingest calls it right
  * after extraction). Best-effort: a cache that cannot be written only means
- * the next read re-extracts.
+ * the next read re-extracts. A dry run writes nothing outside its workspace
+ * (GRND-19), so it caches nothing: its reads re-extract.
  */
 export async function writeByoTextCache(pdfSha256: string, text: string): Promise<void> {
+  if (dryRunWorkspaceActive()) return;
   try {
     await atomicWriteFile(cacheFile(pdfSha256), text);
   } catch {

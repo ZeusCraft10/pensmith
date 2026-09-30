@@ -511,6 +511,15 @@ export const addCommand = defineCommand({
       if (!fs.existsSync(path.resolve(pdfArg))) throw new PensmithError(`${P}: --pdf ${pdfArg}: no such file`, EXIT_USAGE);
     }
 
+    // A dry run reads none of the user's PDFs (GRND-19, D-18-29 — as `new
+    // --pdfs` and research's own-source step): identifying one needs the
+    // network, and its text would land in the data dir's cache. A preview
+    // (RUN-03/04): exit 0, nothing added.
+    if ((input.kind === 'dir' || input.kind === 'pdf') && networkMode().dryRun) {
+      out(`${P}: ${input.raw}: skipped (--dry-run) — no PDF was read; nothing added.`);
+      return { ok: true, added: false, mode: 'dry-run' };
+    }
+
     // (2) A folder: bring-your-own ingest of every PDF in it (SRC-15).
     if (input.kind === 'dir') {
       const files = await listPdfsInDir(input.path);

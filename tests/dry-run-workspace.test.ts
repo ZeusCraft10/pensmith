@@ -311,3 +311,26 @@ test('GRND-19 / D-18-29 (review round 1): `new --pdfs <dir> --dry-run` touches n
   }
   assert.equal(existsSync(join(root, '.paper')), false, 'the real .paper/ is never created');
 });
+
+test('GRND-19 / D-18-29 (review round 2): `add <folder>` and `add <file.pdf>` under --dry-run read no PDF, cache no text, add nothing — a preview (exit 0)', () => {
+  const sb = sandbox('ws-add-pdfs');
+  const root = sb.project('p');
+  const r0 = runCli(sb, root, ['new', '--from', ASSIGNMENT_FIXTURE, '--yolo', '--dry-run']);
+  assert.equal(r0.status, 0, `${r0.stdout}\n${r0.stderr}`);
+  mkdirSync(join(root, 'pdfs'));
+  for (const f of ['doi-footer.pdf', 'no-match.pdf']) {
+    writeFileSync(join(root, 'pdfs', f), readFileSync(join(REPO, 'tests', 'fixtures', 'byo', f)));
+  }
+  const ws = join(root, '.paper-dry-run');
+  const libBefore = existsSync(join(ws, 'LIBRARY.json')) ? readFileSync(join(ws, 'LIBRARY.json'), 'utf8') : null;
+  for (const arg of ['pdfs', join('pdfs', 'doi-footer.pdf')]) {
+    const r = runCli(sb, root, ['add', arg, '--dry-run']);
+    assert.equal(r.status, 0, `add ${arg}: ${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout, /pensmith add: .+: skipped \(--dry-run\) — no PDF was read; nothing added\./, arg);
+  }
+  assert.equal(existsSync(sandboxDataPath(sb, 'byo-text')), false, 'no PDF text is cached in the data dir');
+  assert.equal(existsSync(join(ws, 'sources')), false, 'no PDF is copied');
+  const libAfter = existsSync(join(ws, 'LIBRARY.json')) ? readFileSync(join(ws, 'LIBRARY.json'), 'utf8') : null;
+  assert.equal(libAfter, libBefore, 'LIBRARY.json is unchanged');
+  assert.equal(existsSync(join(root, '.paper')), false, 'the real .paper/ is never created');
+});
