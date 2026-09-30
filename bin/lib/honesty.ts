@@ -18,9 +18,8 @@
 //     log payload, the cost ledger, stdout, or a return value (presence-check
 //     only at the call boundary).
 
-import { readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { pluginReferencePath } from './paths.js';
 import { fetch as httpFetch } from './http.js';
 import { networkMode } from './http-mock.js';
 import { assertBudget, appendCost } from './budget.js';
@@ -50,30 +49,10 @@ export interface HonestyBackend {
 // ============================================================
 //   Locked honest-framing copy (read VERBATIM — never inlined)
 // ============================================================
-// This module ships at two depths: bin/lib/honesty.ts under tsx, and
-// dist/bin/lib/honesty.js after build. Fixed-depth `..` × N would land in the
-// wrong dir post-build (IN-03 defect class). Walk up from HERE until we find
-// the directory that owns package.json, then resolve references/ relative to
-// that. EXACT shape copied from bin/lib/http.ts findPkgRoot + loadWarnString.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-const PKG_ROOT = findPkgRoot(__dirname);
-const FRAMING_FILE = path.join(PKG_ROOT, 'references', 'honesty-framing.md');
+// The copy lives in the plugin's references/honesty-framing.md (PLUG-02); the
+// one asset resolver (paths.ts, D-23a-03) finds it from this module's own
+// location in every layout — source, dist/, an npm install, the plugin bundle.
+const framingFile = (): string => pluginReferencePath('honesty-framing.md');
 
 let framingNote: string | null = null;
 
@@ -92,7 +71,7 @@ function loadFramingNote(): string {
   if (framingNote !== null) return framingNote;
   let md: string;
   try {
-    md = readFileSync(FRAMING_FILE, 'utf8');
+    md = readFileSync(framingFile(), 'utf8');
   } catch {
     framingNote =
       'Note: this score reflects prose patterns. The humanizer improves readability; it does not promise to make output undetectable.';
@@ -156,7 +135,7 @@ function loadDisclosureNote(): string {
   if (disclosureNote !== null) return disclosureNote;
   let md: string;
   try {
-    md = readFileSync(FRAMING_FILE, 'utf8');
+    md = readFileSync(framingFile(), 'utf8');
   } catch {
     disclosureNote =
       'Disclosure: the honesty check sends your full paper text to GPTZero (api.gptzero.me), an external service, for AI-detection scoring. This is for your transparency only — it does NOT make your output undetectable. No data is sent without your consent.';

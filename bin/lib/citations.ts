@@ -70,10 +70,9 @@
 // happens at compile time via Pandoc. citations.ts renders only the
 // reference list (bibliography). Phase 6 compile verb wires Pandoc.
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
+import { pluginTemplatePath } from './paths.js';
 import { defaultCitationStyleFor } from './disciplines.js';
 
 // `citation-js@0.7` ships a single default-export class; the `plugins`
@@ -93,32 +92,9 @@ const plugins = Cite.plugins;
 // `from 'citation-js'`.
 export { Cite };
 
-// =====================================================================
-//   Locate apa.csl relative to package root (mirrors bin/lib/http.ts)
-// =====================================================================
-// This file ships at two depths: bin/lib/citations.ts under tsx, and
-// dist/bin/lib/citations.js after build. Fixed-depth `..` × N would
-// land in the wrong dir post-build (same defect class as IN-03 in
-// http.ts). Walk up from HERE until we find package.json.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(__dirname);
+// The bundled CSL styles live in the plugin's templates/citation-styles/
+// (PLUG-02); paths.ts pluginTemplatePath resolves them from this module's own
+// location in every layout (source, dist/, an npm install, the plugin bundle).
 
 // =====================================================================
 //   Memoized N-style custom-template registration (Pitfall #4 / Pitfall 1)
@@ -161,7 +137,7 @@ const noteStyles = new Set<string>();
 function ensureStyleTemplate(style: string): void {
   if (registeredStyles.get(style)) return;
   const filename = STYLE_FILENAMES[style] ?? style;
-  const cslPath = path.join(PKG_ROOT, 'templates', 'citation-styles', `${filename}.csl`);
+  const cslPath = pluginTemplatePath('citation-styles', `${filename}.csl`);
   if (!existsSync(cslPath)) {
     throw new Error(
       `renderStyle: CSL file not found for style '${style}' at ${cslPath}`,

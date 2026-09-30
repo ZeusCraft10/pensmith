@@ -20,9 +20,8 @@
 // intake-brief.ts / config.ts.
 
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { pluginTemplatePath } from './paths.js';
 
 /** Source-preference ids a preset may name (PRD §8; adapters for some land in Phase 19). */
 export const SOURCE_PREFERENCE_IDS = [
@@ -108,29 +107,14 @@ export interface DisciplinePreset {
 // Loading
 // ---------------------------------------------------------------------------
 
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i += 1) {
-    try {
-      readFileSync(path.join(cur, 'package.json'));
-      return cur;
-    } catch {
-      // keep walking up
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
+/**
+ * The packaged preset file: the plugin's templates/presets/disciplines.json
+ * (PLUG-02), resolved lazily through paths.ts so a broken install fails with
+ * the resolver's one-line error at first use, never at import.
+ */
+export function disciplinesPath(): string {
+  return pluginTemplatePath('presets', 'disciplines.json');
 }
-
-/** The packaged preset file (shipped through package.json `files` → templates/). */
-export const DISCIPLINES_PATH = path.join(
-  findPkgRoot(path.dirname(fileURLToPath(import.meta.url))),
-  'templates',
-  'presets',
-  'disciplines.json',
-);
 
 let cache: Readonly<Record<string, DisciplinePreset>> | null = null;
 
@@ -157,7 +141,7 @@ export function parsePresetFile(raw: unknown): Readonly<Record<string, Disciplin
 
 /** Every preset, by slug (read and validated once per process). */
 export function loadDisciplinePresets(): Readonly<Record<string, DisciplinePreset>> {
-  if (cache === null) cache = parsePresetFile(JSON.parse(readFileSync(DISCIPLINES_PATH, 'utf8')) as unknown);
+  if (cache === null) cache = parsePresetFile(JSON.parse(readFileSync(disciplinesPath(), 'utf8')) as unknown);
   return cache;
 }
 

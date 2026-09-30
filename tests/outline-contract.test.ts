@@ -15,7 +15,7 @@ import { renderOutlineMd, parseOutline } from '../bin/lib/outline-parse.js';
 import { numberFreshOutline } from '../bin/lib/section-stubs.js';
 import { FENCE_OPEN, FENCE_CLOSE } from '../bin/lib/untrusted-fence.js';
 
-const TEMPLATE = fs.readFileSync(new URL('../templates/prompts/outline-author.md', import.meta.url), 'utf8');
+const TEMPLATE = fs.readFileSync(new URL('../plugin/templates/prompts/outline-author.md', import.meta.url), 'utf8');
 
 /** The ```json block under "## Output Format". */
 function exampleBlock(template: string): string {

@@ -30,7 +30,7 @@ import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 import { readIntakeBrief } from '../bin/lib/intake-brief.js';
 import { withLlmSandbox } from './helpers/llm-sandbox.js';
 
-const TEMPLATE = fs.readFileSync(fileURLToPath(new URL('../templates/prompts/intake-clarifier.md', import.meta.url)), 'utf8');
+const TEMPLATE = fs.readFileSync(fileURLToPath(new URL('../plugin/templates/prompts/intake-clarifier.md', import.meta.url)), 'utf8');
 const A1 = fs.readFileSync(fileURLToPath(new URL('./fixtures/assignment.txt', import.meta.url)), 'utf8');
 const DISCIPLINES = disciplineSlugs().map((slug) => ({ slug, name: presetFor(slug).name }));
 

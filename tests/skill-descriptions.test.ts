@@ -1,104 +1,188 @@
-// tests/skill-descriptions.test.ts — Phase 7 Wave 0 RED scaffold for UX-03 / UX-04.
+// tests/skill-descriptions.test.ts — the plugin's skills in the Claude Code
+// SKILL.md layout (PLUG-01, PLUG-05, CI-05; D-23a-09, D-23a-10).
 //
-// Skill descriptions are the ONLY mechanism that routes natural-language phrases
-// to verbs (07-RESEARCH "Natural-Language Trigger Routing"). The plumbing skill
-// files (skills/*.md) carry the EXACT PRD §5.4 trigger phrases in their
-// `description:` frontmatter. The plugin manifest registers the colon-prefix
-// skill names. Both land in Plan 07-04 — RED-by-skip on existsSync of the
-// skill files / the plugin.json `skills` key.
+// Rewritten in Phase 23a: the earlier version read flat skills/*.md files and a
+// plugin.json `skills` array of {name, file} objects — a layout Claude Code
+// never loaded (0 skills, no /pensmith). Now:
+//   - plugin/skills/<name>/SKILL.md for the 8 skills, frontmatter `name` equal
+//     to the directory (the plugin namespace adds "pensmith:" itself);
+//   - `pensmith` is the ONE natural-language router: its description +
+//     when_to_use (≤ 1,536 characters, the skill-listing cap) carry every PRD
+//     §5.4 phrase and the §5.6 corrections, and it pre-approves only the
+//     read-only pensmith_status tool;
+//   - the 7 plumbing skills are user-invoked only (disable-model-invocation)
+//     and forward `<verb> $ARGUMENTS` to the pensmith skill;
+//   - the pensmith skill tells the user how to fix a server that is not
+//     connected: Node.js ≥ 22 on PATH, then restart (CI-05).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import YAML from 'yaml';
+import { UX02_VERBS } from '../bin/lib/verbs.js';
 
-function repoPath(rel: string): string {
-  return fileURLToPath(new URL('../' + rel, import.meta.url));
-}
-
-const SKILL_FILES = {
-  pensmith: repoPath('skills/pensmith.md'),
-  planSection: repoPath('skills/plan-section.md'),
-  writeSection: repoPath('skills/write-section.md'),
-  verifySection: repoPath('skills/verify-section.md'),
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SKILLS_DIR = path.join(REPO, 'plugin', 'skills');
+const ROUTER = 'pensmith';
+const PLUMBING: Record<string, string> = {
+  'plan-section': 'plan',
+  'write-section': 'write',
+  'verify-section': 'verify',
+  research: 'research',
+  outline: 'outline',
+  compile: 'compile',
+  done: 'done',
 };
-const PLUGIN_JSON = repoPath('.claude-plugin/plugin.json');
 
-// RED-by-skip guard: the skill files land in 07-04.
-const skillsBuilt = existsSync(SKILL_FILES.pensmith);
-
-// Extract the `description:` frontmatter value (single-line or quoted) from a
-// skill markdown file's YAML frontmatter.
-function readDescription(path: string): string {
-  const text = readFileSync(path, 'utf8');
-  const fmMatch = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  const block = fmMatch ? fmMatch[1] ?? '' : text;
-  const descMatch = /(?:^|\n)description:\s*(.+)/.exec(block);
-  return descMatch ? (descMatch[1] ?? '').trim() : '';
+interface Skill {
+  fm: Record<string, unknown>;
+  body: string;
 }
 
-// --- RED-by-skip presence guard ---
-test('UX-03/04: skill files presence is consistent with Wave-0 RED state', () => {
-  if (skillsBuilt) {
-    assert.ok(skillsBuilt, 'skills/pensmith.md present — skill-content tests active');
-  } else {
-    assert.ok(!skillsBuilt, 'Wave-0: skills/*.md not written yet (RED-by-skip; lands in 07-04)');
+function readSkill(name: string): Skill {
+  const text = readFileSync(path.join(SKILLS_DIR, name, 'SKILL.md'), 'utf8');
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(text);
+  assert.ok(m, `${name}/SKILL.md starts with YAML frontmatter`);
+  const fm = YAML.parse(m[1]!) as Record<string, unknown>;
+  return { fm, body: text.slice(m[0].length) };
+}
+
+function listing(s: Skill): string {
+  return [s.fm['description'], s.fm['when_to_use']].filter((v): v is string => typeof v === 'string').join(' ');
+}
+
+/** PRD §5.4 — every phrase the "You say..." column lists (11 rows). */
+const PRD_5_4_PHRASES = [
+  'I have an essay to write on X',
+  'research my topic',
+  'find sources',
+  'outline the paper',
+  'write the next section',
+  'continue',
+  'redo section 3',
+  'section 3 needs work',
+  'check the citations in section 3',
+  'make it sound less AI',
+  'compile',
+  'put it all together',
+  'export to Word',
+  'where am I?',
+  "what's next?",
+  'what papers do I have?',
+];
+
+/** PRD §5.6 — the inline conversational corrections. */
+const PRD_5_6_CORRECTIONS = [
+  'make it 1500 words instead of 2500',
+  'add a section about counterexamples',
+  'drop the section about X',
+  're-do section 3',
+  'use a different source for the claim about X in section 4',
+];
+
+test('PLUG-01: plugin/skills holds exactly the 8 skills as <name>/SKILL.md, and no flat skill file', () => {
+  const entries = readdirSync(SKILLS_DIR, { withFileTypes: true });
+  assert.deepEqual(entries.filter((e) => e.isFile()).map((e) => e.name), [], 'no flat skills/*.md');
+  assert.deepEqual(
+    entries.filter((e) => e.isDirectory()).map((e) => e.name).sort(),
+    [ROUTER, ...Object.keys(PLUMBING)].sort(),
+  );
+  for (const e of entries) assert.ok(existsSync(path.join(SKILLS_DIR, e.name, 'SKILL.md')), `${e.name}/SKILL.md`);
+});
+
+test('PLUG-01: every skill\'s frontmatter name equals its directory (no "pensmith:" prefix)', () => {
+  for (const name of [ROUTER, ...Object.keys(PLUMBING)]) {
+    const s = readSkill(name);
+    assert.equal(s.fm['name'], name);
+    assert.ok(!String(s.fm['name']).includes(':'), `${name}: the plugin namespace adds the prefix`);
+    assert.equal(typeof s.fm['description'], 'string');
+    assert.ok(String(s.fm['description']).trim().length > 0, `${name} has a description`);
+    assert.equal(typeof s.fm['argument-hint'], 'string', `${name} has an argument-hint`);
   }
 });
 
-// === UX-03: the four plumbing skill files exist ===
-test('UX-03: the four plumbing skill files exist on disk',
-  { skip: !skillsBuilt }, () => {
-    for (const [name, path] of Object.entries(SKILL_FILES)) {
-      assert.ok(existsSync(path), `UX-03: skill file for "${name}" must exist at ${path}`);
-    }
-  });
-
-// === UX-04: skills/pensmith.md description carries the §5.4 status/resume triggers ===
-test('UX-04: skills/pensmith.md description contains the PRD §5.4 status/resume trigger phrases',
-  { skip: !skillsBuilt }, () => {
-    const desc = readDescription(SKILL_FILES.pensmith);
-    assert.match(desc, /where am I/i, 'UX-04: pensmith skill must carry "where am I" (status trigger)');
-    assert.match(desc, /what'?s next/i, 'UX-04: pensmith skill must carry "what\'s next" (status trigger)');
-    assert.match(desc, /resume/i, 'UX-04: pensmith skill must carry "resume" (resume trigger)');
-  });
-
-// === UX-04: plan-section skill carries the plan/redo triggers ===
-test('UX-04: skills/plan-section.md description contains the PRD §5.4 plan/redo trigger phrases',
-  { skip: !skillsBuilt }, () => {
-    const desc = readDescription(SKILL_FILES.planSection);
-    assert.match(desc, /plan section/i, 'UX-04: plan-section skill must carry "plan section"');
-    assert.match(desc, /redo section/i, 'UX-04: plan-section skill must carry "redo section"');
-  });
-
-// === UX-04: verify-section skill carries the verify trigger ===
-test('UX-04: skills/verify-section.md description contains the PRD §5.4 verify trigger phrase',
-  { skip: !skillsBuilt }, () => {
-    const desc = readDescription(SKILL_FILES.verifySection);
-    assert.match(desc, /verify section/i, 'UX-04: verify-section skill must carry "verify section"');
-  });
-
-// === UX-03: plugin.json registers exactly the colon-prefix plumbing skill names ===
-const pluginSkillsBuilt = (() => {
-  if (!existsSync(PLUGIN_JSON)) return false;
-  try {
-    const pkg = JSON.parse(readFileSync(PLUGIN_JSON, 'utf8')) as { skills?: unknown };
-    return Array.isArray(pkg.skills);
-  } catch {
-    return false;
+test('UX-04 / PLUG-01: the pensmith skill listing carries every PRD §5.4 phrase and §5.6 correction within 1,536 characters', () => {
+  const s = readSkill(ROUTER);
+  const text = listing(s);
+  assert.ok(text.length <= 1536, `description + when_to_use is ${text.length} characters (cap 1,536)`);
+  const lower = text.toLowerCase();
+  for (const phrase of [...PRD_5_4_PHRASES, ...PRD_5_6_CORRECTIONS]) {
+    assert.ok(lower.includes(phrase.toLowerCase()), `the pensmith skill listing must carry "${phrase}"`);
   }
-})();
+  // The status / resume triggers of UX-04.
+  assert.match(text, /where am I/i);
+  assert.match(text, /what'?s next/i);
+  assert.match(text, /resume/i);
+});
 
-test('UX-03: plugin.json skills array registers the colon-prefix plumbing namespace',
-  { skip: !pluginSkillsBuilt }, () => {
-    const pkg = JSON.parse(readFileSync(PLUGIN_JSON, 'utf8')) as { skills?: unknown[] };
-    const skills = (pkg.skills ?? []) as unknown[];
-    // The registered skill identifiers must include the colon-prefix plumbing names.
-    const flat = JSON.stringify(skills);
-    for (const name of ['pensmith', 'pensmith:plan-section', 'pensmith:write-section', 'pensmith:verify-section']) {
-      assert.ok(
-        flat.includes(name),
-        `UX-03: plugin.json skills must register "${name}" (colon-prefix plumbing namespace)`,
-      );
+test('D-23a-09: pensmith is the only model-invocable skill; the plumbing skills are user-invoked only', () => {
+  assert.notEqual(readSkill(ROUTER).fm['disable-model-invocation'], true, 'the router stays model-invocable');
+  for (const name of Object.keys(PLUMBING)) {
+    const s = readSkill(name);
+    assert.equal(s.fm['disable-model-invocation'], true, `${name}: disable-model-invocation: true`);
+    assert.ok(!('when_to_use' in s.fm), `${name} carries no natural-language triggers`);
+    for (const phrase of PRD_5_4_PHRASES.filter((p) => p.length > 8)) {
+      assert.ok(!listing(s).toLowerCase().includes(phrase.toLowerCase()), `${name} must not compete for "${phrase}"`);
     }
-  });
+  }
+});
+
+test('D-23a-10: the pensmith skill pre-approves only the read-only pensmith_status tool', () => {
+  assert.equal(readSkill(ROUTER).fm['allowed-tools'], 'mcp__plugin_pensmith_pensmith__pensmith_status');
+});
+
+test('D-23a-10: the pensmith skill says how each of the 16 verbs runs in this release', () => {
+  const { body } = readSkill(ROUTER);
+  const table = /## How each verb runs in this release([\s\S]*?)\n## /.exec(body)?.[1] ?? '';
+  assert.ok(table.length > 0, 'the verb → execution section exists');
+  for (const [verb, tool] of [['status', 'pensmith_status'], ['plan N', 'pensmith_plan'], ['write N', 'pensmith_write'], ['verify N', 'pensmith_verify']] as const) {
+    assert.match(table, new RegExp(`\\| \`${verb}\` \\| the MCP tool \`${tool}\``), `${verb} runs through ${tool}`);
+  }
+  const cliRow = table.split('\n').find((l) => l.includes('the CLI: run `pensmith <verb> [args]`')) ?? '';
+  const cliVerbs = [...cliRow.matchAll(/`([a-z]+)`/g)].map((m) => m[1]!).filter((v) => (UX02_VERBS as readonly string[]).includes(v));
+  assert.deepEqual(
+    [...new Set([...cliVerbs, 'status', 'plan', 'write', 'verify'])].sort(),
+    [...UX02_VERBS].sort(),
+    'every one of the 16 verbs has a way to run',
+  );
+  // Truthful about the model provider: plan/write are not key-free in this release.
+  assert.match(body, /`plan` and `write` call the model provider configured for pensmith/);
+  assert.match(body, /does not generate text through this\s+Claude Code session/);
+});
+
+test('D-23a-10: a bare /pensmith calls pensmith_status first and runs one step', () => {
+  const { body } = readSkill(ROUTER);
+  const bare = /## A bare \/pensmith[^\n]*\n([\s\S]*?)\n## /.exec(body)?.[1] ?? '';
+  assert.match(bare, /1\. Call `pensmith_status` first/);
+  assert.match(bare, /One \/pensmith is one step/);
+});
+
+test('CI-05: the pensmith skill tells the user to put Node.js ≥ 22 on PATH and restart when the server is not connected', () => {
+  const { body } = readSkill(ROUTER);
+  const section = /## When the pensmith tools are missing\n([\s\S]*?)(?:\n## |$)/.exec(body)?.[1] ?? '';
+  assert.match(section, /Node\.js ≥ 22/);
+  assert.match(section, /`node` on the PATH/);
+  assert.match(section, /restart Claude Code/);
+  assert.match(section, /pensmith_status/);
+});
+
+test('honest framing: "make it sound less AI" improves prose — never a promise to evade detection', () => {
+  const { body } = readSkill(ROUTER);
+  assert.match(body, /it improves the\s+prose/);
+  assert.match(body, /Never describe it[\s\S]*?as a way\s+to evade or pass a detector/);
+  for (const name of [ROUTER, ...Object.keys(PLUMBING)]) {
+    const text = readFileSync(path.join(SKILLS_DIR, name, 'SKILL.md'), 'utf8');
+    assert.doesNotMatch(text, /undetectable|bypass(?:es)? (?:AI )?detect/i, `${name} makes no detection-evasion claim`);
+  }
+});
+
+test('D-23a-09: each plumbing skill forwards `<verb> $ARGUMENTS` to the pensmith skill and holds no routing logic', () => {
+  for (const [name, verb] of Object.entries(PLUMBING)) {
+    const { body } = readSkill(name);
+    assert.match(body, new RegExp(`Run the pensmith verb \`${verb} \\$ARGUMENTS\``), `${name} runs ${verb}`);
+    assert.match(body, new RegExp(`invoke the \`pensmith:pensmith\` skill with the arguments\\s+\`${verb} \\$ARGUMENTS\``), `${name} forwards`);
+    assert.doesNotMatch(body, /\| The user says/, `${name} has no natural-language routing table`);
+  }
+});

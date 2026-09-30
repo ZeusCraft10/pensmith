@@ -1,0 +1,24 @@
+{
+  "name": "pensmith",
+  "version": "0.1.0-dev",
+  "description": "Negative control: the pre-v1 plugin shape that Claude Code refuses to load.",
+  "license": "AGPL-3.0-or-later",
+  "author": {
+    "name": "Pensmith Maintainers",
+    "email": "maintainers@example.org"
+  },
+  "homepage": "https://example.org/pensmith",
+  "repository": "https://example.org/pensmith",
+  "keywords": ["academic-writing"],
+  "skills": [
+    { "name": "pensmith", "file": "skills/pensmith.md" },
+    { "name": "pensmith:plan-section", "file": "skills/plan-section.md" }
+  ],
+  "mcpServers": {
+    "pensmith": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"]
+    }
+  }
+}

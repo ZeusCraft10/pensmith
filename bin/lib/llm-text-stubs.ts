@@ -33,9 +33,8 @@
 // no consumer could use (a draft that cited nothing, an unparseable swap).
 
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { pluginTemplatePath } from './paths.js';
 import { CITEKEY_RE } from './citekey.js';
 import { promptHints } from './prompt-request.js';
 
@@ -52,29 +51,13 @@ const EMPTY_PAYLOAD = '(none)';
 // The prose data file
 // ---------------------------------------------------------------------------
 
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i += 1) {
-    try {
-      readFileSync(path.join(cur, 'package.json'));
-      return cur;
-    } catch {
-      // keep walking up
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
+/**
+ * The packaged stub prose: the plugin's templates/stubs/text-stubs.json
+ * (PLUG-02), resolved lazily through paths.ts.
+ */
+export function textStubsPath(): string {
+  return pluginTemplatePath('stubs', 'text-stubs.json');
 }
-
-/** The packaged stub prose (shipped through package.json `files` → templates/). */
-export const TEXT_STUBS_PATH = path.join(
-  findPkgRoot(path.dirname(fileURLToPath(import.meta.url))),
-  'templates',
-  'stubs',
-  'text-stubs.json',
-);
 
 const Sentence = z.string().min(1);
 
@@ -111,14 +94,14 @@ export function loadTextStubs(): TextStubsFile {
   if (cache !== null) return cache;
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(TEXT_STUBS_PATH, 'utf8')) as unknown;
+    raw = JSON.parse(readFileSync(textStubsPath(), 'utf8')) as unknown;
   } catch (e) {
-    throw new Error(`llm-text-stubs: cannot read ${TEXT_STUBS_PATH} (${(e as Error).message})`);
+    throw new Error(`llm-text-stubs: cannot read ${textStubsPath()} (${(e as Error).message})`);
   }
   const parsed = TextStubsFileSchema.safeParse(raw);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw new Error(`llm-text-stubs: ${TEXT_STUBS_PATH} is invalid (${first?.path.join('.') ?? ''}: ${first?.message ?? 'schema mismatch'})`);
+    throw new Error(`llm-text-stubs: ${textStubsPath()} is invalid (${first?.path.join('.') ?? ''}: ${first?.message ?? 'schema mismatch'})`);
   }
   for (const s of parsed.data['section-drafter'].cited) {
     if (!s.includes('{cite}')) throw new Error(`llm-text-stubs: every section-drafter "cited" sentence needs a {cite} slot (${s})`);

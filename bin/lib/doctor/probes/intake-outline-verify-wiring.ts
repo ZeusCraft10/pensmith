@@ -9,8 +9,8 @@
 //         new, research, outline, plan, write, verify
 //       (`new` is the canonical UX02_VERBS key — workflows/new.md is the
 //        intake workflow body per CYCLE-3 NAMING NOTE.)
-//   (b) workflows/{new,research,outline,plan,write,verify}.md each has a
-//       `## Body` section (Plan 03-06 contract).
+//   (b) plugin/workflows/{new,research,outline,plan,write,verify}.md each has
+//       a `## Body` section (Plan 03-06 contract).
 //   (c) bin/lib/drafter-input.ts exports `assertDrafterInput` (Plan 03-07).
 //
 // D-19 read-only: probe only imports + parses files; no filesystem writes,
@@ -21,31 +21,13 @@
 // wiring regressed.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { pluginWorkflowPath } from '../../paths.js';
 
-// Resolve workflow files relative to the package root (same find-up
-// pattern used by build-artifact-resolves.ts and prompt-loader.ts) so the
-// probe works under both `tsx` (bin/lib/doctor/probes/*.ts) and the
-// compiled dist build (dist/bin/lib/doctor/probes/*.js).
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue upward
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = findPkgRoot(HERE);
+// Workflow bodies live in the plugin's workflows/ (PLUG-02). paths.ts
+// pluginWorkflowPath resolves them from the resolver's own module location,
+// so the probe reads the same files under tsx, from dist/, from an npm
+// install and in any working directory (CR-02).
 
 // (a) REAL_VERB_LOADERS expected keys. `new` is the canonical UX02 key
 // even though the bin/cli implementation file is intake.ts (Plan 06+07
@@ -85,14 +67,20 @@ export const intakeOutlineVerifyWiringProbe: Probe = {
 
     // (b) Each workflow file exists and contains a `## Body` heading.
     for (const v of EXPECTED_WORKFLOW_FILES) {
-      const wfPath = path.join(PKG_ROOT, 'workflows', `${v}.md`);
+      let wfPath = `the ${v} workflow body`;
       try {
+        wfPath = pluginWorkflowPath(v);
         const text = readFileSync(wfPath, 'utf8');
         if (!/^## Body\s*$/m.test(text)) {
-          failures.push(`workflows/${v}.md missing '## Body' section`);
+          failures.push(`${wfPath} missing '## Body' section`);
         }
-      } catch {
-        failures.push(`workflows/${v}.md not found`);
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        failures.push(
+          code === 'ENOENT'
+            ? `${wfPath} not found`
+            : `${wfPath} not readable: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     }
 

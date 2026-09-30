@@ -19,16 +19,20 @@
 //   4. `node <symlink | Windows junction to the package root>/dist/bin/pensmith.js
 //      --version`;
 //   5. a JSON-RPC `initialize` over stdio to `node <linked root>/dist/mcp/server.js`
-//      answers serverInfo.name "pensmith".
+//      answers serverInfo.name "pensmith";
+//   6. (PLUG-02) the package ships the canonical plugin/ directory, the installed
+//      resolver finds it, every prompt loads through its hash pin, and doctor's
+//      workflow-wiring, build-artifact and MCP-bundle probes PASS from any folder.
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type ChildProcess, type SpawnSyncReturns } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { packAndInstall, type InstalledPackage } from './helpers/installed-package.js';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
+import { EXPECTED_PROMPT_HASHES } from '../bin/lib/prompt-loader.js';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 const IS_WIN = process.platform === 'win32';
@@ -126,6 +130,61 @@ test('RUN-10: installed `pensmith doctor` prints the probe table', () => {
     assert.match(r.stdout, new RegExp(id), `the probe table lists ${id}`);
   }
   assert.match(r.stdout, /\[PASS\] node-version/, 'the supported Node passes the node-version probe');
+});
+
+// PLUG-02: the npm package ships the one canonical plugin/ directory, and the
+// installed CLI reads its assets there — through the resolver in the installed
+// dist/bin/lib/paths.js, with every prompt checked against its hash pin.
+test('PLUG-02: the installed package ships plugin/ and none of the pre-move asset folders', () => {
+  const { pkgDir } = installed!;
+  for (const rel of [
+    ['plugin', '.claude-plugin', 'plugin.json'],
+    ['plugin', 'hooks', 'hooks.json'],
+    ['plugin', 'skills', 'pensmith', 'SKILL.md'],
+    ['plugin', 'templates', 'presets', 'disciplines.json'],
+    ['plugin', 'templates', 'citation-styles', 'apa.csl'],
+    ['plugin', 'references', 'honesty-framing.md'],
+  ]) {
+    assert.ok(fs.existsSync(path.join(pkgDir, ...rel)), `the package ships ${rel.join('/')}`);
+  }
+  const workflows = fs.readdirSync(path.join(pkgDir, 'plugin', 'workflows')).filter((f) => f.endsWith('.md'));
+  assert.deepEqual(workflows.map((f) => f.replace(/\.md$/, '')).sort(), [...UX02_VERBS].sort());
+  for (const gone of ['workflows', 'templates', 'references', 'skills', 'agents', '.claude-plugin', '.mcp.json']) {
+    assert.ok(!fs.existsSync(path.join(pkgDir, gone)), `the package root no longer ships ${gone}`);
+  }
+  assert.ok(!fs.existsSync(path.join(pkgDir, 'plugin', 'bin')), 'the plugin in the package has no bin/');
+});
+
+test('PLUG-02: the installed CLI resolves plugin/ and loads every prompt through its hash pin', () => {
+  const { pkgDir, scratch, runEnv } = installed!;
+  const lib = path.join(pkgDir, 'dist', 'bin', 'lib');
+  const script = [
+    `const paths = await import(${JSON.stringify(pathToFileURL(path.join(lib, 'paths.js')).href)});`,
+    `const loader = await import(${JSON.stringify(pathToFileURL(path.join(lib, 'prompt-loader.js')).href)});`,
+    'const slugs = Object.keys(loader.EXPECTED_PROMPT_HASHES);',
+    'for (const slug of slugs) if (loader.loadPrompt(slug).length === 0) throw new Error(`empty prompt ${slug}`);',
+    'process.stdout.write(JSON.stringify({ root: paths.pluginRoot(), layout: paths.pluginLayout(), pkg: paths.cliPackageRoot(), loaded: slugs.length }));',
+  ].join('\n');
+  const cwd = fs.mkdtempSync(path.join(scratch, 'cwd-'));
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd, env: runEnv, encoding: 'utf8', timeout: 60_000 });
+  assert.equal(r.status, 0, r.stderr);
+  const got = JSON.parse(r.stdout) as { root: string; layout: string; pkg: string; loaded: number };
+  assert.equal(fs.realpathSync(got.root), fs.realpathSync(path.join(pkgDir, 'plugin')));
+  assert.equal(got.layout, 'package');
+  assert.equal(fs.realpathSync(got.pkg), fs.realpathSync(pkgDir));
+  assert.equal(got.loaded, Object.keys(EXPECTED_PROMPT_HASHES).length, 'every pinned prompt loaded');
+});
+
+test('PLUG-02: installed `pensmith doctor --json` finds the workflow bodies, the CLI build and the plugin bundle from any folder', () => {
+  const cwd = fs.mkdtempSync(path.join(installed!.scratch, 'cwd-'));
+  const r = runShim(['doctor', '--json'], cwd);
+  const report = JSON.parse(r.stdout) as { probes: Record<string, { severity: string; summary: string; detail?: string }> };
+  for (const id of ['intake-outline-verify-wiring', 'build-artifact-resolves', 'mcp-sdk-presence']) {
+    const probe = report.probes[id];
+    assert.ok(probe, `doctor reports ${id}`);
+    assert.equal(probe.severity, 'PASS', `${id}: ${probe.summary} ${probe.detail ?? ''}`);
+  }
+  assert.match(report.probes['mcp-sdk-presence']!.summary, /plugin\/dist\/mcp\/server\.mjs present/);
 });
 
 test('RUN-10: `node <symlink/junction to the package root>/dist/bin/pensmith.js --version` works', () => {

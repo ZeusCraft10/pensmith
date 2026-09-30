@@ -138,8 +138,8 @@ import { isIP } from 'node:net';
 import { readFileSync, statSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { pensmithHttpCacheDir, pensmithDataDir, projectRoot } from './paths.js';
+import { pensmithHttpCacheDir, pensmithDataDir, projectRoot, pluginReferencePath } from './paths.js';
+import { VERSION } from './version.generated.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { retry, parseRetryAfter } from './retry.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
@@ -647,36 +647,14 @@ async function checkLocalService(url: string, kind: LocalService, resolveFn: Res
   return addrs;
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// IN-03 fix: this file ships at two different depths — bin/lib/http.ts under
-// tsx, dist/bin/lib/http.js after build. Fixed-depth `..` × N produced
-// `dist/references/http-warnings.md` (nonexistent) post-build, silently
-// degrading the WARN banner to the short fallback. Same defect-class as CR-02
-// for the doctor probes; same shape of fix — walk up from HERE until we hit
-// the directory that owns package.json. See bin/lib/doctor/probes/
-// build-artifact-resolves.ts for the original rationale.
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-const PKG_ROOT = findPkgRoot(__dirname);
-
 // ============================================================
 //   WARN-once for missing contact email
 // ============================================================
-const WARN_FILE = path.join(PKG_ROOT, 'references', 'http-warnings.md');
+// The locked banner lives in the plugin's references/http-warnings.md
+// (PLUG-02), found through the one asset resolver (paths.ts, D-23a-03) in
+// every layout: source, dist/, an npm install and the plugin bundle (IN-03 —
+// never a fixed-depth `..` walk).
+const warnFile = (): string => pluginReferencePath('http-warnings.md');
 
 let warnString: string | null = null;
 let warnedNoEmail = false;
@@ -685,10 +663,10 @@ function loadWarnString(): string {
   if (warnString !== null) return warnString;
   let md: string;
   try {
-    md = readFileSync(WARN_FILE, 'utf8');
+    md = readFileSync(warnFile(), 'utf8');
   } catch {
     // Defensive fallback if the references file is missing — should never
-    // happen in shipped builds because references/ is in package.json files[].
+    // happen in shipped builds because plugin/ is in package.json files[].
     warnString = 'pensmith: PENSMITH_CONTACT_EMAIL is not set.';
     return warnString;
   }
@@ -732,21 +710,13 @@ export function _resetWarnedForTest(): void {
 // ============================================================
 //   User-Agent
 // ============================================================
-let cachedVersion: string | null = null;
+/**
+ * The running version for the User-Agent: the prebuild-generated VERSION
+ * (package.json#version, WR-01) — the same constant in every layout, including
+ * the plugin bundle, which ships no package.json.
+ */
 function pkgVersion(): string {
-  if (cachedVersion !== null) return cachedVersion;
-  try {
-    // IN-03: same off-by-one as WARN_FILE — `..` × 2 from __dirname lands at
-    // dist/ post-build, producing a path that doesn't exist and silently
-    // returning '0.0.0' in the User-Agent header. Reuse PKG_ROOT.
-    const pkgPath = path.join(PKG_ROOT, 'package.json');
-    const raw = readFileSync(pkgPath, 'utf8');
-    const parsed = JSON.parse(raw) as { version?: string };
-    cachedVersion = parsed.version ?? '0.0.0';
-  } catch {
-    cachedVersion = '0.0.0';
-  }
-  return cachedVersion;
+  return VERSION;
 }
 
 /**

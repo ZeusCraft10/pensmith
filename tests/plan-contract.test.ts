@@ -20,7 +20,7 @@ import { loadPrompt } from '../bin/lib/prompt-loader.js';
 import { FENCE_OPEN, FENCE_CLOSE } from '../bin/lib/untrusted-fence.js';
 
 function template(slug: string): string {
-  return fs.readFileSync(new URL(`../templates/prompts/${slug}.md`, import.meta.url), 'utf8');
+  return fs.readFileSync(new URL(`../plugin/templates/prompts/${slug}.md`, import.meta.url), 'utf8');
 }
 
 function exampleBlock(text: string): string {

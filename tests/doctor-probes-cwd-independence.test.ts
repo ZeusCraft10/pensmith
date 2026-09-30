@@ -1,7 +1,9 @@
 // tests/doctor-probes-cwd-independence.test.ts
 //
 // CR-02 regression: build-artifact-resolves and mcp-sdk-presence probes must
-// resolve dist/* relative to the PROBE FILE's package root, not process.cwd().
+// resolve the CLI build dist/bin/pensmith.js and the plugin bundle
+// plugin/dist/mcp/server.mjs from the installed package (paths.ts pluginRoot(),
+// which walks up from its own module location), not process.cwd().
 // PRD §3 / §19 Tier-2 contract requires `pensmith doctor` to work from inside
 // a user's paper directory (which is NOT the pensmith repo root).
 //
@@ -73,7 +75,7 @@ test('CR-02: compiled doctor --json from a non-repo cwd exits 0 with build-artif
       probe.severity,
       'PASS',
       `${id} regressed to cwd-relative or wrong-depth: got ${probe.severity} (${probe.summary}). ` +
-        `The probe must resolve dist/* relative to its package root (walked via findPkgRoot), not process.cwd() and not a fixed-depth ..×N.`,
+        `The probe must resolve its artifacts from the package (paths.ts pluginRoot() / cliPackageRoot()), not process.cwd() and not a fixed-depth ..×N.`,
     );
   }
 });

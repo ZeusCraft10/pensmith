@@ -33,7 +33,7 @@ The command exits 0 when no probe FAILs and 1 otherwise.
 > Node.js runtime version probe — pensmith requires Node >= 22.12.0 (the Node 22 and 24 LTS lines; CI-06). PASS at or above the floor; FAIL below it, with the fix "Install Node 22.12.0 or newer (the Node 22 or 24 LTS line)".
 
 ### mcp-sdk-presence (DOCT-01 wiring)
-> MCP server build artifact presence — dist/mcp/server.js must exist and be non-empty.
+> MCP server artifact presence — the Tier-1 server the plugin manifest launches, the committed self-contained bundle plugin/dist/mcp/server.mjs, must exist and be non-empty (found from the installed package, never the working directory). The fix names `npm run bundle` in a source checkout and a reinstall otherwise.
 
 ### contact-email-presence (DOCT-03)
 > Contact email for the polite pools (Crossref, OpenAlex, Unpaywall) — resolves the variable that holds it (the paper's `[network] contact_email_env`, honoured only for a `PENSMITH_…` name containing EMAIL or MAILTO and no secret word; else the global runtime.json `contactEmailEnv`; default PENSMITH_CONTACT_EMAIL) and names that variable, never the address. PASS when it holds a plain email address; WARN when it is unset or not an address — the polite pools are then unavailable and Unpaywall is skipped (see references/http-warnings.md for the full WARN copy). (Canonical probe id per 02-05 line 45; 02-07 Case A reads `probes['contact-email-presence']`.)
@@ -58,7 +58,7 @@ The command exits 0 when no probe FAILs and 1 otherwise.
 
 ### build-artifact-resolves (Phase 2 substitute for deferred DOCT-05)
 
-> Compiled dist/ build-artifact resolution probe — confirms dist/bin/pensmith.js and dist/mcp/server.js exist and are non-empty. Phase 2 substitute for the originally deferred DOCT-05; remains active in Phase 3 alongside the real DOCT-05 wiring smoke (D-15).
+> Build-artifact resolution probe — confirms the Tier-2 CLI build dist/bin/pensmith.js and the Tier-1 server bundle plugin/dist/mcp/server.mjs exist and are non-empty (both found from the installed package, never the working directory) and that `pensmith --version` exits 0. Phase 2 substitute for the originally deferred DOCT-05; remains active in Phase 3 alongside the real DOCT-05 wiring smoke (D-15).
 
 ### http-crossref-ping (D-03(d) cassette wiring)
 
@@ -66,7 +66,7 @@ The command exits 0 when no probe FAILs and 1 otherwise.
 
 ### intake-outline-verify-wiring (DOCT-05)
 
-> Intake/outline/verify wiring smoke probe — confirms the 6 Phase-3 per-section verbs (new, research, outline, plan, write, verify) are wired end-to-end across the dispatcher (bin/pensmith.ts subCommands), workflow bodies (`workflows/{verb}.md` "## Body" section), and the drafter contract (bin/lib/drafter-input.ts assertDrafterInput export). FAIL lists every missing piece in `detail` so a single `pensmith doctor` invocation tells the operator exactly which wiring regressed. Probe is READ-ONLY per D-19 — no .paper/ side effects.
+> Intake/outline/verify wiring smoke probe — confirms the 6 Phase-3 per-section verbs (new, research, outline, plan, write, verify) are wired end-to-end across the dispatcher (bin/pensmith.ts subCommands), workflow bodies (`plugin/workflows/{verb}.md` "## Body" section), and the drafter contract (bin/lib/drafter-input.ts assertDrafterInput export). FAIL lists every missing piece in `detail` so a single `pensmith doctor` invocation tells the operator exactly which wiring regressed. Probe is READ-ONLY per D-19 — no .paper/ side effects.
 
 ## JSON shape
 
