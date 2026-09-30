@@ -18,7 +18,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPass3 } from '../bin/lib/verify/pass3.js';
-import { _resetSourceTextMemoForTest, sourceTextPassage } from '../bin/lib/verify/source-text.js';
+import { _resetSourceTextMemoForTest, openAccessPdfText, sourceTextPassage } from '../bin/lib/verify/source-text.js';
 import { extractPdf } from '../bin/lib/pdf-text.js';
 import { textPdf } from './helpers/text-pdf.js';
 import { libraryEntry } from './helpers/section-fixture.js';
@@ -223,6 +223,41 @@ test('VRFY-19: the user\'s own PDF first — verified with zero connects, even l
   assert.equal(fake?.verdict, 'NOT_FOUND', fake?.reason);
   assert.equal(fake?.localFile, undefined);
   assert.match(fake?.reason ?? '', /^quote not found in your local file sources\/k\.pdf \(best lev=0\.\d{3} < 0\.95\); the Unpaywall lookup of DOI 10\.5555\/no-recording: offline: no recorded fixture for GET /);
+});
+
+test('VRFY-19 (recorded, offline): Unpaywall → the arXiv PDF of an erratum; the Europe PMC full text of a letter; arXiv\'s `.pdf` redirect replayed hop by hop', async () => {
+  await withContactEmail(EMAIL, async () => {
+    // 1. Unpaywall lists one copy, the 29 KB arXiv PDF of an erratum (both recorded).
+    const erratum = new Map([['k', { DOI: '10.1142/S0218301312920012' }]]);
+    const [ok] = await pass3('They concede that "we neglected the curvature of the earth" [@k, p. 1].', erratum);
+    assert.deepEqual([ok?.verdict, ok?.reason], ['PASS', 'verbatim in the open-access PDF at arxiv.org']);
+    const [bad] = await pass3('They insist that "the curvature of the earth was included in every estimate" [@k].', erratum);
+    assert.equal(bad?.verdict, 'NOT_FOUND', bad?.reason);
+    assert.match(bad?.reason ?? '', /^quote not found in the open-access PDF at arxiv\.org \(best lev=0\.\d{3} < 0\.95\)$/);
+
+    // 2. A letter whose listed Springer PDF is not recorded (larger than a cassette) — no answer
+    // offline — and whose Europe PMC full text is: the PMCID comes from the library.
+    const root = mkdtempSync(join(tmpdir(), 'pensmith-p3rec-'));
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    const doi = '10.1186/s43044-026-00785-w';
+    const entry = { ...libraryEntry({ citekey: 'k', title: 'Sex disparities in STEMI care', author: 'Dziewierz, Artur', year: 2026, doi }), pmid: '42771069', pmcid: 'PMC13598034' };
+    writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 2, entries: [entry] }));
+    const letter = new Map([['k', { DOI: doi }]]);
+    const [real] = await pass3('The authors note that "One of the most clinically actionable findings is the longer pre-hospital delay among women" [@k].', letter, root);
+    assert.deepEqual([real?.verdict, real?.reason], ['PASS', 'verbatim in the Europe PMC full text of PMC13598034']);
+    const [fake] = await pass3('The authors claim that "women reached first medical contact faster than men in every registry" [@k].', letter, root);
+    assert.equal(fake?.verdict, 'NOT_FOUND', fake?.reason);
+    assert.match(
+      fake?.reason ?? '',
+      /^quote not found in the Europe PMC full text of PMC13598034 \(best lev=0\.\d{3} < 0\.95\); the open-access PDF at link\.springer\.com: offline: no recorded fixture for GET https:\/\/link\.springer\.com\/content\/pdf\/10\.1186\/s43044-026-00785-w\.pdf — re-run online$/,
+    );
+  });
+  // 3. The production fetch follows a recorded redirect hop by hop.
+  const viaRedirect = await openAccessPdfText('https://arxiv.org/pdf/1205.6430.pdf', { source: 'arxiv' });
+  assert.equal(viaRedirect.kind, 'text');
+  if (viaRedirect.kind !== 'text') return;
+  assert.equal(viaRedirect.source.finalUrl, 'https://arxiv.org/pdf/1205.6430');
+  assert.match(viaRedirect.source.text.replace(/\s+/g, ' '), /we neglected the curvature of the earth/);
 });
 
 test('VRFY-18 / VRFY-20: an unattributed quote is one UNATTRIBUTED row; every row carries the quote id, hash, line and locator', async () => {

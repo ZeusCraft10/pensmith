@@ -85,8 +85,9 @@ function dropElements(xml: string, names: readonly string[]): string {
   let out = xml;
   for (const name of names) {
     const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out.replace(new RegExp(`<${esc}(?:\\s[^>]*)?/>`, 'gi'), ' ');
-    out = out.replace(new RegExp(`<${esc}(?:\\s[^>]*)?>[\\s\\S]*?</${esc}>`, 'gi'), ' ');
+    // Removed without a space: a citation marker sits against punctuation (`before<xref …>1</xref>, the`).
+    out = out.replace(new RegExp(`<${esc}(?:\\s[^>]*)?/>`, 'gi'), '');
+    out = out.replace(new RegExp(`<${esc}(?:\\s[^>]*)?>[\\s\\S]*?</${esc}>`, 'gi'), '');
   }
   return out;
 }
@@ -123,6 +124,8 @@ export function jatsToArticle(xml: string): EuropePmcArticle {
     .replace(BLOCK_TAGS, '\n')
     .replace(/<[^>]+>/g, '');
   const text = decodeEntities(readable)
+    // The brackets and parentheses removed citation markers leave behind (`[ ]`, `[–]`, `( )`).
+    .replace(/[ \t]*\[[\s,;–-]*\]|[ \t]*\([\s,;–-]*\)/g, '')
     .split('\n')
     .map((l) => l.replace(/[ \t\r\f\v]+/g, ' ').trim())
     .filter((l) => l.length > 0)

@@ -306,6 +306,18 @@ async function pdfText(url: string, source: HttpSource, origin: TextOrigin, labe
   return textOf(origin, label, url, finalUrl, ex.text, false);
 }
 
+/**
+ * The text of the open-access PDF at `url`, read exactly as Pass 3 reads a
+ * copy (redirects followed, a real PDF required, the SEC-02 worker, the
+ * extracted-text cache): for a caller that holds a URL rather than a citation
+ * — scripts/live-verify-quotes.mjs checks the services with it. Never throws.
+ */
+export async function openAccessPdfText(url: string, opts: SourceTextOptions & { readonly source?: 'generic' | 'arxiv' } = {}): Promise<TextAttempt> {
+  const source = opts.source ?? 'generic';
+  const label = source === 'arxiv' ? `the arXiv PDF at ${url}` : `the open-access PDF at ${hostOf(url)}`;
+  return pdfText(url, source, source === 'arxiv' ? 'arXiv PDF' : 'open-access PDF', label, opts);
+}
+
 /** A Europe PMC full text and the ids its article names, or why there is none. Never throws. */
 async function europePmcText(pmcid: string, opts: SourceTextOptions): Promise<{ attempt: TextAttempt; ids: ArticleIds | null }> {
   const label = `the Europe PMC full text of ${pmcid}`;

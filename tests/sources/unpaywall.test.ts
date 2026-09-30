@@ -116,6 +116,49 @@ test('SRC-03: the best PDF — best location, then any url_for_pdf, then a PDF-l
   assert.equal(unpaywall.unpaywallAuthorName({ family: 'Vaswani', given: 'Ashish' }), 'Vaswani, Ashish');
 });
 
+test('VRFY-19 (D-20-18): lookupOaPdfUrls — every PDF the record lists, best first, de-duplicated (recorded NumPy answer; the same request as lookupById)', async () => {
+  await withContactEmail(EMAIL, async () => {
+    const r = await unpaywall.lookupOaPdfUrls('10.1038/s41586-020-2649-2');
+    assert.equal(r.kind, 'found');
+    if (r.kind !== 'found') return;
+    assert.equal(r.isOa, true);
+    assert.equal(r.pdfUrls[0], 'https://www.nature.com/articles/s41586-020-2649-2.pdf', 'best location first');
+    assert.ok(r.pdfUrls.includes('https://arxiv.org/pdf/2006.10256'));
+    assert.equal(new Set(r.pdfUrls).size, r.pdfUrls.length, 'no duplicates');
+  });
+});
+
+test('VRFY-19: oaPdfUrls — url_for_pdf of every location (best first), then location URLs that are PDF links; lookupOaPdfUrls says why there is none', async () => {
+  const loc = (url?: string, pdf?: string) => ({ ...(url ? { url } : {}), ...(pdf ? { url_for_pdf: pdf } : {}) });
+  assert.deepEqual(
+    unpaywall.oaPdfUrls({
+      best_oa_location: loc('https://b.org/landing', 'https://b.org/y.pdf'),
+      oa_locations: [loc('https://a.org', 'https://a.org/x.pdf'), loc('https://b.org/landing', 'https://b.org/y.pdf'), loc('https://arxiv.org/abs/2006.10256'), loc('not a url', 'ftp://x')],
+    }),
+    ['https://b.org/y.pdf', 'https://a.org/x.pdf', 'https://arxiv.org/pdf/2006.10256'],
+  );
+  assert.deepEqual(unpaywall.oaPdfUrls({ best_oa_location: null, oa_locations: null }), []);
+  _resetContactEmailForTest();
+  await withContactEmail(undefined, async () => {
+    const r = await unpaywall.lookupOaPdfUrls('10.5555/whatever');
+    assert.deepEqual(r, { kind: 'failed', reason: 'Unpaywall skipped: set PENSMITH_CONTACT_EMAIL', noEmail: true });
+  });
+  await liveLane(async (agent) => {
+    const reply = (doi: string, status: number, body: unknown): void => {
+      agent.get('https://api.unpaywall.org').intercept({ path: (p: string) => decodeURIComponent(p).startsWith(`/v2/${doi}?`), method: 'GET' }).reply(status, JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+    };
+    reply('10.5555/closed-oa-pdf', 200, { doi: '10.5555/closed-oa-pdf', is_oa: false, best_oa_location: null, oa_locations: [] });
+    assert.deepEqual(await unpaywall.lookupOaPdfUrls('10.5555/closed-oa-pdf'), { kind: 'found', isOa: false, pdfUrls: [] });
+    reply('10.5555/unknown-oa-pdf', 404, { error: true, message: 'not found' });
+    assert.equal((await unpaywall.lookupOaPdfUrls('10.5555/unknown-oa-pdf')).kind, 'not-found');
+    reply('10.5555/bad-oa-pdf', 422, { error: true, message: 'Email address required in API call' });
+    assert.deepEqual(await unpaywall.lookupOaPdfUrls('10.5555/bad-oa-pdf'), { kind: 'failed', reason: 'HTTP 422: Email address required in API call', status: 422 });
+    // A record without authors is still read for its locations (lookupById would call it incomplete).
+    reply('10.5555/no-authors-oa-pdf', 200, { doi: '10.5555/no-authors-oa-pdf', is_oa: true, best_oa_location: loc('https://z.org', 'https://z.org/z.pdf'), oa_locations: [] });
+    assert.deepEqual(await unpaywall.lookupOaPdfUrls('10.5555/no-authors-oa-pdf'), { kind: 'found', isOa: true, pdfUrls: ['https://z.org/z.pdf'] });
+  }, { contactEmail: EMAIL });
+});
+
 test('unpaywall.search() is inert (DOI-lookup service)', async () => {
   assert.deepEqual(await unpaywall.search('attention mechanisms'), []);
 });
