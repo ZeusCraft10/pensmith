@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?filter=updates%3A10.1109%2FDAPIC66097.2025.00037&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
+    "path": "/works?filter=updates%3A10.1109%2FISCAS58744.2024.10558182&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
     "status": 200,
     "response": {
       "status": "ok",
@@ -23,7 +23,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:42:05.293Z",
+      "recordedAt": "2026-09-30T12:35:36.869Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "retraction-watch"
     }
@@ -31,7 +31,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?filter=updates%3A10.1109%2Fdapic66097.2025.00037&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
+    "path": "/works?filter=updates%3A10.1109%2Fiscas58744.2024.10558182&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
     "status": 200,
     "response": {
       "status": "ok",
@@ -52,7 +52,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:42:05.293Z",
+      "recordedAt": "2026-09-30T12:35:36.869Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "retraction-watch"
     }

@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?filter=updates%3A10.1109%2FACAIT63902.2024.11022229&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
+    "path": "/works?filter=updates%3A10.1109%2FLASCAS67804.2026.11457118&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
     "status": 200,
     "response": {
       "status": "ok",
@@ -31,7 +31,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?filter=updates%3A10.1109%2Facait63902.2024.11022229&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
+    "path": "/works?filter=updates%3A10.1109%2Flascas67804.2026.11457118&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
     "status": 200,
     "response": {
       "status": "ok",

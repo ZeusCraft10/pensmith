@@ -42,7 +42,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:41:49.456Z",
+      "recordedAt": "2026-09-30T12:35:12.360Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }
@@ -1311,14 +1311,6 @@
           ],
           "history": [
             {
-              "pubstatus": "medline",
-              "date": "2026/09/29 23:29"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/29 23:29"
-            },
-            {
               "pubstatus": "received",
               "date": "2025/09/18 00:00"
             },
@@ -1329,6 +1321,14 @@
             {
               "pubstatus": "accepted",
               "date": "2026/09/17 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/29 23:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/29 23:29"
             },
             {
               "pubstatus": "entrez",
@@ -1379,7 +1379,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:41:49.456Z",
+      "recordedAt": "2026-09-30T12:35:12.360Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }

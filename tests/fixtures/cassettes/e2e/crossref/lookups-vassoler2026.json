@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works/10.1109%2Fdapic66097.2025.00037",
+    "path": "/works/10.1109%2Flascas67804.2026.11457118",
     "status": 200,
     "response": {
       "status": "ok",
@@ -12,29 +12,29 @@
         "indexed": {
           "date-parts": [
             [
-              2025,
-              5,
-              18
+              2026,
+              4,
+              1
             ]
           ],
-          "date-time": "2025-05-18T04:02:58Z",
-          "timestamp": 1747540978416,
-          "version": "3.40.5"
+          "date-time": "2026-04-01T09:25:39Z",
+          "timestamp": 1775035539441,
+          "version": "3.50.1"
         },
-        "reference-count": 12,
+        "reference-count": 15,
         "publisher": "IEEE",
         "license": [
           {
             "start": {
               "date-parts": [
                 [
-                  2025,
+                  2026,
                   2,
-                  26
+                  24
                 ]
               ],
-              "date-time": "2025-02-26T00:00:00Z",
-              "timestamp": 1740528000000
+              "date-time": "2026-02-24T00:00:00Z",
+              "timestamp": 1771891200000
             },
             "content-version": "stm-asf",
             "delay-in-days": 0,
@@ -44,13 +44,13 @@
             "start": {
               "date-parts": [
                 [
-                  2025,
+                  2026,
                   2,
-                  26
+                  24
                 ]
               ],
-              "date-time": "2025-02-26T00:00:00Z",
-              "timestamp": 1740528000000
+              "date-time": "2026-02-24T00:00:00Z",
+              "timestamp": 1771891200000
             },
             "content-version": "stm-asf",
             "delay-in-days": 0,
@@ -65,40 +65,40 @@
         "published-print": {
           "date-parts": [
             [
-              2025,
+              2026,
               2,
-              26
+              24
             ]
           ]
         },
-        "DOI": "10.1109/dapic66097.2025.00037",
+        "DOI": "10.1109/lascas67804.2026.11457118",
         "type": "proceedings-article",
         "created": {
           "date-parts": [
             [
-              2025,
-              5,
-              16
+              2026,
+              3,
+              31
             ]
           ],
-          "date-time": "2025-05-16T17:41:28Z",
-          "timestamp": 1747417288000
+          "date-time": "2026-03-31T19:50:57Z",
+          "timestamp": 1774986657000
         },
-        "page": "171-176",
+        "page": "1-5",
         "source": "Crossref",
         "is-referenced-by-count": 0,
         "title": [
-          "Research on Korean Neural Machine Translation Model Based on Attention Mechanism"
+          "Design and Synthesis of a Scaled Dot Product Accelerator with an AXI4-Stream Interface"
         ],
         "prefix": "10.1109",
         "author": [
           {
-            "given": "Xinfeng",
-            "family": "Wang",
+            "given": "Augusto",
+            "family": "Vassoler",
             "sequence": "first",
             "affiliation": [
               {
-                "name": "Weifang Engineering Vocational College,Qingzhou,Shandong,China,262500"
+                "name": "Institute of Informatics (INF) - Federal University of Rio Grande do Sul (UFRGS)"
               }
             ],
             "role": [
@@ -109,12 +109,28 @@
             ]
           },
           {
-            "given": "Qingsong",
-            "family": "Chang",
+            "given": "Fakhrul Zaman",
+            "family": "Rokhani",
             "sequence": "additional",
             "affiliation": [
               {
-                "name": "Weifang Engineering Vocational College,Qingzhou,Shandong,China,262500"
+                "name": "University of Putra Malaysia (UPM)"
+              }
+            ],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Mateus",
+            "family": "Grellert",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Institute of Informatics (INF) - Federal University of Rio Grande do Sul (UFRGS)"
               }
             ],
             "role": [
@@ -130,98 +146,117 @@
           {
             "key": "ref1",
             "doi-asserted-by": "publisher",
-            "DOI": "10.1007/s11063-023-11208-1"
+            "DOI": "10.48550/ARXIV.1706.03762"
           },
           {
             "key": "ref2",
             "doi-asserted-by": "publisher",
-            "DOI": "10.1007/s13042-024-02148-w"
+            "DOI": "10.1016/j.ymeth.2019.06.024"
           },
           {
             "key": "ref3",
             "doi-asserted-by": "publisher",
-            "DOI": "10.1007/s10489-024-05586-9"
+            "DOI": "10.1007/978-3-030-86472-9_31"
           },
           {
             "key": "ref4",
             "doi-asserted-by": "publisher",
-            "DOI": "10.1145/3441691"
+            "DOI": "10.1109/TDSC.2024.3445181"
           },
           {
-            "issue": "3",
             "key": "ref5",
-            "first-page": "310",
-            "article-title": "Research on system combination of machine translation based on transformer",
-            "volume": "29",
-            "author": "Liu",
-            "year": "2023",
-            "journal-title": "High technology letters"
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1145/3549937"
           },
           {
             "key": "ref6",
-            "doi-asserted-by": "publisher",
-            "DOI": "10.1017/S1351324922000341"
+            "doi-asserted-by": "crossref",
+            "DOI": "10.18653/v1/P19-1355",
+            "volume-title": "Energy and policy considerations for deep learning in nlp",
+            "author": "Strubell",
+            "year": "2019"
           },
           {
             "key": "ref7",
             "doi-asserted-by": "publisher",
-            "DOI": "10.1515/jisys-2022-0005"
+            "DOI": "10.1109/MSE.2011.5937096"
           },
           {
             "key": "ref8",
             "doi-asserted-by": "publisher",
-            "DOI": "10.1007/s10489-022-03563-8"
+            "DOI": "10.1109/ISLPED58423.2023.10244348"
           },
           {
             "key": "ref9",
             "doi-asserted-by": "publisher",
-            "DOI": "10.1007/s10723-022-09607-0"
+            "DOI": "10.1109/TCAD.2022.3170848"
           },
           {
             "key": "ref10",
             "doi-asserted-by": "publisher",
-            "DOI": "10.1016/j.procir.2021.01.044"
+            "DOI": "10.1109/HPCA51647.2021.00018"
           },
           {
             "key": "ref11",
-            "doi-asserted-by": "publisher",
-            "DOI": "10.1515/jisys-2021-0150"
+            "first-page": "363",
+            "article-title": "Optimus: Optimized matrix multiplication structure for transformer neural network accelerator",
+            "volume-title": "Proceedings of Machine Learning and Systems",
+            "volume": "2",
+            "author": "Park",
+            "year": "2020"
           },
           {
             "key": "ref12",
             "doi-asserted-by": "publisher",
-            "DOI": "10.1007/s10994-021-06070-y"
+            "DOI": "10.1109/ISCA52012.2021.00060"
+          },
+          {
+            "key": "ref13",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1109/ISSCC42614.2022.9731686"
+          },
+          {
+            "key": "ref14",
+            "article-title": "Fully quantized transformer for machine translation",
+            "author": "Prato",
+            "year": "2019",
+            "journal-title": "arXiv preprint"
+          },
+          {
+            "key": "ref15",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.3115/1073083.1073135"
           }
         ],
         "event": {
-          "name": "2025 International Conference on Digital Analysis and Processing, Intelligent Computation (DAPIC)",
+          "name": "2026 IEEE 17th Latin America Symposium on Circuits and System (LASCAS)",
+          "location": "Arequipa, Peru",
           "start": {
             "date-parts": [
               [
-                2025,
+                2026,
                 2,
-                26
+                24
               ]
             ]
           },
-          "location": "Incheon, Korea, Republic of",
           "end": {
             "date-parts": [
               [
-                2025,
+                2026,
                 2,
-                28
+                27
               ]
             ]
           }
         },
         "container-title": [
-          "2025 International Conference on Digital Analysis and Processing, Intelligent Computation (DAPIC)"
+          "2026 IEEE 17th Latin America Symposium on Circuits and System (LASCAS)"
         ],
         "original-title": [],
         "link": [
           {
-            "URL": "http://xplorestaging.ieee.org/ielx8/10988934/10988935/10989179.pdf?arnumber=10989179",
+            "URL": "http://xplorestaging.ieee.org/ielx8/11457069/11457071/11457118.pdf?arnumber=11457118",
             "content-type": "unspecified",
             "content-version": "vor",
             "intended-application": "similarity-checking"
@@ -230,18 +265,18 @@
         "deposited": {
           "date-parts": [
             [
-              2025,
-              5,
-              17
+              2026,
+              4,
+              1
             ]
           ],
-          "date-time": "2025-05-17T05:01:14Z",
-          "timestamp": 1747458074000
+          "date-time": "2026-04-01T06:33:03Z",
+          "timestamp": 1775025183000
         },
         "score": 1,
         "resource": {
           "primary": {
-            "URL": "https://ieeexplore.ieee.org/document/10989179/"
+            "URL": "https://ieeexplore.ieee.org/document/11457118/"
           }
         },
         "subtitle": [],
@@ -249,22 +284,22 @@
         "issued": {
           "date-parts": [
             [
-              2025,
+              2026,
               2,
-              26
+              24
             ]
           ]
         },
-        "references-count": 12,
-        "URL": "https://doi.org/10.1109/dapic66097.2025.00037",
+        "references-count": 15,
+        "URL": "https://doi.org/10.1109/lascas67804.2026.11457118",
         "relation": {},
         "subject": [],
         "published": {
           "date-parts": [
             [
-              2025,
+              2026,
               2,
-              26
+              24
             ]
           ]
         }
@@ -274,7 +309,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:42:05.293Z",
+      "recordedAt": "2026-09-30T12:35:36.869Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

@@ -1,0 +1,483 @@
+[
+  {
+    "scope": "https://api.semanticscholar.org",
+    "method": "GET",
+    "path": "/graph/v1/paper/search?query=transformer+self-attention+mechanism&limit=10&fields=title%2Cauthors%2Cyear%2CexternalIds%2Cabstract%2Cvenue%2CpublicationTypes%2Cjournal",
+    "status": 200,
+    "response": {
+      "total": 73075,
+      "offset": 0,
+      "next": 10,
+      "data": [
+        {
+          "paperId": "bdecc2f8c588df08834819eae8c58a0c6c54daa5",
+          "externalIds": {
+            "DBLP": "journals/bib/LinWZCLFJWZXW22",
+            "DOI": "10.1093/bib/bbab421",
+            "CorpusId": 239050810,
+            "PubMed": "34671814"
+          },
+          "title": "MDF-SA-DDI: predicting drug-drug interaction events based on multi-source drug fusion, multi-source feature fusion and transformer self-attention mechanism",
+          "venue": "Briefings Bioinform.",
+          "year": 2021,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1093/bib/bbab421?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1093/bib/bbab421, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Briefings in bioinformatics"
+          },
+          "authors": [
+            {
+              "authorId": "2145249245",
+              "name": "Sheng-Geng Lin"
+            },
+            {
+              "authorId": "47906008",
+              "name": "Yan-Jing Wang"
+            },
+            {
+              "authorId": "2145398179",
+              "name": "Ling-Feng Zhang"
+            },
+            {
+              "authorId": "148385810",
+              "name": "Yanyi Chu"
+            },
+            {
+              "authorId": "2492562340",
+              "name": "Yatong Liu"
+            },
+            {
+              "authorId": "12341800",
+              "name": "Yitian Fang"
+            },
+            {
+              "authorId": "1962341590",
+              "name": "Ming-Ming Jiang"
+            },
+            {
+              "authorId": "6648393",
+              "name": "Qiankun Wang"
+            },
+            {
+              "authorId": "2143737895",
+              "name": "Bowen Zhao"
+            },
+            {
+              "authorId": "145306713",
+              "name": "Y. Xiong"
+            },
+            {
+              "authorId": "13763835",
+              "name": "Dongqing Wei"
+            }
+          ],
+          "abstract": null
+        },
+        {
+          "paperId": "5b63cf7b3488fcd8d1bb75048f5534beb7d1913a",
+          "externalIds": {
+            "DOI": "10.1109/ICAITA67588.2025.11137914",
+            "CorpusId": 281227700
+          },
+          "title": "Non-Intrusive Load Monitoring Based on an Improved Bidirectional Transformer Self-Attention Mechanism Integrated with U-Net",
+          "venue": "2025 7th International Conference on Artificial Intelligence Technologies and Applications (ICAITA)",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/ICAITA67588.2025.11137914?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/ICAITA67588.2025.11137914, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "Conference"
+          ],
+          "journal": {
+            "name": "2025 7th International Conference on Artificial Intelligence Technologies and Applications (ICAITA)",
+            "pages": "115-118"
+          },
+          "authors": [
+            {
+              "authorId": "2312601716",
+              "name": "Hongbo Li"
+            },
+            {
+              "authorId": "2278981250",
+              "name": "Yue Cui"
+            }
+          ],
+          "abstract": "With the rapid development of smart grids and the growing urgency of electricity management across society, there is an increasing demand for advanced energy monitoring technologies. Non-Intrusive Load Monitoring (NILM) is one such technology that can identify different appliance types from aggregate power data and disaggregate their individual energy consumption. However, traditional methods struggle to capture both global and local features, single-appliance training ignores inter-appliance dependencies, while simultaneous multi-appliance training is challenged by appliance switching, which degrades model performance. To address these issues, we propose BT-UNET, an algorithm that combines an enhanced bidirectional Transformer self-attention mechanism with a U-Net architecture for feature extraction, feature fusion, and multi-appliance state detection. Evaluation on the UK-DALE dataset demonstrates that BT-UNET effectively improves NILM disaggregation efficiency."
+        },
+        {
+          "paperId": "1b40c9e5e1cf129447c5a2b3d5e91ff53b535fa0",
+          "externalIds": {
+            "DBLP": "journals/corr/abs-2510-16575",
+            "ArXiv": "2510.16575",
+            "DOI": "10.48550/arXiv.2510.16575",
+            "CorpusId": 282210433
+          },
+          "title": "ViT-Transformer: Self-attention mechanism based constitutive modeling for nonlinear heterogeneous materials",
+          "venue": "arXiv.org",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2510.16575, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "ArXiv",
+            "volume": "abs/2510.16575"
+          },
+          "authors": [
+            {
+              "authorId": "2354984346",
+              "name": "Yijing Zhou"
+            },
+            {
+              "authorId": "98640322",
+              "name": "S. J. Semnani"
+            }
+          ],
+          "abstract": "Multi-scale simulations of nonlinear heterogeneous materials and composites are challenging due to the prohibitive computational costs of high-fidelity simulations. Recently, machine learning (ML) based approaches have emerged as promising alternatives to traditional multiscale methods. However, existing ML surrogate constitutive models struggle in capturing long-range dependencies and generalization across microstructures. The recent advancements in attention-based Transformer architectures open the door to a more powerful class of surrogate models. Attention mechanism has demonstrated remarkable capabilities in natural language processing and computer vision. In this work, we introduce a surrogate (meta) model, namely ViT-Transformer, using a Vision Transformer (ViT) encoder and a Transformer-based decoder which are both driven by the self-attention mechanism. The ViT encoder extracts microstructural features from material images, while the decoder is a masked Transformer encoder that combines the latent geometrical features with the macroscopic strain input sequence to predict the corresponding stress response. To enhance training, we propose a random extract training algorithm that improves robustness to sequences of variable length. We design and construct a compact yet diverse dataset via data augmentation, and validate the surrogate model using various composite material images and loading scenarios. Several numerical examples are provided to show the effectiveness and accuracy of the ViT-Transformer model and the training algorithm."
+        },
+        {
+          "paperId": "1952e712affc5eaaaa288459ad14afc02943e4fa",
+          "externalIds": {
+            "DBLP": "conf/iscas/CaiKGAA24",
+            "DOI": "10.1109/ISCAS58744.2024.10558182",
+            "CorpusId": 270930713
+          },
+          "title": "In-Memory Transformer Self-Attention Mechanism Using Passive Memristor Crossbar",
+          "venue": "International Symposium on Circuits and Systems",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": "CLOSED",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/ISCAS58744.2024.10558182?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/ISCAS58744.2024.10558182, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "2024 IEEE International Symposium on Circuits and Systems (ISCAS)",
+            "pages": "1-5"
+          },
+          "authors": [
+            {
+              "authorId": "2155809927",
+              "name": "Jack Cai"
+            },
+            {
+              "authorId": "2159454554",
+              "name": "M. A. Kaleem"
+            },
+            {
+              "authorId": "2238182235",
+              "name": "Roman Genov"
+            },
+            {
+              "authorId": "2119862",
+              "name": "M. Azghadi"
+            },
+            {
+              "authorId": "2723828",
+              "name": "A. Amirsoleimani"
+            }
+          ],
+          "abstract": "Transformers have emerged as the state-of-the-art architecture for natural language processing (NLP) and computer vision. However, they are inefficient in both conventional and in-memory computing architectures as doubling their sequence length quadruples their time and memory complexity due to their self-attention mechanism. Traditional methods optimize self-attention using memory-efficient algorithms or approximate methods, such as locality-sensitive hashing (LSH) attention that reduces time and memory complexity from O(L2) to O(L log L). In this work, we propose a hardware-level solution that further improves the computational efficiency of LSH attention by utilizing in-memory computing with semi-passive memristor arrays. We demonstrate that LSH can be performed with low-resolution, energy-efficient 0T1R arrays performing stochastic memristive vector-matrix multiplication (VMM). Using circuit-level simulation, we show our proposed method is feasible as a drop-in approximation in Large Language Models (LLMs) with no degradation in evaluation metrics. Our results set the foundation for future works on computing the entire transformer architecture in-memory."
+        },
+        {
+          "paperId": "d480bbde21d2a1be7a54efbd6700bdab4a5fc575",
+          "externalIds": {
+            "DOI": "10.1117/12.3023789",
+            "CorpusId": 268567567
+          },
+          "title": "LED fingerprint recognition method based on transformer self-attention mechanism",
+          "venue": "Advanced Fiber Laser Conference",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": "CLOSED",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1117/12.3023789?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1117/12.3023789, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "Conference"
+          ],
+          "journal": {
+            "pages": "131046K - 131046K-9",
+            "volume": "13104"
+          },
+          "authors": [
+            {
+              "authorId": "2327007604",
+              "name": "Lihui Shen"
+            },
+            {
+              "authorId": "2292528992",
+              "name": "Dun Li"
+            },
+            {
+              "authorId": "2292478881",
+              "name": "Er-feng Zhang"
+            },
+            {
+              "authorId": "2292604840",
+              "name": "Yanyu Zhang"
+            },
+            {
+              "authorId": "2347976708",
+              "name": "Chenxi Su"
+            },
+            {
+              "authorId": "2368536031",
+              "name": "Xiaodong Wang"
+            },
+            {
+              "authorId": "2292795424",
+              "name": "Jian Zhang"
+            }
+          ],
+          "abstract": "In this paper, a Light Emitting Diode (LED) fingerprinting method based on the Transformer self-attention mechanism is proposed to address the challenge of trusted authentication of terminal identity in visible light communication. The method leverages the unique individual characteristics of LED emission spectra for identity recognition. To extract fingerprint features from the spectral data, a parallel network structure is proposed. The one-dimensional spectral signal is input into a Convolutional Neural Network (CNN) to extract local features, while simultaneously being fed into a Transformer branch for self-attention calculation to capture global correlation features. The encoded global features from the Transformer are fused with the local features extracted by the CNN, and a feature interaction module is used to generate the final feature vector for classification. Experiment results demonstrate that on a spectral dataset from 8 different LED lights of the same model and batch, the proposed method achieves a classification accuracy of 98.33%, providing a new approach and method for secure access in visible light communication."
+        },
+        {
+          "paperId": "e9b5c04cb78b9d7214e6723dc71235c7539738ae",
+          "externalIds": {
+            "DOI": "10.26624/lafl3528",
+            "CorpusId": 290301239
+          },
+          "title": "Radio Celestial Source Fringe Signals Detection Based on Transformer Self-Attention Mechanism",
+          "venue": "Astronomical Society of the Pacific Conference Series",
+          "year": 2026,
+          "openAccessPdf": {
+            "url": "",
+            "status": "CLOSED",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.26624/lafl3528?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.26624/lafl3528, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "Conference"
+          ],
+          "journal": {
+            "name": "Astronomical Society of the Pacific Conference Series"
+          },
+          "authors": [
+            {
+              "authorId": "2055863674",
+              "name": "Ruiqing Yan"
+            },
+            {
+              "authorId": "2179349106",
+              "name": "Z. Yin"
+            },
+            {
+              "authorId": "2266141281",
+              "name": "Xianchuan Yu"
+            }
+          ],
+          "abstract": "Radio observations serve as a powerful means of exploring the universe. Tianlai telescope observes the dark energy of the universe through radio radiation. The Tianlai telescope is a radio array composed of multiple radio telescopes. It obtains the distribution of matter in the universe by observing the 21 cm spectral line of neutral hydrogen, and indirectly realizes the observation of dark energy. However, the 21 cm spectral line of radio observation is very weak, and it is easily interfered by other weak celestial sources, which is a problem that must be solved for normal operation. In order to detect these weak radio signals, we propose a celestial source fringes detection method based on the Transformer self-attention mechanism. To prove the effectiveness of our proposed method, we performed some experiments on the method and compared with other deep learning methods in terms of mean of Average Precision. We also verified the impact of data quality on the model, and fringe signals can be detected at low signal-to-noise ratios. Experimental results show that the method achieves comparable detection performance for radio celestial source fringes in terms of accuracy and location regression. This study is important for the detection of dark energy in the universe through radio observation of the neutral hydrogen 21 cm signal."
+        },
+        {
+          "paperId": "a6f0c55564629365c0f8440e303cdbfd10da25b9",
+          "externalIds": {
+            "DBLP": "conf/iccsie/Li22e",
+            "DOI": "10.1145/3558819.3565216",
+            "CorpusId": 253120379
+          },
+          "title": "Stock quantitative prediction analysis method based on deep learning transformer self-attention mechanism",
+          "venue": "ICCSIE",
+          "year": 2022,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1145/3558819.3565216?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1145/3558819.3565216, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "Book",
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Proceedings of the 7th International Conference on Cyber Security and Information Engineering"
+          },
+          "authors": [
+            {
+              "authorId": "2130455601",
+              "name": "Yutong Li"
+            }
+          ],
+          "abstract": "In recent years, China's economy has developed rapidly, and accordingly, financial market has also developed rapidly in China, attracting the attention of investors domestic and foreign. Therefore, it is of vital significance to study the stock price trend in China's financial market for scholars, investors and regulators. With the rise of quantitative trading and other ideas, more and more scholars apply deep neural network (DNN) to the financial field. Although DNN has achieved great success in image, voice and text in recent years, it has encountered many challenges in financial time series prediction due to the highly dynamic and noisy feature of dataset. As a typical representative of DNN in time series data processing, LSTM, because this method does not consider the importance of data at different time points and different sources, the effect is still not ideal. Different from the introduction of the Attention mechanism on the traditional LSTM model, by improving the Self-Attention model, the daily data and the time-sharing data are encoded and fused separately, and the impact of changes in capital flow on changes in stock trends can be learned. The experimental results show that the proposed method improves the accuracy of trend judgment to 63.04%, and obtains a return of 6.562% in the two-month back testing experiment, which proves that the model has a certain effectiveness and practicability in stock price trend prediction."
+        },
+        {
+          "paperId": "1b42b682a1a64b6f65df15e508dcc25895690f00",
+          "externalIds": {
+            "ArXiv": "2502.19214",
+            "PubMedCentral": "12757140",
+            "DOI": "10.1021/acs.jctc.5c00331",
+            "CorpusId": 276617719,
+            "PubMed": "40333363"
+          },
+          "title": "A Hybrid Transformer Architecture with a Quantized Self-Attention Mechanism Applied to Molecular Generation",
+          "venue": "Journal of Chemical Theory and Computation",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2502.19214, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Journal of chemical theory and computation",
+            "pages": "5143 - 5154",
+            "volume": "21"
+          },
+          "authors": [
+            {
+              "authorId": "2218503583",
+              "name": "Anthony M. Smaldone"
+            },
+            {
+              "authorId": "2460217697",
+              "name": "Shee Yu"
+            },
+            {
+              "authorId": "2138199595",
+              "name": "Gregory W. Kyro"
+            },
+            {
+              "authorId": "2322505039",
+              "name": "Marwa H. Farag"
+            },
+            {
+              "authorId": "2326841690",
+              "name": "Zohim Chandani"
+            },
+            {
+              "authorId": "48735809",
+              "name": "Elica Kyoseva"
+            },
+            {
+              "authorId": "2114268342",
+              "name": "V. Batista"
+            }
+          ],
+          "abstract": "The success of the self-attention mechanism in classical machine learning models has inspired the development of quantum analogs aimed at reducing computational overhead. Self-attention integrates learnable query and key matrices to calculate attention scores between all pairs of tokens in a sequence. These scores are then multiplied by a learnable value matrix to obtain the output self-attention matrix, enabling the model to effectively capture long-range dependencies within the input sequence. Here, we propose a hybrid quantum-classical self-attention mechanism as part of a transformer decoder, the architecture underlying large language models (LLMs). To demonstrate its utility in chemistry, we train this model on the QM9 dataset for conditional generation, using SMILES strings as input, each labeled with a set of physicochemical properties that serve as conditions during inference. Our theoretical analysis shows that the time complexity of the query-key dot product is reduced from 𝒪n2d in a classical model to 𝒪n2logd in our quantum model, where n and d represent the sequence length and embedding dimension, respectively. We perform simulations using NVIDIA’s CUDA-Q platform, which is designed for efficient GPU scalability. This work provides a promising avenue for quantum-enhanced natural language processing (NLP)."
+        },
+        {
+          "paperId": "feb8fa2a5c48c96a00bcf2efd0f70e0c230db0e5",
+          "externalIds": {
+            "PubMedCentral": "10802018",
+            "DOI": "10.1186/s12864-024-09985-7",
+            "CorpusId": 267061576,
+            "PubMed": "38254021"
+          },
+          "title": "A semi-supervised approach for the integration of multi-omics data based on transformer multi-head self-attention mechanism and graph convolutional networks",
+          "venue": "BMC Genomics",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "https://bmcgenomics.biomedcentral.com/counter/pdf/10.1186/s12864-024-09985-7",
+            "status": "GOLD",
+            "license": "CCBY",
+            "disclaimer": "Notice: Paper or abstract available at https://pmc.ncbi.nlm.nih.gov/articles/PMC10802018, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "BMC Genomics",
+            "volume": "25"
+          },
+          "authors": [
+            {
+              "authorId": "2382317632",
+              "name": "Jiahui Wang"
+            },
+            {
+              "authorId": "2295229802",
+              "name": "Nan-Qing Liao"
+            },
+            {
+              "authorId": "2356797105",
+              "name": "Xiao-Fei Du"
+            },
+            {
+              "authorId": "2204130747",
+              "name": "Qingfeng Chen"
+            },
+            {
+              "authorId": "2371106066",
+              "name": "Bizhong Wei"
+            }
+          ],
+          "abstract": "Background and objectives Comprehensive analysis of multi-omics data is crucial for accurately formulating effective treatment plans for complex diseases. Supervised ensemble methods have gained popularity in recent years for multi-omics data analysis. However, existing research based on supervised learning algorithms often fails to fully harness the information from unlabeled nodes and overlooks the latent features within and among different omics, as well as the various associations among features. Here, we present a novel multi-omics integrative method MOSEGCN, based on the Transformer multi-head self-attention mechanism and Graph Convolutional Networks(GCN), with the aim of enhancing the accuracy of complex disease classification. MOSEGCN first employs the Transformer multi-head self-attention mechanism and Similarity Network Fusion (SNF) to separately learn the inherent correlations of latent features within and among different omics, constructing a comprehensive view of diseases. Subsequently, it feeds the learned crucial information into a self-ensembling Graph Convolutional Network (SEGCN) built upon semi-supervised learning methods for training and testing, facilitating a better analysis and utilization of information from multi-omics data to achieve precise classification of disease subtypes. Results The experimental results show that MOSEGCN outperforms several state-of-the-art multi-omics integrative analysis approaches on three types of omics data: mRNA expression data, microRNA expression data, and DNA methylation data, with accuracy rates of 83.0% for Alzheimer's disease and 86.7% for breast cancer subtyping. Furthermore, MOSEGCN exhibits strong generalizability on the GBM dataset, enabling the identification of important biomarkers for related diseases. Conclusion MOSEGCN explores the significant relationship information among different omics and within each omics' latent features, effectively leveraging labeled and unlabeled information to further enhance the accuracy of complex disease classification. It also provides a promising approach for identifying reliable biomarkers, paving the way for personalized medicine."
+        },
+        {
+          "paperId": "25d3262d9eea28a940febc74da24df7e712b1584",
+          "externalIds": {
+            "DBLP": "journals/tgrs/LiYFL25",
+            "DOI": "10.1109/TGRS.2025.3562185",
+            "CorpusId": 277926930
+          },
+          "title": "A Lightweight Semantic Segmentation Network Based on Self-Attention Mechanism and State Space Model for Efficient Urban Scene Segmentation",
+          "venue": "IEEE Transactions on Geoscience and Remote Sensing",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": "CLOSED",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/TGRS.2025.3562185?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/TGRS.2025.3562185, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "IEEE Transactions on Geoscience and Remote Sensing",
+            "pages": "1-15",
+            "volume": "63"
+          },
+          "authors": [
+            {
+              "authorId": "2356452151",
+              "name": "Langping Li"
+            },
+            {
+              "authorId": "40564962",
+              "name": "Ji-Zheng Yi"
+            },
+            {
+              "authorId": "2357025219",
+              "name": "Hui Fan"
+            },
+            {
+              "authorId": "2268291631",
+              "name": "Hui Lin"
+            }
+          ],
+          "abstract": "In the semantic segmentation of remote sensing images, methods based on convolutional neural networks (CNNs) and Transformers have been extensively studied. Nevertheless, CNN struggles to capture the global context due to its local feature extraction, while Transformer is constrained by the complexity of quadratic calculations. Recently, there has been a great deal of interest in Mamba-based state space models. However, the existing Mamba-based methods do not adequately consider the significance of local information in remote sensing image segmentation tasks. In this article, a codec style network UMFormer is constructed for the semantic segmentation of remote sensing images. Specifically, UMFormer employs the ResNet18 as the encoder, with the objective of performing a preliminary image feature extraction. Subsequently, a self-attention mechanism is optimized to extract the global information pertaining to the objects of disparate sizes within the context of a multiscale condition. For fusing the codec feature map information, another attention structure is built to reconstruct the space information and to capture the relative position relationship. Finally, a decoder based on Mamba is designed to effectively model both global and local information. Concurrently, a feature fusion mechanism utilizing feature similarity is devised with the objective of embedding local information into global ones. Numerous experiments on UAV Imagery Dataset (UAVid), Vaihingen, and Potsdam datasets have demonstrated that the proposed UMFormer exhibits enhanced accuracy while maintaining an efficient running speed. The code will be freely available at: https://github.com/takeyoutime/UMFormer"
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T12:35:12.360Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "semanticscholar"
+    }
+  }
+]

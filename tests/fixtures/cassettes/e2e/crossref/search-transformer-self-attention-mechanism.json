@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 2268869,
+        "total-results": 2269259,
         "items": [
           {
             "DOI": "10.7717/peerj-cs.3829/fig-3",
@@ -491,7 +491,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:41:49.456Z",
+      "recordedAt": "2026-09-30T12:35:12.360Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

@@ -5,7 +5,7 @@
     "path": "/graph/v1/paper/search?query=attention+mechanism+neural+machine+translation&limit=10&fields=title%2Cauthors%2Cyear%2CexternalIds%2Cabstract%2Cvenue%2CpublicationTypes%2Cjournal",
     "status": 200,
     "response": {
-      "total": 8863,
+      "total": 8864,
       "offset": 0,
       "next": 10,
       "data": [
@@ -515,7 +515,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:41:49.456Z",
+      "recordedAt": "2026-09-30T12:35:12.360Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "semanticscholar"
     }

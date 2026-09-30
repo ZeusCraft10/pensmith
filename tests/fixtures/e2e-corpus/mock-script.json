@@ -87,7 +87,21 @@
             "tier": "preprint"
           },
           {
+            "citekey": "cai2024",
+            "keep": true,
+            "reason": "recorded e2e corpus: kept",
+            "relevance": 0.9,
+            "tier": "peer-reviewed"
+          },
+          {
             "citekey": "li2024",
+            "keep": true,
+            "reason": "recorded e2e corpus: kept",
+            "relevance": 0.9,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "vassoler2026",
             "keep": true,
             "reason": "recorded e2e corpus: kept",
             "relevance": 0.9,
@@ -220,10 +234,31 @@
             "tier": "preprint"
           },
           {
+            "citekey": "li2022",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "book"
+          },
+          {
+            "citekey": "smaldone2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "li2025a",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
             "citekey": "wang2025",
-            "keep": true,
-            "reason": "recorded e2e corpus: kept",
-            "relevance": 0.9,
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
             "tier": "peer-reviewed"
           },
           {
@@ -242,9 +277,9 @@
           },
           {
             "citekey": "spandan2024",
-            "keep": true,
-            "reason": "recorded e2e corpus: kept",
-            "relevance": 0.9,
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
             "tier": "peer-reviewed"
           },
           {
@@ -256,6 +291,55 @@
           },
           {
             "citekey": "rathi2024",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "sanger2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "sohn2024",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "preprint"
+          },
+          {
+            "citekey": "bernhard2023a",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "preprint"
+          },
+          {
+            "citekey": "courtois2024a",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "preprint"
+          },
+          {
+            "citekey": "hsih2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "yang2024",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "terui2024",
             "keep": false,
             "reason": "recorded e2e corpus: not in the keep-list",
             "relevance": 0.1,
@@ -297,14 +381,14 @@
             "tier": "preprint"
           },
           {
-            "citekey": "jauregiunanue2018",
+            "citekey": "department2023",
             "keep": false,
             "reason": "recorded e2e corpus: not in the keep-list",
             "relevance": 0.1,
             "tier": "peer-reviewed"
           },
           {
-            "citekey": "department2023",
+            "citekey": "jauregiunanue2018",
             "keep": false,
             "reason": "recorded e2e corpus: not in the keep-list",
             "relevance": 0.1,
@@ -332,13 +416,6 @@
             "tier": "peer-reviewed"
           },
           {
-            "citekey": "sanger2025",
-            "keep": false,
-            "reason": "recorded e2e corpus: not in the keep-list",
-            "relevance": 0.1,
-            "tier": "peer-reviewed"
-          },
-          {
             "citekey": "grigorov2026",
             "keep": false,
             "reason": "recorded e2e corpus: not in the keep-list",
@@ -360,7 +437,7 @@
             "tier": "peer-reviewed"
           },
           {
-            "citekey": "yan2026",
+            "citekey": "yan2026a",
             "keep": false,
             "reason": "recorded e2e corpus: not in the keep-list",
             "relevance": 0.1,
@@ -542,6 +619,48 @@
             "tier": "preprint"
           },
           {
+            "citekey": "lin2021",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "li2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "zhou2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "preprint"
+          },
+          {
+            "citekey": "shen2024",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "yan2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "wang2024",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
             "citekey": "luong2015",
             "keep": false,
             "reason": "recorded e2e corpus: not in the keep-list",
@@ -557,6 +676,13 @@
           },
           {
             "citekey": "wu2016",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list",
+            "relevance": 0.1,
+            "tier": "peer-reviewed"
+          },
+          {
+            "citekey": "shukla2025",
             "keep": false,
             "reason": "recorded e2e corpus: not in the keep-list",
             "relevance": 0.1,
@@ -822,7 +948,7 @@
             "tier": "peer-reviewed"
           },
           {
-            "citekey": "li2025",
+            "citekey": "li2025b",
             "keep": false,
             "reason": "recorded e2e corpus: not in the keep-list",
             "relevance": 0.1,
@@ -836,7 +962,7 @@
             "tier": "peer-reviewed"
           },
           {
-            "citekey": "li2025a",
+            "citekey": "li2025c",
             "keep": false,
             "reason": "recorded e2e corpus: not in the keep-list",
             "relevance": 0.1,

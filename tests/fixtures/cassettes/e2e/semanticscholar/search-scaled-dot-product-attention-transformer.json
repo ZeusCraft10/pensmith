@@ -1,0 +1,399 @@
+[
+  {
+    "scope": "https://api.semanticscholar.org",
+    "method": "GET",
+    "path": "/graph/v1/paper/search?query=scaled+dot-product+attention+transformer&limit=10&fields=title%2Cauthors%2Cyear%2CexternalIds%2Cabstract%2Cvenue%2CpublicationTypes%2Cjournal",
+    "status": 200,
+    "response": {
+      "total": 1097,
+      "offset": 0,
+      "next": 10,
+      "data": [
+        {
+          "paperId": "a223b25ab7db1b12f6a8325533db0bdb74fba4ea",
+          "externalIds": {
+            "DBLP": "journals/neco/Sanger25",
+            "DOI": "10.1162/neco.a.29",
+            "CorpusId": 280660026,
+            "PubMed": "40811797"
+          },
+          "title": "Transformer Models for Signal Processing: Scaled Dot-Product Attention Implements Constrained Filtering",
+          "venue": "Neural Computation",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1162/neco.a.29?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1162/neco.a.29, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Neural computation",
+            "pages": "\n          1-14\n        "
+          },
+          "authors": [
+            {
+              "authorId": "2296394911",
+              "name": "T. Sanger"
+            }
+          ],
+          "abstract": "The remarkable success of the transformer machine learning architecture for processing language sequences far exceeds the performance of classical signal processing methods. A unique component of transformer models is the scaled dot-product attention (SDPA) layer, which does not appear to have an analog in prior signal processing algorithms. Here, we show that SDPA operates using a novel principle that projects the current state estimate onto the space spanned by prior estimates. We show that SDPA, when used for causal recursive state estimation, implements constrained state estimation in circumstances where the constraint is unknown and may be time varying. Since constraints in high-dimensional space may represent the complex relationships that define nonlinear signals and models, this suggests that the SDPA layer and transformer models leverage constrained estimation to achieve their success. This also suggests that transformers and the SPDA layer could be a computational model for previously unexplained capabilities of human behavior."
+        },
+        {
+          "paperId": "c4aa0b845a9dec5f0a56fb74a5897b613312a9f3",
+          "externalIds": {
+            "ArXiv": "2404.16629",
+            "DBLP": "journals/corr/abs-2404-16629",
+            "DOI": "10.48550/arXiv.2404.16629",
+            "CorpusId": 269362279
+          },
+          "title": "Implementing and Optimizing the Scaled Dot-Product Attention on Streaming Dataflow",
+          "venue": "arXiv.org",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2404.16629, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "ArXiv",
+            "volume": "abs/2404.16629"
+          },
+          "authors": [
+            {
+              "authorId": "2298272678",
+              "name": "Gina Sohn"
+            },
+            {
+              "authorId": "2153284251",
+              "name": "Nathan Zhang"
+            },
+            {
+              "authorId": "1746638",
+              "name": "K. Olukotun"
+            }
+          ],
+          "abstract": "Transformer models serve as the backbone of many state-ofthe-art language models, and most use the scaled dot-product attention (SDPA) mechanism to capture relationships between tokens. However, the straightforward implementation of SDPA has quadratic compute and memory complexity with respect to the sequence length. On processor architectures such as GPUs and TPUs, there is a robust body of prior work. However, little work has been performed on non-processor architectures.In this work, we show how the architecture and execution model of Streaming Dataflow Accelerators can help tackle this challenge. We first define abstract hardware that adopts a streaming execution model, and we implement a cycle-accurate simulator of the abstract hardware using the Dataflow Abstract Machine simulation framework. Second, we implement the naive SDPA algorithm on this abstract hardware and show it requires linear (O(N)) intermediate memory. Third, we then modify the naive algorithm, taking inspiration from prior processor-oriented works, by reordering the multiplication and division operations. Finally, we map the modified algorithm to abstract hardware, and confirm that the implementation computes SDPA at full throughput while only using a constant amount (O(1)) of intermediate memory."
+        },
+        {
+          "paperId": "d32a7a831c82892a276fca13ee5c5c53a0af5b10",
+          "externalIds": {
+            "CorpusId": 250616126
+          },
+          "title": "Local Transformer Linear Linear Linear ��� Scaled dot-product attention",
+          "venue": "",
+          "year": 2022,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://openaccess.thecvf.com/content/CVPR2022/supplemental/Zuo_C2SLR_Consistency-Enhanced_Continuous_CVPR_2022_supplemental.pdf, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": null,
+          "journal": null,
+          "authors": [],
+          "abstract": null
+        },
+        {
+          "paperId": "64f91afaf2f44729cbf6a468ffe2f56d20391419",
+          "externalIds": {
+            "ArXiv": "2311.09406",
+            "DBLP": "journals/corr/abs-2311-09406",
+            "DOI": "10.48550/arXiv.2311.09406",
+            "CorpusId": 265221051
+          },
+          "title": "Alternatives to the Scaled Dot Product for Attention in the Transformer Neural Network Architecture",
+          "venue": "arXiv.org",
+          "year": 2023,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2311.09406, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "ArXiv",
+            "volume": "abs/2311.09406"
+          },
+          "authors": [
+            {
+              "authorId": "49839682",
+              "name": "James A. Bernhard"
+            }
+          ],
+          "abstract": "The transformer neural network architecture uses a form of attention in which the dot product of query and key is divided by the square root of the key dimension before applying softmax. This scaling of the dot product is designed to avoid the absolute value of the dot products becoming so large that applying softmax leads to vanishing gradients. In this paper, we propose some alternative scalings, including dividing the dot product instead by the sum of the key lengths before applying softmax. We use simulated keys and queries to show that in many situations this appears to be more effective at avoiding regions where applying softmax leads to vanishing gradients."
+        },
+        {
+          "paperId": "0430f7e17a51c43bd90822751ab32fb3fd542bd6",
+          "externalIds": {
+            "DBLP": "journals/corr/abs-2406-06366",
+            "ArXiv": "2406.06366",
+            "DOI": "10.48550/arXiv.2406.06366",
+            "CorpusId": 270371018
+          },
+          "title": "Symmetric Dot-Product Attention for Efficient Training of BERT Language Models",
+          "venue": "Annual Meeting of the Association for Computational Linguistics",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2406.06366, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle",
+            "Conference"
+          ],
+          "journal": {
+            "name": "ArXiv",
+            "volume": "abs/2406.06366"
+          },
+          "authors": [
+            {
+              "authorId": "2301583289",
+              "name": "Martin Courtois"
+            },
+            {
+              "authorId": "2123349725",
+              "name": "Malte Ostendorff"
+            },
+            {
+              "authorId": "2305612597",
+              "name": "Leonhard Hennig"
+            },
+            {
+              "authorId": "77903998",
+              "name": "Georg Rehm"
+            }
+          ],
+          "abstract": "Initially introduced as a machine translation model, the Transformer architecture has now become the foundation for modern deep learning architecture, with applications in a wide range of fields, from computer vision to natural language processing. Nowadays, to tackle increasingly more complex tasks, Transformer-based models are stretched to enormous sizes, requiring increasingly larger training datasets, and unsustainable amount of compute resources. The ubiquitous nature of the Transformer and its core component, the attention mechanism, are thus prime targets for efficiency research. In this work, we propose an alternative compatibility function for the self-attention mechanism introduced by the Transformer architecture. This compatibility function exploits an overlap in the learned representation of the traditional scaled dot-product attention, leading to a symmetric with pairwise coefficient dot-product attention. When applied to the pre-training of BERT-like models, this new symmetric attention mechanism reaches a score of 79.36 on the GLUE benchmark against 78.74 for the traditional implementation, leads to a reduction of 6% in the number of trainable parameters, and reduces the number of training steps required before convergence by half."
+        },
+        {
+          "paperId": "bcc0b94c5a93c5b5c79405a40461bf365c79086f",
+          "externalIds": {
+            "DBLP": "conf/lascas/VassolerRG26",
+            "DOI": "10.1109/LASCAS67804.2026.11457118",
+            "CorpusId": 287030830
+          },
+          "title": "Design and Synthesis of a Scaled Dot Product Accelerator with an AXI4-Stream Interface",
+          "venue": "Latin American Symposium on Circuits and Systems",
+          "year": 2026,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/LASCAS67804.2026.11457118?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/LASCAS67804.2026.11457118, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "2026 IEEE 17th Latin America Symposium on Circuits and System (LASCAS)",
+            "pages": "1-5"
+          },
+          "authors": [
+            {
+              "authorId": "2298458877",
+              "name": "Augusto Vassoler"
+            },
+            {
+              "authorId": "3310398",
+              "name": "F. Rokhani"
+            },
+            {
+              "authorId": "1894867",
+              "name": "M. Grellert"
+            }
+          ],
+          "abstract": "The evolution of deep learning architectures has culminated in Transformers emerging as the state of the art for applications such as natural language processing (NLP) and computer vision. Still, the cost of time and energy for processing highlights the need for the use of accelerators. The present project aims to implement a hardware accelerator for one of the elementary units of a Transformer, the Scaled-dot product attention, in order to mitigate this issue. The designed models are integrated with an AXI-Stream communication interface. The solutions were employed on a RTL-GDSII flow, which included functional verification, logical and physical synthesis. In order to evaluate the implementation, the synthesis was carried out with different values of operand bit width (4,8 and 12), tokens and features (4, 8 and 16), and attention heads (1, 2 and 4). By doing so, it was found that the presented design is sufficiently robust, outperforming the state-of-the-art accelerators in throughput, power and area efficiency, also reaching higher operation frequencies."
+        },
+        {
+          "paperId": "4103f2f7c11d149cc65149b52f30959071f27754",
+          "externalIds": {
+            "DBLP": "journals/ppna/ShuklaVAASS25",
+            "DOI": "10.1007/s12083-025-02047-z",
+            "CorpusId": 280218205
+          },
+          "title": "Encoder only attention-guided transformer framework for accurate and explainable social media fake profile detection",
+          "venue": "Peer-to-Peer Networking and Applications",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1007/s12083-025-02047-z?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1007/s12083-025-02047-z, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Peer-to-Peer Networking and Applications",
+            "volume": "18"
+          },
+          "authors": [
+            {
+              "authorId": "2156445657",
+              "name": "Prashant Kumar Shukla"
+            },
+            {
+              "authorId": "2745102",
+              "name": "Dr. Bala Dhandayuthapani Veerasamy"
+            },
+            {
+              "authorId": "2343080813",
+              "name": "Noha Alduaiji"
+            },
+            {
+              "authorId": "2289375601",
+              "name": "Santosh Reddy Addula"
+            },
+            {
+              "authorId": "2211806118",
+              "name": "Sachin Sharma"
+            },
+            {
+              "authorId": "2099551831",
+              "name": "P. Shukla"
+            }
+          ],
+          "abstract": null
+        },
+        {
+          "paperId": "60203e553af18b1f5ffa12f7636fe73f657918af",
+          "externalIds": {
+            "DOI": "10.3390/electronics14204123",
+            "CorpusId": 282283934
+          },
+          "title": "Chest X-Ray Medical Report Generation Using a CNN—Transformer Model with Maximum Attention",
+          "venue": "Electronics",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "https://www.mdpi.com/2079-9292/14/20/4123/pdf?version=1761117760",
+            "status": "GOLD",
+            "license": "CCBY",
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.3390/electronics14204123?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.3390/electronics14204123, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Electronics"
+          },
+          "authors": [
+            {
+              "authorId": "21464356",
+              "name": "M.-H. Hsih"
+            },
+            {
+              "authorId": "2388017531",
+              "name": "Shih-Po Lin"
+            },
+            {
+              "authorId": "2297928430",
+              "name": "Chen-Chiung Hsieh"
+            }
+          ],
+          "abstract": "Medical imaging, particularly chest X-rays, plays a vital role in radiological diagnosis. However, interpreting these images and generating detailed diagnostic reports is a time-consuming task for clinicians. To address this challenge, this study proposes an automated image captioning framework for chest X-ray images, aiming to reduce clinical workload and enhance diagnostic efficiency. The proposed approach employs convolutional neural networks (CNNs) for visual feature extraction and a modified Transformer architecture—referred to as the Medical Transformer—for structured report generation. Three CNN models, namely InceptionV3, ResNet152V2, and Inception–ResNetV2, were evaluated as feature extractors. The attention mechanisms, Bahdanau, Luong, and scaled dot product, were activated by ReLU or Tanh functions to identify the optimal configuration, i.e., the maximum attention is used. Experiments were conducted using the Indiana University Chest X-ray dataset, which contains 7466 images paired with corresponding diagnostic reports. The proposed approach employs image augmentation to accommodate input variability, utilizes Inception–ResNetV2 for feature extraction, and integrates the Medical Transformer with maximum attention mechanisms to achieve optimal performance in medical report generation. Evaluation metrics include BLEU (BLEU-1 to BLEU-4 scores of 0.720, 0.669, 0.648, and 0.600, respectively), METEOR (0.741), and BERTScore (FBERT = 0.787), demonstrating superior performance compared to baseline models and the state of the art. These results validate the effectiveness of the proposed Medical Transformer framework in generating accurate and clinically relevant medical image captions."
+        },
+        {
+          "paperId": "8ef7525597e58fc1560499180e2079faf4f4e631",
+          "externalIds": {
+            "DOI": "10.3390/vehicles6010005",
+            "CorpusId": 266921870
+          },
+          "title": "EGFormer: An Enhanced Transformer Model with Efficient Attention Mechanism for Traffic Flow Forecasting",
+          "venue": "Vehicles",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "https://www.mdpi.com/2624-8921/6/1/5/pdf?version=1704534244",
+            "status": "GOLD",
+            "license": "CCBY",
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.3390/vehicles6010005?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.3390/vehicles6010005, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Vehicles"
+          },
+          "authors": [
+            {
+              "authorId": "2279009629",
+              "name": "Zhihui Yang"
+            },
+            {
+              "authorId": "2187147574",
+              "name": "Qingyong Zhang"
+            },
+            {
+              "authorId": "2005887782",
+              "name": "Wanfeng Chang"
+            },
+            {
+              "authorId": "2220427539",
+              "name": "Peng Xiao"
+            },
+            {
+              "authorId": "2278977498",
+              "name": "Minglong Li"
+            }
+          ],
+          "abstract": "Due to the regular influence of human activities, traffic flow data usually exhibit significant periodicity, which provides a foundation for further research on traffic flow data. However, the temporal dependencies in traffic flow data are often obscured by entangled temporal regularities, making it challenging for general models to capture the intrinsic functional relationships within the data accurately. In recent years, a plethora of methods based on statistics, machine learning, and deep learning have been proposed to tackle these problems of traffic flow forecasting. In this paper, the Transformer is improved from two aspects: (1) an Efficient Attention mechanism is proposed, which reduces the time and memory complexity of the Scaled Dot Product Attention; (2) a Generative Decoding mechanism instead of a Dynamic Decoding operation, which accelerates the inference speed of the model. The model is named EGFormer in this paper. Through a lot of experiments and comparative analysis, the authors found that the EGFormer has better ability in the traffic flow forecasting task. The new model has higher prediction accuracy and shorter running time compared with the traditional model."
+        },
+        {
+          "paperId": "5969c58ae820a4d254aa3edda7ab1847f6decd00",
+          "externalIds": {
+            "DBLP": "conf/apsipa/TeruiY24",
+            "DOI": "10.1109/APSIPAASC63619.2025.10848590",
+            "CorpusId": 275956617
+          },
+          "title": "Speech emotion recognition based on crossmodal transformer and attention weight correction",
+          "venue": "Asia-Pacific Signal and Information Processing Association Annual Summit and Conference",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": "CLOSED",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/APSIPAASC63619.2025.10848590?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/APSIPAASC63619.2025.10848590, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle",
+            "Conference"
+          ],
+          "journal": {
+            "name": "2024 Asia Pacific Signal and Information Processing Association Annual Summit and Conference (APSIPA ASC)",
+            "pages": "1-5"
+          },
+          "authors": [
+            {
+              "authorId": "1965124677",
+              "name": "Ryusei Terui"
+            },
+            {
+              "authorId": "23246655",
+              "name": "Takeshi Yamada"
+            }
+          ],
+          "abstract": "In recent years, speech emotion recognition (SER) methods that use both acoustic features and text features derived through automatic speech recognition (ASR) have become mainstream. Furthermore, the crossmodal integration of acoustic and text features using a crossmodal transformer encoder has been proposed and succeeded in improving the SER accuracy. However, these methods have a problem in that ASR errors occur frequently, especially for speech that contains emotion, which affects the SER accuracy. To solve this problem, a method of correcting the self-attention weights based on the wordlevel confidence measure (CM), which indicates the reliability of ASR results, has been proposed. In this paper, we propose a method that combines the crossmodal transformer encoder and the attention weight correction with CM to further improve the SER accuracy. The network of the proposed method includes two different attention mechanisms: scaled dot-product attention and self-attention. In this paper, we applied the attention weight correction to each attention mechanism and verified their effectiveness. Results of experiments using the Interactive Emotional Dyadic Motion Capture (IEMOCAP) dataset revealed that the attention weight correction for self-attention can achieve higher SER improvement and the SER accuracy of the proposed methods is equal to or higher than that of state-of-the-art SER methods."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T12:35:12.360Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "semanticscholar"
+    }
+  }
+]

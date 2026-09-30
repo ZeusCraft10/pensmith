@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 327730,
+        "total-results": 327832,
         "items": [
           {
             "DOI": "10.2139/ssrn.5956857",
@@ -614,7 +614,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:41:49.456Z",
+      "recordedAt": "2026-09-30T12:35:12.360Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

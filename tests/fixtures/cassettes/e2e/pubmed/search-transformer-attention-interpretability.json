@@ -46,7 +46,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:41:49.456Z",
+      "recordedAt": "2026-09-30T12:35:12.360Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }
@@ -977,6 +977,16 @@
               "idtype": "pii",
               "idtypen": 4,
               "value": "10.1186/s12880-026-02793-3"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13621505"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13621505;"
             }
           ],
           "history": [
@@ -999,15 +1009,19 @@
             {
               "pubstatus": "entrez",
               "date": "2026/09/28 23:50"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/09/17 00:00"
             }
           ],
           "references": [],
           "attributes": [
             "Has Abstract"
           ],
-          "pmcrefcount": "",
+          "pmcrefcount": 46,
           "fulljournalname": "BMC medical imaging",
-          "elocationid": "pii: 474. doi: 10.1186/s12880-026-02793-3",
+          "elocationid": "doi: 10.1186/s12880-026-02793-3",
           "doctype": "citation",
           "srccontriblist": [],
           "booktitle": "",
@@ -1204,14 +1218,6 @@
           ],
           "history": [
             {
-              "pubstatus": "medline",
-              "date": "2026/09/29 23:29"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/29 23:29"
-            },
-            {
               "pubstatus": "received",
               "date": "2025/08/10 00:00"
             },
@@ -1222,6 +1228,14 @@
             {
               "pubstatus": "accepted",
               "date": "2026/09/21 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/29 23:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/29 23:29"
             },
             {
               "pubstatus": "entrez",
@@ -1322,14 +1336,6 @@
           ],
           "history": [
             {
-              "pubstatus": "medline",
-              "date": "2026/09/29 23:29"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/29 23:29"
-            },
-            {
               "pubstatus": "received",
               "date": "2026/07/30 00:00"
             },
@@ -1340,6 +1346,14 @@
             {
               "pubstatus": "accepted",
               "date": "2026/09/22 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/29 23:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/29 23:29"
             },
             {
               "pubstatus": "entrez",
@@ -1390,7 +1404,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T04:41:49.456Z",
+      "recordedAt": "2026-09-30T12:35:12.360Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }
