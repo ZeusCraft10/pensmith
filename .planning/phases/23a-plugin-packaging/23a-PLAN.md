@@ -105,8 +105,8 @@ There are three streams, run in parallel in separate worktrees, all forked from 
    - **`plugin/hooks/hooks.json`** (D-23a-06): exec form with these exact commands.
      - Each hook is `{"type":"command","command":"node","args":["${CLAUDE_PLUGIN_ROOT}/dist/hooks/<name>.mjs"],"timeout":10}` for `<name>` in `session-start`, `pre-compact`, `post-tool-use` and `stop`.
      - Matchers:
-       - SessionStart `startup|resume|compact`
-       - PostToolUse `mcp__plugin_pensmith_pensmith__.*`
+       - SessionStart `startup|resume|compact` (*review round 3:* `startup|resume|clear|compact|fork`, D-23a-06)
+       - PostToolUse `mcp__plugin_pensmith_pensmith__.*` (*review round 1:* `^mcp__(?:plugin_pensmith_)?pensmith__.*`)
        - PreCompact and Stop have none.
    - **`.claude-plugin/marketplace.json`**: plugin `source: "./plugin"`, and no entry `version` (review round 2: plugin.json's stamped version is the one Claude Code reads).
    - **`.mcp.json`** (D-23a-07): `{"mcpServers":{"pensmith":{"type":"stdio","command":"node","args":["${PWD:-.}/plugin/dist/mcp/server.mjs"]}}}`.
@@ -217,10 +217,10 @@ There are three streams, run in parallel in separate worktrees, all forked from 
    - Add migration and size tests.
 6. **Hook tests.** These spawn the bundled scripts `node plugin/dist/hooks/<name>.mjs` with Claude Code's documented stdin JSON (`session_id`, `cwd`, `hook_event_name`, plus `source` / `trigger` / `tool_name`). They never import `onPreCompact` or `onPostToolUse`.
    - **PreCompact:** in a paper with §2 `writing`, it writes a HANDOFF.json that validates as v2 with `{phase:'sectioning', section:'2', position:'write'}`.
-   - **PostToolUse:** five invocations within 60 s write exactly one checkpoint line, and nothing is written under `.claude/`.
+   - **PostToolUse:** five invocations within 60 s write exactly one checkpoint line, and nothing is written under `.claude/`. *Review round 3:* within the minute, a call that moved the paper replaces that line (the trailing edge, D-23a-15).
    - **Stop and the session lock.**
      - While a CLI `pensmith write` holds the paper lock (a real CLI process, or a real owner record of kind `cli`), a Stop run leaves the lock in place.
-     - A Stop run with the `session_id` of an MCP-owned lock releases that lock.
+     - A Stop run with the `session_id` of an MCP-owned lock releases that lock. *Review round 3:* only a lock the server left behind (its process gone); a live server's lock is a call still in flight and stays (D-23a-15).
    - **SessionStart:** in a paper, stdout is exactly one JSON line with `hookSpecificOutput.hookEventName === 'SessionStart'` and a non-empty `additionalContext` that names the next step. It never emits `systemMessage`.
    - **Outside a paper:** each of the 4 hooks exits 0 within 500 ms (measured), with empty stdout and no new files in the cwd or the data dir.
 
@@ -434,10 +434,13 @@ Run these on the merged tree (§7). `S` is a scratch dir under `…/scratchpad/p
      gh api repos/ZeusCraft10/pensmith/branches/main/protection/required_status_checks --jq '.contexts'
      ```
    - "Merge notes for Phase 20" (§8).
-6. **Mark requirements.** Tick only PLUG-01, PLUG-02, PLUG-03, PLUG-05 and PLUG-13 outright in REQUIREMENTS.md (traceability "Complete (23a)"). Leave Phase 23 unticked in ROADMAP.md, and add the 23a plan and status to its Plans line. *Review round 2 — do not over-claim:*
+6. **Mark requirements.** Tick only PLUG-01, PLUG-02, PLUG-03, PLUG-05 and PLUG-13 outright in REQUIREMENTS.md (traceability "Complete (23a)"), and PLUG-14 with its caveat (below). Leave Phase 23 unticked in ROADMAP.md, and add the 23a plan and status to its Plans line. *Review rounds 2 and 3 — do not over-claim:*
    - **CI-05 stays unticked** (traceability "Pending — maintainer: first green CI run"). Its acceptance is "the job is a required check and passes"; `v1/p23a` has no upstream, so the `plugin` job and `bundle:check` in the `check` matrix have never run on a GitHub runner, and neither is a required check. Record it as pending the maintainer's first green `plugin (ubuntu-latest|macos-latest|windows-latest)` and `check` matrix runs (bundle:check on Windows included) and the branch-protection command in 23a-VERIFICATION §5; once green, add the run URLs to 23a-SUMMARY and tick it.
    - **PLUG-14**: tick it with its caveat stated in the traceability row — "Complete (23a); the 3-OS CI run of the spawned-bundle hook tests (23a-PLAN §6) pending the first green `check` matrix". The hook tests pass on Linux here; their macOS and Windows legs (and the < 500 ms outside-a-paper budget there) have run only in CI configuration, never on a runner.
-   - **PLUG-04**: tick it with its caveat — acceptance criterion 2 ("registered exactly once" alongside `--plugin-dir`) holds where `PWD` is the repo root (POSIX shells that `cd` there), not in PowerShell/cmd, where Claude Code keeps two servers; CONTRIBUTING documents it and the tested workaround (`disabledMcpjsonServers`, D-23a-07 review round 2).
+   - **PLUG-04 stays unticked** (review round 3; traceability "Pending — acceptance text needs a maintainer amendment (23a-PLAN §7.6)"). Its two criteria cannot both hold on every shell with any committed `.mcp.json` (D-23a-07 review round 3: Claude Code dedupes a plugin server only on an exact match of the expanded command line, which carries the absolute plugin root, and no variable it expands names the project folder everywhere). The shipped `${PWD:-.}` form connects where `PWD` is the root or unset and dedupes where it is the root, but fails with `CONNECTION_CLOSED` under a stale `PWD` (an IDE extension or the Agent SDK started from another folder) and under Git Bash's MSYS `PWD`, and keeps two servers where `PWD` is unset (PowerShell, cmd); a workaround is not "registered exactly once". Ticking it "with a caveat" would over-claim against the unamended text. The maintainer either keeps it Pending or amends the acceptance criteria through a recorded decision, then the closer ticks it against the amended text. Proposed amendment (replace the two criteria):
+     - "In a fresh clone opened in Claude Code at the repo root from a POSIX shell or from PowerShell/cmd, with project MCP servers approved, `claude mcp list` shows pensmith connected with no missing-variable warning and no build step. A launcher that starts Claude Code in the root with a `PWD` naming another folder, and Git Bash on Windows (an MSYS `PWD`), are documented limitations in CONTRIBUTING with their fix (set or unset `PWD`; launch from PowerShell or cmd)."
+     - "When the same checkout is also loaded as a plugin (`--plugin-dir ./plugin`) from a POSIX shell in the root, the pensmith MCP server is registered exactly once; where `PWD` is unset (PowerShell, cmd) Claude Code keeps two servers, and CONTRIBUTING gives the tested workaround (`disabledMcpjsonServers: [\"pensmith\"]`), which the session check proves leaves exactly one."
+     The alternative the reviewer offered — the requirement's own plain `plugin/dist/mcp/server.mjs` — connects from every launch at the root but never dedupes; it trades criterion 2 away everywhere to close the stale-`PWD` case, so the maintainer decides between the two forms with the amendment.
 
 ## 8. Merge notes for Phase 20 (to be copied into 23a-SUMMARY.md)
 
@@ -452,15 +455,24 @@ Run these on the merged tree (§7). `S` is a scratch dir under `…/scratchpad/p
 | `hooks/hooks.json` | `plugin/hooks/hooks.json` |
 | `.claude-plugin/plugin.json` | `plugin/.claude-plugin/plugin.json` |
 
-**Trial merge (review round 2).** Phase 20 has since integrated its four streams into its main branch, so the merge that matters is that branch. `akhil/pensive-faraday-qx3o58` at `f2cc81d` (it holds `v1/p20-gate` `95959e2`, `v1/p20-quotes` `8ebdbf0`, `v1/p20-registrar` `2bab275` and `v1/p20-grammar` `857d26c`) was merged into `v1/p23a` at `ffc2758` in a scratch clone with `git merge --no-edit` (rename detection on). The edits to `templates/prompts/claim-support.md`, `orphan-label.md` and `workflows/{compile,done,verify}.md` land on their `plugin/` paths by rename detection. It stops with these conflicts:
+**Trial merge (review round 3). Phase 20 is still moving: re-run this trial against the Phase 20 head of the day before merging, and refresh this section and the SUMMARY copy of it.** `akhil/pensive-faraday-qx3o58` at `893e0c1` (17 commits after round 2's `f2cc81d`; the integrated branch holding `v1/p20-gate`, `v1/p20-quotes`, `v1/p20-registrar` and `v1/p20-grammar`) was merged into `v1/p23a` at `4f099b0` in a scratch clone with `git merge --no-edit` (rename detection on):
+
+```bash
+git clone --no-hardlinks /home/user/pensmith-p23a merge && cd merge
+git fetch /home/user/pensmith akhil/pensive-faraday-qx3o58:p20   # read-only fetch
+git merge --no-edit p20
+```
+
+Phase 20's edits to `templates/prompts/claim-support.md`, `orphan-label.md` and `workflows/{add,compile,done,next,outline,plan,verify,write}.md` land on their `plugin/` paths by rename detection, and Phase 20 adds no new file under `templates/`, `workflows/`, `references/`, `skills/` or `agents/`. It stops with these conflicts:
 
 | File | What conflicts |
 |---|---|
-| `skills/verify-section.md` | **modify/delete**: 23a moved it to `plugin/skills/verify-section/SKILL.md` and rewrote it past git's 50 % rename threshold, so git does not follow the rename and leaves Phase 20's version (048f55d: the `accept quote qK` row) at the old path — where `tests/plugin-layout.test.ts` fails on it |
-| `CLAUDE.md` | 3 hunks (layout text and chokepoint rows) |
+| `skills/verify-section.md` | **modify/delete**: 23a moved it to `plugin/skills/verify-section/SKILL.md` and rewrote it past git's 50 % rename threshold, so git does not follow the rename and leaves Phase 20's version at the old path — where `tests/plugin-layout.test.ts` fails on it. Phase 20 changed it twice: 048f55d added the `accept quote qK` row, and d7418ae widened the blocking list to "FABRICATED, MIS-CITED, RETRACTED, UNVERIFIABLE(-NETWORK), unparseable or unsupported citation form, or quote-NOT_FOUND" |
+| `skills/plan-section.md` | **modify/delete** (new in round 3), for the same reason: Phase 20 (0899e32) dropped the "or only a Zenodo / figshare / Dryad DataCite DOI" qualifier from the verifier-blind-spot sentence (DataCite DOIs are checkable since VRFY-11). 23a's `plugin/skills/plan-section/SKILL.md` is a forwarder that never carried that sentence, and no other plugin file does, so nothing needs porting: `git rm skills/plan-section.md` |
+| `CLAUDE.md` | 3 hunks (the Gates / Tier 1 plugin / Routing bullets; the Library / Write / Verify / Compile-done bullets; the chokepoint rows) |
 | `bin/cli/compile.ts` | 1 hunk (imports: 23a's `out` vs Phase 20's gate imports) |
-| `bin/cli/done.ts` | 3 hunks (imports; the export BLOCKED block; the GATE-04 block) |
-| `bin/cli/verify.ts` | 4 hunks (imports; the DRAFT.md-missing branch; the CITATIONS.bib check; the final summary) |
+| `bin/cli/done.ts` | 4 hunks (imports; the export BLOCKED block; the unsupported-claims / GATE-04 re-verification block; the FINAL.md GATE-04 block) |
+| `bin/cli/verify.ts` | 4 hunks (imports; the DRAFT.md-missing branch — 23a's `out()` return vs Phase 20's removal; the draft read and CITATIONS.bib check Phase 20 moved into the gate core; the final `wrote … VERIFICATION.md` summary) |
 | `bin/lib/llm-text-stubs.ts`, `bin/lib/plagiarism.ts` | 1 import hunk each |
 | `package.json` | the `scripts` block |
 | `scripts/eslint-rules/chokepoint.mjs` | the header comment (the matcher kinds) |
@@ -469,14 +481,15 @@ Run these on the merged tree (§7). `S` is a scratch dir under `…/scratchpad/p
 
 The round-1 trial (each stream on its own: `p20-grammar` `857d26c`, `p20-gate` `67498b5`, `p20-quotes` `52a03bd`, `p20-registrar` `2bab275`) conflicted in a subset of these files; the integrated branch supersedes it.
 
-**`skills/verify-section.md` step by step.**
-1. `git rm skills/verify-section.md` (the plugin reads only `plugin/skills/<name>/SKILL.md`).
-2. Port its new row into the routing table of `plugin/skills/pensmith/SKILL.md`: "accept quote qK in section N" (a quote VERIFICATION.md lists as UNVERIFIABLE-QUOTE) → `verify N --accept-quote qK`, **in the CLI form** — the `pensmith_verify` MCP tool takes only `n`, `slug` and `yolo`, and the skill already sends a flag the tool does not take to the CLI — and only after asking the user with AskUserQuestion, one id at a time, never on Claude's own initiative (there is no blanket acceptance). Keep its "a section whose last write failed is not verified" note if the skill lacks it.
-3. Add `[--accept-quote <qK>]` to the `argument-hint` of `plugin/skills/verify-section/SKILL.md` and to the `/pensmith:verify-section` row of `docs/PLUMBING.md`: `tests/plumbing-args.test.ts` derives each plumbing command's options from its verb's citty `args` and fails until both name the new flag.
-4. Re-stamp and rebundle (below).
+**`skills/verify-section.md` and `skills/plan-section.md` step by step.**
+1. `git rm skills/verify-section.md skills/plan-section.md` (the plugin reads only `plugin/skills/<name>/SKILL.md`; the plan-section change needs no port, above).
+2. Port verify-section's new row into the routing table of `plugin/skills/pensmith/SKILL.md`: "accept quote qK in section N" (a quote VERIFICATION.md lists as UNVERIFIABLE-QUOTE) → `verify N --accept-quote qK`, **in the CLI form** — the `pensmith_verify` MCP tool takes only `n`, `slug` and `yolo`, and the skill already sends a flag the tool does not take to the CLI — and only after asking the user with AskUserQuestion, one id at a time, never on Claude's own initiative (there is no blanket acceptance). Keep its "a section whose last write failed is not verified" note if the skill lacks it.
+3. Port Phase 20's widened blocking list (round 3): `plugin/skills/verify-section/SKILL.md` ("A blocking verdict (FABRICATED, MIS-CITED, UNVERIFIABLE or a quote NOT_FOUND) stops compile and export …") becomes "FABRICATED, MIS-CITED, RETRACTED, UNVERIFIABLE(-NETWORK), an unparseable or unsupported citation form, or a quote NOT_FOUND"; in `plugin/skills/pensmith/SKILL.md`, the "redo section 3" row and the `plan N --revise` paragraph name the verdicts `plan N --revise` actually repairs after the merge — check `bin/lib/revise.ts` on the merged tree before writing them (23a's text says FABRICATED, MIS-CITED, NOT_FOUND, matching `revise.ts` today), and send every other blocking verdict to `plan N` + `write N`. The same list appears in `plugin/skills/plan-section/SKILL.md`'s `--revise` sentence (round 3): keep the three in step. `tests/skill-descriptions.test.ts` pins the plan-section wording; update it with the port.
+4. Add `[--accept-quote <qK>]` to the `argument-hint` of `plugin/skills/verify-section/SKILL.md` and to the `/pensmith:verify-section` row of `docs/PLUMBING.md`: `tests/plumbing-args.test.ts` derives each plumbing command's options from its verb's citty `args` and fails until both name the new flag.
+5. Re-stamp and rebundle (below).
 
 **How to resolve them.**
-- `bin/cli/compile.ts`, `bin/cli/done.ts` and `bin/cli/verify.ts`: 23a routed every stdout line through `out()` (`bin/lib/output-sink.ts`, PLUG-13). Keep 23a's `out()` form of the existing lines and re-apply Phase 20's changes through `out()`. **Phase 20 adds new `process.stdout.write` calls. In the round-2 trial of `f2cc81d`: `bin/cli/done.ts` — 5 merge in cleanly (the VRFY-22 unsupported-claims block, the accepted-quote and local-file lines) and 5 more sit in the conflict hunks (the export BLOCKED list, the GATE-04 re-verification lines); `bin/cli/verify.ts` — 2 merge in cleanly (the verdict summary, the quote-acceptance line) and 2 sit in conflict hunks (the DRAFT.md-missing line, the final `wrote … VERIFICATION.md` line).** The cleanly merged ones are the easy ones to miss. Each must become `out(…)`, or the `stdout-sink` lint row fails — and `bin/cli/verify.ts` is reached by the MCP server (`pensmith_verify`), so the `mcp-stdout-graph` row fails too.
+- `bin/cli/compile.ts`, `bin/cli/done.ts` and `bin/cli/verify.ts`: 23a routed every stdout line through `out()` (`bin/lib/output-sink.ts`, PLUG-13). Keep 23a's `out()` form of the existing lines and re-apply Phase 20's changes through `out()`. **Phase 20 adds new `process.stdout.write` calls. In the round-3 trial of `893e0c1` (line numbers in the conflicted tree): `bin/cli/done.ts` — 7 merge in cleanly (lines 140–141, the whole-paper Pass 4 `uncited:` sentences from 7fa8bec; 729, 731 and 732, the VRFY-22 unsupported-claims block; 736, the accepted-quote line; 739, the local-file line) and 8 sit in the conflict hunks (799, 802 and 803, the export BLOCKED list; 842, 845 and 846, the GATE-04 re-verification lines; 916–917, the FINAL.md GATE-04 lines); `bin/cli/verify.ts` — 2 merge in cleanly (201, the verdict summary; 392, the quote-acceptance line) and 2 sit in conflict hunks (323, the DRAFT.md-missing line; 523, the final `wrote … VERIFICATION.md` line). `bin/cli/compile.ts` adds none. Re-count on the day: `grep -n 'process.stdout.write\|console.log' bin/cli/*.ts bin/lib/*.ts` on the merged tree must list only `bin/lib/output-sink.ts` and the allow-listed `bin/lib/pdf-worker.ts` (and comments).** The cleanly merged ones are the easy ones to miss. Each must become `out(…)`, or the `stdout-sink` lint row fails — and `bin/cli/verify.ts` is reached by the MCP server (`pensmith_verify`), so the `mcp-stdout-graph` row fails too.
 - `bin/lib/llm-text-stubs.ts` and `bin/lib/plagiarism.ts` (`p20-grammar`): 23a replaced their asset lookups with the `paths.ts` plugin resolver and their stdout writes with `out()`; keep those and re-apply the grammar changes. Phase 20's versions of `exporter.ts`, `llm-text-stubs.ts`, `prompt-loader.ts`, `citations.ts` and `http.ts` still carry the pre-23a `path.join(root, 'templates', …)` / `'references'` lookups: wherever a conflict region includes one, keep 23a's `pluginTemplatePath` / `pluginReferencePath` call (the `plugin-assets` row fails otherwise).
 - `scripts/eslint-rules/chokepoint.mjs` (`p20-grammar`): keep both changes — Phase 20's `regex-literal` matcher kind (add it to `MATCH_KINDS` and to `ChokepointKind` in `chokepoint.d.mts`) and 23a round 1's `arg.index: "any"` for `call` matchers (the `plugin-assets` row uses it). Phase 20's new `citation-grammar` row needs its CLAUDE.md table line.
 - `package.json` (`p20-registrar`): keep 23a's `bundle`, `bundle:check`, `plugin:smoke` scripts, the `check` script ending in `bundle:check`, the `files` list (`plugin/`) and `esbuild`; add Phase 20's `live:verify` script.
@@ -503,6 +516,12 @@ The round-1 trial (each stream on its own: `p20-grammar` `857d26c`, `p20-gate` `
 - `paper://state`'s cost line is the real COSTS.jsonl meter in both tiers (it was `cost: n/a (Claude session)`).
 - The SessionStart context adds the HANDOFF summary only when the hook's stdin `source` is `compact`.
 - The missing-key error ends "`pensmith doctor` checks the setup (README: Model runtimes)." instead of promising key-free Tier-1 operation.
+
+**Behaviour Phase 20 code meets after the merge (review round 3).**
+- `pensmith_status` returns two text blocks: `STATUS_DATA_NOTE` (exported from `mcp/tools.ts`) and the status text inside the FEED-05 fence; an error adds the classification JSON as a third. A Phase 20 test that reads the tool's first block as the status text reads `unfence(content[1].text)` instead.
+- The Stop hook releases an MCP-owned session lock only when the owner's process is gone; a test that expects Stop to clear a live holder's lock must kill the holder first (SIGKILL, so its exit handler cannot release).
+- `.paper/HANDOFF.json` is neither seeded into `.paper-dry-run/` nor part of `SEED.json`'s fingerprint (`SEED_EXCLUDED`).
+- The plugin version digest covers the files git tracks under `plugin/`: after the merge, `git add` any new file under `plugin/` before `npm run plugin:version`, or the stamp leaves it out (and CI's clean checkout then disagrees).
 
 ## 9. Risks
 

@@ -7,10 +7,11 @@
 // Claude Code keeps in its place at the repo root, `mcp__pensmith__*`).
 //
 // In a folder that holds a paper it reads the stdin `tool_name` and
-// `session_id` and appends at most one checkpoint per minute to
+// `session_id` and records at most one checkpoint line per minute in
 // pensmithDataDir()/checkpoints/<projectHash>.jsonl (bin/lib/hooks/
-// post-tool-use.ts) — never under the user's `.claude/` or the paper's
-// `.paper/`. Outside a paper it does nothing.
+// post-tool-use.ts; within the minute a call that moved the paper replaces
+// that line) — never under the user's `.claude/` or the paper's `.paper/`.
+// Outside a paper it does nothing.
 //
 // It writes nothing to stdout; diagnostics go to stderr. It always exits 0.
 
