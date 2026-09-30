@@ -118,7 +118,12 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    never its DRAFT.md, never the bibliography or LIBRARY.json. A re-verify
    failure adds its rows as refuse reasons; an all-pass records a
    Compile-Staleness-Resolved event. Its verdict is not the last word either:
-   step 3a recomputes the section whatever it answered.
+   step 3a recomputes the section whatever it answered. A section whose record
+   says `unverifiable` (an earlier run could not reach a source or check a
+   quote) is re-verified the same way (`WARN: section <N> is unverifiable —
+   re-verifying`): when step 3a now passes it (online again, the PDF added,
+   the quote accepted), its VERIFICATION.md and PLAN.md say `verified`; when
+   it still cannot be checked, step 3a refuses it with its options.
 
 5. **Refuse if any reason was collected**: do NOT write `.paper/DRAFT.md`. Return
    the refusal naming every offending section + citekey (the verifier-blocks-

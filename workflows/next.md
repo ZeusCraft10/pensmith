@@ -60,7 +60,8 @@ edited by hand after compile: make the edit in the section drafts, then `pensmit
 so a failed paid step is never re-run by the next bare invocation. A section verify could not
 check (`unverifiable`: a source that could not be reached, a quote no source text could be
 checked against, or stub text written with no model) does not stop the others (S-13): on an
-unchanged draft the walk goes past it, and compile then refuses it naming its options
+unchanged draft the walk goes past it, and compile re-verifies it (Pass 1 + 3) — a section
+that now passes is compiled and recorded `verified` — or refuses it naming its options
 (`pensmith verify N` online, `pensmith add <pdf>`, a paraphrase with
 `pensmith plan N --revise`, `pensmith verify N --accept-quote qK`, or `pensmith write N`
 with a model configured), which `pensmith status` shows too. A section whose `DRAFT.md` is

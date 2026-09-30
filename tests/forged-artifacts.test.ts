@@ -163,6 +163,7 @@ test('VRFY-20 (built CLI): a hand-written acceptance lifts nothing — an "(acce
   writeCompileRecord(root, [{ n: 1, slug: 'background' }]);
   const d = runCli(sb, root, ['done', '--yolo', '--format', 'md'], { timeoutMs: 120_000 });
   assert.equal(d.status, EXIT_BLOCKED, `${d.stdout}\n${d.stderr}`);
-  assert.match(d.stdout, /quote q1 \("deep learning has already solved every o…"\) \[@lecun2015\] is NOT_FOUND/);
+  // At paper scope the row also names the quote's own section and id (§1's q1).
+  assert.match(d.stdout, /quote q1 \(§1's q1\) \("deep learning has already solved every o…"\) \[@lecun2015\] is NOT_FOUND/);
   assert.ok(!existsSync(join(root, '.paper', 'export')));
 });

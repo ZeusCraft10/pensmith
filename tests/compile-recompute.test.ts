@@ -69,6 +69,29 @@ test('VRFY-25 / D-08 (built CLI): a stale section is re-verified with the adviso
   );
 });
 
+test('S-13 / VRFY-26 (built CLI): a section whose record says unverifiable (an earlier offline run) is re-verified by compile — once the gate passes, its VERIFICATION.md and PLAN.md say verified, and status is clean after done', () => {
+  const p = seedGatePaper('recompute-unverifiable', SECTIONS, RECORDED_BIB);
+  for (const s of SECTIONS) assert.equal(p.cli(['verify', String(s.n)]).status, EXIT_OK);
+  // The record an offline verify left: Status unverifiable, PLAN.md unverifiable.
+  const s1 = p.sectionDir(1, 'intro');
+  const verif = join(s1, 'VERIFICATION.md');
+  writeFileSync(verif, readFileSync(verif, 'utf8').replace(/^Status: verified$/m, 'Status: unverifiable'));
+  writeFileSync(join(s1, 'PLAN.md'), readFileSync(join(s1, 'PLAN.md'), 'utf8').replace(/^status: verified$/m, 'status: unverifiable'));
+  const s2Before = mtimes(p.sectionDir(2, 'measurement'));
+
+  const c = p.cli(['compile', '--yolo']);
+  assert.equal(c.status, EXIT_OK, `${c.stdout}\n${c.stderr}`);
+  assert.match(c.stderr, /WARN: section 1 \(intro\) is unverifiable — re-verifying \(Pass 1\+3\)/);
+  assert.match(readFileSync(verif, 'utf8'), /^Status: verified$/m);
+  assert.match(readFileSync(join(s1, 'PLAN.md'), 'utf8'), /^status: verified$/m);
+  assert.deepEqual(mtimes(p.sectionDir(2, 'measurement')), s2Before, '§2 untouched');
+
+  const d = p.cli(['done', '--yolo', '--format', 'md']);
+  assert.equal(d.status, EXIT_OK, `${d.stdout}\n${d.stderr}`);
+  const st = p.cli(['status']);
+  assert.doesNotMatch(st.stdout, /unverifiable/, st.stdout);
+});
+
 test('VRFY-25 (built CLI): an unreadable CITATIONS.bib is a REFUSED reason naming why — never a stack, never a DRAFT.md', () => {
   const p = seedGatePaper('recompute-unreadable', SECTIONS, RECORDED_BIB);
   for (const s of SECTIONS) assert.equal(p.cli(['verify', String(s.n)]).status, EXIT_OK);

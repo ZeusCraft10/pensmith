@@ -4,7 +4,9 @@
 // chokepoints into a single, lock-guarded, read-only-on-sections pipeline that
 // produces .paper/DRAFT.md + .paper/COMPILE-REPORT.md (it never rewrites
 // .paper/CITATIONS.bib — BRDTH-01). Every write routes through the D-07 atomicWriteFile
-// sole-writer chokepoint; section files are NEVER written (ARCH-20).
+// sole-writer chokepoint. The only section files compile writes are a stale or
+// unverifiable section's VERIFICATION.md and PLAN.md, through its re-verify
+// (D-08); never a DRAFT.md, never another section's files (ARCH-20).
 //
 // Pipeline (04-RESEARCH §F, with the CANONICAL COMP meanings from this plan):
 //   0. Acquire .paper/.compile.lock for the WHOLE run (§P-6 — no mid-pipeline
@@ -21,7 +23,10 @@
 //          through the injected seam (production: verify.ts verifySection with
 //          the advisory passes off — it rewrites that section's VERIFICATION.md
 //          and PLAN.md, never a DRAFT.md). A re-verify failure refuses; an
-//          all-pass records a Compile-Staleness-Resolved event.
+//          all-pass records a Compile-Staleness-Resolved event. A section
+//          whose record says `unverifiable` is re-verified the same way, so a
+//          section compile now passes is recorded `verified` (its verdict is
+//          left to the gate core below).
 //        - RECOMPUTE (VRFY-25, D-20-23): the ONE gate core (verify/gate.ts)
 //          over the section's EXACT draft bytes with its assigned_sources and
 //          quote acceptances — every blocking row refuses, whatever the local
@@ -73,7 +78,7 @@ import { networkMode } from './http-mock.js';
 import { writeCompileInputs } from './compile-inputs.js';
 import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
 import { recomputeGate, gateRefusals, loadBibliography, stripStubMarker, type AcceptedQuote, type ByoQuote } from './verify/gate.js';
-import { verificationRecordReasons } from './verify/verification-md.js';
+import { parseVerificationMd, verificationRecordReasons } from './verify/verification-md.js';
 import { readQuoteAcceptances, sectionDirOfPlan } from './quote-acceptance.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
@@ -367,6 +372,21 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         recordReasons.push(`PLAN.md status is 'failed' — repair the section, then \`pensmith verify ${id}\``);
       }
       for (const reason of recordReasons) refuseReasons.push(`${label}: ${reason}`);
+
+      // A section whose own record says `unverifiable` (a source that could
+      // not be reached, a quote with no checkable text): its verification is
+      // re-run like a stale one, so when the gate core below now passes it
+      // (online again, the PDF added, the quote accepted) its VERIFICATION.md
+      // and PLAN.md say `verified` — never a compiled section whose record
+      // still says it could not be checked. Its verdict, pass or not, is left
+      // to the gate core (the refusal keeps the gate's wording and options).
+      const recordStatus = verificationMd !== null ? (parseVerificationMd(verificationMd).status ?? '').toLowerCase() : '';
+      const unverifiable = !stale && recordReasons.length === 0 && (sec.planStatus === 'unverifiable' || recordStatus === 'unverifiable');
+      if (unverifiable) {
+        warn(`WARN: ${label} is unverifiable — re-verifying (Pass 1+3)`);
+        const reVerify = opts.reVerify ?? (async () => ({ passed: false, failingCitekeys: [] } as ReVerifyResult));
+        await reVerify(os.suffix !== undefined ? { n: os.n, slug: os.slug, suffix: os.suffix } : { n: os.n, slug: os.slug });
+      }
 
       // Staleness (COMP-01 / D-08): the draft changed since its (sound)
       // verification — re-verify it now.
