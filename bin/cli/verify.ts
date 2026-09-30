@@ -580,8 +580,11 @@ export const verifyCommand = defineCommand({
     // no outline yet.
     const { n, slug, suffix } = resolveSectionArg('verify', projectRoot(), args.n, args.slug);
     const fromRaw = repeatedFlagValues(rawArgs ?? [], 'accept-quote');
-    const single = args['accept-quote'];
-    const acceptQuotes = fromRaw.length > 0 ? fromRaw : typeof single === 'string' && single.length > 0 ? [single] : [];
+    // The CLI gives one string (citty keeps the last; rawArgs has them all);
+    // the MCP pensmith_verify tool passes its `accept_quote` list as is.
+    const given: unknown = args['accept-quote'];
+    const fromArgs = Array.isArray(given) ? given.map(String) : typeof given === 'string' && given.length > 0 ? [given] : [];
+    const acceptQuotes = fromRaw.length > 0 ? fromRaw : fromArgs;
     return verifySection(n, slug, suffix, { acceptQuotes, interactive: true, yolo: args.yolo === true });
   },
 });

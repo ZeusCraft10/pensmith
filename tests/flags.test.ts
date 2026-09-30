@@ -507,7 +507,7 @@ test('C3-HIGH-2 (b) RESUME path: `pensmith resume --yolo` → dispatched work ve
 // dial-recorder preload, so any dns.lookup / net.connect / tls.connect — from
 // http.ts, undici, a stray SDK or anything else in the process — is recorded
 // (and refused). The chain covers every verb that used to leak: research,
-// add (doi.ts verifyDoi), verify (Pass-1 re-fetch, retraction re-query, Pass-3
+// add (the registrar lookup), verify (Pass-1 re-fetch, retraction re-query, Pass-3
 // OA-PDF lookup, freshness HEAD, Pass-2/4 LLM), compile, and done (plagiarism
 // queries, GPTZero with a key present). A fake provider key and a fake GPTZero
 // key are present, so every LLM / detector path WOULD egress absent the gate.

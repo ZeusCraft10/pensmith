@@ -151,4 +151,4 @@ or after editing DRAFT.md by hand).
 
 11. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/` — except the bib repair of step 3 and the `last_verified` record of step 10 (paper-level files written by the library writer; no other section's files are ever touched).
 
-12. **Shell fallback** (TIER-06 equivalence path): `pensmith verify <N> [--accept-quote <id>] [--yolo]` (`--accept-quote` repeats, one quote id each).
+12. **Shell fallback** (TIER-06 equivalence path): `pensmith verify <N> [--accept-quote <id>] [--yolo]` (`--accept-quote` repeats, one quote id each). The MCP tool `pensmith_verify` takes the same ids as `accept_quote: ["q1", …]`, only after the user answered an AskUserQuestion confirmation.

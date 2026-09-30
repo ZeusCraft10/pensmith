@@ -37,6 +37,7 @@ import { lookupFailed, lookupFound, lookupNotFound, isSourceLookupError, type Lo
 import { registrationAgency, doiPrefix } from './sources/doi-ra.js';
 import * as doiContent from './sources/doi-cn.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
+import { isOfflineEgressError, offlineLabel } from './http.js';
 
 export type SourceInput =
   | { readonly kind: 'doi'; readonly raw: string; readonly doi: string }
@@ -397,6 +398,57 @@ async function crossrefNotFound(doi: string, notFound: LookupResult): Promise<Lo
         `Crossref has no record of this DOI, and doi.org could not say which agency registered it (${ra.reason}) — try again later`,
       );
   }
+}
+
+/** What `paper_doi_verify` answers for one DOI (the three outcomes of its registrar's lookup, D-19-05). */
+export interface DoiCheck {
+  /** `found`, `not-found` (the registrar that holds the prefix has no such DOI), `failed` (no answer — never "not found"), or `invalid` (not a DOI). */
+  readonly outcome: 'found' | 'not-found' | 'failed' | 'invalid';
+  /** True only when the DOI's registrar holds a record of it. */
+  readonly valid: boolean;
+  /** The normalized DOI, or null when the input is not one. */
+  readonly canonical: string | null;
+  /** Why the DOI was not found, or why the lookup could not be answered. */
+  readonly reason?: string;
+  /** The registrar's record, for a found DOI. */
+  readonly metadata?: { title: string; authors: string[]; year?: number; venue?: string; source: string };
+}
+
+/**
+ * Check one DOI at its registrar, as `add` and Pass 1 read it (VRFY-11): Crossref,
+ * else the agency doi.org names — DataCite, or content negotiation for mEDRA /
+ * JaLC / KISTI. A registrar that cannot answer (offline, rate limited, 5xx) is
+ * `failed` with the reason, never `not-found` (D-20-03). The MCP
+ * `paper_doi_verify` tool returns this. Never throws for a lookup outcome.
+ */
+export async function checkDoi(doi: string): Promise<DoiCheck> {
+  const canonical = normalizeDoi(doi);
+  if (canonical === null) return { outcome: 'invalid', valid: false, canonical: null, reason: 'not a DOI (a DOI starts with 10. and a registrant prefix)' };
+  let r: LookupResult;
+  try {
+    r = await lookupIdentifier({ kind: 'doi', raw: doi, doi: canonical });
+  } catch (e) {
+    if (isOfflineEgressError(e)) {
+      return { outcome: 'failed', valid: false, canonical, reason: `the registrar was not asked (${offlineLabel(e)}) — check it again online` };
+    }
+    throw e;
+  }
+  if (r.kind === 'found') {
+    const c = r.candidate;
+    return {
+      outcome: 'found',
+      valid: true,
+      canonical,
+      metadata: {
+        title: c.title,
+        authors: c.authors,
+        ...(c.year !== undefined ? { year: c.year } : {}),
+        ...(c.venue !== undefined ? { venue: c.venue } : {}),
+        source: c.source,
+      },
+    };
+  }
+  return { outcome: r.kind, valid: false, canonical, reason: r.reason };
 }
 
 /** The arXiv API query for a title (the `ti:` field, as a phrase). */

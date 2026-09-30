@@ -10,8 +10,7 @@
 // See mcp.js lines 138-144 (catch block calls createToolError, not re-throw).
 // Tests assert res.isError === true instead of assert.rejects.
 //
-// The paper_doi_verify valid-input positive test is omitted: it requires a Crossref
-// cassette; the live-handshake form is covered in 02-07's tier-contract test.
+// paper_doi_verify's outcomes replay the recorded registrar answers offline.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -164,9 +163,41 @@ test('TIER-06: paper_doi_verify rejects missing doi', async () => {
   assertToolError(res, 'missing doi should return isError=true');
 });
 
-// NOTE: a *valid* paper_doi_verify positive case would require a Crossref cassette;
-// 02-07's tier-contract test covers the live-handshake form. Here we only assert
-// the zod gate; success path is exercised in 02-07.
+// Phase 20 (VRFY-11, D-20-03): the DOI at its registrar, three outcomes —
+// replayed offline from the recorded answers (the test runner's sources-offline mode).
+test('VRFY-11: paper_doi_verify finds a recorded Crossref DOI and returns its registrar record', async () => {
+  const { client } = await pair(freshPaperRoot());
+  const res = await client.callTool({ name: 'paper_doi_verify', arguments: { doi: 'https://doi.org/10.1038/NATURE14539' } });
+  assert.notEqual(res.isError, true);
+  const body = JSON.parse((res.content as Array<{ text: string }>)[0]!.text) as Record<string, any>;
+  assert.equal(body.outcome, 'found');
+  assert.equal(body.valid, true);
+  assert.equal(body.canonical, '10.1038/nature14539');
+  assert.equal(body.metadata.title, 'Deep learning');
+  assert.equal(body.metadata.source, 'crossref');
+});
+
+test('VRFY-11: paper_doi_verify reads a DataCite DOI at DataCite (Crossref has no record of it), never "invalid"', async () => {
+  const { client } = await pair(freshPaperRoot());
+  const res = await client.callTool({ name: 'paper_doi_verify', arguments: { doi: '10.5281/zenodo.1212303' } });
+  const body = JSON.parse((res.content as Array<{ text: string }>)[0]!.text) as Record<string, any>;
+  assert.equal(body.outcome, 'found', JSON.stringify(body));
+  assert.equal(body.metadata.source, 'datacite');
+});
+
+test('D-20-03: paper_doi_verify says `failed` (not invalid, not not-found) when the registrar gives no answer, and `invalid` for a non-DOI', async () => {
+  const { client } = await pair(freshPaperRoot());
+  const res = await client.callTool({ name: 'paper_doi_verify', arguments: { doi: '10.9999/pensmith-never-recorded-2026' } });
+  assert.notEqual(res.isError, true);
+  const body = JSON.parse((res.content as Array<{ text: string }>)[0]!.text) as Record<string, any>;
+  assert.equal(body.outcome, 'failed', JSON.stringify(body));
+  assert.equal(body.valid, false);
+  assert.match(body.reason, /offline|check it again online|failed/);
+  const bad = await client.callTool({ name: 'paper_doi_verify', arguments: { doi: 'not a doi' } });
+  const badBody = JSON.parse((bad.content as Array<{ text: string }>)[0]!.text) as Record<string, any>;
+  assert.equal(badBody.outcome, 'invalid');
+  assert.equal(badBody.canonical, null);
+});
 
 // ===== paper_capability_probe =====
 test('TIER-06: paper_capability_probe accepts empty args', async () => {

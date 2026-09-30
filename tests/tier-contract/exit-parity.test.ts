@@ -11,7 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { EXIT_OK, EXIT_ERROR, EXIT_BLOCKED } from '../../bin/lib/exit-codes.js';
+import { EXIT_OK, EXIT_ERROR, EXIT_BLOCKED, EXIT_USAGE } from '../../bin/lib/exit-codes.js';
 import {
   CLI_BIN,
   MCP_BIN,
@@ -24,17 +24,21 @@ import {
   writePlan,
   type Sandbox,
 } from '../helpers/paper-cli-harness.js';
+import { seedGatePaper, LECUN_BIB } from '../helpers/gate-paper.js';
+import { readQuoteAcceptances } from '../../bin/lib/quote-acceptance.js';
 
 interface McpOutcome {
   isError: boolean;
   body: { exit_code?: number; classification?: string; message?: string | null } & Record<string, unknown>;
 }
 
-async function callTool(sb: Sandbox, root: string, name: string, args: Record<string, unknown>): Promise<McpOutcome> {
+async function callTool(sb: Sandbox, root: string, name: string, args: Record<string, unknown>, extraEnv: Record<string, string | undefined> = {}): Promise<McpOutcome> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(sb.env({ ...extraEnv, PENSMITH_PAPER_ROOT: root }))) if (v !== undefined) env[k] = v;
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [MCP_BIN],
-    env: sb.env({ PENSMITH_PAPER_ROOT: root }),
+    env,
     cwd: root,
   });
   const client = new Client({ name: 'exit-parity', version: '0.0.0' }, { capabilities: {} });
@@ -92,6 +96,28 @@ test('RUN-09 parity: a successful verify is exit 0 in the CLI and a plain result
   const mcp = await callTool(sb, roots[1]!, 'pensmith_verify', { n: 1, yolo: true });
   assertParity('verify ok', cli.status, mcp, EXIT_OK, 'EXIT_OK');
   for (const root of roots) assert.match(readFileSync(join(sectionDirOf(root, 1, 'intro'), 'VERIFICATION.md'), 'utf8'), /^Status: verified$/m);
+});
+
+test('VRFY-20 parity: `verify 1 --accept-quote q1` and pensmith_verify with accept_quote [q1] record the same acceptance and both verify the section', async () => {
+  // No contact email: Pass 3 cannot ask Unpaywall, so the quote is UNVERIFIABLE-QUOTE (D-20-03).
+  const env = { PENSMITH_CONTACT_EMAIL: undefined, PENSMITH_NO_LLM: '1' };
+  const draft = '# Intro\n\nOne review claims that "attention mechanisms are nothing more than lookup tables for bananas" [@lecun2015].\n';
+  const papers = ['cli', 'mcp'].map((t) => seedGatePaper(`parity-accept-${t}`, [{ n: 1, slug: 'intro', assigned: ['lecun2015'], draft }], LECUN_BIB));
+  const [cliPaper, mcpPaper] = papers as [(typeof papers)[number], (typeof papers)[number]];
+  const cli = cliPaper.cli(['verify', '1', '--accept-quote', 'q1'], env);
+  const mcp = await callTool(mcpPaper.sb, mcpPaper.root, 'pensmith_verify', { n: 1, yolo: true, accept_quote: ['q1'] }, env);
+  assertParity('accept quote', cli.status, mcp, EXIT_OK, 'EXIT_OK');
+  for (const p of papers) {
+    const dir = p.sectionDir(1, 'intro');
+    assert.match(readFileSync(join(dir, 'VERIFICATION.md'), 'utf8'), /^Status: verified$/m);
+    const acc = readQuoteAcceptances(dir);
+    assert.deepEqual(acc.map((a) => [a.quote_id, a.citekey, a.via]), [['q1', 'lecun2015', 'flag']]);
+  }
+  // An id that is not an UNVERIFIABLE-QUOTE is refused the same way in both tiers (EXIT_USAGE).
+  const bad = ['cli', 'mcp'].map((t) => seedGatePaper(`parity-accept-bad-${t}`, [{ n: 1, slug: 'intro', assigned: ['lecun2015'], draft }], LECUN_BIB));
+  const cliBad = bad[0]!.cli(['verify', '1', '--accept-quote', 'q7'], env);
+  const mcpBad = await callTool(bad[1]!.sb, bad[1]!.root, 'pensmith_verify', { n: 1, yolo: true, accept_quote: ['q7'] }, env);
+  assertParity('accept a missing quote', cliBad.status, mcpBad, EXIT_USAGE, 'EXIT_USAGE');
 });
 
 test('RUN-09 parity (VRFY-24): a stub write under PENSMITH_NO_LLM is EXIT_BLOCKED in the CLI and isError exit_code 4 over MCP — its chained verify finds PLACEHOLDER', async () => {

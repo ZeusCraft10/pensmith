@@ -15,7 +15,7 @@ onto the existing `verify` verb; adds no workflow logic.
 | "verify section N" | `pensmith verify N` |
 | "check section N citations" / "check the citations in section N" | `pensmith verify N` |
 | "re-verify section N" | `pensmith verify N` |
-| "accept quote qK in section N" (a quote VERIFICATION.md lists as UNVERIFIABLE-QUOTE) | `pensmith verify N --accept-quote qK` — ask the user first (AskUserQuestion); never on your own |
+| "accept quote qK in section N" (a quote VERIFICATION.md lists as UNVERIFIABLE-QUOTE) | `pensmith verify N --accept-quote qK` (MCP: `pensmith_verify` with `accept_quote: ["qK"]`) — ask the user first (AskUserQuestion); never on your own |
 
 The verifier blocks compile and export: no FABRICATED, MIS-CITED, RETRACTED,
 UNVERIFIABLE(-NETWORK), unparseable or unsupported citation form, or

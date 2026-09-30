@@ -4,7 +4,7 @@
 // verb tools (Plan 03-07 Task 7.3) + 1 Phase-19 source tool — total 10 tools:
 //   Phase 2:  paper_init_section, paper_advance_section,
 //             paper_record_verification, paper_set_status,
-//             paper_doi_verify, paper_capability_probe
+//             paper_doi_verify (Phase 20: the three-way registrar lookup), paper_capability_probe
 //   Phase 3:  pensmith_plan, pensmith_write, pensmith_verify (Tier 1
 //             equivalent of the Tier 2 CLI per-section verbs)
 //   Phase 19: paper_ingest_zotero_items (SRC-16, D-19-24: the Tier 1 half of
@@ -38,7 +38,7 @@ import {
   setSectionStatus,
   recordVerification,
 } from '../bin/lib/state.js';
-import { verifyDoi } from '../bin/lib/doi.js';
+import { checkDoi } from '../bin/lib/source-input.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
 import { projectRoot, asProjectRoot } from '../bin/lib/paths.js';
 import { withPaperSession } from '../bin/lib/session-lock.js';
@@ -185,16 +185,22 @@ export function registerPaperTools(server: McpServer): void {
       toolResult(await mutate(asProjectRoot(paperRoot), { verb: 'paper_set_status', section: n }, () => setSectionStatus(asProjectRoot(paperRoot), n, status))),
   );
 
-  // Tool 5: paper_doi_verify — DOI re-fetch + metadata check via Crossref (delegates to bin/lib/doi.ts).
+  // Tool 5: paper_doi_verify — the DOI at its registrar (Crossref, else the agency
+  //         doi.org names: DataCite or content negotiation; VRFY-11). Three outcomes,
+  //         and "no answer" is never "not found" (D-20-03). Delegates to
+  //         bin/lib/source-input.ts::checkDoi.
   server.registerTool(
     'paper_doi_verify',
     {
       title: 'Verify a DOI',
-      description: 'Re-fetch the DOI via Crossref and return validity + metadata. Thin wrapper around bin/lib/doi.ts::verifyDoi.',
+      description:
+        'Look the DOI up at its registrar (Crossref, DataCite, or doi.org content negotiation) and return ' +
+        '{ outcome: found | not-found | failed | invalid, valid, canonical, reason?, metadata? }. `failed` means no answer (offline, rate limited) — not "not found". ' +
+        'Thin wrapper around bin/lib/source-input.ts::checkDoi.',
       inputSchema: { doi: z.string().min(1) },
     },
     async ({ doi }) => {
-      const result = await verifyDoi(doi);
+      const result = await checkDoi(doi);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -309,17 +315,20 @@ export function registerPaperTools(server: McpServer): void {
     'pensmith_verify',
     {
       title: 'Verify a section DRAFT.md (deterministic Pass-1 + Pass-3)',
-      description: 'Tier 1 equivalent of `pensmith verify <N>`. Imports bin/cli/verify.ts default export.',
+      description:
+        'Tier 1 equivalent of `pensmith verify <N>`. Imports bin/cli/verify.ts default export. ' +
+        '`accept_quote` is `--accept-quote`: the ids (q1, q2, …) of UNVERIFIABLE-QUOTE rows the user accepted after being asked (VRFY-20) — never on your own.',
       inputSchema: {
         n: z.number().int().min(1),
         slug: z.string().optional(),
         yolo: z.boolean().optional(),
+        accept_quote: z.array(z.string()).optional(),
       },
     },
-    async ({ n, slug, yolo }) =>
+    async ({ n, slug, yolo, accept_quote }) =>
       toolResult(await mutate(projectRoot(), { verb: 'pensmith_verify', section: n }, () => runVerbDirect(
         () => import('../bin/cli/verify.js').then((m) => m.default),
-        { n: String(n), slug: slug ?? '', yolo: yolo ?? false },
+        { n: String(n), slug: slug ?? '', yolo: yolo ?? false, 'accept-quote': accept_quote ?? [] },
       ))),
   );
 }
