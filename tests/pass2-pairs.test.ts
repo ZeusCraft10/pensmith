@@ -14,7 +14,7 @@ import { withLlmSandbox } from './helpers/llm-sandbox.js';
 import { upsertSources, type LibraryCandidate } from '../bin/lib/library.js';
 import { NO_SOURCE_TEXT_RATIONALE, pass2NotRun, renderPass2Section, runPass2, type Pass2BibEntry, type Pass2Result } from '../bin/lib/verify/pass2.js';
 import { PASS2_TABLE_HEADER } from '../bin/lib/verify/verdicts.js';
-import { readSectionUnsupported } from '../bin/cli/done.js';
+import { readUnsupportedClaims, type DoneSection } from '../bin/cli/done.js';
 import { FENCE_CLOSE, FENCE_OPEN } from '../bin/lib/untrusted-fence.js';
 import { GateRefusedError } from '../bin/lib/gates.js';
 import { currentSessionId } from '../bin/lib/session-log.js';
@@ -207,7 +207,8 @@ test('VRFY-22: an UNSUPPORTED judgment keeps evidence only as a verbatim substri
     const sec = path.join(sb.paper, 'sections', '01-heat');
     fs.mkdirSync(sec, { recursive: true });
     fs.writeFileSync(path.join(sec, 'VERIFICATION.md'), `# VERIFICATION (Section 1, heat)\n\nStatus: verified\n\n${table}`);
-    const read = readSectionUnsupported(sb.root);
+    const section: DoneSection = { identity: { n: 1, slug: 'heat' }, id: '1', planPath: path.join(sec, 'PLAN.md'), assignedSources: [], verifiedHash: null, currentDraftHash: null };
+    const read = readUnsupportedClaims(sb.root, [section]).map((c) => c.result);
     assert.deepEqual(read.map((r) => [r.citekey, r.evidence]), [['lee2021', evidence], ['park2019', '']]);
   });
 });

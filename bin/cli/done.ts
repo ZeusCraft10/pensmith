@@ -24,7 +24,7 @@
 // (GRND-19); done prints that path and says it is a dry-run export.
 
 import { defineCommand } from 'citty';
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
@@ -429,8 +429,14 @@ export function citedKeySetChange(finalMd: string, draftMd: string): string | nu
 //                  Evidence column) or PASS2_TABLE_HEADER_V1 (without it)
 //   verdict cell:  **<VERDICT>**  (e.g. **UNSUPPORTED**)
 //   empty section: _(no citations to judge)_
+//   not judged:    _(not run — compile staleness re-verify; run `pensmith verify N`)_
+//                  (bin/cli/verify.ts COMPILE_REVERIFY_NOT_RUN: compile re-verified a
+//                  stale section with the advisory passes off, so its current
+//                  draft has no claim-support judgment — not a desynced table)
 const PASS2_HEADING = '## Pass-2';
 const PASS2_EMPTY_MARKER = '_(no citations to judge)_';
+/** The one-line body verify writes when Pass 2 did not judge the section's current draft. */
+const PASS2_NOT_RUN_RE = /^[ \t]*_\(not run(?: —|:)[^\n]*\)_[ \t]*$/m;
 const VALID_VERDICTS: ReadonlySet<string> = new Set([
   'SUPPORTED',
   'PARTIAL',
@@ -450,10 +456,36 @@ function unparseableSentinel(sectionName: string): Pass2Result {
 }
 
 /**
- * Parse the ## Pass-2 table out of ONE section VERIFICATION.md and return the
- * UNSUPPORTED rows it carries. FAIL-SAFE (HIGH-3):
+ * True when the section's `## Pass-2` body is verify's one-line "not run"
+ * marker (compile's staleness re-verify runs Pass 1 + Pass 3 only): the
+ * current draft has no claim-support judgment, which done names instead of
+ * inventing a claim (VRFY-22).
+ */
+function pass2NotRunOnDraft(md: string): boolean {
+  const body = pass2Body(md);
+  return body !== null && !body.some((l) => l.trim() === PASS2_TABLE_HEADER || l.trim() === PASS2_TABLE_HEADER_V1) && PASS2_NOT_RUN_RE.test(body.join('\n'));
+}
+
+/** The lines of the `## Pass-2` section (heading excluded), or null when there is none. */
+function pass2Body(md: string): string[] | null {
+  const lines = md.split(/\r?\n/);
+  const headingIdx = lines.findIndex((l) => l.startsWith(PASS2_HEADING));
+  if (headingIdx === -1) return null;
+  const body: string[] = [];
+  for (let i = headingIdx + 1; i < lines.length; i++) {
+    if ((lines[i] ?? '').startsWith('## ')) break;
+    body.push(lines[i] ?? '');
+  }
+  return body;
+}
+
+/**
+ * Parse the ## Pass-2 table out of ONE section VERIFICATION.md: its
+ * UNSUPPORTED rows. FAIL-SAFE (HIGH-3):
  *   - NO `## Pass-2` heading at all → return [] (nothing to report — clean).
  *   - the `_(no citations to judge)_` empty marker → return [] (clean).
+ *   - the `_(not run — …)_` marker (no judgment of the current draft) → [];
+ *     done names the section (unjudgedClaimSections), it invents no claim.
  *   - heading present + header matches the pinned contract + rows parse →
  *     return the **UNSUPPORTED** rows (filtering out SUPPORTED/PARTIAL/UNCLEAR).
  *   - heading present but the header does NOT match the pinned contract, OR a
@@ -461,35 +493,20 @@ function unparseableSentinel(sectionName: string): Pass2Result {
  *     `<unparseable>` UNSUPPORTED sentinel so hasIssues becomes true and the
  *     gate REQUIRES confirmation. NEVER a silent clean for a present-but-
  *     unparseable table.
+ * Each row carries its 1-based position in the table (0 for the sentinel).
  */
-function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
-  return parseSectionPass2Rows(md, sectionName).map((r) => r.result);
-}
-
-/** parseSectionPass2 with each UNSUPPORTED row's 1-based position in the section's Pass-2 table (0 for the sentinel). */
 function parseSectionPass2Rows(md: string, sectionName: string): Array<{ row: number; result: Pass2Result }> {
   const sentinel = (): Array<{ row: number; result: Pass2Result }> => [{ row: 0, result: unparseableSentinel(sectionName) }];
-  // Locate the ## Pass-2 heading line. Absent → clean (nothing to report).
-  const lines = md.split(/\r?\n/);
-  let headingIdx = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if ((lines[i] ?? '').startsWith(PASS2_HEADING)) {
-      headingIdx = i;
-      break;
-    }
-  }
-  if (headingIdx === -1) return []; // absent Pass-2 section = clean
-
-  // Slice the body of the Pass-2 section: from the heading to the next `## ` or EOF.
-  const body: string[] = [];
-  for (let i = headingIdx + 1; i < lines.length; i++) {
-    if ((lines[i] ?? '').startsWith('## ')) break;
-    body.push(lines[i] ?? '');
-  }
+  // The body of the Pass-2 section (heading to the next `## ` or EOF). Absent → clean.
+  const body = pass2Body(md);
+  if (body === null) return [];
   const bodyText = body.join('\n');
 
   // Explicit empty-section marker → clean.
   if (bodyText.includes(PASS2_EMPTY_MARKER)) return [];
+  // Not run on this draft (compile's staleness re-verify) → no judgment, no
+  // claim: done names the section instead (unjudgedSections).
+  if (pass2NotRunOnDraft(md)) return [];
 
   // The Pass-2 section is present but non-empty. Find the pinned header row
   // (5 columns with Evidence, or the 4-column layout written before Phase 20).
@@ -554,39 +571,6 @@ function parseSectionPass2Rows(md: string, sectionName: string): Array<{ row: nu
   return out;
 }
 
-/**
- * Scan each `.paper/sections/<dir>/VERIFICATION.md` for ## Pass-2 UNSUPPORTED
- * rows and return them as Pass2Result[]. Drives the DONE-09 gate's UNSUPPORTED bucket
- * (the load-bearing disk→gate feed, HIGH-3).
- *
- * Defensive on I/O ONLY: a missing sections dir or an unreadable file is SKIPPED
- * (contributes nothing for that section) and never throws. This is DISTINCT from
- * the fail-safe in parseSectionPass2: missing/absent = clean; present-but-
- * unparseable = a synthetic UNSUPPORTED issue.
- */
-export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
-  const sectionsDir = join(paperDir(paperRoot), 'sections');
-  let entries: string[];
-  try {
-    entries = readdirSync(sectionsDir);
-  } catch {
-    return []; // no sections dir → nothing to report
-  }
-  const out: Pass2Result[] = [];
-  for (const entry of entries) {
-    const vPath = join(sectionsDir, entry, 'VERIFICATION.md');
-    let md: string;
-    try {
-      if (!existsSync(vPath)) continue;
-      md = readFileSync(vPath, 'utf8');
-    } catch {
-      continue; // unreadable file → skip (I/O defensive only)
-    }
-    out.push(...parseSectionPass2(md, entry));
-  }
-  return out;
-}
-
 /** An UNSUPPORTED claim of one registered section, with where it is (VRFY-22). */
 export interface UnsupportedClaim {
   /** `1`, `1a`. */
@@ -601,8 +585,12 @@ export interface UnsupportedClaim {
  * The UNSUPPORTED claims of the paper's REGISTERED sections (STATE.json +
  * OUTLINE.md; VRFY-26), with each claim's section and Pass-2 row — what the
  * `unsupported-claims` gate lists and `.paper/VERIFICATION.md` records a
- * decision for (VRFY-22). Fail safe like readSectionUnsupported: a present but
- * unreadable table is one `<unparseable>` claim. Never throws.
+ * decision for (VRFY-22). Defensive on I/O only (a missing or unreadable
+ * VERIFICATION.md contributes nothing); fail safe on content (HIGH-3): a
+ * present but unreadable table is one `<unparseable>` claim, never a silent
+ * clean. A section whose current draft Pass 2 did not judge (compile's
+ * staleness re-verify) has no claim here — unjudgedClaimSections names it.
+ * Never throws.
  */
 export function readUnsupportedClaims(paperRoot: string, sections: readonly DoneSection[] = doneSections(paperRoot)): UnsupportedClaim[] {
   const out: UnsupportedClaim[] = [];
@@ -619,6 +607,38 @@ export function readUnsupportedClaims(paperRoot: string, sections: readonly Done
     for (const r of parseSectionPass2Rows(md, name)) out.push({ section: s.id, slug: s.identity.slug, row: r.row, result: r.result });
   }
   return out;
+}
+
+/** A registered section whose current draft the advisory claim-support check (Pass 2) did not judge. */
+export interface UnjudgedSection {
+  /** `1`, `1a`. */
+  readonly section: string;
+  readonly slug: string;
+}
+
+/**
+ * The registered sections whose VERIFICATION.md says Pass 2 was not run on the
+ * draft it holds — compile re-verified them after an edit with the advisory
+ * passes off (D-08). done names them with the remedy (`pensmith verify N`)
+ * instead of treating the marker as a claim (VRFY-22); Pass 2 is advisory, so
+ * they never block. Never throws.
+ */
+export function unjudgedClaimSections(paperRoot: string, sections: readonly DoneSection[] = doneSections(paperRoot)): UnjudgedSection[] {
+  const out: UnjudgedSection[] = [];
+  for (const s of sections) {
+    const vPath = sectionVerification(s.identity.n, s.identity.slug, paperRoot);
+    try {
+      if (existsSync(vPath) && pass2NotRunOnDraft(readFileSync(vPath, 'utf8'))) out.push({ section: s.id, slug: s.identity.slug });
+    } catch {
+      // unreadable: runExportBlockingGate reports it
+    }
+  }
+  return out;
+}
+
+/** One line naming a section whose current draft has no claim-support judgment. */
+function unjudgedLine(u: UnjudgedSection): string {
+  return `§${u.section} (${u.slug}): claim support (Pass 2, advisory) was not run on the current draft — compile re-verified it after an edit; run \`pensmith verify ${u.section}\` to judge it`;
 }
 
 // ---------------------------------------------------------------------------
@@ -647,6 +667,8 @@ export interface PaperVerificationReport {
   readonly checkedSha256: string;
   readonly gate: GateResult;
   readonly decisions: readonly ClaimDecision[];
+  /** Sections whose current draft Pass 2 did not judge (named, never decided). */
+  readonly unjudged?: readonly UnjudgedSection[];
   readonly accepted: readonly AcceptedQuote[];
   readonly byoQuotes: readonly ByoQuote[];
   readonly honestyReport: string;
@@ -676,6 +698,7 @@ export function buildVerificationReport(r: PaperVerificationReport): string {
         ),
       ]
     : ['_(no UNSUPPORTED claims to decide)_'];
+  const unjudged = (r.unjudged ?? []).map((u) => `- ${unjudgedLine(u)}`);
   const accepted = r.accepted.length
     ? [
         '| Quote | Citekey | Section | Accepted | Via |',
@@ -700,6 +723,7 @@ export function buildVerificationReport(r: PaperVerificationReport): string {
     '',
     ...decisions,
     '',
+    ...(unjudged.length > 0 ? [...unjudged, ''] : []),
     '## Accepted quotes',
     '',
     ...accepted,
@@ -719,8 +743,14 @@ export function buildVerificationReport(r: PaperVerificationReport): string {
   ].join('\n');
 }
 
-/** Print the UNSUPPORTED claims with their evidence, the accepted quotes and the local-file quotes (the confirmation's list). */
-function writeExportFindings(claims: readonly UnsupportedClaim[], accepted: readonly AcceptedQuote[], byoQuotes: readonly ByoQuote[]): void {
+/** Print the UNSUPPORTED claims with their evidence, the sections Pass 2 did not judge, the accepted quotes and the local-file quotes (the confirmation's list). */
+function writeExportFindings(
+  claims: readonly UnsupportedClaim[],
+  accepted: readonly AcceptedQuote[],
+  byoQuotes: readonly ByoQuote[],
+  unjudged: readonly UnjudgedSection[] = [],
+): void {
+  for (const u of unjudged) process.stdout.write(`pensmith done: ${unjudgedLine(u)}\n`);
   if (claims.length > 0) {
     process.stdout.write(`pensmith done: ${claims.length} claim(s) Pass 2 judged UNSUPPORTED by the cited source (VRFY-22):\n`);
     for (const c of claims) {
@@ -831,6 +861,7 @@ export const doneCommand = defineCommand({
     // The UNSUPPORTED claims of the registered sections (VRFY-22): with any,
     // the confirmation is the `unsupported-claims` gate, else `export-confirm`.
     const claims = readUnsupportedClaims(paperRoot, sections);
+    const unjudged = unjudgedClaimSections(paperRoot, sections);
     const confirmGate = claims.length > 0 ? 'unsupported-claims' : 'export-confirm';
 
     // RUN-09 / RUN-28: the export confirmation needs an answer. Without a
@@ -839,7 +870,7 @@ export const doneCommand = defineCommand({
     // what the answer is about (the UNSUPPORTED claims with their evidence and
     // the quotes the gate took on the user's word) first.
     if (args.yolo !== true && !canPrompt()) {
-      writeExportFindings(claims, draftGate.gate.accepted, draftGate.gate.byoQuotes);
+      writeExportFindings(claims, draftGate.gate.accepted, draftGate.gate.byoQuotes, unjudged);
       await runGate(confirmGate, { yolo: false, detail: 'nothing was exported' });
     }
 
@@ -898,7 +929,7 @@ export const doneCommand = defineCommand({
     // orphans, the plagiarism hits, the accepted quotes and the quotes verified
     // against the user's own files; then `unsupported-claims` (VRFY-22) or the
     // generic `export-confirm` (DONE-09). --yolo answers either.
-    writeExportFindings(claims, exportGate.accepted, exportGate.byoQuotes);
+    writeExportFindings(claims, exportGate.accepted, exportGate.byoQuotes, unjudged);
     if (args.yolo === true) {
       const issues = collectGateIssues({ pass2Results: claims.map((c) => c.result), pass4Results, plagiarismResults });
       if (issues.orphanClaims.length > 0 || issues.plagiarismHits.length > 0) writeGateSummary(issues);
@@ -980,6 +1011,7 @@ export const doneCommand = defineCommand({
         checkedSha256: createHash('sha256').update(exportedText, 'utf8').digest('hex'),
         gate: exportGate,
         decisions,
+        unjudged,
         accepted: exportGate.accepted,
         byoQuotes: exportGate.byoQuotes,
         honestyReport,

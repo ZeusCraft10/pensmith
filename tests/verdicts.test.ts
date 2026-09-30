@@ -29,7 +29,7 @@ import {
   quoteId,
 } from '../bin/lib/verify/verdicts.js';
 import { BLOCKING_VERDICTS as ROWS_BLOCKING, blockingRowReason, parseBlockingVerdictRows, renderPass1VerdictRow, renderPass3VerdictRow } from '../bin/lib/verify/verdict-rows.js';
-import { readSectionUnsupported } from '../bin/cli/done.js';
+import { readUnsupportedClaims, type DoneSection } from '../bin/cli/done.js';
 
 test('seam S-C: every verdict of every pass is exactly one of passing, failing or unverifiable', () => {
   const all = [...PASS1_VERDICTS, ...PASS3_VERDICTS, ...DRAFT_VERDICTS];
@@ -123,6 +123,9 @@ test('seam S-C: done reads the Pass-2 table with or without the Evidence column 
     const v2 = ['# VERIFICATION', 'Status: verified', '', '## Pass-2 (claim support, advisory — LLM-judged)', '', PASS2_TABLE_HEADER, '|---|---|---|---|---|', '| c2020 | Claim C. | **UNSUPPORTED** | contradicts | the abstract says the opposite |', ''].join('\r\n');
     write('01-a', v1);
     write('02-c', v2);
+    const section = (n: number, slug: string): DoneSection => ({ identity: { n, slug }, id: String(n), planPath: join(root, '.paper', 'sections', `0${n}-${slug}`, 'PLAN.md'), assignedSources: [], verifiedHash: null, currentDraftHash: null });
+    const sections = [section(1, 'a'), section(2, 'c')];
+    const readSectionUnsupported = (r: string) => readUnsupportedClaims(r, sections).map((c) => c.result);
     const rows = readSectionUnsupported(root).sort((x, y) => x.citekey.localeCompare(y.citekey));
     assert.deepEqual(rows.map((r) => [r.citekey, r.verdict, r.evidence]), [
       ['a2020', 'UNSUPPORTED', ''],

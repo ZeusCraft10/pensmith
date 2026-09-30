@@ -51,7 +51,9 @@ is present (each listed with its evidence; `--yolo` records it as
 auto-accepted), else the generic export confirmation — only `--yolo` skips it.
 The Pass-2 UNSUPPORTED feed is read from each section `VERIFICATION.md` and FAILS
 SAFE: a present-but-unparseable `## Pass-2` table is treated as issues-present,
-never a silent clean.
+never a silent clean. A section compile re-verified after an edit (advisory
+passes off) has no claim-support judgment of its current draft: done names it
+with `pensmith verify N`, and records no claim or decision for it.
 
 ## Outputs
 

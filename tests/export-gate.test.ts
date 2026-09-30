@@ -14,7 +14,7 @@
 //       called once) and { exported:true } — the generic gate fires even on a
 //       clean paper.
 //
-// NOTE: the disk→gate feed (readSectionUnsupported over the section VERIFICATION.md
+// NOTE: the disk→gate feed (readUnsupportedClaims over the section VERIFICATION.md
 // fixture) + the non-yolo on-disk integration test are added in Plan 06-05 (HIGH-3).
 // This file pins the gate-LOGIC contract; 06-05 pins the disk-feed contract.
 //
@@ -23,7 +23,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -124,13 +124,27 @@ test('export-gate: zero issues + approve=true → generic confirm STILL runs, { 
 );
 
 // ============================================================================
-// HIGH-3 — the disk→gate feed (readSectionUnsupported over real on-disk
+// HIGH-3 — the disk→gate feed (readUnsupportedClaims over real on-disk
 // section VERIFICATION.md) + the fail-safe + the non-yolo on-disk integration.
 // These are the tests Plan 06-05 adds (the Wave-0 file pinned the gate LOGIC;
 // these pin the DISK-FEED contract that the gate logic actually consumes).
 // ============================================================================
 
-type ReadSectionUnsupported = (paperRoot: string) => Pass2Result[];
+type ReadUnsupportedClaims = (paperRoot: string, sections: readonly unknown[]) => Array<{ result: Pass2Result }>;
+
+/**
+ * done's reader over the sections seeded under `root` (the test lists the
+ * directory to name them; done itself reads the registered sections, VRFY-26).
+ */
+async function readSectionUnsupported(root: string): Promise<Pass2Result[]> {
+  const mod = await import(doneModUrl.href) as { readUnsupportedClaims: ReadUnsupportedClaims };
+  const sections = readdirSync(join(root, '.paper', 'sections')).map((dir) => {
+    const m = /^(\d+)-(.+)$/.exec(dir) as RegExpExecArray;
+    const n = Number(m[1]);
+    return { identity: { n, slug: m[2] }, id: String(n), planPath: join(root, '.paper', 'sections', dir, 'PLAN.md'), assignedSources: [], verifiedHash: null, currentDraftHash: null };
+  });
+  return mod.readUnsupportedClaims(root, sections).map((c) => c.result);
+}
 type CollectGateIssues = (input: {
   pass2Results: Pass2Result[];
   pass4Results: Pass4Result[];
@@ -146,13 +160,12 @@ function seedSection(verificationMd: string, sectionDir = '01-intro'): string {
   return root;
 }
 
-test('export-gate HIGH-3: readSectionUnsupported parses the renderPass2Section UNSUPPORTED row, filters SUPPORTED',
+test('export-gate HIGH-3: readUnsupportedClaims parses the renderPass2Section UNSUPPORTED row, filters SUPPORTED',
   { skip: !existsSync(doneSrcPath) },
   async () => {
-    const mod = await import(doneModUrl.href) as { readSectionUnsupported: ReadSectionUnsupported };
     const fixture = readFileSync(PASS2_FIXTURE, 'utf8');
     const root = seedSection(fixture);
-    const rows = mod.readSectionUnsupported(root);
+    const rows = await readSectionUnsupported(root);
     // The fixture has smith2020 **UNSUPPORTED** + vaswani2017 **SUPPORTED**.
     assert.ok(rows.length >= 1, 'at least one UNSUPPORTED row must be detected');
     assert.ok(
@@ -170,11 +183,9 @@ test('export-gate HIGH-3: readSectionUnsupported parses the renderPass2Section U
   },
 );
 
-test('export-gate HIGH-3: readSectionUnsupported FAILS SAFE on a present-but-unparseable Pass-2 table; absent heading is clean',
+test('export-gate HIGH-3: readUnsupportedClaims FAILS SAFE on a present-but-unparseable Pass-2 table; absent heading is clean',
   { skip: !existsSync(doneSrcPath) },
   async () => {
-    const mod = await import(doneModUrl.href) as { readSectionUnsupported: ReadSectionUnsupported };
-
     // (a) present ## Pass-2 heading but a DELIBERATELY MALFORMED (3-column) table.
     const malformed = [
       '# Section Verification — 02-x',
@@ -187,7 +198,7 @@ test('export-gate HIGH-3: readSectionUnsupported FAILS SAFE on a present-but-unp
       '',
     ].join('\n');
     const malRoot = seedSection(malformed, '02-x');
-    const malRows = mod.readSectionUnsupported(malRoot);
+    const malRows = await readSectionUnsupported(malRoot);
     assert.ok(
       malRows.length >= 1,
       'an unparseable-but-present Pass-2 table must yield a NON-empty result (fail safe)',
@@ -208,7 +219,7 @@ test('export-gate HIGH-3: readSectionUnsupported FAILS SAFE on a present-but-unp
     ].join('\n');
     const cleanRoot = seedSection(noPass2, '03-clean');
     assert.deepEqual(
-      mod.readSectionUnsupported(cleanRoot),
+      await readSectionUnsupported(cleanRoot),
       [],
       'a section with no ## Pass-2 heading must contribute nothing (absent = clean)',
     );
@@ -219,7 +230,6 @@ test('export-gate HIGH-3: NON-yolo on-disk gate integration — gate fires from 
   { skip: !existsSync(doneSrcPath) },
   async () => {
     const mod = await import(doneModUrl.href) as {
-      readSectionUnsupported: ReadSectionUnsupported;
       collectGateIssues: CollectGateIssues;
       runDoneGate: RunDoneGate;
     };
@@ -227,7 +237,7 @@ test('export-gate HIGH-3: NON-yolo on-disk gate integration — gate fires from 
     const root = seedSection(fixture);
 
     // Drive the gate from the ON-DISK Pass-2 data (the load-bearing feed).
-    const pass2Results = mod.readSectionUnsupported(root);
+    const pass2Results = await readSectionUnsupported(root);
     const issues = mod.collectGateIssues({
       pass2Results,
       pass4Results: [],

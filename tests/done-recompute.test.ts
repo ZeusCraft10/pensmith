@@ -14,6 +14,9 @@
 //   - answered at the gate (the numbered prompt channel a terminal uses): each
 //     claim is listed with its evidence first; yes exports and records
 //     `Confirmed by user <ISO>`, no exports nothing (exit 3).
+//   - a section compile re-verified after an edit (advisory passes off) has
+//     no claim-support judgment: done names it with `pensmith verify N`,
+//     never an invented `<unparseable>` claim or decision.
 //   - done never writes under sections/.
 //
 // Built CLI, sources offline (the cited works are recorded), model stubbed
@@ -130,6 +133,30 @@ test('VRFY-22 (built CLI): answering the unsupported-claims gate — each claim 
     /^\| §1 \(intro\) \| Pass-2 row 1 \[@lecun2015\] \| [^|]+ \| Confirmed by user \d{4}-\d{2}-\d{2}T[^|]+ \|$/m,
   );
   assert.deepEqual(mtimes(join(p.root, '.paper', 'sections')), sectionsBefore, 'done never writes under sections/');
+});
+
+test('VRFY-22 / D-08 (built CLI): a section compile re-verified after an edit has no claim-support judgment — done names it and the remedy, invents no UNSUPPORTED claim and records no decision', () => {
+  const p = compiledPaper('done-stale-reverify');
+  // A hand edit of §1 after its verification: compile re-verifies it with the advisory passes off.
+  writeFileSync(join(p.sectionDir(1, 'intro'), 'DRAFT.md'), '# Introduction\n\nLayered representations of input data are what deep networks learn [@lecun2015].\n');
+  const c = p.cli(['compile', '--yolo']);
+  assert.equal(c.status, EXIT_OK, `${c.stdout}\n${c.stderr}`);
+  assert.match(c.stderr, /section 1 \(intro\) stale — re-verifying/);
+
+  // No terminal, no --yolo: the plain export confirmation needs an answer — not the unsupported-claims gate.
+  const refused = p.cli(['done', '--format', 'md']);
+  assert.equal(refused.status, EXIT_APPROVAL, `${refused.stdout}\n${refused.stderr}`);
+  assert.doesNotMatch(refused.stdout, /UNSUPPORTED|<unparseable>/);
+  assert.doesNotMatch(refused.stderr, /UNSUPPORTED claims/);
+  assert.match(refused.stdout, /§1 \(intro\): claim support \(Pass 2, advisory\) was not run on the current draft — compile re-verified it after an edit; run `pensmith verify 1` to judge it/);
+
+  const done = p.cli(['done', '--yolo', '--format', 'md']);
+  assert.equal(done.status, EXIT_OK, `${done.stdout}\n${done.stderr}`);
+  assert.doesNotMatch(done.stdout, /<unparseable>/);
+  const report = readFileSync(join(p.root, '.paper', 'VERIFICATION.md'), 'utf8');
+  assert.match(report, /^_\(no UNSUPPORTED claims to decide\)_$/m, 'no decision is recorded');
+  assert.doesNotMatch(report, /<unparseable>|Auto-accepted/);
+  assert.match(report, /^- §1 \(intro\): claim support \(Pass 2, advisory\) was not run on the current draft/m);
 });
 
 function runCliWithInput(p: GatePaper, args: readonly string[], input: string): { status: number | null; stdout: string; stderr: string } {
