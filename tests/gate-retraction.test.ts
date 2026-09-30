@@ -3,9 +3,10 @@
 // Contract under test:
 //   bin/lib/verify/pass1.ts (Wave-1, Plan 03) — modified verdictForCitekey:
 //   After resolving a citation's DOI via Crossref, re-query Retraction Watch
-//   via fetchById. A confirmed live hit → verdict 'MIS-CITED' (blocking).
-//   fetchById returning null (transport error / no cassette hit) → NOT a false
-//   MIS-CITED; follows the normal JW comparison outcome.
+//   via fetchById. A confirmed live hit → verdict 'RETRACTED' (blocking; the
+//   label is RETRACTED from Phase 20, VRFY-15 — it was MIS-CITED + a
+//   retraction flag). A re-query that got no answer is UNVERIFIABLE-NETWORK
+//   (blocking), never "not retracted".
 //
 // RED-by-skip (Wave-0 scaffold): behavioral assertions SKIP until pass1.ts
 // imports the retraction-watch fetchById adapter. A source-grep predicate is
@@ -110,9 +111,9 @@ function makeBibFixture(opts: {
 }
 
 // ---------------------------------------------------------------------------
-// Test 1: Live-retracted DOI (cassette hit) → MIS-CITED (blocking)
+// Test 1: Live-retracted DOI (cassette hit) → RETRACTED (blocking)
 // ---------------------------------------------------------------------------
-test('GATE-03: live-retracted DOI (cassette hit) → Pass-1 verdict is MIS-CITED (blocking)', {
+test('GATE-03 / VRFY-15: live-retracted DOI (cassette hit) → Pass-1 verdict is RETRACTED (blocking)', {
   skip: !pass1ImportsRetractionWatch ? skipReason : false,
 }, async () => {
   const { runPass1 } = await import(pass1JsUrl.href) as {
@@ -134,8 +135,8 @@ test('GATE-03: live-retracted DOI (cassette hit) → Pass-1 verdict is MIS-CITED
   assert.ok(r, 'runPass1 must return a result for the retracted citekey');
   assert.equal(
     r.verdict,
-    'MIS-CITED',
-    'A live-retracted DOI (cassette hit) must produce verdict MIS-CITED (GATE-03 blocking)',
+    'RETRACTED',
+    'A live-retracted DOI (cassette hit) must produce verdict RETRACTED (GATE-03 blocking, VRFY-15)',
   );
   // The reason should mention the live re-query (distinguishes GATE-03 from
   // the stored claimed.retracted fast-path).
@@ -185,17 +186,18 @@ test('GATE-03: no-cassette DOI (transport/no-hit → fetchById null) → NOT a f
     'A no-cassette DOI (fetchById null) must NOT produce a GATE-03 false MIS-CITED reason (transport-error-silent)',
   );
   // Phase 17 (RUN-03, D-17-07): offline, a DOI with no recorded fixture can be
-  // neither re-fetched nor cleared, so it is UNVERIFIABLE (blocking, "re-run
-  // online") — not FABRICATED, not OK. (It used to be FABRICATED via a
-  // Crossref first-search-item fallback, which no longer exists.)
-  assert.equal(r.verdict, 'UNVERIFIABLE');
+  // neither re-fetched nor cleared, so it gets no answer — UNVERIFIABLE-NETWORK
+  // from Phase 20 (VRFY-12, D-20-03; blocking, "re-run online") — not
+  // FABRICATED, not OK. (It used to be FABRICATED via a Crossref
+  // first-search-item fallback, which no longer exists.)
+  assert.equal(r.verdict, 'UNVERIFIABLE-NETWORK');
   assert.match(r.reason, /^offline: no recorded fixture — re-run online/);
 });
 
 // ---------------------------------------------------------------------------
 // Test 2b: a retraction re-query that is UNAVAILABLE offline is never "clean"
 // ---------------------------------------------------------------------------
-test('RUN-03: a Crossref hit whose Retraction Watch re-query has no fixture is UNVERIFIABLE, never OK', async () => {
+test('RUN-03 / VRFY-12: a Crossref hit whose Retraction Watch re-query has no fixture is UNVERIFIABLE-NETWORK, never OK', async () => {
   const { runPass1 } = await import(pass1JsUrl.href) as {
     runPass1: (draftMd: string, bibPath: string) => Promise<Array<{ citekey: string; verdict: string; reason: string }>>;
   };
@@ -212,12 +214,12 @@ test('RUN-03: a Crossref hit whose Retraction Watch re-query has no fixture is U
   const results = await runPass1(draftMd, bibPath);
   const r = results.find((x) => x.citekey === 'rwgap2018');
   assert.ok(r);
-  assert.equal(r.verdict, 'UNVERIFIABLE');
+  assert.equal(r.verdict, 'UNVERIFIABLE-NETWORK');
   assert.match(r.reason, /^offline: no recorded fixture — re-run online \(Retraction Watch re-query of 10\.0000\/rw-unavailable\)$/);
 });
 
 // ---------------------------------------------------------------------------
-// Test 3: D-15 STORED retraction (note = {RETRACTED} round-trip) → MIS-CITED
+// Test 3: D-15 STORED retraction (note = {RETRACTED} round-trip) → RETRACTED
 // ---------------------------------------------------------------------------
 // Regression for the audit finding: writeBibtex serializes a retracted source as
 // BibTeX `note = {RETRACTED}` (bibtex-write.ts:93), and citation-js preserves
@@ -227,7 +229,7 @@ test('RUN-03: a Crossref hit whose Retraction Watch re-query has no fixture is U
 // so EVERY stored-retracted work passed Pass-1 offline (the live re-query is null
 // without a cassette). This asserts the stored flag alone blocks, with NO live
 // re-query — the entire point of D-15 "surface twice".
-test('D-15 stored retraction: a bib entry with note = {RETRACTED} → Pass-1 MIS-CITED (offline, stored path)', async () => {
+test('D-15 stored retraction: a bib entry with note = {RETRACTED} → Pass-1 RETRACTED (offline, stored path)', async () => {
   const { runPass1 } = await import(pass1JsUrl.href) as {
     runPass1: (draftMd: string, bibPath: string) => Promise<Array<{ citekey: string; verdict: string; reason: string }>>;
   };
@@ -254,8 +256,8 @@ test('D-15 stored retraction: a bib entry with note = {RETRACTED} → Pass-1 MIS
   assert.ok(r, 'runPass1 must return a result for the stored-retracted citekey');
   assert.equal(
     r.verdict,
-    'MIS-CITED',
-    'A stored note=RETRACTED bib entry must block as MIS-CITED (D-15 stored path)',
+    'RETRACTED',
+    'A stored note=RETRACTED bib entry must block as RETRACTED (D-15 stored path, VRFY-15)',
   );
   // Must fire via the stored fast-path, NOT the live Retraction Watch re-query
   // (which is null offline). The stored reason references the research-time check.
@@ -271,16 +273,19 @@ test('D-15 stored retraction: a bib entry with note = {RETRACTED} → Pass-1 MIS
 // ---------------------------------------------------------------------------
 // The claimed alias DOI is NOT in Retraction Watch, but Crossref resolves it to a
 // canonical DOI that IS retracted. Querying only the claimed DOI (the original
-// bug) misses it and — because the bib metadata strict-matches the canonical —
-// the multi-DOI-redirect branch would return OK, so a retracted work escapes.
-// The fix re-queries BOTH the claimed and the canonical DOI, so it is blocked.
-test('GATE-03 (#16): claimed DOI redirecting to a retracted canonical → MIS-CITED', async () => {
+// bug) misses it. The fix re-queries BOTH the claimed and the canonical DOI, so
+// it is blocked. (Phase 20, VRFY-14: the answer under another DOI is accepted
+// only because the canonical record asserts `is-identical-to` the claimed DOI
+// — the synthetic record carries that relation; without it the alias itself
+// is refused, tests/pass1-registrars.test.ts.)
+test('GATE-03 (#16): claimed DOI redirecting to a retracted canonical → RETRACTED', async () => {
   const { runPass1 } = await import(pass1JsUrl.href) as {
     runPass1: (draftMd: string, bibPath: string) => Promise<Array<{ citekey: string; verdict: string; reason: string }>>;
   };
-  // bib metadata strict-matches the crossref redirect fixture (redirect-audit16.json):
-  // claimed 10.0000/alias-audit16 resolves to canonical 10.0000/retracted, which
-  // the freshness-hit retraction-watch cassette lists as retracted.
+  // bib metadata matches the crossref redirect fixture (redirect-audit16.json):
+  // claimed 10.0000/alias-audit16 resolves to canonical 10.0000/retracted (whose
+  // record asserts is-identical-to the claimed DOI), which the freshness-hit
+  // retraction-watch cassette lists as retracted.
   const { draftMd, bibPath } = makeBibFixture({
     citekey: 'alias16',
     title: 'A Redirect-to-Retracted Fixture (Audit 16)',
@@ -293,7 +298,8 @@ test('GATE-03 (#16): claimed DOI redirecting to a retracted canonical → MIS-CI
   assert.ok(r, 'runPass1 must return a result for the alias citekey');
   assert.equal(
     r.verdict,
-    'MIS-CITED',
+    'RETRACTED',
     'a claimed DOI that redirects to a retracted canonical must be blocked (#16)',
   );
+  assert.match(r.reason, /Retraction Watch, re-queried at verify time/);
 });
