@@ -109073,7 +109073,7 @@ async function buildStatusView(root, opts = { tier: "cli" }) {
   let sessionLabel = null;
   try {
     totalUsd = await totalCost({ root });
-    if (opts.tier === "cli") ({ sessionUsd, sessionLabel } = await meteredSession(root));
+    ({ sessionUsd, sessionLabel } = await meteredSession(root));
   } catch {
     totalUsd = 0;
   }
@@ -109084,7 +109084,7 @@ async function buildStatusView(root, opts = { tier: "cli" }) {
     capUsd = null;
   }
   const capText = capUsd === null ? "cap invalid: fix PENSMITH_COST_CAP_USD" : `cap ${money(capUsd)}`;
-  const costLine = opts.tier === "mcp" ? "cost: n/a (Claude session)" : `cost: ${money(sessionUsd ?? 0)} ${sessionLabel ?? "this session"} / ${money(totalUsd)} total (${capText})`;
+  const costLine = `cost: ${money(sessionUsd ?? 0)} ${sessionLabel ?? "this session"} / ${money(totalUsd)} total (${capText})`;
   return {
     glyphSet,
     exists: paperId !== null,

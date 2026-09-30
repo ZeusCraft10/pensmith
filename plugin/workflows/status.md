@@ -7,7 +7,7 @@ required:
   - MCP tool pensmith_status (read-only; in Claude Code `mcp__plugin_pensmith_pensmith__pensmith_status`, or `mcp__pensmith__pensmith_status` from the developer `.mcp.json` at the repo root)
 
 degrade_if_missing:
-  - if pensmith_status is missing but the paper:// resources are there: read paper://state (the same status fields; its cost line is `cost: n/a (Claude session)`)
+  - if pensmith_status is missing but the paper:// resources are there: read paper://state (the same status fields, the cost meter included: in this release the plugin's plan and write bill the provider configured for pensmith, so both tiers meter `.paper/COSTS.jsonl`)
   - if no MCP tools: the shell fallback below, else direct readFileSync('.paper/STATE.json') + direct readFileSync of each section PLAN.md
 </capability_check>
 

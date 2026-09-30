@@ -3,10 +3,12 @@
 // `pensmith status` (Tier 2, the built CLI) and the `paper://state` resource
 // (Tier 1, the built MCP server) expose the same status fields for the same
 // paper: title, class, current section and step, per-section glyph + status,
-// and the next action. Only the cost line differs by design (Tier 1 prints
-// `cost: n/a (Claude session)` — the user's Claude session does the
-// generation). Both views come from bin/lib/status-view.ts; a divergence is a
-// shipped-code bug in one tier, never something to normalize here.
+// the cost meter and the next action. The cost line is the same in both tiers
+// (review round 2): in this release the plugin's pensmith_plan / pensmith_write
+// bill the provider configured for pensmith, so Tier 1 meters COSTS.jsonl like
+// the CLI (it used to print `cost: n/a (Claude session)`). Both views come from
+// bin/lib/status-view.ts; a divergence is a shipped-code bug in one tier, never
+// something to normalize here.
 //
 // PLUG-03 / D-23a-12: the Tier-1 `pensmith_status` tool returns exactly the text
 // `pensmith status` prints (the same verb under a capturing output sink), so
@@ -73,10 +75,10 @@ test('RUN-19: CLI `status` and paper://state expose the same status fields', asy
     assert.deepEqual(status.sections.map((s) => s.glyph), ['✓', '⌛', '⌽']);
     assert.ok(cliLines.includes(status.nextLine), status.nextLine);
     assert.equal(status.nextLine, 'next: write §2');
-    // The cost meter: Tier 2 meters the last (or running) session + paper
-    // total — the fixture's $1.23 was spent by an earlier session; Tier 1 says n/a.
+    // The cost meter: both tiers meter the last (or running) session + the
+    // paper total — the fixture's $1.23 was spent by an earlier session.
     assert.ok(cliLines.includes('cost: $1.23 last session / $1.23 total (cap $5.00)'), cli.stdout);
-    assert.equal(status.cost.line, 'cost: n/a (Claude session)');
+    assert.ok(cliLines.includes(status.cost.line), `paper://state's cost line is the CLI's: ${status.cost.line}`);
   });
 });
 
