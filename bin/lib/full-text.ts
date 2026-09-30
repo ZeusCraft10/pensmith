@@ -3,13 +3,14 @@
 //
 // The drafter may quote directly only from a source whose full text Pass 3
 // can actually check (a quote from an abstract-only source can only end as
-// UNVERIFIABLE-QUOTE, VRFY-20). The flag and Pass 3 share one basis, so they
-// never disagree (Phase 19 review round 2). Pass 3 checks a quote against
-// (pass3.ts):
-//   - the source's own bring-your-own PDF, read only through byo-text.ts,
-//     which re-hashes the PDF (SRC-15, S-17): an entry whose `byo` record has
-//     an extracted-text hash and was not attached by the user's say-so against
-//     a failed title / first-author check (`byo.asserted`);
+// UNVERIFIABLE-QUOTE, VRFY-20). The flag never marks a source Pass 3 cannot
+// check; it may mark fewer (Phase 20, D-20-18: Pass 3 also reads a PMCID's
+// Europe PMC full text and every PDF Unpaywall lists at verify time). A source
+// is marked when Pass 3 checks a quote against (pass3.ts, verify/source-text.ts):
+//   - its own bring-your-own PDF, read only through byo-text.ts, which
+//     re-hashes the PDF (SRC-15, S-17): an entry whose `byo` record has an
+//     extracted-text hash and was not attached by the user's say-so against a
+//     failed title / first-author check (`byo.asserted`);
 //   - the open-access PDF Unpaywall lists for its DOI (SRC-03): an entry with
 //     a DOI whose `oa_url` was recorded at ingest. `oa_url` is written only
 //     from Unpaywall's answer, and only once that URL answered HTTP 200 with a
@@ -17,12 +18,13 @@
 //     review round 3: a landing page or an HTML bot wall is abstract-only) —
 //     never from another adapter's open-access link (OpenAlex's primary
 //     location), which Pass 3 does not consult;
-//   - the arXiv PDF of its arXiv id (the bib's `eprint`, or a DataCite arXiv
-//     DOI `10.48550/arXiv.<id>`, which Unpaywall does not index): Pass 3
-//     derives the URL from the id Pass 1 verified at arXiv, never from a URL
-//     stored in a local file (S-17).
-// Nothing else counts: a PMCID alone, or a URL some adapter reported, is not
-// text Pass 3 fetches, so such a source is paraphrased.
+//   - the arXiv PDF of its arXiv id when that id is what Pass 1 verifies: a
+//     DataCite arXiv DOI `10.48550/arXiv.<id>` (which Unpaywall does not
+//     index), or an arXiv id on an entry with no other DOI. Pass 3 derives the
+//     URL from the id, never from a URL stored in a local file (S-17). (An
+//     arXiv id beside another DOI counts in Pass 3 only when the PDF shows the
+//     entry's title, so it is not marked here.)
+// Nothing else is marked: a PMCID alone, or a URL some adapter reported.
 //
 // The recorded BYO hashes are what this pure function reads: a PDF moved or
 // edited since ingest still counts here, and Pass 3 (which re-hashes through
@@ -67,7 +69,7 @@ export function arxivPdfUrl(arxivId: string): string {
 export function fullTextSource(entry: FullTextFields): FullTextSource | null {
   if (entry.byo !== null && entry.byo.text_sha256 !== null && entry.byo.asserted !== true) return 'bring-your-own PDF';
   if (entry.oa_url && entry.oa_url.trim() !== '' && entry.doi && !isDataCiteArxivDoi(entry.doi)) return 'open-access PDF';
-  if (arxivIdOfEntry(entry) !== null) return 'arXiv PDF';
+  if (arxivIdOfEntry(entry) !== null && (!entry.doi || isDataCiteArxivDoi(entry.doi))) return 'arXiv PDF';
   return null;
 }
 
