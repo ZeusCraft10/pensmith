@@ -223,7 +223,7 @@ test('GRND-18: the step exits with the last verb\'s code — a blocking verify e
   for (const verb of ['next', 'resume']) {
     const r2 = await sb.run([verb, '--yolo']);
     assert.equal(r2.status, EXIT_OK, `${r2.stdout}\n${r2.stderr}`);
-    assert.match(r2.stdout, /attention: section 1 could not be verified: citation \[@nofixture2020\] is UNVERIFIABLE .*`pensmith verify 1`/);
+    assert.match(r2.stdout, /attention: section 1 could not be verified: citation \[@nofixture2020\] is UNVERIFIABLE(?:-NETWORK)? .*`pensmith verify 1`/);
   }
   assert.equal(sb.mock.requests.length, before, 'no model call: the unchanged draft is not re-verified');
   const verify = await sb.run(['verify', '1', '--yolo']);
@@ -251,7 +251,7 @@ test('review round 3 (D-18-43): a section left `unverifiable` by advisory rows o
   const verification = readFileSync(sectionFile(sb.root, 1, 'introduction', 'VERIFICATION.md'), 'utf8');
   assert.match(verification, /^Status: unverifiable$/m);
   assert.match(verification, /\*\*(?:PDF|TEXT)_UNAVAILABLE\*\*/);
-  assert.doesNotMatch(verification, /\*\*UNVERIFIABLE\*\*/, 'no blocking row');
+  assert.doesNotMatch(verification, /\*\*UNVERIFIABLE(?:-NETWORK)?\*\*/, 'no blocking row');
   assert.match(r.stderr, /^pensmith: ran plan §1, write §1; next: plan §2$/m, 'write verified §1 once; the chain does not verify it again');
   const calls = sb.mock.requests.length;
   const next = await sb.run(['next', '--yolo']);
