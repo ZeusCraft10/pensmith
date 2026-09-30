@@ -61,7 +61,7 @@ import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
 import { runGate, declineGate } from '../lib/gates.js';
 import { sectionPlan, projectRoot } from '../lib/paths.js';
-import { resolveSectionSlug } from '../lib/section-slug.js';
+import { resolveSectionArg, resolveSectionSlug } from '../lib/section-slug.js';
 import { formatSectionId, parseSectionId, sameSectionId, sectionIdOf } from '../lib/section-id.js';
 import { fetch as httpFetch, isOfflineEgressError, offlineLabel, SsrfBlockedError } from '../lib/http.js';
 import { networkMode } from '../lib/http-mock.js';
@@ -207,10 +207,13 @@ function describeRelevant(ranked: readonly SectionRelevance[]): string {
 }
 
 /**
- * Resolve `--section N` to one section: --slug if given, else the paper's
- * sections (STATE.json + OUTLINE.md), else OUTLINE.md alone. A number that
- * matches no section is a usage error — never a fallback to "every section"
- * (audit #25).
+ * Resolve `--section N` (and `--slug`) to one section. A number that matches
+ * no section is a usage error — never a fallback to "every section" (audit
+ * #25). The section's identity is then checked exactly as plan / write /
+ * verify check it (section-slug.ts resolveSectionArg, D-18-38): a `--slug`
+ * that is not section N's slug, or a STATE.json / OUTLINE.md disagreement, is
+ * refused — a folder is found by its slug (GRND-09), so an unchecked slug
+ * would write another section's PLAN.md while reporting §N.
  */
 function resolveOne(
   paperRoot: string,
@@ -220,20 +223,17 @@ function resolveOne(
 ): { n: number; suffix?: string | undefined; slug: string } {
   // GRND-09: `--section 1a` names the lettered section, as `plan 1a` does.
   const id = parseSectionId(secRaw);
-  const explicit = typeof slugRaw === 'string' && slugRaw.length > 0 ? slugRaw : undefined;
   if (id === null) throw new PensmithError(`${P}: --section ${String(secRaw)} is not a section number (e.g. 2, or 1a for an inserted section)`, EXIT_USAGE);
-  const { n, suffix } = id;
-  if (explicit) return { n, suffix, slug: explicit };
-  const known = sections.find((s) => sameSectionId(s, id));
-  if (known) return { n, suffix, slug: known.slug };
-  const slug = resolveSectionSlug(paperRoot, n, undefined, suffix);
-  if (slug === 'placeholder') {
+  const explicit = typeof slugRaw === 'string' && slugRaw.length > 0;
+  const known = sections.some((s) => sameSectionId(s, id)) || resolveSectionSlug(paperRoot, id.n, undefined, id.suffix) !== 'placeholder';
+  if (!known && !explicit) {
     throw new PensmithError(
       `${P}: --section ${String(secRaw)} is not one of this paper's sections (pass --slug, or run \`pensmith outline\` first) — no section remapped`,
       EXIT_USAGE,
     );
   }
-  return { n, suffix, slug };
+  const r = resolveSectionArg('add', paperRoot, secRaw, slugRaw);
+  return { n: r.n, suffix: r.suffix, slug: r.slug };
 }
 
 /**

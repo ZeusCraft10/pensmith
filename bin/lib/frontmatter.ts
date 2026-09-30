@@ -29,7 +29,7 @@
 // router reads without write-back so it stays pure.
 
 import * as fs from 'node:fs';
-import { parseDocument, type Document } from 'yaml';
+import { isCollection, parseDocument, type Document } from 'yaml';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
@@ -88,10 +88,15 @@ export function updateFrontmatter(
   const doc: Document = match ? parseDocument(match[1] ?? '') : parseDocument('');
   const body = match ? (match[2] ?? '') : text;
 
+  // A read returns the plain JS value: a sequence or a map is its toJSON()
+  // copy, never the yaml node (`Array.isArray(fm.assigned_sources)` must hold
+  // for a list — a YAMLSeq read as "not an array" made `add --remap` replace
+  // a section's sources instead of appending). A mutation is a set.
+  const plain = (v: unknown): unknown => (isCollection(v) ? v.toJSON() : v);
   const proxy = new Proxy({} as Record<string, unknown>, {
     get(_t, prop): unknown {
       if (typeof prop !== 'string') return undefined;
-      return doc.get(prop);
+      return plain(doc.get(prop));
     },
     set(_t, prop, value): boolean {
       if (typeof prop !== 'string') return false;
@@ -115,7 +120,7 @@ export function updateFrontmatter(
     getOwnPropertyDescriptor(_t, prop): PropertyDescriptor | undefined {
       if (typeof prop !== 'string') return undefined;
       if (!doc.has(prop)) return undefined;
-      return { enumerable: true, configurable: true, value: doc.get(prop) };
+      return { enumerable: true, configurable: true, value: plain(doc.get(prop)) };
     },
   });
 
