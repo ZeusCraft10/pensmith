@@ -123,7 +123,10 @@ for section N and adds the ones the user approves to that section only:
    (`upsertSources`, provenance `plan-research:§<N>`: `.paper/LIBRARY.json`,
    deduped by DOI / identifiers / the version rule, with `.paper/CITATIONS.bib`
    / `.ris` re-rendered). Then ONLY section N's PLAN.md `assigned_sources` gains
-   the real library citekeys (under its lock; its `status` and
+   the real library citekeys the citation verifier can check (`source-context.ts`
+   `verifierBlindSpot`, D-18-37: a retracted hit stays in LIBRARY.json, is named
+   in a WARN and logged "not assigned", and never reaches the planner or the
+   drafter) (under its lock; its `status` and
    `verified_against_draft_hash` are untouched), an entry is appended to
    `sections/<NN>-<slug>/RESEARCH-LOG.md` (queries, per-adapter outcomes,
    added keys, what was not added and why), and the sources block of

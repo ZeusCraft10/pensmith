@@ -174,7 +174,11 @@ with an identifier and attaches that PDF as the work's bring-your-own copy
    library (nothing is fetched).
 
 8. **A retracted work** (the registrar's record carries its retraction notice)
-   is added and a WARN names the notice: it fails Pass 1 (blocking) if cited.
+   is added and a WARN names the notice: it fails Pass 1 (blocking) if cited, so
+   it is never mapped to a section (`source-context.ts` `verifierBlindSpot`,
+   D-18-37 — the outline and the planner never get it either): the remap
+   question is not asked, and an explicit `--remap` / `--section N` is refused
+   (exit 1; the work stays in the library).
 
 9. **Shell fallback** (TIER-06 equivalence path): `pensmith add <source>
    [--pdf <file> [--replace-pdf]] [--section <n> [--slug <slug>]] [--remap] [--yolo]`.
