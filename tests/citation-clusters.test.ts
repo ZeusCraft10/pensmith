@@ -229,6 +229,29 @@ test('Pass 3 input: a quote followed by [-@k] or @k, or introduced by a narrativ
   assert.deepEqual(keys(`@vaswani2017 built it. Later work says "${QUOTE}".`), []);
 });
 
+test('Pass 3 input: a cited quote after a short "quoted" phrase is still extracted (the closing mark never swallows the next quote)', () => {
+  const prose = 'in a long remark that goes on for quite a while without any quote marks at all';
+  const keys = (md: string): string[] => extractQuotes(md).map((q) => `${q.citekey}|${q.text}`);
+  // A straight `"` that closes a scare quote (or an inch mark) pairs with the
+  // opening mark of the real quote across the prose between them; that pairing
+  // has no citation after it, and the real quote must still be found.
+  for (const lead of ['He called it "the best"', 'A 12" pipe was', 'He called it “the best”']) {
+    assert.deepEqual(keys(`${lead} ${prose} "${QUOTE}" [@vaswani2017].`), [`vaswani2017|${QUOTE}`], lead);
+    assert.deepEqual(keys(`${lead} ${prose} “${QUOTE}” [@luong2015; @vaswani2017].`), [`luong2015|${QUOTE}`, `vaswani2017|${QUOTE}`], lead);
+  }
+  // A narrative citation claims only a pair Pandoc renders as a quote: the prose
+  // between a narrative quote and the next quote is never taken for a quote.
+  assert.deepEqual(
+    keys(`As @luong2015 wrote, "${QUOTE}". Then ${prose} and more ${prose} “${QUOTE}” [@vaswani2017].`),
+    [`luong2015|${QUOTE}`, `vaswani2017|${QUOTE}`],
+  );
+  assert.deepEqual(keys(`As @luong2015 wrote, "the best" ${prose} "${QUOTE}" [@vaswani2017].`), [`vaswani2017|${QUOTE}`]);
+  // The GRND-14 check sees it and asks for a corrective turn.
+  const draft = `He called it "the best" ${prose} "${QUOTE}" [@vaswani2017].`;
+  const violations = checkDraft(draft, { assigned: ['vaswani2017'], section: '2', fullText: new Map([['vaswani2017', false]]) });
+  assert.deepEqual(violations.map((v) => [v.kind, v.citekey]), [['quote-without-full-text', 'vaswani2017']]);
+});
+
 test('renameCitekey renames narrative, author-suppressed and braced citations; removeCitekey leaves a narrative one for the verifier', () => {
   assert.equal(
     renameCitekey('See [@k] and [see @a; -@k, p. 5]; @k says, -@k too, @{k} as well, @k2 not.', 'k', 'r'),

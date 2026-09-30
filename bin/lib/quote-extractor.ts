@@ -71,6 +71,31 @@ function introducingNarrative(lead: string): CitationCluster | null {
 }
 
 /**
+ * The offsets of the double-quote marks Pandoc's smart-quote reader opens a
+ * quote with, pairing left to right: outside a quote, `"` or `“` with a
+ * non-space right after it opens one; inside, the next `"` or `”` closes it.
+ * A blank line ends a paragraph and any quote left open in it.
+ */
+function pandocQuoteOpeners(md: string): Set<number> {
+  const openers = new Set<number>();
+  const blankLine = /\n[ \t]*\n/y;
+  let inside = false;
+  for (let i = 0; i < md.length; i++) {
+    const c = md[i];
+    blankLine.lastIndex = i;
+    if (c === '\n' && blankLine.test(md)) {
+      inside = false;
+    } else if (!inside && (c === '"' || c === '“') && /\S/.test(md[i + 1] ?? ' ')) {
+      openers.add(i);
+      inside = true;
+    } else if (inside && (c === '"' || c === '”')) {
+      inside = false;
+    }
+  }
+  return openers;
+}
+
+/**
  * Extract verifiable quotes from a DRAFT.md.
  *
  * Returns an array of `{ text, citekey, kind }` entries. Each entry's `text`
@@ -122,19 +147,37 @@ export function extractQuotes(draftMd: string): ExtractedQuote[] {
   // between) — a bare `[@key]`, a cluster (`[@a; @b]`, `[@a, p. 5]`,
   // `[see @a]`, `[-@a]`) or a narrative `@a` — else the narrative citation that
   // introduces the quote in the same sentence. Read with the one grammar.
+  //
+  // A straight `"` is both an opening and a closing mark, so a match is only a
+  // candidate pairing: the mark that closes a short "scare quote" pairs with
+  // the OPENING mark of the next, real quote across the prose between them.
+  // Only a quote with a citation right after it consumes both of its marks;
+  // any other match resumes one character on, so its closing mark can still
+  // open the next quote (Phase 19 review round 2 — else a cited quote after a
+  // short quoted phrase never reaches Pass 3 or the GRND-14 check). A span
+  // never crosses an opening `“`: that mark starts a quote of its own.
   const cites = findCitations(md);
-  const inlineRe = /["“]([^"”]{60,})["”]/g;
-  for (const m of md.matchAll(inlineRe)) {
+  const openers = pandocQuoteOpeners(md);
+  const inlineRe = /["“]([^"“”]{60,})["”]/g;
+  let m: RegExpExecArray | null;
+  while ((m = inlineRe.exec(md)) !== null) {
     const text = m[1] ?? '';
-    if (!text) continue;
-    if (text.length < MIN_INLINE_CHARS) continue;
-    if (wordCount(text) < MIN_WORDS) continue;
+    const sized = text.length >= MIN_INLINE_CHARS && wordCount(text) >= MIN_WORDS;
     const close = m.index + m[0].length;
     const gap = /^\s*/.exec(md.slice(close))?.[0].length ?? 0;
-    const following = cites.find((c) => c.start === close + gap);
-    const cite = following ?? introducingNarrative(md.slice(Math.max(0, m.index - 201), m.index));
-    if (!cite) continue;
-    out.push(...perKey(stripCites(text), cite.keys, 'inline'));
+    const following = sized ? cites.find((c) => c.start === close + gap) : undefined;
+    if (following) {
+      out.push(...perKey(stripCites(text), following.keys, 'inline'));
+      continue;
+    }
+    inlineRe.lastIndex = m.index + 1;
+    // A narrative citation claims only a pair Pandoc renders as a quote, so
+    // the prose between two quotes (from the mark that closed the first to the
+    // mark that opens the next) is never taken for a quote of the source that
+    // introduced the first one.
+    if (!sized || !openers.has(m.index)) continue;
+    const narrative = introducingNarrative(md.slice(Math.max(0, m.index - 201), m.index));
+    if (narrative) out.push(...perKey(stripCites(text), narrative.keys, 'inline'));
   }
 
   return out;

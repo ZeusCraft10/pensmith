@@ -153,6 +153,23 @@ test('the OA PDF is fetched as a generic request (no contact email) and its text
   }, { contactEmail: EMAIL });
 });
 
+test('Pass 3: a quote cited after a short "quoted" phrase is checked against the OA PDF — a misquote is NOT_FOUND, never skipped', async () => {
+  const lead = 'The authors call recurrence "the old way" in a long remark that runs on for quite a while without any quote marks at all';
+  const draft = (quote: string): string => `Background.\n\n${lead} "${quote}" [@vaswani2017].\n`;
+  await liveLane(async (agent) => {
+    const doi = `10.5555/${uniq('scare')}`;
+    unpaywallAnswer(agent, doi, 'https://repo.example/scare.pdf');
+    agent.get('https://repo.example').intercept({ path: '/scare.pdf', method: 'GET' })
+      .reply(200, PDF, { headers: { 'content-type': 'application/pdf' } })
+      .times(2);
+    const map = new Map([['vaswani2017', { DOI: doi }]]);
+    const bad = await runPass3(draft('Recurrent networks remain the undisputed state of the art for every sequence transduction task in the field'), map);
+    assert.deepEqual(bad.map((r) => [r.citekey, r.verdict]), [['vaswani2017', 'NOT_FOUND']], JSON.stringify(bad));
+    const ok = await runPass3(draft('The dominant sequence transduction models are based on complex recurrent or convolutional neural networks'), map);
+    assert.deepEqual(ok.map((r) => [r.citekey, r.verdict]), [['vaswani2017', 'OK']], JSON.stringify(ok));
+  }, { contactEmail: EMAIL });
+});
+
 test('a PDF whose text cannot be extracted is reported (no unhandled rejection)', async () => {
   const unhandled: unknown[] = [];
   const onUnhandled = (e: unknown): void => {
