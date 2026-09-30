@@ -20,6 +20,7 @@ import { sources } from '../bin/lib/sources/index.js';
 import { lookupFailed, lookupNotFound } from '../bin/lib/sources/lookup.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import { withLlmSandbox } from './helpers/llm-sandbox.js';
+import { closeSessionLog } from '../bin/lib/session-log.js';
 
 const BYO = fileURLToPath(new URL('./fixtures/byo/', import.meta.url));
 
@@ -72,7 +73,11 @@ function bibOf(root: string): string {
   return fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8');
 }
 
-function httpRecords(root: string): string[] {
+/** The URLs of the paper's `kind:"http"` SESSION.log records, once every queued record is written. */
+async function httpRecords(root: string): Promise<string[]> {
+  // Session-log records are written fire-and-forget: drain the queue first, or
+  // a record of the verb's last request can still be in flight under load.
+  await closeSessionLog();
   const log = path.join(root, '.paper', 'SESSION.log');
   if (!fs.existsSync(log)) return [];
   return fs
@@ -96,7 +101,7 @@ for (const input of ['arXiv:1706.03762', '1706.03762', 'arXiv:1706.03762v7.', 'h
     assert.equal(r.result['citekey'], 'vaswani2017');
     assert.match(r.stdout, /^pensmith add: added vaswani2017\.\npensmith add: vaswani2017 — Attention Is All You Need \(2017\)$/m);
     assert.match(bibOf(root), /@misc\{vaswani2017,[\s\S]*eprint = \{1706\.03762\},\n {2}archivePrefix = \{arXiv\},/);
-    assert.deepEqual(httpRecords(root), ['https://export.arxiv.org/api/query?id_list=1706.03762'], 'an arXiv URL is an identifier: nothing is downloaded');
+    assert.deepEqual(await httpRecords(root), ['https://export.arxiv.org/api/query?id_list=1706.03762'], 'an arXiv URL is an identifier: nothing is downloaded');
     const research = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
     assert.match(research, /\[@vaswani2017\]/, 'RESEARCH.md lists the new source');
   });
@@ -144,7 +149,7 @@ test('SRC-13: an unclassifiable argument, and --pdf without an identifier, are u
     runAdd(root, { source: 'https://example.org/x', pdf: path.join(BYO, 'doi-footer.pdf') }),
     (e: Error & { exitCode?: number }) => e.exitCode === 2 && /--pdf goes with an identifier/.test(e.message),
   );
-  assert.deepEqual(httpRecords(root), []);
+  assert.deepEqual(await httpRecords(root), []);
 });
 
 // ---------------------------------------------------------------------------
@@ -186,7 +191,7 @@ test('SRC-13 (review round 3): Crossref\'s 404 is "not found" only for a Crossre
   const crossref = await withCrossref(notFound, () => runAdd(root, { source: '10.1038/not-a-real-work' }));
   assert.match(crossref.stderr, /DOI 10\.1038\/not-a-real-work: not found \(HTTP 404 \(Crossref has no record of this DOI\)\) — nothing added; check the identifier\./);
   // Only the prefix left for doi.org.
-  const ra = httpRecords(root).filter((u) => u.startsWith('https://doi.org/'));
+  const ra = (await httpRecords(root)).filter((u) => u.startsWith('https://doi.org/'));
   assert.ok(ra.includes('https://doi.org/ra/10.5281') && ra.includes('https://doi.org/ra/10.99999'), JSON.stringify(ra));
   for (const u of ra) assert.match(u, /^https:\/\/doi\.org\/ra\/10\.\d+$/, 'a prefix, never the DOI');
   assert.equal(fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), false);
