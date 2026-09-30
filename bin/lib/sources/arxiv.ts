@@ -13,7 +13,11 @@
 // A complete record (SRC-02, D-19-13): `arxiv` is the bare identifier without
 // its version (`1706.03762`, `hep-th/9901001`), `doi` the published version's
 // DOI when arXiv lists one, `venue` the journal reference, `abstract` the
-// summary, and `type` is always `preprint` (the eprint itself).
+// summary, and `type` is always `preprint` (the eprint itself). That DOI names
+// the version of record while the title and authors are the preprint's, so
+// research prefers another database's record of the DOI (research-orchestrator
+// mergeFound) and the library writer stores an arXiv record on its own as the
+// preprint, the DOI as an alternate (migrations/library/shape.ts).
 //
 // lookupById accepts every spelling a user or a PDF carries — `arXiv:` prefix,
 // abs / pdf URLs, a version suffix, new-style (`1706.03762v7`) and old-style
