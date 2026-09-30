@@ -28,6 +28,7 @@ Four streams built Phase 20 in parallel on seam S-C, then an integration pass me
 - `blockingRowReason` / `gateRowReason` / the router's attention: UNVERIFIABLE-NETWORK says "re-run online"; UNVERIFIABLE (an answer that cannot be compared) and RETRACTED name the row's own reason (the verdict-row parser keeps each row's reason).
 - write ← quotes: GRND-14 containment counts quotes at `[verification] quote_min_words`.
 - The extractor's code probe replaced by the grammar's `provableCodeSpans`.
+- write ← grammar: containment reports a citation form the verifier cannot check (`uncheckable-citation-form`, the same scanners) — one corrective turn asking for `[@citekey]` tokens, then the FEED-04 failure path — so a model that adds a reference list or author-date citations is corrected at write instead of being blocked at verify.
 
 **Found and fixed during integration.**
 - `done` with no compiled draft (compile refused) exited 1 for an unverifiable or retracted section: it now lists the sections' recorded blocking rows and exits 4 (RUN-09), naming e.g. `citation [@wakefield1998] is RETRACTED — …` (VRFY-15).
@@ -63,6 +64,7 @@ Edited in place, no new files there:
 | `workflows/done.md` | gate + integration | the recomputation, the `unsupported-claims` gate; the full verdict list |
 | `skills/verify-section.md` | gate + integration | the `--accept-quote` route; the verdict list |
 | `workflows/add.md` | integration | DataCite / content-negotiation DOIs are added |
+| `workflows/write.md` | integration | containment also refuses citation forms the verifier cannot check; the quote floor is `quote_min_words` |
 | `workflows/outline.md`, `workflows/plan.md`, `skills/plan-section.md` | integration | Zenodo / figshare / Dryad DOIs are no longer withheld |
 
 ## Hand-offs
