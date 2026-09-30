@@ -115548,6 +115548,7 @@ __export(pubmed_exports, {
   lookupById: () => lookupById6,
   parseEfetchArticles: () => parseEfetchArticles,
   pubmedToCandidate: () => pubmedToCandidate,
+  pubmedVernacularTitle: () => pubmedVernacularTitle,
   search: () => search5
 });
 function parseYear2(pubdate) {
@@ -115621,6 +115622,13 @@ function pubmedToCandidate(rec, checkedAt = (/* @__PURE__ */ new Date()).toISOSt
 }
 function isObject6(v2) {
   return typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
+}
+function pubmedVernacularTitle(raw) {
+  if (!isObject6(raw)) return null;
+  const v2 = str3(raw["vernaculartitle"]);
+  if (v2 === void 0) return null;
+  const title = plainText(v2).replace(/\.$/, "");
+  return title.length > 0 ? title : null;
 }
 function recordsFromEsummary(body, ids) {
   const result = body.result ?? {};
@@ -115790,6 +115798,7 @@ var init_pubmed = __esm({
     __name(str3, "str");
     __name(pubmedToCandidate, "pubmedToCandidate");
     __name(isObject6, "isObject");
+    __name(pubmedVernacularTitle, "pubmedVernacularTitle");
     ESEARCH = jsonShape(
       (b3) => isObject6(b3) && isObject6(b3["esearchresult"]) && Array.isArray(b3["esearchresult"]["idlist"]) && b3["esearchresult"]["ERROR"] === void 0,
       "E-utilities esearch result (idlist)"
@@ -118315,6 +118324,10 @@ var init_name_match = __esm({
 function needsConfirmation(c2) {
   return AGGREGATOR_SOURCES.has(c2.source) && typeof c2.doi === "string" && c2.doi.trim() !== "" && !isDataCiteArxivDoi(c2.doi);
 }
+function titlesOf(c2) {
+  const vernacular = c2.source === "pubmed" ? pubmedVernacularTitle(c2.raw) : null;
+  return vernacular !== null && vernacular !== c2.title ? [c2.title, vernacular] : [c2.title];
+}
 function withRecordFields(c2, r2) {
   const out2 = { ...c2, title: r2.title, authors: [...r2.authors] };
   const copy = /* @__PURE__ */ __name((k2) => {
@@ -118362,11 +118375,13 @@ async function confirmRegistrarRecords(candidates, lookup) {
       out2.push(c2);
       continue;
     }
-    const m3 = matchWork(
-      { title: c2.title, authors: c2.authors, ...c2.editors ? { editors: c2.editors } : {}, year: null },
-      { title: record2.title, subtitle: record2.subtitle, authors: record2.authors, editors: record2.editors, year: record2.year ?? null }
+    const same = titlesOf(c2).some(
+      (title) => matchWork(
+        { title, authors: c2.authors, ...c2.editors ? { editors: c2.editors } : {}, year: null },
+        { title: record2.title, subtitle: record2.subtitle, authors: record2.authors, editors: record2.editors, year: record2.year ?? null }
+      ).ok
     );
-    if (!m3.ok) {
+    if (!same) {
       out2.push(c2);
       continue;
     }
@@ -118382,8 +118397,10 @@ var init_registrar_confirm = __esm({
     init_http();
     init_full_text();
     init_name_match();
-    AGGREGATOR_SOURCES = /* @__PURE__ */ new Set(["semanticscholar", "openalex"]);
+    init_pubmed();
+    AGGREGATOR_SOURCES = /* @__PURE__ */ new Set(["semanticscholar", "openalex", "pubmed"]);
     __name(needsConfirmation, "needsConfirmation");
+    __name(titlesOf, "titlesOf");
     __name(withRecordFields, "withRecordFields");
     __name(confirmRegistrarRecords, "confirmRegistrarRecords");
   }

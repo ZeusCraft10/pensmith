@@ -83,6 +83,8 @@ interface PubmedRecord {
   doctype?: string;
   publishername?: string;
   booktitle?: string;
+  /** The original-language title of a non-English article, whose `title` is PubMed's English translation in brackets. */
+  vernaculartitle?: string;
 }
 
 function parseYear(pubdate: string | undefined): number | undefined {
@@ -170,6 +172,23 @@ export function pubmedToCandidate(rec: PubmedRecord, checkedAt: string = new Dat
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * The original-language title a PubMed record gives a non-English article
+ * (esummary `vernaculartitle`), or null. PubMed's `title` for such an article
+ * is the English translation in brackets (NLM convention: `[How much do
+ * medical students forget?]`), while the DOI's registrar holds the title the
+ * journal printed (`Mennyit felejtenek az orvostanhallgatók?`), so research
+ * compares both with the registrar's record (sources/registrar-confirm.ts).
+ * `raw` is the candidate's esummary record (SourceCandidate.raw).
+ */
+export function pubmedVernacularTitle(raw: unknown): string | null {
+  if (!isObject(raw)) return null;
+  const v = str(raw['vernaculartitle']);
+  if (v === undefined) return null;
+  const title = plainText(v).replace(/\.$/, '');
+  return title.length > 0 ? title : null;
 }
 
 const ESEARCH: ShapeCheck = jsonShape(

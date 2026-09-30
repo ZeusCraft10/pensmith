@@ -16,6 +16,15 @@
 // volume, issue, pages, publisher, type — replace the aggregator's. The
 // candidate keeps its citekey, identifiers, abstract and provenance.
 //
+// PubMed is not a DOI's registrar either (review round 1 of the Phase 20 +
+// 23a merge, found on the live chain): for a non-English article its title is
+// the English translation in brackets, while Crossref holds the title the
+// journal printed — PubMed's `[How much do medical students forget?]` is
+// Crossref's `Mennyit felejtenek az orvostanhallgatók?`, and Pass 1 blocked
+// the kept source as MIS-CITED on the title. A PubMed candidate with a DOI is
+// confirmed too, and its record's original-language title
+// (pubmedVernacularTitle) counts as its title for the same-work check.
+//
 // Best-effort and never fatal: a DOI Crossref does not know (a DataCite DOI),
 // a failed lookup, an offline miss, or a record that is another work leaves
 // the candidate as the aggregator gave it (verify still checks it). The same
@@ -26,11 +35,12 @@
 import { isOfflineEgressError } from '../http.js';
 import { isDataCiteArxivDoi } from '../full-text.js';
 import { matchWork } from '../verify/name-match.js';
+import { pubmedVernacularTitle } from './pubmed.js';
 import type { LookupResult } from './lookup.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
-/** The aggregators whose DOI records research confirms at Crossref. */
-export const AGGREGATOR_SOURCES: ReadonlySet<string> = new Set(['semanticscholar', 'openalex']);
+/** The sources that are not a DOI's registrar, whose DOI records research confirms at Crossref. */
+export const AGGREGATOR_SOURCES: ReadonlySet<string> = new Set(['semanticscholar', 'openalex', 'pubmed']);
 
 /** Crossref's three-way lookup of one DOI (`sources.crossref.lookupById`). */
 export type CrossrefLookup = (doi: string) => Promise<LookupResult>;
@@ -45,6 +55,12 @@ export interface ConfirmOutcome {
 
 function needsConfirmation(c: SourceCandidate): boolean {
   return AGGREGATOR_SOURCES.has(c.source) && typeof c.doi === 'string' && c.doi.trim() !== '' && !isDataCiteArxivDoi(c.doi);
+}
+
+/** The titles the candidate's own record gives the work: its title, then PubMed's original-language title of a translated one. */
+function titlesOf(c: SourceCandidate): string[] {
+  const vernacular = c.source === 'pubmed' ? pubmedVernacularTitle(c.raw) : null;
+  return vernacular !== null && vernacular !== c.title ? [c.title, vernacular] : [c.title];
 }
 
 /** The aggregator candidate with Crossref's bibliographic fields (identifiers, abstract, citekey kept). */
@@ -101,11 +117,14 @@ export async function confirmRegistrarRecords(candidates: readonly SourceCandida
       out.push(c);
       continue;
     }
-    const m = matchWork(
-      { title: c.title, authors: c.authors, ...(c.editors ? { editors: c.editors } : {}), year: null },
-      { title: record.title, subtitle: record.subtitle, authors: record.authors, editors: record.editors, year: record.year ?? null },
+    const same = titlesOf(c).some(
+      (title) =>
+        matchWork(
+          { title, authors: c.authors, ...(c.editors ? { editors: c.editors } : {}), year: null },
+          { title: record.title, subtitle: record.subtitle, authors: record.authors, editors: record.editors, year: record.year ?? null },
+        ).ok,
     );
-    if (!m.ok) {
+    if (!same) {
       out.push(c);
       continue;
     }
