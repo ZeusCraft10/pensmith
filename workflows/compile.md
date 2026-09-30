@@ -138,7 +138,10 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    Tier 2; skipped when no model transport), then require the output placeholder
    set to equal the input set, and the restored text to cite exactly the sources
    the original boundary cited (read with the one citation grammar, so a new
-   `[-@k]`, `@{k}`, narrative `@k` or a rewritten cluster counts, D-18-40). Any
+   `[-@k]`, `@{k}`, narrative `@k` or a rewritten cluster counts, D-18-40), and
+   to add nothing else the gate core checks — no unsupported or unparseable
+   citation form, no direct quote and no identifier written in the prose that
+   the section drafts did not hold (VRFY-25: the gate judged the drafts). Any
    drift REJECTS that boundary (keep the original prose) and records a
    Transitions-Changed rejection. Then run the deterministic
    cross-section consistency scan (COMP-04, flags only) and the citation-density

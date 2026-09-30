@@ -123,3 +123,28 @@ test('D-18-40 (review round 2): a smoother that ADDS a citation in any form (bar
     assert.match(readFileSync(join(root, '.paper', 'COMPILE-REPORT.md'), 'utf8'), /reject/i);
   }
 });
+
+test('VRFY-25: a smoother that ADDS an author-date citation, a reference entry, a direct quote or a bare identifier is rejected — the compiled text holds only what the gate judged', async () => {
+  const extras = [
+    'as (Smith & Jones, 2019) found',
+    'and "deep networks will always outperform every other method ever devised"',
+    'see doi:10.9999/fabricated.2019',
+    'as in [3]',
+  ];
+  for (const extra of extras) {
+    const root = seedTwoSection();
+    const result = await runCompile({
+      paperRoot: root,
+      yolo: true,
+      smoothBoundary: async (input: SmoothBoundaryInput) => `${input.tail} Moreover, ${extra}.\n\n${input.head}`,
+    });
+    assert.equal(result.refused, false, 'a rejected boundary never refuses compile');
+    const draft = readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8');
+    assert.doesNotMatch(draft, /Moreover/, `${extra}: the smoothed text never reaches DRAFT.md`);
+    assert.match(readFileSync(join(root, '.paper', 'COMPILE-REPORT.md'), 'utf8'), /reject/i, extra);
+  }
+  // A prose-only rewrite is still accepted.
+  const root = seedTwoSection();
+  await runCompile({ paperRoot: root, yolo: true, smoothBoundary: async (input: SmoothBoundaryInput) => `${input.tail} Moreover, this carries on.\n\n${input.head}` });
+  assert.match(readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8'), /Moreover, this carries on\./);
+});

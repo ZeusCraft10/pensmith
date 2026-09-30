@@ -77,7 +77,10 @@ import { sectionWriteBlockReason } from './plan-status.js';
 import { networkMode } from './http-mock.js';
 import { writeCompileInputs } from './compile-inputs.js';
 import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
-import { recomputeGate, gateRefusals, loadBibliography, stripStubMarker, type AcceptedQuote, type ByoQuote } from './verify/gate.js';
+import { recomputeGate, gateRefusals, loadBibliography, stripStubMarker, TEXT_SCANNERS, type AcceptedQuote, type ByoQuote } from './verify/gate.js';
+import { extractQuotes } from './quote-extractor.js';
+import { findBareIdentifiers } from './doi.js';
+import { tryReadPaperConfigSync } from './config.js';
 import { parseVerificationMd, verificationRecordReasons } from './verify/verification-md.js';
 import { readQuoteAcceptances, sectionDirOfPlan } from './quote-acceptance.js';
 
@@ -273,6 +276,30 @@ async function loadSection(
 }
 
 /**
+ * What `after` (a smoothed boundary) adds to `before` (the section drafts'
+ * text) that the gate core would check — a text finding (an unsupported or
+ * unparseable citation form), a direct quote, a bare identifier — as a short
+ * phrase for the WARN, or null when it adds none (VRFY-25).
+ */
+export function boundaryAdditions(before: string, after: string, quoteMinWords?: number): string | null {
+  const findings = (t: string): string[] => TEXT_SCANNERS.flatMap((scan) => scan(t)).map((f) => `${f.verdict} \`${f.text}\``);
+  const was = findings(before);
+  for (const f of findings(after)) {
+    const at = was.indexOf(f);
+    if (at === -1) return f;
+    was.splice(at, 1);
+  }
+  const opts = quoteMinWords !== undefined ? { minWords: quoteMinWords } : {};
+  const quotes = new Set(extractQuotes(before, opts).map((q) => q.text));
+  const newQuote = extractQuotes(after, opts).find((q) => !quotes.has(q.text));
+  if (newQuote !== undefined) return `a direct quote ("${newQuote.text.slice(0, 40)}…")`;
+  const ids = new Set(findBareIdentifiers(before).map((b) => `${b.kind}:${b.id}`));
+  const newId = findBareIdentifiers(after).find((b) => !ids.has(`${b.kind}:${b.id}`));
+  if (newId !== undefined) return `an identifier written in the prose (${newId.text})`;
+  return null;
+}
+
+/**
  * Run the Phase-4 compile pipeline. See module header for the full contract.
  */
 export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
@@ -464,6 +491,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
     // ---- Step 3: N-1 per-boundary smoothing (COMP-03 / D-12 / D-13) --------
     const transitions: TransitionEntry[] = [];
+    const quoteMinWords = tryReadPaperConfigSync(opts.paperRoot)?.verification?.quote_min_words;
     for (let k = 0; k < drafts.length - 1; k += 1) {
       const left = splitParagraphs(drafts[k] ?? '');
       const right = splitParagraphs(drafts[k + 1] ?? '');
@@ -529,6 +557,16 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       const citedAfter = new Set(extractCitedKeysForVerification(`${newTail}\n\n${newHead}`));
       if (!setsEqual(citedBefore, citedAfter)) {
         warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — the smoothed text cites different sources; keeping original prose`);
+        transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+        continue;
+      }
+      // VRFY-25: the gate core judged the section drafts, not the smoothed
+      // text — so the smoothed boundary may add nothing the gate would check:
+      // no citation form it refuses or cannot read, no direct quote (Pass 3)
+      // and no identifier written in the prose (Pass 1) the drafts did not hold.
+      const added = boundaryAdditions(`${tailRaw}\n\n${headRaw}`, `${newTail}\n\n${newHead}`, quoteMinWords);
+      if (added !== null) {
+        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — the smoothed text adds ${added}, which no section verified; keeping original prose`);
         transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
         continue;
       }
