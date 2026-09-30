@@ -110,9 +110,9 @@ var init_util = __esm({
       };
     })(util || (util = {}));
     (function(objectUtil2) {
-      objectUtil2.mergeShapes = (first, second) => {
+      objectUtil2.mergeShapes = (first2, second) => {
         return {
-          ...first,
+          ...first2,
           ...second
           // second overwrites first
         };
@@ -3196,10 +3196,10 @@ var init_types = __esm({
       get element() {
         return this._def.valueType;
       }
-      static create(first, second, third) {
+      static create(first2, second, third) {
         if (second instanceof ZodType) {
           return new _ZodRecord({
-            keyType: first,
+            keyType: first2,
             valueType: second,
             typeName: ZodFirstPartyTypeKind.ZodRecord,
             ...processCreateParams(third)
@@ -3207,7 +3207,7 @@ var init_types = __esm({
         }
         return new _ZodRecord({
           keyType: ZodString.create(),
-          valueType: first,
+          valueType: first2,
           typeName: ZodFirstPartyTypeKind.ZodRecord,
           ...processCreateParams(second)
         });
@@ -4363,7 +4363,7 @@ var require_code = __commonJS({
     __name(_3, "_");
     exports._ = _3;
     var plus = new _Code("+");
-    function str6(strs, ...args) {
+    function str8(strs, ...args) {
       const expr = [safeStringify(strs[0])];
       let i = 0;
       while (i < args.length) {
@@ -4374,8 +4374,8 @@ var require_code = __commonJS({
       optimize(expr);
       return new _Code(expr);
     }
-    __name(str6, "str");
-    exports.str = str6;
+    __name(str8, "str");
+    exports.str = str8;
     function addCodeArg(code, arg) {
       if (arg instanceof _Code)
         code.push(...arg._items);
@@ -4421,7 +4421,7 @@ var require_code = __commonJS({
     }
     __name(mergeExprItems, "mergeExprItems");
     function strConcat(c1, c2) {
-      return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str6`${c1}${c2}`;
+      return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str8`${c1}${c2}`;
     }
     __name(strConcat, "strConcat");
     exports.strConcat = strConcat;
@@ -5488,25 +5488,25 @@ var require_util = __commonJS({
     }
     __name(schemaRefOrVal, "schemaRefOrVal");
     exports.schemaRefOrVal = schemaRefOrVal;
-    function unescapeFragment(str6) {
-      return unescapeJsonPointer(decodeURIComponent(str6));
+    function unescapeFragment(str8) {
+      return unescapeJsonPointer(decodeURIComponent(str8));
     }
     __name(unescapeFragment, "unescapeFragment");
     exports.unescapeFragment = unescapeFragment;
-    function escapeFragment(str6) {
-      return encodeURIComponent(escapeJsonPointer(str6));
+    function escapeFragment(str8) {
+      return encodeURIComponent(escapeJsonPointer(str8));
     }
     __name(escapeFragment, "escapeFragment");
     exports.escapeFragment = escapeFragment;
-    function escapeJsonPointer(str6) {
-      if (typeof str6 == "number")
-        return `${str6}`;
-      return str6.replace(/~/g, "~0").replace(/\//g, "~1");
+    function escapeJsonPointer(str8) {
+      if (typeof str8 == "number")
+        return `${str8}`;
+      return str8.replace(/~/g, "~0").replace(/\//g, "~1");
     }
     __name(escapeJsonPointer, "escapeJsonPointer");
     exports.escapeJsonPointer = escapeJsonPointer;
-    function unescapeJsonPointer(str6) {
-      return str6.replace(/~1/g, "/").replace(/~0/g, "~");
+    function unescapeJsonPointer(str8) {
+      return str8.replace(/~1/g, "/").replace(/~0/g, "~");
     }
     __name(unescapeJsonPointer, "unescapeJsonPointer");
     exports.unescapeJsonPointer = unescapeJsonPointer;
@@ -6604,8 +6604,8 @@ var require_json_schema_traverse = __commonJS({
       }
     }
     __name(_traverse, "_traverse");
-    function escapeJsonPtr(str6) {
-      return str6.replace(/~/g, "~0").replace(/\//g, "~1");
+    function escapeJsonPtr(str8) {
+      return str8.replace(/~/g, "~0").replace(/\//g, "~1");
     }
     __name(escapeJsonPtr, "escapeJsonPtr");
   }
@@ -7405,9 +7405,9 @@ var require_compile = __commonJS({
       if (_sch)
         return _sch;
       const rootId = (0, resolve_1.getFullPath)(this.opts.uriResolver, sch.root.baseId);
-      const { es5, lines } = this.opts.code;
+      const { es5, lines: lines2 } = this.opts.code;
       const { ownProperties } = this.opts;
-      const gen = new codegen_1.CodeGen(this.scope, { es5, lines, ownProperties });
+      const gen = new codegen_1.CodeGen(this.scope, { es5, lines: lines2, ownProperties });
       let _ValidationError;
       if (sch.$async) {
         _ValidationError = gen.scopeValue("Error", {
@@ -7743,10 +7743,10 @@ var require_utils = __commonJS({
       }
     }
     __name(normalizeIPv6, "normalizeIPv6");
-    function findToken(str6, token) {
+    function findToken(str8, token) {
       let ind = 0;
-      for (let i = 0; i < str6.length; i++) {
-        if (str6[i] === token) ind++;
+      for (let i = 0; i < str8.length; i++) {
+        if (str8[i] === token) ind++;
       }
       return ind;
     }
@@ -8512,7 +8512,7 @@ var require_core = __commonJS({
     var util_1 = require_util();
     var $dataRefSchema = require_data();
     var uri_1 = require_uri();
-    var defaultRegExp = /* @__PURE__ */ __name((str6, flags) => new RegExp(str6, flags), "defaultRegExp");
+    var defaultRegExp = /* @__PURE__ */ __name((str8, flags) => new RegExp(str8, flags), "defaultRegExp");
     defaultRegExp.code = "new RegExp";
     var META_IGNORE_OPTIONS = ["removeAdditional", "useDefaults", "coerceTypes"];
     var EXT_SCOPE_NAMES = /* @__PURE__ */ new Set([
@@ -8594,8 +8594,8 @@ var require_core = __commonJS({
         this._loading = {};
         this._cache = /* @__PURE__ */ new Map();
         opts = this.opts = { ...opts, ...requiredOptions(opts) };
-        const { es5, lines } = this.opts.code;
-        this.scope = new codegen_2.ValueScope({ scope: {}, prefixes: EXT_SCOPE_NAMES, es5, lines });
+        const { es5, lines: lines2 } = this.opts.code;
+        this.scope = new codegen_2.ValueScope({ scope: {}, prefixes: EXT_SCOPE_NAMES, es5, lines: lines2 });
         this.logger = getLogger(opts.logger);
         const formatOpt = opts.validateFormats;
         opts.validateFormats = false;
@@ -9259,7 +9259,7 @@ var require_core2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var id_1 = require_id();
     var ref_1 = require_ref();
-    var core = [
+    var core2 = [
       "$schema",
       "$id",
       "$defs",
@@ -9269,7 +9269,7 @@ var require_core2 = __commonJS({
       id_1.default,
       ref_1.default
     ];
-    exports.default = core;
+    exports.default = core2;
   }
 });
 
@@ -9338,16 +9338,16 @@ var require_ucs2length = __commonJS({
   "node_modules/@modelcontextprotocol/sdk/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    function ucs2length(str6) {
-      const len = str6.length;
+    function ucs2length(str8) {
+      const len = str8.length;
       let length = 0;
       let pos = 0;
       let value;
       while (pos < len) {
         length++;
-        value = str6.charCodeAt(pos++);
+        value = str8.charCodeAt(pos++);
         if (value >= 55296 && value <= 56319 && pos < len) {
-          value = str6.charCodeAt(pos);
+          value = str8.charCodeAt(pos);
           if ((value & 64512) === 56320)
             pos++;
         }
@@ -11285,8 +11285,8 @@ var require_formats = __commonJS({
     __name(isLeapYear, "isLeapYear");
     var DATE = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
     var DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    function date3(str6) {
-      const matches = DATE.exec(str6);
+    function date3(str8) {
+      const matches = DATE.exec(str8);
       if (!matches)
         return false;
       const year = +matches[1];
@@ -11307,8 +11307,8 @@ var require_formats = __commonJS({
     __name(compareDate, "compareDate");
     var TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
     function getTime(strictTimeZone) {
-      return /* @__PURE__ */ __name(function time3(str6) {
-        const matches = TIME.exec(str6);
+      return /* @__PURE__ */ __name(function time3(str8) {
+        const matches = TIME.exec(str8);
         if (!matches)
           return false;
         const hr = +matches[1];
@@ -11357,8 +11357,8 @@ var require_formats = __commonJS({
     var DATE_TIME_SEPARATOR = /t|\s/i;
     function getDateTime(strictTimeZone) {
       const time3 = getTime(strictTimeZone);
-      return /* @__PURE__ */ __name(function date_time(str6) {
-        const dateTime = str6.split(DATE_TIME_SEPARATOR);
+      return /* @__PURE__ */ __name(function date_time(str8) {
+        const dateTime = str8.split(DATE_TIME_SEPARATOR);
         return dateTime.length === 2 && date3(dateTime[0]) && time3(dateTime[1]);
       }, "date_time");
     }
@@ -11386,14 +11386,14 @@ var require_formats = __commonJS({
     __name(compareIsoDateTime, "compareIsoDateTime");
     var NOT_URI_FRAGMENT = /\/|:/;
     var URI = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
-    function uri(str6) {
-      return NOT_URI_FRAGMENT.test(str6) && URI.test(str6);
+    function uri(str8) {
+      return NOT_URI_FRAGMENT.test(str8) && URI.test(str8);
     }
     __name(uri, "uri");
     var BYTE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/gm;
-    function byte(str6) {
+    function byte(str8) {
       BYTE.lastIndex = 0;
-      return BYTE.test(str6);
+      return BYTE.test(str8);
     }
     __name(byte, "byte");
     var MIN_INT32 = -(2 ** 31);
@@ -11411,11 +11411,11 @@ var require_formats = __commonJS({
     }
     __name(validateNumber, "validateNumber");
     var Z_ANCHOR = /[^\\]\\Z/;
-    function regex(str6) {
-      if (Z_ANCHOR.test(str6))
+    function regex(str8) {
+      if (Z_ANCHOR.test(str8))
         return false;
       try {
-        new RegExp(str6);
+        new RegExp(str8);
         return true;
       } catch (e2) {
         return false;
@@ -11503,7 +11503,7 @@ var require_code3 = __commonJS({
     __name(_3, "_");
     exports._ = _3;
     var plus = new _Code("+");
-    function str6(strs, ...args) {
+    function str8(strs, ...args) {
       const expr = [safeStringify(strs[0])];
       let i = 0;
       while (i < args.length) {
@@ -11514,8 +11514,8 @@ var require_code3 = __commonJS({
       optimize(expr);
       return new _Code(expr);
     }
-    __name(str6, "str");
-    exports.str = str6;
+    __name(str8, "str");
+    exports.str = str8;
     function addCodeArg(code, arg) {
       if (arg instanceof _Code)
         code.push(...arg._items);
@@ -11561,7 +11561,7 @@ var require_code3 = __commonJS({
     }
     __name(mergeExprItems, "mergeExprItems");
     function strConcat(c1, c2) {
-      return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str6`${c1}${c2}`;
+      return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str8`${c1}${c2}`;
     }
     __name(strConcat, "strConcat");
     exports.strConcat = strConcat;
@@ -12628,25 +12628,25 @@ var require_util2 = __commonJS({
     }
     __name(schemaRefOrVal, "schemaRefOrVal");
     exports.schemaRefOrVal = schemaRefOrVal;
-    function unescapeFragment(str6) {
-      return unescapeJsonPointer(decodeURIComponent(str6));
+    function unescapeFragment(str8) {
+      return unescapeJsonPointer(decodeURIComponent(str8));
     }
     __name(unescapeFragment, "unescapeFragment");
     exports.unescapeFragment = unescapeFragment;
-    function escapeFragment(str6) {
-      return encodeURIComponent(escapeJsonPointer(str6));
+    function escapeFragment(str8) {
+      return encodeURIComponent(escapeJsonPointer(str8));
     }
     __name(escapeFragment, "escapeFragment");
     exports.escapeFragment = escapeFragment;
-    function escapeJsonPointer(str6) {
-      if (typeof str6 == "number")
-        return `${str6}`;
-      return str6.replace(/~/g, "~0").replace(/\//g, "~1");
+    function escapeJsonPointer(str8) {
+      if (typeof str8 == "number")
+        return `${str8}`;
+      return str8.replace(/~/g, "~0").replace(/\//g, "~1");
     }
     __name(escapeJsonPointer, "escapeJsonPointer");
     exports.escapeJsonPointer = escapeJsonPointer;
-    function unescapeJsonPointer(str6) {
-      return str6.replace(/~1/g, "/").replace(/~0/g, "~");
+    function unescapeJsonPointer(str8) {
+      return str8.replace(/~1/g, "/").replace(/~0/g, "~");
     }
     __name(unescapeJsonPointer, "unescapeJsonPointer");
     exports.unescapeJsonPointer = unescapeJsonPointer;
@@ -13709,8 +13709,8 @@ var require_json_schema_traverse2 = __commonJS({
       }
     }
     __name(_traverse, "_traverse");
-    function escapeJsonPtr(str6) {
-      return str6.replace(/~/g, "~0").replace(/\//g, "~1");
+    function escapeJsonPtr(str8) {
+      return str8.replace(/~/g, "~0").replace(/\//g, "~1");
     }
     __name(escapeJsonPtr, "escapeJsonPtr");
   }
@@ -14510,9 +14510,9 @@ var require_compile2 = __commonJS({
       if (_sch)
         return _sch;
       const rootId = (0, resolve_1.getFullPath)(this.opts.uriResolver, sch.root.baseId);
-      const { es5, lines } = this.opts.code;
+      const { es5, lines: lines2 } = this.opts.code;
       const { ownProperties } = this.opts;
-      const gen = new codegen_1.CodeGen(this.scope, { es5, lines, ownProperties });
+      const gen = new codegen_1.CodeGen(this.scope, { es5, lines: lines2, ownProperties });
       let _ValidationError;
       if (sch.$async) {
         _ValidationError = gen.scopeValue("Error", {
@@ -14774,7 +14774,7 @@ var require_core3 = __commonJS({
     var util_1 = require_util2();
     var $dataRefSchema = require_data2();
     var uri_1 = require_uri2();
-    var defaultRegExp = /* @__PURE__ */ __name((str6, flags) => new RegExp(str6, flags), "defaultRegExp");
+    var defaultRegExp = /* @__PURE__ */ __name((str8, flags) => new RegExp(str8, flags), "defaultRegExp");
     defaultRegExp.code = "new RegExp";
     var META_IGNORE_OPTIONS = ["removeAdditional", "useDefaults", "coerceTypes"];
     var EXT_SCOPE_NAMES = /* @__PURE__ */ new Set([
@@ -14856,8 +14856,8 @@ var require_core3 = __commonJS({
         this._loading = {};
         this._cache = /* @__PURE__ */ new Map();
         opts = this.opts = { ...opts, ...requiredOptions(opts) };
-        const { es5, lines } = this.opts.code;
-        this.scope = new codegen_2.ValueScope({ scope: {}, prefixes: EXT_SCOPE_NAMES, es5, lines });
+        const { es5, lines: lines2 } = this.opts.code;
+        this.scope = new codegen_2.ValueScope({ scope: {}, prefixes: EXT_SCOPE_NAMES, es5, lines: lines2 });
         this.logger = getLogger(opts.logger);
         const formatOpt = opts.validateFormats;
         opts.validateFormats = false;
@@ -15521,7 +15521,7 @@ var require_core4 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var id_1 = require_id2();
     var ref_1 = require_ref2();
-    var core = [
+    var core2 = [
       "$schema",
       "$id",
       "$defs",
@@ -15531,7 +15531,7 @@ var require_core4 = __commonJS({
       id_1.default,
       ref_1.default
     ];
-    exports.default = core;
+    exports.default = core2;
   }
 });
 
@@ -15600,16 +15600,16 @@ var require_ucs2length2 = __commonJS({
   "node_modules/ajv-formats/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    function ucs2length(str6) {
-      const len = str6.length;
+    function ucs2length(str8) {
+      const len = str8.length;
       let length = 0;
       let pos = 0;
       let value;
       while (pos < len) {
         length++;
-        value = str6.charCodeAt(pos++);
+        value = str8.charCodeAt(pos++);
         if (value >= 55296 && value <= 56319 && pos < len) {
-          value = str6.charCodeAt(pos);
+          value = str8.charCodeAt(pos);
           if ((value & 64512) === 56320)
             pos++;
         }
@@ -18203,8 +18203,8 @@ var require_graceful_fs = __commonJS({
       fs13.createReadStream = createReadStream;
       fs13.createWriteStream = createWriteStream;
       var fs$readFile = fs13.readFile;
-      fs13.readFile = readFile10;
-      function readFile10(path29, options, cb) {
+      fs13.readFile = readFile11;
+      function readFile11(path29, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
         return go$readFile(path29, options, cb);
@@ -18220,7 +18220,7 @@ var require_graceful_fs = __commonJS({
         }
         __name(go$readFile, "go$readFile");
       }
-      __name(readFile10, "readFile");
+      __name(readFile11, "readFile");
       var fs$writeFile = fs13.writeFile;
       fs13.writeFile = writeFile;
       function writeFile(path29, data, options, cb) {
@@ -18939,11 +18939,11 @@ var require_mtime_precision = __commonJS({
     function probe(file, fs12, callback) {
       const cachedPrecision = fs12[cacheSymbol];
       if (cachedPrecision) {
-        return fs12.stat(file, (err, stat2) => {
+        return fs12.stat(file, (err, stat3) => {
           if (err) {
             return callback(err);
           }
-          callback(null, stat2.mtime, cachedPrecision);
+          callback(null, stat3.mtime, cachedPrecision);
         });
       }
       const mtime = new Date(Math.ceil(Date.now() / 1e3) * 1e3 + 5);
@@ -18951,13 +18951,13 @@ var require_mtime_precision = __commonJS({
         if (err) {
           return callback(err);
         }
-        fs12.stat(file, (err2, stat2) => {
+        fs12.stat(file, (err2, stat3) => {
           if (err2) {
             return callback(err2);
           }
-          const precision = stat2.mtime.getTime() % 1e3 === 0 ? "s" : "ms";
+          const precision = stat3.mtime.getTime() % 1e3 === 0 ? "s" : "ms";
           Object.defineProperty(fs12, cacheSymbol, { value: precision });
-          callback(null, stat2.mtime, precision);
+          callback(null, stat3.mtime, precision);
         });
       });
     }
@@ -19015,14 +19015,14 @@ var require_lockfile = __commonJS({
         if (options.stale <= 0) {
           return callback(Object.assign(new Error("Lock file is already being held"), { code: "ELOCKED", file }));
         }
-        options.fs.stat(lockfilePath, (err2, stat2) => {
+        options.fs.stat(lockfilePath, (err2, stat3) => {
           if (err2) {
             if (err2.code === "ENOENT") {
               return acquireLock(file, { ...options, stale: 0 }, callback);
             }
             return callback(err2);
           }
-          if (!isLockStale(stat2, options)) {
+          if (!isLockStale(stat3, options)) {
             return callback(Object.assign(new Error("Lock file is already being held"), { code: "ELOCKED", file }));
           }
           removeLock(file, options, (err3) => {
@@ -19035,8 +19035,8 @@ var require_lockfile = __commonJS({
       });
     }
     __name(acquireLock, "acquireLock");
-    function isLockStale(stat2, options) {
-      return stat2.mtime.getTime() < Date.now() - options.stale;
+    function isLockStale(stat3, options) {
+      return stat3.mtime.getTime() < Date.now() - options.stale;
     }
     __name(isLockStale, "isLockStale");
     function removeLock(file, options, callback) {
@@ -19056,7 +19056,7 @@ var require_lockfile = __commonJS({
       lock3.updateDelay = lock3.updateDelay || options.update;
       lock3.updateTimeout = setTimeout(() => {
         lock3.updateTimeout = null;
-        options.fs.stat(lock3.lockfilePath, (err, stat2) => {
+        options.fs.stat(lock3.lockfilePath, (err, stat3) => {
           const isOverThreshold = lock3.lastUpdate + options.stale < Date.now();
           if (err) {
             if (err.code === "ENOENT" || isOverThreshold) {
@@ -19065,7 +19065,7 @@ var require_lockfile = __commonJS({
             lock3.updateDelay = 1e3;
             return updateLock(file, options);
           }
-          const isMtimeOurs = lock3.mtime.getTime() === stat2.mtime.getTime();
+          const isMtimeOurs = lock3.mtime.getTime() === stat3.mtime.getTime();
           if (!isMtimeOurs) {
             return setLockAsCompromised(
               file,
@@ -19194,11 +19194,11 @@ var require_lockfile = __commonJS({
         if (err) {
           return callback(err);
         }
-        options.fs.stat(getLockFile(file2, options), (err2, stat2) => {
+        options.fs.stat(getLockFile(file2, options), (err2, stat3) => {
           if (err2) {
             return err2.code === "ENOENT" ? callback(null, false) : callback(err2);
           }
-          return callback(null, !isLockStale(stat2, options));
+          return callback(null, !isLockStale(stat3, options));
         });
       });
     }
@@ -19463,6 +19463,9 @@ function pensmithLockDir() {
 function pensmithHttpCacheDir() {
   return path2.join(pensmithDataDir(), "http-cache");
 }
+function pensmithSourceTextCacheDir() {
+  return path2.join(pensmithDataDir(), "source-text");
+}
 function userHomeDir() {
   return os.homedir();
 }
@@ -19625,14 +19628,14 @@ function servicePaperRoot(env = process.env) {
   const envRoot = env["PENSMITH_PAPER_ROOT"];
   return envRoot ? asProjectRoot(envRoot) : workingDirectory();
 }
-function parseSectionDirName(basename3) {
-  if (typeof basename3 !== "string" || basename3.length === 0) return null;
-  if (basename3.includes("\0")) return null;
-  if (basename3.includes("/") || basename3.includes("\\")) return null;
-  if (basename3 === "." || basename3 === "..") return null;
-  if (basename3.includes("..")) return null;
-  if (/^[a-zA-Z]:/.test(basename3)) return null;
-  const m3 = /^(\d{2})([a-z])?-([a-z0-9-]+)$/.exec(basename3);
+function parseSectionDirName(basename4) {
+  if (typeof basename4 !== "string" || basename4.length === 0) return null;
+  if (basename4.includes("\0")) return null;
+  if (basename4.includes("/") || basename4.includes("\\")) return null;
+  if (basename4 === "." || basename4 === "..") return null;
+  if (basename4.includes("..")) return null;
+  if (/^[a-zA-Z]:/.test(basename4)) return null;
+  const m3 = /^(\d{2})([a-z])?-([a-z0-9-]+)$/.exec(basename4);
   if (!m3) return null;
   const n2 = Number(m3[1]);
   if (!Number.isInteger(n2) || n2 < 0 || n2 > 99) return null;
@@ -19710,6 +19713,7 @@ var init_paths = __esm({
     __name(pensmithDataDir, "pensmithDataDir");
     __name(pensmithLockDir, "pensmithLockDir");
     __name(pensmithHttpCacheDir, "pensmithHttpCacheDir");
+    __name(pensmithSourceTextCacheDir, "pensmithSourceTextCacheDir");
     __name(userHomeDir, "userHomeDir");
     __name(pensmithOwnSourceApprovalsPath, "pensmithOwnSourceApprovalsPath");
     PLUGIN_DIR_NAME = "plugin";
@@ -20990,22 +20994,22 @@ function resolveName(raw, keep, after = "", person = false) {
     return all.every((t) => NAME_SUPPRESSION.has(t) && !DATE_WORDS.has(t)) ? null : { raw, startDelta: 0 };
   }
   if (all.every((t) => NAME_SUPPRESSION.has(t))) return null;
-  const words3 = raw.split(" ");
+  const words4 = raw.split(" ");
   let start = 0;
   let remaining = all.length;
-  while (start < words3.length - 1 && remaining > 2 && NAME_SUPPRESSION.has(words3[start])) {
+  while (start < words4.length - 1 && remaining > 2 && NAME_SUPPRESSION.has(words4[start])) {
     start += 1;
     remaining -= 1;
   }
-  const startDelta = start === 0 ? 0 : words3.slice(0, start).join(" ").length + 1;
+  const startDelta = start === 0 ? 0 : words4.slice(0, start).join(" ").length + 1;
   const kept = raw.slice(startDelta);
   const tokens = nameTokens(kept);
   const last = tokens[tokens.length - 1];
-  const first = tokens[0];
+  const first2 = tokens[0];
   const lastBase = last.split("-").pop();
   if (CITATION_STYLE_NAMES.has(last) && STYLE_WORD_AFTER.test(after)) return null;
   if (DATE_WORDS.has(last) || DATE_WORDS.has(lastBase)) return null;
-  if (ENTITY_HEADS.has(last) || ENTITY_HEADS.has(lastBase) || ENTITY_OPENERS.has(first)) return null;
+  if (ENTITY_HEADS.has(last) || ENTITY_HEADS.has(lastBase) || ENTITY_OPENERS.has(first2)) return null;
   if (NUMBER_TOKENS.has(last) && tokens.slice(0, -1).some((t) => ENTITY_HEADS.has(t))) return null;
   if (keep.size > 0 && tokens.every((t) => keep.has(t))) return null;
   return { raw: kept, startDelta };
@@ -21722,9 +21726,9 @@ function registerSecret(value) {
 function scrubSecrets(line) {
   let out2 = line;
   for (const s2 of secrets) {
-    const escaped = JSON.stringify(s2).slice(1, -1);
+    const escaped3 = JSON.stringify(s2).slice(1, -1);
     if (out2.includes(s2)) out2 = out2.split(s2).join("[REDACTED]");
-    if (escaped !== s2 && out2.includes(escaped)) out2 = out2.split(escaped).join("[REDACTED]");
+    if (escaped3 !== s2 && out2.includes(escaped3)) out2 = out2.split(escaped3).join("[REDACTED]");
   }
   return out2;
 }
@@ -26483,20 +26487,20 @@ var require_infra = __commonJS({
       return JSON.parse(utf8DecodeBytes(bytes));
     }
     __name(parseJSONFromBytes, "parseJSONFromBytes");
-    function removeASCIIWhitespace(str6, leading = true, trailing = true) {
-      return removeChars(str6, leading, trailing, isASCIIWhitespace);
+    function removeASCIIWhitespace(str8, leading = true, trailing = true) {
+      return removeChars(str8, leading, trailing, isASCIIWhitespace);
     }
     __name(removeASCIIWhitespace, "removeASCIIWhitespace");
-    function removeChars(str6, leading, trailing, predicate) {
+    function removeChars(str8, leading, trailing, predicate) {
       let lead = 0;
-      let trail = str6.length - 1;
+      let trail = str8.length - 1;
       if (leading) {
-        while (lead < str6.length && predicate(str6.charCodeAt(lead))) lead++;
+        while (lead < str8.length && predicate(str8.charCodeAt(lead))) lead++;
       }
       if (trailing) {
-        while (trail > 0 && predicate(str6.charCodeAt(trail))) trail--;
+        while (trail > 0 && predicate(str8.charCodeAt(trail))) trail--;
       }
-      return lead === 0 && trail === str6.length - 1 ? str6 : str6.slice(lead, trail + 1);
+      return lead === 0 && trail === str8.length - 1 ? str8 : str8.slice(lead, trail + 1);
     }
     __name(removeChars, "removeChars");
     function serializeJavascriptValueToJSONString(value) {
@@ -26759,8 +26763,8 @@ var require_data_url = __commonJS({
       return char === 13 || char === 10 || char === 9 || char === 32;
     }
     __name(isHTTPWhiteSpace, "isHTTPWhiteSpace");
-    function removeHTTPWhitespace(str6, leading = true, trailing = true) {
-      return removeChars(str6, leading, trailing, isHTTPWhiteSpace);
+    function removeHTTPWhitespace(str8, leading = true, trailing = true) {
+      return removeChars(str8, leading, trailing, isHTTPWhiteSpace);
     }
     __name(removeHTTPWhitespace, "removeHTTPWhitespace");
     function minimizeSupportedMimeType(mimeType) {
@@ -28944,7 +28948,7 @@ var require_body = __commonJS({
         const prefix = `--${boundary}\r
 Content-Disposition: form-data`;
         /*! formdata-polyfill. MIT License. Jimmy Wärting <https://jimmy.warting.se/opensource> */
-        const formdataEscape = /* @__PURE__ */ __name((str6) => str6.replace(/\n/g, "%0A").replace(/\r/g, "%0D").replace(/"/g, "%22"), "formdataEscape");
+        const formdataEscape = /* @__PURE__ */ __name((str8) => str8.replace(/\n/g, "%0A").replace(/\r/g, "%0D").replace(/"/g, "%22"), "formdataEscape");
         const normalizeLinefeeds = /* @__PURE__ */ __name((value) => value.replace(/\r?\n|\r/g, "\r\n"), "normalizeLinefeeds");
         const blobParts = [];
         const rn = new Uint8Array([13, 10]);
@@ -35303,14 +35307,14 @@ var require_mock_utils = __commonJS({
       return [...pathSegments, qp.toString()].join("?");
     }
     __name(safeUrl, "safeUrl");
-    function matchKey(mockDispatch2, { path: path29, method, body, headers }) {
+    function matchKey2(mockDispatch2, { path: path29, method, body, headers }) {
       const pathMatch = matchValue(mockDispatch2.path, path29);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
       return pathMatch && methodMatch && bodyMatch && headersMatch;
     }
-    __name(matchKey, "matchKey");
+    __name(matchKey2, "matchKey");
     function getResponseData(data) {
       if (Buffer.isBuffer(data)) {
         return data;
@@ -35367,7 +35371,7 @@ var require_mock_utils = __commonJS({
         if (!dispatch.consumed) {
           return false;
         }
-        return matchKey(dispatch, key2);
+        return matchKey2(dispatch, key2);
       });
       if (index !== -1) {
         mockDispatches.splice(index, 1);
@@ -36413,8 +36417,8 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile, readFile: readFile10, mkdir: mkdir7 } = __require("node:fs/promises");
-    var { dirname: dirname9, resolve: resolve5 } = __require("node:path");
+    var { writeFile, readFile: readFile11, mkdir: mkdir7 } = __require("node:fs/promises");
+    var { dirname: dirname10, resolve: resolve5 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError, UndiciError } = require_errors3();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -36622,7 +36626,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError("Snapshot path is required");
         }
         try {
-          const data = await readFile10(resolve5(path29), "utf8");
+          const data = await readFile11(resolve5(path29), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -36652,7 +36656,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError("Snapshot path is required");
         }
         const resolvedPath = resolve5(path29);
-        await mkdir7(dirname9(resolvedPath), { recursive: true });
+        await mkdir7(dirname10(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash, snapshot]) => ({
           hash,
           snapshot
@@ -44907,9 +44911,9 @@ var require_cookies = __commonJS({
       webidl.argumentLengthCheck(arguments, 2, "setCookie");
       brandChecks(headers);
       cookie = webidl.converters.Cookie(cookie);
-      const str6 = stringify3(cookie);
-      if (str6) {
-        headers.append("set-cookie", str6, true);
+      const str8 = stringify3(cookie);
+      if (str8) {
+        headers.append("set-cookie", str8, true);
       }
     }
     __name(setCookie, "setCookie");
@@ -46084,11 +46088,11 @@ var require_receiver = __commonJS({
           return emptyBuffer;
         }
         this.#byteOffset -= n2;
-        const first = this.#buffers[0];
-        if (first.length > n2) {
-          this.#buffers[0] = first.subarray(n2, first.length);
-          return first.subarray(0, n2);
-        } else if (first.length === n2) {
+        const first2 = this.#buffers[0];
+        if (first2.length > n2) {
+          this.#buffers[0] = first2.subarray(n2, first2.length);
+          return first2.subarray(0, n2);
+        } else if (first2.length === n2) {
           return this.#buffers.shift();
         } else {
           let offset = 0;
@@ -48279,15 +48283,15 @@ var init_http_mock = __esm({
 
 // node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string3, ptr) {
-  let lines = string3.slice(0, ptr).split(/\r\n|\n|\r/g);
-  return [lines.length, lines.pop().length + 1];
+  let lines2 = string3.slice(0, ptr).split(/\r\n|\n|\r/g);
+  return [lines2.length, lines2.pop().length + 1];
 }
 function makeCodeBlock(string3, line, column) {
-  let lines = string3.split(/\r\n|\n|\r/g);
+  let lines2 = string3.split(/\r\n|\n|\r/g);
   let codeblock = "";
   let numberLen = (Math.log10(line + 1) | 0) + 1;
   for (let i = line - 1; i <= line + 1; i++) {
-    let l2 = lines[i - 1];
+    let l2 = lines2[i - 1];
     if (!l2)
       continue;
     codeblock += i.toString().padEnd(numberLen, " ");
@@ -48355,78 +48359,78 @@ ${codeblock}`, options);
 });
 
 // node_modules/smol-toml/dist/util.js
-function isEscaped(str6, ptr) {
+function isEscaped(str8, ptr) {
   let i = 0;
-  while (str6[ptr - ++i] === "\\")
+  while (str8[ptr - ++i] === "\\")
     ;
   return --i && i % 2;
 }
-function indexOfNewline(str6, start = 0, end = str6.length) {
-  let idx = str6.indexOf("\n", start);
-  if (str6[idx - 1] === "\r")
+function indexOfNewline(str8, start = 0, end = str8.length) {
+  let idx = str8.indexOf("\n", start);
+  if (str8[idx - 1] === "\r")
     idx--;
   return idx <= end ? idx : -1;
 }
-function skipComment(str6, ptr) {
-  for (let i = ptr; i < str6.length; i++) {
-    let c2 = str6[i];
+function skipComment(str8, ptr) {
+  for (let i = ptr; i < str8.length; i++) {
+    let c2 = str8[i];
     if (c2 === "\n")
       return i;
-    if (c2 === "\r" && str6[i + 1] === "\n")
+    if (c2 === "\r" && str8[i + 1] === "\n")
       return i + 1;
     if (c2 < " " && c2 !== "	" || c2 === "\x7F") {
       throw new TomlError("control characters are not allowed in comments", {
-        toml: str6,
+        toml: str8,
         ptr
       });
     }
   }
-  return str6.length;
+  return str8.length;
 }
-function skipVoid(str6, ptr, banNewLines, banComments) {
+function skipVoid(str8, ptr, banNewLines, banComments) {
   let c2;
   while (1) {
-    while ((c2 = str6[ptr]) === " " || c2 === "	" || !banNewLines && (c2 === "\n" || c2 === "\r" && str6[ptr + 1] === "\n"))
+    while ((c2 = str8[ptr]) === " " || c2 === "	" || !banNewLines && (c2 === "\n" || c2 === "\r" && str8[ptr + 1] === "\n"))
       ptr++;
     if (banComments || c2 !== "#")
       break;
-    ptr = skipComment(str6, ptr);
+    ptr = skipComment(str8, ptr);
   }
   return ptr;
 }
-function skipUntil(str6, ptr, sep, end, banNewLines = false) {
+function skipUntil(str8, ptr, sep, end, banNewLines = false) {
   if (!end) {
-    ptr = indexOfNewline(str6, ptr);
-    return ptr < 0 ? str6.length : ptr;
+    ptr = indexOfNewline(str8, ptr);
+    return ptr < 0 ? str8.length : ptr;
   }
-  for (let i = ptr; i < str6.length; i++) {
-    let c2 = str6[i];
+  for (let i = ptr; i < str8.length; i++) {
+    let c2 = str8[i];
     if (c2 === "#") {
-      i = indexOfNewline(str6, i);
+      i = indexOfNewline(str8, i);
     } else if (c2 === sep) {
       return i + 1;
-    } else if (c2 === end || banNewLines && (c2 === "\n" || c2 === "\r" && str6[i + 1] === "\n")) {
+    } else if (c2 === end || banNewLines && (c2 === "\n" || c2 === "\r" && str8[i + 1] === "\n")) {
       return i;
     }
   }
   throw new TomlError("cannot find end of structure", {
-    toml: str6,
+    toml: str8,
     ptr
   });
 }
-function getStringEnd(str6, seek) {
-  let first = str6[seek];
-  let target = first === str6[seek + 1] && str6[seek + 1] === str6[seek + 2] ? str6.slice(seek, seek + 3) : first;
+function getStringEnd(str8, seek) {
+  let first2 = str8[seek];
+  let target = first2 === str8[seek + 1] && str8[seek + 1] === str8[seek + 2] ? str8.slice(seek, seek + 3) : first2;
   seek += target.length - 1;
   do
-    seek = str6.indexOf(target, ++seek);
-  while (seek > -1 && first !== "'" && isEscaped(str6, seek));
+    seek = str8.indexOf(target, ++seek);
+  while (seek > -1 && first2 !== "'" && isEscaped(str8, seek));
   if (seek > -1) {
     seek += target.length;
     if (target.length > 1) {
-      if (str6[seek] === first)
+      if (str8[seek] === first2)
         seek++;
-      if (str6[seek] === first)
+      if (str8[seek] === first2)
         seek++;
     }
   }
@@ -48599,14 +48603,14 @@ var init_date = __esm({
 });
 
 // node_modules/smol-toml/dist/primitive.js
-function parseString(str6, ptr = 0, endPtr = str6.length) {
-  let isLiteral = str6[ptr] === "'";
-  let isMultiline = str6[ptr++] === str6[ptr] && str6[ptr] === str6[ptr + 1];
+function parseString(str8, ptr = 0, endPtr = str8.length) {
+  let isLiteral = str8[ptr] === "'";
+  let isMultiline = str8[ptr++] === str8[ptr] && str8[ptr] === str8[ptr + 1];
   if (isMultiline) {
     endPtr -= 2;
-    if (str6[ptr += 2] === "\r")
+    if (str8[ptr += 2] === "\r")
       ptr++;
-    if (str6[ptr] === "\n")
+    if (str8[ptr] === "\n")
       ptr++;
   }
   let tmp = 0;
@@ -48614,27 +48618,27 @@ function parseString(str6, ptr = 0, endPtr = str6.length) {
   let parsed = "";
   let sliceStart = ptr;
   while (ptr < endPtr - 1) {
-    let c2 = str6[ptr++];
-    if (c2 === "\n" || c2 === "\r" && str6[ptr] === "\n") {
+    let c2 = str8[ptr++];
+    if (c2 === "\n" || c2 === "\r" && str8[ptr] === "\n") {
       if (!isMultiline) {
         throw new TomlError("newlines are not allowed in strings", {
-          toml: str6,
+          toml: str8,
           ptr: ptr - 1
         });
       }
     } else if (c2 < " " && c2 !== "	" || c2 === "\x7F") {
       throw new TomlError("control characters are not allowed in strings", {
-        toml: str6,
+        toml: str8,
         ptr: ptr - 1
       });
     }
     if (isEscape) {
       isEscape = false;
       if (c2 === "x" || c2 === "u" || c2 === "U") {
-        let code = str6.slice(ptr, ptr += c2 === "x" ? 2 : c2 === "u" ? 4 : 8);
+        let code = str8.slice(ptr, ptr += c2 === "x" ? 2 : c2 === "u" ? 4 : 8);
         if (!ESCAPE_REGEX.test(code)) {
           throw new TomlError("invalid unicode escape", {
-            toml: str6,
+            toml: str8,
             ptr: tmp
           });
         }
@@ -48642,24 +48646,24 @@ function parseString(str6, ptr = 0, endPtr = str6.length) {
           parsed += String.fromCodePoint(parseInt(code, 16));
         } catch {
           throw new TomlError("invalid unicode escape", {
-            toml: str6,
+            toml: str8,
             ptr: tmp
           });
         }
       } else if (isMultiline && (c2 === "\n" || c2 === " " || c2 === "	" || c2 === "\r")) {
-        ptr = skipVoid(str6, ptr - 1, true);
-        if (str6[ptr] !== "\n" && str6[ptr] !== "\r") {
+        ptr = skipVoid(str8, ptr - 1, true);
+        if (str8[ptr] !== "\n" && str8[ptr] !== "\r") {
           throw new TomlError("invalid escape: only line-ending whitespace may be escaped", {
-            toml: str6,
+            toml: str8,
             ptr: tmp
           });
         }
-        ptr = skipVoid(str6, ptr);
+        ptr = skipVoid(str8, ptr);
       } else if (c2 in ESC_MAP) {
         parsed += ESC_MAP[c2];
       } else {
         throw new TomlError("unrecognized escape sequence", {
-          toml: str6,
+          toml: str8,
           ptr: tmp
         });
       }
@@ -48667,10 +48671,10 @@ function parseString(str6, ptr = 0, endPtr = str6.length) {
     } else if (!isLiteral && c2 === "\\") {
       tmp = ptr - 1;
       isEscape = true;
-      parsed += str6.slice(sliceStart, tmp);
+      parsed += str8.slice(sliceStart, tmp);
     }
   }
-  return parsed + str6.slice(sliceStart, endPtr - 1);
+  return parsed + str8.slice(sliceStart, endPtr - 1);
 }
 function parseValue(value, toml, ptr, integersAsBigInt) {
   if (value === "true")
@@ -48775,32 +48779,32 @@ var init_primitive = __esm({
 });
 
 // node_modules/smol-toml/dist/extract.js
-function sliceAndTrimEndOf(str6, startPtr, endPtr) {
-  let value = str6.slice(startPtr, endPtr);
+function sliceAndTrimEndOf(str8, startPtr, endPtr) {
+  let value = str8.slice(startPtr, endPtr);
   let commentIdx = value.indexOf("#");
   if (commentIdx > -1) {
-    skipComment(str6, commentIdx);
+    skipComment(str8, commentIdx);
     value = value.slice(0, commentIdx);
   }
   return [value.trimEnd(), commentIdx];
 }
-function extractValue(str6, ptr, end, depth, integersAsBigInt) {
+function extractValue(str8, ptr, end, depth, integersAsBigInt) {
   if (depth === 0) {
     throw new TomlError("document contains excessively nested structures. aborting.", {
-      toml: str6,
+      toml: str8,
       ptr
     });
   }
-  let c2 = str6[ptr];
+  let c2 = str8[ptr];
   if (c2 === "[" || c2 === "{") {
-    let [value, endPtr2] = c2 === "[" ? parseArray(str6, ptr, depth, integersAsBigInt) : parseInlineTable(str6, ptr, depth, integersAsBigInt);
+    let [value, endPtr2] = c2 === "[" ? parseArray(str8, ptr, depth, integersAsBigInt) : parseInlineTable(str8, ptr, depth, integersAsBigInt);
     if (end) {
-      endPtr2 = skipVoid(str6, endPtr2);
-      if (str6[endPtr2] === ",")
+      endPtr2 = skipVoid(str8, endPtr2);
+      if (str8[endPtr2] === ",")
         endPtr2++;
-      else if (str6[endPtr2] !== end) {
+      else if (str8[endPtr2] !== end) {
         throw new TomlError("expected comma or end of structure", {
-          toml: str6,
+          toml: str8,
           ptr: endPtr2
         });
       }
@@ -48809,34 +48813,34 @@ function extractValue(str6, ptr, end, depth, integersAsBigInt) {
   }
   let endPtr;
   if (c2 === '"' || c2 === "'") {
-    endPtr = getStringEnd(str6, ptr);
-    let parsed = parseString(str6, ptr, endPtr);
+    endPtr = getStringEnd(str8, ptr);
+    let parsed = parseString(str8, ptr, endPtr);
     if (end) {
-      endPtr = skipVoid(str6, endPtr);
-      if (str6[endPtr] && str6[endPtr] !== "," && str6[endPtr] !== end && str6[endPtr] !== "\n" && str6[endPtr] !== "\r") {
+      endPtr = skipVoid(str8, endPtr);
+      if (str8[endPtr] && str8[endPtr] !== "," && str8[endPtr] !== end && str8[endPtr] !== "\n" && str8[endPtr] !== "\r") {
         throw new TomlError("unexpected character encountered", {
-          toml: str6,
+          toml: str8,
           ptr: endPtr
         });
       }
-      endPtr += +(str6[endPtr] === ",");
+      endPtr += +(str8[endPtr] === ",");
     }
     return [parsed, endPtr];
   }
-  endPtr = skipUntil(str6, ptr, ",", end);
-  let slice = sliceAndTrimEndOf(str6, ptr, endPtr - +(str6[endPtr - 1] === ","));
+  endPtr = skipUntil(str8, ptr, ",", end);
+  let slice = sliceAndTrimEndOf(str8, ptr, endPtr - +(str8[endPtr - 1] === ","));
   if (!slice[0]) {
     throw new TomlError("incomplete key-value declaration: no value specified", {
-      toml: str6,
+      toml: str8,
       ptr
     });
   }
   if (end && slice[1] > -1) {
-    endPtr = skipVoid(str6, ptr + slice[1]);
-    endPtr += +(str6[endPtr] === ",");
+    endPtr = skipVoid(str8, ptr + slice[1]);
+    endPtr += +(str8[endPtr] === ",");
   }
   return [
-    parseValue(slice[0], str6, ptr, integersAsBigInt),
+    parseValue(slice[0], str8, ptr, integersAsBigInt),
     endPtr
   ];
 }
@@ -48879,64 +48883,64 @@ var init_extract = __esm({
 });
 
 // node_modules/smol-toml/dist/struct.js
-function parseKey(str6, ptr, end = "=") {
+function parseKey(str8, ptr, end = "=") {
   let dot = ptr - 1;
   let parsed = [];
-  let endPtr = str6.indexOf(end, ptr);
+  let endPtr = str8.indexOf(end, ptr);
   if (endPtr < 0) {
     throw new TomlError("incomplete key-value: cannot find end of key", {
-      toml: str6,
+      toml: str8,
       ptr
     });
   }
   do {
-    let c2 = str6[ptr = ++dot];
+    let c2 = str8[ptr = ++dot];
     if (c2 !== " " && c2 !== "	") {
       if (c2 === '"' || c2 === "'") {
-        if (c2 === str6[ptr + 1] && c2 === str6[ptr + 2]) {
+        if (c2 === str8[ptr + 1] && c2 === str8[ptr + 2]) {
           throw new TomlError("multiline strings are not allowed in keys", {
-            toml: str6,
+            toml: str8,
             ptr
           });
         }
-        let eos = getStringEnd(str6, ptr);
+        let eos = getStringEnd(str8, ptr);
         if (eos < 0) {
           throw new TomlError("unfinished string encountered", {
-            toml: str6,
+            toml: str8,
             ptr
           });
         }
-        dot = str6.indexOf(".", eos);
-        let strEnd = str6.slice(eos, dot < 0 || dot > endPtr ? endPtr : dot);
+        dot = str8.indexOf(".", eos);
+        let strEnd = str8.slice(eos, dot < 0 || dot > endPtr ? endPtr : dot);
         let newLine = indexOfNewline(strEnd);
         if (newLine > -1) {
           throw new TomlError("newlines are not allowed in keys", {
-            toml: str6,
+            toml: str8,
             ptr: ptr + dot + newLine
           });
         }
         if (strEnd.trimStart()) {
           throw new TomlError("found extra tokens after the string part", {
-            toml: str6,
+            toml: str8,
             ptr: eos
           });
         }
         if (endPtr < eos) {
-          endPtr = str6.indexOf(end, eos);
+          endPtr = str8.indexOf(end, eos);
           if (endPtr < 0) {
             throw new TomlError("incomplete key-value: cannot find end of key", {
-              toml: str6,
+              toml: str8,
               ptr
             });
           }
         }
-        parsed.push(parseString(str6, ptr, eos));
+        parsed.push(parseString(str8, ptr, eos));
       } else {
-        dot = str6.indexOf(".", ptr);
-        let part = str6.slice(ptr, dot < 0 || dot > endPtr ? endPtr : dot);
+        dot = str8.indexOf(".", ptr);
+        let part = str8.slice(ptr, dot < 0 || dot > endPtr ? endPtr : dot);
         if (!KEY_PART_RE.test(part)) {
           throw new TomlError("only letter, numbers, dashes and underscores are allowed in keys", {
-            toml: str6,
+            toml: str8,
             ptr
           });
         }
@@ -48944,33 +48948,33 @@ function parseKey(str6, ptr, end = "=") {
       }
     }
   } while (dot + 1 && dot < endPtr);
-  return [parsed, skipVoid(str6, endPtr + 1, true, true)];
+  return [parsed, skipVoid(str8, endPtr + 1, true, true)];
 }
-function parseInlineTable(str6, ptr, depth, integersAsBigInt) {
+function parseInlineTable(str8, ptr, depth, integersAsBigInt) {
   let res = {};
   let seen = /* @__PURE__ */ new Set();
   let c2;
   ptr++;
-  while ((c2 = str6[ptr++]) !== "}" && c2) {
+  while ((c2 = str8[ptr++]) !== "}" && c2) {
     if (c2 === ",") {
       throw new TomlError("expected value, found comma", {
-        toml: str6,
+        toml: str8,
         ptr: ptr - 1
       });
     } else if (c2 === "#")
-      ptr = skipComment(str6, ptr);
+      ptr = skipComment(str8, ptr);
     else if (c2 !== " " && c2 !== "	" && c2 !== "\n" && c2 !== "\r") {
       let k2;
       let t = res;
       let hasOwn = false;
-      let [key2, keyEndPtr] = parseKey(str6, ptr - 1);
+      let [key2, keyEndPtr] = parseKey(str8, ptr - 1);
       for (let i = 0; i < key2.length; i++) {
         if (i)
           t = hasOwn ? t[k2] : t[k2] = {};
         k2 = key2[i];
         if ((hasOwn = Object.hasOwn(t, k2)) && (typeof t[k2] !== "object" || seen.has(t[k2]))) {
           throw new TomlError("trying to redefine an already defined value", {
-            toml: str6,
+            toml: str8,
             ptr
           });
         }
@@ -48980,11 +48984,11 @@ function parseInlineTable(str6, ptr, depth, integersAsBigInt) {
       }
       if (hasOwn) {
         throw new TomlError("trying to redefine an already defined value", {
-          toml: str6,
+          toml: str8,
           ptr
         });
       }
-      let [value, valueEndPtr] = extractValue(str6, keyEndPtr, "}", depth - 1, integersAsBigInt);
+      let [value, valueEndPtr] = extractValue(str8, keyEndPtr, "}", depth - 1, integersAsBigInt);
       seen.add(value);
       t[k2] = value;
       ptr = valueEndPtr;
@@ -48992,33 +48996,33 @@ function parseInlineTable(str6, ptr, depth, integersAsBigInt) {
   }
   if (!c2) {
     throw new TomlError("unfinished table encountered", {
-      toml: str6,
+      toml: str8,
       ptr
     });
   }
   return [res, ptr];
 }
-function parseArray(str6, ptr, depth, integersAsBigInt) {
+function parseArray(str8, ptr, depth, integersAsBigInt) {
   let res = [];
   let c2;
   ptr++;
-  while ((c2 = str6[ptr++]) !== "]" && c2) {
+  while ((c2 = str8[ptr++]) !== "]" && c2) {
     if (c2 === ",") {
       throw new TomlError("expected value, found comma", {
-        toml: str6,
+        toml: str8,
         ptr: ptr - 1
       });
     } else if (c2 === "#")
-      ptr = skipComment(str6, ptr);
+      ptr = skipComment(str8, ptr);
     else if (c2 !== " " && c2 !== "	" && c2 !== "\n" && c2 !== "\r") {
-      let e2 = extractValue(str6, ptr - 1, "]", depth - 1, integersAsBigInt);
+      let e2 = extractValue(str8, ptr - 1, "]", depth - 1, integersAsBigInt);
       res.push(e2[0]);
       ptr = e2[1];
     }
   }
   if (!c2) {
     throw new TomlError("unfinished array encountered", {
-      toml: str6,
+      toml: str8,
       ptr
     });
   }
@@ -49361,10 +49365,10 @@ function stringify(obj, { maxDepth = 1e3, numbersAsFloat = false } = {}) {
   if (extendedTypeOf(obj) !== "object") {
     throw new TypeError("stringify can only be called with an object");
   }
-  let str6 = stringifyTable(0, obj, "", maxDepth, numbersAsFloat);
-  if (str6[str6.length - 1] !== "\n")
-    return str6 + "\n";
-  return str6;
+  let str8 = stringifyTable(0, obj, "", maxDepth, numbersAsFloat);
+  if (str8[str8.length - 1] !== "\n")
+    return str8 + "\n";
+  return str8;
 }
 var BARE_KEY;
 var init_stringify = __esm({
@@ -49655,8 +49659,11 @@ var init_llm_models = __esm({
       // ~80 output tokens each, so its budget fits a full batch with headroom.
       s("topic-disambiguator", "research", "judgment", "low", 4e3, 1200, 2500, true, true),
       s("source-evaluator", "research", "judgment", "low", 24e3, 12e3, 37e3, true, true),
-      s("claim-support", "verify", "judgment", "low", 2e3, 350, 1200, true, true),
-      s("orphan-label", "verify", "judgment", "low", 1e3, 120, 700, true, true)
+      // Phase 20 (D-20-28, D-20-29): claim-support reads the source text — the
+      // abstract (<= 4000 chars) plus a full-text passage (<= 2400) — and
+      // orphan-label audits one paragraph (<= 4000 chars) and lists its claims.
+      s("claim-support", "verify", "judgment", "low", 2e3, 350, 2200, true, true),
+      s("orphan-label", "verify", "judgment", "low", 2e3, 500, 1800, true, true)
     ];
     SLUGS = Object.freeze(
       Object.fromEntries(SLUG_LIST.map((x3) => [x3.slug, x3]))
@@ -49839,7 +49846,7 @@ var init_tutorial = __esm({
           const claim = oneLine(asString(c2?.claim));
           if (key2 && claim) claimByKey.set(key2, claim);
         }
-        const lines = [];
+        const lines2 = [];
         for (const s2 of sources2) {
           const citekey = asString(s2?.citekey);
           if (!citekey) continue;
@@ -49848,18 +49855,18 @@ var init_tutorial = __esm({
           const year = typeof s2?.year === "number" ? s2.year : void 0;
           const titleSuffix = title ? ` (${title}${year ? `, ${year}` : ""})` : year ? ` (${year})` : "";
           if (claim) {
-            lines.push(`- **${citekey}** supports ${claim}${titleSuffix}`);
+            lines2.push(`- **${citekey}** supports ${claim}${titleSuffix}`);
           } else {
-            lines.push(`- **${citekey}** was selected as a supporting source${titleSuffix}`);
+            lines2.push(`- **${citekey}** was selected as a supporting source${titleSuffix}`);
           }
         }
-        if (lines.length === 0) return;
+        if (lines2.length === 0) return;
         const block = [
           "## Research Provenance \u2014 Why Each Source Was Selected",
           "",
           "Before drafting, each curated source is mapped to the specific claim it supports.",
           "",
-          ...lines,
+          ...lines2,
           ""
         ].join("\n");
         this.#enqueueRender("research.done", block);
@@ -49879,7 +49886,7 @@ var init_tutorial = __esm({
         const assigned = asArray(rec.assignedSources).map((c2) => asString(c2)).filter((c2) => c2.length > 0);
         if (n2 === void 0 && slug === "" && assigned.length === 0) return;
         const header = `## Section ${n2 ?? ""}${slug ? ` \u2014 ${slug}` : ""}: Source Provenance`;
-        const lines = assigned.length > 0 ? assigned.map(
+        const lines2 = assigned.length > 0 ? assigned.map(
           (citekey) => `- Why **${citekey}** was assigned here: it supplies evidence this section relies on.`
         ) : ["- No sources were assigned to this section."];
         const block = [
@@ -49887,7 +49894,7 @@ var init_tutorial = __esm({
           "",
           "These sources were assigned to this section during planning:",
           "",
-          ...lines,
+          ...lines2,
           ""
         ].join("\n");
         this.#enqueueRender(`section.written:${n2 ?? slug}`, block);
@@ -49904,8 +49911,8 @@ var init_tutorial = __esm({
           line = "";
         }
         if (!line) return;
-        const blockKey = key2 === "section.verified" ? `section.verified:${typeof asRecord(payload).n === "number" ? asRecord(payload).n : ""}` : key2;
-        this.#enqueueRender(blockKey, [header, "", line, ""].join("\n"));
+        const blockKey2 = key2 === "section.verified" ? `section.verified:${typeof asRecord(payload).n === "number" ? asRecord(payload).n : ""}` : key2;
+        this.#enqueueRender(blockKey2, [header, "", line, ""].join("\n"));
       }
       /**
        * Store/overwrite a block by key, then enqueue a FULL-document rewrite onto
@@ -50036,7 +50043,7 @@ function citationStyleKey(name) {
 function citationStyleAliases() {
   return Object.keys(CITATION_STYLE_KEYS).sort((a3, b3) => b3.length - a3.length || a3.localeCompare(b3));
 }
-var CURRENT_CONFIG_VERSION, CITATION_STYLE_NAMES2, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HumanizerSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
+var CURRENT_CONFIG_VERSION, DEFAULT_QUOTE_MIN_WORDS, CITATION_STYLE_NAMES2, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HumanizerSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
 var init_config = __esm({
   "bin/lib/schemas/config.ts"() {
     "use strict";
@@ -50044,7 +50051,8 @@ var init_config = __esm({
     init_tutorial();
     init_runtime_config();
     init_lookup_table();
-    CURRENT_CONFIG_VERSION = 2;
+    CURRENT_CONFIG_VERSION = 3;
+    DEFAULT_QUOTE_MIN_WORDS = 5;
     CITATION_STYLE_NAMES2 = [
       "APA",
       "MLA",
@@ -50129,6 +50137,11 @@ var init_config = __esm({
       // PDFs nearest each claim to the configured model provider; off by default
       // (PRD §9: a bring-your-own PDF's contents stay local). Phase 19 review round 2.
       send_byo_passages: external_exports.boolean().optional(),
+      // Pass 3 checks every direct quote of at least this many words (VRFY-18):
+      // 1..DEFAULT_QUOTE_MIN_WORDS — a paper may only ask for a stricter floor.
+      quote_min_words: external_exports.number().int().min(1, { message: `quote_min_words must be between 1 and ${DEFAULT_QUOTE_MIN_WORDS}` }).max(DEFAULT_QUOTE_MIN_WORDS, {
+        message: `quote_min_words must be between 1 and ${DEFAULT_QUOTE_MIN_WORDS}: a higher floor would leave longer direct quotes unchecked by Pass 3 (PRD \xA714) \u2014 lower it to check shorter quotes too`
+      }).optional(),
       flag_threshold: external_exports.enum(["low", "medium", "high"]).optional(),
       recheck_after_days: NonNegInt.optional(),
       plagiarism_check: external_exports.boolean().optional(),
@@ -50249,6 +50262,22 @@ var init_v1_to_v22 = __esm({
   }
 });
 
+// bin/lib/migrations/config/v2_to_v3.ts
+function migrate5(input2) {
+  const out2 = { schema_version: 3 };
+  for (const [k2, v2] of Object.entries(input2)) {
+    if (k2 === "schema_version") continue;
+    out2[k2] = v2;
+  }
+  return out2;
+}
+var init_v2_to_v32 = __esm({
+  "bin/lib/migrations/config/v2_to_v3.ts"() {
+    "use strict";
+    __name(migrate5, "migrate");
+  }
+});
+
 // bin/lib/config-text.ts
 function isPlainObject4(v2) {
   return typeof v2 === "object" && v2 !== null && !Array.isArray(v2) && !(v2 instanceof Date);
@@ -50307,12 +50336,12 @@ function keyPattern(key2) {
   const esc2 = key2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`^\\s*(?:${esc2}|"${esc2}"|'${esc2}')\\s*=`);
 }
-function regions(lines) {
+function regions(lines2) {
   const tables = /* @__PURE__ */ new Map();
-  let topEnd = lines.length;
+  let topEnd = lines2.length;
   let current = null;
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i] ?? "";
+  for (let i = 0; i < lines2.length; i += 1) {
+    const line = lines2[i] ?? "";
     if (!ANY_HEADER_RE.test(line)) continue;
     const m3 = HEADER_RE.exec(line);
     if (current === null) topEnd = Math.min(topEnd, i);
@@ -50322,19 +50351,19 @@ function regions(lines) {
     }
     if (!m3) {
       current = `\0${i}`;
-      tables.set(current, { start: i + 1, end: lines.length });
+      tables.set(current, { start: i + 1, end: lines2.length });
       continue;
     }
     const name = m3[1];
     if (tables.has(name)) return null;
     current = name;
-    tables.set(name, { start: i + 1, end: lines.length });
+    tables.set(name, { start: i + 1, end: lines2.length });
   }
   return { top: { start: 0, end: topEnd }, tables };
 }
-function findKeyLine(lines, region, key2) {
+function findKeyLine(lines2, region, key2) {
   const re = keyPattern(key2);
-  for (let i = region.start; i < region.end; i += 1) if (re.test(lines[i] ?? "")) return i;
+  for (let i = region.start; i < region.end; i += 1) if (re.test(lines2[i] ?? "")) return i;
   return -1;
 }
 function trailingComment(line, key2, oldValue, io) {
@@ -50354,63 +50383,63 @@ function trailingComment(line, key2, oldValue, io) {
   void key2;
   return "";
 }
-function insertionPoint(lines, region) {
+function insertionPoint(lines2, region) {
   let at = region.start;
   for (let i = region.start; i < region.end; i += 1) {
-    const t = (lines[i] ?? "").trim();
+    const t = (lines2[i] ?? "").trim();
     if (t.length > 0 && !t.startsWith("#")) at = i + 1;
   }
   return at;
 }
-function topInsertionPoint(lines, region, leading) {
+function topInsertionPoint(lines2, region, leading) {
   if (leading) {
     for (let i = region.start; i < region.end; i += 1) {
-      const t = (lines[i] ?? "").trim();
+      const t = (lines2[i] ?? "").trim();
       if (t.length > 0 && !t.startsWith("#")) return i;
     }
     let at = region.start;
-    for (let i = region.start; i < region.end; i += 1) if ((lines[i] ?? "").trim().startsWith("#")) at = i + 1;
+    for (let i = region.start; i < region.end; i += 1) if ((lines2[i] ?? "").trim().startsWith("#")) at = i + 1;
     return at;
   }
-  return insertionPoint(lines, region);
+  return insertionPoint(lines2, region);
 }
 function editTomlText(text4, before, after, io) {
   const ops = diff(before, after);
   if (ops === null) return null;
   if (ops.length === 0) return text4;
   const eol = text4.includes("\r\n") ? "\r\n" : "\n";
-  const lines = text4.split(/\r?\n/);
-  const hadFinalNewline = lines.length > 0 && lines[lines.length - 1] === "";
-  if (hadFinalNewline) lines.pop();
+  const lines2 = text4.split(/\r?\n/);
+  const hadFinalNewline = lines2.length > 0 && lines2[lines2.length - 1] === "";
+  if (hadFinalNewline) lines2.pop();
   for (const op of ops) {
-    const reg = regions(lines);
+    const reg = regions(lines2);
     if (reg === null) return null;
     const region = op.table === null ? reg.top : reg.tables.get(op.table);
     if (op.kind === "delete") {
       if (!region) return null;
-      const at2 = findKeyLine(lines, region, op.key);
+      const at2 = findKeyLine(lines2, region, op.key);
       if (at2 < 0) return null;
-      lines.splice(at2, 1);
+      lines2.splice(at2, 1);
       continue;
     }
     const rendered = io.render(op.key, op.value);
     if (rendered.includes("\n")) return null;
     if (!region) {
-      if (lines.length > 0 && (lines[lines.length - 1] ?? "").trim() !== "") lines.push("");
-      lines.push(`[${op.table}]`, rendered);
+      if (lines2.length > 0 && (lines2[lines2.length - 1] ?? "").trim() !== "") lines2.push("");
+      lines2.push(`[${op.table}]`, rendered);
       continue;
     }
-    const at = findKeyLine(lines, region, op.key);
+    const at = findKeyLine(lines2, region, op.key);
     if (at >= 0) {
       const oldValue = op.table === null ? before[op.key] : before[op.table]?.[op.key];
-      const indent = /^\s*/.exec(lines[at] ?? "")?.[0] ?? "";
-      lines[at] = `${indent}${rendered}${trailingComment(lines[at] ?? "", op.key, oldValue, io)}`;
+      const indent = /^\s*/.exec(lines2[at] ?? "")?.[0] ?? "";
+      lines2[at] = `${indent}${rendered}${trailingComment(lines2[at] ?? "", op.key, oldValue, io)}`;
       continue;
     }
-    const insertAt = op.table === null ? topInsertionPoint(lines, region, op.key === io.leadingKey) : insertionPoint(lines, region);
-    lines.splice(insertAt, 0, rendered);
+    const insertAt = op.table === null ? topInsertionPoint(lines2, region, op.key === io.leadingKey) : insertionPoint(lines2, region);
+    lines2.splice(insertAt, 0, rendered);
   }
-  const out2 = lines.join(eol) + (hadFinalNewline || lines.length > 0 ? eol : "");
+  const out2 = lines2.join(eol) + (hadFinalNewline || lines2.length > 0 ? eol : "");
   try {
     if (!tomlValueEqual(io.reparse(out2), after)) return null;
   } catch {
@@ -50867,6 +50896,7 @@ var init_config2 = __esm({
     init_tutorial();
     init_v0_to_v1();
     init_v1_to_v22();
+    init_v2_to_v32();
     init_config_text();
     init_disciplines();
     init_config();
@@ -50881,7 +50911,8 @@ var init_config2 = __esm({
     };
     MIGRATIONS = Object.freeze({
       0: migrate3,
-      1: migrate4
+      1: migrate4,
+      2: migrate5
     });
     VERIFY_QUOTES_REFUSAL = "verify_quotes is not configurable: Pass 3 quote verification is a blocking pass (PRD \xA714) \u2014 turning it off would let a quote-NOT_FOUND citation reach the compiled paper. Remove it from [verification].";
     __name(paperConfigPath, "paperConfigPath");
@@ -50910,6 +50941,7 @@ var init_config2 = __esm({
       "project.pii_redaction": false,
       "sources.require_doi": true,
       "verification.fetch_full_text": true,
+      "verification.quote_min_words": DEFAULT_QUOTE_MIN_WORDS,
       "verification.plagiarism_check": true,
       "humanizer.enabled": true,
       "humanizer.honesty_score": true,
@@ -50940,14 +50972,14 @@ var init_config2 = __esm({
 });
 
 // bin/lib/migrations/runtime-config/v1_to_v2.ts
-function migrate5(input2) {
+function migrate6(input2) {
   const src = typeof input2 === "object" && input2 !== null ? input2 : {};
   const out2 = { $schemaVersion: 2 };
   const providers = src["providers"];
   if (typeof providers === "object" && providers !== null && !Array.isArray(providers)) {
-    const first = Object.values(providers)[0];
-    if (typeof first === "object" && first !== null) {
-      const entry = first;
+    const first2 = Object.values(providers)[0];
+    if (typeof first2 === "object" && first2 !== null) {
+      const entry = first2;
       const name = entry["name"];
       if (typeof name === "string") {
         out2["provider"] = name;
@@ -50968,7 +51000,7 @@ var init_v1_to_v23 = __esm({
   "bin/lib/migrations/runtime-config/v1_to_v2.ts"() {
     "use strict";
     init_llm_models();
-    __name(migrate5, "migrate");
+    __name(migrate6, "migrate");
   }
 });
 
@@ -51007,7 +51039,7 @@ async function readGlobal(file) {
         schema: Schema2,
         schemaName: "runtime-config",
         currentVersion: CURRENT_RUNTIME_CONFIG_VERSION,
-        migrations: { 1: migrate5 },
+        migrations: { 1: migrate6 },
         writeBack: true
       })
     );
@@ -51660,9 +51692,9 @@ function loadWarnString() {
     warnString = "pensmith: PENSMITH_CONTACT_EMAIL is not set.";
     return warnString;
   }
-  const lines = md.split(/\r?\n/);
+  const lines2 = md.split(/\r?\n/);
   let inSection = false;
-  for (const line of lines) {
+  for (const line of lines2) {
     if (line.startsWith("## PENSMITH_CONTACT_EMAIL not set")) {
       inSection = true;
       continue;
@@ -51700,6 +51732,9 @@ function scrubContactEmail(text4) {
   let out2 = text4;
   for (const form of /* @__PURE__ */ new Set([email2, encodeURIComponent(email2)])) out2 = out2.split(form).join("REDACTED_CONTACT_EMAIL");
   return out2;
+}
+function sourceTtlMs(source) {
+  return TTL_MS_BY_SOURCE[source];
 }
 function minHonouredRate() {
   return 1e3 / RETRY_AFTER_CAP_MS;
@@ -51914,7 +51949,7 @@ function filterHeadersForCache(headers) {
 async function writeCache(key2, response) {
   const file = path9.join(pensmithHttpCacheDir(), `${key2}.json`);
   const envelope = {
-    savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    savedAt: response.answeredAt ?? (/* @__PURE__ */ new Date()).toISOString(),
     response: {
       status: response.status,
       // CR-03: ONLY allowlisted headers go to disk. Set-Cookie / Authorization /
@@ -51960,9 +51995,9 @@ function installedMockAgent() {
 function pinnedDispatcher(addrs, ca) {
   const lookup = /* @__PURE__ */ __name((_host, options, cb) => {
     const all = typeof options === "object" && options !== null && options.all === true;
-    const first = addrs[0];
+    const first2 = addrs[0];
     if (all) cb(null, addrs.map((a3) => ({ address: a3.address, family: a3.family })));
-    else cb(null, first.address, first.family);
+    else cb(null, first2.address, first2.family);
   }, "lookup");
   return new import_undici.Agent({
     connect: { lookup, ...ca !== void 0 ? { ca } : {} },
@@ -51997,19 +52032,19 @@ async function readCapped(body, maxBytes, requestLabel, declaredLength, prefixBy
 }
 function mirrorRequest(method, url, body, llm) {
   if (!isMirrorPromptsEnabled()) return;
-  const lines = [`[show-prompts] ${method} ${redactUrl(url)}`];
+  const lines2 = [`[show-prompts] ${method} ${redactUrl(url)}`];
   if (body !== void 0) {
     const text4 = Buffer.isBuffer(body) ? body.toString("utf8") : body;
     if (llm) {
-      lines.push(`[show-prompts] body: ${text4}`);
+      lines2.push(`[show-prompts] body: ${text4}`);
     } else if (method === "POST" && Buffer.isBuffer(body)) {
-      lines.push(`[show-prompts] body: ${body.length} bytes (binary)`);
+      lines2.push(`[show-prompts] body: ${body.length} bytes (binary)`);
     } else if (method === "POST") {
       const n2 = Buffer.byteLength(text4, "utf8");
-      lines.push(`[show-prompts] body: ${n2} bytes: ${text4.slice(0, MIRROR_PREVIEW_CHARS)}`);
+      lines2.push(`[show-prompts] body: ${n2} bytes: ${text4.slice(0, MIRROR_PREVIEW_CHARS)}`);
     }
   }
-  process.stderr.write(lines.join("\n") + "\n");
+  process.stderr.write(lines2.join("\n") + "\n");
 }
 function httpLogger() {
   const cwd = projectRoot();
@@ -52279,7 +52314,7 @@ async function fetch2(url, opts = {}) {
     }
   }
   const cacheAllowed = !mode.sourcesOffline && method === "GET" && !opts.noCache && llm === void 0 && opts.prefixBytes === void 0;
-  if (cacheAllowed) {
+  if (cacheAllowed && opts.refresh !== true) {
     const cached2 = await readCache(key2, ttlMs);
     if (cached2) {
       recordHttp({ ...base, status: cached2.status, cache: "hit", bytes: Buffer.byteLength(cached2.body, "utf8"), ms: Date.now() - started });
@@ -52472,6 +52507,7 @@ async function fetch2(url, opts = {}) {
     throw err;
   }
   RESPONSE_CHAINS.set(response, hops);
+  response.answeredAt = (/* @__PURE__ */ new Date()).toISOString();
   recordHttp({ ...base, url: response.finalUrl ?? url, status: response.status, cache: "miss", bytes: response.bodyBytes?.length ?? 0, ms: Date.now() - started });
   const invalid = llm === void 0 ? opts.validate?.(response) ?? recordedErrorBody(response.status, response.body) : null;
   if (llm === void 0 && invalid === null && isRecordingEnabled()) {
@@ -52483,7 +52519,7 @@ async function fetch2(url, opts = {}) {
   }
   return response;
 }
-var import_undici, OfflineEgressError, ResponseTooLargeError, RateLimitExhaustedError, CircuitOpenError, RedirectError, MAX_JSON_RESPONSE_BYTES, MAX_LLM_RESPONSE_BYTES, SSRF_ALLOWED_SCHEMES, defaultResolver, SsrfBlockedError, LOCAL_SERVICE_HOW, warnFile, warnString, warnedNoEmail, POLITE_POOL_SOURCES, ONE_DAY_MS, ONE_HOUR_MS, TTL_MS_BY_SOURCE, NEGATIVE_RESPONSE_TTL_MS, RPS_BY_SOURCE, TokenBucket, HOST_RPS_FLOOR, RATE_HEADER_HOSTS, BREAKER_THRESHOLD, MIN_THROTTLE_HOLD_MS, BREAKER_HALF_OPEN_MS, HOSTS, sleepMs, CACHE_HEADER_ALLOWLIST, DEFAULT_TIMEOUT_MS, RETRYABLE_STATUSES, RETRY_AFTER_CAP_MS, RETRYABLE_ERR_CODES, SECRET_QUERY_PARAMS, CONTACT_QUERY_PARAMS, testSeams, mockAgentResolver, MIRROR_PREVIEW_CHARS, httpLoggers, RECORD_HEADER_ALLOWLIST, RESPONSE_CHAINS, recordedFixtures, TEXT_CONTENT_TYPE, REDIRECT_STATUSES, MAX_REDIRECTS;
+var import_undici, OfflineEgressError, ResponseTooLargeError, RateLimitExhaustedError, CircuitOpenError, RedirectError, MAX_JSON_RESPONSE_BYTES, MAX_LLM_RESPONSE_BYTES, SSRF_ALLOWED_SCHEMES, defaultResolver, SsrfBlockedError, LOCAL_SERVICE_HOW, warnFile, warnString, warnedNoEmail, POLITE_POOL_SOURCES, ONE_DAY_MS, ONE_HOUR_MS, TTL_MS_BY_SOURCE, NEGATIVE_RESPONSE_TTL_MS, RPS_BY_SOURCE, GRANT_MARGIN, TokenBucket, HOST_RPS_FLOOR, RATE_HEADER_HOSTS, BREAKER_THRESHOLD, MIN_THROTTLE_HOLD_MS, BREAKER_HALF_OPEN_MS, HOSTS, sleepMs, CACHE_HEADER_ALLOWLIST, DEFAULT_TIMEOUT_MS, RETRYABLE_STATUSES, RETRY_AFTER_CAP_MS, RETRYABLE_ERR_CODES, SECRET_QUERY_PARAMS, CONTACT_QUERY_PARAMS, testSeams, mockAgentResolver, MIRROR_PREVIEW_CHARS, httpLoggers, RECORD_HEADER_ALLOWLIST, RESPONSE_CHAINS, recordedFixtures, TEXT_CONTENT_TYPE, REDIRECT_STATUSES, MAX_REDIRECTS;
 var init_http = __esm({
   "bin/lib/http.ts"() {
     "use strict";
@@ -52637,10 +52673,14 @@ var init_http = __esm({
     ONE_HOUR_MS = 36e5;
     TTL_MS_BY_SOURCE = {
       crossref: 7 * ONE_DAY_MS,
+      // Phase 20 (VRFY-11): a DataCite record changes as rarely as a Crossref one.
+      datacite: 7 * ONE_DAY_MS,
       openalex: 7 * ONE_DAY_MS,
       arxiv: 7 * ONE_DAY_MS,
       pubmed: 7 * ONE_DAY_MS,
       unpaywall: 1 * ONE_DAY_MS,
+      // Phase 20 (VRFY-19): an open-access article's full text changes as rarely as its metadata.
+      europepmc: 7 * ONE_DAY_MS,
       semanticscholar: 7 * ONE_DAY_MS,
       "retraction-watch": 1 * ONE_DAY_MS,
       // Phase 19 seam S-B: book metadata changes rarely; a Zotero library changes
@@ -52650,14 +52690,20 @@ var init_http = __esm({
       generic: 1 * ONE_DAY_MS
     };
     NEGATIVE_RESPONSE_TTL_MS = ONE_HOUR_MS;
+    __name(sourceTtlMs, "sourceTtlMs");
     RPS_BY_SOURCE = {
       // Crossref's polite pool answers list queries with `x-rate-limit-limit: 3`
       // (`polite-array`; single-work lookups allow 10, the public pool 1) — seed at
       // 3/s and let its headers lower it (never raise it).
       crossref: 3,
+      // DataCite REST API: 3,000 requests per 5 minutes per IP (10/s documented);
+      // pensmith asks at most 5/s (docs/SOURCES.md, Phase 20 VRFY-11).
+      datacite: 5,
       // OpenAlex: 10/s within the (keyed) daily budget.
       openalex: 10,
       unpaywall: 10,
+      // Europe PMC's REST API asks for moderate use; pensmith asks at most 5/s (Phase 20, VRFY-19).
+      europepmc: 5,
       // arXiv API terms: no more than one request every three seconds.
       arxiv: 1 / 3,
       // NCBI E-utilities without an API key: 3 requests per second.
@@ -52672,6 +52718,7 @@ var init_http = __esm({
       zotero: 5,
       generic: 5
     };
+    GRANT_MARGIN = 1.05;
     TokenBucket = class {
       constructor(capacity, refillPerSec) {
         this.capacity = capacity;
@@ -52720,7 +52767,7 @@ var init_http = __esm({
         const now = Date.now();
         const elapsedSec = (now - this.lastRefillMs) / 1e3;
         if (elapsedSec <= 0) return;
-        this.tokens = Math.min(this.capacity, this.tokens + elapsedSec * this.refillPerSec);
+        this.tokens = Math.min(this.capacity, this.tokens + elapsedSec * this.refillPerSec / GRANT_MARGIN);
         this.lastRefillMs = now;
       }
       /**
@@ -52757,7 +52804,7 @@ var init_http = __esm({
       _scheduleGrant() {
         this.timerPending = true;
         const deficit = Math.max(0, 1 - this.tokens);
-        const waitMs = Math.max(1, Math.ceil(deficit / this.refillPerSec * 1e3));
+        const waitMs = Math.max(1, Math.ceil(deficit * GRANT_MARGIN / this.refillPerSec * 1e3));
         setTimeout(() => {
           this.timerPending = false;
           this.refill();
@@ -52774,6 +52821,7 @@ var init_http = __esm({
       "export.arxiv.org": 1 / 3,
       "arxiv.org": 1 / 3,
       "api.crossref.org": 3,
+      "api.datacite.org": 5,
       "eutils.ncbi.nlm.nih.gov": 3,
       "api.semanticscholar.org": 1,
       "openlibrary.org": 1,
@@ -52781,6 +52829,7 @@ var init_http = __esm({
     });
     RATE_HEADER_HOSTS = /* @__PURE__ */ new Set([
       "api.crossref.org",
+      "api.datacite.org",
       "api.openalex.org",
       "export.arxiv.org",
       "eutils.ncbi.nlm.nih.gov",
@@ -52925,8 +52974,8 @@ function canonicalOldClass(cls) {
   if (dot < 0) return archive;
   const subject = cls.slice(dot + 1);
   if (ARXIV_TWO_LETTER_SUBJECTS.has(archive) && /^[A-Za-z]{2}$/.test(subject)) return `${archive}.${subject.toUpperCase()}`;
-  const words3 = ARXIV_WORD_SUBJECTS[archive];
-  if (words3?.has(subject.toLowerCase())) return `${archive}.${subject.toLowerCase()}`;
+  const words4 = ARXIV_WORD_SUBJECTS[archive];
+  if (words4?.has(subject.toLowerCase())) return `${archive}.${subject.toLowerCase()}`;
   return null;
 }
 function normalizeArxiv(input2) {
@@ -52954,6 +53003,83 @@ function normalizePmcid(input2) {
   if (typeof input2 !== "string") return null;
   const m3 = /^pmc(\d+)$/i.exec(input2.trim());
   return m3 && m3[1] ? `PMC${m3[1]}` : null;
+}
+function bareIdentifierKey(b3) {
+  return b3.kind === "doi" ? `doi:${b3.id}` : b3.kind === "arxiv" ? `arXiv:${b3.id}` : `PMID:${b3.id}`;
+}
+function provableCodeSpans(md) {
+  const spans = [];
+  const lineStarts = [0];
+  for (let i = 0; i < md.length; i++) if (md[i] === "\n") lineStarts.push(i + 1);
+  const lineText = /* @__PURE__ */ __name((k2) => md.slice(lineStarts[k2], (lineStarts[k2 + 1] ?? md.length + 1) - 1).replace(/\r$/, ""), "lineText");
+  for (let k2 = 0; k2 < lineStarts.length; k2++) {
+    const open4 = /^ {0,3}(`{3,}|~{3,})/.exec(lineText(k2));
+    if (!open4) continue;
+    const fence = open4[1];
+    let close = -1;
+    for (let j2 = k2 + 1; j2 < lineStarts.length; j2++) {
+      const m3 = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(lineText(j2));
+      if (m3 && m3[1][0] === fence[0] && m3[1].length >= fence.length) {
+        close = j2;
+        break;
+      }
+    }
+    if (close < 0) continue;
+    spans.push([lineStarts[k2], (lineStarts[close + 1] ?? md.length + 1) - 1]);
+    k2 = close;
+  }
+  const inFence = /* @__PURE__ */ __name((i) => spans.some(([a3, b3]) => i >= a3 && i < b3), "inFence");
+  const tick = /`+/g;
+  for (let m3 = tick.exec(md); m3 !== null; m3 = tick.exec(md)) {
+    if (inFence(m3.index)) continue;
+    const run = m3[0];
+    const rest = md.slice(m3.index + run.length);
+    const paragraphEnd2 = rest.search(/\r?\n[ \t]*\r?\n/);
+    const scope = paragraphEnd2 >= 0 ? rest.slice(0, paragraphEnd2) : rest;
+    const closeRe = new RegExp(`(?<!\`)${run}(?!\`)`, "g");
+    const close = closeRe.exec(scope);
+    if (!close) continue;
+    const end = m3.index + run.length + close.index + run.length;
+    spans.push([m3.index, end]);
+    tick.lastIndex = end;
+  }
+  return spans;
+}
+function canonicalBareId(kind, text4) {
+  if (kind === "doi") return normalizeDoi(text4);
+  if (kind === "pmid") return normalizePmid(text4.replace(/^.*\/(?=\d)/, ""));
+  const url = /arxiv\.org\/(?:abs|pdf)\/(.+?)(?:\.pdf)?$/i.exec(text4);
+  const n2 = normalizeArxiv(url?.[1] ? `arXiv:${url[1]}` : text4);
+  return n2 === null ? null : n2.replace(/^arxiv:/, "").replace(/v\d+$/, "");
+}
+function findBareIdentifiers(md) {
+  const code = md.includes("`") || md.includes("~") ? provableCodeSpans(md) : [];
+  const inCode = /* @__PURE__ */ __name((i) => code.some(([a3, b3]) => i >= a3 && i < b3), "inCode");
+  const claimed = [];
+  const overlaps = /* @__PURE__ */ __name((a3, b3) => claimed.some(([x3, y3]) => a3 < y3 && x3 < b3), "overlaps");
+  const found = [];
+  for (const { kind, re } of BARE_ID_PATTERNS) {
+    re.lastIndex = 0;
+    for (let m3 = re.exec(md); m3 !== null; m3 = re.exec(md)) {
+      const start = m3.index;
+      const end = start + m3[0].length;
+      if (inCode(start) || overlaps(start, end)) continue;
+      const id = canonicalBareId(kind, m3[0]);
+      if (id === null) continue;
+      claimed.push([start, end]);
+      let line = 1;
+      for (let i = 0; i < start; i++) if (md.charCodeAt(i) === 10) line++;
+      found.push({ kind, id, text: m3[0], start, end, line });
+    }
+  }
+  found.sort((a3, b3) => a3.start - b3.start);
+  const seen = /* @__PURE__ */ new Set();
+  return found.filter((b3) => {
+    const key2 = bareIdentifierKey(b3);
+    if (seen.has(key2)) return false;
+    seen.add(key2);
+    return true;
+  });
 }
 function isbn13CheckDigit(first12) {
   let sum = 0;
@@ -52991,7 +53117,7 @@ async function verifyDoi(doi) {
   }
   return { valid: true, canonical, metadata };
 }
-var DOI_URL_PREFIXES, DOI_LABEL_PREFIX, TRAILING_PUNCT, DOI_VALID, ARXIV_NEW, ARXIV_OLD_ARCHIVES, ARXIV_TWO_LETTER_SUBJECTS, ARXIV_WORD_SUBJECTS, DRY_RUN_DOI_PREFIX, DRY_RUN_DOI_RE, DRY_RUN_ARXIV_RE, DRY_RUN_ISBN_PREFIX;
+var DOI_URL_PREFIXES, DOI_LABEL_PREFIX, TRAILING_PUNCT, DOI_VALID, ARXIV_NEW, ARXIV_OLD_ARCHIVES, ARXIV_TWO_LETTER_SUBJECTS, ARXIV_WORD_SUBJECTS, DOI_BODY, ARXIV_BODY, BARE_ID_PATTERNS, DRY_RUN_DOI_PREFIX, DRY_RUN_DOI_RE, DRY_RUN_ARXIV_RE, DRY_RUN_ISBN_PREFIX;
 var init_doi = __esm({
   "bin/lib/doi.ts"() {
     "use strict";
@@ -53085,6 +53211,23 @@ var init_doi = __esm({
     __name(normalizeArxiv, "normalizeArxiv");
     __name(normalizePmid, "normalizePmid");
     __name(normalizePmcid, "normalizePmcid");
+    __name(bareIdentifierKey, "bareIdentifierKey");
+    DOI_BODY = String.raw`10\.\d{4,9}\/[^\s"'<>{}|\\^\x60\]]+`;
+    ARXIV_BODY = String.raw`(?:\d{4}\.\d{4,5}|[a-z][a-z-]*(?:\.[A-Za-z-]{2,})?\/\d{7})(?:v\d+)?`;
+    BARE_ID_PATTERNS = [
+      // doi.org links (any scheme / host spelling doi.ts accepts) and `doi:` labels first:
+      // they claim the DOI text a bare-DOI match would also see.
+      { kind: "doi", re: new RegExp(String.raw`(?:https?:\/\/)?(?:www\.|dx\.)*doi\.org\/(?:10\.\d{4,9}(?:\/|%2[fF])[^\s"'<>{}|\\^\x60\]]+)`, "gi") },
+      { kind: "doi", re: new RegExp(String.raw`\bdoi:\s?${DOI_BODY}`, "gi") },
+      { kind: "doi", re: new RegExp(String.raw`\b${DOI_BODY}`, "g") },
+      { kind: "arxiv", re: new RegExp(String.raw`(?:https?:\/\/)?(?:www\.|export\.)?arxiv\.org\/(?:abs|pdf)\/${ARXIV_BODY}(?:\.pdf)?`, "gi") },
+      { kind: "arxiv", re: new RegExp(String.raw`\barxiv:\s?${ARXIV_BODY}`, "gi") },
+      { kind: "pmid", re: /(?:https?:\/\/)?(?:pubmed\.ncbi\.nlm\.nih\.gov\/|(?:www\.)?ncbi\.nlm\.nih\.gov\/pubmed\/)\d{1,9}\b/gi },
+      { kind: "pmid", re: /\bPMID:?\s*\d{1,9}\b/gi }
+    ];
+    __name(provableCodeSpans, "provableCodeSpans");
+    __name(canonicalBareId, "canonicalBareId");
+    __name(findBareIdentifiers, "findBareIdentifiers");
     DRY_RUN_DOI_PREFIX = "10.0000/pensmith-dryrun.";
     DRY_RUN_DOI_RE = /^10\.0000\/pensmith-dryrun\.[0-9a-f]{8}$/;
     DRY_RUN_ARXIV_RE = /^(?:arxiv:)?pensmith-dryrun\.[0-9a-f]{8}$/i;
@@ -53196,8 +53339,8 @@ function transliterate(s2) {
 function corporateKeyWord(author) {
   const m3 = /^\{(.+)\}$/.exec(author.trim());
   if (!m3) return null;
-  const words3 = (m3[1] ?? "").replace(/[{}]/g, " ").split(/\s+/).filter((w3) => new RegExp("\\p{L}", "u").test(w3));
-  const word = words3.find((w3) => !CORPORATE_SKIP.test(w3)) ?? words3[0];
+  const words4 = (m3[1] ?? "").replace(/[{}]/g, " ").split(/\s+/).filter((w3) => new RegExp("\\p{L}", "u").test(w3));
+  const word = words4.find((w3) => !CORPORATE_SKIP.test(w3)) ?? words4[0];
   return word ?? null;
 }
 function generateCitekey(c2) {
@@ -53466,9 +53609,9 @@ function normIsbn(v2) {
   if (/^\d{9}[\dX]$/.test(s2)) {
     const sum10 = [...s2].reduce((acc, d3, i) => acc + (d3 === "X" ? 10 : Number(d3)) * (10 - i), 0);
     if (sum10 % 11 !== 0) return null;
-    const core = `978${s2.slice(0, 9)}`;
-    const sum = [...core].reduce((acc, d3, i) => acc + Number(d3) * (i % 2 === 0 ? 1 : 3), 0);
-    return `${core}${(10 - sum % 10) % 10}`;
+    const core2 = `978${s2.slice(0, 9)}`;
+    const sum = [...core2].reduce((acc, d3, i) => acc + Number(d3) * (i % 2 === 0 ? 1 : 3), 0);
+    return `${core2}${(10 - sum % 10) % 10}`;
   }
   return null;
 }
@@ -55279,8 +55422,8 @@ var require_tr46 = __commonJS({
       TRANSITIONAL: 0,
       NONTRANSITIONAL: 1
     };
-    function normalize(str6) {
-      return str6.split("\0").map(function(s2) {
+    function normalize(str8) {
+      return str8.split("\0").map(function(s2) {
         return s2.normalize("NFC");
       }).join("\0");
     }
@@ -55452,8 +55595,8 @@ var require_url_state_machine = __commonJS({
       wss: 443
     };
     var failure = /* @__PURE__ */ Symbol("failure");
-    function countSymbols(str6) {
-      return punycode.ucs2.decode(str6).length;
+    function countSymbols(str8) {
+      return punycode.ucs2.decode(str8).length;
     }
     __name(countSymbols, "countSymbols");
     function at(input2, idx) {
@@ -55528,15 +55671,15 @@ var require_url_state_machine = __commonJS({
     __name(percentEncode, "percentEncode");
     function utf8PercentEncode(c2) {
       const buf = new Buffer(c2);
-      let str6 = "";
+      let str8 = "";
       for (let i = 0; i < buf.length; ++i) {
-        str6 += percentEncode(buf[i]);
+        str8 += percentEncode(buf[i]);
       }
-      return str6;
+      return str8;
     }
     __name(utf8PercentEncode, "utf8PercentEncode");
-    function utf8PercentDecode(str6) {
-      const input2 = new Buffer(str6);
+    function utf8PercentDecode(str8) {
+      const input2 = new Buffer(str8);
       const output = [];
       for (let i = 0; i < input2.length; ++i) {
         if (input2[i] !== 37) {
@@ -57261,18 +57404,18 @@ var require_lib3 = __commonJS({
       }
       const ct = headers.get("content-type");
       let charset = "utf-8";
-      let res, str6;
+      let res, str8;
       if (ct) {
         res = /charset=([^;]*)/i.exec(ct);
       }
-      str6 = buffer.slice(0, 1024).toString();
-      if (!res && str6) {
-        res = /<meta.+?charset=(['"])(.+?)\1/i.exec(str6);
+      str8 = buffer.slice(0, 1024).toString();
+      if (!res && str8) {
+        res = /<meta.+?charset=(['"])(.+?)\1/i.exec(str8);
       }
-      if (!res && str6) {
-        res = /<meta[\s]+?http-equiv=(['"])content-type\1[\s]+?content=(['"])(.+?)\2/i.exec(str6);
+      if (!res && str8) {
+        res = /<meta[\s]+?http-equiv=(['"])content-type\1[\s]+?content=(['"])(.+?)\2/i.exec(str8);
         if (!res) {
-          res = /<meta[\s]+?content=(['"])(.+?)\1[\s]+?http-equiv=(['"])content-type\3/i.exec(str6);
+          res = /<meta[\s]+?content=(['"])(.+?)\1[\s]+?http-equiv=(['"])content-type\3/i.exec(str8);
           if (res) {
             res.pop();
           }
@@ -57281,8 +57424,8 @@ var require_lib3 = __commonJS({
           res = /charset=(.*)/i.exec(res.pop());
         }
       }
-      if (!res && str6) {
-        res = /<\?xml.+?encoding=(['"])(.+?)\1/i.exec(str6);
+      if (!res && str8) {
+        res = /<\?xml.+?encoding=(['"])(.+?)\1/i.exec(str8);
       }
       if (res) {
         charset = res.pop();
@@ -58873,18 +59016,18 @@ var require_lib4 = __commonJS({
       }
       const ct = headers.get("content-type");
       let charset = "utf-8";
-      let res, str6;
+      let res, str8;
       if (ct) {
         res = /charset=([^;]*)/i.exec(ct);
       }
-      str6 = buffer.slice(0, 1024).toString();
-      if (!res && str6) {
-        res = /<meta.+?charset=(['"])(.+?)\1/i.exec(str6);
+      str8 = buffer.slice(0, 1024).toString();
+      if (!res && str8) {
+        res = /<meta.+?charset=(['"])(.+?)\1/i.exec(str8);
       }
-      if (!res && str6) {
-        res = /<meta[\s]+?http-equiv=(['"])content-type\1[\s]+?content=(['"])(.+?)\2/i.exec(str6);
+      if (!res && str8) {
+        res = /<meta[\s]+?http-equiv=(['"])content-type\1[\s]+?content=(['"])(.+?)\2/i.exec(str8);
         if (!res) {
-          res = /<meta[\s]+?content=(['"])(.+?)\1[\s]+?http-equiv=(['"])content-type\3/i.exec(str6);
+          res = /<meta[\s]+?content=(['"])(.+?)\1[\s]+?http-equiv=(['"])content-type\3/i.exec(str8);
           if (res) {
             res.pop();
           }
@@ -58893,8 +59036,8 @@ var require_lib4 = __commonJS({
           res = /charset=(.*)/i.exec(res.pop());
         }
       }
-      if (!res && str6) {
-        res = /<\?xml.+?encoding=(['"])(.+?)\1/i.exec(str6);
+      if (!res && str8) {
+        res = /<\?xml.+?encoding=(['"])(.+?)\1/i.exec(str8);
       }
       if (res) {
         charset = res.pop();
@@ -61319,18 +61462,18 @@ var require_json = __commonJS({
     }
     __name(_interopRequireDefault, "_interopRequireDefault");
     var substituters = [[/((?:\[|:|,)\s*)'((?:\\'|[^'])*?[^\\])?'(?=\s*(?:\]|}|,))/g, '$1"$2"'], [/((?:(?:"|]|}|\/[gmiuys]|\.|(?:\d|\.|-)*\d)\s*,|{)\s*)(?:"([^":\n]+?)"|'([^":\n]+?)'|([^":\n]+?))(\s*):/g, '$1"$2$3$4"$5:']];
-    function parseJSON(str6) {
-      if (typeof str6 !== "string") {
-        return JSON.parse(str6);
+    function parseJSON(str8) {
+      if (typeof str8 !== "string") {
+        return JSON.parse(str8);
       }
       try {
-        return JSON.parse(str6);
+        return JSON.parse(str8);
       } catch (e2) {
         _logger.default.debug("[plugin-common]", "Invalid JSON, switching to experimental parser");
         substituters.forEach(([regex, subst]) => {
-          str6 = str6.replace(regex, subst);
+          str8 = str8.replace(regex, subst);
         });
-        return JSON.parse(str6);
+        return JSON.parse(str8);
       }
     }
     __name(parseJSON, "parseJSON");
@@ -61935,14 +62078,14 @@ var require_output4 = __commonJS({
       value: true
     });
     exports.default = void 0;
-    function padStart(str6, len, chr) {
-      if (str6.length >= len) {
-        return str6;
+    function padStart(str8, len, chr) {
+      if (str8.length >= len) {
+        return str8;
       }
-      while (str6.length < len) {
-        str6 = chr + str6;
+      while (str8.length < len) {
+        str8 = chr + str8;
       }
-      return str6.slice(-len);
+      return str8.slice(-len);
     }
     __name(padStart, "padStart");
     var getDate = /* @__PURE__ */ __name(function getDate2(date3, delimiter = "-") {
@@ -62261,10 +62404,10 @@ var require_moo = __commonJS({
         return o2 && toString.call(o2) === "[object RegExp]";
       }
       __name(isRegExp, "isRegExp");
-      function isObject9(o2) {
+      function isObject10(o2) {
         return o2 && typeof o2 === "object" && !isRegExp(o2) && !Array.isArray(o2);
       }
-      __name(isObject9, "isObject");
+      __name(isObject10, "isObject");
       function reEscape(s2) {
         return s2.replace(/[-\/\\^$*+?.()|[\]{}]/g, function(x3) {
           if (x3 === "-") return "\\x2d";
@@ -62347,7 +62490,7 @@ var require_moo = __commonJS({
           }
           var match = [];
           rules.forEach(function(rule) {
-            if (isObject9(rule)) {
+            if (isObject10(rule)) {
               if (match.length) result.push(ruleOptions(key2, match));
               result.push(ruleOptions(key2, rule));
               match = [];
@@ -62380,7 +62523,7 @@ var require_moo = __commonJS({
       }
       __name(arrayToRules, "arrayToRules");
       function ruleOptions(type, obj) {
-        if (!isObject9(obj)) {
+        if (!isObject10(obj)) {
           obj = { match: obj };
         }
         if (obj.include) {
@@ -65715,7 +65858,7 @@ var require_value = __commonJS({
           (_this$state2 = this.state).partlyLowercase || (_this$state2.partlyLowercase = text5 === text5.toLowerCase() && text5 !== text5.toUpperCase());
           return text5;
         }
-        const [first, ...otherCharacters] = text5;
+        const [first2, ...otherCharacters] = text5;
         const rest = otherCharacters.join("");
         const restLowerCase = rest.toLowerCase();
         if (rest !== restLowerCase) {
@@ -65724,7 +65867,7 @@ var require_value = __commonJS({
         if (!afterPunctuation) {
           return text5.toLowerCase();
         }
-        return first + restLowerCase;
+        return first2 + restLowerCase;
       },
       Command() {
         const commandToken = this.consumeToken("command");
@@ -66560,37 +66703,37 @@ var require_citeproc_commonjs = __commonJS({
     */
     var CSL = {
       PROCESSOR_VERSION: "1.4.61",
-      error: /* @__PURE__ */ __name(function(str6) {
+      error: /* @__PURE__ */ __name(function(str8) {
         if ("undefined" === typeof Error) {
-          throw new Error("citeproc-js error: " + str6);
+          throw new Error("citeproc-js error: " + str8);
         } else {
-          throw "citeproc-js error: " + str6;
+          throw "citeproc-js error: " + str8;
         }
       }, "error"),
-      debug: /* @__PURE__ */ __name(function(str6) {
+      debug: /* @__PURE__ */ __name(function(str8) {
         if ("undefined" === typeof console) {
-          dump("CSL: " + str6 + "\n");
+          dump("CSL: " + str8 + "\n");
         } else {
-          console.log("citeproc-js warning: " + str6);
+          console.log("citeproc-js warning: " + str8);
         }
       }, "debug"),
-      toLocaleUpperCase(str6) {
+      toLocaleUpperCase(str8) {
         var arr = this.tmp.lang_array;
         try {
-          str6 = str6.toLocaleUpperCase(arr);
+          str8 = str8.toLocaleUpperCase(arr);
         } catch (e2) {
-          str6 = str6.toUpperCase();
+          str8 = str8.toUpperCase();
         }
-        return str6;
+        return str8;
       },
-      toLocaleLowerCase(str6) {
+      toLocaleLowerCase(str8) {
         var arr = this.tmp.lang_array;
         try {
-          str6 = str6.toLocaleLowerCase(arr);
+          str8 = str8.toLocaleLowerCase(arr);
         } catch (e2) {
-          str6 = str6.toLowerCase();
+          str8 = str8.toLowerCase();
         }
-        return str6;
+        return str8;
       },
       LOCATOR_LABELS_REGEXP: new RegExp("^((vrs|sv|subpara|op|subch|add|amend|annot|app|art|bibliog|bk|ch|cl|col|cmt|dec|dept|div|ex|fig|fld|fol|n|hypo|illus|intro|l|no|p|pp|para|pt|pmbl|princ|pub|r|rn|sched|sec|ser|subdiv|subsec|supp|tbl|tit|vol)\\.)\\s+(.*)"),
       STATUTE_SUBDIV_PLAIN_REGEX: /(?:(?:^| )(?:vrs|sv|subpara|op|subch|add|amend|annot|app|art|bibliog|bk|ch|cl|col|cmt|dec|dept|div|ex|fig|fld|fol|n|hypo|illus|intro|l|no|p|pp|para|pt|pmbl|princ|pub|r|rn|sched|sec|ser|subdiv|subsec|supp|tbl|tit|vol)\. *)/,
@@ -66765,9 +66908,9 @@ var require_citeproc_commonjs = __commonJS({
       checkNestedBrace: /* @__PURE__ */ __name(function(state) {
         if (state.opt.xclass === "note") {
           this.depth = 0;
-          this.update = function(str6) {
-            var str6 = str6 ? str6 : "";
-            var lst = str6.split(/([\(\)])/);
+          this.update = function(str8) {
+            var str8 = str8 ? str8 : "";
+            var lst = str8.split(/([\(\)])/);
             for (var i = 1, ilen = lst.length; i < ilen; i += 2) {
               if (lst[i] === "(") {
                 if (1 === this.depth % 2) {
@@ -66785,8 +66928,8 @@ var require_citeproc_commonjs = __commonJS({
             return ret;
           };
         } else {
-          this.update = function(str6) {
-            return str6;
+          this.update = function(str8) {
+            return str8;
           };
         }
       }, "checkNestedBrace"),
@@ -66907,11 +67050,11 @@ var require_citeproc_commonjs = __commonJS({
         }
         return item;
       }, "parseLocator"),
-      normalizeLocaleStr: /* @__PURE__ */ __name(function(str6) {
-        if (!str6) {
+      normalizeLocaleStr: /* @__PURE__ */ __name(function(str8) {
+        if (!str8) {
           return;
         }
-        var lst = str6.split("-");
+        var lst = str8.split("-");
         lst[0] = lst[0].toLowerCase();
         if (lst[1]) {
           lst[1] = lst[1].toUpperCase();
@@ -66923,9 +67066,9 @@ var require_citeproc_commonjs = __commonJS({
           return;
         }
         var elems = [];
-        var lines = Item.note.split("\n");
-        for (var i = 0, ilen = lines.length; i < ilen; i++) {
-          var line = lines[i];
+        var lines2 = Item.note.split("\n");
+        for (var i = 0, ilen = lines2.length; i < ilen; i++) {
+          var line = lines2[i];
           var elems = [];
           var m3 = line.match(CSL.NOTE_FIELDS_REGEXP);
           if (m3) {
@@ -66942,14 +67085,14 @@ var require_citeproc_commonjs = __commonJS({
                 elems[j2] = "\n" + elems[j2].slice(2, -1).trim() + "\n";
               }
             }
-            lines[i] = elems.join("");
+            lines2[i] = elems.join("");
           }
         }
-        lines = lines.join("\n").split("\n");
+        lines2 = lines2.join("\n").split("\n");
         var offset = 0;
         var names = {};
-        for (var i = 0, ilen = lines.length; i < ilen; i++) {
-          var line = lines[i];
+        for (var i = 0, ilen = lines2.length; i < ilen; i++) {
+          var line = lines2[i];
           var mm = line.match(CSL.NOTE_FIELD_REGEXP);
           if (!line.trim()) {
             continue;
@@ -66965,12 +67108,12 @@ var require_citeproc_commonjs = __commonJS({
           var val = mm[2].replace(/^\s+/, "").replace(/\s+$/, "");
           if (key2 === "type") {
             Item.type = val;
-            lines[i] = "";
+            lines2[i] = "";
           } else if (CSL.DATE_VARIABLES.indexOf(key2.replace(/^alt-/, "")) > -1) {
             if (!Item[key2] || allowDateOverride) {
               Item[key2] = CSL.DateParser.parseDateToArray(val);
               if (!validFieldsForType || validFieldsForType[key2] && this.isDateString(val)) {
-                lines[i] = "";
+                lines2[i] = "";
               }
             }
           } else if (!Item[key2]) {
@@ -66990,7 +67133,7 @@ var require_citeproc_commonjs = __commonJS({
               Item[key2] = val;
             }
             if (!validFieldsForType || validFieldsForType[key2]) {
-              lines[i] = "";
+              lines2[i] = "";
             }
           }
         }
@@ -66998,16 +67141,16 @@ var require_citeproc_commonjs = __commonJS({
           Item[key2] = names[key2];
         }
         if (validFieldsForType) {
-          if (lines[offset].trim()) {
-            lines[offset] = "\n" + lines[offset];
+          if (lines2[offset].trim()) {
+            lines2[offset] = "\n" + lines2[offset];
           }
           for (var i = offset - 1; i > -1; i--) {
-            if (!lines[i].trim()) {
-              lines = lines.slice(0, i).concat(lines.slice(i + 1));
+            if (!lines2[i].trim()) {
+              lines2 = lines2.slice(0, i).concat(lines2.slice(i + 1));
             }
           }
         }
-        Item.note = lines.join("\n").trim();
+        Item.note = lines2.join("\n").trim();
       }, "parseNoteFieldHacks"),
       checkPrefixSpaceAppend: /* @__PURE__ */ __name(function(state, prefix) {
         if (!prefix) {
@@ -67421,16 +67564,16 @@ var require_citeproc_commonjs = __commonJS({
           vals[title.subjoin] = Item[title.subjoin];
         }
         if (vals[title.main] && vals[title.sub]) {
-          var mainTitle = vals[title.main];
+          var mainTitle2 = vals[title.main];
           var subJoin = vals[title.subjoin];
           var subTitle = vals[title.sub];
           if (sentenceCase) {
-            mainTitle = CSL.Output.Formatters.sentence(state, mainTitle);
+            mainTitle2 = CSL.Output.Formatters.sentence(state, mainTitle2);
             subTitle = CSL.Output.Formatters.sentence(state, subTitle);
           } else if (state.opt.development_extensions.uppercase_subtitles) {
             subTitle = CSL.Output.Formatters["capitalize-first"](state, subTitle);
           }
-          return [mainTitle, subJoin, subTitle].join("");
+          return [mainTitle2, subJoin, subTitle].join("");
         } else if (vals[title.title]) {
           if (sentenceCase) {
             return CSL.Output.Formatters.sentence(state, vals[title.title]);
@@ -67711,12 +67854,12 @@ var require_citeproc_commonjs = __commonJS({
       // since they have different effects between comma-safe and comma-safe-numbers-only.
       // Either that, or -- oh, we could just bang the two together for the test where
       // necessary.
-      UPDATE_GROUP_CONTEXT_CONDITION: /* @__PURE__ */ __name(function(state, str6, valueTerm, token, value) {
+      UPDATE_GROUP_CONTEXT_CONDITION: /* @__PURE__ */ __name(function(state, str8, valueTerm, token, value) {
         if (!state.opt.use_context_condition) return;
         var flags = state.tmp.group_context.tip;
         if (flags.condition) {
           if (!flags.condition.termtxt) {
-            flags.condition.termtxt = str6;
+            flags.condition.termtxt = str8;
             flags.condition.valueTerm = valueTerm;
           }
           if (!flags.value_seen && flags.condition.test === "comma-safe-numbers-only") {
@@ -67732,8 +67875,8 @@ var require_citeproc_commonjs = __commonJS({
             state.tmp.just_did_number = false;
           } else if (token && token.strings.suffix) {
             state.tmp.just_did_number = false;
-          } else if (str6) {
-            if (str6.match(/[0-9]$/)) {
+          } else if (str8) {
+            if (str8.match(/[0-9]$/)) {
               state.tmp.just_did_number = true;
             } else {
               state.tmp.just_did_number = false;
@@ -67817,12 +67960,12 @@ var require_citeproc_commonjs = __commonJS({
           split: new RegExp("(?:" + splits.join("|") + ")")
         };
       })(),
-      TITLE_SPLIT: /* @__PURE__ */ __name(function(str6) {
-        if (!str6) {
-          return str6;
+      TITLE_SPLIT: /* @__PURE__ */ __name(function(str8) {
+        if (!str8) {
+          return str8;
         }
-        var m3 = str6.match(CSL.TITLE_SPLIT_REGEXP.match);
-        var lst = str6.split(CSL.TITLE_SPLIT_REGEXP.split);
+        var m3 = str8.match(CSL.TITLE_SPLIT_REGEXP.match);
+        var lst = str8.split(CSL.TITLE_SPLIT_REGEXP.split);
         for (var i = lst.length - 2; i > -1; i--) {
           lst[i] = lst[i].trim();
           if (lst[i] && lst[i].slice(-1).toLowerCase() !== lst[i].slice(-1)) {
@@ -68300,13 +68443,13 @@ var require_citeproc_commonjs = __commonJS({
       xml = xml.replace(/\s+$/g, "");
       return xml;
     };
-    CSL.parseXml = function(str6) {
+    CSL.parseXml = function(str8) {
       var _pos = 0;
       var _obj = { children: [] };
       var _stack = [_obj.children];
-      function _listifyString(str7) {
-        str7 = str7.split(/(?:\r\n|\n|\r)/).join(" ").replace(/>[	 ]+</g, "><").replace(/<\!--.*?-->/g, "");
-        var lst2 = str7.split("><");
+      function _listifyString(str9) {
+        str9 = str9.split(/(?:\r\n|\n|\r)/).join(" ").replace(/>[	 ]+</g, "><").replace(/<\!--.*?-->/g, "");
+        var lst2 = str9.split("><");
         var stylePos = null;
         for (var i2 = 0, ilen2 = lst2.length; i2 < ilen2; i2++) {
           if (i2 > 0) {
@@ -68343,8 +68486,8 @@ var require_citeproc_commonjs = __commonJS({
         return lst2;
       }
       __name(_listifyString, "_listifyString");
-      function _decodeHtmlEntities(str7) {
-        return str7.split("&amp;").join("&").split("&quot;").join('"').split("&gt;").join(">").split("&lt;").join("<").replace(/&#([0-9]{1,6});/gi, function(match, numStr) {
+      function _decodeHtmlEntities(str9) {
+        return str9.split("&amp;").join("&").split("&quot;").join('"').split("&gt;").join(">").split("&lt;").join("<").replace(/&#([0-9]{1,6});/gi, function(match, numStr) {
           var num2 = parseInt(numStr, 10);
           return String.fromCharCode(num2);
         }).replace(/&#x([a-f0-9]{1,6});/gi, function(match, numStr) {
@@ -68428,7 +68571,7 @@ var require_citeproc_commonjs = __commonJS({
         }
       }
       __name(processElement, "processElement");
-      var lst = _listifyString(str6);
+      var lst = _listifyString(str8);
       for (var i = 0, ilen = lst.length; i < ilen; i++) {
         var elem = lst[i];
         processElement(elem);
@@ -68440,18 +68583,18 @@ var require_citeproc_commonjs = __commonJS({
       if ("undefined" == typeof DOMParser) {
         DOMParser = /* @__PURE__ */ __name(function() {
         }, "DOMParser");
-        DOMParser.prototype.parseFromString = function(str7, contentType) {
+        DOMParser.prototype.parseFromString = function(str9, contentType) {
           if ("undefined" != typeof ActiveXObject) {
             var xmldata = new ActiveXObject("MSXML.DomDocument");
             xmldata.async = false;
-            xmldata.loadXML(str7);
+            xmldata.loadXML(str9);
             return xmldata;
           } else if ("undefined" != typeof XMLHttpRequest) {
             var xmldata = new XMLHttpRequest();
             if (!contentType) {
               contentType = "text/xml";
             }
-            xmldata.open("GET", "data:" + contentType + ";charset=utf-8," + encodeURIComponent(str7), false);
+            xmldata.open("GET", "data:" + contentType + ";charset=utf-8," + encodeURIComponent(str9), false);
             if (xmldata.overrideMimeType) {
               xmldata.overrideMimeType(contentType);
             }
@@ -68459,7 +68602,7 @@ var require_citeproc_commonjs = __commonJS({
             return xmldata.responseXML;
           } else if ("undefined" != typeof marknote) {
             var parser = new marknote.Parser();
-            return parser.parse(str7);
+            return parser.parse(str9);
           }
         };
         this.hasAttributes = function(node) {
@@ -68510,8 +68653,8 @@ var require_citeproc_commonjs = __commonJS({
         }
       };
       this.parser = new DOMParser();
-      var str6 = '<docco><institution institution-parts="long" delimiter=", " substitute-use-first="1" use-last="1"><institution-part name="long"/></institution></docco>';
-      var inst_doc = this.parser.parseFromString(str6, "text/xml");
+      var str8 = '<docco><institution institution-parts="long" delimiter=", " substitute-use-first="1" use-last="1"><institution-part name="long"/></institution></docco>';
+      var inst_doc = this.parser.parseFromString(str8, "text/xml");
       var inst_node = inst_doc.getElementsByTagName("institution");
       this.institution = inst_node.item(0);
       var inst_part_node = inst_doc.getElementsByTagName("institution-part");
@@ -68869,8 +69012,8 @@ var require_citeproc_commonjs = __commonJS({
       strcmp = /* @__PURE__ */ __name(function(a3, b3) {
         return CSL.toLocaleLowerCase.call(me, a3).localeCompare(CSL.toLocaleLowerCase.call(me, b3), default_locale, strcmp_opts);
       }, "strcmp");
-      var stripPunct = /* @__PURE__ */ __name(function(str6) {
-        return str6.replace(/^[\[\]\'\"]*/g, "");
+      var stripPunct = /* @__PURE__ */ __name(function(str8) {
+        return str8.replace(/^[\[\]\'\"]*/g, "");
       }, "stripPunct");
       var getBracketPreSort = /* @__PURE__ */ __name(function() {
         if (!strcmp("[x", "x")) {
@@ -70361,18 +70504,18 @@ var require_citeproc_commonjs = __commonJS({
     CSL.Doppeler = function(rexStr, stringMangler) {
       var matchRex = new RegExp("(" + rexStr + ")", "g");
       var splitRex = new RegExp(rexStr, "g");
-      this.split = function(str6) {
+      this.split = function(str8) {
         if (stringMangler) {
-          str6 = stringMangler(str6);
+          str8 = stringMangler(str8);
         }
-        var match = str6.match(matchRex);
+        var match = str8.match(matchRex);
         if (!match) {
           return {
             tags: [],
-            strings: [str6]
+            strings: [str8]
           };
         }
-        var split = str6.split(splitRex);
+        var split = str8.split(splitRex);
         for (var i = match.length - 1; i > -1; i--) {
           if (typeof match[i] === "number") {
             match[i] = "";
@@ -70482,14 +70625,14 @@ var require_citeproc_commonjs = __commonJS({
               lst = lst.slice(0, i).concat(lst.slice(i + 1));
             }
           }
-          var str6 = lst.join("");
-          str6 = str6.slice(0, params[0].authors[0]);
-          if (str6.length > 1) {
-            str6 = str6.slice(0, 1).toUpperCase() + str6.slice(1).toLowerCase();
-          } else if (str6.length === 1) {
-            str6 = str6.toUpperCase();
+          var str8 = lst.join("");
+          str8 = str8.slice(0, params[0].authors[0]);
+          if (str8.length > 1) {
+            str8 = str8.slice(0, 1).toUpperCase() + str8.slice(1).toLowerCase();
+          } else if (str8.length === 1) {
+            str8 = str8.toUpperCase();
           }
-          label = str6;
+          label = str8;
         }
       }
       var year = "0000";
@@ -70509,10 +70652,10 @@ var require_citeproc_commonjs = __commonJS({
         CSL.error("Bad trigraph definition: " + this.opt.trigraph);
       }
       for (var i = 0, ilen = ilst.length; i < ilen; i += 1) {
-        var str6 = ilst[i];
+        var str8 = ilst[i];
         var config2 = { authors: [], year: 0 };
-        for (var j2 = 0, jlen = str6.length; j2 < jlen; j2 += 1) {
-          switch (str6.slice(j2, j2 + 1)) {
+        for (var j2 = 0, jlen = str8.length; j2 < jlen; j2 += 1) {
+          switch (str8.slice(j2, j2 + 1)) {
             case "A":
               config2.authors.push(1);
               break;
@@ -70787,7 +70930,7 @@ var require_citeproc_commonjs = __commonJS({
         blob.strings.suffix = this.checkNestedBrace.update(blob.strings.suffix);
       }
     };
-    CSL.Output.Queue.prototype.append = function(str6, tokname, notSerious, ignorePredecessor, noStripPeriods) {
+    CSL.Output.Queue.prototype.append = function(str8, tokname, notSerious, ignorePredecessor, noStripPeriods) {
       var token, blob, curr;
       var useblob = true;
       if (notSerious) {
@@ -70801,11 +70944,11 @@ var require_citeproc_commonjs = __commonJS({
           tokname = "empty";
         }
       }
-      if ("undefined" === typeof str6) {
+      if ("undefined" === typeof str8) {
         return false;
       }
-      if ("number" === typeof str6) {
-        str6 = "" + str6;
+      if ("number" === typeof str8) {
+        str8 = "" + str8;
       }
       if (!notSerious && this.state.tmp.element_trace && this.state.tmp.element_trace.value() === "suppress-me") {
         return false;
@@ -70827,12 +70970,12 @@ var require_citeproc_commonjs = __commonJS({
       if (token.strings && "undefined" === typeof token.strings.delimiter) {
         token.strings.delimiter = "";
       }
-      if ("string" === typeof str6 && str6.length) {
-        str6 = str6.replace(/ ([:;?!\u00bb])/g, "\u202F$1").replace(/\u00ab /g, "\xAB\u202F");
-        this.last_char_rendered = str6.slice(-1);
-        str6 = str6.replace(/\s+'/g, " '");
+      if ("string" === typeof str8 && str8.length) {
+        str8 = str8.replace(/ ([:;?!\u00bb])/g, "\u202F$1").replace(/\u00ab /g, "\xAB\u202F");
+        this.last_char_rendered = str8.slice(-1);
+        str8 = str8.replace(/\s+'/g, " '");
         if (!notSerious) {
-          str6 = str6.replace(/^'/g, " '");
+          str8 = str8.replace(/^'/g, " '");
         }
         if (!ignorePredecessor) {
           this.state.tmp.term_predecessor = true;
@@ -70841,7 +70984,7 @@ var require_citeproc_commonjs = __commonJS({
           this.state.tmp.term_predecessor_name = true;
         }
       }
-      blob = new CSL.Blob(str6, token);
+      blob = new CSL.Blob(str8, token);
       curr = this.current.value();
       if ("undefined" === typeof curr && this.current.mystack.length === 0) {
         this.current.mystack.push([]);
@@ -70855,7 +70998,7 @@ var require_citeproc_commonjs = __commonJS({
           this.state.tmp.term_predecessor_name = true;
         }
       }
-      if ("string" === typeof str6) {
+      if ("string" === typeof str8) {
         if ("string" === typeof blob.blobs) {
           if (blob.blobs.slice(0, 1) !== " ") {
             var blobPrefix = "";
@@ -70871,7 +71014,7 @@ var require_citeproc_commonjs = __commonJS({
           }
         }
         if (blob.strings["text-case"]) {
-          blob.blobs = CSL.Output.Formatters[blob.strings["text-case"]](this.state, str6);
+          blob.blobs = CSL.Output.Formatters[blob.strings["text-case"]](this.state, str8);
         }
         if (this.state.tmp.strip_periods && !noStripPeriods) {
           blob.blobs = blob.blobs.replace(/\.([^a-z]|$)/g, "$1");
@@ -70891,7 +71034,7 @@ var require_citeproc_commonjs = __commonJS({
       } else if (useblob) {
         curr.push(blob);
       } else {
-        curr.push(str6);
+        curr.push(str8);
       }
       return true;
     };
@@ -71082,7 +71225,7 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL.Output.Queue.prototype.renderBlobs = function(blobs, delim, in_cite, parent) {
-      var state, ret, ret_last_char, use_delim, blob, pos, len, ppos, llen, str6, params, txt_esc;
+      var state, ret, ret_last_char, use_delim, blob, pos, len, ppos, llen, str8, params, txt_esc;
       txt_esc = CSL.getSafeEscape(this.state);
       if (!delim) {
         delim = "";
@@ -71140,21 +71283,21 @@ var require_citeproc_commonjs = __commonJS({
           }
         } else if (blob.status !== CSL.SUPPRESS) {
           if (blob.particle) {
-            str6 = blob.particle + blob.num;
+            str8 = blob.particle + blob.num;
           } else {
-            str6 = blob.formatter.format(blob.num, blob.gender);
+            str8 = blob.formatter.format(blob.num, blob.gender);
           }
-          var strlen = str6.replace(/<[^>]*>/g, "").length;
-          this.append(str6, "empty", true);
+          var strlen = str8.replace(/<[^>]*>/g, "").length;
+          this.append(str8, "empty", true);
           var str_blob = this.pop();
           var count_offset_characters = state.tmp.count_offset_characters;
-          str6 = this.string(state, [str_blob], false);
+          str8 = this.string(state, [str_blob], false);
           state.tmp.count_offset_characters = count_offset_characters;
           if (blob.strings["text-case"]) {
-            str6 = CSL.Output.Formatters[blob.strings["text-case"]](this.state, str6);
+            str8 = CSL.Output.Formatters[blob.strings["text-case"]](this.state, str8);
           }
-          if (str6 && this.state.tmp.strip_periods) {
-            str6 = str6.replace(/\.([^a-z]|$)/g, "$1");
+          if (str8 && this.state.tmp.strip_periods) {
+            str8 = str8.replace(/\.([^a-z]|$)/g, "$1");
           }
           if (!state.tmp.suppress_decorations) {
             llen = blob.decorations.length;
@@ -71163,10 +71306,10 @@ var require_citeproc_commonjs = __commonJS({
               if (state.normalDecorIsOrphan(blob, params)) {
                 continue;
               }
-              str6 = state.fun.decorate[params[0]][params[1]].call(blob, state, str6, params[2]);
+              str8 = state.fun.decorate[params[0]][params[1]].call(blob, state, str8, params[2]);
             }
           }
-          str6 = txt_esc(blob.strings.prefix) + str6 + txt_esc(blob.strings.suffix);
+          str8 = txt_esc(blob.strings.prefix) + str8 + txt_esc(blob.strings.suffix);
           var addme = "";
           if (blob.status === CSL.END) {
             addme = txt_esc(blob.range_prefix);
@@ -71182,7 +71325,7 @@ var require_citeproc_commonjs = __commonJS({
             addme = txt_esc(blob.splice_prefix);
           }
           ret += addme;
-          ret += str6;
+          ret += str8;
           if (state.tmp.count_offset_characters) {
             state.tmp.offset_characters += addme.length + blob.strings.prefix.length + strlen + blob.strings.suffix.length;
           }
@@ -71380,17 +71523,17 @@ var require_citeproc_commonjs = __commonJS({
         }
       }
       __name(matchLastChar, "matchLastChar");
-      function mergeChars(First, first, Second, second, merge_right) {
-        var FirstStrings = "blobs" === first ? First : First.strings;
+      function mergeChars(First, first2, Second, second, merge_right) {
+        var FirstStrings = "blobs" === first2 ? First : First.strings;
         var SecondStrings = "blobs" === second ? Second : Second.strings;
-        var firstChar = FirstStrings[first].slice(-1);
+        var firstChar = FirstStrings[first2].slice(-1);
         var secondChar = SecondStrings[second].slice(0, 1);
         function cullRight() {
           SecondStrings[second] = SecondStrings[second].slice(1);
         }
         __name(cullRight, "cullRight");
         function cullLeft() {
-          FirstStrings[first] = FirstStrings[first].slice(0, -1);
+          FirstStrings[first2] = FirstStrings[first2].slice(0, -1);
         }
         __name(cullLeft, "cullLeft");
         function addRight(chr) {
@@ -71398,7 +71541,7 @@ var require_citeproc_commonjs = __commonJS({
         }
         __name(addRight, "addRight");
         function addLeft(chr) {
-          FirstStrings[first] += chr;
+          FirstStrings[first2] += chr;
         }
         __name(addLeft, "addLeft");
         var cull = merge_right ? cullLeft : cullRight;
@@ -72589,7 +72732,7 @@ var require_citeproc_commonjs = __commonJS({
       return [this.registry.return_data, ret];
     };
     CSL.Engine.prototype.process_CitationCluster = function(sortedItems, citation) {
-      var str6 = "";
+      var str8 = "";
       if (citation && citation.properties && citation.properties.mode === "composite") {
         citation.properties.mode = "author-only";
         var firstChunk = CSL.getCitationCluster.call(this, sortedItems, citation);
@@ -72608,16 +72751,16 @@ var require_citeproc_commonjs = __commonJS({
           firstChunk += secondChunk;
           secondChunk = false;
         }
-        str6 = [firstChunk, secondChunk, thirdChunk].filter(function(obj) {
+        str8 = [firstChunk, secondChunk, thirdChunk].filter(function(obj) {
           return obj;
         }).join(" ");
       } else {
-        str6 = CSL.getCitationCluster.call(this, sortedItems, citation);
+        str8 = CSL.getCitationCluster.call(this, sortedItems, citation);
       }
-      return str6;
+      return str8;
     };
     CSL.Engine.prototype.makeCitationCluster = function(rawList) {
-      var inputList, newitem, str6, pos, len, item, Item;
+      var inputList, newitem, str8, pos, len, item, Item;
       inputList = [];
       len = rawList.length;
       for (pos = 0; pos < len; pos += 1) {
@@ -72655,8 +72798,8 @@ var require_citeproc_commonjs = __commonJS({
         inputList.sort(this.citation.srt.compareCompositeKeys);
       }
       this.tmp.citation_errors = [];
-      var str6 = CSL.getCitationCluster.call(this, inputList);
-      return str6;
+      var str8 = CSL.getCitationCluster.call(this, inputList);
+      return str8;
     };
     CSL.getAmbiguousCite = function(Item, disambig, visualForm, item) {
       var ret;
@@ -76183,7 +76326,7 @@ var require_citeproc_commonjs = __commonJS({
       }
       var persons = [];
       var has_affiliates = false;
-      var first = true;
+      var first2 = true;
       for (var i = values.length - 1; i > -1; i += -1) {
         if (this.isPerson(values[i])) {
           var value = this._checkNickname(values[i]);
@@ -76193,12 +76336,12 @@ var require_citeproc_commonjs = __commonJS({
         } else {
           has_affiliates = true;
           this.institutions[v2].push(values[i]);
-          if (!first) {
+          if (!first2) {
             persons.reverse();
             this.persons[v2].push(persons);
             persons = [];
           }
-          first = false;
+          first2 = false;
         }
       }
       if (has_affiliates) {
@@ -76936,23 +77079,23 @@ var require_citeproc_commonjs = __commonJS({
     CSL.NameOutput.prototype._renderOneInstitutionPart = function(blobs, style) {
       for (var i = 0, ilen = blobs.length; i < ilen; i += 1) {
         if (blobs[i]) {
-          var str6 = blobs[i];
+          var str8 = blobs[i];
           if (this.state.tmp.strip_periods) {
-            str6 = str6.replace(/\./g, "");
+            str8 = str8.replace(/\./g, "");
           } else {
             for (var j2 = 0, jlen = style.decorations.length; j2 < jlen; j2 += 1) {
               if ("@strip-periods" === style.decorations[j2][0] && "true" === style.decorations[j2][1]) {
-                str6 = str6.replace(/\./g, "");
+                str8 = str8.replace(/\./g, "");
                 break;
               }
             }
           }
           this.state.tmp.group_context.tip.variable_success = true;
           this.state.tmp.can_substitute.replace(false, CSL.LITERAL);
-          if (str6 === "!here>>>") {
+          if (str8 === "!here>>>") {
             blobs[i] = false;
           } else {
-            this.state.output.append(str6, style, true);
+            this.state.output.append(str8, style, true);
             blobs[i] = this.state.output.pop();
           }
         }
@@ -77117,7 +77260,7 @@ var require_citeproc_commonjs = __commonJS({
       } else {
         nbspace = " ";
       }
-      var blob, merged, first, second;
+      var blob, merged, first2, second;
       if (romanesque === 0) {
         blob = this._join([non_dropping_particle, family, given], "");
       } else if (romanesque === 1 || name["static-ordering"]) {
@@ -77156,20 +77299,20 @@ var require_citeproc_commonjs = __commonJS({
           blob = this._join([merged, suffix], sort_sep);
         } else {
           if (has_hyphenated_non_dropping_particle) {
-            first = this._join([non_dropping_particle, family], "");
+            first2 = this._join([non_dropping_particle, family], "");
           } else {
-            first = this._join([non_dropping_particle, family], nbspace);
+            first2 = this._join([non_dropping_particle, family], nbspace);
           }
-          if (first && this.family) {
-            first.strings.prefix = this.family.strings.prefix;
-            first.strings.suffix = this.family.strings.suffix;
+          if (first2 && this.family) {
+            first2.strings.prefix = this.family.strings.prefix;
+            first2.strings.suffix = this.family.strings.suffix;
           }
           second = this._join([given, dropping_particle], name["comma-dropping-particle"] + " ");
           if (second && this.given) {
             second.strings.prefix = this.given.strings.prefix;
             second.strings.suffix = this.given.strings.suffix;
           }
-          merged = this._join([first, second], sort_sep);
+          merged = this._join([first2, second], sort_sep);
           blob = this._join([merged, suffix], sort_sep);
         }
         blob.isInverted = true;
@@ -77236,29 +77379,29 @@ var require_citeproc_commonjs = __commonJS({
       this._parseName(name);
       return name;
     };
-    CSL.NameOutput.prototype._stripPeriods = function(tokname, str6) {
+    CSL.NameOutput.prototype._stripPeriods = function(tokname, str8) {
       var decor_tok = this[tokname + "_decor"];
-      if (str6) {
+      if (str8) {
         if (this.state.tmp.strip_periods) {
-          str6 = str6.replace(/\./g, "");
+          str8 = str8.replace(/\./g, "");
         } else if (decor_tok) {
           for (var i = 0, ilen = decor_tok.decorations.length; i < ilen; i += 1) {
             if ("@strip-periods" === decor_tok.decorations[i][0] && "true" === decor_tok.decorations[i][1]) {
-              str6 = str6.replace(/\./g, "");
+              str8 = str8.replace(/\./g, "");
               break;
             }
           }
         }
       }
-      return str6;
+      return str8;
     };
     CSL.NameOutput.prototype._nonDroppingParticle = function(name) {
       var ndp = name["non-dropping-particle"];
       if (ndp && this.state.tmp.sort_key_flag) {
         ndp = ndp.replace(/[\'\u2019]/, "");
       }
-      var str6 = this._stripPeriods("family", ndp);
-      if (this.state.output.append(str6, this.family_decor, true)) {
+      var str8 = this._stripPeriods("family", ndp);
+      if (this.state.output.append(str8, this.family_decor, true)) {
         return this.state.output.pop();
       }
       return false;
@@ -77268,7 +77411,7 @@ var require_citeproc_commonjs = __commonJS({
       if (dp && this.state.tmp.sort_key_flag) {
         dp = dp.replace(/[\'\u2019]/, "");
       }
-      var str6 = this._stripPeriods("given", dp);
+      var str8 = this._stripPeriods("given", dp);
       if (name["dropping-particle"] && name["dropping-particle"].match(/^et.?al[^a-z]$/)) {
         if (this.state.inheritOpt(this.name, "et-al-use-last")) {
           if ("undefined" === typeof j2) {
@@ -77284,14 +77427,14 @@ var require_citeproc_commonjs = __commonJS({
           }
         }
         name["comma-dropping-particle"] = "";
-      } else if (this.state.output.append(str6, this.given_decor, true)) {
+      } else if (this.state.output.append(str8, this.given_decor, true)) {
         return this.state.output.pop();
       }
       return false;
     };
     CSL.NameOutput.prototype._familyName = function(name) {
-      var str6 = this._stripPeriods("family", name.family);
-      if (this.state.output.append(str6, this.family_decor, true)) {
+      var str8 = this._stripPeriods("family", name.family);
+      if (this.state.output.append(str8, this.family_decor, true)) {
         return this.state.output.pop();
       }
       return false;
@@ -77338,8 +77481,8 @@ var require_citeproc_commonjs = __commonJS({
       } else if (useLevel === 2) {
         name.given = CSL.Util.Names.unInitialize(this.state, name.given);
       }
-      var str6 = this._stripPeriods("given", name.given);
-      var rendered = this.state.output.append(str6, this.given_decor, true);
+      var str8 = this._stripPeriods("given", name.given);
+      var rendered = this.state.output.append(str8, this.given_decor, true);
       if (rendered) {
         ret = this.state.output.pop();
         return {
@@ -77352,17 +77495,17 @@ var require_citeproc_commonjs = __commonJS({
       };
     };
     CSL.NameOutput.prototype._nameSuffix = function(name) {
-      var str6 = name.suffix, ret;
-      if (str6 && "string" === typeof this.state.inheritOpt(this.name, "initialize-with")) {
-        str6 = CSL.Util.Names.initializeWith(this.state, str6, this.state.inheritOpt(this.name, "initialize-with"), true);
+      var str8 = name.suffix, ret;
+      if (str8 && "string" === typeof this.state.inheritOpt(this.name, "initialize-with")) {
+        str8 = CSL.Util.Names.initializeWith(this.state, str8, this.state.inheritOpt(this.name, "initialize-with"), true);
       }
-      str6 = this._stripPeriods("family", str6);
+      str8 = this._stripPeriods("family", str8);
       var toSuffix = "";
-      if (str6 && str6.slice(-1) === ".") {
-        str6 = str6.slice(0, -1);
+      if (str8 && str8.slice(-1) === ".") {
+        str8 = str8.slice(0, -1);
         toSuffix = ".";
       }
-      var rendered = this.state.output.append(str6, "empty", true);
+      var rendered = this.state.output.append(str8, "empty", true);
       if (rendered) {
         ret = this.state.output.pop();
         ret.strings.suffix = toSuffix + ret.strings.suffix;
@@ -77648,11 +77791,11 @@ var require_citeproc_commonjs = __commonJS({
       }
       return static_ordering_val;
     };
-    CSL.NameOutput.prototype._quashChecks = function(jurisdiction, str6) {
-      var str6 = this.state.transform.quashCheck(jurisdiction, str6);
-      var lst = str6.split(/>>[0-9]{4}>>/);
-      var m3 = str6.match(/>>([0-9]{4})>>/);
-      str6 = lst.pop();
+    CSL.NameOutput.prototype._quashChecks = function(jurisdiction, str8) {
+      var str8 = this.state.transform.quashCheck(jurisdiction, str8);
+      var lst = str8.split(/>>[0-9]{4}>>/);
+      var m3 = str8.match(/>>([0-9]{4})>>/);
+      str8 = lst.pop();
       var date3 = this.Item["original-date"] ? this.Item["original-date"] : this.Item["issued"];
       if (date3) {
         date3 = parseInt(date3.year, 10);
@@ -77664,12 +77807,12 @@ var require_citeproc_commonjs = __commonJS({
             if (date3 >= parseInt(m3[k2], 10)) {
               break;
             }
-            str6 = lst.pop();
+            str8 = lst.pop();
           }
         }
-        str6 = str6.replace(/\s*\|\s*/g, "|");
+        str8 = str8.replace(/\s*\|\s*/g, "|");
       }
-      return str6;
+      return str8;
     };
     CSL.NameOutput.prototype._trimInstitution = function(subunits) {
       var use_first = false;
@@ -77759,9 +77902,9 @@ var require_citeproc_commonjs = __commonJS({
       for (var i = 0, ilen = 2; i < ilen; i += 1) {
         var varname = ["publisher", "publisher-place"][i];
         for (var j2 = 0, jlen = this["publisher-list"].length; j2 < jlen; j2 += 1) {
-          var str6 = this[varname + "-list"][j2];
+          var str8 = this[varname + "-list"][j2];
           var tok = this[varname + "-token"];
-          this.state.output.append(str6, tok, true);
+          this.state.output.append(str8, tok, true);
           this[varname + "-list"][j2] = this.state.output.pop();
         }
       }
@@ -80712,7 +80855,7 @@ var require_citeproc_commonjs = __commonJS({
       this.year_suffix = false;
       this.disambiguate = 0;
     };
-    CSL.Blob = function(str6, token, levelname) {
+    CSL.Blob = function(str8, token, levelname) {
       var len, pos, key2;
       this.levelname = levelname;
       if (token) {
@@ -80738,10 +80881,10 @@ var require_citeproc_commonjs = __commonJS({
         this.strings.delimiter = "";
         this.decorations = [];
       }
-      if ("string" === typeof str6) {
-        this.blobs = str6;
-      } else if (str6) {
-        this.blobs = [str6];
+      if ("string" === typeof str8) {
+        this.blobs = str8;
+      } else if (str8) {
+        this.blobs = [str8];
       } else {
         this.blobs = [];
       }
@@ -81071,8 +81214,8 @@ var require_citeproc_commonjs = __commonJS({
       ret = ret.replace(/\u2013([a-z])/g, "-$1");
       return ret;
     };
-    CSL.Util.Names.notag = function(str6) {
-      return str6.replace(/^(?:<[^>]+>)*/, "");
+    CSL.Util.Names.notag = function(str8) {
+      return str8.replace(/^(?:<[^>]+>)*/, "");
     };
     CSL.Util.Names.mergetag = function(state, tagstr, newstr) {
       var m3 = tagstr.match(/(?:-*<[^>]+>-*)/g);
@@ -81090,10 +81233,10 @@ var require_citeproc_commonjs = __commonJS({
       }
       return newstr;
     };
-    CSL.Util.Names.tagonly = function(state, str6) {
-      var m3 = str6.match(/(?:<[^>]+>)+/);
+    CSL.Util.Names.tagonly = function(state, str8) {
+      var m3 = str8.match(/(?:<[^>]+>)+/);
       if (!m3) {
-        return str6;
+        return str8;
       } else {
         return m3.join("");
       }
@@ -81388,15 +81531,15 @@ var require_citeproc_commonjs = __commonJS({
       return state.fun.ordinalizer.format(num2, gender);
     };
     CSL.Util.Sort = {};
-    CSL.Util.Sort.strip_prepositions = function(str6) {
+    CSL.Util.Sort.strip_prepositions = function(str8) {
       var m3;
-      if ("string" === typeof str6) {
-        m3 = str6.match(/^(([aA]|[aA][nN]|[tT][hH][eE])\s+)/);
+      if ("string" === typeof str8) {
+        m3 = str8.match(/^(([aA]|[aA][nN]|[tT][hH][eE])\s+)/);
       }
       if (m3) {
-        str6 = str6.substr(m3[1].length);
+        str8 = str8.substr(m3[1].length);
       }
-      return str6;
+      return str8;
     };
     CSL.Util.substituteStart = function(state, target) {
       var element_trace, display, bib_first, func, choose_start, if_start, nodetypes;
@@ -81550,7 +81693,7 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL.Util.substituteEnd = function(state, target) {
-      var func, bib_first_end, bib_other, if_end, choose_end, author_substitute, str6;
+      var func, bib_first_end, bib_other, if_end, choose_end, author_substitute, str8;
       if (state.sys.variableWrapper && (this.hasVariable || this.variables_real && this.variables_real.length)) {
         func = /* @__PURE__ */ __name(function(state2) {
           if (!state2.tmp.just_looking && !state2.tmp.suppress_decorations) {
@@ -81630,8 +81773,8 @@ var require_citeproc_commonjs = __commonJS({
                 for (i = 0, ilen = state2.tmp.name_node.children.length; i < ilen; i += 1) {
                   var name = state2.tmp.rendered_name[i];
                   if (dosub && state2.tmp.last_rendered_name && state2.tmp.last_rendered_name.length > i - 1 && name && !name.localeCompare(state2.tmp.last_rendered_name[i])) {
-                    str6 = new CSL.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
-                    state2.tmp.name_node.children[i].blobs = [str6];
+                    str8 = new CSL.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
+                    state2.tmp.name_node.children[i].blobs = [str8];
                     if ("partial-first" === subrule) {
                       dosub = false;
                     }
@@ -81646,8 +81789,8 @@ var require_citeproc_commonjs = __commonJS({
                 if (rendered_name) {
                   if (state2.tmp.last_rendered_name && !rendered_name.localeCompare(state2.tmp.last_rendered_name)) {
                     for (i = 0, ilen = state2.tmp.name_node.children.length; i < ilen; i += 1) {
-                      str6 = new CSL.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
-                      state2.tmp.name_node.children[i].blobs = [str6];
+                      str8 = new CSL.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
+                      state2.tmp.name_node.children[i].blobs = [str8];
                     }
                   }
                   state2.tmp.last_rendered_name = rendered_name;
@@ -81656,13 +81799,13 @@ var require_citeproc_commonjs = __commonJS({
                 var rendered_name = state2.tmp.rendered_name.join(",");
                 if (rendered_name) {
                   if (state2.tmp.last_rendered_name && !rendered_name.localeCompare(state2.tmp.last_rendered_name)) {
-                    str6 = new CSL.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
+                    str8 = new CSL.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
                     if (state2.tmp.label_blob) {
-                      state2.tmp.name_node.top.blobs = [str6, state2.tmp.label_blob];
+                      state2.tmp.name_node.top.blobs = [str8, state2.tmp.label_blob];
                     } else if (state2.tmp.name_node.top.blobs.length) {
-                      state2.tmp.name_node.top.blobs[0].blobs = [str6];
+                      state2.tmp.name_node.top.blobs[0].blobs = [str8];
                     } else {
-                      state2.tmp.name_node.top.blobs = [str6];
+                      state2.tmp.name_node.top.blobs = [str8];
                     }
                     state2.tmp.substituted_variable = substitution_name;
                   }
@@ -81743,9 +81886,9 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL.Util.Ordinalizer.prototype.format = function(num2, gender) {
-      var str6;
+      var str8;
       num2 = parseInt(num2, 10);
-      str6 = "" + num2;
+      str8 = "" + num2;
       var suffix = "";
       var trygenders = [];
       if (gender) {
@@ -81758,12 +81901,12 @@ var require_citeproc_commonjs = __commonJS({
         for (var i = 0, ilen = trygenders.length; i < ilen; i += 1) {
           trygender = trygenders[i];
           var ordinfo = this.state.locale[this.state.opt.lang].ord["1.0.1"];
-          if (ordinfo["whole-number"][str6] && ordinfo["whole-number"][str6][trygender]) {
-            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["whole-number"][str6][trygender], false, 0, gender);
-          } else if (ordinfo["last-two-digits"][str6.slice(str6.length - 2)] && ordinfo["last-two-digits"][str6.slice(str6.length - 2)][trygender]) {
-            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["last-two-digits"][str6.slice(str6.length - 2)][trygender], false, 0, gender);
-          } else if (ordinfo["last-digit"][str6.slice(str6.length - 1)] && ordinfo["last-digit"][str6.slice(str6.length - 1)][trygender]) {
-            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["last-digit"][str6.slice(str6.length - 1)][trygender], false, 0, gender);
+          if (ordinfo["whole-number"][str8] && ordinfo["whole-number"][str8][trygender]) {
+            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["whole-number"][str8][trygender], false, 0, gender);
+          } else if (ordinfo["last-two-digits"][str8.slice(str8.length - 2)] && ordinfo["last-two-digits"][str8.slice(str8.length - 2)][trygender]) {
+            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["last-two-digits"][str8.slice(str8.length - 2)][trygender], false, 0, gender);
+          } else if (ordinfo["last-digit"][str8.slice(str8.length - 1)] && ordinfo["last-digit"][str8.slice(str8.length - 1)][trygender]) {
+            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["last-digit"][str8.slice(str8.length - 1)][trygender], false, 0, gender);
           }
           if (suffix) {
             break;
@@ -81786,8 +81929,8 @@ var require_citeproc_commonjs = __commonJS({
           suffix = this.suffixes[this.state.opt.lang][gender][3];
         }
       }
-      str6 = str6 += suffix;
-      return str6;
+      str8 = str8 += suffix;
+      return str8;
     };
     CSL.Util.Romanizer = function() {
     };
@@ -81842,9 +81985,9 @@ var require_citeproc_commonjs = __commonJS({
       if (localeAnd === localeAmpersand) {
         localeAmpersand = "&";
       }
-      function normalizeFieldValue(str6) {
-        str6 = str6.trim();
-        var m3 = str6.match(/^([^ ]+)/);
+      function normalizeFieldValue(str8) {
+        str8 = str8.trim();
+        var m3 = str8.match(/^([^ ]+)/);
         if (m3 && !CSL.STATUTE_SUBDIV_STRINGS[m3[1]]) {
           var embeddedLabel = null;
           if (["locator", "locator-extra", "page"].indexOf(variable) > -1) {
@@ -81857,10 +82000,10 @@ var require_citeproc_commonjs = __commonJS({
             embeddedLabel = CSL.STATUTE_SUBDIV_STRINGS_REVERSE[variable];
           }
           if (embeddedLabel) {
-            str6 = embeddedLabel + " " + str6;
+            str8 = embeddedLabel + " " + str8;
           }
         }
-        return str6;
+        return str8;
       }
       __name(normalizeFieldValue, "normalizeFieldValue");
       function composeNumberInfo(origLabel, label, val2, joiningSuffix, parsePosition) {
@@ -81904,19 +82047,19 @@ var require_citeproc_commonjs = __commonJS({
         return elems;
       }
       __name(fixupSubsections, "fixupSubsections");
-      function parseString2(str6, defaultLabel2) {
+      function parseString2(str8, defaultLabel2) {
         defaultLabel2 = defaultLabel2 ? defaultLabel2 : "";
-        str6 = normalizeFieldValue(str6, defaultLabel2);
+        str8 = normalizeFieldValue(str8, defaultLabel2);
         var jmrex, jsrex, mystr;
         if ("page" === variable) {
-          if (str6.indexOf("\u2013") > -1) {
-            str6 = str6.replace(/\u2013/g, "-");
+          if (str8.indexOf("\u2013") > -1) {
+            str8 = str8.replace(/\u2013/g, "-");
           }
         }
-        if (str6.indexOf("\\-") > -1) {
+        if (str8.indexOf("\\-") > -1) {
           jmrex = new RegExp(joinerMatchRex.source.replace("\\-", ""));
           jsrex = new RegExp(joinerSplitRex.source.replace("\\-", ""));
-          var lst = str6.split("\\-");
+          var lst = str8.split("\\-");
           for (var i = 0, ilen = lst.length; i < ilen; i++) {
             lst[i] = lst[i].replace(/\-/g, "\u2013");
           }
@@ -81925,7 +82068,7 @@ var require_citeproc_commonjs = __commonJS({
         } else {
           jmrex = joinerMatchRex;
           jsrex = joinerSplitRex;
-          mystr = str6;
+          mystr = str8;
         }
         var elems = [];
         var m3 = mystr.match(jmrex);
@@ -82222,17 +82365,17 @@ var require_citeproc_commonjs = __commonJS({
         }
         var val2 = values2[i];
         var isPage = checkPage(variable, val2);
-        var str6;
+        var str8;
         if (isPage && !isNaN(parseInt(values2[i - 1].value)) && !isNaN(parseInt(values2[i].value))) {
-          str6 = values2[i - 1].particle + values2[i - 1].value + " - " + values2[i].particle + values2[i].value;
-          str6 = me.fun.page_mangler(str6);
+          str8 = values2[i - 1].particle + values2[i - 1].value + " - " + values2[i].particle + values2[i].value;
+          str8 = me.fun.page_mangler(str8);
         } else {
           if (("" + values2[i - 1].value).match(/^([0-9]+|[ivxlcmIVXLCM]+)$/) && ("" + values2[i].value).match(/^([0-9]+|[ivxlcmIVXLCM]+)$/)) {
             values2[i - 1].joiningSuffix = me.getTerm("page-range-delimiter");
           }
-          str6 = values2[i - 1].value + stripHyphenBackslash(values2[i - 1].joiningSuffix) + values2[i].value;
+          str8 = values2[i - 1].value + stripHyphenBackslash(values2[i - 1].joiningSuffix) + values2[i].value;
         }
-        var m3 = str6.match(/^((?:[0-9]*[a-zA-Z]+0*))?([0-9]+[a-z]*)(\s*[^0-9]+\s*)([-,a-zA-Z]?0*)([0-9]+[a-z]*)$/);
+        var m3 = str8.match(/^((?:[0-9]*[a-zA-Z]+0*))?([0-9]+[a-z]*)(\s*[^0-9]+\s*)([-,a-zA-Z]?0*)([0-9]+[a-z]*)$/);
         if (m3) {
           var rangeDelimiter = m3[3];
           rangeDelimiter = fixupRangeDelimiter(variable, val2, rangeDelimiter, values2[i].numeric);
@@ -82513,16 +82656,16 @@ var require_citeproc_commonjs = __commonJS({
         ret2 = ret2.replace(/([^\\])\-/g, "$1" + state.getTerm(rangeType + "-range-delimiter"));
         return ret2;
       }, "stringify");
-      listify = /* @__PURE__ */ __name(function(str6) {
+      listify = /* @__PURE__ */ __name(function(str8) {
         var m4, lst2, ret2;
         var hyphens = "\\s+\\-\\s+";
         var this_range_delimiter = range_delimiter === "-" ? "" : range_delimiter;
         var delimRex = new RegExp("([^\\\\])[-" + this_range_delimiter + "\\u2013]", "g");
-        str6 = str6.replace(delimRex, "$1 - ").replace(/\s+-\s+/g, " - ");
+        str8 = str8.replace(delimRex, "$1 - ").replace(/\s+-\s+/g, " - ");
         var rexm = new RegExp("((?:[0-9]*[a-zA-Z]+0*)?[0-9]+[a-z]*" + hyphens + "(?:[0-9]*[a-zA-Z]+0*)?[0-9]+[a-z]*)", "g");
         var rexlst = new RegExp("(?:[0-9]*[a-zA-Z]+0*)?[0-9]+[a-z]*" + hyphens + "(?:[0-9]*[a-zA-Z]+0*)?[0-9]+[a-z]*");
-        m4 = str6.match(rexm);
-        lst2 = str6.split(rexlst);
+        m4 = str8.match(rexm);
+        lst2 = str8.split(rexlst);
         if (lst2.length === 0) {
           ret2 = m4;
         } else {
@@ -82534,9 +82677,9 @@ var require_citeproc_commonjs = __commonJS({
         }
         return ret2;
       }, "listify");
-      expand = /* @__PURE__ */ __name(function(str6) {
-        str6 = "" + str6;
-        lst = listify(str6);
+      expand = /* @__PURE__ */ __name(function(str8) {
+        str8 = "" + str8;
+        lst = listify(str8);
         len = lst.length;
         for (pos = 1; pos < len; pos += 2) {
           m3 = lst[pos].match(rangerex);
@@ -82637,40 +82780,40 @@ var require_citeproc_commonjs = __commonJS({
         }
         return stringify3(lst2);
       }, "chicago16");
-      var sniff = /* @__PURE__ */ __name(function(str6, func, minchars, isyear) {
+      var sniff = /* @__PURE__ */ __name(function(str8, func, minchars, isyear) {
         var ret2;
-        str6 = "" + str6;
-        var lst2 = expand(str6);
+        str8 = "" + str8;
+        var lst2 = expand(str8);
         var ret2 = func(lst2, minchars, isyear);
         return ret2;
       }, "sniff");
       if (!state.opt[rangeType + "-range-format"]) {
-        ret_func = /* @__PURE__ */ __name(function(str6) {
-          return sniff(str6, stringify3);
+        ret_func = /* @__PURE__ */ __name(function(str8) {
+          return sniff(str8, stringify3);
         }, "ret_func");
       } else if (state.opt[rangeType + "-range-format"] === "expanded") {
-        ret_func = /* @__PURE__ */ __name(function(str6) {
-          return sniff(str6, stringify3);
+        ret_func = /* @__PURE__ */ __name(function(str8) {
+          return sniff(str8, stringify3);
         }, "ret_func");
       } else if (state.opt[rangeType + "-range-format"] === "minimal") {
-        ret_func = /* @__PURE__ */ __name(function(str6) {
-          return sniff(str6, minimize);
+        ret_func = /* @__PURE__ */ __name(function(str8) {
+          return sniff(str8, minimize);
         }, "ret_func");
       } else if (state.opt[rangeType + "-range-format"] === "minimal-two") {
-        ret_func = /* @__PURE__ */ __name(function(str6, isyear) {
-          return sniff(str6, minimize, 2, isyear);
+        ret_func = /* @__PURE__ */ __name(function(str8, isyear) {
+          return sniff(str8, minimize, 2, isyear);
         }, "ret_func");
       } else if (state.opt[rangeType + "-range-format"] === "chicago") {
-        ret_func = /* @__PURE__ */ __name(function(str6) {
-          return sniff(str6, chicago15);
+        ret_func = /* @__PURE__ */ __name(function(str8) {
+          return sniff(str8, chicago15);
         }, "ret_func");
       } else if (state.opt[rangeType + "-range-format"] === "chicago-15") {
-        ret_func = /* @__PURE__ */ __name(function(str6) {
-          return sniff(str6, chicago15);
+        ret_func = /* @__PURE__ */ __name(function(str8) {
+          return sniff(str8, chicago15);
         }, "ret_func");
       } else if (state.opt[rangeType + "-range-format"] === "chicago-16") {
-        ret_func = /* @__PURE__ */ __name(function(str6) {
-          return sniff(str6, chicago16);
+        ret_func = /* @__PURE__ */ __name(function(str8) {
+          return sniff(str8, chicago16);
         }, "ret_func");
       }
       return ret_func;
@@ -82824,8 +82967,8 @@ var require_citeproc_commonjs = __commonJS({
           }
         }
         var ret = _nestingData[opener];
-        ret.opener = new RegExp("^(?:" + openers.map(function(str6) {
-          return str6.replace("(", "\\(");
+        ret.opener = new RegExp("^(?:" + openers.map(function(str8) {
+          return str8.replace("(", "\\(");
         }).join("|") + ")");
         return ret;
       }
@@ -82852,14 +82995,14 @@ var require_citeproc_commonjs = __commonJS({
           var closer = keys[i];
           closers.push(closer);
         }
-        var all = openers.concat(closers).map(function(str6) {
-          return str6.replace("(", "\\(");
+        var all = openers.concat(closers).map(function(str8) {
+          return str8.replace("(", "\\(");
         }).join("|");
         return {
           matchAll: new RegExp("((?:" + all + "))", "g"),
           splitAll: new RegExp("(?:" + all + ")", "g"),
-          open: new RegExp("(^(?:" + openers.map(function(str6) {
-            return str6.replace("(", "\\(");
+          open: new RegExp("(^(?:" + openers.map(function(str8) {
+            return str8.replace("(", "\\(");
           }).join("|") + ")$)"),
           close: new RegExp("(^(?:" + closers.join("|") + ")$)")
         };
@@ -82923,19 +83066,19 @@ var require_citeproc_commonjs = __commonJS({
         }
       }
       __name(_pushNestingState, "_pushNestingState");
-      function _doppelString(str6) {
+      function _doppelString(str8) {
         var forcedSpaces = [];
-        str6 = str6.replace(/(<span)\s+(style=\"font-variant:)\s*(small-caps);?\"[^>]*(>)/g, '$1 $2$3;"$4');
-        str6 = str6.replace(/(<span)\s+(class=\"no(?:case|decor)\")[^>]*(>)/g, "$1 $2$3");
-        var match = str6.match(_tagRex.matchAll);
+        str8 = str8.replace(/(<span)\s+(style=\"font-variant:)\s*(small-caps);?\"[^>]*(>)/g, '$1 $2$3;"$4');
+        str8 = str8.replace(/(<span)\s+(class=\"no(?:case|decor)\")[^>]*(>)/g, "$1 $2$3");
+        var match = str8.match(_tagRex.matchAll);
         if (!match) {
           return {
             tags: [],
-            strings: [str6],
+            strings: [str8],
             forcedSpaces: []
           };
         }
-        var split = str6.split(_tagRex.splitAll);
+        var split = str8.split(_tagRex.splitAll);
         for (var i = 0, ilen = match.length - 1; i < ilen; i++) {
           if (_nestingData[match[i]]) {
             if (split[i + 1] === "" && ['"', "'"].indexOf(match[i + 1]) > -1) {
@@ -82996,12 +83139,12 @@ var require_citeproc_commonjs = __commonJS({
           _stack.pop();
         };
       }, "TagReg");
-      function _apostropheForce(tag, str6) {
+      function _apostropheForce(tag, str8) {
         if (tag === "'") {
-          if (str6 && str6.match(/^[^\,\.\?\:\;\ ]/)) {
+          if (str8 && str8.match(/^[^\,\.\?\:\;\ ]/)) {
             return "\u2019";
           }
-        } else if (tag === " '" && str6 && str6.match(/^[\ ]/)) {
+        } else if (tag === " '" && str8 && str8.match(/^[\ ]/)) {
           return " \u2019";
         }
         return false;
@@ -83014,13 +83157,13 @@ var require_citeproc_commonjs = __commonJS({
         function Stack(blob2) {
           this.stack = [blob2];
           this.latest = blob2;
-          this.addStyling = function(str7, decor) {
+          this.addStyling = function(str9, decor) {
             if (firstString2) {
-              if (str7.slice(0, 1) === " ") {
-                str7 = str7.slice(1);
+              if (str9.slice(0, 1) === " ") {
+                str9 = str9.slice(1);
               }
-              if (str7.slice(0, 1) === " ") {
-                str7 = str7.slice(1);
+              if (str9.slice(0, 1) === " ") {
+                str9 = str9.slice(1);
               }
               firstString2 = false;
             }
@@ -83063,17 +83206,17 @@ var require_citeproc_commonjs = __commonJS({
               this.latest.blobs.push(newblob);
               this.stack.push(newblob);
               this.latest = newblob;
-              if (str7) {
+              if (str9) {
                 var tok = new CSL.Token();
                 var newblob = new CSL.Blob(null, tok);
-                newblob.blobs = str7;
+                newblob.blobs = str9;
                 newblob.alldecor = this.latest.alldecor.slice();
                 this.latest.blobs.push(newblob);
               }
             } else {
-              if (str7) {
+              if (str9) {
                 var child = new CSL.Blob();
-                child.blobs = str7;
+                child.blobs = str9;
                 child.alldecor = this.latest.alldecor.slice();
                 this.latest.blobs.push(child);
               }
@@ -83086,43 +83229,43 @@ var require_citeproc_commonjs = __commonJS({
         __name(Stack, "Stack");
         var stack = new Stack(blob);
         if (doppel.strings.length) {
-          var str6 = doppel.strings[0];
+          var str8 = doppel.strings[0];
           if (leadingSpace) {
-            str6 = " " + str6;
+            str8 = " " + str8;
           }
-          stack.addStyling(str6);
+          stack.addStyling(str8);
         }
         for (var i = 0, ilen = doppel.tags.length; i < ilen; i++) {
           var tag = doppel.tags[i];
-          var str6 = doppel.strings[i + 1];
+          var str8 = doppel.strings[i + 1];
           if (tag.match(_tagRex.open)) {
             tagReg.set(tag);
-            stack.addStyling(str6, tagReg.pair());
+            stack.addStyling(str8, tagReg.pair());
           } else {
             tagReg.pop();
             stack.popStyling();
-            stack.addStyling(str6);
+            stack.addStyling(str8);
           }
         }
       }
       __name(_undoppelToQueue, "_undoppelToQueue");
       this.processTags = function(blob) {
-        var str6 = blob.blobs;
+        var str8 = blob.blobs;
         var leadingSpace = false;
-        if (str6.slice(0, 1) === " " && !str6.match(/^\s+[\'\"]/)) {
+        if (str8.slice(0, 1) === " " && !str8.match(/^\s+[\'\"]/)) {
           leadingSpace = true;
         }
         var rex = new RegExp("(" + CSL.ROMANESQUE_REGEXP.source + ")\u2019(" + CSL.ROMANESQUE_REGEXP.source + ")", "g");
-        var str6 = " " + str6.replace(rex, "$1'$2");
-        var doppel = _doppelString(str6);
+        var str8 = " " + str8.replace(rex, "$1'$2");
+        var doppel = _doppelString(str8);
         if (doppel.tags.length === 0) {
           return;
         }
         var quoteFormSeen = false;
         for (var i = 0, ilen = doppel.tags.length; i < ilen; i++) {
           var tag = doppel.tags[i];
-          var str6 = doppel.strings[i + 1];
-          var apostrophe = _apostropheForce(tag, str6);
+          var str8 = doppel.strings[i + 1];
+          var apostrophe = _apostropheForce(tag, str8);
           if (apostrophe) {
             doppel.strings[i + 1] = apostrophe + doppel.strings[i + 1];
             doppel.tags[i] = "";
@@ -83205,8 +83348,8 @@ var require_citeproc_commonjs = __commonJS({
     };
     CSL.Output.Formatters = (function() {
       var rexStr = `(?:\u2018|\u2019|\u201C|\u201D| "| '|"|'|[-\u2013\u2014/.,;?!:]|\\[|\\]|\\(|\\)|<span style="font-variant: small-caps;">|<span class="no(?:case|decor)">|</span>|</?(?:i|sc|b|sub|sup)>)`;
-      var tagDoppel = new CSL.Doppeler(rexStr, function(str6) {
-        return str6.replace(/(<span)\s+(class=\"no(?:case|decor)\")[^>]*(>)/g, "$1 $2$3").replace(/(<span)\s+(style=\"font-variant:)\s*(small-caps);?(\")[^>]*(>)/g, "$1 $2 $3;$4$5");
+      var tagDoppel = new CSL.Doppeler(rexStr, function(str8) {
+        return str8.replace(/(<span)\s+(class=\"no(?:case|decor)\")[^>]*(>)/g, "$1 $2$3").replace(/(<span)\s+(style=\"font-variant:)\s*(small-caps);?(\")[^>]*(>)/g, "$1 $2 $3;$4$5");
       });
       var rexNameStr = '(?:[-\\s]*<\\/*(?:spans+class="no(?:case|decor)"|i|sc|b|sub|sup)>[-\\s]*|[-\\s]+)';
       var nameDoppel = new CSL.Doppeler(rexNameStr);
@@ -83299,7 +83442,7 @@ var require_citeproc_commonjs = __commonJS({
         }
         for (var i = 0, ilen = config2.doppel.tags.length; i < ilen; i++) {
           var tag = config2.doppel.tags[i];
-          var str6 = config2.doppel.strings[i + 1];
+          var str8 = config2.doppel.strings[i + 1];
           if (config2.tagState !== null) {
             if (_tagParams[tag]) {
               config2.tagState.push(_tagParams[tag]);
@@ -83313,7 +83456,7 @@ var require_citeproc_commonjs = __commonJS({
             }
           }
           if (config2.tagState.length === 0) {
-            config2.doppel.strings[i + 1] = config2.capitaliseWords(str6, i + 1, config2.doppel, config2.doppel.tags[i + 1]);
+            config2.doppel.strings[i + 1] = config2.capitaliseWords(str8, i + 1, config2.doppel, config2.doppel.tags[i + 1]);
           } else if (config2.doppel.strings[i + 1].trim()) {
             config2.lastWordPos = null;
           }
@@ -83326,12 +83469,12 @@ var require_citeproc_commonjs = __commonJS({
             }
           }
           if (config2.isFirst) {
-            if (str6.trim()) {
+            if (str8.trim()) {
               config2.isFirst = false;
             }
           }
           if (config2.afterPunct) {
-            if (str6.trim()) {
+            if (str8.trim()) {
               config2.afterPunct = false;
             }
           }
@@ -83357,22 +83500,22 @@ var require_citeproc_commonjs = __commonJS({
         return tagDoppel.join(config2.doppel);
       }
       __name(_textcaseEngine, "_textcaseEngine");
-      function passthrough(state, str6) {
-        return str6;
+      function passthrough(state, str8) {
+        return str8;
       }
       __name(passthrough, "passthrough");
       function lowercase2(state, string3) {
         var config2 = {
           quoteState: null,
-          capitaliseWords: /* @__PURE__ */ __name(function(str6) {
-            var words3 = str6.split(" ");
-            for (var i = 0, ilen = words3.length; i < ilen; i++) {
-              var word = words3[i];
+          capitaliseWords: /* @__PURE__ */ __name(function(str8) {
+            var words4 = str8.split(" ");
+            for (var i = 0, ilen = words4.length; i < ilen; i++) {
+              var word = words4[i];
               if (word) {
-                words3[i] = CSL.toLocaleLowerCase.call(state, word);
+                words4[i] = CSL.toLocaleLowerCase.call(state, word);
               }
             }
-            return words3.join(" ");
+            return words4.join(" ");
           }, "capitaliseWords"),
           skipWordsRex: null,
           tagState: [],
@@ -83385,15 +83528,15 @@ var require_citeproc_commonjs = __commonJS({
       function uppercase2(state, string3) {
         var config2 = {
           quoteState: null,
-          capitaliseWords: /* @__PURE__ */ __name(function(str6) {
-            var words3 = str6.split(" ");
-            for (var i = 0, ilen = words3.length; i < ilen; i++) {
-              var word = words3[i];
+          capitaliseWords: /* @__PURE__ */ __name(function(str8) {
+            var words4 = str8.split(" ");
+            for (var i = 0, ilen = words4.length; i < ilen; i++) {
+              var word = words4[i];
               if (word) {
-                words3[i] = CSL.toLocaleUpperCase.call(state, word);
+                words4[i] = CSL.toLocaleUpperCase.call(state, word);
               }
             }
-            return words3.join(" ");
+            return words4.join(" ");
           }, "capitaliseWords"),
           skipWordsRex: null,
           tagState: [],
@@ -83406,20 +83549,20 @@ var require_citeproc_commonjs = __commonJS({
       function sentence(state, string3) {
         var config2 = {
           quoteState: [],
-          capitaliseWords: /* @__PURE__ */ __name(function(str6) {
-            var words3 = str6.split(" ");
-            for (var i = 0, ilen = words3.length; i < ilen; i++) {
-              var word = words3[i];
+          capitaliseWords: /* @__PURE__ */ __name(function(str8) {
+            var words4 = str8.split(" ");
+            for (var i = 0, ilen = words4.length; i < ilen; i++) {
+              var word = words4[i];
               if (word) {
                 if (config2.isFirst) {
-                  words3[i] = _capitalise.call(state, word);
+                  words4[i] = _capitalise.call(state, word);
                   config2.isFirst = false;
                 } else {
-                  words3[i] = CSL.toLocaleLowerCase.call(state, word);
+                  words4[i] = CSL.toLocaleLowerCase.call(state, word);
                 }
               }
             }
-            return words3.join(" ");
+            return words4.join(" ");
           }, "capitaliseWords"),
           skipWordsRex: null,
           tagState: [],
@@ -83432,12 +83575,12 @@ var require_citeproc_commonjs = __commonJS({
       function title(state, string3) {
         var config2 = {
           quoteState: [],
-          capitaliseWords: /* @__PURE__ */ __name(function(str6, i, followingTag) {
-            if (str6.trim()) {
-              var wordle = wordDoppel.split(str6);
-              var words3 = wordle.strings;
-              for (var j2 = 0, jlen = words3.length; j2 < jlen; j2++) {
-                var word = words3[j2];
+          capitaliseWords: /* @__PURE__ */ __name(function(str8, i, followingTag) {
+            if (str8.trim()) {
+              var wordle = wordDoppel.split(str8);
+              var words4 = wordle.strings;
+              for (var j2 = 0, jlen = words4.length; j2 < jlen; j2++) {
+                var word = words4[j2];
                 if (!word) {
                   continue;
                 }
@@ -83445,7 +83588,7 @@ var require_citeproc_commonjs = __commonJS({
                 let capitalize = false;
                 if (word.length > 1 && !lcase.match(config2.skipWordsRex)) {
                   capitalize = true;
-                } else if (j2 === words3.length - 1 && followingTag === "-") {
+                } else if (j2 === words4.length - 1 && followingTag === "-") {
                   capitalize = true;
                 } else if (config2.isFirst) {
                   capitalize = true;
@@ -83453,7 +83596,7 @@ var require_citeproc_commonjs = __commonJS({
                   capitalize = true;
                 }
                 if (capitalize && word === lcase) {
-                  words3[j2] = _capitalise.call(state, word);
+                  words4[j2] = _capitalise.call(state, word);
                 }
                 config2.afterPunct = false;
                 config2.isFirst = false;
@@ -83462,9 +83605,9 @@ var require_citeproc_commonjs = __commonJS({
                   words: j2
                 };
               }
-              str6 = wordDoppel.join(wordle);
+              str8 = wordDoppel.join(wordle);
             }
-            return str6;
+            return str8;
           }, "capitaliseWords"),
           skipWordsRex: state.locale[state.opt.lang].opts["skip-words-regexp"],
           tagState: [],
@@ -83477,15 +83620,15 @@ var require_citeproc_commonjs = __commonJS({
       function capitalizeFirst(state, string3) {
         var config2 = {
           quoteState: [],
-          capitaliseWords: /* @__PURE__ */ __name(function(str6) {
-            var wordle = wordDoppel.split(str6);
-            var words3 = wordle.strings;
-            for (var i = 0, ilen = words3.length; i < ilen; i++) {
-              var word = words3[i];
+          capitaliseWords: /* @__PURE__ */ __name(function(str8) {
+            var wordle = wordDoppel.split(str8);
+            var words4 = wordle.strings;
+            for (var i = 0, ilen = words4.length; i < ilen; i++) {
+              var word = words4[i];
               if (word) {
                 if (config2.isFirst) {
                   if (word === CSL.toLocaleLowerCase.call(state, word)) {
-                    words3[i] = _capitalise.call(state, word);
+                    words4[i] = _capitalise.call(state, word);
                   }
                   config2.isFirst = false;
                   break;
@@ -83505,14 +83648,14 @@ var require_citeproc_commonjs = __commonJS({
       function capitalizeAll(state, string3) {
         var config2 = {
           quoteState: [],
-          capitaliseWords: /* @__PURE__ */ __name(function(str6) {
-            var wordle = wordDoppel.split(str6);
-            var words3 = wordle.strings;
-            for (var i = 0, ilen = words3.length; i < ilen; i++) {
-              var word = words3[i];
+          capitaliseWords: /* @__PURE__ */ __name(function(str8) {
+            var wordle = wordDoppel.split(str8);
+            var words4 = wordle.strings;
+            for (var i = 0, ilen = words4.length; i < ilen; i++) {
+              var word = words4[i];
               if (word) {
                 if (word === CSL.toLocaleLowerCase.call(state, word)) {
-                  words3[i] = _capitalise.call(state, word);
+                  words4[i] = _capitalise.call(state, word);
                 }
               }
             }
@@ -83575,77 +83718,77 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/baseline": '<span style="baseline">%%STRING%%</span>',
       "@strip-periods/true": CSL.Output.Formatters.passthrough,
       "@strip-periods/false": CSL.Output.Formatters.passthrough,
-      "@quotes/true": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/true": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return state.getTerm("open-quote");
         }
-        return state.getTerm("open-quote") + str6 + state.getTerm("close-quote");
+        return state.getTerm("open-quote") + str8 + state.getTerm("close-quote");
       }, "@quotes/true"),
-      "@quotes/inner": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/inner": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return "\u2019";
         }
-        return state.getTerm("open-inner-quote") + str6 + state.getTerm("close-inner-quote");
+        return state.getTerm("open-inner-quote") + str8 + state.getTerm("close-inner-quote");
       }, "@quotes/inner"),
       "@quotes/false": false,
       //"@bibliography/body": function (state,str){
       //    return "<div class=\"csl-bib-body\">\n"+str+"</div>";
       //},
-      "@cite/entry": /* @__PURE__ */ __name(function(state, str6) {
-        return state.sys.wrapCitationEntry(str6, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": /* @__PURE__ */ __name(function(state, str8) {
+        return state.sys.wrapCitationEntry(str8, this.item_id, this.locator_txt, this.suffix_txt);
       }, "@cite/entry"),
-      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str6) {
+      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str8) {
         var insert = "";
         if (state.sys.embedBibliographyEntry) {
           insert = state.sys.embedBibliographyEntry(this.item_id) + "\n";
         }
-        return '  <div class="csl-entry">' + str6 + "</div>\n" + insert;
+        return '  <div class="csl-entry">' + str8 + "</div>\n" + insert;
       }, "@bibliography/entry"),
-      "@display/block": /* @__PURE__ */ __name(function(state, str6) {
-        return '\n\n    <div class="csl-block">' + str6 + "</div>\n";
+      "@display/block": /* @__PURE__ */ __name(function(state, str8) {
+        return '\n\n    <div class="csl-block">' + str8 + "</div>\n";
       }, "@display/block"),
-      "@display/left-margin": /* @__PURE__ */ __name(function(state, str6) {
-        return '\n    <div class="csl-left-margin">' + str6 + "</div>";
+      "@display/left-margin": /* @__PURE__ */ __name(function(state, str8) {
+        return '\n    <div class="csl-left-margin">' + str8 + "</div>";
       }, "@display/left-margin"),
-      "@display/right-inline": /* @__PURE__ */ __name(function(state, str6) {
-        return '<div class="csl-right-inline">' + str6 + "</div>\n  ";
+      "@display/right-inline": /* @__PURE__ */ __name(function(state, str8) {
+        return '<div class="csl-right-inline">' + str8 + "</div>\n  ";
       }, "@display/right-inline"),
-      "@display/indent": /* @__PURE__ */ __name(function(state, str6) {
-        return '<div class="csl-indent">' + str6 + "</div>\n  ";
+      "@display/indent": /* @__PURE__ */ __name(function(state, str8) {
+        return '<div class="csl-indent">' + str8 + "</div>\n  ";
       }, "@display/indent"),
-      "@showid/true": /* @__PURE__ */ __name(function(state, str6, cslid) {
+      "@showid/true": /* @__PURE__ */ __name(function(state, str8, cslid) {
         if (!state.tmp.just_looking && !state.tmp.suppress_decorations) {
           if (cslid) {
-            return '<span class="' + state.opt.nodenames[cslid] + '" cslid="' + cslid + '">' + str6 + "</span>";
-          } else if (this.params && "string" === typeof str6) {
+            return '<span class="' + state.opt.nodenames[cslid] + '" cslid="' + cslid + '">' + str8 + "</span>";
+          } else if (this.params && "string" === typeof str8) {
             var prePunct = "";
-            if (str6) {
-              var m3 = str6.match(CSL.VARIABLE_WRAPPER_PREPUNCT_REX);
+            if (str8) {
+              var m3 = str8.match(CSL.VARIABLE_WRAPPER_PREPUNCT_REX);
               prePunct = m3[1];
-              str6 = m3[2];
+              str8 = m3[2];
             }
             var postPunct = "";
-            if (str6 && CSL.SWAPPING_PUNCTUATION.indexOf(str6.slice(-1)) > -1) {
-              postPunct = str6.slice(-1);
-              str6 = str6.slice(0, -1);
+            if (str8 && CSL.SWAPPING_PUNCTUATION.indexOf(str8.slice(-1)) > -1) {
+              postPunct = str8.slice(-1);
+              str8 = str8.slice(0, -1);
             }
-            return state.sys.variableWrapper(this.params, prePunct, str6, postPunct);
+            return state.sys.variableWrapper(this.params, prePunct, str8, postPunct);
           } else {
-            return str6;
+            return str8;
           }
         } else {
-          return str6;
+          return str8;
         }
       }, "@showid/true"),
-      "@URL/true": /* @__PURE__ */ __name(function(state, str6) {
-        return '<a href="' + str6 + '">' + str6 + "</a>";
+      "@URL/true": /* @__PURE__ */ __name(function(state, str8) {
+        return '<a href="' + str8 + '">' + str8 + "</a>";
       }, "@URL/true"),
-      "@DOI/true": /* @__PURE__ */ __name(function(state, str6) {
-        var doiurl = str6;
-        if (!str6.match(/^https?:\/\//)) {
-          doiurl = "https://doi.org/" + str6;
+      "@DOI/true": /* @__PURE__ */ __name(function(state, str8) {
+        var doiurl = str8;
+        if (!str8.match(/^https?:\/\//)) {
+          doiurl = "https://doi.org/" + str8;
         }
-        return '<a href="' + doiurl + '">' + str6 + "</a>";
+        return '<a href="' + doiurl + '">' + str8 + "</a>";
       }, "@DOI/true")
     };
     CSL.Output.Formats.prototype.text = {
@@ -83679,48 +83822,48 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/sub": false,
       "@strip-periods/true": CSL.Output.Formatters.passthrough,
       "@strip-periods/false": CSL.Output.Formatters.passthrough,
-      "@quotes/true": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/true": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return state.getTerm("open-quote");
         }
-        return state.getTerm("open-quote") + str6 + state.getTerm("close-quote");
+        return state.getTerm("open-quote") + str8 + state.getTerm("close-quote");
       }, "@quotes/true"),
-      "@quotes/inner": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/inner": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return "\u2019";
         }
-        return state.getTerm("open-inner-quote") + str6 + state.getTerm("close-inner-quote");
+        return state.getTerm("open-inner-quote") + str8 + state.getTerm("close-inner-quote");
       }, "@quotes/inner"),
       "@quotes/false": false,
       //"@bibliography/body": function (state,str){
       //    return "<div class=\"csl-bib-body\">\n"+str+"</div>";
       //},
-      "@cite/entry": /* @__PURE__ */ __name(function(state, str6) {
-        return state.sys.wrapCitationEntry(str6, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": /* @__PURE__ */ __name(function(state, str8) {
+        return state.sys.wrapCitationEntry(str8, this.item_id, this.locator_txt, this.suffix_txt);
       }, "@cite/entry"),
-      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str6) {
-        return str6 + "\n";
+      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str8) {
+        return str8 + "\n";
       }, "@bibliography/entry"),
-      "@display/block": /* @__PURE__ */ __name(function(state, str6) {
-        return "\n" + str6;
+      "@display/block": /* @__PURE__ */ __name(function(state, str8) {
+        return "\n" + str8;
       }, "@display/block"),
-      "@display/left-margin": /* @__PURE__ */ __name(function(state, str6) {
-        return str6 + " ";
+      "@display/left-margin": /* @__PURE__ */ __name(function(state, str8) {
+        return str8 + " ";
       }, "@display/left-margin"),
-      "@display/right-inline": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@display/right-inline": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@display/right-inline"),
-      "@display/indent": /* @__PURE__ */ __name(function(state, str6) {
-        return "\n    " + str6;
+      "@display/indent": /* @__PURE__ */ __name(function(state, str8) {
+        return "\n    " + str8;
       }, "@display/indent"),
-      "@showid/true": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@showid/true": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@showid/true"),
-      "@URL/true": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@URL/true": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@URL/true"),
-      "@DOI/true": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@DOI/true": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@DOI/true")
     };
     CSL.Output.Formats.prototype.rtf = {
@@ -83762,60 +83905,60 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/sub": "\\sub %%STRING%%\\nosupersub{}",
       "@strip-periods/true": CSL.Output.Formatters.passthrough,
       "@strip-periods/false": CSL.Output.Formatters.passthrough,
-      "@quotes/true": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/true": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return CSL.Output.Formats.rtf.text_escape(state.getTerm("open-quote"));
         }
-        return CSL.Output.Formats.rtf.text_escape(state.getTerm("open-quote")) + str6 + CSL.Output.Formats.rtf.text_escape(state.getTerm("close-quote"));
+        return CSL.Output.Formats.rtf.text_escape(state.getTerm("open-quote")) + str8 + CSL.Output.Formats.rtf.text_escape(state.getTerm("close-quote"));
       }, "@quotes/true"),
-      "@quotes/inner": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/inner": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return CSL.Output.Formats.rtf.text_escape("\u2019");
         }
-        return CSL.Output.Formats.rtf.text_escape(state.getTerm("open-inner-quote")) + str6 + CSL.Output.Formats.rtf.text_escape(state.getTerm("close-inner-quote"));
+        return CSL.Output.Formats.rtf.text_escape(state.getTerm("open-inner-quote")) + str8 + CSL.Output.Formats.rtf.text_escape(state.getTerm("close-inner-quote"));
       }, "@quotes/inner"),
       "@quotes/false": false,
       "bibstart": "{\\rtf ",
       "bibend": "}",
       "@display/block": "\\line{}%%STRING%%\\line\r\n",
-      "@cite/entry": /* @__PURE__ */ __name(function(state, str6) {
-        return state.sys.wrapCitationEntry(str6, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": /* @__PURE__ */ __name(function(state, str8) {
+        return state.sys.wrapCitationEntry(str8, this.item_id, this.locator_txt, this.suffix_txt);
       }, "@cite/entry"),
-      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@bibliography/entry"),
-      "@display/left-margin": /* @__PURE__ */ __name(function(state, str6) {
-        return str6 + "\\tab ";
+      "@display/left-margin": /* @__PURE__ */ __name(function(state, str8) {
+        return str8 + "\\tab ";
       }, "@display/left-margin"),
-      "@display/right-inline": /* @__PURE__ */ __name(function(state, str6) {
-        return str6 + "\r\n";
+      "@display/right-inline": /* @__PURE__ */ __name(function(state, str8) {
+        return str8 + "\r\n";
       }, "@display/right-inline"),
-      "@display/indent": /* @__PURE__ */ __name(function(state, str6) {
-        return "\n\\tab " + str6 + "\\line\r\n";
+      "@display/indent": /* @__PURE__ */ __name(function(state, str8) {
+        return "\n\\tab " + str8 + "\\line\r\n";
       }, "@display/indent"),
-      "@showid/true": /* @__PURE__ */ __name(function(state, str6) {
+      "@showid/true": /* @__PURE__ */ __name(function(state, str8) {
         if (!state.tmp.just_looking && !state.tmp.suppress_decorations) {
           var prePunct = "";
-          if (str6) {
-            var m3 = str6.match(CSL.VARIABLE_WRAPPER_PREPUNCT_REX);
+          if (str8) {
+            var m3 = str8.match(CSL.VARIABLE_WRAPPER_PREPUNCT_REX);
             prePunct = m3[1];
-            str6 = m3[2];
+            str8 = m3[2];
           }
           var postPunct = "";
-          if (str6 && CSL.SWAPPING_PUNCTUATION.indexOf(str6.slice(-1)) > -1) {
-            postPunct = str6.slice(-1);
-            str6 = str6.slice(0, -1);
+          if (str8 && CSL.SWAPPING_PUNCTUATION.indexOf(str8.slice(-1)) > -1) {
+            postPunct = str8.slice(-1);
+            str8 = str8.slice(0, -1);
           }
-          return state.sys.variableWrapper(this.params, prePunct, str6, postPunct);
+          return state.sys.variableWrapper(this.params, prePunct, str8, postPunct);
         } else {
-          return str6;
+          return str8;
         }
       }, "@showid/true"),
-      "@URL/true": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@URL/true": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@URL/true"),
-      "@DOI/true": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@DOI/true": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@DOI/true")
     };
     CSL.Output.Formats.prototype.asciidoc = {
@@ -83845,64 +83988,64 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/baseline": false,
       "@strip-periods/true": CSL.Output.Formatters.passthrough,
       "@strip-periods/false": CSL.Output.Formatters.passthrough,
-      "@quotes/true": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/true": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return "``";
         }
-        return "``" + str6 + "''";
+        return "``" + str8 + "''";
       }, "@quotes/true"),
-      "@quotes/inner": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/inner": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return "`";
         }
-        return "`" + str6 + "'";
+        return "`" + str8 + "'";
       }, "@quotes/inner"),
       "@quotes/false": false,
-      "@cite/entry": /* @__PURE__ */ __name(function(state, str6) {
-        return state.sys.wrapCitationEntry(str6, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": /* @__PURE__ */ __name(function(state, str8) {
+        return state.sys.wrapCitationEntry(str8, this.item_id, this.locator_txt, this.suffix_txt);
       }, "@cite/entry"),
-      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str6) {
-        return str6 + "\n";
+      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str8) {
+        return str8 + "\n";
       }, "@bibliography/entry"),
-      "@display/block": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@display/block": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@display/block"),
-      "@display/left-margin": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@display/left-margin": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@display/left-margin"),
-      "@display/right-inline": /* @__PURE__ */ __name(function(state, str6) {
-        return " " + str6;
+      "@display/right-inline": /* @__PURE__ */ __name(function(state, str8) {
+        return " " + str8;
       }, "@display/right-inline"),
-      "@display/indent": /* @__PURE__ */ __name(function(state, str6) {
-        return " " + str6;
+      "@display/indent": /* @__PURE__ */ __name(function(state, str8) {
+        return " " + str8;
       }, "@display/indent"),
-      "@showid/true": /* @__PURE__ */ __name(function(state, str6) {
-        if (!state.tmp.just_looking && !state.tmp.suppress_decorations && this.params && "string" === typeof str6) {
+      "@showid/true": /* @__PURE__ */ __name(function(state, str8) {
+        if (!state.tmp.just_looking && !state.tmp.suppress_decorations && this.params && "string" === typeof str8) {
           var prePunct = "";
-          if (str6) {
-            var m3 = str6.match(CSL.VARIABLE_WRAPPER_PREPUNCT_REX);
+          if (str8) {
+            var m3 = str8.match(CSL.VARIABLE_WRAPPER_PREPUNCT_REX);
             prePunct = m3[1];
-            str6 = m3[2];
+            str8 = m3[2];
           }
           var postPunct = "";
-          if (str6 && CSL.SWAPPING_PUNCTUATION.indexOf(str6.slice(-1)) > -1) {
-            postPunct = str6.slice(-1);
-            str6 = str6.slice(0, -1);
+          if (str8 && CSL.SWAPPING_PUNCTUATION.indexOf(str8.slice(-1)) > -1) {
+            postPunct = str8.slice(-1);
+            str8 = str8.slice(0, -1);
           }
-          return state.sys.variableWrapper(this.params, prePunct, str6, postPunct);
+          return state.sys.variableWrapper(this.params, prePunct, str8, postPunct);
         } else {
-          return str6;
+          return str8;
         }
       }, "@showid/true"),
-      "@URL/true": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@URL/true": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@URL/true"),
-      "@DOI/true": /* @__PURE__ */ __name(function(state, str6) {
-        var doiurl = str6;
-        if (!str6.match(/^https?:\/\//)) {
-          doiurl = "https://doi.org/" + str6;
+      "@DOI/true": /* @__PURE__ */ __name(function(state, str8) {
+        var doiurl = str8;
+        if (!str8.match(/^https?:\/\//)) {
+          doiurl = "https://doi.org/" + str8;
         }
-        return doiurl + "[" + str6 + "]";
+        return doiurl + "[" + str8 + "]";
       }, "@DOI/true")
     };
     CSL.Output.Formats.prototype.fo = {
@@ -83932,23 +84075,23 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/baseline": '<fo:inline vertical-align="baseline">%%STRING%%</fo:inline>',
       "@strip-periods/true": CSL.Output.Formatters.passthrough,
       "@strip-periods/false": CSL.Output.Formatters.passthrough,
-      "@quotes/true": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/true": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return state.getTerm("open-quote");
         }
-        return state.getTerm("open-quote") + str6 + state.getTerm("close-quote");
+        return state.getTerm("open-quote") + str8 + state.getTerm("close-quote");
       }, "@quotes/true"),
-      "@quotes/inner": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/inner": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return "\u2019";
         }
-        return state.getTerm("open-inner-quote") + str6 + state.getTerm("close-inner-quote");
+        return state.getTerm("open-inner-quote") + str8 + state.getTerm("close-inner-quote");
       }, "@quotes/inner"),
       "@quotes/false": false,
-      "@cite/entry": /* @__PURE__ */ __name(function(state, str6) {
-        return state.sys.wrapCitationEntry(str6, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": /* @__PURE__ */ __name(function(state, str8) {
+        return state.sys.wrapCitationEntry(str8, this.item_id, this.locator_txt, this.suffix_txt);
       }, "@cite/entry"),
-      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str6) {
+      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str8) {
         var indent = "";
         if (state.bibliography && state.bibliography.opt && state.bibliography.opt.hangingindent) {
           var hi = state.bibliography.opt.hangingindent;
@@ -83958,47 +84101,47 @@ var require_citeproc_commonjs = __commonJS({
         if (state.sys.embedBibliographyEntry) {
           insert = state.sys.embedBibliographyEntry(this.item_id) + "\n";
         }
-        return '<fo:block id="' + this.system_id + '"' + indent + ">" + str6 + "</fo:block>\n" + insert;
+        return '<fo:block id="' + this.system_id + '"' + indent + ">" + str8 + "</fo:block>\n" + insert;
       }, "@bibliography/entry"),
-      "@display/block": /* @__PURE__ */ __name(function(state, str6) {
-        return "\n  <fo:block>" + str6 + "</fo:block>\n";
+      "@display/block": /* @__PURE__ */ __name(function(state, str8) {
+        return "\n  <fo:block>" + str8 + "</fo:block>\n";
       }, "@display/block"),
-      "@display/left-margin": /* @__PURE__ */ __name(function(state, str6) {
-        return '\n  <fo:table table-layout="fixed" width="100%">\n    <fo:table-column column-number="1" column-width="$$$__COLUMN_WIDTH_1__$$$"/>\n    <fo:table-column column-number="2" column-width="proportional-column-width(1)"/>\n    <fo:table-body>\n      <fo:table-row>\n        <fo:table-cell>\n          <fo:block>' + str6 + "</fo:block>\n        </fo:table-cell>\n        ";
+      "@display/left-margin": /* @__PURE__ */ __name(function(state, str8) {
+        return '\n  <fo:table table-layout="fixed" width="100%">\n    <fo:table-column column-number="1" column-width="$$$__COLUMN_WIDTH_1__$$$"/>\n    <fo:table-column column-number="2" column-width="proportional-column-width(1)"/>\n    <fo:table-body>\n      <fo:table-row>\n        <fo:table-cell>\n          <fo:block>' + str8 + "</fo:block>\n        </fo:table-cell>\n        ";
       }, "@display/left-margin"),
-      "@display/right-inline": /* @__PURE__ */ __name(function(state, str6) {
-        return "<fo:table-cell>\n          <fo:block>" + str6 + "</fo:block>\n        </fo:table-cell>\n      </fo:table-row>\n    </fo:table-body>\n  </fo:table>\n";
+      "@display/right-inline": /* @__PURE__ */ __name(function(state, str8) {
+        return "<fo:table-cell>\n          <fo:block>" + str8 + "</fo:block>\n        </fo:table-cell>\n      </fo:table-row>\n    </fo:table-body>\n  </fo:table>\n";
       }, "@display/right-inline"),
-      "@display/indent": /* @__PURE__ */ __name(function(state, str6) {
-        return '<fo:block margin-left="2em">' + str6 + "</fo:block>\n";
+      "@display/indent": /* @__PURE__ */ __name(function(state, str8) {
+        return '<fo:block margin-left="2em">' + str8 + "</fo:block>\n";
       }, "@display/indent"),
-      "@showid/true": /* @__PURE__ */ __name(function(state, str6) {
-        if (!state.tmp.just_looking && !state.tmp.suppress_decorations && this.params && "string" === typeof str6) {
+      "@showid/true": /* @__PURE__ */ __name(function(state, str8) {
+        if (!state.tmp.just_looking && !state.tmp.suppress_decorations && this.params && "string" === typeof str8) {
           var prePunct = "";
-          if (str6) {
-            var m3 = str6.match(CSL.VARIABLE_WRAPPER_PREPUNCT_REX);
+          if (str8) {
+            var m3 = str8.match(CSL.VARIABLE_WRAPPER_PREPUNCT_REX);
             prePunct = m3[1];
-            str6 = m3[2];
+            str8 = m3[2];
           }
           var postPunct = "";
-          if (str6 && CSL.SWAPPING_PUNCTUATION.indexOf(str6.slice(-1)) > -1) {
-            postPunct = str6.slice(-1);
-            str6 = str6.slice(0, -1);
+          if (str8 && CSL.SWAPPING_PUNCTUATION.indexOf(str8.slice(-1)) > -1) {
+            postPunct = str8.slice(-1);
+            str8 = str8.slice(0, -1);
           }
-          return state.sys.variableWrapper(this.params, prePunct, str6, postPunct);
+          return state.sys.variableWrapper(this.params, prePunct, str8, postPunct);
         } else {
-          return str6;
+          return str8;
         }
       }, "@showid/true"),
-      "@URL/true": /* @__PURE__ */ __name(function(state, str6) {
-        return `<fo:basic-link external-destination="url('` + str6 + `')">` + str6 + "</fo:basic-link>";
+      "@URL/true": /* @__PURE__ */ __name(function(state, str8) {
+        return `<fo:basic-link external-destination="url('` + str8 + `')">` + str8 + "</fo:basic-link>";
       }, "@URL/true"),
-      "@DOI/true": /* @__PURE__ */ __name(function(state, str6) {
-        var doiurl = str6;
-        if (!str6.match(/^https?:\/\//)) {
-          doiurl = "https://doi.org/" + str6;
+      "@DOI/true": /* @__PURE__ */ __name(function(state, str8) {
+        var doiurl = str8;
+        if (!str8.match(/^https?:\/\//)) {
+          doiurl = "https://doi.org/" + str8;
         }
-        return `<fo:basic-link external-destination="url('` + doiurl + `')">` + str6 + "</fo:basic-link>";
+        return `<fo:basic-link external-destination="url('` + doiurl + `')">` + str8 + "</fo:basic-link>";
       }, "@DOI/true")
     };
     CSL.Output.Formats.prototype.latex = {
@@ -84026,48 +84169,48 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/sub": false,
       "@strip-periods/true": CSL.Output.Formatters.passthrough,
       "@strip-periods/false": CSL.Output.Formatters.passthrough,
-      "@quotes/true": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/true": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return state.getTerm("open-quote");
         }
-        return state.getTerm("open-quote") + str6 + state.getTerm("close-quote");
+        return state.getTerm("open-quote") + str8 + state.getTerm("close-quote");
       }, "@quotes/true"),
-      "@quotes/inner": /* @__PURE__ */ __name(function(state, str6) {
-        if ("undefined" === typeof str6) {
+      "@quotes/inner": /* @__PURE__ */ __name(function(state, str8) {
+        if ("undefined" === typeof str8) {
           return "\u2019";
         }
-        return state.getTerm("open-inner-quote") + str6 + state.getTerm("close-inner-quote");
+        return state.getTerm("open-inner-quote") + str8 + state.getTerm("close-inner-quote");
       }, "@quotes/inner"),
       "@quotes/false": false,
       //"@bibliography/body": function (state,str){
       //    return "<div class=\"csl-bib-body\">\n"+str+"</div>";
       //},
-      "@cite/entry": /* @__PURE__ */ __name(function(state, str6) {
-        return state.sys.wrapCitationEntry(str6, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": /* @__PURE__ */ __name(function(state, str8) {
+        return state.sys.wrapCitationEntry(str8, this.item_id, this.locator_txt, this.suffix_txt);
       }, "@cite/entry"),
-      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str6) {
+      "@bibliography/entry": /* @__PURE__ */ __name(function(state, str8) {
         return "\\bibitem{" + state.sys.embedBibliographyEntry(this.item_id) + "}\n";
       }, "@bibliography/entry"),
-      "@display/block": /* @__PURE__ */ __name(function(state, str6) {
-        return "\n" + str6;
+      "@display/block": /* @__PURE__ */ __name(function(state, str8) {
+        return "\n" + str8;
       }, "@display/block"),
-      "@display/left-margin": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@display/left-margin": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@display/left-margin"),
-      "@display/right-inline": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@display/right-inline": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@display/right-inline"),
-      "@display/indent": /* @__PURE__ */ __name(function(state, str6) {
-        return "\n    " + str6;
+      "@display/indent": /* @__PURE__ */ __name(function(state, str8) {
+        return "\n    " + str8;
       }, "@display/indent"),
-      "@showid/true": /* @__PURE__ */ __name(function(state, str6, cslid) {
-        return str6;
+      "@showid/true": /* @__PURE__ */ __name(function(state, str8, cslid) {
+        return str8;
       }, "@showid/true"),
-      "@URL/true": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@URL/true": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@URL/true"),
-      "@DOI/true": /* @__PURE__ */ __name(function(state, str6) {
-        return str6;
+      "@DOI/true": /* @__PURE__ */ __name(function(state, str8) {
+        return str8;
       }, "@DOI/true")
     };
     CSL.Output.Formats = new CSL.Output.Formats();
@@ -84519,11 +84662,11 @@ var require_citeproc_commonjs = __commonJS({
       this.nameind = {};
       this.nameindpkeys = {};
       this.itemkeyreg = {};
-      strip_periods = /* @__PURE__ */ __name(function(str6) {
-        if (!str6) {
-          str6 = "";
+      strip_periods = /* @__PURE__ */ __name(function(str8) {
+        if (!str8) {
+          str8 = "";
         }
-        return str6.replace(/\./g, " ").replace(/\s+/g, " ").replace(/\s+$/, "");
+        return str8.replace(/\./g, " ").replace(/\s+/g, " ").replace(/\s+$/, "");
       }, "strip_periods");
       set_keys = /* @__PURE__ */ __name(function(state2, itemid, nameobj) {
         pkey = strip_periods(nameobj.family);
@@ -85280,7 +85423,7 @@ var require_citeproc_commonjs = __commonJS({
       var either_2_dropping_best = [[[0, 2], null], [null, [0, 2]]];
       var either_3_dropping_best = [[[0, 3], null], [null, [0, 3]]];
       var non_dropping_2_alt_dropping_1_non_dropping_1 = [[null, [0, 2]], [[0, 1], [1, 2]]];
-      var PARTICLES2 = [
+      var PARTICLES3 = [
         ["'s", always_non_dropping_1],
         ["'s-", always_non_dropping_1],
         ["'t", always_non_dropping_1],
@@ -85504,7 +85647,7 @@ var require_citeproc_commonjs = __commonJS({
         ["zum", either_1],
         ["zur", either_1]
       ];
-      return PARTICLES2;
+      return PARTICLES3;
     })();
     CSL.parseParticles = /* @__PURE__ */ (function() {
       function splitParticles(nameValue, firstNameFlag, caseOverride) {
@@ -85558,13 +85701,13 @@ var require_citeproc_commonjs = __commonJS({
         return [hasParticle, nameValue, particleList];
       }
       __name(splitParticles, "splitParticles");
-      function trimLast(str6) {
-        var lastChar = str6.slice(-1);
-        str6 = str6.trim();
-        if (lastChar === " " && ["'", "\u2019"].indexOf(str6.slice(-1)) > -1) {
-          str6 += " ";
+      function trimLast(str8) {
+        var lastChar = str8.slice(-1);
+        str8 = str8.trim();
+        if (lastChar === " " && ["'", "\u2019"].indexOf(str8.slice(-1)) > -1) {
+          str8 += " ";
         }
-        return str6;
+        return str8;
       }
       __name(trimLast, "trimLast");
       function parseSuffix(nameObj) {
@@ -91047,12 +91190,12 @@ var require_converters = __commonJS({
         }
       },
       KEYWORD: {
-        toTarget(words3) {
-          words3 = [].concat(words3);
-          return words3.join(",");
+        toTarget(words4) {
+          words4 = [].concat(words4);
+          return words4.join(",");
         },
-        toSource(words3) {
-          return words3.split(",");
+        toSource(words4) {
+          return words4.split(",");
         }
       },
       ID: {
@@ -92312,10 +92455,10 @@ var require_wikidata_sdk = __commonJS({
       return Boolean(obj) && typeof obj === "object" && !Array.isArray(obj);
     }
     __name(isPlainObject6, "isPlainObject");
-    var fixedEncodeURIComponent = /* @__PURE__ */ __name((str6) => {
-      return encodeURIComponent(str6).replace(/[!'()*]/g, encodeCharacter);
+    var fixedEncodeURIComponent = /* @__PURE__ */ __name((str8) => {
+      return encodeURIComponent(str8).replace(/[!'()*]/g, encodeCharacter);
     }, "fixedEncodeURIComponent");
-    var replaceSpaceByUnderscores = /* @__PURE__ */ __name((str6) => str6.replace(/\s/g, "_"), "replaceSpaceByUnderscores");
+    var replaceSpaceByUnderscores = /* @__PURE__ */ __name((str8) => str8.replace(/\s/g, "_"), "replaceSpaceByUnderscores");
     function uniq(array2) {
       return Array.from(new Set(array2));
     }
@@ -95558,7 +95701,7 @@ var require_lib12 = __commonJS({
 // node_modules/citation-js/index.js
 var require_citation_js = __commonJS({
   "node_modules/citation-js/index.js"(exports, module) {
-    var core = require_lib5();
+    var core2 = require_lib5();
     require_lib7();
     require_lib8();
     require_lib9();
@@ -95605,24 +95748,24 @@ var require_citation_js = __commonJS({
       if (!(this instanceof Cite2)) {
         return new Cite2(data, opts);
       }
-      const self2 = new core.Cite(data, opts);
+      const self2 = new core2.Cite(data, opts);
       this._options = self2._options;
       this.log = self2.log;
       this.data = self2.data;
     }
     __name(Cite2, "Cite");
-    Cite2.prototype = Object.create(core.Cite.prototype);
-    Cite2.async = core.Cite.async;
-    Cite2.validateOptions = core.Cite.validateOptions;
-    Cite2.validateOutputOptions = core.Cite.validateOutputOptions;
-    Cite2.input = core.plugins.input.chain;
-    Cite2.inputAsync = core.plugins.input.chainAsync;
-    Cite2.util = Object.assign({ attr }, core.util);
+    Cite2.prototype = Object.create(core2.Cite.prototype);
+    Cite2.async = core2.Cite.async;
+    Cite2.validateOptions = core2.Cite.validateOptions;
+    Cite2.validateOutputOptions = core2.Cite.validateOutputOptions;
+    Cite2.input = core2.plugins.input.chain;
+    Cite2.inputAsync = core2.plugins.input.chainAsync;
+    Cite2.util = Object.assign({ attr }, core2.util);
     Cite2.version = {
-      cite: core.version,
+      cite: core2.version,
       citeproc: citeproc.PROCESSOR_VERSION
     };
-    var CSL = core.plugins.config.get("@csl");
+    var CSL = core2.plugins.config.get("@csl");
     Cite2.CSL = {
       engine: require_engines().fetchEngine,
       item(data) {
@@ -95643,26 +95786,26 @@ var require_citation_js = __commonJS({
         hasLocale: CSL.locales.has.bind(CSL.locales)
       }
     };
-    Cite2.plugins = clone2(core.plugins);
+    Cite2.plugins = clone2(core2.plugins);
     delete Cite2.plugins.input.util.clean;
     Cite2.parse = Object.assign({
       input: {
-        chain: core.plugins.input.chain,
-        chainAsync: core.plugins.input.chainAsync,
-        chainLink: core.plugins.input.chainLink,
-        chainLinkAsync: core.plugins.input.chainLinkAsync,
-        data: core.plugins.input.data,
-        dataAsync: core.plugins.input.dataAsync,
-        type: core.plugins.input.type,
+        chain: core2.plugins.input.chain,
+        chainAsync: core2.plugins.input.chainAsync,
+        chainLink: core2.plugins.input.chainLink,
+        chainLinkAsync: core2.plugins.input.chainLinkAsync,
+        data: core2.plugins.input.data,
+        dataAsync: core2.plugins.input.dataAsync,
+        type: core2.plugins.input.type,
         async: {
-          chain: core.plugins.input.chainAsync,
-          chainLink: core.plugins.input.chainLinkAsync,
-          data: core.plugins.input.dataAsync
+          chain: core2.plugins.input.chainAsync,
+          chainLink: core2.plugins.input.chainLinkAsync,
+          data: core2.plugins.input.dataAsync
         }
       },
       name: name.parse,
       date: date3.parse,
-      csl: core.plugins.input.util.clean,
+      csl: core2.plugins.input.util.clean,
       bibjson: require_lib7().parsers.json.record,
       bibtex: /* @__PURE__ */ ((parsers, entries, types) => ({
         json(entries2) {
@@ -95831,11 +95974,106 @@ async function parseBibFileAt(text4, file) {
     return await parseBibFile(text4);
   } catch (e2) {
     const raw = (e2 instanceof Error ? e2.message : String(e2)).replace(/^parseBib: invalid BibTeX — /, "");
-    const first = raw.split("\n")[0] ?? "";
-    throw new BibParseError(file, first.length > 160 ? `${first.slice(0, 160)}\u2026` : first);
+    const first2 = raw.split("\n")[0] ?? "";
+    throw new BibParseError(file, first2.length > 160 ? `${first2.slice(0, 160)}\u2026` : first2);
   }
 }
-var import_citation_js, plugins, STYLE_FILENAMES, BibParseError;
+function splitBibBlocks(text4) {
+  const out2 = [];
+  let i = 0;
+  while (i < text4.length) {
+    const at = text4.indexOf("@", i);
+    if (at === -1) break;
+    ENTRY_HEAD_RE.lastIndex = at;
+    const head = ENTRY_HEAD_RE.exec(text4);
+    if (!head) {
+      i = at + 1;
+      continue;
+    }
+    const type = (head[1] ?? "").toLowerCase();
+    const open4 = head[2] ?? "{";
+    let depth = open4 === "{" ? 1 : 0;
+    let end = -1;
+    for (let j2 = at + head[0].length; j2 < text4.length; j2++) {
+      const ch = text4[j2];
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (open4 === "{" && depth === 0) {
+          end = j2 + 1;
+          break;
+        }
+        if (depth < 0) depth = 0;
+      } else if (open4 === "(" && ch === ")" && depth === 0) {
+        end = j2 + 1;
+        break;
+      }
+    }
+    if (end !== -1) {
+      out2.push({ type, start: at, text: text4.slice(at, end), closed: true });
+      i = end;
+      continue;
+    }
+    LINE_ENTRY_HEAD_RE.lastIndex = at + head[0].length;
+    const next = LINE_ENTRY_HEAD_RE.exec(text4);
+    const cut = next ? next.index + (next[0].startsWith("\n") ? 1 : 0) : text4.length;
+    out2.push({ type, start: at, text: text4.slice(at, cut), closed: false });
+    i = cut;
+  }
+  return out2;
+}
+function blockKey(block) {
+  const m3 = /^@[A-Za-z][A-Za-z0-9_-]*\s*[{(]\s*([^,\s{}()"]+)\s*,/.exec(block.text);
+  return m3?.[1] ?? null;
+}
+function lineOf(text4, offset) {
+  let line = 1;
+  for (let k2 = 0; k2 < offset; k2++) if (text4.charCodeAt(k2) === 10) line++;
+  return line;
+}
+function oneLine2(msg) {
+  const first2 = (msg.replace(/^parseBib: invalid BibTeX — /, "").replace(/^parseBib: /, "").split("\n")[0] ?? "").replace(/\s+at line \d+ col \d+:?\s*$/, "").trim();
+  return first2.length > 160 ? `${first2.slice(0, 160)}\u2026` : first2 || "invalid BibTeX";
+}
+function parseBibEntries(text4) {
+  if (typeof text4 !== "string" || text4.trim().length === 0) return { entries: [], problems: [] };
+  const blocks = splitBibBlocks(text4);
+  const strings2 = blocks.filter((b3) => b3.type === "string" && b3.closed).map((b3) => b3.text).join("\n");
+  const regular = blocks.filter((b3) => b3.type !== "string" && b3.type !== "comment" && b3.type !== "preamble");
+  if (regular.length === 0) {
+    return { entries: [], problems: [{ key: null, line: 1, detail: "no BibTeX entry found (every entry starts with @type{key, \u2026})" }] };
+  }
+  if (regular.every((b3) => b3.closed)) {
+    try {
+      const all = parseBibSync(text4);
+      if (all.length === regular.length) return { entries: all, problems: [] };
+    } catch {
+    }
+  }
+  const entries = [];
+  const problems = [];
+  for (const block of regular) {
+    const key2 = blockKey(block);
+    const line = lineOf(text4, block.start);
+    if (!block.closed) {
+      problems.push({ key: key2, line, detail: "the entry's braces never close" });
+      continue;
+    }
+    try {
+      const parsed = parseBibSync(strings2.length > 0 ? `${strings2}
+${block.text}` : block.text);
+      if (parsed.length !== 1) {
+        problems.push({ key: key2, line, detail: `the entry parsed as ${parsed.length} entries` });
+        continue;
+      }
+      entries.push(parsed[0]);
+    } catch (e2) {
+      problems.push({ key: key2, line, detail: oneLine2(e2 instanceof Error ? e2.message : String(e2)) });
+    }
+  }
+  return { entries, problems };
+}
+var import_citation_js, plugins, STYLE_FILENAMES, BibParseError, ENTRY_HEAD_RE, LINE_ENTRY_HEAD_RE;
 var init_citations = __esm({
   "bin/lib/citations.ts"() {
     "use strict";
@@ -95875,6 +96113,13 @@ var init_citations = __esm({
       }
     };
     __name(parseBibFileAt, "parseBibFileAt");
+    ENTRY_HEAD_RE = /@([A-Za-z][A-Za-z0-9_-]*)\s*([{(])/y;
+    LINE_ENTRY_HEAD_RE = /(?:^|\n)[ \t]*@[A-Za-z][A-Za-z0-9_-]*\s*[{(]/g;
+    __name(splitBibBlocks, "splitBibBlocks");
+    __name(blockKey, "blockKey");
+    __name(lineOf, "lineOf");
+    __name(oneLine2, "oneLine");
+    __name(parseBibEntries, "parseBibEntries");
   }
 });
 
@@ -95905,10 +96150,10 @@ function isGroupDisplayName(input2) {
   if (typeof input2 !== "string") return false;
   const s2 = clean(input2);
   if (!s2 || s2.includes(",") || isBracedLiteral(s2)) return false;
-  const words3 = s2.split(" ");
-  if (words3.length < 2) return false;
-  if (/^the$/i.test(words3[0])) return true;
-  const last = words3[words3.length - 1].replace(/[^\p{L}]/gu, "").toLowerCase();
+  const words4 = s2.split(" ");
+  if (words4.length < 2) return false;
+  if (/^the$/i.test(words4[0])) return true;
+  const last = words4[words4.length - 1].replace(/[^\p{L}]/gu, "").toLowerCase();
   return GROUP_WORDS.has(last);
 }
 function displayAuthorName(input2) {
@@ -95938,22 +96183,22 @@ function parsePersonName(input2) {
     }
     return build(family2, parts[1] ?? "", "");
   }
-  const words3 = s2.split(" ");
-  if (words3.length === 1) return { family: s2 };
-  if (NAME_PARTICLES.has(words3[0])) return { family: s2 };
+  const words4 = s2.split(" ");
+  if (words4.length === 1) return { family: s2 };
+  if (NAME_PARTICLES.has(words4[0])) return { family: s2 };
   let suffix = "";
-  if (words3.length >= 3 && SUFFIX_RE.test(words3[words3.length - 1])) {
-    suffix = words3.pop();
+  if (words4.length >= 3 && SUFFIX_RE.test(words4[words4.length - 1])) {
+    suffix = words4.pop();
   }
-  let start = words3.length - 1;
-  for (let i = 1; i < words3.length - 1; i++) {
-    if (NAME_PARTICLES.has(words3[i])) {
+  let start = words4.length - 1;
+  for (let i = 1; i < words4.length - 1; i++) {
+    if (NAME_PARTICLES.has(words4[i])) {
       start = i;
       break;
     }
   }
-  const family = words3.slice(start).join(" ");
-  const given = words3.slice(0, start).join(" ");
+  const family = words4.slice(start).join(" ");
+  const given = words4.slice(0, start).join(" ");
   return build(family, given, suffix);
 }
 function formatPersonName(n2) {
@@ -95966,13 +96211,13 @@ function fromPubmedCompactName(input2) {
   if (typeof input2 !== "string") return input2;
   const s2 = clean(input2);
   if (!s2 || s2.includes(",") || isBracedLiteral(s2)) return input2;
-  const words3 = s2.split(" ");
+  const words4 = s2.split(" ");
   let suffix = "";
-  if (words3.length >= 3 && PUBMED_SUFFIX_RE.test(words3[words3.length - 1])) suffix = words3.pop();
-  if (words3.length < 2) return input2;
-  const initials = words3[words3.length - 1];
+  if (words4.length >= 3 && PUBMED_SUFFIX_RE.test(words4[words4.length - 1])) suffix = words4.pop();
+  if (words4.length < 2) return input2;
+  const initials = words4[words4.length - 1];
   if (!PUBMED_INITIALS_RE.test(initials)) return input2;
-  const family = words3.slice(0, -1).join(" ");
+  const family = words4.slice(0, -1).join(" ");
   const dotted = [...initials].map((ch) => `${ch}.`).join(" ");
   return formatPersonName(build(family, dotted, suffix));
 }
@@ -96072,21 +96317,21 @@ function escapeBibtexUtf8(value) {
   return normalizeBibValue(value).replace(/[\\{}$&%#_~^`]/g, (ch) => BIBTEX_SPECIAL[ch] ?? ch).replace(/-(?=-)/g, "-{}").replace(/'(?=')/g, "'{}");
 }
 function titleBibValue(title, abstract = null) {
-  const words3 = normalizeBibValue(title).split(" ");
+  const words4 = normalizeBibValue(title).split(" ");
   const lettersOf = /* @__PURE__ */ __name((w3) => w3.replace(/[^\p{L}]/gu, ""), "lettersOf");
   const isCapital = /* @__PURE__ */ __name((w3) => new RegExp("^\\p{Lu}", "u").test(lettersOf(w3)), "isCapital");
-  const later2 = words3.slice(1).filter((w3) => lettersOf(w3).length >= 4 && !TITLE_STOPWORDS.has(lettersOf(w3).toLowerCase()));
+  const later2 = words4.slice(1).filter((w3) => lettersOf(w3).length >= 4 && !TITLE_STOPWORDS.has(lettersOf(w3).toLowerCase()));
   const titleCase = later2.length > 0 && later2.filter(isCapital).length / later2.length >= 0.75;
   const midSentence = /* @__PURE__ */ new Set();
   if (titleCase && abstract) {
     for (const m3 of abstract.matchAll(new RegExp("[\\p{Ll},;]\\s+(\\p{Lu}[\\p{L}'\u2019-]*)", "gu"))) midSentence.add(m3[1]);
   }
-  return words3.map((word, i) => {
+  return words4.map((word, i) => {
     const letters = lettersOf(word);
     const parts = word.split(/([-\u2010\u2011\u2013\u2014/])/);
     const hasInner = /* @__PURE__ */ __name((part) => new RegExp("\\p{Lu}", "u").test(lettersOf(part).slice(1)), "hasInner");
     const innerCapital = parts.some((part, j2) => j2 % 2 === 0 && hasInner(part));
-    const next = words3[i + 1];
+    const next = words4[i + 1];
     const nextLetters = next !== void 0 ? lettersOf(next) : "";
     const beforeLowerContent = nextLetters.length >= 4 && new RegExp("^\\p{Ll}", "u").test(nextLetters) && !TITLE_STOPWORDS.has(nextLetters.toLowerCase()) && new RegExp("^\\p{L}", "u").test(next ?? "");
     const properNoun = i > 0 && isCapital(word) && (!titleCase || midSentence.has(letters) || midSentence.has(word.replace(/[^\p{L}'’-]/gu, "")) || beforeLowerContent);
@@ -96209,11 +96454,13 @@ function toBibRecord(c2, citekey) {
   const abstract = text(c2.abstract);
   if (abstract) push("abstract", escapeBibtexUtf8(abstract));
   if (c2.retracted === true) push("note", "RETRACTED");
+  const lastVerified = typeof c2.last_verified === "string" && !Number.isNaN(Date.parse(c2.last_verified)) ? new Date(c2.last_verified).toISOString() : null;
+  push("last_verified", lastVerified);
   return {
     citekey,
     entryType,
     fields,
-    expect: { title, authors, abstract, eprint }
+    expect: { title, authors, abstract, eprint, lastVerified }
   };
 }
 function formatBibRecord(r2) {
@@ -96285,13 +96532,26 @@ function assignUniqueCitekeys(candidates) {
 }
 function parsedName(a3) {
   const o2 = a3 ?? {};
-  const str6 = /* @__PURE__ */ __name((k2) => typeof o2[k2] === "string" ? o2[k2] : "", "str");
-  const family = [str6("non-dropping-particle"), str6("dropping-particle"), str6("family") || str6("literal")].filter(Boolean).join(" ");
+  const str8 = /* @__PURE__ */ __name((k2) => typeof o2[k2] === "string" ? o2[k2] : "", "str");
+  const family = [str8("non-dropping-particle"), str8("dropping-particle"), str8("family") || str8("literal")].filter(Boolean).join(" ");
   return {
     family,
-    ...str6("given") ? { given: str6("given") } : {},
-    ...str6("suffix") ? { suffix: str6("suffix") } : {}
+    ...str8("given") ? { given: str8("given") } : {},
+    ...str8("suffix") ? { suffix: str8("suffix") } : {}
   };
+}
+function rawBibField(parsed, citekey, name) {
+  const graph = parsed["_graph"];
+  if (!Array.isArray(graph)) return void 0;
+  for (const step of graph) {
+    if (!Array.isArray(step?.data)) continue;
+    for (const e2 of step.data) {
+      if (e2?.label !== citekey || typeof e2.properties !== "object" || e2.properties === null) continue;
+      const v2 = e2.properties[name];
+      return typeof v2 === "string" ? v2.replace(/^\{(.*)\}$/s, "$1").trim() : void 0;
+    }
+  }
+  return void 0;
 }
 function roundTripProblem(entryText, r2) {
   let parsed;
@@ -96316,6 +96576,10 @@ function roundTripProblem(entryText, r2) {
   }
   if (r2.expect.abstract !== null && got["abstract"] !== r2.expect.abstract) return "abstract changed";
   if (r2.expect.eprint !== null && got["eprint"] !== r2.expect.eprint) return "eprint changed";
+  if (r2.expect.lastVerified !== null) {
+    const lv = rawBibField(got, r2.citekey, "last_verified");
+    if (lv !== void 0 && lv !== r2.expect.lastVerified) return "last_verified changed";
+  }
   return null;
 }
 function renderBibtex(sources2) {
@@ -96444,6 +96708,7 @@ var init_bibtex_write = __esm({
       }
     };
     __name(parsedName, "parsedName");
+    __name(rawBibField, "rawBibField");
     __name(roundTripProblem, "roundTripProblem");
     __name(renderBibtex, "renderBibtex");
   }
@@ -96453,7 +96718,7 @@ var init_bibtex_write = __esm({
 function isoOrNull(v2) {
   return typeof v2 === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v2) && !Number.isNaN(Date.parse(v2)) ? new Date(v2).toISOString() : null;
 }
-function migrate6(input2, now = (/* @__PURE__ */ new Date()).toISOString()) {
+function migrate7(input2, now = (/* @__PURE__ */ new Date()).toISOString()) {
   if (typeof input2 !== "object" || input2 === null) return input2;
   const src = input2;
   if (src["$schemaVersion"] === 2) return JSON.parse(JSON.stringify(src));
@@ -96500,12 +96765,12 @@ var init_v1_to_v24 = __esm({
     init_shape();
     init_bibtex_write();
     __name(isoOrNull, "isoOrNull");
-    __name(migrate6, "migrate");
+    __name(migrate7, "migrate");
   }
 });
 
 // bin/lib/migrations/library/v2_to_v3.ts
-function migrate7(input2) {
+function migrate8(input2) {
   if (typeof input2 !== "object" || input2 === null) return input2;
   const src = input2;
   if (src["$schemaVersion"] === 3) return JSON.parse(JSON.stringify(src));
@@ -96540,7 +96805,7 @@ function migrate7(input2) {
   return { ...src, $schemaVersion: 3, entries };
 }
 var NEW_NULLABLE_FIELDS;
-var init_v2_to_v32 = __esm({
+var init_v2_to_v33 = __esm({
   "bin/lib/migrations/library/v2_to_v3.ts"() {
     "use strict";
     init_person_name();
@@ -96556,7 +96821,7 @@ var init_v2_to_v32 = __esm({
       "why_relevant",
       "zotero"
     ];
-    __name(migrate7, "migrate");
+    __name(migrate8, "migrate");
   }
 });
 
@@ -96647,58 +96912,138 @@ function jaroWinkler(a3, b3) {
   if (jw < 0) return 0;
   return jw;
 }
-function levenshtein(a3, b3) {
-  if (a3 === b3) return 0;
-  if (a3.length === 0) return b3.length;
-  if (b3.length === 0) return a3.length;
-  let s1 = a3;
-  let s2 = b3;
-  if (s1.length < s2.length) {
-    const tmp = s1;
-    s1 = s2;
-    s2 = tmp;
-  }
-  const m3 = s1.length;
-  const n2 = s2.length;
-  let prev = new Uint32Array(n2 + 1);
-  let curr = new Uint32Array(n2 + 1);
-  for (let j2 = 0; j2 <= n2; j2++) prev[j2] = j2;
-  for (let i = 1; i <= m3; i++) {
-    curr[0] = i;
-    const s1c = s1[i - 1];
-    for (let j2 = 1; j2 <= n2; j2++) {
-      const cost = s1c === s2[j2 - 1] ? 0 : 1;
-      const del = prev[j2] + 1;
-      const ins = curr[j2 - 1] + 1;
-      const sub = prev[j2 - 1] + cost;
-      let best = del < ins ? del : ins;
-      if (sub < best) best = sub;
-      curr[j2] = best;
+function substringDistance(p2, t, maxDist) {
+  const m3 = p2.length;
+  if (m3 === 0) return 0;
+  const k2 = Math.max(0, Math.floor(maxDist));
+  if (k2 >= m3) return bestAlignmentFull(p2, t);
+  const C2 = new Uint32Array(m3 + 1);
+  for (let i = 0; i <= m3; i += 1) C2[i] = i;
+  let lact = Math.min(k2 + 1, m3);
+  let best = null;
+  for (let j2 = 0; j2 < t.length; j2 += 1) {
+    const tc = t.charCodeAt(j2);
+    let pC = 0;
+    let nC = 0;
+    for (let i = 1; i <= lact; i += 1) {
+      const old = C2[i];
+      if (p2.charCodeAt(i - 1) === tc) {
+        nC = pC;
+      } else {
+        if (pC < nC) nC = pC;
+        if (old < nC) nC = old;
+        nC += 1;
+      }
+      pC = old;
+      C2[i] = nC;
     }
+    while (lact > 0 && C2[lact] > k2) lact -= 1;
+    if (lact === m3) {
+      const d3 = C2[m3];
+      if (best === null || d3 < best) best = d3;
+      if (best === 0) return 0;
+    } else {
+      lact += 1;
+    }
+  }
+  return best;
+}
+function bestAlignmentFull(p2, t) {
+  const m3 = p2.length;
+  let prev = new Uint32Array(m3 + 1);
+  let curr = new Uint32Array(m3 + 1);
+  for (let i = 0; i <= m3; i += 1) prev[i] = i;
+  let best = prev[m3];
+  for (let j2 = 0; j2 < t.length; j2 += 1) {
+    const tc = t.charCodeAt(j2);
+    curr[0] = 0;
+    for (let i = 1; i <= m3; i += 1) {
+      const cost = p2.charCodeAt(i - 1) === tc ? 0 : 1;
+      const sub = prev[i - 1] + cost;
+      const del = prev[i] + 1;
+      const ins = curr[i - 1] + 1;
+      curr[i] = sub < del ? sub < ins ? sub : ins : del < ins ? del : ins;
+    }
+    if (curr[m3] < best) best = curr[m3];
     const tmp = prev;
     prev = curr;
     curr = tmp;
   }
-  return prev[n2];
+  return best;
 }
-function levenshteinSubstring(needle, haystack) {
-  if (needle === haystack) return 1;
-  const N2 = normalizeForFuzzy(needle);
-  const H2 = normalizeForFuzzy(haystack);
-  if (N2 === H2) return 1;
-  if (N2.length === 0) return 1;
-  if (N2.length > H2.length) return 0;
-  const nLen = N2.length;
-  let minDist = nLen;
-  for (let s2 = 0; s2 <= H2.length - nLen; s2++) {
-    const window2 = H2.substring(s2, s2 + nLen);
-    const d3 = levenshtein(window2, N2);
-    if (d3 < minDist) minDist = d3;
-    if (minDist === 0) break;
+function normalizeForQuote(s2) {
+  return normalizeForFuzzy(s2).replace(/\.(?:\s*\.){2}/g, "...").replace(new RegExp("(\\p{L})-\\s+(\\p{Ll})", "gu"), "$1$2");
+}
+function prepareQuoteText(text4) {
+  return { normalized: normalizeForQuote(text4) };
+}
+function core(s2) {
+  return s2.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+function segmentMatch(seg, text4, from, maxDist) {
+  const at = text4.indexOf(seg, from);
+  if (at !== -1) return { dist: 0, end: at + seg.length };
+  const rest = text4.slice(from);
+  const dist = substringDistance(seg, rest, maxDist);
+  if (dist === null) return { dist: null, end: from };
+  const end = firstEndAt(seg, rest, dist);
+  return { dist, end: from + end };
+}
+function firstEndAt(p2, t, dist) {
+  const m3 = p2.length;
+  const C2 = new Uint32Array(m3 + 1);
+  for (let i = 0; i <= m3; i += 1) C2[i] = i;
+  let lact = Math.min(dist + 1, m3);
+  for (let j2 = 0; j2 < t.length; j2 += 1) {
+    const tc = t.charCodeAt(j2);
+    let pC = 0;
+    let nC = 0;
+    for (let i = 1; i <= lact; i += 1) {
+      const old = C2[i];
+      if (p2.charCodeAt(i - 1) === tc) nC = pC;
+      else {
+        if (pC < nC) nC = pC;
+        if (old < nC) nC = old;
+        nC += 1;
+      }
+      pC = old;
+      C2[i] = nC;
+    }
+    while (lact > 0 && C2[lact] > dist) lact -= 1;
+    if (lact === m3) return j2 + 1;
+    lact += 1;
   }
-  return 1 - minDist / nLen;
+  return t.length;
 }
-var TITLE_JW_THRESHOLD, AUTHOR_JW_THRESHOLD, QUOTE_LEV_THRESHOLD;
+function matchQuote(quote, text4) {
+  const hay = typeof text4 === "string" ? normalizeForQuote(text4) : text4.normalized;
+  const needle = normalizeForQuote(quote);
+  const segments = needle.split(ELISION_RE).map(core).filter((s2) => /[\p{L}\p{N}]/u.test(s2));
+  if (segments.length === 0) return { verbatim: true, ratio: 1 };
+  let from = 0;
+  let total = 0;
+  let distSum = 0;
+  let verbatim2 = true;
+  let found = true;
+  for (const seg of segments) {
+    total += seg.length;
+    const maxDist = Math.floor(seg.length * (1 - QUOTE_LEV_THRESHOLD));
+    const m3 = segmentMatch(seg, hay, from, maxDist);
+    if (m3.dist === null) {
+      found = false;
+      break;
+    }
+    if (m3.dist > 0) verbatim2 = false;
+    distSum += m3.dist;
+    from = m3.end;
+  }
+  if (found) return { verbatim: verbatim2, ratio: total === 0 ? 1 : 1 - distSum / total };
+  const whole = segments.join(" ");
+  if (whole.length * hay.length > DIAGNOSTIC_CELLS) return { verbatim: false, ratio: 0 };
+  const d3 = substringDistance(whole, hay, Math.floor(whole.length * 0.5));
+  return { verbatim: false, ratio: d3 === null ? 0 : Math.max(0, 1 - d3 / whole.length) };
+}
+var TITLE_JW_THRESHOLD, AUTHOR_JW_THRESHOLD, QUOTE_LEV_THRESHOLD, DIAGNOSTIC_CELLS, ELISION_RE;
 var init_fuzzy = __esm({
   "bin/lib/fuzzy.ts"() {
     "use strict";
@@ -96709,8 +97054,16 @@ var init_fuzzy = __esm({
     __name(normalizeForFuzzy, "normalizeForFuzzy");
     __name(jaro, "jaro");
     __name(jaroWinkler, "jaroWinkler");
-    __name(levenshtein, "levenshtein");
-    __name(levenshteinSubstring, "levenshteinSubstring");
+    __name(substringDistance, "substringDistance");
+    __name(bestAlignmentFull, "bestAlignmentFull");
+    __name(normalizeForQuote, "normalizeForQuote");
+    __name(prepareQuoteText, "prepareQuoteText");
+    DIAGNOSTIC_CELLS = 6e7;
+    ELISION_RE = /\s*\[?\s*\.\.\.\s*\]?\s*/g;
+    __name(core, "core");
+    __name(segmentMatch, "segmentMatch");
+    __name(firstEndAt, "firstEndAt");
+    __name(matchQuote, "matchQuote");
   }
 });
 
@@ -97001,14 +97354,14 @@ function uniqueCitekey(d3, taken) {
   }
 }
 function cslNameToString(a3) {
-  const str6 = /* @__PURE__ */ __name((v2) => typeof v2 === "string" ? v2.trim() : "", "str");
-  const family = [str6(a3?.["dropping-particle"]), str6(a3?.["non-dropping-particle"]), str6(a3?.family)].filter(Boolean).join(" ");
+  const str8 = /* @__PURE__ */ __name((v2) => typeof v2 === "string" ? v2.trim() : "", "str");
+  const family = [str8(a3?.["dropping-particle"]), str8(a3?.["non-dropping-particle"]), str8(a3?.family)].filter(Boolean).join(" ");
   if (!family) {
-    const literal2 = str6(a3?.literal);
+    const literal2 = str8(a3?.literal);
     return literal2 ? `{${literal2}}` : "";
   }
-  const given = str6(a3?.given);
-  const suffix = str6(a3?.suffix);
+  const given = str8(a3?.given);
+  const suffix = str8(a3?.suffix);
   if (suffix) return `${family}, ${given}, ${suffix}`;
   return given ? `${family}, ${given}` : family;
 }
@@ -97020,12 +97373,12 @@ function cslToCandidate(csl) {
   const year = typeof yearRaw === "number" ? yearRaw : typeof yearRaw === "string" && /^\d{4}$/.test(yearRaw) ? Number(yearRaw) : null;
   const eprintArxiv = typeof x3.eprint === "string" && (typeof x3.archivePrefix !== "string" || /^arxiv$/i.test(x3.archivePrefix)) ? normArxiv(x3.eprint) : null;
   const arxiv = eprintArxiv ?? (typeof x3.number === "string" ? normArxiv(x3.number) : null);
-  const str6 = /* @__PURE__ */ __name((v2) => typeof v2 === "string" ? v2 : typeof v2 === "number" ? String(v2) : null, "str");
+  const str8 = /* @__PURE__ */ __name((v2) => typeof v2 === "string" ? v2 : typeof v2 === "number" ? String(v2) : null, "str");
   return {
     citekey: typeof x3.id === "string" ? x3.id : void 0,
     doi: typeof x3.DOI === "string" ? x3.DOI : null,
     isbn: typeof x3.ISBN === "string" ? x3.ISBN : null,
-    pmid: str6(x3.PMID),
+    pmid: str8(x3.PMID),
     pmcid: typeof x3.PMCID === "string" ? x3.PMCID : null,
     arxiv,
     title: typeof title === "string" ? title : null,
@@ -97037,8 +97390,8 @@ function cslToCandidate(csl) {
     // A CSL type the library does not know (citation-js reads @misc as
     // `document`) is dropped by candidateToEntry.
     type: typeof x3.type === "string" ? x3.type : null,
-    volume: str6(x3.volume),
-    issue: str6(x3.issue),
+    volume: str8(x3.volume),
+    issue: str8(x3.issue),
     pages: typeof x3.page === "string" ? x3.page : null,
     publisher: typeof x3.publisher === "string" ? x3.publisher : null,
     retracted: x3.note === "RETRACTED"
@@ -97139,6 +97492,62 @@ async function upsertSources(root, candidates, opts) {
 function isSyntheticEntry(e2) {
   return e2.synthetic === true || isReservedDryRunId(e2.doi) || isReservedDryRunId(e2.arxiv) || isReservedDryRunId(e2.isbn);
 }
+async function recordLastVerified(root, stamps) {
+  const paths = libraryPaths(root);
+  return withLock(paths.library, async () => {
+    const current = await readUnlocked(paths.library, false);
+    if (!current) throw new LibraryNotFoundError(`LIBRARY.json not found at ${paths.library}`);
+    const byKey = new Map(current.entries.map((e2) => [e2.citekey, e2]));
+    const updated = [];
+    const unknown2 = [];
+    for (const [key2, at] of Object.entries(stamps)) {
+      const e2 = byKey.get(key2);
+      if (!e2) {
+        unknown2.push(key2);
+        continue;
+      }
+      const iso = new Date(at).toISOString();
+      const next = later(e2.last_verified, iso);
+      if (next !== e2.last_verified) {
+        e2.last_verified = next;
+        e2.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        updated.push(key2);
+      }
+    }
+    if (updated.length > 0) await persist(paths, current);
+    return { updated, unknown: unknown2 };
+  });
+}
+async function recordRetractionStatuses(root, outcomes) {
+  const paths = libraryPaths(root);
+  return withLock(paths.library, async () => {
+    const current = await readUnlocked(paths.library, false);
+    if (!current) throw new LibraryNotFoundError(`LIBRARY.json not found at ${paths.library}`);
+    const byKey = new Map(current.entries.map((e2) => [e2.citekey, e2]));
+    const updated = [];
+    const unknown2 = [];
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    for (const [key2, o2] of Object.entries(outcomes)) {
+      const e2 = byKey.get(key2);
+      if (!e2) {
+        unknown2.push(key2);
+        continue;
+      }
+      if (e2.retraction_status !== "unknown") continue;
+      if (o2.status === "retracted") {
+        e2.retracted = true;
+        e2.retraction_status = "retracted";
+        e2.retraction_details = e2.retraction_details ?? (o2.details && o2.details.trim() ? o2.details.trim() : null);
+      } else {
+        e2.retraction_status = "clear";
+      }
+      e2.updatedAt = now;
+      updated.push(key2);
+    }
+    if (updated.length > 0) await persist(paths, current);
+    return { updated, unknown: unknown2 };
+  });
+}
 async function rerenderCitations(root, opts = {}) {
   const paths = libraryPaths(root);
   const now = (opts.now?.() ?? /* @__PURE__ */ new Date()).toISOString();
@@ -97177,7 +97586,7 @@ var init_library2 = __esm({
     init_loader();
     init_exit_codes();
     init_v1_to_v24();
-    init_v2_to_v32();
+    init_v2_to_v33();
     init_shape();
     init_library();
     init_bibtex_write();
@@ -97192,9 +97601,9 @@ var init_library2 = __esm({
     init_http_mock();
     VERSION_TITLE_JW = 0.95;
     LIBRARY_MIGRATIONS = {
-      1: (input2) => migrate6(input2),
+      1: (input2) => migrate7(input2),
       // Phase 19 seam S-B: the v3 bibliographic, evaluation, BYO, retraction and Zotero fields.
-      2: (input2) => migrate7(input2)
+      2: (input2) => migrate8(input2)
     };
     LibraryNotFoundError = class extends Error {
       static {
@@ -97250,6 +97659,8 @@ var init_library2 = __esm({
     __name(importOrphanBibEntries, "importOrphanBibEntries");
     __name(upsertSources, "upsertSources");
     __name(isSyntheticEntry, "isSyntheticEntry");
+    __name(recordLastVerified, "recordLastVerified");
+    __name(recordRetractionStatuses, "recordRetractionStatuses");
     __name(rerenderCitations, "rerenderCitations");
   }
 });
@@ -97333,17 +97744,17 @@ function splitRow(line) {
 function headerMatches(cells, header) {
   return cells.length === header.length && cells.every((c2, j2) => c2.toLowerCase() === header[j2]);
 }
-function list(cell) {
-  return cell.split(",").map((d3) => d3.trim()).filter((d3) => d3.length > 0);
+function list(cell4) {
+  return cell4.split(",").map((d3) => d3.trim()).filter((d3) => d3.length > 0);
 }
 function parseOutline(raw) {
-  const lines = raw.split(/\r?\n/);
+  const lines2 = raw.split(/\r?\n/);
   let paperTitle = "";
   let thesis = "";
   let headerLineIdx = -1;
   let format = "canonical";
-  for (let i2 = 0; i2 < lines.length; i2 += 1) {
-    const trimmed2 = lines[i2].trim();
+  for (let i2 = 0; i2 < lines2.length; i2 += 1) {
+    const trimmed2 = lines2[i2].trim();
     if (paperTitle === "" && /^#\s+\S/.test(trimmed2)) {
       paperTitle = trimmed2.replace(/^#\s+/, "").trim();
       continue;
@@ -97376,9 +97787,9 @@ function parseOutline(raw) {
   const seenSlugs = /* @__PURE__ */ new Set();
   const seenIds = /* @__PURE__ */ new Set();
   let i = headerLineIdx + 1;
-  for (; i < lines.length; i += 1) {
+  for (; i < lines2.length; i += 1) {
     const lineNo = i + 1;
-    const trimmed2 = lines[i].trim();
+    const trimmed2 = lines2[i].trim();
     if (trimmed2 === "") continue;
     if (!trimmed2.startsWith("|")) {
       if (/^##\s/.test(trimmed2)) break;
@@ -97462,8 +97873,8 @@ function parseOutline(raw) {
     sections.push(section);
   }
   const byId = new Map(sections.map((s2) => [formatSectionId(sectionIdOf(s2.n, s2.suffix)), s2]));
-  for (; i < lines.length; i += 1) {
-    const m3 = DETAIL_RE.exec(lines[i].trim());
+  for (; i < lines2.length; i += 1) {
+    const m3 = DETAIL_RE.exec(lines2[i].trim());
     if (!m3) continue;
     const s2 = byId.get(m3[1]);
     if (!s2) continue;
@@ -97915,7 +98326,7 @@ var require_directives = __commonJS({
         return tag[0] === "!" ? tag : `!<${tag}>`;
       }
       toString(doc) {
-        const lines = this.yaml.explicit ? [`%YAML ${this.yaml.version || "1.2"}`] : [];
+        const lines2 = this.yaml.explicit ? [`%YAML ${this.yaml.version || "1.2"}`] : [];
         const tagEntries = Object.entries(this.tags);
         let tagNames;
         if (doc && tagEntries.length > 0 && identity.isNode(doc.contents)) {
@@ -97931,9 +98342,9 @@ var require_directives = __commonJS({
           if (handle === "!!" && prefix === "tag:yaml.org,2002:")
             continue;
           if (!doc || tagNames.some((tn) => tn.startsWith(prefix)))
-            lines.push(`%TAG ${handle} ${prefix}`);
+            lines2.push(`%TAG ${handle} ${prefix}`);
         }
-        return lines.join("\n");
+        return lines2.join("\n");
       }
     };
     Directives.defaultYaml = { explicit: false, version: "1.2" };
@@ -98523,14 +98934,14 @@ var require_Collection = __commonJS({
 var require_stringifyComment = __commonJS({
   "node_modules/yaml/dist/stringify/stringifyComment.js"(exports) {
     "use strict";
-    var stringifyComment = /* @__PURE__ */ __name((str6) => str6.replace(/^(?!$)(?: $)?/gm, "#"), "stringifyComment");
+    var stringifyComment = /* @__PURE__ */ __name((str8) => str8.replace(/^(?!$)(?: $)?/gm, "#"), "stringifyComment");
     function indentComment(comment, indent) {
       if (/^\n+$/.test(comment))
         return comment.substring(1);
       return indent ? comment.replace(/^(?! *$)/gm, indent) : comment;
     }
     __name(indentComment, "indentComment");
-    var lineComment = /* @__PURE__ */ __name((str6, indent, comment) => str6.endsWith("\n") ? indentComment(comment, indent) : comment.includes("\n") ? "\n" + indentComment(comment, indent) : (str6.endsWith(" ") ? "" : " ") + comment, "lineComment");
+    var lineComment = /* @__PURE__ */ __name((str8, indent, comment) => str8.endsWith("\n") ? indentComment(comment, indent) : comment.includes("\n") ? "\n" + indentComment(comment, indent) : (str8.endsWith(" ") ? "" : " ") + comment, "lineComment");
     exports.indentComment = indentComment;
     exports.lineComment = lineComment;
     exports.stringifyComment = stringifyComment;
@@ -98686,16 +99097,16 @@ var require_stringifyString = __commonJS({
       lineWidth: ctx.options.lineWidth,
       minContentWidth: ctx.options.minContentWidth
     }), "getFoldOptions");
-    var containsDocumentMarker = /* @__PURE__ */ __name((str6) => /^(%|---|\.\.\.)/m.test(str6), "containsDocumentMarker");
-    function lineLengthOverLimit(str6, lineWidth, indentLength) {
+    var containsDocumentMarker = /* @__PURE__ */ __name((str8) => /^(%|---|\.\.\.)/m.test(str8), "containsDocumentMarker");
+    function lineLengthOverLimit(str8, lineWidth, indentLength) {
       if (!lineWidth || lineWidth < 0)
         return false;
       const limit = lineWidth - indentLength;
-      const strLen = str6.length;
+      const strLen = str8.length;
       if (strLen <= limit)
         return false;
       for (let i = 0, start = 0; i < strLen; ++i) {
-        if (str6[i] === "\n") {
+        if (str8[i] === "\n") {
           if (i - start > limit)
             return true;
           start = i + 1;
@@ -98713,11 +99124,11 @@ var require_stringifyString = __commonJS({
       const { implicitKey } = ctx;
       const minMultiLineLength = ctx.options.doubleQuotedMinMultiLineLength;
       const indent = ctx.indent || (containsDocumentMarker(value) ? "  " : "");
-      let str6 = "";
+      let str8 = "";
       let start = 0;
       for (let i = 0, ch = json[i]; ch; ch = json[++i]) {
         if (ch === " " && json[i + 1] === "\\" && json[i + 2] === "n") {
-          str6 += json.slice(start, i) + "\\ ";
+          str8 += json.slice(start, i) + "\\ ";
           i += 1;
           start = i;
           ch = "\\";
@@ -98726,38 +99137,38 @@ var require_stringifyString = __commonJS({
           switch (json[i + 1]) {
             case "u":
               {
-                str6 += json.slice(start, i);
+                str8 += json.slice(start, i);
                 const code = json.substr(i + 2, 4);
                 switch (code) {
                   case "0000":
-                    str6 += "\\0";
+                    str8 += "\\0";
                     break;
                   case "0007":
-                    str6 += "\\a";
+                    str8 += "\\a";
                     break;
                   case "000b":
-                    str6 += "\\v";
+                    str8 += "\\v";
                     break;
                   case "001b":
-                    str6 += "\\e";
+                    str8 += "\\e";
                     break;
                   case "0085":
-                    str6 += "\\N";
+                    str8 += "\\N";
                     break;
                   case "00a0":
-                    str6 += "\\_";
+                    str8 += "\\_";
                     break;
                   case "2028":
-                    str6 += "\\L";
+                    str8 += "\\L";
                     break;
                   case "2029":
-                    str6 += "\\P";
+                    str8 += "\\P";
                     break;
                   default:
                     if (code.substr(0, 2) === "00")
-                      str6 += "\\x" + code.substr(2);
+                      str8 += "\\x" + code.substr(2);
                     else
-                      str6 += json.substr(i, 6);
+                      str8 += json.substr(i, 6);
                 }
                 i += 5;
                 start = i + 1;
@@ -98767,14 +99178,14 @@ var require_stringifyString = __commonJS({
               if (implicitKey || json[i + 2] === '"' || json.length < minMultiLineLength) {
                 i += 1;
               } else {
-                str6 += json.slice(start, i) + "\n\n";
+                str8 += json.slice(start, i) + "\n\n";
                 while (json[i + 2] === "\\" && json[i + 3] === "n" && json[i + 4] !== '"') {
-                  str6 += "\n";
+                  str8 += "\n";
                   i += 2;
                 }
-                str6 += indent;
+                str8 += indent;
                 if (json[i + 2] === " ")
-                  str6 += "\\";
+                  str8 += "\\";
                 i += 1;
                 start = i + 1;
               }
@@ -98783,8 +99194,8 @@ var require_stringifyString = __commonJS({
               i += 1;
           }
       }
-      str6 = start ? str6 + json.slice(start) : json;
-      return implicitKey ? str6 : foldFlowLines.foldFlowLines(str6, indent, foldFlowLines.FOLD_QUOTED, getFoldOptions(ctx, false));
+      str8 = start ? str8 + json.slice(start) : json;
+      return implicitKey ? str8 : foldFlowLines.foldFlowLines(str8, indent, foldFlowLines.FOLD_QUOTED, getFoldOptions(ctx, false));
     }
     __name(doubleQuotedString, "doubleQuotedString");
     function singleQuotedString(value, ctx) {
@@ -98916,15 +99327,15 @@ ${indent}${start}${value}${end}`;
           return quotedString(value, ctx);
         }
       }
-      const str6 = value.replace(/\n+/g, `$&
+      const str8 = value.replace(/\n+/g, `$&
 ${indent}`);
       if (actualString) {
-        const test = /* @__PURE__ */ __name((tag) => tag.default && tag.tag !== "tag:yaml.org,2002:str" && tag.test?.test(str6), "test");
+        const test = /* @__PURE__ */ __name((tag) => tag.default && tag.tag !== "tag:yaml.org,2002:str" && tag.test?.test(str8), "test");
         const { compat, tags } = ctx.doc.schema;
         if (tags.some(test) || compat?.some(test))
           return quotedString(value, ctx);
       }
-      return implicitKey ? str6 : foldFlowLines.foldFlowLines(str6, indent, foldFlowLines.FOLD_FLOW, getFoldOptions(ctx, false));
+      return implicitKey ? str8 : foldFlowLines.foldFlowLines(str8, indent, foldFlowLines.FOLD_FLOW, getFoldOptions(ctx, false));
     }
     __name(plainString, "plainString");
     function stringifyString(item, ctx, onComment, onChompKeep) {
@@ -99081,11 +99492,11 @@ var require_stringify = __commonJS({
       const props = stringifyProps(node, tagObj, ctx);
       if (props.length > 0)
         ctx.indentAtStart = (ctx.indentAtStart ?? 0) + props.length + 1;
-      const str6 = typeof tagObj.stringify === "function" ? tagObj.stringify(node, ctx, onComment, onChompKeep) : identity.isScalar(node) ? stringifyString.stringifyString(node, ctx, onComment, onChompKeep) : node.toString(ctx, onComment, onChompKeep);
+      const str8 = typeof tagObj.stringify === "function" ? tagObj.stringify(node, ctx, onComment, onChompKeep) : identity.isScalar(node) ? stringifyString.stringifyString(node, ctx, onComment, onChompKeep) : node.toString(ctx, onComment, onChompKeep);
       if (!props)
-        return str6;
-      return identity.isScalar(node) || str6[0] === "{" || str6[0] === "[" ? `${props} ${str6}` : `${props}
-${ctx.indent}${str6}`;
+        return str8;
+      return identity.isScalar(node) || str8[0] === "{" || str8[0] === "[" ? `${props} ${str8}` : `${props}
+${ctx.indent}${str8}`;
     }
     __name(stringify3, "stringify");
     exports.createStringifyContext = createStringifyContext;
@@ -99121,8 +99532,8 @@ var require_stringifyPair = __commonJS({
       });
       let keyCommentDone = false;
       let chompKeep = false;
-      let str6 = stringify3.stringify(key2, ctx, () => keyCommentDone = true, () => chompKeep = true);
-      if (!explicitKey && !ctx.inFlow && str6.length > 1024) {
+      let str8 = stringify3.stringify(key2, ctx, () => keyCommentDone = true, () => chompKeep = true);
+      if (!explicitKey && !ctx.inFlow && str8.length > 1024) {
         if (simpleKeys)
           throw new Error("With simple keys, single line scalar must not span more than 1024 characters");
         explicitKey = true;
@@ -99131,27 +99542,27 @@ var require_stringifyPair = __commonJS({
         if (allNullValues || value == null) {
           if (keyCommentDone && onComment)
             onComment();
-          return str6 === "" ? "?" : explicitKey ? `? ${str6}` : str6;
+          return str8 === "" ? "?" : explicitKey ? `? ${str8}` : str8;
         }
       } else if (allNullValues && !simpleKeys || value == null && explicitKey) {
-        str6 = `? ${str6}`;
+        str8 = `? ${str8}`;
         if (keyComment && !keyCommentDone) {
-          str6 += stringifyComment.lineComment(str6, ctx.indent, commentString(keyComment));
+          str8 += stringifyComment.lineComment(str8, ctx.indent, commentString(keyComment));
         } else if (chompKeep && onChompKeep)
           onChompKeep();
-        return str6;
+        return str8;
       }
       if (keyCommentDone)
         keyComment = null;
       if (explicitKey) {
         if (keyComment)
-          str6 += stringifyComment.lineComment(str6, ctx.indent, commentString(keyComment));
-        str6 = `? ${str6}
+          str8 += stringifyComment.lineComment(str8, ctx.indent, commentString(keyComment));
+        str8 = `? ${str8}
 ${indent}:`;
       } else {
-        str6 = `${str6}:`;
+        str8 = `${str8}:`;
         if (keyComment)
-          str6 += stringifyComment.lineComment(str6, ctx.indent, commentString(keyComment));
+          str8 += stringifyComment.lineComment(str8, ctx.indent, commentString(keyComment));
       }
       let vsb, vcb, valueComment;
       if (identity.isNode(value)) {
@@ -99167,7 +99578,7 @@ ${indent}:`;
       }
       ctx.implicitKey = false;
       if (!explicitKey && !keyComment && identity.isScalar(value))
-        ctx.indentAtStart = str6.length + 1;
+        ctx.indentAtStart = str8.length + 1;
       chompKeep = false;
       if (!indentSeq && indentStep.length >= 2 && !ctx.inFlow && !explicitKey && identity.isSeq(value) && !value.flow && !value.tag && !value.anchor) {
         ctx.indent = ctx.indent.substring(2);
@@ -99211,16 +99622,16 @@ ${ctx.indent}`;
       } else if (valueStr === "" || valueStr[0] === "\n") {
         ws = "";
       }
-      str6 += ws + valueStr;
+      str8 += ws + valueStr;
       if (ctx.inFlow) {
         if (valueCommentDone && onComment)
           onComment();
       } else if (valueComment && !valueCommentDone) {
-        str6 += stringifyComment.lineComment(str6, ctx.indent, commentString(valueComment));
+        str8 += stringifyComment.lineComment(str8, ctx.indent, commentString(valueComment));
       } else if (chompKeep && onChompKeep) {
         onChompKeep();
       }
-      return str6;
+      return str8;
     }
     __name(stringifyPair, "stringifyPair");
     exports.stringifyPair = stringifyPair;
@@ -99441,50 +99852,50 @@ var require_stringifyCollection = __commonJS({
       const { indent, options: { commentString } } = ctx;
       const itemCtx = Object.assign({}, ctx, { indent: itemIndent, type: null });
       let chompKeep = false;
-      const lines = [];
+      const lines2 = [];
       for (let i = 0; i < items.length; ++i) {
         const item = items[i];
         let comment2 = null;
         if (identity.isNode(item)) {
           if (!chompKeep && item.spaceBefore)
-            lines.push("");
-          addCommentBefore(ctx, lines, item.commentBefore, chompKeep);
+            lines2.push("");
+          addCommentBefore(ctx, lines2, item.commentBefore, chompKeep);
           if (item.comment)
             comment2 = item.comment;
         } else if (identity.isPair(item)) {
           const ik = identity.isNode(item.key) ? item.key : null;
           if (ik) {
             if (!chompKeep && ik.spaceBefore)
-              lines.push("");
-            addCommentBefore(ctx, lines, ik.commentBefore, chompKeep);
+              lines2.push("");
+            addCommentBefore(ctx, lines2, ik.commentBefore, chompKeep);
           }
         }
         chompKeep = false;
-        let str7 = stringify3.stringify(item, itemCtx, () => comment2 = null, () => chompKeep = true);
+        let str9 = stringify3.stringify(item, itemCtx, () => comment2 = null, () => chompKeep = true);
         if (comment2)
-          str7 += stringifyComment.lineComment(str7, itemIndent, commentString(comment2));
+          str9 += stringifyComment.lineComment(str9, itemIndent, commentString(comment2));
         if (chompKeep && comment2)
           chompKeep = false;
-        lines.push(blockItemPrefix + str7);
+        lines2.push(blockItemPrefix + str9);
       }
-      let str6;
-      if (lines.length === 0) {
-        str6 = flowChars.start + flowChars.end;
+      let str8;
+      if (lines2.length === 0) {
+        str8 = flowChars.start + flowChars.end;
       } else {
-        str6 = lines[0];
-        for (let i = 1; i < lines.length; ++i) {
-          const line = lines[i];
-          str6 += line ? `
+        str8 = lines2[0];
+        for (let i = 1; i < lines2.length; ++i) {
+          const line = lines2[i];
+          str8 += line ? `
 ${indent}${line}` : "\n";
         }
       }
       if (comment) {
-        str6 += "\n" + stringifyComment.indentComment(commentString(comment), indent);
+        str8 += "\n" + stringifyComment.indentComment(commentString(comment), indent);
         if (onComment)
           onComment();
       } else if (chompKeep && onChompKeep)
         onChompKeep();
-      return str6;
+      return str8;
     }
     __name(stringifyBlockCollection, "stringifyBlockCollection");
     function stringifyFlowCollection({ items }, ctx, { flowChars, itemIndent }) {
@@ -99497,22 +99908,22 @@ ${indent}${line}` : "\n";
       });
       let reqNewline = false;
       let linesAtValue = 0;
-      const lines = [];
+      const lines2 = [];
       for (let i = 0; i < items.length; ++i) {
         const item = items[i];
         let comment = null;
         if (identity.isNode(item)) {
           if (item.spaceBefore)
-            lines.push("");
-          addCommentBefore(ctx, lines, item.commentBefore, false);
+            lines2.push("");
+          addCommentBefore(ctx, lines2, item.commentBefore, false);
           if (item.comment)
             comment = item.comment;
         } else if (identity.isPair(item)) {
           const ik = identity.isNode(item.key) ? item.key : null;
           if (ik) {
             if (ik.spaceBefore)
-              lines.push("");
-            addCommentBefore(ctx, lines, ik.commentBefore, false);
+              lines2.push("");
+            addCommentBefore(ctx, lines2, ik.commentBefore, false);
             if (ik.comment)
               reqNewline = true;
           }
@@ -99528,50 +99939,50 @@ ${indent}${line}` : "\n";
         }
         if (comment)
           reqNewline = true;
-        let str6 = stringify3.stringify(item, itemCtx, () => comment = null);
-        reqNewline || (reqNewline = lines.length > linesAtValue || str6.includes("\n"));
+        let str8 = stringify3.stringify(item, itemCtx, () => comment = null);
+        reqNewline || (reqNewline = lines2.length > linesAtValue || str8.includes("\n"));
         if (i < items.length - 1) {
-          str6 += ",";
+          str8 += ",";
         } else if (ctx.options.trailingComma) {
           if (ctx.options.lineWidth > 0) {
-            reqNewline || (reqNewline = lines.reduce((sum, line) => sum + line.length + 2, 2) + (str6.length + 2) > ctx.options.lineWidth);
+            reqNewline || (reqNewline = lines2.reduce((sum, line) => sum + line.length + 2, 2) + (str8.length + 2) > ctx.options.lineWidth);
           }
           if (reqNewline) {
-            str6 += ",";
+            str8 += ",";
           }
         }
         if (comment)
-          str6 += stringifyComment.lineComment(str6, itemIndent, commentString(comment));
-        lines.push(str6);
-        linesAtValue = lines.length;
+          str8 += stringifyComment.lineComment(str8, itemIndent, commentString(comment));
+        lines2.push(str8);
+        linesAtValue = lines2.length;
       }
       const { start, end } = flowChars;
-      if (lines.length === 0) {
+      if (lines2.length === 0) {
         return start + end;
       } else {
         if (!reqNewline) {
-          const len = lines.reduce((sum, line) => sum + line.length + 2, 2);
+          const len = lines2.reduce((sum, line) => sum + line.length + 2, 2);
           reqNewline = ctx.options.lineWidth > 0 && len > ctx.options.lineWidth;
         }
         if (reqNewline) {
-          let str6 = start;
-          for (const line of lines)
-            str6 += line ? `
+          let str8 = start;
+          for (const line of lines2)
+            str8 += line ? `
 ${indentStep}${indent}${line}` : "\n";
-          return `${str6}
+          return `${str8}
 ${indent}${end}`;
         } else {
-          return `${start}${fcPadding}${lines.join(" ")}${fcPadding}${end}`;
+          return `${start}${fcPadding}${lines2.join(" ")}${fcPadding}${end}`;
         }
       }
     }
     __name(stringifyFlowCollection, "stringifyFlowCollection");
-    function addCommentBefore({ indent, options: { commentString } }, lines, comment, chompKeep) {
+    function addCommentBefore({ indent, options: { commentString } }, lines2, comment, chompKeep) {
       if (comment && chompKeep)
         comment = comment.replace(/^\n+/, "");
       if (comment) {
         const ic = stringifyComment.indentComment(commentString(comment), indent);
-        lines.push(ic.trimStart());
+        lines2.push(ic.trimStart());
       }
     }
     __name(addCommentBefore, "addCommentBefore");
@@ -99900,7 +100311,7 @@ var require_string = __commonJS({
       identify: /* @__PURE__ */ __name((value) => typeof value === "string", "identify"),
       default: true,
       tag: "tag:yaml.org,2002:str",
-      resolve: /* @__PURE__ */ __name((str6) => str6, "resolve"),
+      resolve: /* @__PURE__ */ __name((str8) => str8, "resolve"),
       stringify(item, ctx, onComment, onChompKeep) {
         ctx = Object.assign({ actualString: true }, ctx);
         return stringifyString.stringifyString(item, ctx, onComment, onChompKeep);
@@ -99938,7 +100349,7 @@ var require_bool = __commonJS({
       default: true,
       tag: "tag:yaml.org,2002:bool",
       test: /^(?:[Tt]rue|TRUE|[Ff]alse|FALSE)$/,
-      resolve: /* @__PURE__ */ __name((str6) => new Scalar.Scalar(str6[0] === "t" || str6[0] === "T"), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8) => new Scalar.Scalar(str8[0] === "t" || str8[0] === "T"), "resolve"),
       stringify({ source, value }, ctx) {
         if (source && boolTag.test.test(source)) {
           const sv = source[0] === "t" || source[0] === "T";
@@ -99991,7 +100402,7 @@ var require_float = __commonJS({
       default: true,
       tag: "tag:yaml.org,2002:float",
       test: /^(?:[-+]?\.(?:inf|Inf|INF)|\.nan|\.NaN|\.NAN)$/,
-      resolve: /* @__PURE__ */ __name((str6) => str6.slice(-3).toLowerCase() === "nan" ? NaN : str6[0] === "-" ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY, "resolve"),
+      resolve: /* @__PURE__ */ __name((str8) => str8.slice(-3).toLowerCase() === "nan" ? NaN : str8[0] === "-" ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY, "resolve"),
       stringify: stringifyNumber.stringifyNumber
     };
     var floatExp = {
@@ -100000,7 +100411,7 @@ var require_float = __commonJS({
       tag: "tag:yaml.org,2002:float",
       format: "EXP",
       test: /^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)[eE][-+]?[0-9]+$/,
-      resolve: /* @__PURE__ */ __name((str6) => parseFloat(str6), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8) => parseFloat(str8), "resolve"),
       stringify(node) {
         const num2 = Number(node.value);
         return isFinite(num2) ? num2.toExponential() : stringifyNumber.stringifyNumber(node);
@@ -100011,11 +100422,11 @@ var require_float = __commonJS({
       default: true,
       tag: "tag:yaml.org,2002:float",
       test: /^[-+]?(?:\.[0-9]+|[0-9]+\.[0-9]*)$/,
-      resolve(str6) {
-        const node = new Scalar.Scalar(parseFloat(str6));
-        const dot = str6.indexOf(".");
-        if (dot !== -1 && str6[str6.length - 1] === "0")
-          node.minFractionDigits = str6.length - dot - 1;
+      resolve(str8) {
+        const node = new Scalar.Scalar(parseFloat(str8));
+        const dot = str8.indexOf(".");
+        if (dot !== -1 && str8[str8.length - 1] === "0")
+          node.minFractionDigits = str8.length - dot - 1;
         return node;
       },
       stringify: stringifyNumber.stringifyNumber
@@ -100032,7 +100443,7 @@ var require_int = __commonJS({
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     var intIdentify = /* @__PURE__ */ __name((value) => typeof value === "bigint" || Number.isInteger(value), "intIdentify");
-    var intResolve = /* @__PURE__ */ __name((str6, offset, radix, { intAsBigInt }) => intAsBigInt ? BigInt(str6) : parseInt(str6.substring(offset), radix), "intResolve");
+    var intResolve = /* @__PURE__ */ __name((str8, offset, radix, { intAsBigInt }) => intAsBigInt ? BigInt(str8) : parseInt(str8.substring(offset), radix), "intResolve");
     function intStringify(node, radix, prefix) {
       const { value } = node;
       if (intIdentify(value) && value >= 0)
@@ -100046,7 +100457,7 @@ var require_int = __commonJS({
       tag: "tag:yaml.org,2002:int",
       format: "OCT",
       test: /^0o[0-7]+$/,
-      resolve: /* @__PURE__ */ __name((str6, _onError, opt) => intResolve(str6, 2, 8, opt), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8, _onError, opt) => intResolve(str8, 2, 8, opt), "resolve"),
       stringify: /* @__PURE__ */ __name((node) => intStringify(node, 8, "0o"), "stringify")
     };
     var int2 = {
@@ -100054,7 +100465,7 @@ var require_int = __commonJS({
       default: true,
       tag: "tag:yaml.org,2002:int",
       test: /^[-+]?[0-9]+$/,
-      resolve: /* @__PURE__ */ __name((str6, _onError, opt) => intResolve(str6, 0, 10, opt), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8, _onError, opt) => intResolve(str8, 0, 10, opt), "resolve"),
       stringify: stringifyNumber.stringifyNumber
     };
     var intHex = {
@@ -100063,7 +100474,7 @@ var require_int = __commonJS({
       tag: "tag:yaml.org,2002:int",
       format: "HEX",
       test: /^0x[0-9a-fA-F]+$/,
-      resolve: /* @__PURE__ */ __name((str6, _onError, opt) => intResolve(str6, 2, 16, opt), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8, _onError, opt) => intResolve(str8, 2, 16, opt), "resolve"),
       stringify: /* @__PURE__ */ __name((node) => intStringify(node, 16, "0x"), "stringify")
     };
     exports.int = int2;
@@ -100117,7 +100528,7 @@ var require_schema2 = __commonJS({
         identify: /* @__PURE__ */ __name((value) => typeof value === "string", "identify"),
         default: true,
         tag: "tag:yaml.org,2002:str",
-        resolve: /* @__PURE__ */ __name((str6) => str6, "resolve"),
+        resolve: /* @__PURE__ */ __name((str8) => str8, "resolve"),
         stringify: stringifyJSON
       },
       {
@@ -100134,7 +100545,7 @@ var require_schema2 = __commonJS({
         default: true,
         tag: "tag:yaml.org,2002:bool",
         test: /^true$|^false$/,
-        resolve: /* @__PURE__ */ __name((str6) => str6 === "true", "resolve"),
+        resolve: /* @__PURE__ */ __name((str8) => str8 === "true", "resolve"),
         stringify: stringifyJSON
       },
       {
@@ -100142,7 +100553,7 @@ var require_schema2 = __commonJS({
         default: true,
         tag: "tag:yaml.org,2002:int",
         test: /^-?(?:0|[1-9][0-9]*)$/,
-        resolve: /* @__PURE__ */ __name((str6, _onError, { intAsBigInt }) => intAsBigInt ? BigInt(str6) : parseInt(str6, 10), "resolve"),
+        resolve: /* @__PURE__ */ __name((str8, _onError, { intAsBigInt }) => intAsBigInt ? BigInt(str8) : parseInt(str8, 10), "resolve"),
         stringify: /* @__PURE__ */ __name(({ value }) => intIdentify(value) ? value.toString() : JSON.stringify(value), "stringify")
       },
       {
@@ -100150,7 +100561,7 @@ var require_schema2 = __commonJS({
         default: true,
         tag: "tag:yaml.org,2002:float",
         test: /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]*)?(?:[eE][-+]?[0-9]+)?$/,
-        resolve: /* @__PURE__ */ __name((str6) => parseFloat(str6), "resolve"),
+        resolve: /* @__PURE__ */ __name((str8) => parseFloat(str8), "resolve"),
         stringify: stringifyJSON
       }
     ];
@@ -100158,9 +100569,9 @@ var require_schema2 = __commonJS({
       default: true,
       tag: "",
       test: /^/,
-      resolve(str6, onError) {
-        onError(`Unresolved plain scalar ${JSON.stringify(str6)}`);
-        return str6;
+      resolve(str8, onError) {
+        onError(`Unresolved plain scalar ${JSON.stringify(str8)}`);
+        return str8;
       }
     };
     var schema = [map.map, seq.seq].concat(jsonScalars, jsonError);
@@ -100192,10 +100603,10 @@ var require_binary = __commonJS({
         if (typeof node_buffer.Buffer === "function") {
           return node_buffer.Buffer.from(src, "base64");
         } else if (typeof atob === "function") {
-          const str6 = atob(src.replace(/[\n\r]/g, ""));
-          const buffer = new Uint8Array(str6.length);
-          for (let i = 0; i < str6.length; ++i)
-            buffer[i] = str6.charCodeAt(i);
+          const str8 = atob(src.replace(/[\n\r]/g, ""));
+          const buffer = new Uint8Array(str8.length);
+          for (let i = 0; i < str8.length; ++i)
+            buffer[i] = str8.charCodeAt(i);
           return buffer;
         } else {
           onError("This environment does not support reading binary tags; either Buffer or atob is required");
@@ -100206,28 +100617,28 @@ var require_binary = __commonJS({
         if (!value)
           return "";
         const buf = value;
-        let str6;
+        let str8;
         if (typeof node_buffer.Buffer === "function") {
-          str6 = buf instanceof node_buffer.Buffer ? buf.toString("base64") : node_buffer.Buffer.from(buf.buffer).toString("base64");
+          str8 = buf instanceof node_buffer.Buffer ? buf.toString("base64") : node_buffer.Buffer.from(buf.buffer).toString("base64");
         } else if (typeof btoa === "function") {
           let s2 = "";
           for (let i = 0; i < buf.length; ++i)
             s2 += String.fromCharCode(buf[i]);
-          str6 = btoa(s2);
+          str8 = btoa(s2);
         } else {
           throw new Error("This environment does not support writing binary tags; either Buffer or btoa is required");
         }
         type ?? (type = Scalar.Scalar.BLOCK_LITERAL);
         if (type !== Scalar.Scalar.QUOTE_DOUBLE) {
           const lineWidth = Math.max(ctx.options.lineWidth - ctx.indent.length, ctx.options.minContentWidth);
-          const n2 = Math.ceil(str6.length / lineWidth);
-          const lines = new Array(n2);
+          const n2 = Math.ceil(str8.length / lineWidth);
+          const lines2 = new Array(n2);
           for (let i = 0, o2 = 0; i < n2; ++i, o2 += lineWidth) {
-            lines[i] = str6.substr(o2, lineWidth);
+            lines2[i] = str8.substr(o2, lineWidth);
           }
-          str6 = lines.join(type === Scalar.Scalar.BLOCK_LITERAL ? "\n" : " ");
+          str8 = lines2.join(type === Scalar.Scalar.BLOCK_LITERAL ? "\n" : " ");
         }
-        return stringifyString.stringifyString({ comment, type, value: str6 }, ctx, onComment, onChompKeep);
+        return stringifyString.stringifyString({ comment, type, value: str8 }, ctx, onComment, onChompKeep);
       }
     };
     exports.binary = binary;
@@ -100439,7 +100850,7 @@ var require_float2 = __commonJS({
       default: true,
       tag: "tag:yaml.org,2002:float",
       test: /^(?:[-+]?\.(?:inf|Inf|INF)|\.nan|\.NaN|\.NAN)$/,
-      resolve: /* @__PURE__ */ __name((str6) => str6.slice(-3).toLowerCase() === "nan" ? NaN : str6[0] === "-" ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY, "resolve"),
+      resolve: /* @__PURE__ */ __name((str8) => str8.slice(-3).toLowerCase() === "nan" ? NaN : str8[0] === "-" ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY, "resolve"),
       stringify: stringifyNumber.stringifyNumber
     };
     var floatExp = {
@@ -100448,7 +100859,7 @@ var require_float2 = __commonJS({
       tag: "tag:yaml.org,2002:float",
       format: "EXP",
       test: /^[-+]?(?:[0-9][0-9_]*)?(?:\.[0-9_]*)?[eE][-+]?[0-9]+$/,
-      resolve: /* @__PURE__ */ __name((str6) => parseFloat(str6.replace(/_/g, "")), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8) => parseFloat(str8.replace(/_/g, "")), "resolve"),
       stringify(node) {
         const num2 = Number(node.value);
         return isFinite(num2) ? num2.toExponential() : stringifyNumber.stringifyNumber(node);
@@ -100459,11 +100870,11 @@ var require_float2 = __commonJS({
       default: true,
       tag: "tag:yaml.org,2002:float",
       test: /^[-+]?(?:[0-9][0-9_]*)?\.[0-9_]*$/,
-      resolve(str6) {
-        const node = new Scalar.Scalar(parseFloat(str6.replace(/_/g, "")));
-        const dot = str6.indexOf(".");
+      resolve(str8) {
+        const node = new Scalar.Scalar(parseFloat(str8.replace(/_/g, "")));
+        const dot = str8.indexOf(".");
         if (dot !== -1) {
-          const f2 = str6.substring(dot + 1).replace(/_/g, "");
+          const f2 = str8.substring(dot + 1).replace(/_/g, "");
           if (f2[f2.length - 1] === "0")
             node.minFractionDigits = f2.length;
         }
@@ -100483,35 +100894,35 @@ var require_int2 = __commonJS({
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     var intIdentify = /* @__PURE__ */ __name((value) => typeof value === "bigint" || Number.isInteger(value), "intIdentify");
-    function intResolve(str6, offset, radix, { intAsBigInt }) {
-      const sign = str6[0];
+    function intResolve(str8, offset, radix, { intAsBigInt }) {
+      const sign = str8[0];
       if (sign === "-" || sign === "+")
         offset += 1;
-      str6 = str6.substring(offset).replace(/_/g, "");
+      str8 = str8.substring(offset).replace(/_/g, "");
       if (intAsBigInt) {
         switch (radix) {
           case 2:
-            str6 = `0b${str6}`;
+            str8 = `0b${str8}`;
             break;
           case 8:
-            str6 = `0o${str6}`;
+            str8 = `0o${str8}`;
             break;
           case 16:
-            str6 = `0x${str6}`;
+            str8 = `0x${str8}`;
             break;
         }
-        const n3 = BigInt(str6);
+        const n3 = BigInt(str8);
         return sign === "-" ? BigInt(-1) * n3 : n3;
       }
-      const n2 = parseInt(str6, radix);
+      const n2 = parseInt(str8, radix);
       return sign === "-" ? -1 * n2 : n2;
     }
     __name(intResolve, "intResolve");
     function intStringify(node, radix, prefix) {
       const { value } = node;
       if (intIdentify(value)) {
-        const str6 = value.toString(radix);
-        return value < 0 ? "-" + prefix + str6.substr(1) : prefix + str6;
+        const str8 = value.toString(radix);
+        return value < 0 ? "-" + prefix + str8.substr(1) : prefix + str8;
       }
       return stringifyNumber.stringifyNumber(node);
     }
@@ -100522,7 +100933,7 @@ var require_int2 = __commonJS({
       tag: "tag:yaml.org,2002:int",
       format: "BIN",
       test: /^[-+]?0b[0-1_]+$/,
-      resolve: /* @__PURE__ */ __name((str6, _onError, opt) => intResolve(str6, 2, 2, opt), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8, _onError, opt) => intResolve(str8, 2, 2, opt), "resolve"),
       stringify: /* @__PURE__ */ __name((node) => intStringify(node, 2, "0b"), "stringify")
     };
     var intOct = {
@@ -100531,7 +100942,7 @@ var require_int2 = __commonJS({
       tag: "tag:yaml.org,2002:int",
       format: "OCT",
       test: /^[-+]?0[0-7_]+$/,
-      resolve: /* @__PURE__ */ __name((str6, _onError, opt) => intResolve(str6, 1, 8, opt), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8, _onError, opt) => intResolve(str8, 1, 8, opt), "resolve"),
       stringify: /* @__PURE__ */ __name((node) => intStringify(node, 8, "0"), "stringify")
     };
     var int2 = {
@@ -100539,7 +100950,7 @@ var require_int2 = __commonJS({
       default: true,
       tag: "tag:yaml.org,2002:int",
       test: /^[-+]?[0-9][0-9_]*$/,
-      resolve: /* @__PURE__ */ __name((str6, _onError, opt) => intResolve(str6, 0, 10, opt), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8, _onError, opt) => intResolve(str8, 0, 10, opt), "resolve"),
       stringify: stringifyNumber.stringifyNumber
     };
     var intHex = {
@@ -100548,7 +100959,7 @@ var require_int2 = __commonJS({
       tag: "tag:yaml.org,2002:int",
       format: "HEX",
       test: /^[-+]?0x[0-9a-fA-F_]+$/,
-      resolve: /* @__PURE__ */ __name((str6, _onError, opt) => intResolve(str6, 2, 16, opt), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8, _onError, opt) => intResolve(str8, 2, 16, opt), "resolve"),
       stringify: /* @__PURE__ */ __name((node) => intStringify(node, 16, "0x"), "stringify")
     };
     exports.int = int2;
@@ -100655,9 +101066,9 @@ var require_timestamp = __commonJS({
   "node_modules/yaml/dist/schema/yaml-1.1/timestamp.js"(exports) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
-    function parseSexagesimal(str6, asBigInt) {
-      const sign = str6[0];
-      const parts = sign === "-" || sign === "+" ? str6.substring(1) : str6;
+    function parseSexagesimal(str8, asBigInt) {
+      const sign = str8[0];
+      const parts = sign === "-" || sign === "+" ? str8.substring(1) : str8;
       const num2 = /* @__PURE__ */ __name((n2) => asBigInt ? BigInt(n2) : Number(n2), "num");
       const res = parts.replace(/_/g, "").split(":").reduce((res2, p2) => res2 * num2(60) + num2(p2), num2(0));
       return sign === "-" ? num2(-1) * res : res;
@@ -100696,7 +101107,7 @@ var require_timestamp = __commonJS({
       tag: "tag:yaml.org,2002:int",
       format: "TIME",
       test: /^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+$/,
-      resolve: /* @__PURE__ */ __name((str6, _onError, { intAsBigInt }) => parseSexagesimal(str6, intAsBigInt), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8, _onError, { intAsBigInt }) => parseSexagesimal(str8, intAsBigInt), "resolve"),
       stringify: stringifySexagesimal
     };
     var floatTime = {
@@ -100705,7 +101116,7 @@ var require_timestamp = __commonJS({
       tag: "tag:yaml.org,2002:float",
       format: "TIME",
       test: /^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\.[0-9_]*$/,
-      resolve: /* @__PURE__ */ __name((str6) => parseSexagesimal(str6, false), "resolve"),
+      resolve: /* @__PURE__ */ __name((str8) => parseSexagesimal(str8, false), "resolve"),
       stringify: stringifySexagesimal
     };
     var timestamp = {
@@ -100716,8 +101127,8 @@ var require_timestamp = __commonJS({
       // may be omitted altogether, resulting in a date format. In such a case, the time part is
       // assumed to be 00:00:00Z (start of day, UTC).
       test: RegExp("^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})(?:(?:t|T|[ \\t]+)([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2}(\\.[0-9]+)?)(?:[ \\t]*(Z|[-+][012]?[0-9](?::[0-9]{2})?))?)?$"),
-      resolve(str6) {
-        const match = str6.match(timestamp.test);
+      resolve(str8) {
+        const match = str8.match(timestamp.test);
         if (!match)
           throw new Error("!!timestamp expects a date, starting with yyyy-mm-dd");
         const [, year, month, day, hour, minute, second] = match.map(Number);
@@ -100922,35 +101333,35 @@ var require_stringifyDocument = __commonJS({
     var stringify3 = require_stringify();
     var stringifyComment = require_stringifyComment();
     function stringifyDocument(doc, options) {
-      const lines = [];
+      const lines2 = [];
       let hasDirectives = options.directives === true;
       if (options.directives !== false && doc.directives) {
         const dir = doc.directives.toString(doc);
         if (dir) {
-          lines.push(dir);
+          lines2.push(dir);
           hasDirectives = true;
         } else if (doc.directives.docStart)
           hasDirectives = true;
       }
       if (hasDirectives)
-        lines.push("---");
+        lines2.push("---");
       const ctx = stringify3.createStringifyContext(doc, options);
       const { commentString } = ctx.options;
       if (doc.commentBefore) {
-        if (lines.length !== 1)
-          lines.unshift("");
+        if (lines2.length !== 1)
+          lines2.unshift("");
         const cs = commentString(doc.commentBefore);
-        lines.unshift(stringifyComment.indentComment(cs, ""));
+        lines2.unshift(stringifyComment.indentComment(cs, ""));
       }
       let chompKeep = false;
       let contentComment = null;
       if (doc.contents) {
         if (identity.isNode(doc.contents)) {
           if (doc.contents.spaceBefore && hasDirectives)
-            lines.push("");
+            lines2.push("");
           if (doc.contents.commentBefore) {
             const cs = commentString(doc.contents.commentBefore);
-            lines.push(stringifyComment.indentComment(cs, ""));
+            lines2.push(stringifyComment.indentComment(cs, ""));
           }
           ctx.forceBlockIndent = !!doc.comment;
           contentComment = doc.contents.comment;
@@ -100959,36 +101370,36 @@ var require_stringifyDocument = __commonJS({
         let body = stringify3.stringify(doc.contents, ctx, () => contentComment = null, onChompKeep);
         if (contentComment)
           body += stringifyComment.lineComment(body, "", commentString(contentComment));
-        if ((body[0] === "|" || body[0] === ">") && lines[lines.length - 1] === "---") {
-          lines[lines.length - 1] = `--- ${body}`;
+        if ((body[0] === "|" || body[0] === ">") && lines2[lines2.length - 1] === "---") {
+          lines2[lines2.length - 1] = `--- ${body}`;
         } else
-          lines.push(body);
+          lines2.push(body);
       } else {
-        lines.push(stringify3.stringify(doc.contents, ctx));
+        lines2.push(stringify3.stringify(doc.contents, ctx));
       }
       if (doc.directives?.docEnd) {
         if (doc.comment) {
           const cs = commentString(doc.comment);
           if (cs.includes("\n")) {
-            lines.push("...");
-            lines.push(stringifyComment.indentComment(cs, ""));
+            lines2.push("...");
+            lines2.push(stringifyComment.indentComment(cs, ""));
           } else {
-            lines.push(`... ${cs}`);
+            lines2.push(`... ${cs}`);
           }
         } else {
-          lines.push("...");
+          lines2.push("...");
         }
       } else {
         let dc = doc.comment;
         if (dc && chompKeep)
           dc = dc.replace(/^\n+/, "");
         if (dc) {
-          if ((!chompKeep || contentComment) && lines[lines.length - 1] !== "")
-            lines.push("");
-          lines.push(stringifyComment.indentComment(commentString(dc), ""));
+          if ((!chompKeep || contentComment) && lines2[lines2.length - 1] !== "")
+            lines2.push("");
+          lines2.push(stringifyComment.indentComment(commentString(dc), ""));
         }
       }
-      return lines.join("\n") + "\n";
+      return lines2.join("\n") + "\n";
     }
     __name(stringifyDocument, "stringifyDocument");
     exports.stringifyDocument = stringifyDocument;
@@ -102074,17 +102485,17 @@ var require_resolve_block_scalar = __commonJS({
       if (!header)
         return { value: "", type: null, comment: "", range: [start, start, start] };
       const type = header.mode === ">" ? Scalar.Scalar.BLOCK_FOLDED : Scalar.Scalar.BLOCK_LITERAL;
-      const lines = scalar.source ? splitLines(scalar.source) : [];
-      let chompStart = lines.length;
-      for (let i = lines.length - 1; i >= 0; --i) {
-        const content = lines[i][1];
+      const lines2 = scalar.source ? splitLines(scalar.source) : [];
+      let chompStart = lines2.length;
+      for (let i = lines2.length - 1; i >= 0; --i) {
+        const content = lines2[i][1];
         if (content === "" || content === "\r")
           chompStart = i;
         else
           break;
       }
       if (chompStart === 0) {
-        const value2 = header.chomp === "+" && lines.length > 0 ? "\n".repeat(Math.max(1, lines.length - 1)) : "";
+        const value2 = header.chomp === "+" && lines2.length > 0 ? "\n".repeat(Math.max(1, lines2.length - 1)) : "";
         let end2 = start + header.length;
         if (scalar.source)
           end2 += scalar.source.length;
@@ -102094,7 +102505,7 @@ var require_resolve_block_scalar = __commonJS({
       let offset = scalar.offset + header.length;
       let contentStart = 0;
       for (let i = 0; i < chompStart; ++i) {
-        const [indent, content] = lines[i];
+        const [indent, content] = lines2[i];
         if (content === "" || content === "\r") {
           if (header.indent === 0 && indent.length > trimIndent)
             trimIndent = indent.length;
@@ -102114,17 +102525,17 @@ var require_resolve_block_scalar = __commonJS({
         }
         offset += indent.length + content.length + 1;
       }
-      for (let i = lines.length - 1; i >= chompStart; --i) {
-        if (lines[i][0].length > trimIndent)
+      for (let i = lines2.length - 1; i >= chompStart; --i) {
+        if (lines2[i][0].length > trimIndent)
           chompStart = i + 1;
       }
       let value = "";
       let sep = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
-        value += lines[i][0].slice(trimIndent) + "\n";
+        value += lines2[i][0].slice(trimIndent) + "\n";
       for (let i = contentStart; i < chompStart; ++i) {
-        let [indent, content] = lines[i];
+        let [indent, content] = lines2[i];
         offset += indent.length + content.length + 1;
         const crlf = content[content.length - 1] === "\r";
         if (crlf)
@@ -102161,8 +102572,8 @@ var require_resolve_block_scalar = __commonJS({
         case "-":
           break;
         case "+":
-          for (let i = chompStart; i < lines.length; ++i)
-            value += "\n" + lines[i][0].slice(trimIndent);
+          for (let i = chompStart; i < lines2.length; ++i)
+            value += "\n" + lines2[i][0].slice(trimIndent);
           if (value[value.length - 1] !== "\n")
             value += "\n";
           break;
@@ -102236,13 +102647,13 @@ var require_resolve_block_scalar = __commonJS({
     __name(parseBlockScalarHeader, "parseBlockScalarHeader");
     function splitLines(source) {
       const split = source.split(/\n( *)/);
-      const first = split[0];
-      const m3 = first.match(/^( *)/);
-      const line0 = m3?.[1] ? [m3[1], first.slice(m3[1].length)] : ["", first];
-      const lines = [line0];
+      const first2 = split[0];
+      const m3 = first2.match(/^( *)/);
+      const line0 = m3?.[1] ? [m3[1], first2.slice(m3[1].length)] : ["", first2];
+      const lines2 = [line0];
       for (let i = 1; i < split.length; i += 2)
-        lines.push([split[i], split[i + 1]]);
-      return lines;
+        lines2.push([split[i], split[i + 1]]);
+      return lines2;
     }
     __name(splitLines, "splitLines");
     exports.resolveBlockScalar = resolveBlockScalar;
@@ -102329,20 +102740,20 @@ var require_resolve_flow_scalar = __commonJS({
     }
     __name(singleQuotedValue, "singleQuotedValue");
     function foldLines(source) {
-      let first, line;
+      let first2, line;
       try {
-        first = new RegExp("(.*?)(?<![ 	])[ 	]*\r?\n", "sy");
+        first2 = new RegExp("(.*?)(?<![ 	])[ 	]*\r?\n", "sy");
         line = new RegExp("[ 	]*(.*?)(?:(?<![ 	])[ 	]*)?\r?\n", "sy");
       } catch {
-        first = /(.*?)[ \t]*\r?\n/sy;
+        first2 = /(.*?)[ \t]*\r?\n/sy;
         line = /[ \t]*(.*?)[ \t]*\r?\n/sy;
       }
-      let match = first.exec(source);
+      let match = first2.exec(source);
       if (!match)
         return source;
       let res = match[1];
       let sep = " ";
-      let pos = first.lastIndex;
+      let pos = first2.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
@@ -105045,53 +105456,53 @@ var require_dist2 = __commonJS({
 });
 
 // bin/lib/migrations/plan/v0_to_v1.ts
-function migrate8(text4) {
+function migrate9(text4) {
   return setFrontmatterVersionText(text4, 1);
 }
 var init_v0_to_v12 = __esm({
   "bin/lib/migrations/plan/v0_to_v1.ts"() {
     "use strict";
     init_loader();
-    __name(migrate8, "migrate");
+    __name(migrate9, "migrate");
   }
 });
 
 // bin/lib/migrations/plan/v1_to_v2.ts
-function migrate9(text4) {
+function migrate10(text4) {
   return setFrontmatterVersionText(text4, 2);
 }
 var init_v1_to_v25 = __esm({
   "bin/lib/migrations/plan/v1_to_v2.ts"() {
     "use strict";
     init_loader();
-    __name(migrate9, "migrate");
+    __name(migrate10, "migrate");
   }
 });
 
 // bin/lib/migrations/intake/v0_to_v1.ts
 function legacyTopic(text4) {
-  const lines = text4.replace(/\r\n/g, "\n").split("\n");
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = (lines[i] ?? "").trim();
+  const lines2 = text4.replace(/\r\n/g, "\n").split("\n");
+  for (let i = 0; i < lines2.length; i += 1) {
+    const line = (lines2[i] ?? "").trim();
     const m3 = /^topic\s*:\s*(.+)$/i.exec(line);
     if (m3 && (m3[1] ?? "").trim()) return (m3[1] ?? "").trim().slice(0, 200);
     if (/^##\s+topic\b/i.test(line)) {
-      for (let j2 = i + 1; j2 < lines.length; j2 += 1) {
-        const v2 = (lines[j2] ?? "").trim();
+      for (let j2 = i + 1; j2 < lines2.length; j2 += 1) {
+        const v2 = (lines2[j2] ?? "").trim();
         if (v2 && !v2.startsWith("#")) return v2.slice(0, 200);
       }
     }
   }
   const assignment = /(?:^|\n)## Assignment[ \t]*\n([\s\S]*?)(?=\n## |$)/.exec(text4.replace(/\r\n/g, "\n"))?.[1]?.trim() ?? "";
-  const first = assignment.split(/[.!?]/)[0]?.trim() ?? "";
-  if (first.length < 3) return "";
-  return first.replace(/^(write|analy[sz]e|discuss|examine|explore|describe|explain|review|argue)\s+(an?\s+)?/i, "").replace(/^(\d+[- ]word\s+)?(literature review|paper|essay|report|study|analysis)\s+(on|about|regarding|of)\s+/i, "").trim().slice(0, 200);
+  const first2 = assignment.split(/[.!?]/)[0]?.trim() ?? "";
+  if (first2.length < 3) return "";
+  return first2.replace(/^(write|analy[sz]e|discuss|examine|explore|describe|explain|review|argue)\s+(an?\s+)?/i, "").replace(/^(\d+[- ]word\s+)?(literature review|paper|essay|report|study|analysis)\s+(on|about|regarding|of)\s+/i, "").trim().slice(0, 200);
 }
 function legacyDiscipline(text4) {
   const m3 = /^discipline\s*:\s*(.+)$/im.exec(text4);
   return normalizeDisciplineSlug(m3 ? m3[1] ?? "" : "");
 }
-function migrate10(text4) {
+function migrate11(text4) {
   if (FRONTMATTER_BLOCK_RE2.test(text4)) return setFrontmatterVersionText(text4, 1);
   const eol = text4.includes("\r\n") ? "\r\n" : "\n";
   const yaml = (0, import_yaml.stringify)({ schema_version: 1, topic: legacyTopic(text4), discipline: legacyDiscipline(text4) }).replace(/\n/g, eol);
@@ -105107,7 +105518,7 @@ var init_v0_to_v13 = __esm({
     FRONTMATTER_BLOCK_RE2 = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
     __name(legacyTopic, "legacyTopic");
     __name(legacyDiscipline, "legacyDiscipline");
-    __name(migrate10, "migrate");
+    __name(migrate11, "migrate");
   }
 });
 
@@ -105235,8 +105646,8 @@ var init_frontmatter = __esm({
     __name(updateFrontmatter, "updateFrontmatter");
     INTAKE_FRONTMATTER_VERSION = 1;
     FRONTMATTER_KINDS = Object.freeze({
-      plan: { current: CURRENT_PLAN_FRONTMATTER_VERSION, migrations: { 0: migrate8, 1: migrate9 } },
-      intake: { current: INTAKE_FRONTMATTER_VERSION, migrations: { 0: migrate10 } },
+      plan: { current: CURRENT_PLAN_FRONTMATTER_VERSION, migrations: { 0: migrate9, 1: migrate10 } },
+      intake: { current: INTAKE_FRONTMATTER_VERSION, migrations: { 0: migrate11 } },
       draft: { current: 0, migrations: {} },
       verification: { current: 0, migrations: {} }
     });
@@ -105277,13 +105688,14 @@ var init_draft_hash = __esm({
 });
 
 // bin/lib/schemas/compile-inputs.ts
-var COMPILE_INPUTS_SCHEMA_VERSION, SHA256_OR_EMPTY, CompileInputsSectionSchema, CompileInputsSchema;
+var COMPILE_INPUTS_SCHEMA_VERSION, SHA256_OR_EMPTY, SHA256, CompileInputsSectionSchema, CompileInputsSchema;
 var init_compile_inputs = __esm({
   "bin/lib/schemas/compile-inputs.ts"() {
     "use strict";
     init_zod();
-    COMPILE_INPUTS_SCHEMA_VERSION = 1;
+    COMPILE_INPUTS_SCHEMA_VERSION = 2;
     SHA256_OR_EMPTY = /^(?:[0-9a-f]{64})?$/;
+    SHA256 = /^[0-9a-f]{64}$/;
     CompileInputsSectionSchema = external_exports.object({
       /** `1`, `1a` — the section id (GRND-09). */
       id: external_exports.string().regex(/^[1-9][0-9]?[a-z]?$/),
@@ -105291,14 +105703,42 @@ var init_compile_inputs = __esm({
       /** sha256 of the section's DRAFT.md bytes ('' when it had none). */
       draft_sha256: external_exports.string().regex(SHA256_OR_EMPTY),
       /** sha256 of the section's VERIFICATION.md bytes ('' when it had none). */
-      verification_sha256: external_exports.string().regex(SHA256_OR_EMPTY)
+      verification_sha256: external_exports.string().regex(SHA256_OR_EMPTY),
+      /** The section's verified_against_draft_hash when compiled (null: recorded by a v1 compile — stale). */
+      verified_against_draft_hash: external_exports.string().regex(SHA256).nullable()
     }).strict();
     CompileInputsSchema = external_exports.object({
       $schemaVersion: external_exports.literal(COMPILE_INPUTS_SCHEMA_VERSION),
       compiled_at: external_exports.string().datetime(),
+      /** sha256 of the `.paper/DRAFT.md` bytes compile wrote (null: recorded by a v1 compile — stale). */
+      compiled_draft_sha256: external_exports.string().regex(SHA256).nullable(),
       /** The compiled sections in (n, suffix) order. */
       sections: external_exports.array(CompileInputsSectionSchema)
     }).strict();
+  }
+});
+
+// bin/lib/migrations/compile-inputs/v1_to_v2.ts
+function migrate12(input2) {
+  const src = typeof input2 === "object" && input2 !== null && !Array.isArray(input2) ? input2 : {};
+  const sections = Array.isArray(src["sections"]) ? src["sections"] : [];
+  return {
+    ...src,
+    $schemaVersion: 2,
+    compiled_draft_sha256: typeof src["compiled_draft_sha256"] === "string" ? src["compiled_draft_sha256"] : null,
+    sections: sections.map((s2) => {
+      const sec = typeof s2 === "object" && s2 !== null && !Array.isArray(s2) ? s2 : {};
+      return {
+        ...sec,
+        verified_against_draft_hash: typeof sec["verified_against_draft_hash"] === "string" ? sec["verified_against_draft_hash"] : null
+      };
+    })
+  };
+}
+var init_v1_to_v26 = __esm({
+  "bin/lib/migrations/compile-inputs/v1_to_v2.ts"() {
+    "use strict";
+    __name(migrate12, "migrate");
   }
 });
 
@@ -105326,7 +105766,10 @@ function currentSectionInputs(paperRoot, s2) {
 }
 function readCompileInputs(paperRoot) {
   try {
-    const parsed = CompileInputsSchema.safeParse(JSON.parse(readFileSync11(compileInputsPath(paperRoot), "utf8")));
+    let value = JSON.parse(readFileSync11(compileInputsPath(paperRoot), "utf8"));
+    const version2 = typeof value === "object" && value !== null ? value["$schemaVersion"] : void 0;
+    if (version2 === 1) value = migrate12(value);
+    const parsed = CompileInputsSchema.safeParse(value);
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -105354,6 +105797,7 @@ var init_compile_inputs2 = __esm({
     init_paths();
     init_section_id();
     init_compile_inputs();
+    init_v1_to_v26();
     COMPILE_INPUTS_FILE = "COMPILE-INPUTS.json";
     __name(compileInputsPath, "compileInputsPath");
     __name(fileSha256, "fileSha256");
@@ -105387,21 +105831,21 @@ function sectionRegistryDivergence(registered, outline) {
   const regById = new Map(registered.map((s2) => [identityLabel(s2), s2]));
   const rowSlugs = new Set(outline.map((s2) => s2.slug));
   const claimedIds = /* @__PURE__ */ new Set();
-  for (const row of outline) {
-    const id = identityLabel(row);
-    const reg = regBySlug.get(row.slug);
+  for (const row2 of outline) {
+    const id = identityLabel(row2);
+    const reg = regBySlug.get(row2.slug);
     if (reg !== void 0) {
       if (identityLabel(reg) !== id) {
-        out2.push(`OUTLINE.md numbers "${row.slug}" \xA7${id}, but STATE.json registers it as \xA7${identityLabel(reg)}`);
+        out2.push(`OUTLINE.md numbers "${row2.slug}" \xA7${id}, but STATE.json registers it as \xA7${identityLabel(reg)}`);
       }
       continue;
     }
     const holder = regById.get(id);
     if (holder !== void 0 && !rowSlugs.has(holder.slug)) {
       claimedIds.add(id);
-      out2.push(`OUTLINE.md lists \xA7${id} as "${row.slug}", but STATE.json registers \xA7${id} as "${holder.slug}"`);
+      out2.push(`OUTLINE.md lists \xA7${id} as "${row2.slug}", but STATE.json registers \xA7${id} as "${holder.slug}"`);
     } else {
-      out2.push(`OUTLINE.md lists \xA7${id} "${row.slug}", which STATE.json does not register`);
+      out2.push(`OUTLINE.md lists \xA7${id} "${row2.slug}", which STATE.json does not register`);
     }
   }
   for (const reg of registered) {
@@ -105455,25 +105899,112 @@ var init_section_registry = __esm({
   }
 });
 
+// bin/lib/verify/verdicts.ts
+import { createHash as createHash8 } from "node:crypto";
+function sectionOutcome(rows) {
+  let failed = false;
+  let unverifiable = false;
+  let blocked = false;
+  for (const r2 of rows) {
+    if (PASSING_VERDICTS.has(r2.verdict)) continue;
+    if (r2.accepted === true && r2.verdict === ACCEPTABLE_QUOTE_VERDICT) continue;
+    if (LEGACY_UNAVAILABLE_VERDICTS.has(r2.verdict)) {
+      unverifiable = true;
+      continue;
+    }
+    if (UNVERIFIABLE_VERDICTS.has(r2.verdict)) {
+      unverifiable = true;
+      blocked = true;
+      continue;
+    }
+    failed = true;
+    blocked = true;
+  }
+  return { status: failed ? "failed" : unverifiable ? "unverifiable" : "verified", blocked };
+}
+function quoteTextSha256(text4) {
+  return createHash8("sha256").update(text4.normalize("NFKC").replace(/\s+/gu, " ").trim(), "utf8").digest("hex");
+}
+function quoteId(index) {
+  return `q${index + 1}`;
+}
+var PASS1_VERDICTS, PASS3_VERDICTS, DRAFT_VERDICTS, PASSING_VERDICTS, FAILING_VERDICTS, UNVERIFIABLE_VERDICTS, BLOCKING_VERDICTS, ACCEPTABLE_QUOTE_VERDICT, RETRY_ONLINE_VERDICTS, LEGACY_UNAVAILABLE_VERDICTS, UNATTRIBUTED_CITEKEY, QUOTE_ID_RE, PASS2_TABLE_HEADER;
+var init_verdicts = __esm({
+  "bin/lib/verify/verdicts.ts"() {
+    "use strict";
+    PASS1_VERDICTS = [
+      "OK",
+      "OK-BYO",
+      "FABRICATED",
+      "MIS-CITED",
+      "RETRACTED",
+      "UNASSIGNED",
+      "UNPARSEABLE",
+      "UNSUPPORTED-FORM",
+      "UNRESOLVABLE",
+      "UNVERIFIABLE-NETWORK",
+      "UNVERIFIABLE"
+    ];
+    PASS3_VERDICTS = ["PASS", "FUZZY", "NOT_FOUND", "UNVERIFIABLE-QUOTE", "UNVERIFIABLE-NETWORK", "UNATTRIBUTED"];
+    DRAFT_VERDICTS = ["PLACEHOLDER", "NO-CITATIONS"];
+    PASSING_VERDICTS = /* @__PURE__ */ new Set(["OK", "OK-BYO", "PASS", "FUZZY"]);
+    FAILING_VERDICTS = /* @__PURE__ */ new Set([
+      "FABRICATED",
+      "MIS-CITED",
+      "RETRACTED",
+      "UNASSIGNED",
+      "UNPARSEABLE",
+      "UNSUPPORTED-FORM",
+      "UNRESOLVABLE",
+      "NOT_FOUND",
+      "UNATTRIBUTED",
+      "NO-CITATIONS"
+    ]);
+    UNVERIFIABLE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK", "UNVERIFIABLE", "UNVERIFIABLE-QUOTE", "PLACEHOLDER"]);
+    BLOCKING_VERDICTS = /* @__PURE__ */ new Set([...FAILING_VERDICTS, ...UNVERIFIABLE_VERDICTS]);
+    ACCEPTABLE_QUOTE_VERDICT = "UNVERIFIABLE-QUOTE";
+    RETRY_ONLINE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK"]);
+    LEGACY_UNAVAILABLE_VERDICTS = /* @__PURE__ */ new Set(["PDF_UNAVAILABLE", "TEXT_UNAVAILABLE"]);
+    UNATTRIBUTED_CITEKEY = "(unattributed)";
+    __name(sectionOutcome, "sectionOutcome");
+    __name(quoteTextSha256, "quoteTextSha256");
+    __name(quoteId, "quoteId");
+    QUOTE_ID_RE = /^q[1-9]\d*$/;
+    PASS2_TABLE_HEADER = "| Citekey | Claim Sentence | Verdict | Rationale | Evidence |";
+  }
+});
+
 // bin/lib/verify/verdict-rows.ts
+function rowReason(afterVerdict) {
+  const m3 = /^\s*—\s*(?:titleJW=\S+,\s*authorJW=\S+\s*—\s*|lev=\S+\s*—\s*)?(.*)$/u.exec(afterVerdict);
+  const reason = m3?.[1]?.replace(/ — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/, "").trim();
+  return reason !== void 0 && reason.length > 0 ? reason : void 0;
+}
 function renderPass1VerdictRow(citekey, verdict, titleJW, authorJW, reason) {
   const score = /* @__PURE__ */ __name((x3) => Number.isFinite(x3) ? x3.toFixed(2) : "n/a", "score");
   return `- ${citekey}: **${verdict}** \u2014 titleJW=${score(titleJW)}, authorJW=${score(authorJW)} \u2014 ${reason}`;
 }
-function renderPass3VerdictRow(citekey, quoteSnippet, verdict, levRatio, reason) {
-  return `- ${citekey} ("${quoteSnippet}\u2026"): **${verdict}** \u2014 lev=${levRatio.toFixed(3)} \u2014 ${reason}`;
-}
 function parseBlockingVerdictRows(verificationMd) {
   const out2 = [];
   for (const line of verificationMd.split(/\r?\n/)) {
-    const any = /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
-    const verdict = any?.[1];
+    const pass3 = /^\s*-\s*(\S+?)(?:\s+\[(q[1-9]\d*)\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
+    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
+    const any = pass3 || pass1 ? null : /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
+    const verdict = pass3?.[3] ?? pass1?.[2] ?? any?.[1];
+    const matched = pass3 ?? pass1 ?? any;
     if (verdict === void 0 || !BLOCKING_VERDICTS.has(verdict)) continue;
-    const pass3 = /^\s*-\s*(\S+?)\s+\(".*"\):\s*\*\*[A-Z_-]+\*\*/u.exec(line);
-    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*[A-Z_-]+\*\*/u.exec(line);
+    if (verdict === ACCEPTABLE_QUOTE_VERDICT && / — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/.test(line)) continue;
     const citekey = pass3?.[1] ?? pass1?.[1];
     const retraction = /\bcited work is retracted\b/.test(line);
-    out2.push({ citekey: citekey ?? UNREADABLE_CITEKEY, verdict, ...retraction ? { retraction: true } : {} });
+    const quoteId2 = pass3?.[2];
+    const reason = matched !== null ? rowReason(line.slice(matched.index + matched[0].length)) : void 0;
+    out2.push({
+      citekey: citekey ?? UNREADABLE_CITEKEY,
+      verdict,
+      ...retraction ? { retraction: true } : {},
+      ...quoteId2 !== void 0 ? { quoteId: quoteId2 } : {},
+      ...reason !== void 0 ? { reason } : {}
+    });
   }
   return out2;
 }
@@ -105486,28 +106017,54 @@ function sectionVerificationReasons(verificationMd, dryRunNow) {
   if (dryRun !== null) return [dryRun];
   const reasons = [];
   if (status.toLowerCase() === "failed") reasons.push("VERIFICATION.md Status is 'failed'");
-  for (const row of parseBlockingVerdictRows(verificationMd)) reasons.push(blockingRowReason(row));
+  for (const row2 of parseBlockingVerdictRows(verificationMd)) reasons.push(verdictRowReason(row2));
   return reasons;
 }
-function blockingRowReason(row) {
-  const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
-  return row.verdict === "UNVERIFIABLE" ? `${cite} is UNVERIFIABLE (its source could not be checked: offline, --dry-run or a failed lookup) \u2014 re-run online` : `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ": the cited work is retracted" : ""})`;
+function verdictRowReason(row2) {
+  if (row2.citekey === "draft" && DRAFT_VERDICTS.includes(row2.verdict)) {
+    return row2.verdict === "PLACEHOLDER" ? "the draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model configured (`pensmith write <N>`)" : "the draft cites none of its assigned sources (NO-CITATIONS) \u2014 re-draft it (`pensmith write <N>`)";
+  }
+  if (/^L\d+$/.test(row2.citekey) && (row2.verdict === "UNPARSEABLE" || row2.verdict === "UNSUPPORTED-FORM")) {
+    return `line ${row2.citekey.slice(1)} of the draft holds a citation the verifier cannot check (${row2.verdict})`;
+  }
+  if (row2.quoteId !== void 0 && row2.verdict === ACCEPTABLE_QUOTE_VERDICT) {
+    return blockingRowReason(row2).replace("--accept-quote <id>", `--accept-quote ${row2.quoteId}`);
+  }
+  return blockingRowReason(row2);
+}
+function blockingRowReason(row2) {
+  const cite = row2.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row2.citekey}]`;
+  if (RETRY_ONLINE_VERDICTS.has(row2.verdict)) {
+    return `${cite} is ${row2.verdict} (its source could not be checked: offline, --dry-run or a failed lookup) \u2014 re-run online`;
+  }
+  if (row2.verdict === "UNVERIFIABLE") {
+    return `${cite} is UNVERIFIABLE \u2014 ${row2.reason ?? "its registrar's answer cannot be compared with the entry"}`;
+  }
+  if (row2.verdict === "RETRACTED") {
+    return `${cite} is RETRACTED \u2014 ${row2.reason ?? "the cited work is retracted"}`;
+  }
+  if (row2.verdict === ACCEPTABLE_QUOTE_VERDICT) {
+    return `${cite} has a quote no source text could be checked against (${row2.verdict}) \u2014 add the source's PDF (pensmith add <pdf>), paraphrase the quote (pensmith plan <N> --revise), or accept that one quote (pensmith verify <N> --accept-quote <id>)`;
+  }
+  return `${cite} has a blocking verdict (${row2.verdict}${row2.retraction === true ? ": the cited work is retracted" : ""})`;
 }
 function dryRunVerificationReason(verificationMd, dryRunNow) {
   if (dryRunNow) return null;
-  const first = verificationMd.split(/\r?\n/).find((l2) => l2.trim().length > 0) ?? "";
-  return first.startsWith(DRY_RUN_VERIFICATION_MARKER) ? "verified under --dry-run against synthetic sources \u2014 re-run `pensmith verify` without --dry-run" : null;
+  const first2 = verificationMd.split(/\r?\n/).find((l2) => l2.trim().length > 0) ?? "";
+  return first2.startsWith(DRY_RUN_VERIFICATION_MARKER) ? "verified under --dry-run against synthetic sources \u2014 re-run `pensmith verify` without --dry-run" : null;
 }
-var BLOCKING_VERDICTS, UNREADABLE_CITEKEY, DRY_RUN_VERIFICATION_MARKER;
+var UNREADABLE_CITEKEY, DRY_RUN_VERIFICATION_MARKER;
 var init_verdict_rows = __esm({
   "bin/lib/verify/verdict-rows.ts"() {
     "use strict";
-    BLOCKING_VERDICTS = /* @__PURE__ */ new Set(["FABRICATED", "MIS-CITED", "NOT_FOUND", "UNVERIFIABLE"]);
+    init_verdicts();
+    init_verdicts();
+    __name(rowReason, "rowReason");
     __name(renderPass1VerdictRow, "renderPass1VerdictRow");
-    __name(renderPass3VerdictRow, "renderPass3VerdictRow");
     __name(parseBlockingVerdictRows, "parseBlockingVerdictRows");
     UNREADABLE_CITEKEY = "(unreadable verdict row)";
     __name(sectionVerificationReasons, "sectionVerificationReasons");
+    __name(verdictRowReason, "verdictRowReason");
     __name(blockingRowReason, "blockingRowReason");
     DRY_RUN_VERIFICATION_MARKER = "> OFFLINE MODE (--dry-run)";
     __name(dryRunVerificationReason, "dryRunVerificationReason");
@@ -105609,7 +106166,7 @@ var init_research_sentinel = __esm({
 
 // bin/lib/router.ts
 import { existsSync as existsSync9, readFileSync as readFileSync13, statSync as statSync7 } from "node:fs";
-import { join as join10 } from "node:path";
+import { basename as basename3, join as join10 } from "node:path";
 function readSectionInfo(planPath) {
   const none = { stub: false, failureReason: null, verifiedHash: null, assignedSources: [] };
   if (!existsSync9(planPath)) {
@@ -105650,13 +106207,43 @@ function verificationBlockers(verificationPath) {
     return ["its VERIFICATION.md is missing or unreadable"];
   }
   const reasons = sectionVerificationReasons(md, dryRunWorkspaceActive());
-  const unverifiable2 = parseBlockingVerdictRows(md).filter((r2) => r2.verdict === "UNVERIFIABLE");
-  if (reasons.length > 1 && unverifiable2.length === reasons.length) {
-    const keys = unverifiable2.map((r2) => `[@${r2.citekey}]`);
+  const unverifiable = parseBlockingVerdictRows(md).filter((r2) => r2.verdict === "UNVERIFIABLE" || RETRY_ONLINE_VERDICTS.has(r2.verdict));
+  if (reasons.length > 1 && unverifiable.length === reasons.length) {
+    const keys = unverifiable.map((r2) => `[@${r2.citekey}]`);
     const list3 = `${keys.slice(0, -1).join(", ")} and ${keys[keys.length - 1]}`;
     return [`${list3} are UNVERIFIABLE (their sources could not be checked: offline, --dry-run or a failed lookup)`];
   }
   return reasons;
+}
+function unverifiableSectionDetail(verificationPath, label) {
+  let md;
+  try {
+    md = readFileSync13(verificationPath, "utf8");
+  } catch {
+    return `section ${label} could not be verified: its VERIFICATION.md is missing or unreadable \u2014 run \`pensmith verify ${label}\``;
+  }
+  const rows = parseBlockingVerdictRows(md);
+  if (rows.length === 0) return null;
+  const parts = [];
+  const quotes = rows.filter((r2) => r2.verdict === ACCEPTABLE_QUOTE_VERDICT);
+  if (quotes.length > 0) {
+    const ids = [...new Set(quotes.map((q3) => q3.quoteId ?? "?"))];
+    parts.push(
+      `${ids.length} quote(s) (${ids.join(", ")}) could not be checked against any source text \u2014 add the source's PDF (\`pensmith add <pdf>\`), paraphrase (\`pensmith plan ${label} --revise\`), or accept a quote (\`pensmith verify ${label} --accept-quote ${ids[0]}\`)`
+    );
+  }
+  if (rows.some((r2) => r2.verdict === "PLACEHOLDER")) {
+    parts.push(`its draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model: \`pensmith write ${label}\``);
+  }
+  const network = rows.filter((r2) => RETRY_ONLINE_VERDICTS.has(r2.verdict));
+  if (network.length > 0) {
+    parts.push(`${network.map((r2) => `[@${r2.citekey}]`).join(", ")} could not be checked (offline or a failed lookup) \u2014 re-run \`pensmith verify ${label}\` online`);
+  }
+  for (const r2 of rows.filter((x3) => x3.verdict === "UNVERIFIABLE")) {
+    parts.push(`[@${r2.citekey}] cannot be checked by its registrar${r2.reason !== void 0 ? ` \u2014 ${r2.reason}` : ""}`);
+  }
+  if (parts.length === 0) parts.push(verificationBlockers(verificationPath).join("; "));
+  return `section ${label} could not be verified: ${parts.join("; ")}`;
 }
 function mtimeOf(p2) {
   try {
@@ -105676,6 +106263,8 @@ function compiledSectionCount(pDir) {
 function compiledDraftStale(pDir, sections, paperRoot) {
   const compiledAt = mtimeOf(join10(pDir, "DRAFT.md"));
   if (compiledAt === null) return true;
+  const record2 = readCompileInputs(paperRoot);
+  if (record2 !== null && (record2.compiled_draft_sha256 === null || record2.sections.some((s2) => s2.verified_against_draft_hash === null))) return true;
   const current = compiledInputsCurrent(paperRoot, sections);
   if (current !== null) return !current;
   for (const { n: n2, slug } of sections) {
@@ -105736,8 +106325,8 @@ async function resolveNextAction(paperRoot, opts = {}) {
       }
       switch (r2.status) {
         case "verified":
+          if (!existsSync9(sectionDraft(n2, slug, paperRoot))) return { verb: "write", ...id };
           continue;
-        // the ONLY continue case
         case "planned":
           return r2.stub ? { verb: "plan", ...id } : { verb: "write", ...id };
         case "writing":
@@ -105762,20 +106351,15 @@ async function resolveNextAction(paperRoot, opts = {}) {
           return { verb: "verify", ...id };
         // the draft changed: re-attempt verification — NOT continue
         case "unverifiable": {
+          if (!existsSync9(sectionDraft(n2, slug, paperRoot))) return { verb: "write", ...id };
           if (r2.verifiedHash === null || draftHashOf(sectionDraft(n2, slug, paperRoot), r2.assignedSources) !== r2.verifiedHash) {
             return { verb: "verify", ...id };
           }
-          const blockers = verificationBlockers(sectionVerification(n2, slug, paperRoot));
-          if (blockers.length === 0) continue;
-          return {
-            verb: "status",
-            reason: "attention",
-            section: id,
-            detail: `section ${label} could not be verified: ${blockers.join("; ")} \u2014 its draft has not changed since; re-run the check with \`pensmith verify ${label}\` once the sources can be reached`
-          };
+          continue;
         }
         case "written":
         case "verifying":
+          if (!existsSync9(sectionDraft(n2, slug, paperRoot))) return { verb: "write", ...id };
           return { verb: "verify", ...id };
         default:
           return {
@@ -105786,9 +106370,19 @@ async function resolveNextAction(paperRoot, opts = {}) {
           };
       }
     }
+    const record2 = readCompileInputs(paperRoot);
+    if (record2 !== null && record2.compiled_draft_sha256 !== null && existsSync9(join10(pDir, "DRAFT.md")) && fileSha256(join10(pDir, "DRAFT.md")) !== record2.compiled_draft_sha256) {
+      return {
+        verb: "status",
+        reason: "attention",
+        detail: `${basename3(pDir)}/DRAFT.md was edited after compile \u2014 make the edit in the section drafts (then \`pensmith\` re-verifies them) and run \`pensmith compile\`, which replaces the edited file`
+      };
+    }
     if (compiledDraftStale(pDir, sections, paperRoot)) return { verb: "compile" };
     const finalAt = mtimeOf(join10(pDir, "FINAL.md"));
-    if (finalAt === null || finalAt < (mtimeOf(join10(pDir, "DRAFT.md")) ?? 0)) return { verb: "done" };
+    if (finalAt === null || finalAt < (mtimeOf(join10(pDir, "DRAFT.md")) ?? 0)) {
+      return record2 === null ? { verb: "compile" } : { verb: "done" };
+    }
     return { verb: "status", reason: "done" };
   } catch (e2) {
     process.stderr.write(
@@ -105810,10 +106404,14 @@ var init_router = __esm({
     init_compile_inputs2();
     init_section_registry();
     init_verdict_rows();
+    init_verdicts();
     init_research_sentinel();
+    init_verdicts();
+    init_compile_inputs2();
     __name(readSectionInfo, "readSectionInfo");
     __name(draftHashOf, "draftHashOf");
     __name(verificationBlockers, "verificationBlockers");
+    __name(unverifiableSectionDetail, "unverifiableSectionDetail");
     __name(mtimeOf, "mtimeOf");
     __name(compiledSectionCount, "compiledSectionCount");
     __name(compiledDraftStale, "compiledDraftStale");
@@ -105934,7 +106532,7 @@ var init_intake_brief = __esm({
 });
 
 // bin/lib/intake-overrides.ts
-function oneLine2(s2) {
+function oneLine3(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function escapeRe(s2) {
@@ -105972,7 +106570,7 @@ function styleOverrideFrom(text4) {
       const afterCue = AFTER_CUE.test(after) || !ambiguous && AFTER_EDITION.test(after);
       const strong = BEFORE_STRONG.test(before) || afterCue;
       const weak = !ambiguous && BEFORE_WEAK.test(before);
-      if (strong || weak) found = { style: m3.style, evidence: oneLine2(clause).slice(0, 200) };
+      if (strong || weak) found = { style: m3.style, evidence: oneLine3(clause).slice(0, 200) };
     }
   }
   return found;
@@ -105980,13 +106578,13 @@ function styleOverrideFrom(text4) {
 function sectioningNotesFrom(text4) {
   const out2 = [];
   for (const raw of clausesOf(text4)) {
-    const clause = oneLine2(raw).replace(/^[-*•\d.)\s]+/, "");
+    const clause = oneLine3(raw).replace(/^[-*•\d.)\s]+/, "");
     if (clause.length < 6 || clause.length > 300) continue;
     if (!SECTION_WORDS.test(clause) && !SECTION_NOUN.test(clause)) continue;
     const ordered = SECTION_WORDS.test(clause) && ORDER_CUE.test(clause);
-    const asked = SECTION_NOUN.test(clause) && NEED_CUE.test(clause);
+    const asked2 = SECTION_NOUN.test(clause) && NEED_CUE.test(clause);
     const noSection = /^(?:no|without|omit|skip|drop)\b/i.test(clause) && SECTION_WORDS.test(clause);
-    if (!ordered && !asked && !noSection) continue;
+    if (!ordered && !asked2 && !noSection) continue;
     const note = clause.replace(/[.;]+$/, "");
     if (!out2.some((n2) => n2.toLowerCase() === note.toLowerCase())) out2.push(note);
   }
@@ -106010,9 +106608,9 @@ function statedLengthWords(text4) {
       if (mid !== null) return mid;
     }
   }
-  const words3 = new RegExp(`${NUM}[\\s-]*(?:words?|wds?)\\b`, "i").exec(t);
-  if (words3) {
-    const n2 = plausible(toInt(words3[1] ?? ""));
+  const words4 = new RegExp(`${NUM}[\\s-]*(?:words?|wds?)\\b`, "i").exec(t);
+  if (words4) {
+    const n2 = plausible(toInt(words4[1] ?? ""));
     if (n2 !== null) return n2;
   }
   const pageRange = /(\d{1,2})\s*(?:-|–|—|to)\s*(\d{1,2})[\s-]*pages?\b/i.exec(t);
@@ -106051,16 +106649,16 @@ function unlabelled(clause) {
   return TASK_VERB.test(rest) ? rest : null;
 }
 function taskTopicPhrase(t, taskVerbOnly = false) {
-  const clauses = clausesOf(t).filter((c2) => !/^thesis\s+seed\s*:/i.test(c2)).map(unlabelled).filter((c2) => c2 !== null && !INSTRUCTION_ONLY.test(c2) && sectioningNotesFrom(c2).length === 0 && stripRequirementParts(oneLine2(c2).replace(/[.!?]+$/, "")).length > 0);
+  const clauses = clausesOf(t).filter((c2) => !/^thesis\s+seed\s*:/i.test(c2)).map(unlabelled).filter((c2) => c2 !== null && !INSTRUCTION_ONLY.test(c2) && sectioningNotesFrom(c2).length === 0 && stripRequirementParts(oneLine3(c2).replace(/[.!?]+$/, "")).length > 0);
   const sentence = clauses.find((c2) => TASK_VERB.test(c2)) ?? (taskVerbOnly ? "" : clauses[0] ?? "");
-  let s2 = stripRequirementParts(oneLine2(sentence).replace(/[.!?]+$/, ""));
+  let s2 = stripRequirementParts(oneLine3(sentence).replace(/[.!?]+$/, ""));
   s2 = s2.replace(TASK_VERB, "").replace(/^\s*(?:an?|one|your)\s+/i, "").replace(/^\s*(?:(?:short|brief|detailed|critical|formal|well[\s-]researched|original|thoughtful|clear)\s+)*/i, "").replace(new RegExp(String.raw`^\s*${NUMBER_WORDS}(?:\s*(?:-|–|—|to)\s*${NUMBER_WORDS})?[\s-]*(?:word|page)s?\s+`, "i"), "").replace(/^\s*(?:(?:argumentative|persuasive|analytical|expository|research|critical|reflective|comparative|academic|short|term|informative|explanatory)\s+)*/i, "").replace(/^\s*(?:literature\s+review|lit(?:erature)?\s+survey|review|paper|essay|report|study|analysis|article|proposal|memo|primer|summary|brief|piece|assignment|lab\s+report|research\s+paper)s?\s*/i, "").replace(/^\s*in\s+(?:english|plain\s+language|the\s+(?:first|third)\s+person)\s+/i, "").replace(/^\s*(?:on|about|of|regarding|concerning|examining|exploring|discussing|covering|addressing|investigating|into|that\s+(?:examines|explores|discusses|analy[sz]es|argues))\s+/i, "").replace(COURSE_TAIL, "").replace(/[,;:]+$/, "").trim();
   return s2.length >= 3 && !isRequirementPart(s2) ? s2.slice(0, 200) : "";
 }
 function labelledLine(t, labels) {
   const re = new RegExp(String.raw`^\s*(?:paper\s+)?(?:${labels.source})\s*[:–—-]\s*(.+?)\s*$`, "im");
   const v2 = re.exec(t)?.[1];
-  return v2 && oneLine2(v2).length >= 3 ? oneLine2(v2).replace(/[.]+$/, "").slice(0, 200) : "";
+  return v2 && oneLine3(v2).length >= 3 ? oneLine3(v2).replace(/[.]+$/, "").slice(0, 200) : "";
 }
 function topicFromAssignment(text4) {
   const t = text4.replace(/\r\n?/g, "\n");
@@ -106098,7 +106696,7 @@ function disciplineMentionFrom(text4) {
 }
 function thesisSeedFrom(text4) {
   const m3 = new RegExp(`^\\s*${escapeRe(THESIS_SEED_LABEL)}\\s*(.+)$`, "im").exec(text4.replace(/\r\n?/g, "\n"));
-  return m3 ? oneLine2(m3[1] ?? "") : "";
+  return m3 ? oneLine3(m3[1] ?? "") : "";
 }
 function parseIntakeOverrides(assignment, answers = []) {
   let style = styleOverrideFrom(assignment);
@@ -106120,7 +106718,7 @@ var init_intake_overrides = __esm({
     WORDS_PER_PAGE = 300;
     MIN_WORDS = 100;
     MAX_WORDS = 5e4;
-    __name(oneLine2, "oneLine");
+    __name(oneLine3, "oneLine");
     __name(escapeRe, "escapeRe");
     __name(clausesOf, "clausesOf");
     AMBIGUOUS_STYLE_ALIASES = /* @__PURE__ */ new Set(["chicago", "harvard", "vancouver", "turabian", "author date", "notes bibliography", "ama"]);
@@ -106495,21 +107093,21 @@ async function askNumbered(question, opts) {
       return { id: question.id, kind: "text", value: line };
     }
     case "multiline": {
-      const lines = [];
+      const lines2 = [];
       try {
         for (; ; ) {
           const line = await readOneLine(question.id, stdin, timeoutMs, false);
           if (line.trim() === MULTILINE_TERMINATOR) break;
-          lines.push(line);
+          lines2.push(line);
         }
       } catch (e2) {
-        if (!(e2 instanceof PromptAbortedError) || lines.length === 0) {
+        if (!(e2 instanceof PromptAbortedError) || lines2.length === 0) {
           if (!echoes) writeStderr(stderr, "\n");
           throw e2;
         }
       }
       if (!echoes) writeStderr(stderr, "\n");
-      return { id: question.id, kind: "multiline", value: lines.join("\n").replace(/^\n+|\s+$/g, "") };
+      return { id: question.id, kind: "multiline", value: lines2.join("\n").replace(/^\n+|\s+$/g, "") };
     }
     case "confirm": {
       const line = await readOneLineEchoed(question.id, stdin, timeoutMs);
@@ -107292,19 +107890,19 @@ function readMultiline(id, label, placeholder) {
 ` : ""}Paste the text, then a line holding only "${MULTILINE_TERMINATOR}" to finish:`);
   return new Promise((resolve5, reject) => {
     const rl = readline2.createInterface({ input: process.stdin, terminal: false, crlfDelay: Infinity });
-    const lines = [];
+    const lines2 = [];
     let done = false;
     const finish = /* @__PURE__ */ __name((ok) => {
       if (done) return;
       done = true;
       rl.close();
-      const value = lines.join("\n").replace(/^\n+|\s+$/g, "");
+      const value = lines2.join("\n").replace(/^\n+|\s+$/g, "");
       if (ok || value.length > 0) resolve5(value);
       else reject(new PromptAbortedError(id));
     }, "finish");
     rl.on("line", (line) => {
       if (line.trim() === MULTILINE_TERMINATOR) finish(true);
-      else lines.push(line.replace(/\r$/, ""));
+      else lines2.push(line.replace(/\r$/, ""));
     });
     rl.on("close", () => finish(false));
     rl.on("SIGINT", () => finish(false));
@@ -107484,7 +108082,11 @@ var init_gates = __esm({
       { id: "plan-research", label: "Add these research hits to the section?", yolo: "skip", yoloChoice: "add the hits the evaluator kept to the section", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "GRND-17", summary: "the `plan N --research` hits" },
       { id: "byo-folder", label: "Read the PDFs in this folder outside the paper and copy them into it?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "SRC-15", summary: "reading a PDF folder outside the paper" },
       { id: "zotero-collection", label: "Pull this Zotero collection from your library into the paper?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "SRC-16", summary: "pulling a Zotero collection a paper's config names" },
-      { id: "pdf-attach-unmatched", label: "Attach this PDF although its first page does not show the work's title and first author?", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "SRC-13", summary: "attaching a PDF whose first page does not show the work" }
+      { id: "pdf-attach-unmatched", label: "Attach this PDF although its first page does not show the work's title and first author?", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "SRC-13", summary: "attaching a PDF whose first page does not show the work" },
+      // VRFY-20 / S-04: a verification decision — --yolo never accepts a quote; without a terminal the section stays unverifiable (verify's own exit, 4).
+      { id: "quote-accept", label: "Accept these quotes whose source text cannot be checked?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "VRFY-20", summary: "accepting a quote whose source text cannot be checked" },
+      // VRFY-22: done's confirmation when Pass 2 judged claims UNSUPPORTED; the decision is recorded in .paper/VERIFICATION.md.
+      { id: "unsupported-claims", label: "Export the paper with these UNSUPPORTED claims?", yolo: "skip", yoloChoice: "export and record them as auto-accepted", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "VRFY-22", summary: "the UNSUPPORTED-claims confirmation" }
     ]);
     __name(gateDef, "gateDef");
     __name(canPrompt, "canPrompt");
@@ -107701,7 +108303,7 @@ var init_budget = __esm({
 });
 
 // bin/lib/dry-run-paper.ts
-import { createHash as createHash8 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 import { existsSync as existsSync11, lstatSync, readdirSync as readdirSync4, readFileSync as readFileSync14, rmSync as rmSync3, statSync as statSync8, utimesSync } from "node:fs";
 import path13 from "node:path";
 function dryRunMarkerPath(root) {
@@ -107723,7 +108325,7 @@ function hasPaperFiles(root) {
   return names.some((n2) => PAPER_ARTIFACTS.has(n2));
 }
 function sha256(buf) {
-  return createHash8("sha256").update(buf).digest("hex");
+  return createHash9("sha256").update(buf).digest("hex");
 }
 function listSeedFiles(dir) {
   const out2 = [];
@@ -108154,7 +108756,7 @@ var init_session_lock = __esm({
 
 // bin/lib/prompt-loader.ts
 import { readFileSync as readFileSync16 } from "node:fs";
-import { createHash as createHash9 } from "node:crypto";
+import { createHash as createHash10 } from "node:crypto";
 function stripFrontmatter(text4) {
   if (!text4.startsWith("---")) return text4;
   const parts = text4.split(/^---\s*$/m);
@@ -108170,7 +108772,7 @@ function loadPrompt(name) {
   }
   const promptPath = pluginTemplatePath("prompts", `${name}.md`);
   const bytes = readFileSync16(promptPath);
-  const actual = createHash9("sha256").update(bytes).digest("hex");
+  const actual = createHash10("sha256").update(bytes).digest("hex");
   const text4 = bytes.toString("utf8");
   if (expected.startsWith("__PENDING_HASH_")) {
     if (process.env["PENSMITH_ALLOW_PENDING_PROMPT_HASHES"] !== "1") {
@@ -108242,10 +108844,10 @@ var init_prompt_loader = __esm({
       // loadPrompt('claim-support') / loadPrompt('orphan-label') succeed WITHOUT
       // PENSMITH_ALLOW_PENDING_PROMPT_HASHES; runtime drift detection is restored).
       // Mirrors the Phase-4 smoother re-pin precedent exactly (Plan 04-05 Task 4).
-      "claim-support": "f6d673bdef91ed677609678bda9f07b422ef3b5a3ac1766eadbd2bc189070a7a",
-      // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts; HARD-04c fence added Plan 15-06)
-      "orphan-label": "76f3b8527b03115480d4cd99a631fd746abb0ce28906c0d486a5e1baaa3ac82d",
-      // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 4 Step 3 via pass4.ts; HARD-04c fence added Plan 15-06)
+      "claim-support": "44727c65d9ffec142d9d0a8419c4caad551ea0a243efd655b9bc48c069275bf4",
+      // Phase 5 D-12 (re-pinned Phase 20 D-20-30: judged against the source text — abstract + full-text passages, input <source_text>; WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts)
+      "orphan-label": "c1d45a9f9c7d74889a5f476a2f1b2e847e4edfae96ddf6604479da5334979dc0",
+      // Phase 5 D-12 (re-pinned Phase 20 D-20-29/30: the per-paragraph orphan audit, input <paragraph>, output {claims}; WN-3 lockstep with repo-files pin; ACTIVE Pass 4 via pass4.ts)
       // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts (Plan 09-02 wires the
       // TutorialSubscriber render seam). RE-PINNED to the real SHA-256 in Plan 09-03 Task 3
       // (the prompt bodies are byte-stable since 09-00 — see the byte-identical guard in
@@ -108922,9 +109524,9 @@ function estimateTokens(chars) {
   return Math.ceil(chars / 4);
 }
 function parseLengthWords(text4) {
-  const words3 = /(\d{1,3}(?:,\d{3})+|\d{2,6})\s*(?:-|\s)?\s*words?\b/i.exec(text4);
-  if (words3?.[1]) {
-    const n2 = Number(words3[1].replace(/,/g, ""));
+  const words4 = /(\d{1,3}(?:,\d{3})+|\d{2,6})\s*(?:-|\s)?\s*words?\b/i.exec(text4);
+  if (words4?.[1]) {
+    const n2 = Number(words4[1].replace(/,/g, ""));
     if (Number.isFinite(n2) && n2 > 0) return n2;
   }
   const pages = /(\d{1,3})\s*(?:-|\s)?\s*pages?\b/i.exec(text4);
@@ -108976,6 +109578,10 @@ var init_estimator = __esm({
 // bin/lib/status-view.ts
 import { readFileSync as readFileSync19 } from "node:fs";
 import path17 from "node:path";
+function unverifiableStatus(verificationPath, id, dash) {
+  const detail = unverifiableSectionDetail(verificationPath, id);
+  return detail === null ? "unverifiable" : `unverifiable ${dash} ${detail.replace(/^section \S+ could not be verified: /, "")}`;
+}
 function glyphSetFor(env = process.env, platform = process.platform) {
   const locale = env["LC_ALL"] || env["LC_CTYPE"] || env["LANG"];
   if (locale) return /utf-?8/i.test(locale) ? "unicode" : "ascii";
@@ -109042,11 +109648,11 @@ async function buildStatusView(root, opts = { tier: "cli" }) {
   }
   const sections = registered.map(({ n: n2, suffix, slug }) => {
     const r2 = readSectionInfo(sectionPlan(n2, slug, root));
-    const status = r2.absent ? "not planned" : r2.corrupt ? `corrupt/unreadable PLAN.md ${marks.dash} needs attention` : r2.status === "planned" && r2.stub ? "outlined (not planned)" : r2.status === "failed" && r2.failureReason ? `failed ${marks.dash} ${r2.failureReason}` : r2.status;
+    const status = r2.absent ? "not planned" : r2.corrupt ? `corrupt/unreadable PLAN.md ${marks.dash} needs attention` : r2.status === "planned" && r2.stub ? "outlined (not planned)" : r2.status === "failed" && r2.failureReason ? `failed ${marks.dash} ${r2.failureReason}` : r2.status === "unverifiable" ? unverifiableStatus(sectionVerification(n2, slug, root), formatSectionId(sectionIdOf(n2, suffix)), marks.dash) : r2.status;
     const phase = phaseOf(r2.status, r2.absent || r2.stub, r2.corrupt);
-    const row = { n: n2, id: formatSectionId(sectionIdOf(n2, suffix)), slug, title: titles.get(slug) ?? slug, status, phase, glyph: glyphs[phase] };
-    if (suffix !== void 0) row.suffix = suffix;
-    return row;
+    const row2 = { n: n2, id: formatSectionId(sectionIdOf(n2, suffix)), slug, title: titles.get(slug) ?? slug, status, phase, glyph: glyphs[phase] };
+    if (suffix !== void 0) row2.suffix = suffix;
+    return row2;
   });
   let decision;
   try {
@@ -109108,22 +109714,22 @@ function renderStatusView(view) {
   if (view.problem === "no-paper") {
     return `pensmith status: no active paper ${dash} run \`pensmith new\` to start.`;
   }
-  const lines = ["pensmith status:"];
-  lines.push(`  paper: ${view.title}${view.title !== view.name ? ` (${view.name})` : ""} ${dash} class ${view.class}`);
+  const lines2 = ["pensmith status:"];
+  lines2.push(`  paper: ${view.title}${view.title !== view.name ? ` (${view.name})` : ""} ${dash} class ${view.class}`);
   if (view.problem === "corrupt-state") {
-    lines.push(`  STATE.json is unreadable/corrupt ${dash} inspect or restore it.`);
+    lines2.push(`  STATE.json is unreadable/corrupt ${dash} inspect or restore it.`);
   } else if (view.paperId) {
-    lines.push(`  id: ${view.paperId}`);
+    lines2.push(`  id: ${view.paperId}`);
   }
-  lines.push(`  ${view.currentLine}`);
-  lines.push("  sections:");
-  if (view.sections.length === 0) lines.push("    (none yet)");
-  for (const s2 of view.sections) lines.push(`    ${s2.glyph} ${section}${s2.id} ${s2.slug}: ${s2.status}`);
-  lines.push(`  ${view.cost.line}`);
-  lines.push(`  ${view.nextLine}`);
-  if (view.attention !== null) lines.push(`  attention: ${view.attention}`);
-  if (view.note !== null) lines.push(`  note: ${view.note}`);
-  return lines.join("\n");
+  lines2.push(`  ${view.currentLine}`);
+  lines2.push("  sections:");
+  if (view.sections.length === 0) lines2.push("    (none yet)");
+  for (const s2 of view.sections) lines2.push(`    ${s2.glyph} ${section}${s2.id} ${s2.slug}: ${s2.status}`);
+  lines2.push(`  ${view.cost.line}`);
+  lines2.push(`  ${view.nextLine}`);
+  if (view.attention !== null) lines2.push(`  attention: ${view.attention}`);
+  if (view.note !== null) lines2.push(`  note: ${view.note}`);
+  return lines2.join("\n");
 }
 function fmtValue(v2) {
   return JSON.stringify(v2) ?? String(v2);
@@ -109147,13 +109753,13 @@ function slugSourceLabel(s2) {
 async function renderConfigView(root, env = process.env) {
   const rows = effectiveConfigRows(root, env);
   const rt = await resolveRuntime({ paperRoot: root, env });
-  const lines = [
+  const lines2 = [
     `pensmith status --config (${path17.relative(root, paperConfigPath(root)).split(path17.sep).join("/")}, schema_version ${CURRENT_CONFIG_VERSION})`,
     "  config:"
   ];
   const w3 = Math.max(24, ...rows.map((r2) => r2.key.length));
-  for (const r2 of rows) lines.push(`    ${r2.key.padEnd(w3)} = ${fmtValue(r2.value)}  (${r2.source})`);
-  lines.push("  runtime:");
+  for (const r2 of rows) lines2.push(`    ${r2.key.padEnd(w3)} = ${fmtValue(r2.value)}  (${r2.source})`);
+  lines2.push("  runtime:");
   const keyState = rt.apiKeyEnv === null ? "no key needed" : isApiKeyPresent(rt.apiKeyEnv, env) ? "set" : "not set";
   const rtRows = [
     ["provider", rt.provider, rt.providerSource],
@@ -109168,18 +109774,18 @@ async function renderConfigView(root, env = process.env) {
       rt.priceSource ?? "default"
     ]
   ];
-  for (const [k2, v2, src] of rtRows) lines.push(`    ${k2.padEnd(w3)} = ${v2}  (${src})`);
-  lines.push("  prompt slugs:");
+  for (const [k2, v2, src] of rtRows) lines2.push(`    ${k2.padEnd(w3)} = ${v2}  (${src})`);
+  lines2.push("  prompt slugs:");
   for (const slug of SLUG_NAMES) {
     const spec = slugSpec(slug);
     const sr = resolveSlug(rt, slug);
     const sent = sr.model === null || LOCAL_PROVIDERS.has(rt.provider) ? null : effectiveEffort(modelCapabilities(rt.provider, sr.model), sr.effort);
     const cache3 = cacheCell(rt.provider, sr.model, slug);
-    lines.push(
+    lines2.push(
       `    ${slug.padEnd(w3)} ${spec.tier.padEnd(10)} ${(sr.model ?? "(unset)").padEnd(18)} effort ${(sent ?? "n/a").padEnd(6)} cache ${cache3.column.padEnd(3)} (model: ${slugSourceLabel(sr.modelSource)}; effort: ${sent === null ? "not sent for this model" : slugSourceLabel(sr.effortSource)}; cache: ${cache3.detail})`
     );
   }
-  return lines.join("\n");
+  return lines2.join("\n");
 }
 var GLYPHS, MARKS;
 var init_status_view = __esm({
@@ -109198,6 +109804,7 @@ var init_status_view = __esm({
     init_llm_models();
     init_prompt_loader();
     init_estimator();
+    __name(unverifiableStatus, "unverifiableStatus");
     GLYPHS = Object.freeze({
       unicode: Object.freeze({ verified: "\u2713", "in-progress": "\u231B", pending: "\u233D", attention: "!" }),
       ascii: Object.freeze({ verified: "[x]", "in-progress": "[~]", pending: "[ ]", attention: "[!]" })
@@ -109239,11 +109846,11 @@ function exitCodeForResult(result) {
 function isCittyUsageError(e2) {
   return e2 instanceof Error && e2.name === "CLIError";
 }
-function oneLine3(s2) {
+function oneLine4(s2) {
   return s2.replace(/\s*\r?\n\s*/g, " ").trim();
 }
 function classifyFailure(e2) {
-  if (isPensmithError(e2)) return { code: e2.exitCode, message: oneLine3(e2.message), unexpected: false };
+  if (isPensmithError(e2)) return { code: e2.exitCode, message: oneLine4(e2.message), unexpected: false };
   if (e2 instanceof PromptAbortedError) {
     return { code: EXIT_APPROVAL, message: `no answer for "${e2.id}" (input ended) \u2014 nothing was changed`, unexpected: false };
   }
@@ -109251,10 +109858,10 @@ function classifyFailure(e2) {
     return { code: EXIT_APPROVAL, message: `no answer for "${e2.id}" within ${e2.timeoutMs} ms \u2014 nothing was changed`, unexpected: false };
   }
   if (isCittyUsageError(e2)) {
-    return { code: EXIT_USAGE, message: oneLine3(stripAnsi(e2.message)), unexpected: false };
+    return { code: EXIT_USAGE, message: oneLine4(stripAnsi(e2.message)), unexpected: false };
   }
   const msg = e2 instanceof Error ? e2.message : String(e2);
-  return { code: EXIT_ERROR, message: oneLine3(msg) || "unexpected error", unexpected: true };
+  return { code: EXIT_ERROR, message: oneLine4(msg) || "unexpected error", unexpected: true };
 }
 function failureLine(message) {
   return /^pensmith[\s:]/.test(message) ? message : `pensmith: ${message}`;
@@ -109292,7 +109899,7 @@ var init_verb_outcome = __esm({
     __name(exitCodeName, "exitCodeName");
     __name(exitCodeForResult, "exitCodeForResult");
     __name(isCittyUsageError, "isCittyUsageError");
-    __name(oneLine3, "oneLine");
+    __name(oneLine4, "oneLine");
     __name(classifyFailure, "classifyFailure");
     __name(failureLine, "failureLine");
     __name(runClassified, "runClassified");
@@ -109411,11 +110018,11 @@ function markerLines(text4, marker) {
   }
   return out2;
 }
-function oneLine4(s2) {
+function oneLine5(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function excerpt(text4, max) {
-  const flat = oneLine4(text4);
+  const flat = oneLine5(text4);
   if (flat.length <= max) return flat;
   const cut = flat.slice(0, max);
   const at = cut.lastIndexOf(" ");
@@ -109452,14 +110059,14 @@ function formatReference(e2) {
   const names = e2.authors.map(displayAuthor).filter((a3) => a3.length > 0);
   const who = names.length === 0 ? e2.editors.length > 0 ? `${e2.editors.slice(0, MAX_LISTED_AUTHORS).map(displayAuthor).join("; ")} (Ed${e2.editors.length > 1 ? "s" : ""}.)` : "Anonymous" : names.length > MAX_LISTED_AUTHORS ? `${names.slice(0, MAX_LISTED_AUTHORS).join("; ")}; et al.` : names.join("; ");
   const parts = [`${who} (${e2.year ?? "n.d."}).`];
-  parts.push(`${oneLine4(e2.title ?? "(untitled)").replace(/[.]+$/, "")}.`);
+  parts.push(`${oneLine5(e2.title ?? "(untitled)").replace(/[.]+$/, "")}.`);
   const where = [];
-  if (e2.venue) where.push(oneLine4(e2.venue));
+  if (e2.venue) where.push(oneLine5(e2.venue));
   if (e2.volume) where.push(e2.issue ? `${e2.volume}(${e2.issue})` : e2.volume);
   else if (e2.issue) where.push(`(${e2.issue})`);
   if (e2.pages) where.push(e2.pages);
   if (where.length > 0) parts.push(`${where.join(", ")}.`);
-  if (e2.publisher && e2.publisher !== e2.venue) parts.push(`${oneLine4(e2.publisher)}.`);
+  if (e2.publisher && e2.publisher !== e2.venue) parts.push(`${oneLine5(e2.publisher)}.`);
   const id = identifierText(e2);
   if (id) parts.push(id);
   return parts.join(" ");
@@ -109473,27 +110080,29 @@ function sortedForReading(entries) {
   });
 }
 function renderSourcesBlock(entries) {
-  const lines = [SOURCES_START2, `## Sources (${entries.length})`, ""];
-  if (entries.length === 0) lines.push("_No sources in LIBRARY.json yet._");
+  const lines2 = [SOURCES_START2, `## Sources (${entries.length})`, ""];
+  if (entries.length === 0) lines2.push("_No sources in LIBRARY.json yet._");
   for (const e2 of sortedForReading(entries)) {
-    lines.push(`- [@${e2.citekey}] ${formatReference(e2)}`);
+    lines2.push(`- [@${e2.citekey}] ${formatReference(e2)}`);
     const facts = [`Tier: ${e2.tier ?? "not evaluated"}`];
     if (e2.relevance !== null) facts.push(`Relevance: ${e2.relevance.toFixed(2)}`);
     const tags = provenanceTags(e2);
     if (tags.length > 0) facts.push(`Tags: ${tags.join(", ")}`);
-    lines.push(`  - ${facts.join(" \xB7 ")}`);
-    if (e2.why_relevant) lines.push(`  - Why relevant: ${oneLine4(e2.why_relevant)}`);
-    if (e2.abstract) lines.push(`  - Abstract: ${excerpt(e2.abstract, ABSTRACT_CHARS)}`);
+    lines2.push(`  - ${facts.join(" \xB7 ")}`);
+    if (e2.why_relevant) lines2.push(`  - Why relevant: ${oneLine5(e2.why_relevant)}`);
+    if (e2.abstract) lines2.push(`  - Abstract: ${excerpt(e2.abstract, ABSTRACT_CHARS)}`);
     if (e2.retraction_status === "retracted") {
-      lines.push(`  - Retraction: RETRACTED${e2.retraction_details ? ` \u2014 ${oneLine4(e2.retraction_details)}` : ""}`);
+      lines2.push(`  - Retraction: RETRACTED${e2.retraction_details ? ` \u2014 ${oneLine5(e2.retraction_details)}` : ""}`);
     } else if (e2.retraction_status === "unknown") {
-      lines.push("  - Retraction: retraction status unknown (the lookup failed; it is re-checked at verify time)");
+      lines2.push(
+        e2.retraction_details ? `  - Retraction: retraction status unknown (${oneLine5(e2.retraction_details)}; it is re-checked at verify time)` : "  - Retraction: retraction status unknown (the lookup failed; it is re-checked at verify time)"
+      );
     }
     if (!e2.hydrated) {
-      lines.push("  - Metadata: local only \u2014 no registrar record matched this PDF confidently; check it before citing");
+      lines2.push("  - Metadata: local only \u2014 no registrar record matched this PDF confidently; check it before citing");
     }
   }
-  return [SOURCES_START2, ...lines.slice(1).map(inertMarkup), SOURCES_END2].join("\n");
+  return [SOURCES_START2, ...lines2.slice(1).map(inertMarkup), SOURCES_END2].join("\n");
 }
 function upsertSourcesBlock(existing, block) {
   if (existing === null || existing.trim().length === 0) {
@@ -109556,7 +110165,7 @@ var init_research_md = __esm({
       "bib-import": "imported",
       v1: "imported"
     });
-    __name(oneLine4, "oneLine");
+    __name(oneLine5, "oneLine");
     __name(excerpt, "excerpt");
     __name(provenanceTags, "provenanceTags");
     __name(displayAuthor, "displayAuthor");
@@ -109720,10 +110329,27 @@ var init_source_candidate = __esm({
       /** Retraction lookup outcome when the adapter's own record carries it (Crossref updated-by, SRC-04). */
       retraction_status: RetractionStatusSchema.optional(),
       /** The Zotero item identity (SRC-16). */
-      zotero: ZoteroRefSchema.optional()
+      zotero: ZoteroRefSchema.optional(),
+      // Phase 20 (VRFY-13, VRFY-14): what Pass 1 compares beyond the title and
+      // authors. Neither is persisted (the library keeps the title as registered).
+      /** The registrar's subtitle, when it keeps it apart from the title (Crossref `subtitle`, DataCite `Subtitle`). */
+      subtitle: external_exports.string().optional(),
+      /**
+       * The relations the registrar itself asserts between this work and another
+       * DOI (Crossref `relation`, DataCite `relatedIdentifiers`): `type` in the
+       * registrar's kebab-case spelling (`is-identical-to`, `has-preprint`, …),
+       * `doi` normalized. Pass 1 accepts an answer under another DOI only on one
+       * of these (VRFY-14, D-20-12).
+       */
+      relations: external_exports.array(external_exports.object({ type: external_exports.string().min(1), doi: external_exports.string().min(1) }).strict()).optional()
     };
     SourceCandidateSchema = external_exports.discriminatedUnion("source", [
       external_exports.object({ ...BaseFields, source: external_exports.literal("crossref") }),
+      // Phase 20 (VRFY-11, D-20-10): a DataCite record (api.datacite.org), and a
+      // record another agency served through doi.org content negotiation
+      // (mEDRA, JaLC, KISTI — CSL JSON).
+      external_exports.object({ ...BaseFields, source: external_exports.literal("datacite") }),
+      external_exports.object({ ...BaseFields, source: external_exports.literal("doi.org") }),
       external_exports.object({ ...BaseFields, source: external_exports.literal("openalex") }),
       external_exports.object({ ...BaseFields, source: external_exports.literal("arxiv") }),
       external_exports.object({ ...BaseFields, source: external_exports.literal("pubmed") }),
@@ -109759,9 +110385,9 @@ function validateZoteroItem(raw, label = "item") {
   const full = "data" in raw;
   const parsed = full ? ZoteroApiItemSchema.safeParse(raw) : ZoteroItemDataSchema.safeParse(raw);
   if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    const where = issuePath(label, first?.path ?? []);
-    return { ok: false, error: `${where}: ${first?.message ?? "invalid"}` };
+    const first2 = parsed.error.issues[0];
+    const where = issuePath(label, first2?.path ?? []);
+    return { ok: false, error: `${where}: ${first2?.message ?? "invalid"}` };
   }
   if (full) {
     const item = parsed.data;
@@ -109779,11 +110405,11 @@ function clean3(v2) {
 }
 function creatorName(c2) {
   const last = clean3(c2.lastName);
-  const first = clean3(c2.firstName);
-  if (last) return first ? `${last}, ${first}` : last;
+  const first2 = clean3(c2.firstName);
+  if (last) return first2 ? `${last}, ${first2}` : last;
   const single = clean3(c2.name);
   if (single) return `{${single.replace(/[{}]/g, "")}}`;
-  return first;
+  return first2;
 }
 function parseExtra(extra) {
   const out2 = /* @__PURE__ */ new Map();
@@ -110017,9 +110643,6 @@ function lookupFailed(reason, extra = {}) {
     ...extra.permanent === true ? { permanent: true } : {}
   };
 }
-function isSourceLookupError(e2) {
-  return e2 instanceof SourceLookupError;
-}
 function unwrapLookup(result, source, id) {
   switch (result.kind) {
     case "found":
@@ -110060,7 +110683,6 @@ var init_lookup = __esm({
         this.permanent = failed.permanent === true;
       }
     };
-    __name(isSourceLookupError, "isSourceLookupError");
     __name(unwrapLookup, "unwrapLookup");
   }
 });
@@ -110277,8 +110899,8 @@ async function findZoteroCollection(conn, lib, name) {
 function validRows(rows) {
   const items = [];
   const invalid = [];
-  rows.forEach((row, i) => {
-    const v2 = validateZoteroItem(row, `items[${i}]`);
+  rows.forEach((row2, i) => {
+    const v2 = validateZoteroItem(row2, `items[${i}]`);
     if (v2.ok) items.push(v2.item);
     else invalid.push(v2.error);
   });
@@ -110430,7 +111052,7 @@ var init_dist4 = __esm({
 });
 
 // bin/lib/plan-render.ts
-function oneLine5(s2) {
+function oneLine6(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function frontmatterObject(fields, extra) {
@@ -110440,12 +111062,12 @@ function frontmatterObject(fields, extra) {
   };
   if (fields.suffix !== void 0) out2["suffix"] = fields.suffix;
   out2["slug"] = fields.slug;
-  out2["title"] = oneLine5(fields.title) || fields.slug;
-  if (fields.purpose !== void 0 && oneLine5(fields.purpose).length > 0) out2["purpose"] = oneLine5(fields.purpose);
+  out2["title"] = oneLine6(fields.title) || fields.slug;
+  if (fields.purpose !== void 0 && oneLine6(fields.purpose).length > 0) out2["purpose"] = oneLine6(fields.purpose);
   if (fields.role !== void 0) out2["role"] = fields.role;
   out2["depends_on"] = [...fields.depends_on];
   if (fields.word_target !== void 0 && fields.word_target > 0) out2["word_target"] = fields.word_target;
-  if (fields.voice !== void 0 && oneLine5(fields.voice).length > 0) out2["voice"] = oneLine5(fields.voice);
+  if (fields.voice !== void 0 && oneLine6(fields.voice).length > 0) out2["voice"] = oneLine6(fields.voice);
   out2["assigned_sources"] = [...new Set(fields.assigned_sources)];
   if (fields.wave !== void 0) out2["wave"] = fields.wave;
   if (extra.stub === true) out2["stub"] = true;
@@ -110458,25 +111080,25 @@ function withMarker(heading, marker) {
   return marker ? [heading, "", marker, ""] : [heading, ""];
 }
 function renderPlanBody(plan, wordTarget, opts = {}) {
-  const lines = [...withMarker("## Claims", opts.marker)];
+  const lines2 = [...withMarker("## Claims", opts.marker)];
   plan.claims.forEach((c2, i) => {
-    lines.push(`${i + 1}. ${oneLine5(c2.claim)}`);
-    lines.push(`   - Sources: ${c2.sources.length > 0 ? [...new Set(c2.sources)].join(", ") : "(none)"}`);
-    lines.push(`   - Evidence: ${oneLine5(c2.evidence) || "(none)"}`);
-    lines.push(`   - Counterexamples: ${oneLine5(c2.counterexamples) || "(none)"}`);
+    lines2.push(`${i + 1}. ${oneLine6(c2.claim)}`);
+    lines2.push(`   - Sources: ${c2.sources.length > 0 ? [...new Set(c2.sources)].join(", ") : "(none)"}`);
+    lines2.push(`   - Evidence: ${oneLine6(c2.evidence) || "(none)"}`);
+    lines2.push(`   - Counterexamples: ${oneLine6(c2.counterexamples) || "(none)"}`);
   });
-  lines.push("", "## Structure", "");
-  const paragraphs = [...plan.structure].sort((a3, b3) => a3.paragraph - b3.paragraph);
-  paragraphs.forEach((p2, i) => {
+  lines2.push("", "## Structure", "");
+  const paragraphs2 = [...plan.structure].sort((a3, b3) => a3.paragraph - b3.paragraph);
+  paragraphs2.forEach((p2, i) => {
     const claims = p2.claims.length > 0 ? `claims ${[...new Set(p2.claims)].join(", ")}` : "claims none";
-    lines.push(`${i + 1}. ${oneLine5(p2.purpose)} \u2014 ${claims}`);
+    lines2.push(`${i + 1}. ${oneLine6(p2.purpose)} \u2014 ${claims}`);
   });
-  lines.push("", "## Word target", "");
-  lines.push(wordTarget !== void 0 && wordTarget > 0 ? `${wordTarget} words` : "(not set)");
-  lines.push("", "## Voice", "");
-  lines.push(oneLine5(plan.voice) || "(no voice direction)");
-  lines.push("");
-  return lines.join("\n");
+  lines2.push("", "## Word target", "");
+  lines2.push(wordTarget !== void 0 && wordTarget > 0 ? `${wordTarget} words` : "(not set)");
+  lines2.push("", "## Voice", "");
+  lines2.push(oneLine6(plan.voice) || "(no voice direction)");
+  lines2.push("");
+  return lines2.join("\n");
 }
 function renderPlannedPlanMd(fields, plan, opts = {}) {
   const fm = frontmatterObject(fields, { status: "planned" });
@@ -110507,10 +111129,10 @@ function listOf(v2) {
   return t.length === 0 ? [] : t.split(",").map((x3) => x3.trim()).filter((x3) => x3.length > 0);
 }
 function parsePlanClaims(body) {
-  const lines = bodySections(body).get("claims") ?? [];
+  const lines2 = bodySections(body).get("claims") ?? [];
   const claims = [];
   let cur = null;
-  for (const line of lines) {
+  for (const line of lines2) {
     const start = /^(\d+)\.\s+(.*)$/.exec(line);
     if (start) {
       cur = { claim: start[2].trim(), sources: [], evidence: "", counterexamples: "" };
@@ -110529,9 +111151,9 @@ function parsePlanClaims(body) {
   return claims;
 }
 function parsePlanStructure(body) {
-  const lines = bodySections(body).get("structure") ?? [];
+  const lines2 = bodySections(body).get("structure") ?? [];
   const out2 = [];
-  for (const line of lines) {
+  for (const line of lines2) {
     const m3 = /^(\d+)\.\s+(.*?)(?:\s+—\s+claims?\s+(none|[\d,\s]+))?\s*$/.exec(line);
     if (!m3) continue;
     const claims = m3[3] === void 0 || m3[3] === "none" ? [] : m3[3].split(",").map((x3) => Number(x3.trim())).filter((x3) => Number.isInteger(x3) && x3 >= 1);
@@ -110543,7 +111165,7 @@ function parsePlanBody(body) {
   const sections = bodySections(body);
   const wordLines = (sections.get("word target") ?? []).join("\n");
   const wm = /(\d+)\s+words?/i.exec(wordLines);
-  const voice = oneLine5((sections.get("voice") ?? []).join(" "));
+  const voice = oneLine6((sections.get("voice") ?? []).join(" "));
   return {
     claims: parsePlanClaims(body),
     structure: parsePlanStructure(body),
@@ -110566,7 +111188,7 @@ var init_plan_render = __esm({
     "use strict";
     init_frontmatter();
     init_plan_frontmatter();
-    __name(oneLine5, "oneLine");
+    __name(oneLine6, "oneLine");
     __name(frontmatterObject, "frontmatterObject");
     __name(withMarker, "withMarker");
     __name(renderPlanBody, "renderPlanBody");
@@ -110696,9 +111318,9 @@ function readKey(text4, at) {
     }
     return null;
   }
-  const first = charAt(text4, i);
-  if (first === void 0 || !(first === "*" || isRegChar(first))) return null;
-  let j2 = i + first.length;
+  const first2 = charAt(text4, i);
+  if (first2 === void 0 || !(first2 === "*" || isRegChar(first2))) return null;
+  let j2 = i + first2.length;
   for (; ; ) {
     const c2 = charAt(text4, j2);
     if (c2 === void 0) break;
@@ -110783,12 +111405,12 @@ function sourceLines(md) {
     start = nl + 1;
   }
 }
-function fencedCodeBlocks(lines) {
+function fencedCodeBlocks(lines2) {
   const out2 = [];
   let afterBlank = true;
   let paragraphSpansLines = false;
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
+  for (let i = 0; i < lines2.length; i += 1) {
+    const line = lines2[i];
     const m3 = FENCE_LINE_RE.exec(line.text);
     if (m3 === null) {
       afterBlank = BLANK_LINE_RE.test(line.text);
@@ -110801,15 +111423,15 @@ function fencedCodeBlocks(lines) {
     const opens = afterBlank || fence[0] === "`" && !paragraphSpansLines;
     if (m3[1] !== "" || !opens || !infoOk) return [];
     let close = -1;
-    for (let j2 = i + 1; j2 < lines.length; j2 += 1) {
-      const c2 = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(lines[j2].text);
+    for (let j2 = i + 1; j2 < lines2.length; j2 += 1) {
+      const c2 = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(lines2[j2].text);
       if (c2 !== null && c2[1][0] === fence[0] && c2[1].length >= fence.length) {
         close = j2;
         break;
       }
     }
     if (close === -1) return [];
-    out2.push([line.start, lines[close].end]);
+    out2.push([line.start, lines2[close].end]);
     i = close;
     afterBlank = true;
     paragraphSpansLines = false;
@@ -110858,22 +111480,22 @@ function pairBackticks(text4) {
   }
   return out2;
 }
-function inlineCodeSpans(md, lines, fences) {
+function inlineCodeSpans(md, lines2, fences) {
   const out2 = [];
   const inFence = /* @__PURE__ */ __name((l2) => fences.some(([s2, e2]) => l2.start >= s2 && l2.start < e2), "inFence");
   let i = 0;
-  while (i < lines.length) {
-    const first = lines[i];
-    if (BLANK_LINE_RE.test(first.text) || inFence(first)) {
+  while (i < lines2.length) {
+    const first2 = lines2[i];
+    if (BLANK_LINE_RE.test(first2.text) || inFence(first2)) {
       i += 1;
       continue;
     }
     let k2 = i;
-    while (k2 + 1 < lines.length && !BLANK_LINE_RE.test(lines[k2 + 1].text) && !inFence(lines[k2 + 1])) k2 += 1;
-    const para = lines.slice(i, k2 + 1);
+    while (k2 + 1 < lines2.length && !BLANK_LINE_RE.test(lines2[k2 + 1].text) && !inFence(lines2[k2 + 1])) k2 += 1;
+    const para = lines2.slice(i, k2 + 1);
     i = k2 + 1;
     const last = para[para.length - 1];
-    const text4 = md.slice(first.start, last.end);
+    const text4 = md.slice(first2.start, last.end);
     if (!text4.includes("`") || BACKTICK_TAKER_RE.test(text4)) continue;
     if (para.length > MAX_PARAGRAPH_LINES || text4.length > MAX_PARAGRAPH_CHARS) continue;
     const pairings = para.map(
@@ -110891,11 +111513,37 @@ function inlineCodeSpans(md, lines, fences) {
   }
   return out2;
 }
+function outsideFenceInteriors(md, lines2, fences) {
+  if (fences.length === 0) return md;
+  let out2 = "";
+  let at = 0;
+  for (const [start, end] of fences) {
+    const open4 = lines2.find((l2) => l2.start === start);
+    const closeStart = lines2.filter((l2) => l2.end === end).map((l2) => l2.start)[0] ?? end;
+    const from = Math.min(open4.end, closeStart);
+    out2 += md.slice(at, from) + md.slice(from, closeStart).replace(/[^\n]/g, " ");
+    at = closeStart;
+  }
+  return out2 + md.slice(at);
+}
 function codeSpans(md) {
-  if (UNMODELLED_RE.test(md) || tableMayCut(md)) return [];
-  const lines = sourceLines(md);
-  const fences = fencedCodeBlocks(lines);
-  return [...fences, ...inlineCodeSpans(md, lines, fences)];
+  if (GLOBALLY_UNMODELLED_RE.test(md) || tableMayCut(md)) return [];
+  const lines2 = sourceLines(md);
+  const fences = fencedCodeBlocks(lines2);
+  if (UNMODELLED_RE.test(outsideFenceInteriors(md, lines2, fences))) return [];
+  return [...fences, ...inlineCodeSpans(md, lines2, fences)];
+}
+function provableCodeSpans2(md) {
+  if (!md.includes("`") && !md.includes("~")) return [];
+  return codeSpans(md).sort((a3, b3) => a3[0] - b3[0]);
+}
+function offsetInSpans(at, spans) {
+  return inSpans(at, spans);
+}
+function lineOfOffset(md, at) {
+  let line = 1;
+  for (let i = md.indexOf("\n"); i !== -1 && i < at; i = md.indexOf("\n", i + 1)) line += 1;
+  return line;
 }
 function inSpans(at, spans) {
   return spans.some(([s2, e2]) => at >= s2 && at < e2);
@@ -110915,14 +111563,140 @@ function findNarrativeCitations(md) {
 function findCitations(md) {
   return [...findCitationClusters(md), ...findNarrativeCitations(md)].sort((a3, b3) => a3.start - b3.start);
 }
-function stripCitationClusters(md) {
-  let out2 = "";
-  let at = 0;
-  for (const c2 of findCitationClusters(md)) {
-    out2 += md.slice(at, c2.start);
-    at = c2.end;
+function paragraphSpans(md) {
+  const out2 = [];
+  let start = -1;
+  let end = -1;
+  for (const line of sourceLines(md)) {
+    const blank = BLANK_LINE_RE.test(line.text);
+    const heading = /^ {0,3}#{1,6}(?:[ \t]|$)/.test(line.text);
+    if (blank || heading) {
+      if (start !== -1) out2.push([start, end]);
+      start = -1;
+      if (heading) out2.push([line.start, line.end]);
+      continue;
+    }
+    if (start === -1) start = line.start;
+    end = line.end;
   }
-  return out2 + md.slice(at);
+  if (start !== -1) out2.push([start, end]);
+  return out2;
+}
+function findingText(md, start, end, max = 80) {
+  const nl = md.indexOf("\n", start);
+  const stop = Math.min(end, nl === -1 ? md.length : nl, start + max);
+  return md.slice(start, stop).replace(/\r$/, "");
+}
+function findUnparseableCitations(md) {
+  if (!md.includes("@")) return [];
+  const code = provableCodeSpans2(md);
+  const loose = tableMayCut(md);
+  const out2 = [];
+  const report = /* @__PURE__ */ __name((form, at, end) => {
+    if (offsetInSpans(at, code)) return;
+    const finding = { verdict: "UNPARSEABLE", form, text: findingText(md, at, end), line: lineOfOffset(md, at), reason: UNPARSEABLE_REASONS[form] };
+    out2.push({ at, finding });
+  }, "report");
+  for (const [pStart, pEnd] of paragraphSpans(md)) {
+    const para = md.slice(pStart, pEnd);
+    if (!para.includes("@")) continue;
+    const keyAt = /* @__PURE__ */ new Set();
+    for (const m3 of keyMatches(para, loose)) keyAt.add(para.indexOf("@", m3.index));
+    const failedStarts = failedCitationStarts(para, loose);
+    const paraCode = code.filter(([s2, e2]) => e2 > pStart && s2 < pEnd).map(([s2, e2]) => [s2 - pStart, e2 - pStart]);
+    const stack = [];
+    for (let i = 0; i < para.length; i += 1) {
+      const inCode = paraCode.find(([s2, e2]) => i >= s2 && i < e2);
+      if (inCode !== void 0) {
+        i = inCode[1] - 1;
+        continue;
+      }
+      const c2 = para[i];
+      if (c2 === "[" && !escapedAt(para, i)) {
+        const top2 = stack[stack.length - 1];
+        if (top2 !== void 0) top2.nested = true;
+        stack.push({ open: i, hasKey: false, nested: false });
+        continue;
+      }
+      if (c2 === "]" && !escapedAt(para, i)) {
+        const b3 = stack.pop();
+        if (b3 !== void 0 && b3.hasKey && b3.nested) report("nested-bracket", pStart + b3.open, pStart + i + 1);
+        continue;
+      }
+      if (c2 !== "@") continue;
+      const top = stack[stack.length - 1];
+      if (keyAt.has(i)) {
+        if (top !== void 0) top.hasKey = true;
+        continue;
+      }
+      if (!failedStarts.has(i)) continue;
+      const lead = i > 0 && para[i - 1] === "-" ? i - 1 : i;
+      if (para[i + 1] === "{") {
+        const ws = /\s/.exec(para.slice(i));
+        report("unterminated-braced-key", pStart + lead, pStart + (ws === null ? para.length : i + ws.index));
+        continue;
+      }
+      if (top === void 0) continue;
+      const before = para.slice(top.open, lead).replace(/[ \t]+$/, "");
+      if (before === "[") report("empty-key", pStart + top.open, pStart + closingBracketAfter(para, i));
+      else if (before.endsWith(";") && top.hasKey) report("empty-key", pStart + lead, pStart + closingBracketAfter(para, i));
+    }
+    for (const b3 of stack) if (b3.hasKey) report("unbalanced-bracket", pStart + b3.open, pEnd);
+  }
+  return out2.sort((a3, b3) => a3.at - b3.at).map((f2) => f2.finding);
+}
+function closingBracketAfter(text4, i) {
+  const nl = text4.indexOf("\n", i);
+  const lineEnd = nl === -1 ? text4.length : nl;
+  const close = text4.indexOf("]", i);
+  return close !== -1 && close < lineEnd ? close + 1 : lineEnd;
+}
+function failedCitationStarts(text4, loose) {
+  const out2 = /* @__PURE__ */ new Set();
+  const keys = new Set(keyMatches(text4, loose).map((m3) => text4.indexOf("@", m3.index)));
+  for (let at = text4.indexOf("@"); at !== -1; at = text4.indexOf("@", at + 1)) {
+    if (keys.has(at) || escapedAt(text4, at)) continue;
+    const before = charBefore(text4, at);
+    if (!loose && before !== void 0 && ALNUM_RE.test(before) && !afterTexCommand(text4, at)) continue;
+    if (readKey(text4, at) === null) out2.add(at);
+  }
+  return out2;
+}
+function splitLocator(suffix) {
+  const rest = suffix.replace(/^\s*,?\s*/, "");
+  if (rest === "") return null;
+  for (const [term, label] of LOCATOR_TERMS) {
+    const t = term.exec(rest);
+    if (t === null) continue;
+    const after = rest.slice(t[0].length).trimStart();
+    const v2 = LOCATOR_VALUE_RE.exec(after);
+    if (v2 === null || !new RegExp("\\p{N}|^[ivxlcdm]+$", "iu").test(v2[0])) break;
+    return { locator: v2[0], label, rest: after.slice(v2[0].length) };
+  }
+  const page = /^,\s*/.test(suffix) ? new RegExp("^\\p{N}+(?:[-\u2013\u2014]\\p{N}+)?", "u").exec(rest) : null;
+  if (page !== null) return { locator: page[0], label: "page", rest: rest.slice(page[0].length) };
+  return null;
+}
+function citationItems(c2) {
+  const narrative = c2.narrative === true;
+  const segments = narrative ? [c2.text] : c2.text.slice(1, -1).split(";");
+  const out2 = [];
+  for (const segment of segments) {
+    const m3 = keyMatches(segment)[0];
+    if (m3 === void 0) continue;
+    const token = segment.slice(m3.index, m3.index + m3.length);
+    const suffix = segment.slice(m3.index + m3.length).trimEnd();
+    const loc = splitLocator(suffix);
+    out2.push({
+      prefix: segment.slice(0, m3.index).trim(),
+      key: m3.key,
+      suppressAuthor: token.startsWith("-"),
+      suffix,
+      ...loc !== null ? { locator: loc.locator, label: loc.label } : {},
+      narrative
+    });
+  }
+  return out2;
 }
 function replaceCitations(md, fn) {
   let out2 = "";
@@ -110933,9 +111707,6 @@ function replaceCitations(md, fn) {
     at = c2.end;
   }
   return out2 + md.slice(at);
-}
-function firstCitation(md) {
-  return findCitations(md)[0] ?? null;
 }
 function editClustersCiting(md, key2, edit) {
   let out2 = "";
@@ -110990,7 +111761,7 @@ function renameCitekey(md, from, to) {
   }
   return out2 + clustered.slice(at);
 }
-var MAX_SCRIPT_CHARS, ASCII_ENTITIES, CLUSTER_RE_SOURCE, ALNUM_RE, INTERNAL_PUNCT, EXAMPLE_LABEL_RE, TABLE_RULE_RE, BLANK_LINE_RE, UNMODELLED_RE, FENCE_LINE_RE, FENCE_ATTRS_RE, SPANS_LINES_RE, BACKTICK_TAKER_RE, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_CHARS;
+var MAX_SCRIPT_CHARS, ASCII_ENTITIES, CLUSTER_RE_SOURCE, ALNUM_RE, INTERNAL_PUNCT, EXAMPLE_LABEL_RE, TABLE_RULE_RE, BLANK_LINE_RE, UNMODELLED_RE, FENCE_LINE_RE, FENCE_ATTRS_RE, SPANS_LINES_RE, BACKTICK_TAKER_RE, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_CHARS, GLOBALLY_UNMODELLED_RE, UNPARSEABLE_REASONS, LOCATOR_TERMS, LOCATOR_VALUE_RE;
 var init_citation_token = __esm({
   "bin/lib/citation-token.ts"() {
     "use strict";
@@ -111073,13 +111844,47 @@ var init_citation_token = __esm({
     MAX_PARAGRAPH_CHARS = 2e4;
     __name(pairBackticks, "pairBackticks");
     __name(inlineCodeSpans, "inlineCodeSpans");
+    GLOBALLY_UNMODELLED_RE = /\r(?!\n)|\uFEFF/;
+    __name(outsideFenceInteriors, "outsideFenceInteriors");
     __name(codeSpans, "codeSpans");
+    __name(provableCodeSpans2, "provableCodeSpans");
+    __name(offsetInSpans, "offsetInSpans");
+    __name(lineOfOffset, "lineOfOffset");
     __name(inSpans, "inSpans");
     __name(findNarrativeCitations, "findNarrativeCitations");
     __name(findCitations, "findCitations");
-    __name(stripCitationClusters, "stripCitationClusters");
+    UNPARSEABLE_REASONS = {
+      "empty-key": "a citation with no key \u2014 Pandoc prints it as text; write [@citekey] with a key from CITATIONS.bib",
+      "unbalanced-bracket": 'a citation bracket that is never closed in its paragraph \u2014 Pandoc prints the "[" as text around a narrative citation; close it: [@citekey]',
+      "unterminated-braced-key": 'a braced key "@{" with no closing "}" before a space \u2014 Pandoc prints it as text; write @{citekey} or [@citekey]',
+      "nested-bracket": "a citation bracket that holds another bracket \u2014 Pandoc renders a form the verifier does not model; take the inner brackets out (e.g. [@citekey, p. 5, see note])"
+    };
+    __name(paragraphSpans, "paragraphSpans");
+    __name(findingText, "findingText");
+    __name(findUnparseableCitations, "findUnparseableCitations");
+    __name(closingBracketAfter, "closingBracketAfter");
+    __name(failedCitationStarts, "failedCitationStarts");
+    LOCATOR_TERMS = [
+      [/^(?:pp?\.|pages?\b)/i, "page"],
+      [/^(?:chaps?\.|chapters?\b)/i, "chapter"],
+      [/^(?:secs?\.|sections?\b|§§?)/i, "section"],
+      [/^(?:figs?\.|figures?\b)/i, "figure"],
+      [/^(?:vols?\.|volumes?\b)/i, "volume"],
+      [/^(?:paras?\.|paragraphs?\b|¶¶?)/i, "paragraph"],
+      [/^(?:ll?\.|lines?\b)/i, "line"],
+      [/^(?:nn?\.|notes?\b)/i, "note"],
+      [/^(?:nos?\.|numbers?\b)/i, "issue"],
+      [/^(?:cols?\.|columns?\b)/i, "column"],
+      [/^(?:pts?\.|parts?\b)/i, "part"],
+      [/^(?:vv?\.|verses?\b)/i, "verse"],
+      [/^(?:bks?\.|books?\b)/i, "book"],
+      [/^(?:fols?\.|folios?\b)/i, "folio"],
+      [/^(?:s\.vv?\.|sub verbo\b)/i, "sub-verbo"]
+    ];
+    LOCATOR_VALUE_RE = /^[\p{N}ivxlcdm]+(?:[-–—][\p{N}ivxlcdm]+)?(?:,\s*[\p{N}]+(?:[-–—][\p{N}]+)?)*/iu;
+    __name(splitLocator, "splitLocator");
+    __name(citationItems, "citationItems");
     __name(replaceCitations, "replaceCitations");
-    __name(firstCitation, "firstCitation");
     __name(editClustersCiting, "editClustersCiting");
     __name(segmentCites, "segmentCites");
     __name(removeCitekey, "removeCitekey");
@@ -111090,18 +111895,20 @@ var init_citation_token = __esm({
 
 // bin/lib/revise.ts
 import { readFileSync as readFileSync21, existsSync as existsSync17 } from "node:fs";
+function verdictRowOf(line) {
+  const m3 = /^\s*-\s*(\S+?)(?:\s+\[q[1-9]\d*\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line) ?? /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line);
+  if (!m3 || m3[1] === void 0 || m3[2] === void 0) return null;
+  return { citekey: m3[1], verdict: m3[2], rest: m3[3] ?? "" };
+}
 function failingCitations(verificationMd) {
   const out2 = [];
   const seen = /* @__PURE__ */ new Set();
   for (const line of verificationMd.split(/\r?\n/)) {
-    const m3 = /^\s*-\s*([a-z][a-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*\s*(.*)$/.exec(line);
-    if (!m3) continue;
-    const citekey = m3[1];
-    const verdict = m3[2];
-    if (citekey === void 0 || verdict === void 0 || seen.has(citekey)) continue;
-    if (FAILING_VERDICTS.includes(verdict)) {
-      seen.add(citekey);
-      out2.push({ citekey, reason: `${verdict}: ${(m3[3] ?? "").replace(/^—\s*/, "").trim()}` });
+    const row2 = verdictRowOf(line);
+    if (row2 === null || seen.has(row2.citekey)) continue;
+    if (REVISABLE_VERDICTS.includes(row2.verdict)) {
+      seen.add(row2.citekey);
+      out2.push({ citekey: row2.citekey, reason: `${row2.verdict}: ${row2.rest.replace(/^—\s*/, "").trim()}` });
     }
   }
   return out2;
@@ -111231,7 +112038,7 @@ async function runRevise(opts) {
   const verificationMd = readFileSync21(verifPath, "utf8");
   const flagged = failingCitations(verificationMd);
   if (flagged.length === 0) {
-    return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation in section ${opts.n}.`.trim() };
+    return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation (nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE) in section ${opts.n}.`.trim() };
   }
   if (!existsSync17(planPath) || !existsSync17(draftPath)) {
     base.flagged_citekey = flagged[0].citekey;
@@ -111288,7 +112095,7 @@ async function runRevise(opts) {
   }
   return { ...base, accepted: false, rejectedReason: lastRejection, message: `${base.message} Proposal rejected (${lastRejection}); DRAFT.md unchanged.`.trim() };
 }
-var YOLO_RETRY_CAP, FAILING_VERDICTS, ReviseSwapSchema;
+var YOLO_RETRY_CAP, REVISABLE_VERDICTS, ReviseSwapSchema;
 var init_revise = __esm({
   "bin/lib/revise.ts"() {
     "use strict";
@@ -111302,7 +112109,8 @@ var init_revise = __esm({
     init_paths();
     init_section_id();
     YOLO_RETRY_CAP = 2;
-    FAILING_VERDICTS = ["FABRICATED", "MIS-CITED", "NOT_FOUND"];
+    REVISABLE_VERDICTS = ["FABRICATED", "MIS-CITED", "RETRACTED", "UNASSIGNED", "UNPARSEABLE", "UNRESOLVABLE", "NOT_FOUND"];
+    __name(verdictRowOf, "verdictRowOf");
     ReviseSwapSchema = external_exports.object({
       action: external_exports.enum(["swap", "remove"]),
       flagged_citekey: external_exports.string(),
@@ -111408,6 +112216,9 @@ function coerceEvaluation(v2) {
   });
   return { ...obj, verdicts };
 }
+function coerceOrphanAudit(v2) {
+  return Array.isArray(v2) && v2.length > 0 && v2.every(isRecord) ? { claims: v2 } : v2;
+}
 function plannerFromText(text4) {
   const doc = /^\s*```(?:markdown|md|yaml)?\s*\n([\s\S]*?)\n```\s*$/.exec(text4)?.[1] ?? text4;
   const trimmed2 = doc.replace(/^\s+/, "");
@@ -111427,16 +112238,16 @@ function plannerFromText(text4) {
   return { frontmatter: picked, claims: body.claims, structure: body.structure, voice: body.voice };
 }
 function intakeFromText(text4) {
-  const lines = text4.split(/\r?\n/);
+  const lines2 = text4.split(/\r?\n/);
   const label = /* @__PURE__ */ __name((name) => {
-    for (const line of lines) {
+    for (const line of lines2) {
       const m3 = new RegExp(`^\\s*(?:[-*]\\s*)?(?:\\*\\*)?(?:${name.source})(?:\\*\\*)?\\s*:\\s*(.*?)\\s*$`, "i").exec(line);
       if (m3) return (m3[1] ?? "").replace(/^\*+|\*+$/g, "").trim();
     }
     return "";
   }, "label");
   const followUps = [];
-  for (const line of lines) {
+  for (const line of lines2) {
     const m3 = /^\s*(\d+)[.)]\s+(.+)$/.exec(line);
     if (!m3) continue;
     const q3 = (m3[2] ?? "").trim();
@@ -111784,10 +112595,14 @@ var init_llm_contracts = __esm({
     ClaimSupportSchema = external_exports.object({
       verdict: external_exports.enum(["SUPPORTED", "PARTIAL", "UNSUPPORTED", "UNCLEAR"]),
       rationale: external_exports.string().describe("at most 200 characters, no markdown"),
-      evidence: external_exports.string().describe('a verbatim substring of the source abstract, or ""')
+      evidence: external_exports.string().describe('a verbatim substring of the source text, or ""')
     });
     OrphanLabelSchema = external_exports.object({
-      label: external_exports.enum(["claim", "definition", "UNCLEAR"])
+      claims: external_exports.array(external_exports.object({
+        sentence: external_exports.string().describe("the claim sentence, copied verbatim from the paragraph"),
+        needs_citation: external_exports.boolean().describe("true when a reader would need a source for the sentence"),
+        supported_by: external_exports.array(external_exports.string()).default([]).describe("keys of the citations in the paragraph that support it ([] when none)")
+      })).describe("every sentence of the paragraph that makes a claim ([] when none)")
     });
     __name(wrapArray, "wrapArray");
     __name(coerceOutline, "coerceOutline");
@@ -111809,6 +112624,7 @@ var init_llm_contracts = __esm({
       other: "other"
     });
     __name(coerceEvaluation, "coerceEvaluation");
+    __name(coerceOrphanAudit, "coerceOrphanAudit");
     __name(plannerFromText, "plannerFromText");
     __name(intakeFromText, "intakeFromText");
     CONTRACTS = Object.freeze({
@@ -111818,7 +112634,7 @@ var init_llm_contracts = __esm({
       "outline-author": { slug: "outline-author", schema: OutlineSchema, coerce: coerceOutline },
       "section-planner": { slug: "section-planner", schema: SectionPlannerSchema, fromText: plannerFromText },
       "claim-support": { slug: "claim-support", schema: ClaimSupportSchema },
-      "orphan-label": { slug: "orphan-label", schema: OrphanLabelSchema }
+      "orphan-label": { slug: "orphan-label", schema: OrphanLabelSchema, coerce: coerceOrphanAudit }
     });
     __name(contractFor, "contractFor");
     __name(defOf, "defOf");
@@ -111950,8 +112766,10 @@ var init_prompt_request = __esm({
         input("plan", true, false),
         input("sources", true, true)
       ],
-      "claim-support": [input("citation", true, true), input("claim", true, true), input("abstract", true, true)],
-      "orphan-label": [input("paragraph", true, true), input("sentence", true, true)],
+      // Phase 20 (D-20-28, D-20-30): claim-support judges the source text (the
+      // abstract plus full-text passages); orphan-label audits a whole paragraph.
+      "claim-support": [input("citation", true, true), input("claim", true, true), input("source_text", true, true)],
+      "orphan-label": [input("paragraph", true, true)],
       "smoother": [input("boundary", true, false), input("tail", true, true), input("head", true, true)],
       "revise-swap": [input("flag", true, false), input("voice", true, false), input("available_sources", true, true), input("claim", true, true)],
       "pass1-fuzzy-judge": [input("comparison", true, true)],
@@ -111997,8 +112815,8 @@ function loadTextStubs() {
   }
   const parsed = TextStubsFileSchema.safeParse(raw);
   if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(`llm-text-stubs: ${textStubsPath()} is invalid (${first?.path.join(".") ?? ""}: ${first?.message ?? "schema mismatch"})`);
+    const first2 = parsed.error.issues[0];
+    throw new Error(`llm-text-stubs: ${textStubsPath()} is invalid (${first2?.path.join(".") ?? ""}: ${first2?.message ?? "schema mismatch"})`);
   }
   for (const s2 of parsed.data["section-drafter"].cited) {
     if (!s2.includes("{cite}")) throw new Error(`llm-text-stubs: every section-drafter "cited" sentence needs a {cite} slot (${s2})`);
@@ -112047,39 +112865,39 @@ function plainWords(s2, max = 80) {
   return (space > max / 2 ? cut.slice(0, space) : cut).trim();
 }
 function proseWordCount(md) {
-  return md.replace(/\[@[^\]]*\]/g, " ").split(/\s+/).filter((w3) => w3.length > 0).length;
+  return replaceCitations(md, () => " ").split(/\s+/).filter((w3) => w3.length > 0).length;
 }
 function wordTargetOf(section, fallback) {
   const v2 = section?.["word_target"] ?? section?.["estimated_word_count"];
   return typeof v2 === "number" && Number.isFinite(v2) && v2 >= 1 ? Math.round(v2) : fallback;
 }
 function drafterStub(hints) {
-  const prose = loadTextStubs()["section-drafter"];
+  const prose2 = loadTextStubs()["section-drafter"];
   const section = asRecord2(hints["section"]);
   const brief = asRecord2(hints["brief"]);
-  const target = wordTargetOf(section, prose.default_word_target);
+  const target = wordTargetOf(section, prose2.default_word_target);
   const lower = Math.ceil(target * 0.8);
   const upper = Math.floor(target * 1.2);
   const keys = citekeysOf(hints["sources"]);
   const title = plainWords(text2(section?.["title"]) ?? text2(section?.["slug"]) ?? "this part of the paper");
   const topic = text2(brief?.["topic"]);
-  const opening = topic !== null ? fill(prose.opening_with_topic, { title, topic: plainWords(topic) }) : fill(prose.opening, { title });
-  let cited = keys.map((k2, i) => fill(prose.cited[i % prose.cited.length], { cite: `[@${k2}]` }));
-  const words3 = /* @__PURE__ */ __name((list3) => list3.reduce((a3, s2) => a3 + proseWordCount(s2), 0), "words");
-  const closing = prose.closing;
-  if (keys.length > 1 && words3([opening, ...cited, closing]) > upper) {
-    cited = [fill(prose.cited_group, { cites: keys.map((k2) => `[@${k2}]`).join(" ") })];
+  const opening = topic !== null ? fill(prose2.opening_with_topic, { title, topic: plainWords(topic) }) : fill(prose2.opening, { title });
+  let cited = keys.map((k2, i) => fill(prose2.cited[i % prose2.cited.length], { cite: `[@${k2}]` }));
+  const words4 = /* @__PURE__ */ __name((list3) => list3.reduce((a3, s2) => a3 + proseWordCount(s2), 0), "words");
+  const closing = prose2.closing;
+  if (keys.length > 1 && words4([opening, ...cited, closing]) > upper) {
+    cited = [fill(prose2.cited_group, { cites: keys.map((k2) => `[@${k2}]`).join(" ") })];
   }
   const filler = [];
-  let total = words3([opening, ...cited, closing]);
+  let total = words4([opening, ...cited, closing]);
   let turn = 0;
   while (total < lower) {
     let picked = null;
-    for (let j2 = 0; j2 < prose.filler.length; j2 += 1) {
-      const candidate = prose.filler[(turn + j2) % prose.filler.length];
+    for (let j2 = 0; j2 < prose2.filler.length; j2 += 1) {
+      const candidate = prose2.filler[(turn + j2) % prose2.filler.length];
       if (total + proseWordCount(candidate) <= upper) {
         picked = candidate;
-        turn = (turn + j2 + 1) % prose.filler.length;
+        turn = (turn + j2 + 1) % prose2.filler.length;
         break;
       }
     }
@@ -112093,13 +112911,13 @@ function drafterStub(hints) {
     body.splice(at, 0, c2);
   });
   const sentences = [opening, ...body, closing];
-  const paragraphs = [];
-  for (let i = 0; i < sentences.length; i += 4) paragraphs.push(sentences.slice(i, i + 4).join(" "));
-  if (paragraphs.length > 1 && sentences.length % 4 === 1) {
-    const last = paragraphs.pop();
-    paragraphs[paragraphs.length - 1] = `${paragraphs[paragraphs.length - 1]} ${last}`;
+  const paragraphs2 = [];
+  for (let i = 0; i < sentences.length; i += 4) paragraphs2.push(sentences.slice(i, i + 4).join(" "));
+  if (paragraphs2.length > 1 && sentences.length % 4 === 1) {
+    const last = paragraphs2.pop();
+    paragraphs2[paragraphs2.length - 1] = `${paragraphs2[paragraphs2.length - 1]} ${last}`;
   }
-  return `${paragraphs.join("\n\n")}
+  return `${paragraphs2.join("\n\n")}
 `;
 }
 function smootherStub(hints) {
@@ -112119,29 +112937,29 @@ function reviseSwapStub(hints) {
   });
 }
 function sectionProvenanceStub(hints) {
-  const prose = loadTextStubs()["tutorial-section-provenance"];
+  const prose2 = loadTextStubs()["tutorial-section-provenance"];
   const keys = citekeysOf(hints["sources"]);
-  if (keys.length === 0) return `${prose.none}
+  if (keys.length === 0) return `${prose2.none}
 `;
   const claims = Array.isArray(hints["claims"]) ? hints["claims"].map(asRecord2).filter((c2) => c2 !== null) : [];
-  const lines = keys.map((citekey) => {
+  const lines2 = keys.map((citekey) => {
     const claim = claims.find((c2) => citekeysOf(c2["citekeys"]).includes(citekey));
     const claimText = claim ? text2(claim["claim"]) : null;
-    return claimText !== null ? `- ${fill(prose.with_claim, { citekey, claim: plainWords(claimText, 160) })}` : `- ${fill(prose.without_claim, { citekey })}`;
+    return claimText !== null ? `- ${fill(prose2.with_claim, { citekey, claim: plainWords(claimText, 160) })}` : `- ${fill(prose2.without_claim, { citekey })}`;
   });
-  return `${lines.join("\n")}
+  return `${lines2.join("\n")}
 `;
 }
 function researchRationaleStub(hints) {
-  const prose = loadTextStubs()["tutorial-research-rationale"];
+  const prose2 = loadTextStubs()["tutorial-research-rationale"];
   const keys = citekeysOf(hints["sources"]);
-  if (keys.length === 0) return `${prose.none}
+  if (keys.length === 0) return `${prose2.none}
 `;
   const topic = plainWords(text2(hints["topic"]) ?? "the assigned topic");
-  const lines = keys.map((citekey) => `- ${fill(prose.per_source, { citekey, topic })}`);
-  return `${lines.join("\n")}
+  const lines2 = keys.map((citekey) => `- ${fill(prose2.per_source, { citekey, topic })}`);
+  return `${lines2.join("\n")}
 
-${prose.coverage}
+${prose2.coverage}
 `;
 }
 function textStub(slug, messages, hint) {
@@ -112154,6 +112972,7 @@ var init_llm_text_stubs = __esm({
   "bin/lib/llm-text-stubs.ts"() {
     "use strict";
     init_zod();
+    init_citation_token();
     init_paths();
     init_citekey();
     init_prompt_request();
@@ -112265,15 +113084,15 @@ function splitWords(total, parts) {
 }
 function outlineStub(hint) {
   const brief = hintObject(hint, "brief");
-  const words3 = Math.max(3, Math.round(objNumber(brief, "length_target_words") ?? hintNumber(hint, "length") ?? 1500));
+  const words4 = Math.max(3, Math.round(objNumber(brief, "length_target_words") ?? hintNumber(hint, "length") ?? 1500));
   const sources2 = hintCitekeys(hint);
   const topic = objString(brief, "topic") ?? hintString(hint, "topic") ?? "the assigned topic";
   const thesis = objString(brief, "thesis") ?? `A structured account of ${queryFrom(topic)}.`;
   const counter = brief?.["counterargument_required"] === true;
   const head = sources2.slice(0, Math.min(3, sources2.length));
-  const intro = Math.max(1, Math.round(words3 * 0.2));
-  const conclusion = Math.max(1, Math.round(words3 * 0.2));
-  const middle = splitWords(Math.max(counter ? 3 : 1, words3 - intro - conclusion), counter ? 3 : 1);
+  const intro = Math.max(1, Math.round(words4 * 0.2));
+  const conclusion = Math.max(1, Math.round(words4 * 0.2));
+  const middle = splitWords(Math.max(counter ? 3 : 1, words4 - intro - conclusion), counter ? 3 : 1);
   const sections = [
     { n: 1, slug: "introduction", title: "Introduction", purpose: "Frame the question and state the thesis.", depends_on: [], estimated_word_count: intro, assigned_sources: head, role: "intro" },
     { n: 2, slug: "discussion", title: "Discussion", purpose: "Develop the main argument from the assigned sources.", depends_on: ["introduction"], estimated_word_count: middle[0], assigned_sources: sources2, role: "body" }
@@ -112369,8 +113188,8 @@ function sourceEvaluatorStub(hint) {
   const keywords = topicKeywords(hintText(hint, "topic"));
   return {
     verdicts: stubCandidates(hint).map((c2) => {
-      const words3 = new Set(topicKeywords(c2.text));
-      const share = keywords.length === 0 ? 0 : keywords.filter((k2) => words3.has(k2)).length / keywords.length;
+      const words4 = new Set(topicKeywords(c2.text));
+      const share = keywords.length === 0 ? 0 : keywords.filter((k2) => words4.has(k2)).length / keywords.length;
       return {
         citekey: c2.citekey,
         keep: true,
@@ -112425,7 +113244,9 @@ var init_llm_stubs = __esm({
       "outline-author": outlineStub,
       "section-planner": plannerStub,
       "claim-support": /* @__PURE__ */ __name(() => ({ verdict: "UNCLEAR", rationale: "LLM stubbed: no claim-support judgment was made.", evidence: "" }), "claim-support"),
-      "orphan-label": /* @__PURE__ */ __name(() => ({ label: "UNCLEAR" }), "orphan-label")
+      // The per-paragraph orphan audit (D-20-29) can only ADD orphans, so the
+      // conservative stub names no claim: the deterministic floor stands alone.
+      "orphan-label": /* @__PURE__ */ __name(() => ({ claims: [] }), "orphan-label")
     });
     __name(hasStructuredStub, "hasStructuredStub");
     __name(structuredStub, "structuredStub");
@@ -112433,7 +113254,7 @@ var init_llm_stubs = __esm({
 });
 
 // bin/lib/anthropic.ts
-import { createHash as createHash10 } from "node:crypto";
+import { createHash as createHash11 } from "node:crypto";
 function correctiveMessages(messages, replyText, correction) {
   if (replyText.trim().length > 0) {
     return [...messages, { role: "assistant", content: replyText }, { role: "user", content: correction }];
@@ -112824,7 +113645,7 @@ function transportError(plan, err, elapsedMs) {
   );
 }
 function sha2562(text4) {
-  return createHash10("sha256").update(text4, "utf8").digest("hex");
+  return createHash11("sha256").update(text4, "utf8").digest("hex");
 }
 async function recordAttempt(plan, opts, log4) {
   const root = projectRoot();
@@ -113063,14 +113884,14 @@ async function complete(opts) {
     if (key2) registerSecret(key2);
   }
   let totalCost2 = 0;
-  const first = await runWithRetry(plan, opts, key2, opts.messages, "initial");
-  totalCost2 += first.spentUsd;
-  let final = first;
+  const first2 = await runWithRetry(plan, opts, key2, opts.messages, "initial");
+  totalCost2 += first2.spentUsd;
+  let final = first2;
   let data;
   if (plan.structured) {
-    let parsed = first.parsed ?? { ok: false, error: "no reply to parse" };
+    let parsed = first2.parsed ?? { ok: false, error: "no reply to parse" };
     if (!parsed.ok) {
-      const retryMessages = correctiveMessages(opts.messages, first.result.text, correctiveInstruction(plan.spec.slug, parsed.error));
+      const retryMessages = correctiveMessages(opts.messages, first2.result.text, correctiveInstruction(plan.spec.slug, parsed.error));
       const second = await runWithRetry(plan, opts, key2, retryMessages, "corrective-retry");
       totalCost2 += second.spentUsd;
       final = second;
@@ -113311,9 +114132,10 @@ var init_source_policy = __esm({
 
 // bin/lib/sources/registrar-response.ts
 function article(service) {
+  if (/^(?:eu|uni(?!n)|one\b)/i.test(service)) return "a";
   return /^[aeiou]/i.test(service) ? "an" : "a";
 }
-function oneLine6(s2, max = 160) {
+function oneLine7(s2, max = 160) {
   const line = (s2.split(/\r?\n/).find((l2) => l2.trim().length > 0) ?? "").trim().replace(/\s+/g, " ");
   return line.length > max ? `${line.slice(0, max - 1)}\u2026` : line;
 }
@@ -113346,20 +114168,20 @@ function bodyMessage(body) {
     const o2 = parsed;
     for (const k2 of ["message", "detail", "error", "title"]) {
       const v2 = o2[k2];
-      if (typeof v2 === "string" && v2.trim().length > 0) return oneLine6(v2);
+      if (typeof v2 === "string" && v2.trim().length > 0) return oneLine7(v2);
       if (k2 === "error" && typeof v2 === "object" && v2 !== null) {
         const m3 = v2["message"];
-        if (typeof m3 === "string" && m3.trim().length > 0) return oneLine6(m3);
+        if (typeof m3 === "string" && m3.trim().length > 0) return oneLine7(m3);
       }
       if (k2 === "message" && Array.isArray(v2)) {
-        const first = v2.find((x3) => typeof x3 === "object" && x3 !== null);
-        const m3 = first?.["message"];
-        if (typeof m3 === "string" && m3.trim().length > 0) return oneLine6(m3);
+        const first2 = v2.find((x3) => typeof x3 === "object" && x3 !== null);
+        const m3 = first2?.["message"];
+        if (typeof m3 === "string" && m3.trim().length > 0) return oneLine7(m3);
       }
     }
     return null;
   }
-  if (!t.startsWith("<") && t.length <= 200) return oneLine6(t);
+  if (!t.startsWith("<") && t.length <= 200) return oneLine7(t);
   return null;
 }
 function statusReason2(res) {
@@ -113450,6 +114272,12 @@ async function exchange(send, opts) {
   if (res.status >= 500) return { kind: "failed", reason: httpFailureReason(res.status), status: res.status };
   return { kind: "status", res };
 }
+function answeredAt(res) {
+  for (const at of [res.cachedAt, res.answeredAt]) {
+    if (typeof at === "string" && !Number.isNaN(Date.parse(at))) return new Date(at).toISOString();
+  }
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
 var sendOverride;
 var init_registrar_response = __esm({
   "bin/lib/sources/registrar-response.ts"() {
@@ -113459,7 +114287,7 @@ var init_registrar_response = __esm({
     init_retry();
     init_search_failure();
     __name(article, "article");
-    __name(oneLine6, "oneLine");
+    __name(oneLine7, "oneLine");
     __name(parseJsonBody, "parseJsonBody");
     __name(jsonShape, "jsonShape");
     __name(validator, "validator");
@@ -113469,6 +114297,7 @@ var init_registrar_response = __esm({
     __name(rateLimitedFailure, "rateLimitedFailure");
     sendOverride = null;
     __name(exchange, "exchange");
+    __name(answeredAt, "answeredAt");
   }
 });
 
@@ -113509,7 +114338,7 @@ function formatRetractionNotice(update2) {
   ].filter((x3) => x3 !== null);
   return `${date3 ? `${date3}: ` : ""}${label}${where.length > 0 ? ` (${where.join("; ")})` : ""}`;
 }
-function toCandidate(doi, notice, update2) {
+function toCandidate(doi, notice, update2, checkedAt) {
   const described = {
     ...update2.type !== void 0 ? { type: update2.type } : {},
     ...update2.label !== void 0 ? { label: update2.label } : {},
@@ -113537,7 +114366,7 @@ function toCandidate(doi, notice, update2) {
     // D-15 surface-twice: a hit from this adapter == retracted.
     retraction_details,
     retraction_status: "retracted",
-    last_verified: (/* @__PURE__ */ new Date()).toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors: byline }),
     raw: notice
   };
@@ -113549,10 +114378,15 @@ function retractionLookupUrl(doi) {
   const email2 = contactEmail().email;
   return `${BASE}/works?filter=${encodeURIComponent(`updates:${doi}`)}&select=${encodeURIComponent("DOI,title,author,update-to")}&rows=20` + (email2 ? `&mailto=${encodeURIComponent(email2)}` : "");
 }
-async function fetchById2(doi) {
+async function fetchById2(doi, opts = {}) {
   const url = retractionLookupUrl(doi);
   const ex = await exchange(
-    () => fetch2(url, { source: "retraction-watch", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(WORK_LIST) }),
+    () => fetch2(url, {
+      source: "retraction-watch",
+      maxBytes: MAX_JSON_RESPONSE_BYTES,
+      validate: validator(WORK_LIST),
+      ...opts.refresh === true ? { refresh: true } : {}
+    }),
     { service: "Crossref", check: WORK_LIST }
   );
   if (ex.kind === "failed") throw new RetractionLookupError(doi, `the Crossref lookup failed (${ex.reason})`);
@@ -113561,7 +114395,7 @@ async function fetchById2(doi) {
   for (const notice of items) {
     for (const u of notice["update-to"] ?? []) {
       if (sameDoi(u.DOI, doi) && isRetractionUpdateType(u.type)) {
-        return toCandidate(doi, notice, u);
+        return toCandidate(doi, notice, u, answeredAt(ex.res));
       }
     }
   }
@@ -113607,12 +114441,15 @@ var init_retraction_watch = __esm({
 // bin/lib/sources/crossref.ts
 var crossref_exports = {};
 __export(crossref_exports, {
+  bibliographicSearchUrl: () => bibliographicSearchUrl,
   crossrefCslType: () => crossrefCslType,
   crossrefPersonName: () => crossrefPersonName,
+  crossrefRelations: () => crossrefRelations,
   crossrefToCandidate: () => crossrefToCandidate,
   fetchById: () => fetchById3,
   lookupById: () => lookupById2,
   search: () => search2,
+  searchBibliographic: () => searchBibliographic,
   searchUrl: () => searchUrl,
   stripJats: () => stripJats
 });
@@ -113667,7 +114504,20 @@ function retractionOf(item, title) {
   }
   return { retracted: false, retraction_status: "clear" };
 }
-function crossrefToCandidate(item) {
+function crossrefRelations(item) {
+  const out2 = [];
+  const rel2 = item.relation;
+  if (typeof rel2 !== "object" || rel2 === null) return out2;
+  for (const [type, list3] of Object.entries(rel2)) {
+    for (const r2 of Array.isArray(list3) ? list3 : []) {
+      if (String(r2?.["id-type"] ?? "").toLowerCase() !== "doi" || typeof r2?.id !== "string") continue;
+      const doi = normalizeDoi(r2.id);
+      if (doi !== null && !out2.some((o2) => o2.type === type && o2.doi === doi)) out2.push({ type, doi });
+    }
+  }
+  return out2;
+}
+function crossrefToCandidate(item, checkedAt = (/* @__PURE__ */ new Date()).toISOString()) {
   const doi = typeof item.DOI === "string" ? item.DOI.trim() : "";
   if (!doi) return null;
   const title = plainText(firstString(item.title));
@@ -113681,16 +114531,20 @@ function crossrefToCandidate(item) {
   const type = crossrefCslType(item.type);
   const isbn = pickIsbn(item.ISBN);
   const abstract = stripJats(item.abstract);
-  const str6 = /* @__PURE__ */ __name((v2) => typeof v2 === "string" && v2.trim().length > 0 ? v2.trim() : void 0, "str");
-  const volume = str6(item.volume);
-  const issue2 = str6(item.issue);
-  const pages = str6(item.page);
-  const publisher = plainTextOpt(str6(item.publisher));
+  const str8 = /* @__PURE__ */ __name((v2) => typeof v2 === "string" && v2.trim().length > 0 ? v2.trim() : void 0, "str");
+  const volume = str8(item.volume);
+  const issue2 = str8(item.issue);
+  const pages = str8(item.page);
+  const publisher = plainTextOpt(str8(item.publisher));
+  const subtitle = plainTextOpt(firstString(item.subtitle));
+  const relations = crossrefRelations(item);
   return {
     source: "crossref",
     id: doi,
     doi,
     title,
+    ...subtitle !== void 0 && subtitle.length > 0 ? { subtitle } : {},
+    ...relations.length > 0 ? { relations } : {},
     authors,
     ...year !== void 0 ? { year } : {},
     ...abstract !== void 0 ? { abstract } : {},
@@ -113703,7 +114557,7 @@ function crossrefToCandidate(item) {
     ...type !== void 0 ? { type } : {},
     ...editors.length > 0 ? { editors } : {},
     ...retractionOf(item, title),
-    last_verified: (/* @__PURE__ */ new Date()).toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...year !== void 0 ? { year } : {} }),
     raw: item
   };
@@ -113733,15 +114587,31 @@ async function search2(query, opts = {}) {
     opts.onFailure?.(statusReason2(ex.res));
     return [];
   }
+  const at = answeredAt(ex.res);
   const items = JSON.parse(ex.res.body).message.items;
-  return items.map(crossrefToCandidate).filter((c2) => c2 !== null);
+  return items.map((i) => crossrefToCandidate(i, at)).filter((c2) => c2 !== null);
 }
-async function lookupById2(id) {
+function bibliographicSearchUrl(citation, rows = 5) {
+  return `${BASE2}/works?query.bibliographic=${encodeURIComponent(citation)}&rows=${rows}&select=${encodeURIComponent(BIBLIOGRAPHIC_SELECT)}`;
+}
+async function searchBibliographic(citation, opts = {}) {
+  const url = bibliographicSearchUrl(citation, opts.rows ?? 5);
+  const ex = await exchange(
+    () => fetch2(url, { source: "crossref", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(WORK_LIST2), ...opts.refresh === true ? { refresh: true } : {} }),
+    { service: SERVICE, check: WORK_LIST2 }
+  );
+  if (ex.kind === "failed") return { kind: "failed", reason: ex.reason };
+  if (ex.kind === "status") return { kind: "failed", reason: statusReason2(ex.res) };
+  const at = answeredAt(ex.res);
+  const items = JSON.parse(ex.res.body).message.items;
+  return { kind: "ok", candidates: items.map((i) => crossrefToCandidate(i, at)).filter((c2) => c2 !== null) };
+}
+async function lookupById2(id, opts = {}) {
   const doi = normalizeDoi(id);
   if (doi === null) return lookupNotFound(`not a DOI: ${JSON.stringify(id.slice(0, 80))}`);
   const url = `${BASE2}/works/${encodeURIComponent(doi)}`;
   const ex = await exchange(
-    () => fetch2(url, { source: "crossref", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(WORK) }),
+    () => fetch2(url, { source: "crossref", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(WORK), ...opts.refresh === true ? { refresh: true } : {} }),
     { service: SERVICE, check: WORK }
   );
   if (ex.kind === "failed") {
@@ -113755,7 +114625,7 @@ async function lookupById2(id) {
     return lookupFailed(statusReason2(ex.res), { status: ex.res.status });
   }
   const msg = JSON.parse(ex.res.body).message;
-  const candidate = crossrefToCandidate(msg);
+  const candidate = crossrefToCandidate(msg, answeredAt(ex.res));
   if (candidate === null) {
     return lookupFailed(
       "Crossref's record of this DOI lists no title, or no author or editor, so it cannot be cited or checked (an incomplete registrar record \u2014 asking again gives the same answer)",
@@ -113767,7 +114637,7 @@ async function lookupById2(id) {
 async function fetchById3(doi) {
   return unwrapLookup(await lookupById2(doi), "crossref", doi);
 }
-var BASE2, SERVICE, CSL_TYPE, WORK_LIST2, WORK, SEARCH_SELECT;
+var BASE2, SERVICE, CSL_TYPE, WORK_LIST2, WORK, SEARCH_SELECT, BIBLIOGRAPHIC_SELECT;
 var init_crossref = __esm({
   "bin/lib/sources/crossref.ts"() {
     "use strict";
@@ -113809,6 +114679,7 @@ var init_crossref = __esm({
     __name(stripJats, "stripJats");
     __name(pickIsbn, "pickIsbn");
     __name(retractionOf, "retractionOf");
+    __name(crossrefRelations, "crossrefRelations");
     __name(crossrefToCandidate, "crossrefToCandidate");
     __name(isObject3, "isObject");
     WORK_LIST2 = jsonShape(
@@ -113839,8 +114710,170 @@ var init_crossref = __esm({
     ].join(",");
     __name(searchUrl, "searchUrl");
     __name(search2, "search");
+    BIBLIOGRAPHIC_SELECT = `${SEARCH_SELECT},subtitle`;
+    __name(bibliographicSearchUrl, "bibliographicSearchUrl");
+    __name(searchBibliographic, "searchBibliographic");
     __name(lookupById2, "lookupById");
     __name(fetchById3, "fetchById");
+  }
+});
+
+// bin/lib/sources/datacite.ts
+var datacite_exports = {};
+__export(datacite_exports, {
+  DATACITE_RETRACTION_UNKNOWN: () => DATACITE_RETRACTION_UNKNOWN,
+  dataCiteName: () => dataCiteName,
+  dataCiteToCandidate: () => dataCiteToCandidate,
+  fetchById: () => fetchById4,
+  lookupById: () => lookupById3,
+  lookupUrl: () => lookupUrl
+});
+function str(v2) {
+  return typeof v2 === "string" && v2.trim().length > 0 ? v2.trim() : void 0;
+}
+function dataCiteName(n2) {
+  const family = str(n2.familyName);
+  const given = str(n2.givenName);
+  const name = str(n2.name)?.replace(/[{}]/g, "");
+  if (n2.nameType === "Organizational") return name ? `{${name}}` : "";
+  if (family && given && family !== name) return `${family}, ${given}`;
+  if (name) return displayAuthorName(name);
+  return family ?? given ?? "";
+}
+function kebab(s2) {
+  return s2.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+}
+function dataCiteToCandidate(attrs, checkedAt = (/* @__PURE__ */ new Date()).toISOString()) {
+  const doi = normalizeDoi(str(attrs.doi) ?? "");
+  if (doi === null) return null;
+  const titles = Array.isArray(attrs.titles) ? attrs.titles : [];
+  const main2 = titles.find((t) => !str(t.titleType) && str(t.title)) ?? titles.find((t) => str(t.title) && t.titleType !== "Subtitle");
+  const title = plainText(str(main2?.title) ?? "");
+  if (!title) return null;
+  const subtitle = plainTextOpt(str(titles.find((t) => t.titleType === "Subtitle")?.title));
+  const names = /* @__PURE__ */ __name((list3) => (Array.isArray(list3) ? list3 : []).map(dataCiteName).filter((s2) => s2.length > 0), "names");
+  const creators = names(attrs.creators);
+  const editors = names((attrs.contributors ?? []).filter((c2) => c2.contributorType === "Editor"));
+  const authors = creators.length > 0 ? creators : editors;
+  if (authors.length === 0) return null;
+  const yearNum = Number(attrs.publicationYear);
+  const year = Number.isInteger(yearNum) && yearNum >= 1800 && yearNum <= 2100 ? yearNum : void 0;
+  const publisher = plainTextOpt(typeof attrs.publisher === "string" ? str(attrs.publisher) : str(attrs.publisher?.name));
+  const venue = plainTextOpt(str(attrs.container?.title));
+  const abstract = plainTextOpt(str((attrs.descriptions ?? []).find((d3) => d3.descriptionType === "Abstract")?.description));
+  const general = str(attrs.types?.resourceTypeGeneral);
+  const type = general !== void 0 ? CSL_TYPE2[general] ?? "other" : void 0;
+  const relations = (Array.isArray(attrs.relatedIdentifiers) ? attrs.relatedIdentifiers : []).filter((r2) => r2.relatedIdentifierType === "DOI" && str(r2.relationType) && str(r2.relatedIdentifier)).map((r2) => ({ type: kebab(r2.relationType), doi: normalizeDoi(r2.relatedIdentifier) })).filter((r2) => r2.doi !== null);
+  const volume = str(attrs.container?.volume);
+  const issue2 = str(attrs.container?.issue);
+  const first2 = str(attrs.container?.firstPage);
+  const last = str(attrs.container?.lastPage);
+  const pages = first2 ? last ? `${first2}-${last}` : first2 : void 0;
+  return {
+    source: "datacite",
+    id: doi,
+    doi,
+    title,
+    ...subtitle !== void 0 ? { subtitle } : {},
+    authors,
+    ...editors.length > 0 ? { editors } : {},
+    ...year !== void 0 ? { year } : {},
+    ...abstract !== void 0 ? { abstract } : {},
+    ...venue !== void 0 ? { venue } : {},
+    ...volume !== void 0 ? { volume } : {},
+    ...issue2 !== void 0 ? { issue: issue2 } : {},
+    ...pages !== void 0 ? { pages } : {},
+    ...publisher !== void 0 ? { publisher } : {},
+    ...type !== void 0 ? { type } : {},
+    ...relations.length > 0 ? { relations } : {},
+    retracted: false,
+    retraction_status: "unknown",
+    last_verified: checkedAt,
+    citekey: generateCitekey({ authors, ...year !== void 0 ? { year } : {} }),
+    raw: attrs
+  };
+}
+function isObject4(v2) {
+  return typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
+}
+function lookupUrl(doi) {
+  return `${BASE3}/dois/${encodeURIComponent(doi)}`;
+}
+async function lookupById3(id, opts = {}) {
+  const doi = normalizeDoi(id);
+  if (doi === null) return lookupNotFound(`not a DOI: ${JSON.stringify(id.slice(0, 80))}`);
+  const ex = await exchange(
+    () => fetch2(lookupUrl(doi), {
+      source: "datacite",
+      maxBytes: MAX_JSON_RESPONSE_BYTES,
+      validate: validator(DOI_RECORD),
+      ...opts.refresh === true ? { refresh: true } : {}
+    }),
+    { service: SERVICE2, check: DOI_RECORD }
+  );
+  if (ex.kind === "failed") {
+    return lookupFailed(ex.reason, {
+      ...ex.status !== void 0 ? { status: ex.status } : {},
+      ...ex.retryAfterMs !== void 0 ? { retryAfterMs: ex.retryAfterMs } : {}
+    });
+  }
+  if (ex.kind === "status") {
+    if (ex.res.status === 404) return lookupNotFound("HTTP 404 (DataCite has no record of this DOI)");
+    return lookupFailed(statusReason2(ex.res), { status: ex.res.status });
+  }
+  const attrs = JSON.parse(ex.res.body).data.attributes;
+  const candidate = dataCiteToCandidate(attrs, answeredAt(ex.res));
+  if (candidate === null) {
+    return lookupFailed(
+      "DataCite's record of this DOI lists no title, or no creator or editor, so it cannot be checked (an incomplete registrar record \u2014 asking again gives the same answer)",
+      { status: 200, permanent: true }
+    );
+  }
+  return lookupFound(candidate);
+}
+async function fetchById4(doi) {
+  return unwrapLookup(await lookupById3(doi), "datacite", doi);
+}
+var BASE3, SERVICE2, DATACITE_RETRACTION_UNKNOWN, CSL_TYPE2, DOI_RECORD;
+var init_datacite = __esm({
+  "bin/lib/sources/datacite.ts"() {
+    "use strict";
+    init_http();
+    init_registrar_response();
+    init_lookup();
+    init_citekey();
+    init_doi();
+    init_markup();
+    init_person_name();
+    init_lookup_table();
+    BASE3 = "https://api.datacite.org";
+    SERVICE2 = "DataCite";
+    DATACITE_RETRACTION_UNKNOWN = "no retraction data for DataCite DOIs";
+    CSL_TYPE2 = lookupTable({
+      JournalArticle: "article-journal",
+      Preprint: "preprint",
+      Dataset: "dataset",
+      Book: "book",
+      BookChapter: "chapter",
+      ConferencePaper: "paper-conference",
+      ConferenceProceeding: "book",
+      Report: "report",
+      Dissertation: "thesis",
+      Text: "other",
+      Software: "other"
+    });
+    __name(str, "str");
+    __name(dataCiteName, "dataCiteName");
+    __name(kebab, "kebab");
+    __name(dataCiteToCandidate, "dataCiteToCandidate");
+    __name(isObject4, "isObject");
+    DOI_RECORD = jsonShape(
+      (b3) => isObject4(b3) && isObject4(b3["data"]) && b3["data"]["type"] === "dois" && isObject4(b3["data"]["attributes"]),
+      'DataCite DOI record (data.type "dois")'
+    );
+    __name(lookupUrl, "lookupUrl");
+    __name(lookupById3, "lookupById");
+    __name(fetchById4, "fetchById");
   }
 });
 
@@ -113848,9 +114881,9 @@ var init_crossref = __esm({
 var openalex_exports = {};
 __export(openalex_exports, {
   abstractFromInvertedIndex: () => abstractFromInvertedIndex,
-  fetchById: () => fetchById4,
+  fetchById: () => fetchById5,
   isBudgetExhausted: () => isBudgetExhausted,
-  lookupById: () => lookupById3,
+  lookupById: () => lookupById4,
   openAlexCslType: () => openAlexCslType,
   openAlexToCandidate: () => openAlexToCandidate,
   search: () => search3,
@@ -113863,14 +114896,14 @@ function stripDoiUrl(doiUrl) {
 }
 function abstractFromInvertedIndex(index) {
   if (!index || typeof index !== "object") return void 0;
-  const words3 = [];
+  const words4 = [];
   for (const [word, positions] of Object.entries(index)) {
     if (!Array.isArray(positions)) continue;
     for (const p2 of positions) {
-      if (Number.isInteger(p2) && p2 >= 0 && p2 < 1e5) words3[p2] = word;
+      if (Number.isInteger(p2) && p2 >= 0 && p2 < 1e5) words4[p2] = word;
     }
   }
-  const text4 = words3.filter((w3) => typeof w3 === "string").join(" ").replace(/\s+/g, " ").trim();
+  const text4 = words4.filter((w3) => typeof w3 === "string").join(" ").replace(/\s+/g, " ").trim();
   return text4.length > 0 ? text4 : void 0;
 }
 function openAlexCslType(type, sourceType) {
@@ -113904,11 +114937,11 @@ function openAlexCslType(type, sourceType) {
       return "other";
   }
 }
-function str(v2) {
+function str2(v2) {
   return typeof v2 === "string" && v2.trim().length > 0 ? v2.trim() : void 0;
 }
 function httpUrl(v2) {
-  const s2 = str(v2);
+  const s2 = str2(v2);
   if (s2 === void 0) return void 0;
   try {
     const u = new URL(s2);
@@ -113917,9 +114950,9 @@ function httpUrl(v2) {
     return void 0;
   }
 }
-function openAlexToCandidate(item) {
+function openAlexToCandidate(item, checkedAt = (/* @__PURE__ */ new Date()).toISOString()) {
   const doi = stripDoiUrl(item.doi);
-  const id = str(item.id) ?? doi;
+  const id = str2(item.id) ?? doi;
   if (!id) return null;
   const title = plainText(String(item.title ?? item.display_name ?? ""));
   if (!title) return null;
@@ -113928,14 +114961,14 @@ function openAlexToCandidate(item) {
   const y3 = item.publication_year;
   const year = typeof y3 === "number" && y3 >= 1800 && y3 <= 2100 ? y3 : void 0;
   const source = item.primary_location?.source ?? void 0;
-  const venue = plainTextOpt(str(source?.display_name));
-  const publisher = str(source?.host_organization_name);
+  const venue = plainTextOpt(str2(source?.display_name));
+  const publisher = str2(source?.host_organization_name);
   const type = openAlexCslType(item.type, source?.type);
-  const volume = str(item.biblio?.volume);
-  const issue2 = str(item.biblio?.issue);
-  const first = str(item.biblio?.first_page);
-  const last = str(item.biblio?.last_page);
-  const pages = first && last && first !== last ? `${first}-${last}` : first;
+  const volume = str2(item.biblio?.volume);
+  const issue2 = str2(item.biblio?.issue);
+  const first2 = str2(item.biblio?.first_page);
+  const last = str2(item.biblio?.last_page);
+  const pages = first2 && last && first2 !== last ? `${first2}-${last}` : first2;
   const abstract = plainTextOpt(abstractFromInvertedIndex(item.abstract_inverted_index));
   const pmid = normalizePmid(String(item.ids?.pmid ?? "").replace(/^https?:\/\/pubmed\.ncbi\.nlm\.nih\.gov\//i, "").replace(/\/$/, ""));
   const pmcid = normalizePmcid(String(item.ids?.pmcid ?? "").replace(/^https?:\/\/(?:www\.)?ncbi\.nlm\.nih\.gov\/pmc\/articles\//i, "").replace(/\/$/, ""));
@@ -113960,12 +114993,12 @@ function openAlexToCandidate(item) {
     ...oaPdf !== void 0 ? { oa_pdf_url: oaPdf } : {},
     retracted,
     ...retracted ? { retraction_status: "retracted", retraction_details: "OpenAlex marks this work as retracted" } : {},
-    last_verified: (/* @__PURE__ */ new Date()).toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...year !== void 0 ? { year } : {} }),
     raw: item
   };
 }
-function isObject4(v2) {
+function isObject5(v2) {
   return typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
 }
 function identityParams(key2) {
@@ -113992,13 +115025,13 @@ function missingKeyReason(key2) {
 async function get(url, check3, key2) {
   return exchange(
     () => fetch2(url, { source: "openalex", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(check3) }),
-    { service: SERVICE2, check: check3, rateLimited: rateLimitReason(key2) }
+    { service: SERVICE3, check: check3, rateLimited: rateLimitReason(key2) }
   );
 }
 function searchPath(query, opts = {}) {
   const limit = opts.limit ?? 20;
   const filter = typeof opts.fromYear === "number" && Number.isInteger(opts.fromYear) ? `&filter=${encodeURIComponent(`from_publication_date:${opts.fromYear}-01-01`)}` : "";
-  return `${BASE3}/works?search=${encodeURIComponent(query)}&per-page=${limit}&select=${encodeURIComponent(SELECT)}${filter}`;
+  return `${BASE4}/works?search=${encodeURIComponent(query)}&per-page=${limit}&select=${encodeURIComponent(SELECT)}${filter}`;
 }
 async function search3(query, opts = {}) {
   const key2 = await openAlexKey();
@@ -114016,7 +115049,8 @@ async function search3(query, opts = {}) {
     return [];
   }
   const results = JSON.parse(ex.res.body).results;
-  return results.map(openAlexToCandidate).filter((c2) => c2 !== null);
+  const at = answeredAt(ex.res);
+  return results.map((r2) => openAlexToCandidate(r2, at)).filter((c2) => c2 !== null);
 }
 function workPathSegment(id) {
   const s2 = id.trim();
@@ -114028,12 +115062,12 @@ function workPathSegment(id) {
   if (pmid !== null && /^pmid:/i.test(s2)) return `pmid:${pmid}`;
   return null;
 }
-async function lookupById3(id) {
+async function lookupById4(id) {
   const segment = workPathSegment(id);
   if (segment === null) return lookupNotFound(`not an OpenAlex work id, DOI or PMID: ${JSON.stringify(id.slice(0, 80))}`);
   const key2 = await openAlexKey();
   if (key2.required && key2.value === void 0) return lookupFailed(missingKeyReason(key2));
-  const ex = await get(`${BASE3}/works/${segment}?select=${encodeURIComponent(SELECT)}${identityParams(key2)}`, WORK2, key2);
+  const ex = await get(`${BASE4}/works/${segment}?select=${encodeURIComponent(SELECT)}${identityParams(key2)}`, WORK2, key2);
   if (ex.kind === "failed") {
     return lookupFailed(ex.reason, {
       ...ex.status !== void 0 ? { status: ex.status } : {},
@@ -114044,14 +115078,14 @@ async function lookupById3(id) {
     if (ex.res.status === 404) return lookupNotFound("HTTP 404 (OpenAlex has no such work)");
     return lookupFailed(statusReason2(ex.res), { status: ex.res.status });
   }
-  const candidate = openAlexToCandidate(JSON.parse(ex.res.body));
+  const candidate = openAlexToCandidate(JSON.parse(ex.res.body), answeredAt(ex.res));
   if (candidate === null) return lookupFailed("the OpenAlex record has no title or no authors (an incomplete registrar record \u2014 asking again gives the same answer)", { status: 200, permanent: true });
   return lookupFound(candidate);
 }
-async function fetchById4(id) {
-  return unwrapLookup(await lookupById3(id), "openalex", id);
+async function fetchById5(id) {
+  return unwrapLookup(await lookupById4(id), "openalex", id);
 }
-var BASE3, SERVICE2, SELECT, RESULTS, WORK2;
+var BASE4, SERVICE3, SELECT, RESULTS, WORK2;
 var init_openalex = __esm({
   "bin/lib/sources/openalex.ts"() {
     "use strict";
@@ -114065,8 +115099,8 @@ var init_openalex = __esm({
     init_citekey();
     init_person_name();
     init_doi();
-    BASE3 = "https://api.openalex.org";
-    SERVICE2 = "OpenAlex";
+    BASE4 = "https://api.openalex.org";
+    SERVICE3 = "OpenAlex";
     SELECT = [
       "id",
       "doi",
@@ -114083,12 +115117,12 @@ var init_openalex = __esm({
     __name(stripDoiUrl, "stripDoiUrl");
     __name(abstractFromInvertedIndex, "abstractFromInvertedIndex");
     __name(openAlexCslType, "openAlexCslType");
-    __name(str, "str");
+    __name(str2, "str");
     __name(httpUrl, "httpUrl");
     __name(openAlexToCandidate, "openAlexToCandidate");
-    __name(isObject4, "isObject");
-    RESULTS = jsonShape((b3) => isObject4(b3) && Array.isArray(b3["results"]), "OpenAlex results list");
-    WORK2 = jsonShape((b3) => isObject4(b3) && typeof b3["id"] === "string", "OpenAlex work (id)");
+    __name(isObject5, "isObject");
+    RESULTS = jsonShape((b3) => isObject5(b3) && Array.isArray(b3["results"]), "OpenAlex results list");
+    WORK2 = jsonShape((b3) => isObject5(b3) && typeof b3["id"] === "string", "OpenAlex work (id)");
     __name(identityParams, "identityParams");
     __name(isBudgetExhausted, "isBudgetExhausted");
     __name(rateLimitReason, "rateLimitReason");
@@ -114097,8 +115131,8 @@ var init_openalex = __esm({
     __name(searchPath, "searchPath");
     __name(search3, "search");
     __name(workPathSegment, "workPathSegment");
-    __name(lookupById3, "lookupById");
-    __name(fetchById4, "fetchById");
+    __name(lookupById4, "lookupById");
+    __name(fetchById5, "fetchById");
   }
 });
 
@@ -114107,8 +115141,8 @@ var arxiv_exports = {};
 __export(arxiv_exports, {
   ARXIV_BATCH_IDS: () => ARXIV_BATCH_IDS,
   canonicalArxivId: () => canonicalArxivId,
-  fetchById: () => fetchById5,
-  lookupById: () => lookupById4,
+  fetchById: () => fetchById6,
+  lookupById: () => lookupById5,
   lookupByIds: () => lookupByIds,
   search: () => search4
 });
@@ -114175,7 +115209,7 @@ function canonicalArxivId(input2) {
 function entryArxivId(entryId) {
   return canonicalArxivId(entryId) ?? void 0;
 }
-function toCandidate2(entry) {
+function toCandidate2(entry, checkedAt) {
   if (!entry.id || !entry.title) return null;
   if (entry.authors.length === 0) return null;
   let year;
@@ -114197,7 +115231,7 @@ function toCandidate2(entry) {
     ...entry.journalRef !== void 0 ? { venue: entry.journalRef } : {},
     type: "preprint",
     retracted: false,
-    last_verified: (/* @__PURE__ */ new Date()).toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors: entry.authors, ...year !== void 0 ? { year } : {} }),
     raw: entry
   };
@@ -114205,15 +115239,15 @@ function toCandidate2(entry) {
 function isErrorEntry(entryXml) {
   return /<id>\s*https?:\/\/arxiv\.org\/api\/errors/i.test(entryXml);
 }
-function parseFeed(xml) {
-  return extractAll(xml, "entry").filter((e2) => !isErrorEntry(e2)).map(parseEntry).filter((e2) => e2 !== null).map(toCandidate2).filter((c2) => c2 !== null);
+function parseFeed(xml, checkedAt = (/* @__PURE__ */ new Date()).toISOString()) {
+  return extractAll(xml, "entry").filter((e2) => !isErrorEntry(e2)).map(parseEntry).filter((e2) => e2 !== null).map((e2) => toCandidate2(e2, checkedAt)).filter((c2) => c2 !== null);
 }
 async function search4(query, opts = {}) {
   const limit = opts.limit ?? 20;
-  const url = `${BASE4}/api/query?search_query=${encodeURIComponent(query)}&max_results=${limit}`;
+  const url = `${BASE5}/api/query?search_query=${encodeURIComponent(query)}&max_results=${limit}`;
   const ex = await exchange(
     () => fetch2(url, { source: "arxiv", headers: ATOM_HEADERS, maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(FEED) }),
-    { service: SERVICE3, check: FEED }
+    { service: SERVICE4, check: FEED }
   );
   if (ex.kind === "failed") {
     opts.onFailure?.(ex.reason);
@@ -114223,15 +115257,21 @@ async function search4(query, opts = {}) {
     opts.onFailure?.(statusReason2(ex.res));
     return [];
   }
-  return parseFeed(ex.res.body);
+  return parseFeed(ex.res.body, answeredAt(ex.res));
 }
-async function lookupById4(id) {
+async function lookupById5(id, opts = {}) {
   const canonical = canonicalArxivId(id);
   if (canonical === null) return lookupNotFound(`not an arXiv identifier: ${JSON.stringify(id.slice(0, 80))}`);
-  const url = `${BASE4}/api/query?id_list=${encodeURIComponent(canonical)}`;
+  const url = `${BASE5}/api/query?id_list=${encodeURIComponent(canonical)}`;
   const ex = await exchange(
-    () => fetch2(url, { source: "arxiv", headers: ATOM_HEADERS, maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(FEED) }),
-    { service: SERVICE3, check: FEED }
+    () => fetch2(url, {
+      source: "arxiv",
+      headers: ATOM_HEADERS,
+      maxBytes: MAX_JSON_RESPONSE_BYTES,
+      validate: validator(FEED),
+      ...opts.refresh === true ? { refresh: true } : {}
+    }),
+    { service: SERVICE4, check: FEED }
   );
   if (ex.kind === "failed") {
     return lookupFailed(ex.reason, {
@@ -114245,11 +115285,11 @@ async function lookupById4(id) {
   }
   const entries = extractAll(ex.res.body, "entry");
   if (entries.some(isErrorEntry)) return lookupNotFound(`arXiv has no paper ${canonical} (the id was rejected)`);
-  const match = parseFeed(ex.res.body).find((c2) => c2.arxiv === canonical);
+  const match = parseFeed(ex.res.body, answeredAt(ex.res)).find((c2) => c2.arxiv === canonical);
   if (!match) return lookupNotFound(`arXiv has no paper ${canonical}`);
   return lookupFound(match);
 }
-async function lookupByIds(ids) {
+async function lookupByIds(ids, opts = {}) {
   const out2 = /* @__PURE__ */ new Map();
   const byCanonical = /* @__PURE__ */ new Map();
   for (const id of ids) {
@@ -114264,7 +115304,7 @@ async function lookupByIds(ids) {
   for (let i = 0; i < canonicals.length; i += ARXIV_BATCH_IDS) {
     const batch = canonicals.slice(i, i + ARXIV_BATCH_IDS);
     if (batch.length < 2) continue;
-    const answers = await lookupBatch(batch);
+    const answers = await lookupBatch(batch, opts);
     if (answers === null) continue;
     for (const [canonical, answer] of answers) {
       for (const id of byCanonical.get(canonical) ?? []) out2.set(id, answer);
@@ -114272,13 +115312,19 @@ async function lookupByIds(ids) {
   }
   return out2;
 }
-async function lookupBatch(batch) {
-  const url = `${BASE4}/api/query?id_list=${batch.map(encodeURIComponent).join(",")}&max_results=${batch.length}`;
+async function lookupBatch(batch, opts) {
+  const url = `${BASE5}/api/query?id_list=${batch.map(encodeURIComponent).join(",")}&max_results=${batch.length}`;
   let ex;
   try {
     ex = await exchange(
-      () => fetch2(url, { source: "arxiv", headers: ATOM_HEADERS, maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(FEED) }),
-      { service: SERVICE3, check: FEED }
+      () => fetch2(url, {
+        source: "arxiv",
+        headers: ATOM_HEADERS,
+        maxBytes: MAX_JSON_RESPONSE_BYTES,
+        validate: validator(FEED),
+        ...opts.refresh === true ? { refresh: true } : {}
+      }),
+      { service: SERVICE4, check: FEED }
     );
   } catch (e2) {
     if (isOfflineEgressError(e2)) return null;
@@ -114296,16 +115342,16 @@ async function lookupBatch(batch) {
     return every(lookupFailed(statusReason2(ex.res), { status: ex.res.status }));
   }
   if (extractAll(ex.res.body, "entry").some(isErrorEntry)) return null;
-  const found = new Map(parseFeed(ex.res.body).map((c2) => [c2.arxiv, c2]));
+  const found = new Map(parseFeed(ex.res.body, answeredAt(ex.res)).map((c2) => [c2.arxiv, c2]));
   return new Map(batch.map((c2) => {
     const match = found.get(c2);
     return [c2, match ? lookupFound(match) : lookupNotFound(`arXiv has no paper ${c2}`)];
   }));
 }
-async function fetchById5(id) {
-  return unwrapLookup(await lookupById4(id), "arxiv", id);
+async function fetchById6(id) {
+  return unwrapLookup(await lookupById5(id), "arxiv", id);
 }
-var BASE4, SERVICE3, ATOM_HEADERS, FEED, ARXIV_BATCH_IDS;
+var BASE5, SERVICE4, ATOM_HEADERS, FEED, ARXIV_BATCH_IDS;
 var init_arxiv = __esm({
   "bin/lib/sources/arxiv.ts"() {
     "use strict";
@@ -114316,8 +115362,8 @@ var init_arxiv = __esm({
     init_lookup();
     init_citekey();
     init_person_name();
-    BASE4 = "https://export.arxiv.org";
-    SERVICE3 = "arXiv";
+    BASE5 = "https://export.arxiv.org";
+    SERVICE4 = "arXiv";
     ATOM_HEADERS = { accept: "application/atom+xml" };
     __name(extractAll, "extractAll");
     __name(extractOne, "extractOne");
@@ -114331,19 +115377,23 @@ var init_arxiv = __esm({
     __name(parseFeed, "parseFeed");
     FEED = /* @__PURE__ */ __name((res) => /<feed\b[^>]*>/.test(res.body) ? null : "no Atom <feed>", "FEED");
     __name(search4, "search");
-    __name(lookupById4, "lookupById");
+    __name(lookupById5, "lookupById");
     ARXIV_BATCH_IDS = 50;
     __name(lookupByIds, "lookupByIds");
     __name(lookupBatch, "lookupBatch");
-    __name(fetchById5, "fetchById");
+    __name(fetchById6, "fetchById");
   }
 });
 
 // bin/lib/sources/pubmed.ts
 var pubmed_exports = {};
 __export(pubmed_exports, {
-  fetchById: () => fetchById6,
-  lookupById: () => lookupById5,
+  EFETCH_BATCH: () => EFETCH_BATCH,
+  efetchUrl: () => efetchUrl,
+  fetchAbstracts: () => fetchAbstracts,
+  fetchById: () => fetchById7,
+  lookupById: () => lookupById6,
+  parseEfetchArticles: () => parseEfetchArticles,
   pubmedToCandidate: () => pubmedToCandidate,
   search: () => search5
 });
@@ -114370,11 +115420,11 @@ function pubmedCslType(rec) {
   if (types.includes("technical report")) return "report";
   return "article-journal";
 }
-function str2(v2) {
+function str3(v2) {
   return typeof v2 === "string" && v2.trim().length > 0 ? v2.trim() : void 0;
 }
-function pubmedToCandidate(rec) {
-  const pmid = str2(rec.uid);
+function pubmedToCandidate(rec, checkedAt = (/* @__PURE__ */ new Date()).toISOString()) {
+  const pmid = str3(rec.uid);
   if (!pmid || rec.error !== void 0) return null;
   const title = plainText(String(rec.title ?? "")).replace(/\.$/, "");
   if (!title) return null;
@@ -114388,11 +115438,11 @@ function pubmedToCandidate(rec) {
   const doi = articleId(rec, "doi");
   const pmcRaw = articleId(rec, "pmc") ?? articleId(rec, "pmcid")?.replace(/^pmc-id:\s*/i, "").replace(/;.*$/, "");
   const pmcid = pmcRaw !== void 0 ? normalizePmcid(pmcRaw) : null;
-  const venue = plainTextOpt(str2(rec.fulljournalname) ?? str2(rec.source) ?? str2(rec.booktitle));
-  const volume = str2(rec.volume);
-  const issue2 = str2(rec.issue);
-  const pages = str2(rec.pages);
-  const publisher = str2(rec.publishername);
+  const venue = plainTextOpt(str3(rec.fulljournalname) ?? str3(rec.source) ?? str3(rec.booktitle));
+  const volume = str3(rec.volume);
+  const issue2 = str3(rec.issue);
+  const pages = str3(rec.pages);
+  const publisher = str3(rec.publishername);
   const retracted = (rec.pubtype ?? []).some((t) => t.toLowerCase() === "retracted publication");
   return {
     source: "pubmed",
@@ -114411,12 +115461,12 @@ function pubmedToCandidate(rec) {
     type: pubmedCslType(rec),
     retracted,
     ...retracted ? { retraction_status: "retracted", retraction_details: "PubMed publication type: Retracted Publication" } : {},
-    last_verified: (/* @__PURE__ */ new Date()).toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...year !== void 0 ? { year } : {} }),
     raw: rec
   };
 }
-function isObject5(v2) {
+function isObject6(v2) {
   return typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
 }
 function recordsFromEsummary(body, ids) {
@@ -114424,15 +115474,89 @@ function recordsFromEsummary(body, ids) {
   const records = [];
   for (const id of ids) {
     const rec = result[id];
-    if (isObject5(rec)) records.push(rec);
+    if (isObject6(rec)) records.push(rec);
   }
   return records;
 }
-async function get2(url, check3) {
+async function get2(url, check3, opts = {}) {
   return exchange(
-    () => fetch2(url, { source: "pubmed", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(check3) }),
-    { service: SERVICE4, check: check3 }
+    () => fetch2(url, {
+      source: "pubmed",
+      maxBytes: MAX_JSON_RESPONSE_BYTES,
+      validate: validator(check3),
+      ...opts.refresh === true ? { refresh: true } : {}
+    }),
+    { service: SERVICE5, check: check3 }
   );
+}
+function efetchUrl(ids) {
+  return `${BASE6}/efetch.fcgi?db=pubmed&id=${encodeURIComponent(ids.join(","))}&rettype=abstract&retmode=xml`;
+}
+function xmlText(s2) {
+  const flat = s2.replace(/<\/?(?:i|b|u|sup|sub)(?:\s[^>]*)?>/g, "").replace(/<[^>]+>/g, " ");
+  return decodeEntities(flat).replace(/\s+/g, " ").replace(/\s+([.,;:!?)])/g, "$1").trim();
+}
+function parseEfetchArticles(xml) {
+  const out2 = /* @__PURE__ */ new Map();
+  for (const block of xml.split(/<\/PubmedArticle>|<\/PubmedBookArticle>/)) {
+    const pmid = /<PMID\b[^>]*>\s*(\d{1,9})\s*<\/PMID>/.exec(block)?.[1];
+    if (pmid === void 0 || out2.has(pmid)) continue;
+    const abstractXml = /<Abstract>([\s\S]*?)<\/Abstract>/.exec(block)?.[1] ?? "";
+    const parts = [];
+    for (const m3 of abstractXml.matchAll(/<AbstractText\b([^>]*)>([\s\S]*?)<\/AbstractText>/g)) {
+      const text4 = xmlText(m3[2] ?? "");
+      if (!text4) continue;
+      const label = /\bLabel="([^"]*)"/.exec(m3[1] ?? "")?.[1]?.trim();
+      parts.push(label && !/^unlabelled$/i.test(label) ? `${xmlText(label)}: ${text4}` : text4);
+    }
+    const dataAt = block.indexOf("<PubmedData>");
+    const own = dataAt >= 0 ? block.slice(dataAt).split("<ReferenceList")[0] ?? "" : "";
+    const ids = /<ArticleIdList>([\s\S]*?)<\/ArticleIdList>/.exec(own)?.[1] ?? "";
+    const pmcRaw = /<ArticleId\s+IdType="pmc">\s*([^<]+?)\s*<\/ArticleId>/.exec(ids)?.[1];
+    const pmcid = pmcRaw !== void 0 ? normalizePmcid(pmcRaw) : null;
+    out2.set(pmid, {
+      ...parts.length > 0 ? { abstract: parts.join(" ") } : {},
+      ...pmcid !== null ? { pmcid } : {}
+    });
+  }
+  return out2;
+}
+async function fetchAbstracts(ids, opts = {}) {
+  const facts = /* @__PURE__ */ new Map();
+  let failure = null;
+  const unique = [...new Set(ids)];
+  for (let i = 0; i < unique.length; i += EFETCH_BATCH) {
+    const batch = unique.slice(i, i + EFETCH_BATCH);
+    let ex;
+    try {
+      ex = await get2(efetchUrl(batch), EFETCH, opts);
+    } catch (err) {
+      if (!isOfflineEgressError(err)) throw err;
+      failure ??= `${offlineLabel(err)}: no recorded fixture for the efetch request \u2014 re-run online`;
+      continue;
+    }
+    if (ex.kind === "failed") {
+      failure ??= `efetch failed: ${ex.reason}`;
+      continue;
+    }
+    if (ex.kind === "status") {
+      failure ??= `efetch failed: ${statusReason2(ex.res)}`;
+      continue;
+    }
+    for (const [pmid, f2] of parseEfetchArticles(ex.res.body)) facts.set(pmid, f2);
+  }
+  return { facts, failure };
+}
+function withArticleFacts(candidates, facts) {
+  return candidates.map((c2) => {
+    const f2 = c2.pmid !== void 0 ? facts.get(c2.pmid) : void 0;
+    if (f2 === void 0) return c2;
+    return {
+      ...c2,
+      ...f2.abstract !== void 0 ? { abstract: f2.abstract } : {},
+      ...c2.pmcid === void 0 && f2.pmcid !== void 0 ? { pmcid: f2.pmcid } : {}
+    };
+  });
 }
 function failureOf(ex) {
   if (ex.kind === "failed") return ex.reason;
@@ -114442,7 +115566,7 @@ function failureOf(ex) {
 async function search5(query, opts = {}) {
   const limit = opts.limit ?? 20;
   const dates = typeof opts.fromYear === "number" && Number.isInteger(opts.fromYear) ? `&datetype=pdat&mindate=${opts.fromYear}&maxdate=3000` : "";
-  const esearchUrl = `${BASE5}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmode=json&retmax=${limit}${dates}`;
+  const esearchUrl = `${BASE6}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmode=json&retmax=${limit}${dates}`;
   const ex1 = await get2(esearchUrl, ESEARCH);
   const fail1 = failureOf(ex1);
   if (fail1 !== null || ex1.kind !== "ok") {
@@ -114451,20 +115575,25 @@ async function search5(query, opts = {}) {
   }
   const idlist = JSON.parse(ex1.res.body).esearchresult.idlist.filter((x3) => typeof x3 === "string");
   if (idlist.length === 0) return [];
-  const esummaryUrl = `${BASE5}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(idlist.join(","))}&retmode=json`;
+  const esummaryUrl = `${BASE6}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(idlist.join(","))}&retmode=json`;
   const ex2 = await get2(esummaryUrl, ESUMMARY);
   const fail2 = failureOf(ex2);
   if (fail2 !== null || ex2.kind !== "ok") {
     opts.onFailure?.(fail2 ?? "unknown failure");
     return [];
   }
+  const at = answeredAt(ex2.res);
   const records = recordsFromEsummary(JSON.parse(ex2.res.body), idlist);
-  return records.map(pubmedToCandidate).filter((c2) => c2 !== null);
+  const candidates = records.map((r2) => pubmedToCandidate(r2, at)).filter((c2) => c2 !== null);
+  if (candidates.length === 0) return candidates;
+  const { facts, failure } = await fetchAbstracts(candidates.map((c2) => c2.pmid).filter((x3) => x3 !== void 0));
+  if (failure !== null) opts.onWarning?.(`abstracts unavailable (${failure})`);
+  return withArticleFacts(candidates, facts);
 }
-async function lookupById5(id) {
+async function lookupById6(id, opts = {}) {
   const pmid = normalizePmid(id);
   if (pmid === null) return lookupNotFound(`not a PMID: ${JSON.stringify(id.slice(0, 80))}`);
-  const ex = await get2(`${BASE5}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`, ESUMMARY);
+  const ex = await get2(`${BASE6}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`, ESUMMARY, opts);
   if (ex.kind === "failed") {
     return lookupFailed(ex.reason, {
       ...ex.status !== void 0 ? { status: ex.status } : {},
@@ -114478,14 +115607,17 @@ async function lookupById5(id) {
   const [rec] = recordsFromEsummary(JSON.parse(ex.res.body), [pmid]);
   if (!rec) return lookupNotFound(`PubMed has no record for PMID ${pmid}`);
   if (typeof rec.error === "string") return lookupNotFound(`PubMed has no record for PMID ${pmid} (${rec.error})`);
-  const candidate = pubmedToCandidate(rec);
+  const candidate = pubmedToCandidate(rec, answeredAt(ex.res));
   if (candidate === null) return lookupFailed("the PubMed record has no title or no authors (an incomplete registrar record \u2014 asking again gives the same answer)", { status: 200, permanent: true });
-  return lookupFound(candidate);
+  if (opts.abstract === false) return lookupFound(candidate);
+  const { facts, failure } = await fetchAbstracts([pmid], opts);
+  const found = withArticleFacts([candidate], facts)[0] ?? candidate;
+  return lookupFound(failure === null ? found : { ...found, raw: { ...rec, abstractNote: `abstract unavailable (${failure})` } });
 }
-async function fetchById6(pmid) {
-  return unwrapLookup(await lookupById5(pmid), "pubmed", pmid);
+async function fetchById7(pmid) {
+  return unwrapLookup(await lookupById6(pmid), "pubmed", pmid);
 }
-var BASE5, SERVICE4, ESEARCH, ESUMMARY;
+var BASE6, SERVICE5, ESEARCH, ESUMMARY, EFETCH_BATCH, EFETCH;
 var init_pubmed = __esm({
   "bin/lib/sources/pubmed.ts"() {
     "use strict";
@@ -114497,25 +115629,32 @@ var init_pubmed = __esm({
     init_citekey();
     init_doi();
     init_person_name();
-    BASE5 = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
-    SERVICE4 = "PubMed";
+    BASE6 = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
+    SERVICE5 = "PubMed";
     __name(parseYear2, "parseYear");
     __name(articleId, "articleId");
     __name(pubmedCslType, "pubmedCslType");
-    __name(str2, "str");
+    __name(str3, "str");
     __name(pubmedToCandidate, "pubmedToCandidate");
-    __name(isObject5, "isObject");
+    __name(isObject6, "isObject");
     ESEARCH = jsonShape(
-      (b3) => isObject5(b3) && isObject5(b3["esearchresult"]) && Array.isArray(b3["esearchresult"]["idlist"]) && b3["esearchresult"]["ERROR"] === void 0,
+      (b3) => isObject6(b3) && isObject6(b3["esearchresult"]) && Array.isArray(b3["esearchresult"]["idlist"]) && b3["esearchresult"]["ERROR"] === void 0,
       "E-utilities esearch result (idlist)"
     );
-    ESUMMARY = jsonShape((b3) => isObject5(b3) && isObject5(b3["result"]), "E-utilities esummary result");
+    ESUMMARY = jsonShape((b3) => isObject6(b3) && isObject6(b3["result"]), "E-utilities esummary result");
     __name(recordsFromEsummary, "recordsFromEsummary");
     __name(get2, "get");
+    EFETCH_BATCH = 200;
+    EFETCH = /* @__PURE__ */ __name((res) => /<PubmedArticleSet\b/.test(res.body) ? null : "no <PubmedArticleSet>", "EFETCH");
+    __name(efetchUrl, "efetchUrl");
+    __name(xmlText, "xmlText");
+    __name(parseEfetchArticles, "parseEfetchArticles");
+    __name(fetchAbstracts, "fetchAbstracts");
+    __name(withArticleFacts, "withArticleFacts");
     __name(failureOf, "failureOf");
     __name(search5, "search");
-    __name(lookupById5, "lookupById");
-    __name(fetchById6, "fetchById");
+    __name(lookupById6, "lookupById");
+    __name(fetchById7, "fetchById");
   }
 });
 
@@ -114525,8 +115664,8 @@ __export(semanticscholar_exports, {
   S2_KEYLESS_429_REASON: () => S2_KEYLESS_429_REASON,
   S2_KEYLESS_NOTICE: () => S2_KEYLESS_NOTICE,
   _resetS2NoticeForTest: () => _resetS2NoticeForTest,
-  fetchById: () => fetchById7,
-  lookupById: () => lookupById6,
+  fetchById: () => fetchById8,
+  lookupById: () => lookupById7,
   paperPathSegment: () => paperPathSegment,
   s2CslType: () => s2CslType,
   s2ToCandidate: () => s2ToCandidate,
@@ -114562,11 +115701,11 @@ function s2CslType(types) {
   }
   return "other";
 }
-function str3(v2) {
+function str4(v2) {
   return typeof v2 === "string" && v2.trim().length > 0 ? v2.trim() : void 0;
 }
-function s2ToCandidate(item) {
-  const id = str3(item.paperId);
+function s2ToCandidate(item, checkedAt = (/* @__PURE__ */ new Date()).toISOString()) {
+  const id = str4(item.paperId);
   if (!id) return null;
   const title = plainText(String(item.title ?? ""));
   if (!title) return null;
@@ -114574,14 +115713,14 @@ function s2ToCandidate(item) {
   if (authors.length === 0) return null;
   const year = typeof item.year === "number" && item.year >= 1800 && item.year <= 2100 ? item.year : void 0;
   const ext = item.externalIds ?? {};
-  const doi = str3(ext.DOI);
-  const arxiv = str3(ext.ArXiv);
+  const doi = str4(ext.DOI);
+  const arxiv = str4(ext.ArXiv);
   const pmid = ext.PubMed !== void 0 ? normalizePmid(String(ext.PubMed)) : null;
   const pmcRaw = ext.PubMedCentral !== void 0 ? String(ext.PubMedCentral) : void 0;
   const pmcid = pmcRaw !== void 0 ? normalizePmcid(/^pmc/i.test(pmcRaw) ? pmcRaw : `PMC${pmcRaw}`) : null;
-  const venue = str3(item.journal?.name) ?? str3(item.venue);
-  const volume = str3(item.journal?.volume);
-  const pages = str3(item.journal?.pages)?.replace(/\s+/g, "");
+  const venue = str4(item.journal?.name) ?? str4(item.venue);
+  const volume = str4(item.journal?.volume);
+  const pages = str4(item.journal?.pages)?.replace(/\s+/g, "");
   const type = s2CslType(item.publicationTypes);
   return {
     source: "semanticscholar",
@@ -114601,12 +115740,12 @@ function s2ToCandidate(item) {
     ...pages !== void 0 && pages.length > 0 ? { pages } : {},
     ...type !== void 0 ? { type } : {},
     retracted: false,
-    last_verified: (/* @__PURE__ */ new Date()).toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...year !== void 0 ? { year } : {} }),
     raw: item
   };
 }
-function isObject6(v2) {
+function isObject7(v2) {
   return typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
 }
 async function get3(url, check3) {
@@ -114620,7 +115759,7 @@ async function get3(url, check3) {
       ...headers ? { headers } : {}
     }),
     {
-      service: SERVICE5,
+      service: SERVICE6,
       check: check3,
       rateLimited: /* @__PURE__ */ __name((info) => keyed ? `HTTP 429 \u2014 rate limited${info.retryAfterMs !== void 0 ? ` (retry after ${formatRetryAfter(info.retryAfterMs)})` : ""}` : S2_KEYLESS_429_REASON, "rateLimited")
     }
@@ -114629,7 +115768,7 @@ async function get3(url, check3) {
 async function search6(query, opts = {}) {
   const limit = opts.limit ?? 20;
   const year = typeof opts.fromYear === "number" && Number.isInteger(opts.fromYear) ? `&year=${opts.fromYear}-` : "";
-  const url = `${BASE6}/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=${encodeURIComponent(FIELDS)}${year}`;
+  const url = `${BASE7}/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=${encodeURIComponent(FIELDS)}${year}`;
   const ex = await get3(url, SEARCH);
   if (ex.kind === "failed") {
     opts.onFailure?.(ex.reason);
@@ -114640,7 +115779,8 @@ async function search6(query, opts = {}) {
     return [];
   }
   const data = JSON.parse(ex.res.body).data ?? [];
-  return data.map(s2ToCandidate).filter((c2) => c2 !== null);
+  const at = answeredAt(ex.res);
+  return data.map((p2) => s2ToCandidate(p2, at)).filter((c2) => c2 !== null);
 }
 function paperPathSegment(id) {
   const s2 = id.trim();
@@ -114654,10 +115794,10 @@ function paperPathSegment(id) {
   if (doi !== null) return `DOI:${encodeURIComponent(doi)}`;
   return null;
 }
-async function lookupById6(id) {
+async function lookupById7(id) {
   const segment = paperPathSegment(id);
   if (segment === null) return lookupNotFound(`not a Semantic Scholar paper id or DOI: ${JSON.stringify(id.slice(0, 80))}`);
-  const ex = await get3(`${BASE6}/graph/v1/paper/${segment}?fields=${encodeURIComponent(FIELDS)}`, PAPER);
+  const ex = await get3(`${BASE7}/graph/v1/paper/${segment}?fields=${encodeURIComponent(FIELDS)}`, PAPER);
   if (ex.kind === "failed") {
     return lookupFailed(ex.reason, {
       ...ex.status !== void 0 ? { status: ex.status } : {},
@@ -114668,14 +115808,14 @@ async function lookupById6(id) {
     if (ex.res.status === 404) return lookupNotFound("HTTP 404 (Semantic Scholar has no such paper)");
     return lookupFailed(statusReason2(ex.res), { status: ex.res.status });
   }
-  const candidate = s2ToCandidate(JSON.parse(ex.res.body));
+  const candidate = s2ToCandidate(JSON.parse(ex.res.body), answeredAt(ex.res));
   if (candidate === null) return lookupFailed("the Semantic Scholar record has no title or no authors (an incomplete registrar record \u2014 asking again gives the same answer)", { status: 200, permanent: true });
   return lookupFound(candidate);
 }
-async function fetchById7(paperId) {
-  return unwrapLookup(await lookupById6(paperId), "semanticscholar", paperId);
+async function fetchById8(paperId) {
+  return unwrapLookup(await lookupById7(paperId), "semanticscholar", paperId);
 }
-var BASE6, SERVICE5, FIELDS, S2_KEYLESS_NOTICE, S2_KEYLESS_429_REASON, warnedOnceKeyless, SEARCH, PAPER;
+var BASE7, SERVICE6, FIELDS, S2_KEYLESS_NOTICE, S2_KEYLESS_429_REASON, warnedOnceKeyless, SEARCH, PAPER;
 var init_semanticscholar = __esm({
   "bin/lib/sources/semanticscholar.ts"() {
     "use strict";
@@ -114688,8 +115828,8 @@ var init_semanticscholar = __esm({
     init_person_name();
     init_runtime();
     init_doi();
-    BASE6 = "https://api.semanticscholar.org";
-    SERVICE5 = "Semantic Scholar";
+    BASE7 = "https://api.semanticscholar.org";
+    SERVICE6 = "Semantic Scholar";
     FIELDS = "title,authors,year,externalIds,abstract,venue,publicationTypes,journal";
     S2_KEYLESS_NOTICE = "pensmith: PENSMITH_S2_API_KEY is not set \u2014 Semantic Scholar requests go to its shared keyless pool, which every keyless client shares and which often answers HTTP 429; a free key: https://www.semanticscholar.org/product/api#api-key-form";
     S2_KEYLESS_429_REASON = "HTTP 429 \u2014 rate limited; set PENSMITH_S2_API_KEY";
@@ -114698,19 +115838,19 @@ var init_semanticscholar = __esm({
     __name(_resetS2NoticeForTest, "_resetS2NoticeForTest");
     __name(buildHeaders, "buildHeaders");
     __name(s2CslType, "s2CslType");
-    __name(str3, "str");
+    __name(str4, "str");
     __name(s2ToCandidate, "s2ToCandidate");
-    __name(isObject6, "isObject");
+    __name(isObject7, "isObject");
     SEARCH = jsonShape(
-      (b3) => isObject6(b3) && (Array.isArray(b3["data"]) || typeof b3["total"] === "number" && b3["data"] === void 0),
+      (b3) => isObject7(b3) && (Array.isArray(b3["data"]) || typeof b3["total"] === "number" && b3["data"] === void 0),
       "Semantic Scholar search result (data)"
     );
-    PAPER = jsonShape((b3) => isObject6(b3) && typeof b3["paperId"] === "string", "Semantic Scholar paper (paperId)");
+    PAPER = jsonShape((b3) => isObject7(b3) && typeof b3["paperId"] === "string", "Semantic Scholar paper (paperId)");
     __name(get3, "get");
     __name(search6, "search");
     __name(paperPathSegment, "paperPathSegment");
-    __name(lookupById6, "lookupById");
-    __name(fetchById7, "fetchById");
+    __name(lookupById7, "lookupById");
+    __name(fetchById8, "fetchById");
   }
 });
 
@@ -114719,8 +115859,10 @@ var unpaywall_exports = {};
 __export(unpaywall_exports, {
   _resetUnpaywallNoticeForTest: () => _resetUnpaywallNoticeForTest,
   bestPdfUrl: () => bestPdfUrl,
-  fetchById: () => fetchById8,
-  lookupById: () => lookupById7,
+  fetchById: () => fetchById9,
+  lookupById: () => lookupById8,
+  lookupOaPdfUrls: () => lookupOaPdfUrls,
+  oaPdfUrls: () => oaPdfUrls,
   search: () => search7,
   unpaywallAuthorName: () => unpaywallAuthorName,
   unpaywallSkippedReason: () => unpaywallSkippedReason,
@@ -114820,10 +115962,10 @@ function unpaywallToCandidate(item) {
 async function search7(_query, _opts = {}) {
   return [];
 }
-function isObject7(v2) {
+function isObject8(v2) {
   return typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
 }
-async function lookupById7(id) {
+async function lookupById8(id) {
   const doi = normalizeDoi(id);
   if (doi === null) return lookupNotFound(`not a DOI: ${JSON.stringify(id.slice(0, 80))}`);
   const email2 = contactEmail().email;
@@ -114832,10 +115974,10 @@ async function lookupById7(id) {
     warnNoEmailOnce2(reason);
     return lookupFailed(reason);
   }
-  const url = `${BASE7}/v2/${encodeURIComponent(doi)}?email=${encodeURIComponent(email2)}`;
+  const url = `${BASE8}/v2/${encodeURIComponent(doi)}?email=${encodeURIComponent(email2)}`;
   const ex = await exchange(
     () => fetch2(url, { source: "unpaywall", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(RECORD) }),
-    { service: SERVICE6, check: RECORD }
+    { service: SERVICE7, check: RECORD }
   );
   if (ex.kind === "failed") {
     return lookupFailed(ex.reason, {
@@ -114851,10 +115993,44 @@ async function lookupById7(id) {
   if (candidate === null) return lookupFailed("the Unpaywall record has no title or no authors (an incomplete registrar record \u2014 asking again gives the same answer)", { status: 200, permanent: true });
   return lookupFound(candidate);
 }
-async function fetchById8(doi) {
-  return unwrapLookup(await lookupById7(doi), "unpaywall", doi);
+async function fetchById9(doi) {
+  return unwrapLookup(await lookupById8(doi), "unpaywall", doi);
 }
-var BASE7, SERVICE6, warnedNoEmail2, RECORD;
+function oaPdfUrls(item) {
+  const locations = [item.best_oa_location, ...item.oa_locations ?? []].filter((l2) => l2 !== null && l2 !== void 0 && typeof l2 === "object");
+  const out2 = [];
+  const add = /* @__PURE__ */ __name((u) => {
+    if (u !== void 0 && !out2.includes(u)) out2.push(u);
+  }, "add");
+  for (const l2 of locations) add(httpUrl2(l2.url_for_pdf));
+  for (const l2 of locations) add(pdfLinkOf(httpUrl2(l2.url)));
+  return out2;
+}
+async function lookupOaPdfUrls(id, opts = {}) {
+  const doi = normalizeDoi(id);
+  if (doi === null) return { kind: "not-found", reason: `not a DOI: ${JSON.stringify(id.slice(0, 80))}` };
+  const email2 = contactEmail().email;
+  if (email2 === null) {
+    const reason = unpaywallSkippedReason();
+    warnNoEmailOnce2(reason);
+    return { kind: "failed", reason, noEmail: true };
+  }
+  const url = `${BASE8}/v2/${encodeURIComponent(doi)}?email=${encodeURIComponent(email2)}`;
+  const ex = await exchange(
+    // VRFY-28: a citation due for a re-check asks Unpaywall again (the HTTP
+    // cache read is skipped and the fresh answer written back).
+    () => fetch2(url, { source: "unpaywall", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(RECORD), ...opts.refresh === true ? { refresh: true } : {} }),
+    { service: SERVICE7, check: RECORD }
+  );
+  if (ex.kind === "failed") return { kind: "failed", reason: ex.reason, ...ex.status !== void 0 ? { status: ex.status } : {} };
+  if (ex.kind === "status") {
+    if (ex.res.status === 404) return { kind: "not-found", reason: "HTTP 404 (Unpaywall has no record of this DOI)" };
+    return { kind: "failed", reason: statusReason2(ex.res), status: ex.res.status };
+  }
+  const item = JSON.parse(ex.res.body);
+  return { kind: "found", isOa: item.is_oa !== false, pdfUrls: oaPdfUrls(item) };
+}
+var BASE8, SERVICE7, warnedNoEmail2, RECORD;
 var init_unpaywall = __esm({
   "bin/lib/sources/unpaywall.ts"() {
     "use strict";
@@ -114866,8 +116042,8 @@ var init_unpaywall = __esm({
     init_person_name();
     init_doi();
     init_source_types();
-    BASE7 = "https://api.unpaywall.org";
-    SERVICE6 = "Unpaywall";
+    BASE8 = "https://api.unpaywall.org";
+    SERVICE7 = "Unpaywall";
     __name(unpaywallSkippedReason, "unpaywallSkippedReason");
     warnedNoEmail2 = false;
     __name(warnNoEmailOnce2, "warnNoEmailOnce");
@@ -114879,10 +116055,121 @@ var init_unpaywall = __esm({
     __name(bestPdfUrl, "bestPdfUrl");
     __name(unpaywallToCandidate, "unpaywallToCandidate");
     __name(search7, "search");
-    __name(isObject7, "isObject");
-    RECORD = jsonShape((b3) => isObject7(b3) && typeof b3["doi"] === "string", "Unpaywall record (doi)");
-    __name(lookupById7, "lookupById");
-    __name(fetchById8, "fetchById");
+    __name(isObject8, "isObject");
+    RECORD = jsonShape((b3) => isObject8(b3) && typeof b3["doi"] === "string", "Unpaywall record (doi)");
+    __name(lookupById8, "lookupById");
+    __name(fetchById9, "fetchById");
+    __name(oaPdfUrls, "oaPdfUrls");
+    __name(lookupOaPdfUrls, "lookupOaPdfUrls");
+  }
+});
+
+// bin/lib/sources/europepmc.ts
+var europepmc_exports = {};
+__export(europepmc_exports, {
+  fullTextXmlUrl: () => fullTextXmlUrl,
+  jatsToArticle: () => jatsToArticle,
+  lookupFullText: () => lookupFullText,
+  normPmcid: () => normPmcid2
+});
+function normPmcid2(id) {
+  const m3 = /^\s*(?:pmcid:\s*)?(?:PMC)?(\d{1,10})\s*$/i.exec(id);
+  return m3 ? `PMC${m3[1]}` : null;
+}
+function fullTextXmlUrl(pmcid) {
+  return `${BASE9}/${pmcid}/fullTextXML`;
+}
+function firstText(xml, re) {
+  const m3 = re.exec(xml);
+  if (m3 === null) return null;
+  const t = decodeEntities((m3[1] ?? "").replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+  return t.length > 0 ? t : null;
+}
+function dropElements(xml, names) {
+  let out2 = xml;
+  for (const name of names) {
+    const esc2 = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out2 = out2.replace(new RegExp(`<${esc2}(?:\\s[^>]*)?/>`, "gi"), "");
+    out2 = out2.replace(new RegExp(`<${esc2}(?:\\s[^>]*)?>[\\s\\S]*?</${esc2}>`, "gi"), "");
+  }
+  return out2;
+}
+function jatsToArticle(xml) {
+  const meta = /<article-meta\b[\s\S]*?<\/article-meta>/i.exec(xml)?.[0] ?? "";
+  const id = /* @__PURE__ */ __name((type) => firstText(meta, new RegExp(`<article-id\\b[^>]*pub-id-type="${type}"[^>]*>([\\s\\S]*?)</article-id>`, "i")), "id");
+  const rawDoi = id("doi");
+  const rawPmcid = id("pmcid") ?? id("pmc");
+  const pmid = id("pmid");
+  const title = firstText(meta, /<article-title\b[^>]*>([\s\S]*?)<\/article-title>/i);
+  const authors = [];
+  for (const c2 of meta.matchAll(/<contrib\b([^>]*)>([\s\S]*?)<\/contrib>/gi)) {
+    const role = /contrib-type="([^"]*)"/i.exec(c2[1] ?? "")?.[1];
+    if (role !== void 0 && role.toLowerCase() !== "author") continue;
+    const inner = c2[2] ?? "";
+    const family = firstText(inner, /<surname\b[^>]*>([\s\S]*?)<\/surname>/i);
+    const given = firstText(inner, /<given-names\b[^>]*>([\s\S]*?)<\/given-names>/i);
+    const collab = firstText(inner, /<collab\b[^>]*>([\s\S]*?)<\/collab>/i);
+    if (family) authors.push(given ? `${family}, ${given}` : family);
+    else if (collab) authors.push(collab);
+  }
+  const yearText = firstText(meta, /<pub-date\b[^>]*>[\s\S]*?<year>([\s\S]*?)<\/year>/i);
+  const year = yearText !== null && /^\d{4}$/.test(yearText) ? Number(yearText) : null;
+  const abstracts = [...meta.matchAll(/<abstract\b[^>]*>[\s\S]*?<\/abstract>/gi)].map((m3) => m3[0]).join("\n");
+  const body = /<body\b[^>]*>[\s\S]*<\/body>/i.exec(xml)?.[0] ?? "";
+  const back = /<back\b[^>]*>[\s\S]*<\/back>/i.exec(xml)?.[0] ?? "";
+  const readable = dropElements(`${title ?? ""}
+${abstracts}
+${body}
+${back}`, DROPPED_ELEMENTS).replace(BLOCK_TAGS, "\n").replace(/<[^>]+>/g, "");
+  const text4 = decodeEntities(readable).replace(/[ \t]*\[[\s,;–-]*\]|[ \t]*\([\s,;–-]*\)/g, "").split("\n").map((l2) => l2.replace(/[ \t\r\f\v]+/g, " ").trim()).filter((l2) => l2.length > 0).join("\n");
+  return {
+    ids: { doi: rawDoi === null ? null : normalizeDoi(rawDoi), pmid: pmid !== null && /^\d+$/.test(pmid) ? pmid : null, pmcid: rawPmcid === null ? null : normPmcid2(rawPmcid) },
+    title,
+    authors,
+    year,
+    text: text4
+  };
+}
+async function lookupFullText(pmcid) {
+  const id = normPmcid2(pmcid);
+  if (id === null) return { kind: "not-found", reason: `not a PMCID: ${JSON.stringify(pmcid.slice(0, 40))}` };
+  const url = fullTextXmlUrl(id);
+  const ex = await exchange(
+    () => fetch2(url, {
+      source: "europepmc",
+      headers: { accept: "application/xml" },
+      noCache: true,
+      maxBytes: MAX_JSON_RESPONSE_BYTES,
+      validate: validator(JATS)
+    }),
+    { service: SERVICE8, check: JATS }
+  );
+  if (ex.kind === "failed") return { kind: "failed", reason: ex.reason, ...ex.status !== void 0 ? { status: ex.status } : {} };
+  if (ex.kind === "status") {
+    if (ex.res.status === 404) return { kind: "not-found", reason: `HTTP 404 (Europe PMC has no open-access full text of ${id})` };
+    return { kind: "failed", reason: statusReason2(ex.res), status: ex.res.status };
+  }
+  return { kind: "found", article: jatsToArticle(ex.res.body), url: ex.res.finalUrl ?? url, body: ex.res.body };
+}
+var BASE9, SERVICE8, JATS, DROPPED_ELEMENTS, BLOCK_TAGS;
+var init_europepmc = __esm({
+  "bin/lib/sources/europepmc.ts"() {
+    "use strict";
+    init_http();
+    init_registrar_response();
+    init_markup();
+    init_doi();
+    BASE9 = "https://www.ebi.ac.uk/europepmc/webservices/rest";
+    SERVICE8 = "Europe PMC";
+    __name(normPmcid2, "normPmcid");
+    __name(fullTextXmlUrl, "fullTextXmlUrl");
+    JATS = /* @__PURE__ */ __name((res) => /<article[\s>]/.test(res.body) && /<\/article>\s*$/.test(res.body.trim()) ? null : "no JATS <article>", "JATS");
+    DROPPED_ELEMENTS = ["ref-list", "xref", "tex-math", "mml:math", "math", "object-id"];
+    BLOCK_TAGS = /<\/?(?:p|sec|title|article-title|abstract|caption|label|td|th|tr|list-item|disp-quote|fn|table-wrap|fig|boxed-text|def-item|term|def|statement|kwd-group|body|back|front|ack|app|glossary|notes|trans-abstract)\b[^>]*>/gi;
+    __name(firstText, "firstText");
+    __name(dropElements, "dropElements");
+    __name(jatsToArticle, "jatsToArticle");
+    __name(lookupFullText, "lookupFullText");
   }
 });
 
@@ -114890,12 +116177,14 @@ var init_unpaywall = __esm({
 var books_exports = {};
 __export(books_exports, {
   MAX_EDITION_AUTHORS: () => MAX_EDITION_AUTHORS,
-  fetchById: () => fetchById9,
+  fetchById: () => fetchById10,
   googleBooksToCandidate: () => googleBooksToCandidate,
-  lookupById: () => lookupById8,
+  lookupById: () => lookupById9,
   openLibraryToCandidate: () => openLibraryToCandidate,
   search: () => search8,
+  searchTitle: () => searchTitle,
   searchUrl: () => searchUrl2,
+  titleSearchUrl: () => titleSearchUrl,
   toIsbn13: () => toIsbn13
 });
 function toIsbn13(input2) {
@@ -114904,8 +116193,8 @@ function toIsbn13(input2) {
   if (/^\d{9}[\dX]$/.test(s2)) {
     const sum10 = [...s2].reduce((acc, d3, i) => acc + (d3 === "X" ? 10 : Number(d3)) * (10 - i), 0);
     if (sum10 % 11 !== 0) return null;
-    const core = `978${s2.slice(0, 9)}`;
-    return `${core}${isbn13CheckDigit(core)}`;
+    const core2 = `978${s2.slice(0, 9)}`;
+    return `${core2}${isbn13CheckDigit(core2)}`;
   }
   return null;
 }
@@ -114913,7 +116202,7 @@ function firstIsbn13(list3) {
   const all = (list3 ?? []).map((x3) => toIsbn13(String(x3))).filter((x3) => x3 !== null);
   return all[0];
 }
-function str4(v2) {
+function str5(v2) {
   return typeof v2 === "string" && v2.replace(/\s+/g, " ").trim().length > 0 ? v2.replace(/\s+/g, " ").trim() : void 0;
 }
 function yearIn(s2) {
@@ -114922,21 +116211,21 @@ function yearIn(s2) {
   return y3 >= 1800 && y3 <= 2100 ? y3 : void 0;
 }
 function bookTitle(work, edition) {
-  const workTitle = str4(work.title);
-  const edTitle = str4(edition?.title);
+  const workTitle = str5(work.title);
+  const edTitle = str5(edition?.title);
   let title = edTitle ?? workTitle;
   if (edTitle && workTitle && workTitle.toLowerCase().startsWith(edTitle.toLowerCase())) {
     title = workTitle.slice(0, edTitle.length);
   }
   if (title === void 0) return void 0;
-  const subtitle = str4(edition?.subtitle) ?? (edition === void 0 ? str4(work.subtitle) : void 0);
+  const subtitle = str5(edition?.subtitle) ?? (edition === void 0 ? str5(work.subtitle) : void 0);
   return subtitle ? `${title}: ${subtitle}` : title;
 }
 function workId(key2) {
   const m3 = key2 ? /^\/?(?:works\/)?(OL\d+W)$/.exec(key2.trim()) : null;
   return m3?.[1];
 }
-function openLibraryToCandidate(work, wantIsbn) {
+function openLibraryToCandidate(work, wantIsbn, checkedAt = (/* @__PURE__ */ new Date()).toISOString()) {
   const editions = work.editions?.docs ?? [];
   const edition = wantIsbn ? editions.find((e2) => (e2.isbn ?? []).some((i) => toIsbn13(String(i)) === wantIsbn)) : editions[0];
   if (wantIsbn && !edition) return null;
@@ -114946,7 +116235,7 @@ function openLibraryToCandidate(work, wantIsbn) {
   const authors = authorList.map((a3) => displayAuthorName(String(a3))).filter(Boolean);
   if (authors.length === 0) return null;
   const year = yearIn(edition?.publish_date?.[0]) ?? (typeof work.first_publish_year === "number" ? yearIn(String(work.first_publish_year)) : void 0);
-  const publisher = str4(edition?.publisher?.[0]);
+  const publisher = str5(edition?.publisher?.[0]);
   const isbn = wantIsbn ?? firstIsbn13(edition?.isbn);
   const olWork = workId(work.key);
   const id = isbn ? `isbn:${isbn}` : olWork;
@@ -114961,23 +116250,23 @@ function openLibraryToCandidate(work, wantIsbn) {
     ...isbn !== void 0 ? { isbn } : {},
     type: "book",
     retracted: false,
-    last_verified: (/* @__PURE__ */ new Date()).toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...year !== void 0 ? { year } : {} }),
     raw: { openLibrary: { work: work.key, edition: edition?.key } }
   };
 }
-function googleBooksToCandidate(volume, wantIsbn) {
+function googleBooksToCandidate(volume, wantIsbn, checkedAt = (/* @__PURE__ */ new Date()).toISOString()) {
   const info = volume.volumeInfo ?? {};
   const ids = (info.industryIdentifiers ?? []).map((x3) => toIsbn13(String(x3.identifier ?? ""))).filter((x3) => x3 !== null);
   if (!ids.includes(wantIsbn)) return null;
-  const base = plainTextOpt(str4(info.title));
+  const base = plainTextOpt(str5(info.title));
   if (!base) return null;
-  const subtitle = plainTextOpt(str4(info.subtitle));
+  const subtitle = plainTextOpt(str5(info.subtitle));
   const authors = (info.authors ?? []).map((a3) => displayAuthorName(String(a3))).filter(Boolean);
   if (authors.length === 0) return null;
   const year = yearIn(info.publishedDate);
-  const publisher = str4(info.publisher);
-  const abstract = plainTextOpt(str4(info.description));
+  const publisher = str5(info.publisher);
+  const abstract = plainTextOpt(str5(info.description));
   return {
     source: "books",
     id: `isbn:${wantIsbn}`,
@@ -114989,23 +116278,23 @@ function googleBooksToCandidate(volume, wantIsbn) {
     isbn: wantIsbn,
     type: "book",
     retracted: false,
-    last_verified: (/* @__PURE__ */ new Date()).toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...year !== void 0 ? { year } : {} }),
     raw: { googleBooks: volume.id ?? null }
   };
 }
-function isObject8(v2) {
+function isObject9(v2) {
   return typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
 }
-async function openLibrary(url) {
+async function openLibrary(url, opts = {}) {
   return exchange(
-    () => fetch2(url, { source: "books", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(OL_SEARCH) }),
+    () => fetch2(url, { source: "books", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(OL_SEARCH), ...opts.refresh === true ? { refresh: true } : {} }),
     { service: "Open Library", check: OL_SEARCH }
   );
 }
-async function googleBooks(url) {
+async function googleBooks(url, opts = {}) {
   return exchange(
-    () => fetch2(url, { source: "books", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(GB_VOLUMES) }),
+    () => fetch2(url, { source: "books", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(GB_VOLUMES), ...opts.refresh === true ? { refresh: true } : {} }),
     { service: "Google Books", check: GB_VOLUMES, rateLimited: /* @__PURE__ */ __name(() => "Google Books keyless quota exhausted (HTTP 429)", "rateLimited") }
   );
 }
@@ -115023,8 +116312,20 @@ async function search8(query, opts = {}) {
     opts.onFailure?.(statusReason2(ex.res));
     return [];
   }
+  const at = answeredAt(ex.res);
   const docs = JSON.parse(ex.res.body).docs;
-  return docs.map((d3) => openLibraryToCandidate(d3)).filter((c2) => c2 !== null);
+  return docs.map((d3) => openLibraryToCandidate(d3, void 0, at)).filter((c2) => c2 !== null);
+}
+function titleSearchUrl(title, author, limit = 5) {
+  return `${OPEN_LIBRARY}/search.json?title=${encodeURIComponent(title)}` + (author ? `&author=${encodeURIComponent(author)}` : "") + `&fields=${encodeURIComponent(FIELDS2)}&limit=${limit}`;
+}
+async function searchTitle(title, author, opts = {}) {
+  const ex = await openLibrary(titleSearchUrl(title, author), opts);
+  if (ex.kind === "failed") return { kind: "failed", reason: `Open Library: ${ex.reason}` };
+  if (ex.kind === "status") return { kind: "failed", reason: `Open Library: ${statusReason2(ex.res)}` };
+  const at = answeredAt(ex.res);
+  const docs = JSON.parse(ex.res.body).docs;
+  return { kind: "ok", candidates: docs.map((d3) => openLibraryToCandidate(d3, void 0, at)).filter((c2) => c2 !== null) };
 }
 function attemptFrom(ex, service, parse4, missing) {
   if (ex.kind === "failed") return { kind: "failed", reason: `${service}: ${ex.reason}`, ...ex.status !== void 0 ? { status: ex.status } : {} };
@@ -115043,39 +116344,41 @@ async function openLibraryRecord(url) {
   return ex.kind === "ok" ? JSON.parse(ex.res.body) : null;
 }
 function familyToken(name) {
-  const words3 = name.normalize("NFKD").replace(new RegExp("\\p{M}", "gu"), "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  return words3[words3.length - 1] ?? "";
+  const words4 = name.normalize("NFKD").replace(new RegExp("\\p{M}", "gu"), "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return words4[words4.length - 1] ?? "";
 }
 async function editionAuthors(editionKey, indexNames) {
   const m3 = /^\/?books\/(OL\d+M)$/.exec(editionKey.trim());
   if (!m3) return null;
   const record2 = await openLibraryRecord(`${OPEN_LIBRARY}/books/${m3[1]}.json`);
   if (record2 === null) return null;
-  const keys = (Array.isArray(record2["authors"]) ? record2["authors"] : []).map((a3) => isObject8(a3) && isObject8(a3["author"]) ? a3["author"]["key"] : isObject8(a3) ? a3["key"] : void 0).filter((k2) => typeof k2 === "string" && /^\/authors\/OL\d+A$/.test(k2)).slice(0, MAX_EDITION_AUTHORS);
+  const keys = (Array.isArray(record2["authors"]) ? record2["authors"] : []).map((a3) => isObject9(a3) && isObject9(a3["author"]) ? a3["author"]["key"] : isObject9(a3) ? a3["key"] : void 0).filter((k2) => typeof k2 === "string" && /^\/authors\/OL\d+A$/.test(k2)).slice(0, MAX_EDITION_AUTHORS);
   if (keys.length > 0) {
     const names = [];
     for (const key2 of keys) {
       const a3 = await openLibraryRecord(`${OPEN_LIBRARY}${key2}.json`);
-      const name = a3 ? str4(a3["name"]) ?? str4(a3["personal_name"]) : void 0;
+      const name = a3 ? str5(a3["name"]) ?? str5(a3["personal_name"]) : void 0;
       if (name === void 0) return null;
       names.push(displayAuthorName(name));
     }
     return names;
   }
-  const by = str4(record2["by_statement"]);
+  const by = str5(record2["by_statement"]);
   if (by === void 0) return null;
   const byWords = new Set(by.normalize("NFKD").replace(new RegExp("\\p{M}", "gu"), "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean));
   const kept = indexNames.filter((n2) => byWords.has(familyToken(n2)));
   return kept.length > 0 ? kept : null;
 }
-async function lookupIsbn(isbn) {
+async function lookupIsbn(isbn, opts) {
+  const olEx = await openLibrary(`${OPEN_LIBRARY}/search.json?isbn=${isbn}&fields=${encodeURIComponent(FIELDS2)}&limit=1`, opts);
+  const olAt = olEx.kind === "ok" ? answeredAt(olEx.res) : void 0;
   const ol = attemptFrom(
-    await openLibrary(`${OPEN_LIBRARY}/search.json?isbn=${isbn}&fields=${encodeURIComponent(FIELDS2)}&limit=1`),
+    olEx,
     "Open Library",
     (body) => {
       const docs = JSON.parse(body).docs;
       for (const d3 of docs) {
-        const c2 = openLibraryToCandidate(d3, isbn);
+        const c2 = openLibraryToCandidate(d3, isbn, olAt);
         if (c2) return c2;
       }
       return null;
@@ -115089,13 +116392,15 @@ async function lookupIsbn(isbn) {
     if (authors === null || authors.length === 0) return lookupFound(c2);
     return lookupFound({ ...c2, authors, citekey: generateCitekey({ authors, ...c2.year !== void 0 ? { year: c2.year } : {} }) });
   }
+  const gbEx = await googleBooks(`${GOOGLE_BOOKS}/books/v1/volumes?q=${encodeURIComponent(`isbn:${isbn}`)}`, opts);
+  const gbAt = gbEx.kind === "ok" ? answeredAt(gbEx.res) : void 0;
   const gb = attemptFrom(
-    await googleBooks(`${GOOGLE_BOOKS}/books/v1/volumes?q=${encodeURIComponent(`isbn:${isbn}`)}`),
+    gbEx,
     "Google Books",
     (body) => {
       const items = JSON.parse(body).items ?? [];
       for (const v2 of items) {
-        const c2 = googleBooksToCandidate(v2, isbn);
+        const c2 = googleBooksToCandidate(v2, isbn, gbAt);
         if (c2) return c2;
       }
       return null;
@@ -115107,16 +116412,18 @@ async function lookupIsbn(isbn) {
   const status = gb.kind === "failed" ? gb.status : ol.kind === "failed" ? ol.status : void 0;
   return lookupFailed(`${ol.reason}; ${gb.reason}`, status !== void 0 ? { status } : {});
 }
-async function lookupWork(id) {
+async function lookupWork(id, opts) {
   const ex = await openLibrary(
-    `${OPEN_LIBRARY}/search.json?q=${encodeURIComponent(`key:/works/${id}`)}&fields=${encodeURIComponent(FIELDS2)}&limit=1`
+    `${OPEN_LIBRARY}/search.json?q=${encodeURIComponent(`key:/works/${id}`)}&fields=${encodeURIComponent(FIELDS2)}&limit=1`,
+    opts
   );
+  const at = ex.kind === "ok" ? answeredAt(ex.res) : void 0;
   const a3 = attemptFrom(
     ex,
     "Open Library",
     (body) => {
       const doc = JSON.parse(body).docs.find((d3) => workId(d3.key) === id);
-      return doc ? openLibraryToCandidate(doc) : null;
+      return doc ? openLibraryToCandidate(doc, void 0, at) : null;
     },
     `no work ${id}`
   );
@@ -115124,16 +116431,16 @@ async function lookupWork(id) {
   if (a3.kind === "not-found") return lookupNotFound(a3.reason);
   return lookupFailed(a3.reason, a3.status !== void 0 ? { status: a3.status } : {});
 }
-async function lookupById8(id) {
+async function lookupById9(id, opts = {}) {
   const s2 = id.trim();
   const work = workId(s2.replace(/^openlibrary:/i, ""));
-  if (work) return lookupWork(work);
+  if (work) return lookupWork(work, opts);
   const isbn = toIsbn13(s2);
   if (isbn === null) return lookupNotFound(`not an ISBN or Open Library work id: ${JSON.stringify(s2.slice(0, 80))}`);
-  return lookupIsbn(isbn);
+  return lookupIsbn(isbn, opts);
 }
-async function fetchById9(id) {
-  return unwrapLookup(await lookupById8(id), "books", id);
+async function fetchById10(id) {
+  return unwrapLookup(await lookupById9(id), "books", id);
 }
 var OPEN_LIBRARY, GOOGLE_BOOKS, FIELDS2, OL_SEARCH, GB_VOLUMES, MAX_EDITION_AUTHORS, OL_RECORD;
 var init_books = __esm({
@@ -115166,32 +116473,34 @@ var init_books = __esm({
     ].join(",");
     __name(toIsbn13, "toIsbn13");
     __name(firstIsbn13, "firstIsbn13");
-    __name(str4, "str");
+    __name(str5, "str");
     __name(yearIn, "yearIn");
     __name(bookTitle, "bookTitle");
     __name(workId, "workId");
     __name(openLibraryToCandidate, "openLibraryToCandidate");
     __name(googleBooksToCandidate, "googleBooksToCandidate");
-    __name(isObject8, "isObject");
-    OL_SEARCH = jsonShape((b3) => isObject8(b3) && Array.isArray(b3["docs"]), "Open Library search result (docs)");
+    __name(isObject9, "isObject");
+    OL_SEARCH = jsonShape((b3) => isObject9(b3) && Array.isArray(b3["docs"]), "Open Library search result (docs)");
     GB_VOLUMES = jsonShape(
-      (b3) => isObject8(b3) && b3["kind"] === "books#volumes" && typeof b3["totalItems"] === "number",
+      (b3) => isObject9(b3) && b3["kind"] === "books#volumes" && typeof b3["totalItems"] === "number",
       "Google Books volume list"
     );
     __name(openLibrary, "openLibrary");
     __name(googleBooks, "googleBooks");
     __name(searchUrl2, "searchUrl");
     __name(search8, "search");
+    __name(titleSearchUrl, "titleSearchUrl");
+    __name(searchTitle, "searchTitle");
     __name(attemptFrom, "attemptFrom");
     MAX_EDITION_AUTHORS = 10;
-    OL_RECORD = jsonShape((b3) => isObject8(b3) && typeof b3["key"] === "string", "Open Library record (key)");
+    OL_RECORD = jsonShape((b3) => isObject9(b3) && typeof b3["key"] === "string", "Open Library record (key)");
     __name(openLibraryRecord, "openLibraryRecord");
     __name(familyToken, "familyToken");
     __name(editionAuthors, "editionAuthors");
     __name(lookupIsbn, "lookupIsbn");
     __name(lookupWork, "lookupWork");
-    __name(lookupById8, "lookupById");
-    __name(fetchById9, "fetchById");
+    __name(lookupById9, "lookupById");
+    __name(fetchById10, "fetchById");
   }
 });
 
@@ -115201,21 +116510,30 @@ var init_sources = __esm({
   "bin/lib/sources/index.ts"() {
     "use strict";
     init_crossref();
+    init_datacite();
     init_openalex();
     init_arxiv();
     init_pubmed();
     init_semanticscholar();
     init_unpaywall();
+    init_europepmc();
     init_retraction_watch();
     init_books();
     init_zotero();
     sources = {
       crossref: crossref_exports,
+      // Phase 20 (VRFY-11, D-20-10): DataCite DOI records (Zenodo, figshare,
+      // Dryad, …) — a lookup-only registrar (no `search`: research never queries
+      // it); Pass 1 asks it when doi.org names DataCite as a DOI's agency.
+      datacite: datacite_exports,
       openalex: openalex_exports,
       arxiv: arxiv_exports,
       pubmed: pubmed_exports,
       semanticscholar: semanticscholar_exports,
       unpaywall: unpaywall_exports,
+      // Phase 20 (VRFY-19, D-20-18): Europe PMC's open-access full text of a
+      // PMCID, for Pass 3 only — no `search` and no metadata lookup.
+      europepmc: europepmc_exports,
       "retraction-watch": retraction_watch_exports,
       // SRC-11 (D-19-14): books — Open Library search and ISBN lookups, Google
       // Books as the keyless ISBN fallback.
@@ -115230,187 +116548,441 @@ var init_sources = __esm({
   }
 });
 
-// bin/lib/sources/retraction-cross-check.ts
-function retractionCheckReason(candidate) {
-  return unknownReasons.get(candidate);
+// bin/lib/sources/doi-ra.ts
+function firstRecord(body) {
+  if (!Array.isArray(body)) return null;
+  const first2 = body[0];
+  return typeof first2 === "object" && first2 !== null ? first2 : null;
 }
-function setRetracted(c2, details) {
-  c2.retracted = true;
-  c2.retraction_status = "retracted";
-  if (details && !c2.retraction_details) c2.retraction_details = details;
-  unknownReasons.delete(c2);
+function doiPrefix(doi) {
+  const slash = doi.indexOf("/");
+  const prefix = slash > 0 ? doi.slice(0, slash) : "";
+  return /^\d+\.\d+(?:\.\d+)*$/.test(prefix) ? prefix : null;
 }
-function setClear(c2) {
-  c2.retracted = false;
-  c2.retraction_status = "clear";
-  unknownReasons.delete(c2);
+async function registrationAgency(doi) {
+  const prefix = doiPrefix(doi);
+  if (prefix === null) return { kind: "unknown-prefix" };
+  const ex = await exchange(
+    () => fetch2(`https://doi.org/ra/${prefix}`, { source: "generic", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(RA_ANSWER) }),
+    { service: "doi.org", check: RA_ANSWER }
+  );
+  if (ex.kind === "failed") return { kind: "failed", reason: ex.reason };
+  if (ex.kind === "status") return { kind: "failed", reason: statusReason2(ex.res) };
+  const rec = firstRecord(parseJsonBody(ex.res));
+  const ra = rec?.["RA"];
+  if (typeof ra === "string" && ra.trim() !== "") return { kind: "agency", agency: ra.trim() };
+  return { kind: "unknown-prefix" };
 }
-function setUnknown(c2, reason) {
-  c2.retraction_status = "unknown";
-  unknownReasons.set(c2, reason);
-}
-function decidedByRecords(group) {
-  const retracted = group.find((c2) => c2.retracted === true || c2.retraction_status === "retracted");
-  if (retracted) return { status: "retracted", details: retracted.retraction_details };
-  if (group.some((c2) => c2.retraction_status === "clear")) return { status: "clear" };
-  return null;
-}
-function lookupFailureReason(err) {
-  if (isOfflineEgressError(err)) {
-    return offlineLabel(err) === "dry-run" ? "dry-run: no retraction lookup under --dry-run" : "offline: no recorded fixture for the retraction lookup \u2014 re-run online";
-  }
-  const msg = err instanceof Error ? err.message : String(err);
-  return (msg.split(/\r?\n/)[0] ?? "").slice(0, 240);
-}
-async function crossCheckRetractions(candidates, lookup = sources["retraction-watch"]) {
-  const groups = /* @__PURE__ */ new Map();
-  for (const c2 of candidates) {
-    if (!c2.doi || c2.synthetic === true) continue;
-    const key2 = normalizeDoi(c2.doi) ?? c2.doi.trim().toLowerCase();
-    const g2 = groups.get(key2);
-    if (g2) g2.push(c2);
-    else groups.set(key2, [c2]);
-  }
-  for (const group of groups.values()) {
-    const known = decidedByRecords(group);
-    if (known !== null) {
-      for (const c2 of group) {
-        if (known.status === "retracted") setRetracted(c2, known.details);
-        else setClear(c2);
-      }
-      continue;
-    }
-    const doi = group[0].doi;
-    try {
-      const hit = await lookup.fetchById(doi);
-      if (hit && hit.retracted === true) {
-        for (const c2 of group) setRetracted(c2, hit.retraction_details);
-      } else {
-        for (const c2 of group) setClear(c2);
-      }
-    } catch (err) {
-      const reason = lookupFailureReason(err);
-      for (const c2 of group) setUnknown(c2, reason);
-    }
-  }
-  return candidates;
-}
-var unknownReasons;
-var init_retraction_cross_check = __esm({
-  "bin/lib/sources/retraction-cross-check.ts"() {
+var RA_ANSWER;
+var init_doi_ra = __esm({
+  "bin/lib/sources/doi-ra.ts"() {
     "use strict";
-    init_sources();
     init_http();
-    init_doi();
-    unknownReasons = /* @__PURE__ */ new WeakMap();
-    __name(retractionCheckReason, "retractionCheckReason");
-    __name(setRetracted, "setRetracted");
-    __name(setClear, "setClear");
-    __name(setUnknown, "setUnknown");
-    __name(decidedByRecords, "decidedByRecords");
-    __name(lookupFailureReason, "lookupFailureReason");
-    __name(crossCheckRetractions, "crossCheckRetractions");
+    init_registrar_response();
+    __name(firstRecord, "firstRecord");
+    RA_ANSWER = jsonShape((body) => {
+      const rec = firstRecord(body);
+      return rec !== null && (typeof rec["RA"] === "string" || typeof rec["status"] === "string");
+    }, "registration agency");
+    __name(doiPrefix, "doiPrefix");
+    __name(registrationAgency, "registrationAgency");
   }
 });
 
 // bin/lib/quote-extractor.ts
-function stripCites(s2) {
-  return stripCitationClusters(s2).replace(/\s+/g, " ").trim();
+function words2(text4) {
+  return text4.split(/\s+/u).filter((w3) => /[\p{L}\p{N}]/u.test(w3));
 }
-function perKey(text4, keys, kind) {
-  return [...new Set(keys)].map((citekey) => ({ text: text4, citekey, kind }));
+function quoteText(raw) {
+  return replaceCitations(raw, () => " ").replace(/!?\[([^[\]]*)\]\([^()\s]*(?:\s+"[^"]*")?\)/g, "$1").replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/\*+/g, "").replace(/(^|[\s\p{P}])_+|_+(?=[\s\p{P}]|$)/gu, "$1").replace(/\s+/gu, " ").trim();
 }
-function wordCount(s2) {
-  return stripCites(s2).split(/\s+/).filter(Boolean).length;
+function lineAt(md, offset) {
+  let line = 1;
+  for (let i = md.indexOf("\n"); i !== -1 && i < offset; i = md.indexOf("\n", i + 1)) line += 1;
+  return line;
 }
-function introducingNarrative(lead) {
-  const window2 = lead.length > 200 ? lead.slice(-200).replace(/^\S*/, "") : lead;
-  const cites = findNarrativeCitations(window2);
-  const last = cites[cites.length - 1];
-  if (!last) return null;
-  const after = window2.slice(last.end).replace(/\[[^[\]]*\]/g, "");
-  if (/[.!?](?=\s|$)/.test(after) || /\n[ \t]*\n/.test(after)) return null;
-  return last;
+function looksLikeTitle(text4) {
+  if (/[.!?]["”’)\]]*(?:\s|$)/u.test(text4)) return false;
+  const ws = words2(text4);
+  if (ws.length === 0 || ws.length > MAX_TITLE_WORDS) return false;
+  return ws.every((raw, i) => {
+    const w3 = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    if (w3 === "" || new RegExp("^\\p{N}", "u").test(w3)) return true;
+    if (i > 0 && MINOR_WORDS.has(w3.toLowerCase())) return true;
+    return new RegExp("^\\p{Lu}", "u").test(w3);
+  });
 }
-function pandocQuoteOpeners(md) {
-  const openers = /* @__PURE__ */ new Set();
-  const blankLine = /\n[ \t]*\n/y;
-  let inside = false;
-  for (let i = 0; i < md.length; i++) {
-    const c2 = md[i];
-    blankLine.lastIndex = i;
-    if (c2 === "\n" && blankLine.test(md)) {
-      inside = false;
-    } else if (!inside && (c2 === '"' || c2 === "\u201C") && /\S/.test(md[i + 1] ?? " ")) {
-      openers.add(i);
-      inside = true;
-    } else if (inside && (c2 === '"' || c2 === "\u201D")) {
-      inside = false;
+function endsSentence(text4) {
+  if (/\n[ \t]*\n/.test(text4)) return true;
+  for (const m3 of text4.matchAll(/([\p{L}\p{N}.]*)[.!?]["”’)\]]*(?=\s)/gu)) {
+    const token = (m3[1] ?? "").replace(/\.$/, "").toLowerCase();
+    if (m3[0].endsWith(".") || /[.]["”’)\]]*$/.test(m3[0])) {
+      if (ABBREVIATIONS.has(token)) continue;
+      if (new RegExp("^\\p{L}$", "u").test(token)) continue;
     }
+    return true;
   }
-  return openers;
+  return false;
 }
-function extractQuotes(draftMd) {
+function attributionOf(c2, md) {
   const out2 = [];
-  const md = draftMd.replace(/\r\n?/g, "\n");
-  const lines = md.split("\n");
-  let blockBuf = [];
-  let blockStartIdx = -1;
-  let blockEndIdx = -1;
-  const flushBlock = /* @__PURE__ */ __name(() => {
-    if (blockBuf.length === 0) return;
-    const text4 = blockBuf.join(" ");
-    if (wordCount(text4) >= MIN_WORDS2) {
-      const lookAhead = lines.slice(blockEndIdx + 1, blockEndIdx + 5).join(" ");
-      const cite = firstCitation(lookAhead) ?? introducingNarrative(lines.slice(Math.max(0, blockStartIdx - 2), blockStartIdx).join("\n").replace(/\n[ \t]*$/, ""));
-      if (cite) out2.push(...perKey(stripCites(text4), cite.keys, "block"));
-    }
-    blockBuf = [];
-  }, "flushBlock");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    if (line.startsWith("> ")) {
-      if (blockBuf.length === 0) blockStartIdx = i;
-      blockBuf.push(line.slice(2));
-      blockEndIdx = i;
-    } else {
-      flushBlock();
-    }
-  }
-  flushBlock();
-  const cites = findCitations(md);
-  const openers = pandocQuoteOpeners(md);
-  const inlineRe = /["“]([^"“”]{60,})["”]/g;
-  let m3;
-  while ((m3 = inlineRe.exec(md)) !== null) {
-    const text4 = m3[1] ?? "";
-    const sized = text4.length >= MIN_INLINE_CHARS && wordCount(text4) >= MIN_WORDS2;
-    const close = m3.index + m3[0].length;
-    const gap = /^\s*/.exec(md.slice(close))?.[0].length ?? 0;
-    const following = sized ? cites.find((c2) => c2.start === close + gap) : void 0;
-    if (following) {
-      out2.push(...perKey(stripCites(text4), following.keys, "inline"));
-      continue;
-    }
-    inlineRe.lastIndex = m3.index + 1;
-    if (!sized || !openers.has(m3.index)) continue;
-    const narrative = introducingNarrative(md.slice(Math.max(0, m3.index - 201), m3.index));
-    if (narrative) out2.push(...perKey(stripCites(text4), narrative.keys, "inline"));
+  const seen = /* @__PURE__ */ new Set();
+  const trailing = c2.narrative ? /^[ \t]*\[([^[\]@]*)\]/.exec(md.slice(c2.end)) : null;
+  for (const item of citationItems(c2)) {
+    if (seen.has(item.key)) continue;
+    seen.add(item.key);
+    const written = (c2.narrative ? trailing?.[1] ?? "" : item.suffix).replace(/^[\s,]+/, "").trim();
+    out2.push(written !== "" ? { key: item.key, locator: written } : { key: item.key });
   }
   return out2;
 }
-var MIN_WORDS2, MIN_INLINE_CHARS;
+function citationEnd(c2, md) {
+  if (!c2.narrative) return c2.end;
+  const trailing = /^[ \t]*\[[^[\]@]*\]/.exec(md.slice(c2.end));
+  return trailing === null ? c2.end : c2.end + trailing[0].length;
+}
+function citationRightAfter(md, at, cites, maxAt = md.length) {
+  const gap = /^[ \t]*(?:\n[ \t]*)?/.exec(md.slice(at))?.[0].length ?? 0;
+  const start = at + gap;
+  if (start >= maxAt) return null;
+  return cites.find((c2) => c2.start === start) ?? null;
+}
+function citationBefore(md, at, from, cites) {
+  let best = null;
+  for (const c2 of cites) {
+    if (c2.start < from || c2.end > at) continue;
+    if (best === null || c2.start > best.start) best = c2;
+  }
+  if (best === null || at - best.start > BEFORE_WINDOW) return null;
+  return endsSentence(md.slice(citationEnd(best, md), at)) ? null : best;
+}
+function linesOf(md) {
+  const out2 = [];
+  let start = 0;
+  for (; ; ) {
+    const nl = md.indexOf("\n", start);
+    const end = nl === -1 ? md.length : nl;
+    out2.push({ start, end, text: md.slice(start, end) });
+    if (nl === -1) return out2;
+    start = nl + 1;
+  }
+}
+function blockRuns(lines2) {
+  const out2 = [];
+  let i = 0;
+  while (i < lines2.length) {
+    if (!BLOCK_LINE_RE.test(lines2[i].text)) {
+      i += 1;
+      continue;
+    }
+    const first2 = i;
+    const parts = [];
+    let lazyOk = false;
+    while (i < lines2.length) {
+      const l2 = lines2[i];
+      if (BLOCK_LINE_RE.test(l2.text)) {
+        const content = l2.text.replace(BLOCK_MARKERS_RE, "");
+        parts.push(content);
+        lazyOk = !/^[ \t\r]*$/.test(content);
+      } else if (lazyOk && !isBlank(l2)) {
+        parts.push(l2.text);
+      } else {
+        break;
+      }
+      i += 1;
+    }
+    out2.push({ first: first2, last: i - 1, text: parts.join("\n") });
+  }
+  return out2;
+}
+function paragraphEnd(lines2, j2) {
+  let k2 = j2;
+  while (k2 + 1 < lines2.length && !isBlank(lines2[k2 + 1]) && !BLOCK_LINE_RE.test(lines2[k2 + 1].text)) k2 += 1;
+  return lines2[k2].end;
+}
+function trailingCitation(text4) {
+  const cites = findCitations(text4);
+  const last = cites[cites.length - 1];
+  if (last === void 0) return null;
+  return /^[\s.,;:!?)\]"'”’—–-]*$/u.test(text4.slice(citationEnd(last, text4))) ? last : null;
+}
+function blockCandidates(md, lines2, cites, minWords) {
+  const out2 = [];
+  for (const run of blockRuns(lines2)) {
+    const text4 = quoteText(run.text);
+    if (words2(text4).length < minWords) continue;
+    const firstLine3 = lines2[run.first];
+    const inside = trailingCitation(run.text);
+    let cite = inside !== null ? { c: inside, src: run.text } : null;
+    let opener = null;
+    let openerAlone = false;
+    {
+      let j2 = run.last + 1;
+      let blanks = 0;
+      while (j2 < lines2.length && isBlank(lines2[j2]) && blanks < 2) {
+        j2 += 1;
+        blanks += 1;
+      }
+      const next = lines2[j2];
+      if (next !== void 0 && !isBlank(next) && !BLOCK_LINE_RE.test(next.text)) {
+        const ws = /^[ \t]*/.exec(next.text)?.[0].length ?? 0;
+        const dashed = /^[ \t]*(?:[—–]|--?)[ \t]*/.exec(next.text)?.[0].length ?? -1;
+        opener = cites.find((x3) => x3.start === next.start + ws || dashed > ws && x3.start === next.start + dashed) ?? null;
+        openerAlone = opener !== null && /^[\s.,;:!?)\]]*$/u.test(md.slice(citationEnd(opener, md), paragraphEnd(lines2, j2)));
+      }
+    }
+    if (cite === null && opener !== null && openerAlone) cite = { c: opener, src: md };
+    if (cite === null) {
+      let j2 = run.first - 1;
+      if (j2 >= 0 && isBlank(lines2[j2])) j2 -= 1;
+      const lead = lines2[j2];
+      if (lead !== void 0 && !isBlank(lead) && !BLOCK_LINE_RE.test(lead.text)) {
+        let k2 = j2;
+        while (k2 - 1 >= 0 && !isBlank(lines2[k2 - 1]) && !BLOCK_LINE_RE.test(lines2[k2 - 1].text)) k2 -= 1;
+        const c2 = citationBefore(md, lead.end, lines2[k2].start, cites);
+        if (c2 !== null) cite = { c: c2, src: md };
+      }
+    }
+    if (cite === null && opener !== null) cite = { c: opener, src: md };
+    const firstText2 = firstLine3.text.replace(BLOCK_MARKERS_RE, "");
+    const alnum = firstText2.search(/[\p{L}\p{N}_*]/u);
+    const probe = alnum > 0 ? firstLine3.start + (firstLine3.text.length - firstText2.length) + alnum - 1 : -1;
+    out2.push({
+      kind: "block",
+      start: firstLine3.start,
+      probe,
+      text: text4,
+      attribution: cite === null ? [] : attributionOf(cite.c, cite.src)
+    });
+  }
+  return out2;
+}
+function escaped(md, i) {
+  let n2 = 0;
+  for (let j2 = i - 1; j2 >= 0 && md[j2] === "\\"; j2 -= 1) n2 += 1;
+  return n2 % 2 === 1;
+}
+function doubleQuoteSpans(md, from, to) {
+  const out2 = [];
+  let open4 = -1;
+  for (let i = from; i < to; i += 1) {
+    const c2 = md[i];
+    if (c2 !== '"' && c2 !== "\u201C" && c2 !== "\u201D") continue;
+    if (escaped(md, i)) continue;
+    if (open4 !== -1 && c2 === "\u201C" && /\S/u.test(md[i + 1] ?? " ")) {
+      open4 = i;
+      continue;
+    }
+    if (open4 !== -1 && (c2 === '"' || c2 === "\u201D")) {
+      out2.push({ open: open4, close: i });
+      open4 = -1;
+      continue;
+    }
+    if (open4 === -1 && (c2 === '"' || c2 === "\u201C") && /\S/u.test(md[i + 1] ?? " ") && i + 1 < to) {
+      if (c2 === '"' && ALNUM_RE2.test(md[i - 1] ?? " ")) continue;
+      open4 = i;
+    }
+  }
+  return out2;
+}
+function singleQuoteSpans(md, from, to, cites) {
+  const out2 = [];
+  let i = from;
+  while (i < to) {
+    const open4 = md.indexOf("\u2018", i);
+    if (open4 === -1 || open4 >= to) break;
+    if (!/\S/u.test(md[open4 + 1] ?? " ")) {
+      i = open4 + 1;
+      continue;
+    }
+    const nextOpen = md.indexOf("\u2018", open4 + 1);
+    const limit = nextOpen === -1 || nextOpen > to ? to : nextOpen;
+    const closers = [];
+    for (let j2 = md.indexOf("\u2019", open4 + 1); j2 !== -1 && j2 < limit; j2 = md.indexOf("\u2019", j2 + 1)) {
+      if (!ALNUM_RE2.test(md[j2 + 1] ?? " ")) closers.push(j2);
+    }
+    const cited = closers.find((j2) => citationRightAfter(md, j2 + 1, cites, to) !== null);
+    const close = cited ?? closers[closers.length - 1];
+    if (close !== void 0) out2.push({ open: open4, close });
+    i = close !== void 0 ? close + 1 : limit;
+  }
+  return out2;
+}
+function paragraphs(lines2, blocked) {
+  const out2 = [];
+  let i = 0;
+  while (i < lines2.length) {
+    if (isBlank(lines2[i]) || blocked.has(i)) {
+      i += 1;
+      continue;
+    }
+    const first2 = i;
+    while (i + 1 < lines2.length && !isBlank(lines2[i + 1]) && !blocked.has(i + 1)) i += 1;
+    out2.push([lines2[first2].start, lines2[i].end]);
+    i += 1;
+  }
+  return out2;
+}
+function inlineCandidates(md, lines2, blocked, cites, minWords) {
+  const out2 = [];
+  for (const [from, to] of paragraphs(lines2, blocked)) {
+    const spans = [...doubleQuoteSpans(md, from, to), ...singleQuoteSpans(md, from, to, cites)].sort((a3, b3) => a3.open - b3.open);
+    let outerEnd = -1;
+    for (const s2 of spans) {
+      if (s2.open < outerEnd) continue;
+      outerEnd = s2.close;
+      const raw = md.slice(s2.open + 1, s2.close);
+      const text4 = quoteText(raw);
+      if (words2(text4).length < minWords) continue;
+      const lineStart = md.lastIndexOf("\n", s2.open) + 1;
+      const before = md.slice(lineStart, s2.open);
+      if (LINK_TITLE_RE.test(before)) continue;
+      if (TITLE_INTRO_RE.test(before) || looksLikeTitle(text4)) continue;
+      const after = citationRightAfter(md, s2.close + 1, cites, to);
+      const cite = after ?? citationBefore(md, s2.open, from, cites);
+      out2.push({
+        kind: "inline",
+        start: s2.open,
+        probe: s2.open,
+        text: text4,
+        attribution: cite === null ? [] : attributionOf(cite, md)
+      });
+    }
+  }
+  return out2;
+}
+function extractQuotes(draftMd, opts = {}) {
+  const minWords = Math.max(1, Math.floor(opts.minWords ?? DEFAULT_QUOTE_MIN_WORDS));
+  const md = draftMd.replace(/\r\n/g, "\n");
+  const lines2 = linesOf(md);
+  const cites = findCitations(md);
+  const blocks = blockCandidates(md, lines2, cites, minWords);
+  const blocked = /* @__PURE__ */ new Set();
+  for (const run of blockRuns(lines2)) for (let i = run.first; i <= run.last; i += 1) blocked.add(i);
+  const candidates = [...blocks, ...inlineCandidates(md, lines2, blocked, cites, minWords)].sort((a3, b3) => a3.start - b3.start);
+  const code = provableCodeSpans2(md);
+  const out2 = [];
+  let n2 = 0;
+  for (const c2 of candidates) {
+    if (offsetInSpans(c2.probe >= 0 ? c2.probe : c2.start, code)) continue;
+    const id = quoteId(n2);
+    n2 += 1;
+    const line = lineAt(md, c2.start);
+    if (c2.attribution.length === 0) {
+      out2.push({ id, text: c2.text, citekey: null, kind: c2.kind, line });
+      continue;
+    }
+    for (const a3 of c2.attribution) {
+      out2.push({ id, text: c2.text, citekey: a3.key, kind: c2.kind, line, ...a3.locator !== void 0 ? { locator: a3.locator } : {} });
+    }
+  }
+  return out2;
+}
+var BEFORE_WINDOW, MAX_TITLE_WORDS, MINOR_WORDS, TITLE_INTRO_RE, LINK_TITLE_RE, ABBREVIATIONS, BLOCK_LINE_RE, BLOCK_MARKERS_RE, isBlank, ALNUM_RE2;
 var init_quote_extractor = __esm({
   "bin/lib/quote-extractor.ts"() {
     "use strict";
     init_citation_token();
-    MIN_WORDS2 = 10;
-    MIN_INLINE_CHARS = 60;
-    __name(stripCites, "stripCites");
-    __name(perKey, "perKey");
-    __name(wordCount, "wordCount");
-    __name(introducingNarrative, "introducingNarrative");
-    __name(pandocQuoteOpeners, "pandocQuoteOpeners");
+    init_verdicts();
+    init_config();
+    init_config();
+    BEFORE_WINDOW = 240;
+    MAX_TITLE_WORDS = 12;
+    __name(words2, "words");
+    __name(quoteText, "quoteText");
+    __name(lineAt, "lineAt");
+    MINOR_WORDS = /* @__PURE__ */ new Set([
+      "a",
+      "an",
+      "the",
+      "and",
+      "but",
+      "or",
+      "nor",
+      "for",
+      "so",
+      "yet",
+      "of",
+      "in",
+      "on",
+      "at",
+      "by",
+      "to",
+      "from",
+      "with",
+      "into",
+      "onto",
+      "over",
+      "upon",
+      "via",
+      "vs",
+      "versus",
+      "as",
+      "per",
+      "than",
+      "up",
+      "out",
+      "off",
+      "about"
+    ]);
+    __name(looksLikeTitle, "looksLikeTitle");
+    TITLE_INTRO_RE = /\b(?:titled|entitled|called|named|the\s+article|the\s+book|the\s+paper)[\s,:]*$/iu;
+    LINK_TITLE_RE = /\]\([^()\s]*[ \t]+$/;
+    ABBREVIATIONS = /* @__PURE__ */ new Set([
+      "p",
+      "pp",
+      "e.g",
+      "i.e",
+      "eg",
+      "ie",
+      "al",
+      "cf",
+      "vs",
+      "ch",
+      "chap",
+      "vol",
+      "vols",
+      "no",
+      "nos",
+      "fig",
+      "figs",
+      "ed",
+      "eds",
+      "dr",
+      "mr",
+      "mrs",
+      "ms",
+      "prof",
+      "st",
+      "sec",
+      "para",
+      "ibid",
+      "op",
+      "cit",
+      "approx",
+      "ca",
+      "viz",
+      "etc"
+    ]);
+    __name(endsSentence, "endsSentence");
+    __name(attributionOf, "attributionOf");
+    __name(citationEnd, "citationEnd");
+    __name(citationRightAfter, "citationRightAfter");
+    __name(citationBefore, "citationBefore");
+    BLOCK_LINE_RE = /^ {0,3}>/;
+    BLOCK_MARKERS_RE = /^(?: {0,3}> ?)+/;
+    __name(linesOf, "linesOf");
+    isBlank = /* @__PURE__ */ __name((l2) => l2 === void 0 || /^[ \t\r]*$/.test(l2.text), "isBlank");
+    __name(blockRuns, "blockRuns");
+    __name(paragraphEnd, "paragraphEnd");
+    __name(trailingCitation, "trailingCitation");
+    __name(blockCandidates, "blockCandidates");
+    ALNUM_RE2 = /[\p{L}\p{N}]/u;
+    __name(escaped, "escaped");
+    __name(doubleQuoteSpans, "doubleQuoteSpans");
+    __name(singleQuoteSpans, "singleQuoteSpans");
+    __name(paragraphs, "paragraphs");
+    __name(inlineCandidates, "inlineCandidates");
     __name(extractQuotes, "extractQuotes");
   }
 });
@@ -115430,7 +117002,7 @@ function arxivPdfUrl(arxivId) {
 function fullTextSource(entry) {
   if (entry.byo !== null && entry.byo.text_sha256 !== null && entry.byo.asserted !== true) return "bring-your-own PDF";
   if (entry.oa_url && entry.oa_url.trim() !== "" && entry.doi && !isDataCiteArxivDoi(entry.doi)) return "open-access PDF";
-  if (arxivIdOfEntry(entry) !== null) return "arXiv PDF";
+  if (arxivIdOfEntry(entry) !== null && (!entry.doi || isDataCiteArxivDoi(entry.doi))) return "arXiv PDF";
   return null;
 }
 function fullTextAvailable(entry) {
@@ -115439,16 +117011,20 @@ function fullTextAvailable(entry) {
 function fullTextByCitekey(entries) {
   return new Map(entries.map((e2) => [e2.citekey, fullTextAvailable(e2)]));
 }
-function quotesWithoutFullText(draft, fullText) {
+function quotesWithoutFullText(draft, fullText, opts = {}) {
   const has = /* @__PURE__ */ __name((key2) => fullText instanceof Map ? fullText.get(key2) === true : fullText[key2] === true, "has");
-  return extractQuotes(draft).filter((q3) => !has(q3.citekey)).map((q3) => ({ citekey: q3.citekey, quote: q3.text, kind: q3.kind }));
+  const out2 = [];
+  for (const q3 of extractQuotes(draft, opts)) {
+    if (q3.citekey !== null && !has(q3.citekey)) out2.push({ citekey: q3.citekey, quote: q3.text, kind: q3.kind });
+  }
+  return out2;
 }
 function describeQuotesWithoutFullText(quotes) {
   if (quotes.length === 0) return "";
   const shown = quotes.slice(0, 5).map((q3) => {
-    const words3 = q3.quote.split(/\s+/).filter(Boolean);
-    const head = words3.slice(0, 8).join(" ");
-    return `[@${q3.citekey}] "${head}${words3.length > 8 ? " \u2026" : ""}"`;
+    const words4 = q3.quote.split(/\s+/).filter(Boolean);
+    const head = words4.slice(0, 8).join(" ");
+    return `[@${q3.citekey}] "${head}${words4.length > 8 ? " \u2026" : ""}"`;
   });
   const more = quotes.length > 5 ? `; \u2026 (${quotes.length - 5} more)` : "";
   return `direct quote(s) from source(s) whose full text pensmith cannot check (full_text: false): ${shown.join("; ")}${more} \u2014 paraphrase them, or quote only a source marked full_text: true`;
@@ -115468,6 +117044,131 @@ var init_full_text = __esm({
     __name(fullTextByCitekey, "fullTextByCitekey");
     __name(quotesWithoutFullText, "quotesWithoutFullText");
     __name(describeQuotesWithoutFullText, "describeQuotesWithoutFullText");
+  }
+});
+
+// bin/lib/sources/retraction-cross-check.ts
+function noRetractionDataReason(agency) {
+  return `no retraction data for ${agency} DOIs`;
+}
+function retractionCheckReason(candidate) {
+  return unknownReasons.get(candidate);
+}
+function setRetracted(c2, details) {
+  c2.retracted = true;
+  c2.retraction_status = "retracted";
+  if (details && !c2.retraction_details) c2.retraction_details = details;
+  unknownReasons.delete(c2);
+}
+function setClear(c2) {
+  c2.retracted = false;
+  c2.retraction_status = "clear";
+  unknownReasons.delete(c2);
+}
+function setUnknown(c2, reason, recordReason = false) {
+  c2.retraction_status = "unknown";
+  if (recordReason && !c2.retraction_details) c2.retraction_details = reason;
+  unknownReasons.set(c2, reason);
+}
+function decidedByRecords(group) {
+  const retracted = group.find((c2) => c2.retracted === true || c2.retraction_status === "retracted");
+  if (retracted) return { status: "retracted", details: retracted.retraction_details };
+  if (group.some((c2) => c2.source === "crossref" && c2.retraction_status === "clear")) return { status: "clear" };
+  return null;
+}
+function lookupFailureReason(err) {
+  if (isOfflineEgressError(err)) {
+    return offlineLabel(err) === "dry-run" ? "dry-run: no retraction lookup under --dry-run" : "offline: no recorded fixture for the retraction lookup \u2014 re-run online";
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return (msg.split(/\r?\n/)[0] ?? "").slice(0, 240);
+}
+async function crossCheckRetractions(candidates, lookup = sources["retraction-watch"]) {
+  const agencyLookup = lookup.registrationAgency ?? registrationAgency;
+  const agencies = /* @__PURE__ */ new Map();
+  const agencyOf = /* @__PURE__ */ __name((doi, group) => {
+    for (const c2 of group) {
+      const known = AGENCY_OF_SOURCE[c2.source];
+      if (known !== void 0) return Promise.resolve({ agency: known });
+    }
+    if (isDataCiteArxivDoi(doi)) return Promise.resolve({ agency: "DataCite" });
+    const prefix = doiPrefix(doi) ?? doi;
+    let p2 = agencies.get(prefix);
+    if (p2 === void 0) {
+      p2 = (async () => {
+        try {
+          const ra = await agencyLookup(doi);
+          if (ra.kind === "agency") return { agency: ra.agency };
+          if (ra.kind === "unknown-prefix") return { reason: `no registration agency holds the DOI prefix ${prefix}` };
+          return { reason: `doi.org could not say which agency registered ${prefix} (${ra.reason})` };
+        } catch (err) {
+          return { reason: lookupFailureReason(err).replace("the retraction lookup", `doi.org's agency lookup of ${prefix}`) };
+        }
+      })();
+      agencies.set(prefix, p2);
+    }
+    return p2;
+  }, "agencyOf");
+  const groups = /* @__PURE__ */ new Map();
+  for (const c2 of candidates) {
+    if (!c2.doi || c2.synthetic === true) continue;
+    const key2 = normalizeDoi(c2.doi) ?? c2.doi.trim().toLowerCase();
+    const g2 = groups.get(key2);
+    if (g2) g2.push(c2);
+    else groups.set(key2, [c2]);
+  }
+  for (const group of groups.values()) {
+    const known = decidedByRecords(group);
+    if (known !== null) {
+      for (const c2 of group) {
+        if (known.status === "retracted") setRetracted(c2, known.details);
+        else setClear(c2);
+      }
+      continue;
+    }
+    const doi = group[0].doi;
+    const who = await agencyOf(doi, group);
+    if ("reason" in who) {
+      for (const c2 of group) setUnknown(c2, who.reason);
+      continue;
+    }
+    if (!/^crossref$/i.test(who.agency)) {
+      for (const c2 of group) setUnknown(c2, noRetractionDataReason(who.agency), true);
+      continue;
+    }
+    try {
+      const hit = await lookup.fetchById(doi);
+      if (hit && hit.retracted === true) {
+        for (const c2 of group) setRetracted(c2, hit.retraction_details);
+      } else {
+        for (const c2 of group) setClear(c2);
+      }
+    } catch (err) {
+      const reason = lookupFailureReason(err);
+      for (const c2 of group) setUnknown(c2, reason);
+    }
+  }
+  return candidates;
+}
+var AGENCY_OF_SOURCE, unknownReasons;
+var init_retraction_cross_check = __esm({
+  "bin/lib/sources/retraction-cross-check.ts"() {
+    "use strict";
+    init_sources();
+    init_http();
+    init_doi();
+    init_doi_ra();
+    init_full_text();
+    __name(noRetractionDataReason, "noRetractionDataReason");
+    AGENCY_OF_SOURCE = { crossref: "Crossref", datacite: "DataCite" };
+    unknownReasons = /* @__PURE__ */ new WeakMap();
+    __name(retractionCheckReason, "retractionCheckReason");
+    __name(setRetracted, "setRetracted");
+    __name(setClear, "setClear");
+    __name(setUnknown, "setUnknown");
+    __name(decidedByRecords, "decidedByRecords");
+    __name(lookupFailureReason, "lookupFailureReason");
+    __name(crossCheckRetractions, "crossCheckRetractions");
   }
 });
 
@@ -115561,8 +117262,8 @@ async function pymupdfExtract(buf) {
           maxBuffer: PYMUPDF_MAX_BUFFER,
           windowsHide: true
         });
-        const stat2 = await fs10.promises.stat(resultPath);
-        if (stat2.size > MAX_RESULT_BYTES) return null;
+        const stat3 = await fs10.promises.stat(resultPath);
+        if (stat3.size > MAX_RESULT_BYTES) return null;
         const result = readResult(await fs10.promises.readFile(resultPath, "utf8"));
         if (result !== null) return result;
       } catch {
@@ -115736,16 +117437,6 @@ async function extractPdf(buf, opts = {}) {
   }
   return { ...parsed, imageOnly: true, engine: "pdf-parse" };
 }
-async function extractPdfText(buf) {
-  assertBytes(buf, "extractPdfText");
-  const out2 = await extractPdf(buf);
-  if (out2.imageOnly) {
-    console.warn(
-      `extractPdfText: PDF appears to be image-only or scanned (text body <${IMAGE_ONLY_TEXT_THRESHOLD} non-whitespace chars across ${out2.numpages} pages); pymupdf unavailable or returned empty, continuing with near-empty text. Pass 3 quote verification will mark this source UNVERIFIABLE rather than failed.`
-    );
-  }
-  return out2.text;
-}
 var IMAGE_ONLY_TEXT_THRESHOLD, MAX_PDF_BYTES, PDF_TIMEOUT_MS, WORKER_MAX_OLD_GENERATION_MB, CAPTURE_LIMIT, PdfTimeoutError, liveWorkers, REAL_TIMERS, workerTestSeam;
 var init_pdf_text = __esm({
   "bin/lib/pdf-text.ts"() {
@@ -115780,7 +117471,6 @@ var init_pdf_text = __esm({
     __name(parseInFreshWorker, "parseInFreshWorker");
     __name(assertBytes, "assertBytes");
     __name(extractPdf, "extractPdf");
-    __name(extractPdfText, "extractPdfText");
   }
 });
 
@@ -115813,7 +117503,7 @@ async function enrichOpenAccess(targets, opts = {}) {
   if (!injected && contactEmail().email === null) {
     return { asked: todo.length, found: 0, unconfirmed: 0, problem: `not looked up: Unpaywall needs a contact email (set ${contactEmail().envName})` };
   }
-  const lookup = opts.lookup ?? lookupById7;
+  const lookup = opts.lookup ?? lookupById8;
   const confirm = opts.confirm ?? confirmOpenAccessPdf;
   let found = 0;
   let unconfirmed = 0;
@@ -115889,11 +117579,6 @@ var init_open_access = __esm({
 function trimmed(v2) {
   return typeof v2 === "string" ? v2.trim() : "";
 }
-function doiPrefixOf(doi) {
-  const d3 = trimmed(doi).toLowerCase();
-  const slash = d3.indexOf("/");
-  return slash > 0 ? d3.slice(0, slash) : "";
-}
 function doilessIdentifiers(ids) {
   const out2 = [];
   const arxiv = trimmed(ids.arxiv);
@@ -115922,13 +117607,8 @@ function uncheckableReason(ids) {
       return null;
     case "no-doi":
       return route.ids.length > 0 ? null : NO_IDENTIFIER_REASON;
-    case "crossref": {
-      const prefix = doiPrefixOf(ids.doi);
-      if (DATACITE_DOI_PREFIXES.includes(prefix) && route.fallback.length === 0) {
-        return `a DataCite DOI (${prefix}) the verifier cannot check yet, and no arXiv id, PMID or ISBN`;
-      }
+    case "crossref":
       return null;
-    }
   }
 }
 var DATACITE_DOI_PREFIXES, NO_IDENTIFIER_REASON;
@@ -115940,7 +117620,6 @@ var init_pass1_identifiers = __esm({
     init_doi();
     DATACITE_DOI_PREFIXES = Object.freeze(["10.5281", "10.6084", "10.5061"]);
     __name(trimmed, "trimmed");
-    __name(doiPrefixOf, "doiPrefixOf");
     __name(doilessIdentifiers, "doilessIdentifiers");
     __name(citationCheckRoute, "citationCheckRoute");
     NO_IDENTIFIER_REASON = "no DOI, arXiv id, PMID or ISBN";
@@ -115964,12 +117643,12 @@ function clip(text4, max) {
   if (code >= 55296 && code <= 56319) end -= 1;
   return text4.slice(0, end);
 }
-function oneLine7(s2) {
+function oneLine8(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function textOrNull(v2, max) {
   if (typeof v2 !== "string") return null;
-  const t = oneLine7(v2);
+  const t = oneLine8(v2);
   if (t.length === 0) return null;
   return max === void 0 ? t : clip(t, max);
 }
@@ -115986,11 +117665,14 @@ function authorsOf(v2) {
   const out2 = [];
   for (const a3 of v2) {
     if (typeof a3 !== "string") continue;
-    const t = oneLine7(a3);
+    const t = oneLine8(a3);
     if (t.length > 0) out2.push(t);
     if (out2.length === MAX_AUTHORS) break;
   }
   return out2;
+}
+function claimSupportAbstract(entry) {
+  return textOrNull(entry?.abstract, CLAIM_SUPPORT_ABSTRACT_CHARS);
 }
 function byCitekey(entries) {
   const map = /* @__PURE__ */ new Map();
@@ -116055,15 +117737,13 @@ function excludedRemedy(excluded) {
   const fixable = excluded.some((x3) => x3.reason !== RETRACTED_REASON && x3.reason !== SYNTHETIC_REASON);
   const parts = [];
   if (fixable) {
-    parts.push(
-      "to use one the verifier cannot check, `pensmith add` its DOI, arXiv id, PMID or ISBN (for a Zenodo / figshare / Dryad record, the DOI of its published version)"
-    );
+    parts.push("to use one the verifier cannot check, `pensmith add` its DOI, arXiv id, PMID or ISBN");
   }
   if (retracted) parts.push("a retracted source is never cited");
   if (synthetic) parts.push("a synthetic --dry-run source is never cited outside a dry run");
   return parts.join("; ");
 }
-var MAX_AUTHORS, MAX_ABSTRACT_CHARS, RETRACTED_REASON, SYNTHETIC_REASON;
+var MAX_AUTHORS, MAX_ABSTRACT_CHARS, CLAIM_SUPPORT_ABSTRACT_CHARS, RETRACTED_REASON, SYNTHETIC_REASON;
 var init_source_context = __esm({
   "bin/lib/source-context.ts"() {
     "use strict";
@@ -116074,11 +117754,13 @@ var init_source_context = __esm({
     MAX_ABSTRACT_CHARS = 800;
     __name(fullTextAvailable2, "fullTextAvailable");
     __name(clip, "clip");
-    __name(oneLine7, "oneLine");
+    __name(oneLine8, "oneLine");
     __name(textOrNull, "textOrNull");
     __name(yearOf3, "yearOf");
     __name(tierOf, "tierOf");
     __name(authorsOf, "authorsOf");
+    CLAIM_SUPPORT_ABSTRACT_CHARS = 4e3;
+    __name(claimSupportAbstract, "claimSupportAbstract");
     __name(byCitekey, "byCitekey");
     __name(sourceContextRecord, "sourceContextRecord");
     __name(buildSourceContext, "buildSourceContext");
@@ -116096,13 +117778,13 @@ var init_source_context = __esm({
 var dry_run_exports = {};
 __export(dry_run_exports, {
   dryRunCorpusPath: () => dryRunCorpusPath,
-  fetchById: () => fetchById10,
+  fetchById: () => fetchById11,
   kindOf: () => kindOf,
-  lookupById: () => lookupById9,
+  lookupById: () => lookupById10,
   search: () => search9,
   syntheticSource: () => syntheticSource
 });
-import { createHash as createHash11 } from "node:crypto";
+import { createHash as createHash12 } from "node:crypto";
 import { readFileSync as readFileSync23 } from "node:fs";
 function dryRunCorpusPath() {
   return pluginTemplatePath("dry-run", "corpus.json");
@@ -116135,7 +117817,7 @@ function kindOf(hex) {
   return n2 === 4 ? "preprint" : n2 === 5 ? "book" : "article";
 }
 function sha256Hex3(s2) {
-  return createHash11("sha256").update(s2).digest("hex");
+  return createHash12("sha256").update(s2).digest("hex");
 }
 function pick2(list3, hex, salt) {
   const h2 = sha256Hex3(`${hex}:${salt}`);
@@ -116215,7 +117897,7 @@ ${salt}`).slice(0, 8);
   }
   return out2;
 }
-async function lookupById9(id) {
+async function lookupById10(id) {
   const s2 = id.trim();
   const doi = normalizeDoi(s2);
   let hex;
@@ -116229,8 +117911,8 @@ async function lookupById9(id) {
   }
   return lookupFound(syntheticSource(hex));
 }
-async function fetchById10(id) {
-  return unwrapLookup(await lookupById9(id), "dry-run", id);
+async function fetchById11(id) {
+  return unwrapLookup(await lookupById10(id), "dry-run", id);
 }
 var corpusCache;
 var init_dry_run = __esm({
@@ -116251,8 +117933,306 @@ var init_dry_run = __esm({
     __name(syntheticSource, "syntheticSource");
     __name(wantedKind, "wantedKind");
     __name(search9, "search");
-    __name(lookupById9, "lookupById");
-    __name(fetchById10, "fetchById");
+    __name(lookupById10, "lookupById");
+    __name(fetchById11, "fetchById");
+  }
+});
+
+// bin/lib/verify/name-match.ts
+function foldText(s2) {
+  return s2.normalize("NFKD").replace(new RegExp("\\p{M}", "gu"), "").replace(DASHES, "-").toLowerCase().replace(/\s+/g, " ").trim();
+}
+function tidyTitle(title) {
+  let t = plainText(title).trim();
+  const bracketed = /^\[(.*)\][.]?$/su.exec(t);
+  if (bracketed?.[1]) t = bracketed[1];
+  return t.replace(/[\s.]+$/u, "");
+}
+function mainTitle(title) {
+  const t = tidyTitle(title);
+  const m3 = /^(.+?)(?::\s|\s[-–—‐]\s|\.\s)/su.exec(t);
+  const main2 = m3?.[1]?.trim();
+  return main2 && main2.length >= 3 && main2 !== t ? main2 : null;
+}
+function titleForms(title, subtitle) {
+  const whole = tidyTitle(title);
+  const forms = /* @__PURE__ */ new Set([foldText(whole)]);
+  const main2 = mainTitle(whole);
+  if (main2 !== null) forms.add(foldText(main2));
+  const sub = typeof subtitle === "string" ? tidyTitle(subtitle) : "";
+  if (sub) forms.add(foldText(`${whole}: ${sub}`));
+  forms.delete("");
+  return [...forms];
+}
+function titleSimilarity(record2, claimed) {
+  const a3 = titleForms(record2.title ?? "", record2.subtitle ?? null);
+  const b3 = titleForms(claimed);
+  let best = 0;
+  for (const x3 of a3) for (const y3 of b3) best = Math.max(best, jaroWinkler(x3, y3));
+  return best;
+}
+function isInitialToken(t) {
+  return INITIALS_TOKEN.test(t);
+}
+function withAndWithoutParticles(surname) {
+  const s2 = foldText(surname);
+  if (!s2) return [];
+  const words4 = s2.split(" ");
+  let i = 0;
+  while (i < words4.length - 1 && PARTICLES2.has(words4[i])) i++;
+  const forms = i > 0 ? [s2, words4.slice(i).join(" ")] : [s2];
+  const core2 = words4.slice(i);
+  if (core2.length > 1) {
+    for (const w3 of core2) if (w3.length >= 2 && !PARTICLES2.has(w3) && !new RegExp("^\\p{L}\\.?$", "u").test(w3)) forms.push(w3);
+  }
+  return forms;
+}
+function displayFamily(name) {
+  const tokens = name.split(/\s+/).filter(Boolean);
+  if (tokens.length <= 1) return name;
+  let end = tokens.length;
+  while (end > 1 && (COMPACT_INITIALS.test(tokens[end - 1]) || isInitialToken(tokens[end - 1]))) end--;
+  if (end < tokens.length) return tokens.slice(0, end).join(" ");
+  for (let i = 1; i < tokens.length - 1; i++) {
+    if (new RegExp("^\\p{Ll}", "u").test(tokens[i]) && PARTICLES2.has(foldText(tokens[i]))) return tokens.slice(i).join(" ");
+  }
+  let start = tokens.length - 1;
+  while (start > 0 && PARTICLES2.has(foldText(tokens[start - 1]))) start--;
+  return tokens.slice(start).join(" ");
+}
+function surnameForms(author) {
+  let s2 = String(author ?? "").normalize("NFC").replace(/\s+/g, " ").trim();
+  s2 = s2.replace(/[,\s]*\bet\s+al\b\.?$/iu, "").replace(/[,\s]*\band\s+others$/iu, "").trim();
+  if (!s2) return [];
+  const braced = /^\{(.*)\}$/su.exec(s2);
+  if (braced) {
+    const whole = foldText(braced[1] ?? "").replace(/^the\s+/, "");
+    return whole ? [whole] : [];
+  }
+  const forms = /* @__PURE__ */ new Set();
+  if (s2.includes(",")) {
+    const [familyRaw, ...rest] = s2.split(",");
+    const family = (familyRaw ?? "").trim();
+    const given = rest.join(",").trim();
+    for (const f2 of withAndWithoutParticles(family)) forms.add(f2);
+    if (COMPACT_INITIALS.test(family) && /^[\p{L}'’-]+$/u.test(given) && new RegExp("\\p{Ll}", "u").test(given)) {
+      for (const f2 of withAndWithoutParticles(given)) forms.add(f2);
+    }
+    if (forms.size === 0 && given) for (const f2 of withAndWithoutParticles(displayFamily(given))) forms.add(f2);
+  } else {
+    for (const f2 of withAndWithoutParticles(displayFamily(s2))) forms.add(f2);
+  }
+  forms.delete("");
+  return [...forms];
+}
+function nameParts(author) {
+  let s2 = String(author ?? "").normalize("NFC").replace(/\s+/g, " ").trim();
+  s2 = s2.replace(/[,\s]*\bet\s+al\b\.?$/iu, "").trim();
+  if (!s2 || s2.startsWith("{")) return null;
+  let family;
+  let given;
+  if (s2.includes(",")) {
+    const [f3, ...rest] = s2.split(",");
+    family = (f3 ?? "").trim();
+    given = (rest.join(",").trim().split(" ")[0] ?? "").trim();
+  } else {
+    const tokens = s2.split(" ");
+    if (tokens.length !== 2) return null;
+    [given, family] = [tokens[0] ?? "", tokens[1] ?? ""];
+  }
+  const g2 = foldText(given).replace(/\.$/u, "");
+  const f2 = foldText(family);
+  return f2 && g2 && !f2.includes(" ") ? { family: f2, given: g2 } : null;
+}
+function swappedNameScore(a3, b3) {
+  const x3 = nameParts(a3);
+  const y3 = nameParts(b3);
+  if (x3 === null || y3 === null) return 0;
+  const half = /* @__PURE__ */ __name((family, given) => given.length === 1 ? family.startsWith(given) ? 1 : 0 : jaroWinkler(family, given), "half");
+  return Math.min(half(x3.family, y3.given), half(y3.family, x3.given));
+}
+function authorSimilarity(recordAuthor, claimedAuthor) {
+  const a3 = surnameForms(recordAuthor);
+  const b3 = surnameForms(claimedAuthor);
+  let best = 0;
+  for (const x3 of a3) for (const y3 of b3) best = Math.max(best, jaroWinkler(x3, y3));
+  return Math.max(best, swappedNameScore(recordAuthor, claimedAuthor));
+}
+function firstAuthorScore(claimed, record2) {
+  const claimedFirst = claimed.authors[0] ?? claimed.editors?.[0];
+  const recordFirsts = [record2.authors?.[0], ...claimed.authors.length === 0 || (record2.authors ?? []).length === 0 ? [record2.editors?.[0]] : []];
+  let best = 0;
+  for (const r2 of recordFirsts) if (r2 !== void 0) best = Math.max(best, authorSimilarity(r2, claimedFirst));
+  return best;
+}
+function matchWork(claimed, record2, opts = {}) {
+  const tt = opts.titleThreshold ?? TITLE_JW_THRESHOLD;
+  const at = opts.authorThreshold ?? AUTHOR_JW_THRESHOLD;
+  const tol = opts.yearTolerance ?? YEAR_TOLERANCE;
+  const titleJW = titleSimilarity(record2, claimed.title);
+  const authorJW = firstAuthorScore(claimed, record2);
+  const years = typeof claimed.year === "number" && Number.isInteger(claimed.year) && typeof record2.year === "number" && Number.isInteger(record2.year) ? { claimed: claimed.year, record: record2.year } : null;
+  const failing = [];
+  const parts = [];
+  if (titleJW < tt) {
+    failing.push("title");
+    parts.push(`title (${titleJW.toFixed(2)} < ${tt})`);
+  }
+  if (authorJW < at) {
+    failing.push("first author");
+    parts.push(`first author (${authorJW.toFixed(2)} < ${at})`);
+  }
+  if (years !== null && Math.abs(years.claimed - years.record) > tol) {
+    failing.push("year");
+    parts.push(`year (claimed ${years.claimed}, record ${years.record})`);
+  }
+  const ok = failing.length === 0;
+  const yearNote = years === null ? "" : years.claimed === years.record ? ` (year ${years.claimed})` : ` (year ${years.claimed}, record ${years.record}: within ${tol})`;
+  return {
+    titleJW,
+    authorJW,
+    years,
+    failing,
+    ok,
+    detail: ok ? `D-11 AND-gate passed${yearNote}` : `mismatch: ${parts.join(", ")}`
+  };
+}
+var YEAR_TOLERANCE, STRICT_TITLE_JW, DASHES, PARTICLES2, INITIALS_TOKEN, COMPACT_INITIALS;
+var init_name_match = __esm({
+  "bin/lib/verify/name-match.ts"() {
+    "use strict";
+    init_fuzzy();
+    init_markup();
+    YEAR_TOLERANCE = 1;
+    STRICT_TITLE_JW = 0.95;
+    DASHES = /[‐-―−﹘﹣－­]/gu;
+    PARTICLES2 = /* @__PURE__ */ new Set([
+      "van",
+      "von",
+      "der",
+      "den",
+      "de",
+      "del",
+      "della",
+      "dei",
+      "di",
+      "da",
+      "dos",
+      "das",
+      "do",
+      "du",
+      "la",
+      "le",
+      "ten",
+      "ter",
+      "te",
+      "zu",
+      "vom",
+      "zum",
+      "bin",
+      "ben",
+      "al",
+      "el",
+      "abu",
+      "y",
+      "e",
+      "d'",
+      "o'"
+    ]);
+    __name(foldText, "foldText");
+    __name(tidyTitle, "tidyTitle");
+    __name(mainTitle, "mainTitle");
+    __name(titleForms, "titleForms");
+    __name(titleSimilarity, "titleSimilarity");
+    INITIALS_TOKEN = new RegExp("^(?:\\p{Lu}\\.?-?){1,4}$", "u");
+    COMPACT_INITIALS = new RegExp("^\\p{Lu}{1,4}$", "u");
+    __name(isInitialToken, "isInitialToken");
+    __name(withAndWithoutParticles, "withAndWithoutParticles");
+    __name(displayFamily, "displayFamily");
+    __name(surnameForms, "surnameForms");
+    __name(nameParts, "nameParts");
+    __name(swappedNameScore, "swappedNameScore");
+    __name(authorSimilarity, "authorSimilarity");
+    __name(firstAuthorScore, "firstAuthorScore");
+    __name(matchWork, "matchWork");
+  }
+});
+
+// bin/lib/sources/registrar-confirm.ts
+function needsConfirmation(c2) {
+  return AGGREGATOR_SOURCES.has(c2.source) && typeof c2.doi === "string" && c2.doi.trim() !== "" && !isDataCiteArxivDoi(c2.doi);
+}
+function withRecordFields(c2, r2) {
+  const out2 = { ...c2, title: r2.title, authors: [...r2.authors] };
+  const copy = /* @__PURE__ */ __name((k2) => {
+    if (r2[k2] !== void 0) out2[k2] = r2[k2];
+  }, "copy");
+  copy("subtitle");
+  copy("editors");
+  copy("year");
+  copy("venue");
+  copy("volume");
+  copy("issue");
+  copy("pages");
+  copy("publisher");
+  copy("type");
+  if (c2.abstract === void 0 && r2.abstract !== void 0) out2.abstract = r2.abstract;
+  return out2;
+}
+async function confirmRegistrarRecords(candidates, lookup) {
+  const out2 = [];
+  const confirmed = [];
+  const answers = /* @__PURE__ */ new Map();
+  const recordOf = /* @__PURE__ */ __name((doi) => {
+    const key2 = doi.trim().toLowerCase();
+    let p2 = answers.get(key2);
+    if (p2 === void 0) {
+      p2 = lookup(doi.trim()).then(
+        (r2) => r2.kind === "found" ? r2.candidate : null,
+        // Offline with no recording: no confirmation (verify asks again).
+        (err) => {
+          if (isOfflineEgressError(err)) return null;
+          throw err;
+        }
+      );
+      answers.set(key2, p2);
+    }
+    return p2;
+  }, "recordOf");
+  for (const c2 of candidates) {
+    if (!needsConfirmation(c2)) {
+      out2.push(c2);
+      continue;
+    }
+    const record2 = await recordOf(c2.doi);
+    if (record2 === null) {
+      out2.push(c2);
+      continue;
+    }
+    const m3 = matchWork(
+      { title: c2.title, authors: c2.authors, ...c2.editors ? { editors: c2.editors } : {}, year: null },
+      { title: record2.title, subtitle: record2.subtitle, authors: record2.authors, editors: record2.editors, year: record2.year ?? null }
+    );
+    if (!m3.ok) {
+      out2.push(c2);
+      continue;
+    }
+    out2.push(withRecordFields(c2, record2));
+    confirmed.push(c2.citekey);
+  }
+  return { candidates: out2, confirmed };
+}
+var AGGREGATOR_SOURCES;
+var init_registrar_confirm = __esm({
+  "bin/lib/sources/registrar-confirm.ts"() {
+    "use strict";
+    init_http();
+    init_full_text();
+    init_name_match();
+    AGGREGATOR_SOURCES = /* @__PURE__ */ new Set(["semanticscholar", "openalex"]);
+    __name(needsConfirmation, "needsConfirmation");
+    __name(withRecordFields, "withRecordFields");
+    __name(confirmRegistrarRecords, "confirmRegistrarRecords");
   }
 });
 
@@ -116353,6 +118333,8 @@ function aggregateStatus(rows, total) {
   const parts = [total > 0 ? "ok" : "no results"];
   if (failed.length > 0) parts.push(`${failed[0]?.status ?? "failed"} for ${failed.length} of ${n2} queries`);
   if (offline.length > 0) parts.push(`no recorded fixture for ${offline.length} of ${n2} queries`);
+  const noted = rows.filter((r2) => r2.note !== void 0);
+  if (noted.length > 0) parts.push(`${noted[0]?.note}${n2 > 1 ? ` for ${noted.length} of ${n2} queries` : ""}`);
   return parts.join("; ");
 }
 async function discoverCandidates(args) {
@@ -116371,18 +118353,22 @@ async function discoverCandidates(args) {
           return { entry, results: [], status: "skipped (no adapter)" };
         }
         let failure = null;
+        let note = null;
         try {
           const opts = {
             limit: RESEARCH_PER_QUERY_LIMIT,
             onFailure: /* @__PURE__ */ __name((reason) => {
               failure ??= reason;
             }, "onFailure"),
+            onWarning: /* @__PURE__ */ __name((n2) => {
+              note ??= n2;
+            }, "onWarning"),
             ...args.fromYear !== void 0 ? { fromYear: args.fromYear } : {},
             ...entry.options.doiPrefix !== void 0 ? { doiPrefix: entry.options.doiPrefix } : {}
           };
           const results = await adapter.search(query, opts);
           if (failure !== null && results.length === 0) return { entry, results, status: `failed (${failure})` };
-          return { entry, results, status: "ok" };
+          return { entry, results, status: "ok", ...note !== null ? { note } : {} };
         } catch (err) {
           if (isOfflineEgressError(err)) {
             return { entry, results: [], status: `${offlineLabel(err)}: no recorded fixture` };
@@ -116393,7 +118379,9 @@ async function discoverCandidates(args) {
     );
     let queryCount = 0;
     let offlineMisses = 0;
-    for (const { entry, results, status } of settled) {
+    for (const settledOne of settled) {
+      const { entry, results, status } = settledOne;
+      const note = "note" in settledOne ? settledOne.note : void 0;
       if (status.endsWith("no recorded fixture")) offlineMisses += 1;
       let kept = 0;
       for (const item of results) {
@@ -116415,7 +118403,13 @@ async function discoverCandidates(args) {
       }
       found += kept;
       queryCount += kept;
-      perQuery.push({ query, adapter: entry.id, count: kept, status: status === "ok" && kept === 0 ? "no results" : status });
+      perQuery.push({
+        query,
+        adapter: entry.id,
+        count: kept,
+        status: status === "ok" && kept === 0 ? "no results" : status,
+        ...note !== void 0 && kept > 0 ? { note } : {}
+      });
     }
     if (mode.sourcesOffline && !mode.dryRun && queryCount === 0 && offlineMisses > 0) {
       warn(`offline: no recorded results for this query ("${query}")`);
@@ -116628,13 +118622,23 @@ async function runResearchPass(args) {
     perQuery: discovery.perQuery,
     found: discovery.found,
     distinct: discovery.candidates.length,
-    kept: rankItems(kept),
+    kept: await confirmKept(rankItems(kept), args.registry, now),
     rejected: rankItems(rejected),
     excluded,
     notEvaluated: kept.filter((k2) => k2.decision === "not-evaluated").length,
     evaluator: { calls: run.calls, failures: run.failures, unknownVerdicts: applied.unknownVerdicts },
     own
   };
+}
+async function confirmKept(items, registry2, now) {
+  const crossref = registry2["crossref"];
+  if (crossref === void 0 || typeof crossref.lookupById !== "function") return items;
+  const lookupById12 = crossref.lookupById;
+  const { candidates } = await confirmRegistrarRecords(items.map((i) => i.candidate), (doi) => lookupById12(doi));
+  return items.map((item, i) => {
+    const c2 = candidates[i] ?? item.candidate;
+    return c2 === item.candidate ? item : { ...item, candidate: c2, view: candidateToEntry(c2, [], now) };
+  });
 }
 function renderAdapterTable(adapters) {
   const w3 = Math.max(8, ...adapters.map((a3) => a3.adapter.length));
@@ -116676,6 +118680,7 @@ var init_research_orchestrator = __esm({
     init_sources();
     init_dry_run();
     init_source_candidate();
+    init_registrar_confirm();
     init_doi();
     init_http();
     init_http_mock();
@@ -116717,6 +118722,7 @@ var init_research_orchestrator = __esm({
     __name(rankItems, "rankItems");
     __name(policyInputOf, "policyInputOf");
     __name(runResearchPass, "runResearchPass");
+    __name(confirmKept, "confirmKept");
     __name(renderAdapterTable, "renderAdapterTable");
     __name(tierSummary, "tierSummary");
     __name(upsertCounts, "upsertCounts");
@@ -116727,12 +118733,12 @@ var init_research_orchestrator = __esm({
 // bin/lib/section-research.ts
 import { existsSync as existsSync18, readFileSync as readFileSync24 } from "node:fs";
 import path22 from "node:path";
-function oneLine8(s2) {
+function oneLine9(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function sectionQueries(query, title) {
-  const q3 = oneLine8(query);
-  const joined = oneLine8(`${q3} ${title}`);
+  const q3 = oneLine9(query);
+  const joined = oneLine9(`${q3} ${title}`);
   return q3.toLowerCase() === joined.toLowerCase() || title.trim() === "" ? [q3] : [q3, joined];
 }
 function knownEntryFor(entries, view) {
@@ -116755,7 +118761,7 @@ function knownEntryFor(entries, view) {
   return entries.find((e2) => sameDoiVersionFamily(e2, view) || sameWorkVersion(e2, view)) ?? null;
 }
 function excerpt2(text4, max) {
-  const flat = oneLine8(text4 ?? "");
+  const flat = oneLine9(text4 ?? "");
   if (flat.length <= max) return flat;
   const cut = flat.slice(0, max);
   const at = cut.lastIndexOf(" ");
@@ -116809,7 +118815,7 @@ async function runSectionResearch(opts) {
   const verb = opts.verb ?? "plan";
   const label = `pensmith ${verb} --research`;
   const { out: out2, err } = opts.io;
-  const rawQuery = oneLine8(opts.query);
+  const rawQuery = oneLine9(opts.query);
   if (rawQuery.length === 0) throw new PensmithError(`${label}: the query is empty`, EXIT_USAGE);
   if (!opts.yolo && !canPrompt()) {
     await runGate("plan-research", { yolo: false, detail: `section ${id}: nothing was searched, sent or written` });
@@ -116825,12 +118831,12 @@ async function runSectionResearch(opts) {
     );
   }
   const plan = await loadFrontmatterDoc("plan", planPath);
-  const title = typeof plan.frontmatter["title"] === "string" && plan.frontmatter["title"].trim() ? oneLine8(plan.frontmatter["title"]) : opts.slug;
+  const title = typeof plan.frontmatter["title"] === "string" && plan.frontmatter["title"].trim() ? oneLine9(plan.frontmatter["title"]) : opts.slug;
   const doc = readIntakeBrief(opts.root);
   const redact = doc?.brief.pii_redaction === true || config2.project?.pii_redaction === true;
-  const query = redact ? oneLine8(redactPii(rawQuery)) : rawQuery;
+  const query = redact ? oneLine9(redactPii(rawQuery)) : rawQuery;
   const discipline = resolveDiscipline({ discipline: { intake: doc?.brief.discipline, config: config2.project?.discipline_preset } }).slug.value;
-  const briefTopic = oneLine8(doc?.brief.topic ?? "");
+  const briefTopic = oneLine9(doc?.brief.topic ?? "");
   const topic = briefTopic ? `${briefTopic} \u2014 ${title}` : title;
   const queries = sectionQueries(query, title);
   out2(`${label}: section ${id} "${title}" \u2014 ${queries.length} quer${queries.length === 1 ? "y" : "ies"}${redact ? " (PII-redacted)" : ""}`);
@@ -116918,7 +118924,7 @@ async function runSectionResearch(opts) {
   const notAdded = [
     ...final.map((i, index) => ({ i, key: realKeys[index] })).filter(({ key: key2 }, index) => withheld.has(key2) && realKeys.indexOf(key2) === index).map(({ i, key: key2 }) => `[@${key2}] ${formatReference(i.view)} \u2014 not assigned: the citation verifier would not pass a citation of it (${withheld.get(key2)})`),
     ...pass.kept.filter((k2) => !selected.has(k2.candidate.citekey)).map((k2) => `[@${k2.candidate.citekey}] ${formatReference(k2.view)} \u2014 deselected`),
-    ...pass.rejected.filter((r2) => !selected.has(r2.candidate.citekey)).map((r2) => `[@${r2.candidate.citekey}] ${formatReference(r2.view)} \u2014 evaluator: ${oneLine8(r2.reason ?? "rejected")}`),
+    ...pass.rejected.filter((r2) => !selected.has(r2.candidate.citekey)).map((r2) => `[@${r2.candidate.citekey}] ${formatReference(r2.view)} \u2014 evaluator: ${oneLine9(r2.reason ?? "rejected")}`),
     ...pass.excluded.map((x3) => `[@${x3.candidate.citekey}] ${formatReference(x3.view)} \u2014 policy: ${x3.exclusion?.reason ?? "excluded"}`)
   ];
   const retracted = candidates.map((c2, i) => ({ c: c2, key: realKeys[i] })).filter(({ c: c2 }) => c2.retracted === true || c2.retraction_status === "retracted");
@@ -116932,7 +118938,7 @@ async function runSectionResearch(opts) {
     `- Added to this section's assigned_sources: ${added.length > 0 ? added.join(", ") : assignable.length > 0 ? "(none new \u2014 already assigned)" : '(none \u2014 see "Not added")'}`,
     `- New to LIBRARY.json: ${newToLibrary.length > 0 ? newToLibrary.join(", ") : "(none)"}`,
     ...retracted.length > 0 ? [`- RETRACTED (kept in LIBRARY.json, not assigned \u2014 Pass 1 blocks a citation of it): ${retracted.map((r2) => r2.key).join(", ")}`] : [],
-    ...unknown2.length > 0 ? [`- Retraction status unknown (re-checked at verify time): ${unknown2.map((u) => `${u.key}${u.reason ? ` \u2014 ${oneLine8(u.reason)}` : ""}`).join("; ")}`] : [],
+    ...unknown2.length > 0 ? [`- Retraction status unknown (re-checked at verify time): ${unknown2.map((u) => `${u.key}${u.reason ? ` \u2014 ${oneLine9(u.reason)}` : ""}`).join("; ")}`] : [],
     ...notAdded.length > 0 ? ["- Not added:", ...notAdded.map((x3) => `  - ${x3}`)] : []
   ];
   await appendSectionLog(logPath, `# Research log \u2014 section ${id}: ${title}
@@ -117002,7 +119008,7 @@ var init_section_research = __esm({
         this.name = "SectionResearchError";
       }
     };
-    __name(oneLine8, "oneLine");
+    __name(oneLine9, "oneLine");
     __name(sectionQueries, "sectionQueries");
     __name(knownEntryFor, "knownEntryFor");
     __name(excerpt2, "excerpt");
@@ -117078,8 +119084,8 @@ function resolveSectionSlug(paperRoot, n2, explicitSlug, suffix) {
   const match = /* @__PURE__ */ __name((s2) => s2.n === n2 && (s2.suffix ?? "") === (suffix ?? ""), "match");
   const registered = registeredSectionsSync(root)?.find(match);
   if (registered) return registered.slug;
-  const row = outlineIdentitiesSync(root)?.find(match);
-  if (row?.slug) return row.slug;
+  const row2 = outlineIdentitiesSync(root)?.find(match);
+  if (row2?.slug) return row2.slug;
   return "placeholder";
 }
 function outlineSections(paperRoot) {
@@ -117129,30 +119135,30 @@ function resolveSectionArg(verb, paperRoot, rawN, explicitSlug) {
   const registered = fromState.length > 0 ? fromState : rows;
   if (registered.length > 0) {
     const bySlug = slugArg !== void 0 && id.suffix === void 0 ? registered.find((s2) => s2.slug === slugArg && s2.n === id.n) : void 0;
-    const row = bySlug ?? registered.find((s2) => s2.n === id.n && (s2.suffix ?? "") === (id.suffix ?? ""));
-    if (!row) {
+    const row2 = bySlug ?? registered.find((s2) => s2.n === id.n && (s2.suffix ?? "") === (id.suffix ?? ""));
+    if (!row2) {
       throw new PensmithError(
         `pensmith ${verb}: this paper has no section ${idText} \u2014 its outline has section(s) ${describeSections(registered)}`,
         EXIT_USAGE
       );
     }
-    const rowId = formatSectionId(sectionIdOf(row.n, row.suffix));
-    if (slugArg !== void 0 && slugArg !== row.slug) {
+    const rowId = formatSectionId(sectionIdOf(row2.n, row2.suffix));
+    if (slugArg !== void 0 && slugArg !== row2.slug) {
       throw new PensmithError(
-        `pensmith ${verb}: section ${rowId} is "${row.slug}" in the outline, not "${slugArg}" \u2014 drop --slug or pass --slug ${row.slug}`,
+        `pensmith ${verb}: section ${rowId} is "${row2.slug}" in the outline, not "${slugArg}" \u2014 drop --slug or pass --slug ${row2.slug}`,
         EXIT_USAGE
       );
     }
     if (fromState.length > 0) {
-      const why = outlineDisagreement(row, rows);
+      const why = outlineDisagreement(row2, rows);
       if (why !== null) {
         throw new PensmithError(
-          `pensmith ${verb}: section ${rowId} is "${row.slug}" in STATE.json, but ${why} \u2014 ${RECONCILE_HINT}`,
+          `pensmith ${verb}: section ${rowId} is "${row2.slug}" in STATE.json, but ${why} \u2014 ${RECONCILE_HINT}`,
           EXIT_ERROR
         );
       }
     }
-    return row.suffix !== void 0 ? { n: row.n, suffix: row.suffix, slug: row.slug, id: rowId } : { n: row.n, slug: row.slug, id: rowId };
+    return row2.suffix !== void 0 ? { n: row2.n, suffix: row2.suffix, slug: row2.slug, id: rowId } : { n: row2.n, slug: row2.slug, id: rowId };
   }
   if (id.suffix !== void 0) {
     throw new PensmithError(
@@ -117312,7 +119318,7 @@ function readPlanFrontmatter(planPath) {
 function strings(v2) {
   return Array.isArray(v2) ? v2.filter((x3) => typeof x3 === "string") : void 0;
 }
-function str5(v2) {
+function str6(v2) {
   return typeof v2 === "string" && v2.trim().length > 0 ? v2.trim() : void 0;
 }
 function num(v2) {
@@ -117360,7 +119366,7 @@ var init_plan = __esm({
     };
     __name(readPlanFrontmatter, "readPlanFrontmatter");
     __name(strings, "strings");
-    __name(str5, "str");
+    __name(str6, "str");
     __name(num, "num");
     planCommand = defineCommand({
       meta: {
@@ -117421,21 +119427,21 @@ var init_plan = __esm({
         const paperRoot = projectRoot();
         const planPath = sectionPlan(n2, slug, paperRoot);
         const outline = readOutlineSync(paperRoot);
-        const row = outline?.sections.find((s2) => s2.slug === slug) ?? null;
+        const row2 = outline?.sections.find((s2) => s2.slug === slug) ?? null;
         const fm = readPlanFrontmatter(planPath);
         const brief = readPaperBrief(paperRoot);
         const library = (await tryLoadLibrary(paperRoot))?.entries ?? [];
         const { checkable: entries, excluded } = partitionCheckable(library, networkMode().dryRun);
         const blind = new Map(excluded.map((x3) => [x3.citekey, x3.reason]));
-        const title = row?.title ?? str5(fm?.["title"]) ?? slug;
-        const purpose = row?.purpose ?? str5(fm?.["purpose"]) ?? "";
-        const role = row?.role ?? str5(fm?.["role"]);
-        const dependsOn = row?.depends_on ?? strings(fm?.["depends_on"]) ?? [];
-        const wordTarget = row?.estimated_word_count ?? num(fm?.["word_target"]);
-        const voice = row?.voice ?? str5(fm?.["voice"]);
+        const title = row2?.title ?? str6(fm?.["title"]) ?? slug;
+        const purpose = row2?.purpose ?? str6(fm?.["purpose"]) ?? "";
+        const role = row2?.role ?? str6(fm?.["role"]);
+        const dependsOn = row2?.depends_on ?? strings(fm?.["depends_on"]) ?? [];
+        const wordTarget = row2?.estimated_word_count ?? num(fm?.["word_target"]);
+        const voice = row2?.voice ?? str6(fm?.["voice"]);
         const sectionId = sectionIdOf(n2, suffix);
         const researched = entries.filter((e2) => (e2.provenance ?? []).some((t) => isPlanResearchFor(t, sectionId))).map((e2) => e2.citekey);
-        const candidates = [.../* @__PURE__ */ new Set([...row?.assigned_sources ?? [], ...strings(fm?.["assigned_sources"]) ?? [], ...researched])];
+        const candidates = [.../* @__PURE__ */ new Set([...row2?.assigned_sources ?? [], ...strings(fm?.["assigned_sources"]) ?? [], ...researched])];
         const unusable = candidates.filter((k2) => blind.has(k2));
         if (unusable.length > 0) {
           process.stderr.write(
@@ -117801,11 +119807,11 @@ var require_util10 = __commonJS({
     }
     __name(isRegExp, "isRegExp");
     exports.isRegExp = isRegExp;
-    function isObject9(arg) {
+    function isObject10(arg) {
       return typeof arg === "object" && arg !== null;
     }
-    __name(isObject9, "isObject");
-    exports.isObject = isObject9;
+    __name(isObject10, "isObject");
+    exports.isObject = isObject10;
     function isDate(d3) {
       return objectToString(d3) === "[object Date]";
     }
@@ -117930,7 +119936,7 @@ var require_BufferList = __commonJS({
         this.head = this.tail = null;
         this.length = 0;
       }, "clear");
-      BufferList.prototype.join = /* @__PURE__ */ __name(function join16(s2) {
+      BufferList.prototype.join = /* @__PURE__ */ __name(function join19(s2) {
         if (this.length === 0) return "";
         var p2 = this.head;
         var ret = "" + p2.data;
@@ -119482,19 +121488,19 @@ var require_stream_readable = __commonJS({
       var ret = p2.data;
       n2 -= ret.length;
       while (p2 = p2.next) {
-        var str6 = p2.data;
-        var nb = n2 > str6.length ? str6.length : n2;
-        if (nb === str6.length) ret += str6;
-        else ret += str6.slice(0, n2);
+        var str8 = p2.data;
+        var nb = n2 > str8.length ? str8.length : n2;
+        if (nb === str8.length) ret += str8;
+        else ret += str8.slice(0, n2);
         n2 -= nb;
         if (n2 === 0) {
-          if (nb === str6.length) {
+          if (nb === str8.length) {
             ++c2;
             if (p2.next) list3.head = p2.next;
             else list3.head = list3.tail = null;
           } else {
             list3.head = p2;
-            p2.data = str6.slice(nb);
+            p2.data = str8.slice(nb);
           }
           break;
         }
@@ -120431,14 +122437,14 @@ var require_utils4 = __commonJS({
     var nodejsUtils = require_nodejsUtils();
     var external = require_external();
     require_setImmediate();
-    function string2binary(str6) {
+    function string2binary(str8) {
       var result = null;
       if (support.uint8array) {
-        result = new Uint8Array(str6.length);
+        result = new Uint8Array(str8.length);
       } else {
-        result = new Array(str6.length);
+        result = new Array(str8.length);
       }
-      return stringToArrayLike(str6, result);
+      return stringToArrayLike(str8, result);
     }
     __name(string2binary, "string2binary");
     exports.newBlob = function(part, type) {
@@ -120462,9 +122468,9 @@ var require_utils4 = __commonJS({
       return input2;
     }
     __name(identity, "identity");
-    function stringToArrayLike(str6, array2) {
-      for (var i = 0; i < str6.length; ++i) {
-        array2[i] = str6.charCodeAt(i) & 255;
+    function stringToArrayLike(str8, array2) {
+      for (var i = 0; i < str8.length; ++i) {
+        array2[i] = str8.charCodeAt(i) & 255;
       }
       return array2;
     }
@@ -120680,10 +122686,10 @@ var require_utils4 = __commonJS({
     };
     exports.MAX_VALUE_16BITS = 65535;
     exports.MAX_VALUE_32BITS = -1;
-    exports.pretty = function(str6) {
+    exports.pretty = function(str8) {
       var res = "", code, i;
-      for (i = 0; i < (str6 || "").length; i++) {
-        code = str6.charCodeAt(i);
+      for (i = 0; i < (str8 || "").length; i++) {
+        code = str8.charCodeAt(i);
         res += "\\x" + (code < 16 ? "0" : "") + code.toString(16).toUpperCase();
       }
       return res;
@@ -120994,12 +123000,12 @@ var require_utf8 = __commonJS({
     }
     var i;
     _utf8len[254] = _utf8len[254] = 1;
-    var string2buf = /* @__PURE__ */ __name(function(str6) {
-      var buf, c2, c22, m_pos, i2, str_len = str6.length, buf_len = 0;
+    var string2buf = /* @__PURE__ */ __name(function(str8) {
+      var buf, c2, c22, m_pos, i2, str_len = str8.length, buf_len = 0;
       for (m_pos = 0; m_pos < str_len; m_pos++) {
-        c2 = str6.charCodeAt(m_pos);
+        c2 = str8.charCodeAt(m_pos);
         if ((c2 & 64512) === 55296 && m_pos + 1 < str_len) {
-          c22 = str6.charCodeAt(m_pos + 1);
+          c22 = str8.charCodeAt(m_pos + 1);
           if ((c22 & 64512) === 56320) {
             c2 = 65536 + (c2 - 55296 << 10) + (c22 - 56320);
             m_pos++;
@@ -121013,9 +123019,9 @@ var require_utf8 = __commonJS({
         buf = new Array(buf_len);
       }
       for (i2 = 0, m_pos = 0; i2 < buf_len; m_pos++) {
-        c2 = str6.charCodeAt(m_pos);
+        c2 = str8.charCodeAt(m_pos);
         if ((c2 & 64512) === 55296 && m_pos + 1 < str_len) {
-          c22 = str6.charCodeAt(m_pos + 1);
+          c22 = str8.charCodeAt(m_pos + 1);
           if ((c22 & 64512) === 56320) {
             c2 = 65536 + (c2 - 55296 << 10) + (c22 - 56320);
             m_pos++;
@@ -121099,11 +123105,11 @@ var require_utf8 = __commonJS({
       }
       return utils.applyFromCharCode(utf16buf);
     }, "buf2string");
-    exports.utf8encode = /* @__PURE__ */ __name(function utf8encode(str6) {
+    exports.utf8encode = /* @__PURE__ */ __name(function utf8encode(str8) {
       if (support.nodebuffer) {
-        return nodejsUtils.newBufferFrom(str6, "utf-8");
+        return nodejsUtils.newBufferFrom(str8, "utf-8");
       }
-      return string2buf(str6);
+      return string2buf(str8);
     }, "utf8encode");
     exports.utf8decode = /* @__PURE__ */ __name(function utf8decode(buf) {
       if (support.nodebuffer) {
@@ -121523,11 +123529,11 @@ var require_crc32 = __commonJS({
       return crc ^ -1;
     }
     __name(crc32, "crc32");
-    function crc32str(crc, str6, len, pos) {
+    function crc32str(crc, str8, len, pos) {
       var t = crcTable, end = pos + len;
       crc = crc ^ -1;
       for (var i = pos; i < end; i++) {
-        crc = crc >>> 8 ^ t[(crc ^ str6.charCodeAt(i)) & 255];
+        crc = crc >>> 8 ^ t[(crc ^ str8.charCodeAt(i)) & 255];
       }
       return crc ^ -1;
     }
@@ -122770,7 +124776,7 @@ var require_deflate = __commonJS({
     __name(longest_match, "longest_match");
     function fill_window(s2) {
       var _w_size = s2.w_size;
-      var p2, n2, m3, more, str6;
+      var p2, n2, m3, more, str8;
       do {
         more = s2.window_size - s2.lookahead - s2.strstart;
         if (s2.strstart >= _w_size + (_w_size - MIN_LOOKAHEAD)) {
@@ -122798,14 +124804,14 @@ var require_deflate = __commonJS({
         n2 = read_buf(s2.strm, s2.window, s2.strstart + s2.lookahead, more);
         s2.lookahead += n2;
         if (s2.lookahead + s2.insert >= MIN_MATCH) {
-          str6 = s2.strstart - s2.insert;
-          s2.ins_h = s2.window[str6];
-          s2.ins_h = (s2.ins_h << s2.hash_shift ^ s2.window[str6 + 1]) & s2.hash_mask;
+          str8 = s2.strstart - s2.insert;
+          s2.ins_h = s2.window[str8];
+          s2.ins_h = (s2.ins_h << s2.hash_shift ^ s2.window[str8 + 1]) & s2.hash_mask;
           while (s2.insert) {
-            s2.ins_h = (s2.ins_h << s2.hash_shift ^ s2.window[str6 + MIN_MATCH - 1]) & s2.hash_mask;
-            s2.prev[str6 & s2.w_mask] = s2.head[s2.ins_h];
-            s2.head[s2.ins_h] = str6;
-            str6++;
+            s2.ins_h = (s2.ins_h << s2.hash_shift ^ s2.window[str8 + MIN_MATCH - 1]) & s2.hash_mask;
+            s2.prev[str8 & s2.w_mask] = s2.head[s2.ins_h];
+            s2.head[s2.ins_h] = str8;
+            str8++;
             s2.insert--;
             if (s2.lookahead + s2.insert < MIN_MATCH) {
               break;
@@ -123597,7 +125603,7 @@ var require_deflate = __commonJS({
     function deflateSetDictionary(strm, dictionary) {
       var dictLength = dictionary.length;
       var s2;
-      var str6, n2;
+      var str8, n2;
       var wrap;
       var avail;
       var next;
@@ -123635,15 +125641,15 @@ var require_deflate = __commonJS({
       strm.input = dictionary;
       fill_window(s2);
       while (s2.lookahead >= MIN_MATCH) {
-        str6 = s2.strstart;
+        str8 = s2.strstart;
         n2 = s2.lookahead - (MIN_MATCH - 1);
         do {
-          s2.ins_h = (s2.ins_h << s2.hash_shift ^ s2.window[str6 + MIN_MATCH - 1]) & s2.hash_mask;
-          s2.prev[str6 & s2.w_mask] = s2.head[s2.ins_h];
-          s2.head[s2.ins_h] = str6;
-          str6++;
+          s2.ins_h = (s2.ins_h << s2.hash_shift ^ s2.window[str8 + MIN_MATCH - 1]) & s2.hash_mask;
+          s2.prev[str8 & s2.w_mask] = s2.head[s2.ins_h];
+          s2.head[s2.ins_h] = str8;
+          str8++;
         } while (--n2);
-        s2.strstart = str6;
+        s2.strstart = str8;
         s2.lookahead = MIN_MATCH - 1;
         fill_window(s2);
       }
@@ -123695,12 +125701,12 @@ var require_strings = __commonJS({
     }
     var q3;
     _utf8len[254] = _utf8len[254] = 1;
-    exports.string2buf = function(str6) {
-      var buf, c2, c22, m_pos, i, str_len = str6.length, buf_len = 0;
+    exports.string2buf = function(str8) {
+      var buf, c2, c22, m_pos, i, str_len = str8.length, buf_len = 0;
       for (m_pos = 0; m_pos < str_len; m_pos++) {
-        c2 = str6.charCodeAt(m_pos);
+        c2 = str8.charCodeAt(m_pos);
         if ((c2 & 64512) === 55296 && m_pos + 1 < str_len) {
-          c22 = str6.charCodeAt(m_pos + 1);
+          c22 = str8.charCodeAt(m_pos + 1);
           if ((c22 & 64512) === 56320) {
             c2 = 65536 + (c2 - 55296 << 10) + (c22 - 56320);
             m_pos++;
@@ -123710,9 +125716,9 @@ var require_strings = __commonJS({
       }
       buf = new utils.Buf8(buf_len);
       for (i = 0, m_pos = 0; i < buf_len; m_pos++) {
-        c2 = str6.charCodeAt(m_pos);
+        c2 = str8.charCodeAt(m_pos);
         if ((c2 & 64512) === 55296 && m_pos + 1 < str_len) {
-          c22 = str6.charCodeAt(m_pos + 1);
+          c22 = str8.charCodeAt(m_pos + 1);
           if ((c22 & 64512) === 56320) {
             c2 = 65536 + (c2 - 55296 << 10) + (c22 - 56320);
             m_pos++;
@@ -123752,10 +125758,10 @@ var require_strings = __commonJS({
     exports.buf2binstring = function(buf) {
       return buf2binstring(buf, buf.length);
     };
-    exports.binstring2buf = function(str6) {
-      var buf = new utils.Buf8(str6.length);
+    exports.binstring2buf = function(str8) {
+      var buf = new utils.Buf8(str8.length);
       for (var i = 0, len = buf.length; i < len; i++) {
-        buf[i] = str6.charCodeAt(i);
+        buf[i] = str8.charCodeAt(i);
       }
       return buf;
     };
@@ -127764,18 +129770,18 @@ function assembleDrafterInput(paperRoot, section, libraryEntries3) {
   const id = formatSectionId(sectionIdOf(fm.section, fm.suffix));
   if (fm.stub === true) throw new SectionNotPlannedError(id);
   const brief = readPaperBrief(paperRoot);
-  const row = readOutlineSync(paperRoot)?.sections.find((s2) => s2.slug === section.slug);
+  const row2 = readOutlineSync(paperRoot)?.sections.find((s2) => s2.slug === section.slug);
   const profile = loadStyleProfile(paperRoot);
   const sources2 = [...new Set(fm.assigned_sources)];
   const records = buildSourceContext(libraryEntries3, sources2);
   const held2 = new Set(records.map((r2) => r2.citekey));
   const voiceHint2 = resolveVoiceHint({
     planMd: plan.text,
-    outlineVoice: row?.voice,
+    outlineVoice: row2?.voice,
     styleProfile: profile,
     presetHint: presetVoiceHint(brief.discipline.tone, brief.discipline.preset.name)
   });
-  const wordTarget = fm.word_target ?? row?.estimated_word_count ?? 400;
+  const wordTarget = fm.word_target ?? row2?.estimated_word_count ?? 400;
   const input2 = {
     planPath: rel(paperRoot, planPath),
     paper: {
@@ -127788,8 +129794,8 @@ function assembleDrafterInput(paperRoot, section, libraryEntries3) {
       n: fm.section,
       suffix: fm.suffix ?? null,
       slug: fm.slug,
-      title: row?.title || fm.title || fm.slug,
-      role: row?.role ?? fm.role ?? null,
+      title: row2?.title || fm.title || fm.slug,
+      role: row2?.role ?? fm.role ?? null,
       word_target: wordTarget > 0 ? wordTarget : 400
     },
     sources: sources2,
@@ -127896,6 +129902,462 @@ var init_drafter_input = __esm({
   }
 });
 
+// bin/lib/verify/unsupported-forms.ts
+function linesOf2(md) {
+  const out2 = [];
+  let start = 0;
+  for (; ; ) {
+    const nl = md.indexOf("\n", start);
+    const rawEnd = nl === -1 ? md.length : nl;
+    const end = rawEnd > start && md[rawEnd - 1] === "\r" ? rawEnd - 1 : rawEnd;
+    out2.push({ start, end, text: md.slice(start, end) });
+    if (nl === -1) return out2;
+    start = nl + 1;
+  }
+}
+function mathSpans(md, code) {
+  const out2 = [];
+  if (!md.includes("$")) return out2;
+  const cites = findCitations(md);
+  const inCitation = /* @__PURE__ */ __name((at) => cites.some((c2) => c2.start < at && at < c2.end), "inCitation");
+  const re = /(?<!\\)\$\$[\s\S]*?(?<!\\)\$\$|(?<![\\$])\$(?![\s$])(?:\\.|[^$\\\n])*?(?<![\s\\])\$(?![\d$])/g;
+  for (let m3 = re.exec(md); m3 !== null; m3 = re.exec(md)) {
+    if (inCitation(m3.index)) {
+      re.lastIndex = m3.index + 1;
+      continue;
+    }
+    if (offsetInSpans(m3.index, code)) continue;
+    if (/\n[ \t]*\r?\n/.test(m3[0])) continue;
+    out2.push([m3.index, m3.index + m3[0].length]);
+  }
+  return out2;
+}
+function listName(text4) {
+  return text4.replace(/[*_]+/g, "").replace(/^\s*(?:\d+(?:\.\d+)*\.?|[IVXLC]+\.)\s+/, "").replace(/[\s:.]+$/, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function headingKind(lines2, i) {
+  const text4 = lines2[i].text;
+  if (ATX_RE.test(text4)) return "atx";
+  const prevBlank = i === 0 || BLANK_RE.test(lines2[i - 1].text);
+  const next = lines2[i + 1];
+  if (!BLANK_RE.test(text4) && prevBlank && next !== void 0 && SETEXT_RULE_RE.test(next.text)) return "setext";
+  if (EMPHASIS_LINE_RE.test(text4)) return "label";
+  return null;
+}
+function headingText(lines2, i, kind) {
+  const text4 = lines2[i].text;
+  if (kind === "atx") return ATX_RE.exec(text4)?.[2] ?? "";
+  if (kind === "label") return EMPHASIS_LINE_RE.exec(text4)?.[2] ?? "";
+  return text4;
+}
+function referenceLists(md, lines2) {
+  const out2 = [];
+  for (let i = 0; i < lines2.length; i += 1) {
+    const line = lines2[i];
+    let kind = headingKind(lines2, i);
+    let name = kind === null ? "" : listName(headingText(lines2, i, kind));
+    if (!REFERENCE_LIST_NAMES.has(name)) {
+      const prevBlank = i === 0 || BLANK_RE.test(lines2[i - 1].text);
+      if (!prevBlank) continue;
+      name = listName(line.text);
+      if (!REFERENCE_LIST_NAMES.has(name) || line.text.trim().length > 40) continue;
+      kind = "label";
+    }
+    const headingEnd = kind === "setext" ? lines2[i + 1].end : line.end;
+    out2.push({ form: "reference-list", start: line.start, end: headingEnd });
+    let j2 = kind === "setext" ? i + 2 : i + 1;
+    let entry = null;
+    const flush = /* @__PURE__ */ __name(() => {
+      if (entry !== null) out2.push({ form: "reference-list", start: entry.start, end: entry.end });
+      entry = null;
+    }, "flush");
+    for (; j2 < lines2.length; j2 += 1) {
+      const l2 = lines2[j2];
+      if (BLANK_RE.test(l2.text)) {
+        flush();
+        continue;
+      }
+      if (headingKind(lines2, j2) !== null) break;
+      if (entry === null || LIST_ITEM_RE.test(l2.text)) {
+        flush();
+        entry = { start: l2.start, end: l2.end };
+      } else {
+        entry.end = l2.end;
+      }
+    }
+    flush();
+    i = j2 - 1;
+  }
+  return out2;
+}
+function footnotes(md, lines2) {
+  const out2 = [];
+  const defStarts = /* @__PURE__ */ new Set();
+  for (const l2 of lines2) {
+    const m3 = /^ {0,3}\[\^[^\]\s]+\]:/.exec(l2.text);
+    if (m3 === null) continue;
+    defStarts.add(l2.start + l2.text.indexOf("["));
+    out2.push({ form: "footnote", start: l2.start + l2.text.indexOf("["), end: l2.end });
+  }
+  for (const m3 of md.matchAll(/\[\^[^\]\s]+\]/g)) {
+    if (defStarts.has(m3.index) || escaped2(md, m3.index)) continue;
+    out2.push({ form: "footnote", start: m3.index, end: m3.index + m3[0].length });
+  }
+  return out2;
+}
+function escaped2(text4, i) {
+  let n2 = 0;
+  for (let j2 = i - 1; j2 >= 0 && text4[j2] === "\\"; j2 -= 1) n2 += 1;
+  return n2 % 2 === 1;
+}
+function closeBracket(md, open4) {
+  let depth = 0;
+  for (let i = open4; i < md.length; i += 1) {
+    const c2 = md[i];
+    if (c2 === "\n" && /^\r?\n[ \t]*\r?\n/.test(md.slice(i))) return i;
+    if (escaped2(md, i)) continue;
+    if (c2 === "[") depth += 1;
+    else if (c2 === "]") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return md.length;
+}
+function inlineNotes(md) {
+  const out2 = [];
+  for (let at = md.indexOf("^["); at !== -1; at = md.indexOf("^[", at + 2)) {
+    if (escaped2(md, at)) continue;
+    out2.push({ form: "inline-note", start: at, end: closeBracket(md, at + 1) });
+  }
+  return out2;
+}
+function texCites(md) {
+  return [...md.matchAll(TEX_CITE_RE)].map((m3) => ({ form: "tex-cite", start: m3.index, end: m3.index + m3[0].length }));
+}
+function exponentContext(before) {
+  const word = /[\p{L}\p{N}]+$/u.exec(before)?.[0] ?? "";
+  if (word === "") return false;
+  return new RegExp("\\p{N}$", "u").test(word) || word.length <= 2;
+}
+function htmlCites(md) {
+  const out2 = [];
+  for (const m3 of md.matchAll(/<cite\b[^>]*>/gi)) {
+    const close = md.slice(m3.index).search(/<\/cite\s*>/i);
+    const end = close === -1 ? m3.index + m3[0].length : m3.index + close + md.slice(m3.index + close).indexOf(">") + 1;
+    out2.push({ form: "html-cite", start: m3.index, end });
+  }
+  for (const m3 of md.matchAll(/<ref\b[^>]*\/?>/gi)) out2.push({ form: "html-cite", start: m3.index, end: m3.index + m3[0].length });
+  for (const m3 of md.matchAll(/<sup\b[^>]*>([\s\S]*?)<\/sup\s*>/gi)) {
+    const inner = m3[1];
+    const text4 = inner.replace(/<[^>]*>/g, "");
+    const linked = /<a\b[^>]*href\s*=\s*["']?#/i.test(inner);
+    const year = /\b(?:1[5-9]|20)\d{2}\b/.test(text4) && new RegExp("\\p{L}", "u").test(text4);
+    const marker = MARKER_CONTENT_RE.test(text4);
+    if (!linked && !year && !marker) continue;
+    if (!linked && !year && PLAIN_NUMBER_RE.test(text4) && exponentContext(md.slice(Math.max(0, m3.index - 40), m3.index))) continue;
+    out2.push({ form: "html-cite", start: m3.index, end: m3.index + m3[0].length });
+  }
+  return out2;
+}
+function superscriptMarkers(md) {
+  const out2 = [];
+  for (const m3 of md.matchAll(/(?<![\\^])\^(\d{1,3}(?:[,–-]\d{1,3})*)\^/g)) {
+    const plain2 = PLAIN_NUMBER_RE.test(m3[1]);
+    if (plain2 && exponentContext(md.slice(Math.max(0, m3.index - 40), m3.index))) continue;
+    out2.push({ form: "superscript-marker", start: m3.index, end: m3.index + m3[0].length });
+  }
+  const uni = new RegExp(`[${SUPERSCRIPT_DIGITS}]+(?:[,\u207B\u2013-][${SUPERSCRIPT_DIGITS}]+)*`, "gu");
+  for (const m3 of md.matchAll(uni)) {
+    const before = md.slice(Math.max(0, m3.index - 40), m3.index);
+    const afterPunct = /[.,;:)\]"'”’]$/u.test(before);
+    const single = !/[,⁻–-]/.test(m3[0]);
+    if (!afterPunct && (before === "" || /\s$/.test(before) || single && exponentContext(before))) continue;
+    out2.push({ form: "superscript-marker", start: m3.index, end: m3.index + m3[0].length });
+  }
+  return out2;
+}
+function numericMarkers(md) {
+  const out2 = [];
+  const re = /\[\s*\d{1,3}(?:\s*[-–—,]\s*\d{1,3})*(?:\s*,\s*pp?\.\s*\d+(?:\s*[-–—]\s*\d+)?)?\s*\]/g;
+  for (const m3 of md.matchAll(re)) {
+    const before = m3.index > 0 ? md[m3.index - 1] : "";
+    const after = md[m3.index + m3[0].length] ?? "";
+    if (/[\p{L}\p{N}\]!\\^]/u.test(before) || /[([:]/.test(after)) continue;
+    out2.push({ form: "numeric-marker", start: m3.index, end: m3.index + m3[0].length });
+  }
+  return out2;
+}
+function authorDateSegment(segment) {
+  const m3 = SEGMENT_RE.exec(segment);
+  if (m3 === null) return false;
+  const names = (m3.groups?.["names"] ?? "").trim();
+  const several = /\s(?:&|and)\s|,|\bet\.?\s+al\b/u.test(names);
+  if (m3.groups?.["page"] !== void 0 && !several) return false;
+  if (!several && !/\s/.test(names) && NOT_AUTHORS.has(names.toLowerCase())) return false;
+  return true;
+}
+function authorDate(md) {
+  const out2 = [];
+  for (const m3 of md.matchAll(/\(([^()]{2,400})\)|\[([^[\]@^]{2,400})\]/g)) {
+    const inner = m3[1] ?? m3[2];
+    if (/\n[ \t]*\r?\n/.test(inner)) continue;
+    if (m3[2] !== void 0) {
+      const before = m3.index > 0 ? md[m3.index - 1] : "";
+      const after = md[m3.index + m3[0].length] ?? "";
+      if (/[!\]\\]/.test(before) || /[([:]/.test(after)) continue;
+    }
+    if (inner.split(";").some((s2) => authorDateSegment(s2.replace(/\s+/g, " ")))) {
+      out2.push({ form: "author-date", start: m3.index, end: m3.index + m3[0].length });
+    }
+  }
+  const narrative = new RegExp(
+    String.raw`(?<![\p{L}\p{M}])(?:${NARRATIVE_AUTHOR}(?:\s*,\s*${NARRATIVE_AUTHOR})*\s*,?\s*(?:and|&)\s+${NARRATIVE_AUTHOR}|${NARRATIVE_AUTHOR}\s+${ET_AL})\s*(?:'s|’s)?\s*$`,
+    "u"
+  );
+  const dated = new RegExp(String.raw`\(\s*${YEAR}(?:\s*[,:][^()\n]*)?\)`, "gu");
+  for (const m3 of md.matchAll(dated)) {
+    const windowStart = Math.max(0, m3.index - 120);
+    const window2 = md.slice(windowStart, m3.index);
+    const lastBreak = Math.max(window2.lastIndexOf("\n\n"), window2.lastIndexOf("\n\r\n"));
+    const head = lastBreak === -1 ? window2 : window2.slice(lastBreak + 1);
+    const n2 = narrative.exec(head);
+    if (n2 === null) continue;
+    const start = m3.index - head.length + n2.index;
+    out2.push({ form: "author-date", start, end: m3.index + m3[0].length });
+  }
+  return out2;
+}
+function findUnsupportedForms(md) {
+  const code = provableCodeSpans2(md);
+  const skip = [...code, ...mathSpans(md, code)];
+  const lines2 = linesOf2(md);
+  const raw = [
+    ...referenceLists(md, lines2),
+    ...footnotes(md, lines2),
+    ...inlineNotes(md),
+    ...texCites(md),
+    ...htmlCites(md),
+    ...superscriptMarkers(md),
+    ...numericMarkers(md),
+    ...authorDate(md)
+  ].filter((f2) => !offsetInSpans(f2.start, skip)).sort((a3, b3) => a3.start - b3.start || b3.end - a3.end);
+  const kept = [];
+  for (const f2 of raw) {
+    if (kept.some((k2) => f2.start >= k2.start && f2.end <= k2.end)) continue;
+    kept.push(f2);
+  }
+  return kept.map((f2) => ({
+    verdict: "UNSUPPORTED-FORM",
+    form: f2.form,
+    text: firstLine2(md.slice(f2.start, f2.end)),
+    line: lineOfOffset(md, f2.start),
+    reason: UNSUPPORTED_FORM_REASONS[f2.form]
+  }));
+}
+function firstLine2(text4) {
+  const line = (text4.split(/\r?\n/)[0] ?? "").trimEnd();
+  return line.length > 120 ? `${line.slice(0, 119)}\u2026` : line;
+}
+var UNSUPPORTED_FORM_REASONS, BLANK_RE, REFERENCE_LIST_NAMES, ATX_RE, SETEXT_RULE_RE, EMPHASIS_LINE_RE, LIST_ITEM_RE, TEX_CITE_RE, MARKER_CONTENT_RE, PLAIN_NUMBER_RE, SUPERSCRIPT_DIGITS, CAPWORD, PARTICLE, JOINER, AUTHOR, NARRATIVE_AUTHOR, ET_AL, YEAR, PREFIX, SEGMENT_RE, NOT_AUTHORS;
+var init_unsupported_forms = __esm({
+  "bin/lib/verify/unsupported-forms.ts"() {
+    "use strict";
+    init_citation_token();
+    UNSUPPORTED_FORM_REASONS = {
+      "author-date": "an author-date citation the verifier cannot check against CITATIONS.bib \u2014 cite the source as [@citekey]",
+      footnote: "a footnote the verifier cannot check \u2014 cite the source in the text as [@citekey] (a note citation style makes the notes at export)",
+      "inline-note": "an inline note the verifier cannot check \u2014 cite the source in the text as [@citekey] (a note citation style makes the notes at export)",
+      "reference-list": "a reference list typed into the draft, which the verifier cannot check \u2014 remove it: the export builds the bibliography from the [@citekey] citations",
+      "tex-cite": "a raw TeX citation command the verifier cannot check \u2014 write [@citekey]",
+      "html-cite": "HTML citation markup the verifier cannot check \u2014 write [@citekey]",
+      "numeric-marker": "a numbered citation marker the verifier cannot check \u2014 write [@citekey] (a numeric citation style numbers the citations at export)",
+      "superscript-marker": "a superscript citation marker the verifier cannot check \u2014 write [@citekey] (a numeric citation style numbers the citations at export)"
+    };
+    __name(linesOf2, "linesOf");
+    BLANK_RE = /^[ \t]*$/;
+    __name(mathSpans, "mathSpans");
+    REFERENCE_LIST_NAMES = /* @__PURE__ */ new Set([
+      "references",
+      "reference list",
+      "list of references",
+      "bibliography",
+      "selected bibliography",
+      "works cited",
+      "works consulted",
+      "cited works",
+      "literature cited",
+      "notes",
+      "endnotes",
+      "footnotes",
+      "sources",
+      "sources cited",
+      "citations",
+      "further reading"
+    ]);
+    __name(listName, "listName");
+    ATX_RE = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t#]*$/;
+    SETEXT_RULE_RE = /^ {0,3}(?:=+|-+)[ \t]*$/;
+    EMPHASIS_LINE_RE = /^[ \t]*(\*\*|__|\*|_)(?!\s)(.+?)(?<!\s)\1[ \t]*:?[ \t]*$/;
+    LIST_ITEM_RE = /^[ \t]*(?:[-*+]|\d{1,3}[.)]|\[\d{1,3}\])[ \t]+/;
+    __name(headingKind, "headingKind");
+    __name(headingText, "headingText");
+    __name(referenceLists, "referenceLists");
+    __name(footnotes, "footnotes");
+    __name(escaped2, "escaped");
+    __name(closeBracket, "closeBracket");
+    __name(inlineNotes, "inlineNotes");
+    TEX_CITE_RE = /\\(?:[Pp]aren|[Tt]ext|[Ff]oot|[Aa]uto|[Ss]mart|[Ss]uper|[Ff]ull|[Nn]o)?[Cc]ite[A-Za-z]*\*?(?:[ \t]*\[[^\]\n]*\]){0,2}(?:[ \t]*\{[^}\n]*\})?|\\(?:bibitem|bibliography|printbibliography|addbibresource|nocite)\b(?:[ \t]*\[[^\]\n]*\])?(?:[ \t]*\{[^}\n]*\})?|\\begin[ \t]*\{thebibliography\}/g;
+    __name(texCites, "texCites");
+    __name(exponentContext, "exponentContext");
+    MARKER_CONTENT_RE = /^\s*\[?\s*\d{1,3}(?:\s*[-–—,]\s*\d{1,3})*\s*\]?\s*$/;
+    PLAIN_NUMBER_RE = /^\s*\d{1,3}\s*$/;
+    __name(htmlCites, "htmlCites");
+    SUPERSCRIPT_DIGITS = "\u2070\xB9\xB2\xB3\u2074\u2075\u2076\u2077\u2078\u2079";
+    __name(superscriptMarkers, "superscriptMarkers");
+    __name(numericMarkers, "numericMarkers");
+    CAPWORD = String.raw`\p{Lu}(?:[\p{L}\p{M}'’.]|-(?=\p{L}))*`;
+    PARTICLE = String.raw`(?:van|von|de|der|den|del|della|di|da|du|le|la|ten|ter|al|el|bin|ibn|dos|das|do|zu)`;
+    JOINER = String.raw`(?:of|for|the|on|in|and|to|de|du|des|für|und|&)`;
+    AUTHOR = String.raw`(?:${PARTICLE}\s+)*${CAPWORD}(?:(?:\s+(?:${PARTICLE}|${JOINER}))*\s+${CAPWORD})*(?:\s*\[\p{Lu}[^\]]{0,19}\])?`;
+    NARRATIVE_AUTHOR = String.raw`(?:${PARTICLE}\s+)*${CAPWORD}(?:[ \t]+${CAPWORD})?`;
+    ET_AL = String.raw`et\.?\s+al\.?`;
+    YEAR = String.raw`(?:(?:1[5-9]|20)\d{2}[a-z]?(?:\/(?:1[5-9]|20)\d{2}[a-z]?)?(?![\d–—-])|n\.\s?d\.|in\s+press|forthcoming|in\s+preparation|under\s+review)`;
+    PREFIX = String.raw`(?:see(?:\s+also)?|but\s+see|e\.g\.,?|i\.e\.,?|cf\.|compare|for\s+example,?|for\s+a\s+review,?\s+see|as\s+cited\s+in|as\s+reviewed\s+in|reviewed\s+in|quoted\s+in|cited\s+in|following|contra)`;
+    SEGMENT_RE = new RegExp(
+      String.raw`^\s*(?:${PREFIX}\s+)?(?<names>${AUTHOR}(?:\s*,\s*${AUTHOR})*(?:\s*,?\s*(?:&|and)\s+${AUTHOR})?(?:\s*,?\s+${ET_AL})?)\s*(?:'s|’s)?(?:\s*,\s*|\s+)(?:${YEAR}(?:\s*[,:].*)?|(?<page>\d{1,4}(?:[-–]\d{1,4})?))\s*$`,
+      "u"
+    );
+    NOT_AUTHORS = /* @__PURE__ */ new Set([
+      "january",
+      "february",
+      "march",
+      "april",
+      "may",
+      "june",
+      "july",
+      "august",
+      "september",
+      "october",
+      "november",
+      "december",
+      "jan.",
+      "feb.",
+      "mar.",
+      "apr.",
+      "jun.",
+      "jul.",
+      "aug.",
+      "sep.",
+      "sept.",
+      "oct.",
+      "nov.",
+      "dec.",
+      "spring",
+      "summer",
+      "autumn",
+      "fall",
+      "winter",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday",
+      "since",
+      "in",
+      "by",
+      "from",
+      "until",
+      "till",
+      "before",
+      "after",
+      "during",
+      "as",
+      "of",
+      "circa",
+      "ca.",
+      "c.",
+      "around",
+      "about",
+      "approximately",
+      "approx.",
+      "up",
+      "to",
+      "through",
+      "throughout",
+      "the",
+      "a",
+      "an",
+      "at",
+      "on",
+      "for",
+      "year",
+      "years",
+      "fy",
+      "ad",
+      "ce",
+      "bce",
+      "bc",
+      "early",
+      "late",
+      "mid",
+      "figure",
+      "fig.",
+      "table",
+      "chapter",
+      "section",
+      "appendix",
+      "vol.",
+      "volume",
+      "no.",
+      "issue",
+      "page",
+      "pages",
+      "version",
+      "edition",
+      "ed.",
+      "est.",
+      "established",
+      "founded",
+      "born",
+      "died",
+      "b.",
+      "d.",
+      "updated",
+      "revised",
+      "accessed",
+      "retrieved",
+      "published",
+      "copyright",
+      "total",
+      "wave",
+      "cohort",
+      "phase",
+      "step",
+      "study",
+      "experiment",
+      "model",
+      "sample",
+      "n",
+      "mean",
+      "median",
+      "age",
+      "ages",
+      "aged",
+      "q1",
+      "q2",
+      "q3",
+      "q4"
+    ]);
+    __name(authorDateSegment, "authorDateSegment");
+    __name(authorDate, "authorDate");
+    __name(findUnsupportedForms, "findUnsupportedForms");
+    __name(firstLine2, "firstLine");
+  }
+});
+
 // bin/lib/draft-containment.ts
 function checkDraft(draft, opts) {
   const assigned = new Set(opts.assigned);
@@ -127904,12 +130366,25 @@ function checkDraft(draft, opts) {
     if (assigned.has(key2)) continue;
     out2.push({ kind: "unassigned-citekey", citekey: key2, message: `citekey ${key2} not assigned to section ${opts.section}` });
   }
+  for (const f2 of [...findUnparseableCitations(draft), ...findUnsupportedForms(draft)].sort((a3, b3) => a3.line - b3.line)) {
+    out2.push({ kind: "uncheckable-citation-form", citekey: `L${f2.line}`, message: `line ${f2.line}: \`${oneLine10(f2.text)}\` (${f2.verdict})` });
+  }
   if (opts.fullText !== void 0) {
-    for (const q3 of quotesWithoutFullText(draft, opts.fullText)) {
+    for (const q3 of quotesWithoutFullText(draft, opts.fullText, opts.quoteMinWords !== void 0 ? { minWords: opts.quoteMinWords } : {})) {
       out2.push({ kind: "quote-without-full-text", citekey: q3.citekey, message: describeQuotesWithoutFullText([q3]), quote: q3 });
     }
   }
   return out2;
+}
+function oneLine10(text4) {
+  const t = text4.replace(/\s+/g, " ").trim();
+  return t.length > 80 ? `${t.slice(0, 79)}\u2026` : t;
+}
+function describeForms(violations) {
+  const forms = violations.filter((v2) => v2.kind === "uncheckable-citation-form");
+  if (forms.length === 0) return "";
+  const named = forms.slice(0, 5).map((v2) => v2.message).join("; ");
+  return `citation forms the verifier cannot check \u2014 ${named}${forms.length > 5 ? `; \u2026 (${forms.length - 5} more)` : ""}`;
 }
 function unassignedKeys(violations) {
   return [...new Set(violations.filter((v2) => v2.kind === "unassigned-citekey").map((v2) => v2.citekey))];
@@ -127925,6 +130400,8 @@ function failureReason(violations, section) {
   else if (keys.length > 1) parts.push(`citekeys ${keys.join(", ")} not assigned to section ${section}`);
   const quotes = describeQuotes(violations);
   if (quotes) parts.push(quotes);
+  const forms = describeForms(violations);
+  if (forms) parts.push(forms);
   return parts.join("; ");
 }
 function containmentCorrection(violations, assigned) {
@@ -127937,6 +130414,12 @@ function containmentCorrection(violations, assigned) {
   }
   const quotes = describeQuotes(violations);
   if (quotes) parts.push(`Your draft has ${quotes.charAt(0).toLowerCase()}${quotes.slice(1)}.`);
+  const forms = describeForms(violations);
+  if (forms) {
+    parts.push(
+      `Your draft uses ${forms}. Cite only with [@citekey] tokens from the sources block: no reference list or bibliography, no footnotes or notes, no author-date citations such as (Author, 2020), no \\cite commands, HTML citation tags or numbered markers.`
+    );
+  }
   parts.push("Reply with the complete corrected section.");
   return parts.join(" ");
 }
@@ -127944,8 +130427,11 @@ var init_draft_containment = __esm({
   "bin/lib/draft-containment.ts"() {
     "use strict";
     init_citation_token();
+    init_unsupported_forms();
     init_full_text();
     __name(checkDraft, "checkDraft");
+    __name(oneLine10, "oneLine");
+    __name(describeForms, "describeForms");
     __name(unassignedKeys, "unassignedKeys");
     __name(describeQuotes, "describeQuotes");
     __name(failureReason, "failureReason");
@@ -128233,15 +130719,334 @@ var init_write_orchestrator = __esm({
   }
 });
 
+// bin/lib/verify/freshness.ts
+function debug(msg) {
+  if (process.env["PENSMITH_DEBUG"] === "1") {
+    process.stderr.write(`[freshness] ${msg}
+`);
+  }
+}
+function cell(s2) {
+  return s2.replace(/\|/g, "/").replace(/\s*\r?\n\s*/g, " ").trim();
+}
+async function registrationAgencyOf(doi) {
+  if (isDataCiteArxivDoi(doi)) return { kind: "agency", agency: "DataCite" };
+  try {
+    const r2 = await sources.crossref.lookupById(doi);
+    if (r2.kind === "found") return { kind: "agency", agency: "Crossref" };
+    if (r2.kind === "failed") return { kind: "unavailable", note: `${cell(r2.reason)} \u2014 re-run verify` };
+    const ra = await registrationAgency(doi);
+    if (ra.kind === "agency") return ra;
+    if (ra.kind === "unknown-prefix") return { kind: "none", reason: "no registration agency holds its prefix \u2014 see its Pass-1 row" };
+    return { kind: "unavailable", note: `the registration agency of ${doi} is unknown: ${cell(ra.reason)} \u2014 re-run verify` };
+  } catch (err) {
+    if (isOfflineEgressError(err)) return { kind: "skipped", detail: `skipped (${offlineLabel(err)})` };
+    return { kind: "unavailable", note: `${cell(errorFailureReason(err))} \u2014 re-run verify` };
+  }
+}
+async function probeFreshness(source) {
+  const { citekey } = source;
+  const warnings = [];
+  const skipped = [];
+  const ok = [];
+  const info = [];
+  let recheck;
+  const done = /* @__PURE__ */ __name((doi) => ({
+    citekey,
+    doi,
+    warnings,
+    ...skipped.length > 0 ? { skipped } : {},
+    ...ok.length > 0 ? { ok } : {},
+    ...info.length > 0 ? { info } : {},
+    ...recheck !== void 0 ? { recheck } : {}
+  }), "done");
+  if (!source.inBib) {
+    info.push({ probe: "CITATIONS.bib", status: "missing", detail: "not in CITATIONS.bib \u2014 see its Pass-1 row" });
+    return done(null);
+  }
+  if (source.doi === null) {
+    info.push(
+      source.registrar !== null ? { probe: "registrar", status: "no DOI", detail: `no DOI \u2014 checked at ${source.registrar} by Pass 1` } : { probe: "registrar", status: "no DOI", detail: "no DOI, arXiv id, PMID or ISBN \u2014 see its Pass-1 row" }
+    );
+    return done(null);
+  }
+  const normalized = normalizeDoi(source.doi);
+  if (normalized === null) {
+    debug(`citekey=${citekey} doi=${JSON.stringify(source.doi)} failed normalization \u2014 not probed`);
+    info.push({ probe: "DOI HEAD", status: "not probed", detail: "the DOI does not normalize \u2014 see its Pass-1 row" });
+    return done(null);
+  }
+  const mode = networkMode();
+  if (mode.sourcesOffline) {
+    skipped.push({ probe: "DOI HEAD", detail: `skipped (${mode.dryRun ? "dry-run" : "offline"})` });
+  } else {
+    try {
+      const res = await fetch2(`https://doi.org/${normalized}`, { method: "HEAD", timeoutMs: 1e4, followRedirects: false });
+      if (res.status >= 400) {
+        warnings.push({ probe: "DOI HEAD", status: "WARN", detail: `DOI HEAD returned ${res.status} \u2014 source may be stale or moved` });
+      } else {
+        ok.push({ probe: "DOI HEAD", detail: `doi.org resolves it (HTTP ${res.status})` });
+      }
+    } catch (err) {
+      const why = isHostUnavailableError(err) ? errorFailureReason(err) : `no answer: ${errorFailureReason(err)}`;
+      skipped.push({ probe: "DOI HEAD", detail: "unavailable", note: `${cell(why)} \u2014 re-run verify` });
+    }
+  }
+  if (isReservedDryRunId(normalized)) {
+    info.push({ probe: "retraction-watch", status: "not probed", detail: "a synthetic --dry-run source" });
+    return done(normalized);
+  }
+  const agency = await registrationAgencyOf(normalized);
+  if (agency.kind === "skipped") {
+    skipped.push({ probe: "retraction-watch", detail: agency.detail });
+    return done(normalized);
+  }
+  if (agency.kind === "unavailable") {
+    skipped.push({ probe: "retraction-watch", detail: "unavailable", note: agency.note });
+    if (source.recheck === true) recheck = { status: "unknown", details: null };
+    return done(normalized);
+  }
+  if (agency.kind === "none") {
+    info.push({ probe: "retraction-watch", status: "unknown", detail: agency.reason });
+    return done(normalized);
+  }
+  if (!/^crossref$/i.test(agency.agency)) {
+    info.push({ probe: "retraction-watch", status: "unknown", detail: `retraction status unknown (no retraction data for ${agency.agency} DOIs)` });
+    if (source.recheck === true) recheck = { status: "unknown", details: null };
+    return done(normalized);
+  }
+  try {
+    const hit = await fetchById2(normalized, source.recheck === true ? { refresh: true } : {});
+    if (hit) {
+      const why = hit.retraction_details ? ` (${hit.retraction_details})` : "";
+      warnings.push({ probe: "retraction-watch", status: "WARN", detail: `cited work appears in Retraction Watch${why}` });
+      if (source.recheck === true) recheck = { status: "retracted", details: hit.retraction_details ?? null };
+    } else {
+      ok.push({ probe: "retraction-watch", detail: source.recheck === true ? "no retraction notice (re-checked: LIBRARY.json had it unknown)" : "no retraction notice" });
+      if (source.recheck === true) recheck = { status: "clear", details: null };
+    }
+  } catch (err) {
+    if (isOfflineEgressError(err)) {
+      skipped.push({ probe: "retraction-watch", detail: `skipped (${offlineLabel(err)})` });
+    } else {
+      const why = isRetractionLookupError(err) ? err.message : `retraction status unknown: ${errorFailureReason(err)}`;
+      skipped.push({ probe: "retraction-watch", detail: "unavailable", note: `${cell(why)} \u2014 re-run verify` });
+    }
+    if (source.recheck === true) recheck = { status: "unknown", details: null };
+  }
+  return done(normalized);
+}
+async function probeFreshnessAll(list3, opts = {}) {
+  const sem = new Semaphore(5);
+  const results = await Promise.all(list3.map((s2) => sem.withLock(() => probeFreshness(s2))));
+  if (opts.root !== void 0) {
+    const decided = {};
+    for (const r2 of results) {
+      if (r2.recheck !== void 0 && r2.recheck.status !== "unknown") decided[r2.citekey] = { status: r2.recheck.status, details: r2.recheck.details };
+    }
+    if (Object.keys(decided).length > 0) {
+      try {
+        await recordRetractionStatuses(opts.root, decided);
+      } catch (err) {
+        debug(`could not record re-checked retraction statuses: ${String(err)}`);
+      }
+    }
+  }
+  return results;
+}
+function renderFreshnessTable(results) {
+  const lines2 = [
+    "## Source Freshness (RSCH-10)",
+    "",
+    "| Citekey | Probe | Status | Detail |",
+    "|---------|-------|--------|--------|"
+  ];
+  if (results.length === 0) {
+    lines2.push("| _(none)_ | \u2014 | \u2014 | no citations to probe |");
+    return lines2.join("\n");
+  }
+  for (const r2 of results) {
+    const rows = [];
+    for (const i of r2.info ?? []) rows.push({ probe: i.probe, text: `| ${r2.citekey} | ${i.probe} | ${i.status} | ${cell(i.detail)} |` });
+    for (const o2 of r2.ok ?? []) rows.push({ probe: o2.probe, text: `| ${r2.citekey} | ${o2.probe} | ok | ${cell(o2.detail)} |` });
+    for (const w3 of r2.warnings) rows.push({ probe: w3.probe, text: `| ${r2.citekey} | ${w3.probe} | ${w3.status} | ${cell(w3.detail)} |` });
+    for (const sk of r2.skipped ?? []) {
+      rows.push({ probe: sk.probe, text: `| ${r2.citekey} | ${sk.probe} | ${sk.detail} | ${sk.note ?? "not probed \u2014 re-run online"} |` });
+    }
+    rows.sort((a3, b3) => PROBE_ORDER.indexOf(a3.probe) - PROBE_ORDER.indexOf(b3.probe));
+    for (const x3 of rows) lines2.push(x3.text);
+  }
+  return lines2.join("\n");
+}
+var PROBE_ORDER;
+var init_freshness = __esm({
+  "bin/lib/verify/freshness.ts"() {
+    "use strict";
+    init_doi();
+    init_http();
+    init_search_failure();
+    init_http_mock();
+    init_retraction_watch();
+    init_sources();
+    init_doi_ra();
+    init_full_text();
+    init_library2();
+    init_budget();
+    __name(debug, "debug");
+    __name(cell, "cell");
+    __name(registrationAgencyOf, "registrationAgencyOf");
+    __name(probeFreshness, "probeFreshness");
+    __name(probeFreshnessAll, "probeFreshnessAll");
+    PROBE_ORDER = ["CITATIONS.bib", "registrar", "DOI HEAD", "retraction-watch"];
+    __name(renderFreshnessTable, "renderFreshnessTable");
+  }
+});
+
+// bin/lib/sources/doi-cn.ts
+function servesContentNegotiation(agency) {
+  return CONTENT_NEGOTIATION_AGENCIES.some((a3) => a3.toLowerCase() === agency.trim().toLowerCase());
+}
+function first(v2) {
+  const s2 = Array.isArray(v2) ? v2[0] : v2;
+  return typeof s2 === "string" && s2.trim().length > 0 ? s2.trim() : void 0;
+}
+function cslPersonName(n2) {
+  const family = typeof n2.family === "string" ? n2.family.trim() : "";
+  const given = typeof n2.given === "string" ? n2.given.trim() : "";
+  const literal2 = (typeof n2.literal === "string" ? n2.literal : typeof n2.name === "string" ? n2.name : "").replace(/[{}]/g, "").trim();
+  if (family) return given ? `${family}, ${given}` : family;
+  if (literal2) return `{${literal2}}`;
+  return given ? displayAuthorName(given) : "";
+}
+function yearOf4(r2) {
+  const y3 = Number(r2.issued?.["date-parts"]?.[0]?.[0]);
+  return Number.isInteger(y3) && y3 >= 1800 && y3 <= 2100 ? y3 : void 0;
+}
+function cslToCandidate2(r2, fallbackDoi, checkedAt = (/* @__PURE__ */ new Date()).toISOString()) {
+  const doi = normalizeDoi(first(r2.DOI) ?? "") ?? normalizeDoi(fallbackDoi);
+  if (doi === null) return null;
+  const title = plainText(first(r2.title) ?? "");
+  if (!title) return null;
+  const subtitle = plainTextOpt(first(r2.subtitle));
+  const names = /* @__PURE__ */ __name((list3) => (Array.isArray(list3) ? list3 : []).map(cslPersonName).filter((s2) => s2.length > 0), "names");
+  const creators = names(r2.author);
+  const editors = names(r2.editor);
+  const authors = creators.length > 0 ? creators : editors;
+  if (authors.length === 0) return null;
+  const year = yearOf4(r2);
+  const venue = plainTextOpt(first(r2["container-title"]));
+  const publisher = plainTextOpt(first(r2.publisher));
+  const type = SOURCE_TYPES.includes(String(r2.type)) ? r2.type : r2.type ? "other" : void 0;
+  const text4 = /* @__PURE__ */ __name((v2) => v2 === void 0 || String(v2).trim() === "" ? void 0 : String(v2).trim(), "text");
+  const volume = text4(r2.volume);
+  const issue2 = text4(r2.issue);
+  const pages = text4(r2.page);
+  const abstract = plainTextOpt(first(r2.abstract));
+  return {
+    source: "doi.org",
+    id: doi,
+    doi,
+    title,
+    ...subtitle !== void 0 ? { subtitle } : {},
+    authors,
+    ...editors.length > 0 ? { editors } : {},
+    ...year !== void 0 ? { year } : {},
+    ...abstract !== void 0 ? { abstract } : {},
+    ...venue !== void 0 ? { venue } : {},
+    ...volume !== void 0 ? { volume } : {},
+    ...issue2 !== void 0 ? { issue: issue2 } : {},
+    ...pages !== void 0 ? { pages } : {},
+    ...publisher !== void 0 ? { publisher } : {},
+    ...type !== void 0 ? { type } : {},
+    retracted: false,
+    retraction_status: "unknown",
+    last_verified: checkedAt,
+    citekey: generateCitekey({ authors, ...year !== void 0 ? { year } : {} }),
+    raw: r2
+  };
+}
+function contentNegotiationUrl(doi) {
+  return `https://doi.org/${doi.split("/").map((part, i) => i === 0 ? part : encodeURIComponent(part)).join("/")}`;
+}
+async function lookupById11(id, opts = {}) {
+  const doi = normalizeDoi(id);
+  if (doi === null) return lookupNotFound(`not a DOI: ${JSON.stringify(id.slice(0, 80))}`);
+  const ex = await exchange(
+    () => fetch2(contentNegotiationUrl(doi), {
+      source: "generic",
+      headers: { accept: CSL_ACCEPT },
+      maxBytes: MAX_JSON_RESPONSE_BYTES,
+      validate: validator(CSL_RECORD),
+      ...opts.refresh === true ? { refresh: true } : {}
+    }),
+    { service: "doi.org content-negotiation", check: CSL_RECORD }
+  );
+  if (ex.kind === "failed") {
+    const definitive = ex.status === 200;
+    return lookupFailed(ex.reason, {
+      ...ex.status !== void 0 ? { status: ex.status } : {},
+      ...ex.retryAfterMs !== void 0 ? { retryAfterMs: ex.retryAfterMs } : {},
+      ...definitive ? { permanent: true } : {}
+    });
+  }
+  if (ex.kind === "status") {
+    if (ex.res.status === 404) return lookupNotFound("HTTP 404 (doi.org: DOI Not Found)");
+    return lookupFailed(statusReason2(ex.res), { status: ex.res.status, ...ex.res.status === 406 ? { permanent: true } : {} });
+  }
+  const candidate = cslToCandidate2(parseJsonBody(ex.res), doi, answeredAt(ex.res));
+  if (candidate === null) {
+    return lookupFailed(
+      "the record doi.org served lists no title, or no author or editor, so it cannot be checked (asking again gives the same answer)",
+      { status: 200, permanent: true }
+    );
+  }
+  return lookupFound(candidate);
+}
+var CONTENT_NEGOTIATION_AGENCIES, CSL_ACCEPT, CSL_RECORD;
+var init_doi_cn = __esm({
+  "bin/lib/sources/doi-cn.ts"() {
+    "use strict";
+    init_http();
+    init_registrar_response();
+    init_lookup();
+    init_citekey();
+    init_doi();
+    init_markup();
+    init_person_name();
+    init_http_mock();
+    init_source_types();
+    CONTENT_NEGOTIATION_AGENCIES = Object.freeze(["mEDRA", "JaLC", "KISTI"]);
+    __name(servesContentNegotiation, "servesContentNegotiation");
+    CSL_ACCEPT = "application/vnd.citationstyles.csl+json";
+    __name(first, "first");
+    __name(cslPersonName, "cslPersonName");
+    __name(yearOf4, "yearOf");
+    __name(cslToCandidate2, "cslToCandidate");
+    CSL_RECORD = /* @__PURE__ */ __name((res) => {
+      const body = parseJsonBody(res);
+      if (body === void 0 || typeof body !== "object" || body === null || Array.isArray(body)) {
+        const ct = res.headers["content-type"] ?? "no content type";
+        return `not a CSL record (${ct.split(";")[0]})`;
+      }
+      const errorDoc = recordedErrorBody(200, body);
+      if (errorDoc !== null) return `an error document: ${errorDoc}`;
+      const o2 = body;
+      return typeof o2["title"] === "string" || Array.isArray(o2["title"]) || typeof o2["DOI"] === "string" ? null : "no CSL title or DOI";
+    }, "CSL_RECORD");
+    __name(contentNegotiationUrl, "contentNegotiationUrl");
+    __name(lookupById11, "lookupById");
+  }
+});
+
 // bin/lib/byo-text.ts
-import { createHash as createHash12 } from "node:crypto";
+import { createHash as createHash13 } from "node:crypto";
 import * as fsp9 from "node:fs/promises";
 import * as path25 from "node:path";
 function byoCopyAltered(code) {
   return code === "missing" || code === "changed" || code === "outside";
 }
 function sha256Hex4(data) {
-  return createHash12("sha256").update(data).digest("hex");
+  return createHash13("sha256").update(data).digest("hex");
 }
 function byoTextCacheDir() {
   return path25.join(pensmithDataDir(), "byo-text");
@@ -128314,18 +131119,21 @@ async function byoText(root, entry) {
   await writeByoTextCache(byo.sha256, text4);
   return { available: true, text: text4, file, sha256: byo.sha256, fromCache: false };
 }
-function words2(s2) {
+function words3(s2) {
   return s2.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w3) => w3.length >= 3 && !STOP.has(w3));
 }
 function byoPassages(text4, claim, maxChars = BYO_PASSAGE_CHARS) {
-  const want = new Set(words2(replaceCitations(claim, () => " ")));
+  return passagesNearClaim(text4, claim, maxChars);
+}
+function passagesNearClaim(text4, claim, maxChars = BYO_PASSAGE_CHARS) {
+  const want = new Set(words3(replaceCitations(claim, () => " ")));
   const flat = text4.replace(/\s+/g, " ").trim();
   if (flat.length <= maxChars) return flat;
   const windows = [];
   for (let start = 0; start < flat.length; start += PASSAGE_WINDOW / 2) {
     const chunk = flat.slice(start, start + PASSAGE_WINDOW);
     let score = 0;
-    for (const w3 of new Set(words2(chunk))) if (want.has(w3)) score += 1;
+    for (const w3 of new Set(words3(chunk))) if (want.has(w3)) score += 1;
     windows.push({ start, text: chunk, score });
     if (start + PASSAGE_WINDOW >= flat.length) break;
   }
@@ -128391,166 +131199,98 @@ var init_byo_text = __esm({
       "them",
       "our"
     ]);
-    __name(words2, "words");
+    __name(words3, "words");
     __name(byoPassages, "byoPassages");
+    __name(passagesNearClaim, "passagesNearClaim");
   }
 });
 
-// bin/lib/verify/freshness.ts
-function debug(msg) {
-  if (process.env["PENSMITH_DEBUG"] === "1") {
-    process.stderr.write(`[freshness] ${msg}
-`);
+// bin/lib/verify/metadata-search.ts
+function authorTerm(claimed) {
+  const first2 = claimed.authors[0] ?? claimed.editors?.[0];
+  if (first2 === void 0) return null;
+  const s2 = first2.replace(/[{}]/g, "").trim();
+  const family = s2.includes(",") ? (s2.split(",")[0] ?? "").trim() : s2;
+  return family.length > 0 && surnameForms(first2).length > 0 ? family : null;
+}
+function bibliographicQuery(claimed) {
+  return [plainText(claimed.title).trim(), authorTerm(claimed), claimed.year !== null ? String(claimed.year) : null].filter((x3) => typeof x3 === "string" && x3.length > 0).join(" ");
+}
+function identifierOf(c2) {
+  if (c2.doi) return `DOI ${c2.doi}`;
+  if (c2.isbn) return `ISBN ${c2.isbn}`;
+  if (c2.arxiv) return `arXiv:${c2.arxiv}`;
+  if (c2.pmid) return `PMID ${c2.pmid}`;
+  return null;
+}
+function bestStrictMatch(claimed, candidates) {
+  let best = null;
+  for (const c2 of candidates) {
+    if (identifierOf(c2) === null) continue;
+    const match = matchWork(claimed, c2, { titleThreshold: STRICT_TITLE_JW, authorThreshold: AUTHOR_JW_THRESHOLD });
+    if (!match.ok) continue;
+    if (best === null || match.titleJW + match.authorJW > best.match.titleJW + best.match.authorJW) best = { candidate: c2, match };
+  }
+  return best;
+}
+async function asked(run, who) {
+  try {
+    return await run();
+  } catch (err) {
+    if (isOfflineEgressError(err)) {
+      return { kind: "failed", reason: `${offlineLabel(err)}: no recorded fixture for the ${who} search \u2014 re-run online` };
+    }
+    throw err;
   }
 }
-async function probeFreshness(citekey, doi) {
-  const warnings = [];
-  const skipped = [];
-  const normalized = doi ? normalizeDoi(doi) : null;
-  if (doi && !normalized) {
-    debug(`citekey=${citekey} doi=${JSON.stringify(doi)} failed normalization \u2014 skipping HEAD`);
+async function metadataSearch(claimed, opts = {}) {
+  const refresh = opts.refresh === true ? { refresh: true } : {};
+  const searches = [];
+  if (opts.isBook === true) {
+    searches.push({ who: "Open Library", run: /* @__PURE__ */ __name(() => sources.books.searchTitle(plainText(claimed.title), authorTerm(claimed), refresh), "run") });
   }
-  if (normalized) {
-    const mode = networkMode();
-    if (mode.sourcesOffline) {
-      skipped.push({ probe: "DOI HEAD", detail: `skipped (${mode.dryRun ? "dry-run" : "offline"})` });
-    } else {
-      try {
-        const res = await fetch2(`https://doi.org/${normalized}`, {
-          method: "HEAD",
-          timeoutMs: 1e4,
-          followRedirects: false
-        });
-        if (res.status >= 400) {
-          warnings.push({
-            probe: "DOI HEAD",
-            status: "WARN",
-            detail: `DOI HEAD returned ${res.status} \u2014 source may be stale or moved`
-          });
-        }
-      } catch (err) {
-        if (isHostUnavailableError(err)) {
-          skipped.push({ probe: "DOI HEAD", detail: "unavailable", note: `${errorFailureReason(err).replace(/\|/g, "/")} \u2014 re-run verify` });
-        } else {
-          debug(`citekey=${citekey} doi=${normalized} HEAD transport error: ${String(err)} \u2014 silent`);
-        }
-      }
-    }
-    try {
-      const hit = await fetchById2(normalized);
-      if (hit) {
-        const why = hit.retraction_details ? ` (${hit.retraction_details})` : "";
-        warnings.push({
-          probe: "retraction-watch",
-          status: "WARN",
-          detail: `cited work appears in Retraction Watch${why}`
-        });
-      }
-    } catch (err) {
-      if (isOfflineEgressError(err)) {
-        skipped.push({ probe: "retraction-watch", detail: `skipped (${offlineLabel(err)})` });
-      } else {
-        const why = isRetractionLookupError(err) ? err.message : `retraction status unknown: ${errorFailureReason(err)}`;
-        skipped.push({ probe: "retraction-watch", detail: "unavailable", note: `${why.replace(/\|/g, "/")} \u2014 re-run verify` });
-      }
-    }
-  }
-  return skipped.length > 0 ? { citekey, doi: normalized, warnings, skipped } : { citekey, doi: normalized, warnings };
-}
-async function probeFreshnessAll(sources2) {
-  const sem = new Semaphore(5);
-  return Promise.all(
-    sources2.map((s2) => sem.withLock(() => probeFreshness(s2.citekey, s2.doi)))
-  );
-}
-function renderFreshnessTable(results) {
-  const lines = [
-    "## Source Freshness (RSCH-10)",
-    "",
-    "| Citekey | Probe | Status | Detail |",
-    "|---------|-------|--------|--------|"
-  ];
-  if (results.length === 0) {
-    lines.push("| _(none)_ | \u2014 | \u2014 | no DOIs to probe |");
-    return lines.join("\n");
-  }
-  for (const r2 of results) {
-    const skips = r2.skipped ?? [];
-    for (const sk of skips) {
-      lines.push(`| ${r2.citekey} | ${sk.probe} | ${sk.detail} | ${sk.note ?? "not probed \u2014 re-run online"} |`);
-    }
-    if (r2.warnings.length === 0) {
-      if (!skips.some((sk) => sk.probe === "DOI HEAD")) lines.push(`| ${r2.citekey} | DOI HEAD | ok | |`);
+  searches.push({ who: "Crossref", run: /* @__PURE__ */ __name(() => sources.crossref.searchBibliographic(bibliographicQuery(claimed), refresh), "run") });
+  const failures = [];
+  const empties = [];
+  for (const s2 of searches) {
+    const answer = await asked(s2.run, s2.who);
+    if (answer.kind === "failed") {
+      failures.push(`${s2.who}: ${answer.reason}`);
       continue;
     }
-    for (const w3 of r2.warnings) {
-      lines.push(`| ${r2.citekey} | ${w3.probe} | ${w3.status} | ${w3.detail} |`);
+    const best = bestStrictMatch(claimed, answer.candidates);
+    if (best !== null) {
+      return { kind: "match", candidate: best.candidate, match: best.match, identifier: identifierOf(best.candidate), registrar: s2.who };
     }
+    empties.push(`${s2.who}: ${answer.candidates.length === 0 ? "no record" : `none of its ${answer.candidates.length} closest record(s) matches strictly`}`);
   }
-  return lines.join("\n");
-}
-var init_freshness = __esm({
-  "bin/lib/verify/freshness.ts"() {
-    "use strict";
-    init_doi();
-    init_http();
-    init_search_failure();
-    init_http_mock();
-    init_retraction_watch();
-    init_budget();
-    __name(debug, "debug");
-    __name(probeFreshness, "probeFreshness");
-    __name(probeFreshnessAll, "probeFreshnessAll");
-    __name(renderFreshnessTable, "renderFreshnessTable");
+  if (failures.length > 0) {
+    return { kind: "no-answer", reason: `the metadata search did not answer (${failures.join("; ")})${empties.length > 0 ? `; ${empties.join("; ")}` : ""}` };
   }
-});
-
-// bin/lib/sources/doi-ra.ts
-function firstRecord(body) {
-  if (!Array.isArray(body)) return null;
-  const first = body[0];
-  return typeof first === "object" && first !== null ? first : null;
+  return { kind: "no-match", reason: `no registrar record matches its title, first author and year (${empties.join("; ")})` };
 }
-function doiPrefix(doi) {
-  const slash = doi.indexOf("/");
-  const prefix = slash > 0 ? doi.slice(0, slash) : "";
-  return /^\d+\.\d+(?:\.\d+)*$/.test(prefix) ? prefix : null;
-}
-async function registrationAgency(doi) {
-  const prefix = doiPrefix(doi);
-  if (prefix === null) return { kind: "unknown-prefix" };
-  const ex = await exchange(
-    () => fetch2(`https://doi.org/ra/${prefix}`, { source: "generic", maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(RA_ANSWER) }),
-    { service: "doi.org", check: RA_ANSWER }
-  );
-  if (ex.kind === "failed") return { kind: "failed", reason: ex.reason };
-  if (ex.kind === "status") return { kind: "failed", reason: statusReason2(ex.res) };
-  const rec = firstRecord(parseJsonBody(ex.res));
-  const ra = rec?.["RA"];
-  if (typeof ra === "string" && ra.trim() !== "") return { kind: "agency", agency: ra.trim() };
-  return { kind: "unknown-prefix" };
-}
-var RA_ANSWER;
-var init_doi_ra = __esm({
-  "bin/lib/sources/doi-ra.ts"() {
+var init_metadata_search = __esm({
+  "bin/lib/verify/metadata-search.ts"() {
     "use strict";
+    init_fuzzy();
     init_http();
-    init_registrar_response();
-    __name(firstRecord, "firstRecord");
-    RA_ANSWER = jsonShape((body) => {
-      const rec = firstRecord(body);
-      return rec !== null && (typeof rec["RA"] === "string" || typeof rec["status"] === "string");
-    }, "registration agency");
-    __name(doiPrefix, "doiPrefix");
-    __name(registrationAgency, "registrationAgency");
+    init_sources();
+    init_markup();
+    init_name_match();
+    __name(authorTerm, "authorTerm");
+    __name(bibliographicQuery, "bibliographicQuery");
+    __name(identifierOf, "identifierOf");
+    __name(bestStrictMatch, "bestStrictMatch");
+    __name(asked, "asked");
+    __name(metadataSearch, "metadataSearch");
   }
 });
 
 // bin/lib/verify/pass1.ts
 import { readFileSync as readFileSync28 } from "node:fs";
-function unverifiable(ck, err, what) {
+function offlineRow(ck, err, what) {
   const reason = err.mode === "dry-run" ? UNVERIFIABLE_DRY_RUN_REASON : UNVERIFIABLE_OFFLINE_REASON;
-  return { citekey: ck, verdict: "UNVERIFIABLE", titleJW: 0, authorJW: 0, reason: `${reason} (${what})` };
+  return { citekey: ck, verdict: "UNVERIFIABLE-NETWORK", titleJW: NOT_COMPARED, authorJW: NOT_COMPARED, reason: `${reason} (${what})` };
 }
 function normalizeBibAuthors(rawAuthors) {
   return (rawAuthors ?? []).map((a3) => {
@@ -128560,287 +131300,181 @@ function normalizeBibAuthors(rawAuthors) {
     const given = String(a3?.given ?? "").trim();
     const literal2 = String(a3?.literal ?? "").trim();
     if (!family) return literal2 ? `{${literal2}}` : "";
+    if (!given && !particle && /\s/.test(family)) return `{${family}}`;
     return given ? `${family}, ${given}` : family;
   }).filter(Boolean);
 }
-function surnameOf(author) {
-  return firstAuthorSurname(String(author ?? "").replace(/[{}]/g, ""));
+function bibTitle(claimed) {
+  if (Array.isArray(claimed.title)) return claimed.title[0] ?? "";
+  return claimed.title ?? "";
 }
-function titleSimilarity(actual, claimed) {
-  return jaroWinkler(plainText(actual ?? ""), plainText(claimed));
+function bibYear(claimed) {
+  const y3 = Number(claimed.issued?.["date-parts"]?.[0]?.[0]);
+  return Number.isInteger(y3) && y3 > 0 ? y3 : null;
 }
 function arxivIdOfDataCiteDoi(doi) {
   return isDataCiteArxivDoi(doi) ? normArxiv(doi) : null;
 }
-function arxivIdsToAsk(keys, bibByCitekey) {
-  const ids = /* @__PURE__ */ new Set();
-  for (const ck of keys) {
-    const claimed = bibByCitekey.get(ck);
-    if (!claimed) continue;
-    if (!claimed.DOI) {
-      for (const { registrar, id } of doilessIdentifiers2(claimed)) if (registrar === "arxiv") ids.add(id);
-      continue;
-    }
-    const dataCiteArxiv = arxivIdOfDataCiteDoi(claimed.DOI);
-    if (dataCiteArxiv !== null) ids.add(dataCiteArxiv);
-  }
-  return [...ids];
-}
-async function libraryFacts(root) {
-  if (root === void 0) return NO_LIBRARY_FACTS;
+async function libraryFacts(root, refresh) {
+  if (root === void 0) return { ...NO_LIBRARY_FACTS, refresh };
   let entries = [];
   try {
     entries = (await tryLoadLibrary(root))?.entries ?? [];
   } catch {
-    return NO_LIBRARY_FACTS;
+    return { ...NO_LIBRARY_FACTS, root, refresh };
   }
   return {
-    retractionDetails: new Map(entries.filter((e2) => e2.retraction_details !== null).map((e2) => [e2.citekey, e2.retraction_details])),
-    unidentifiedByo: new Map(entries.filter((e2) => e2.byo !== null && !e2.hydrated).map((e2) => [e2.citekey, e2.byo.file]))
+    root,
+    refresh,
+    retractionDetails: new Map(entries.filter((e2) => e2.retraction_details !== null && e2.retracted).map((e2) => [e2.citekey, e2.retraction_details])),
+    byo: new Map(entries.filter((e2) => e2.byo !== null).map((e2) => [e2.citekey, e2]))
   };
 }
-function bibTitle(claimed) {
-  if (Array.isArray(claimed.title)) {
-    return claimed.title[0] ?? "";
-  }
-  return claimed.title ?? "";
+function refreshOf(ck, facts) {
+  return facts.refresh.has(ck) ? { refresh: true } : {};
 }
-async function verdictForCitekey(ck, claimed, facts = NO_LIBRARY_FACTS) {
-  if (!claimed) {
-    return {
-      citekey: ck,
-      verdict: "FABRICATED",
-      titleJW: 0,
-      authorJW: 0,
-      reason: "citekey not in .paper/CITATIONS.bib (drafter invented)"
-    };
-  }
-  const claimedAuthorsD14 = normalizeBibAuthors(claimed.author);
-  const claimedTitle = bibTitle(claimed);
-  if (!claimedTitle || claimedAuthorsD14.length === 0) {
-    return {
-      citekey: ck,
-      verdict: "MIS-CITED",
-      titleJW: 0,
-      authorJW: 0,
-      reason: "claimed citation metadata incomplete (empty title or no authors)"
-    };
-  }
-  const v2 = await registrarVerdict(ck, claimed, claimedTitle, claimedAuthorsD14, facts);
-  if (claimed.retracted || claimed.note === "RETRACTED") {
-    if (v2.verdict === "MIS-CITED" && v2.retraction === true) return v2;
-    const compared = v2.verdict === "OK" || v2.verdict === "MIS-CITED" && Number.isFinite(v2.titleJW) && v2.titleJW > 0;
-    const notice = facts.retractionDetails.get(ck);
-    return {
-      citekey: ck,
-      verdict: "MIS-CITED",
-      titleJW: compared ? v2.titleJW : NOT_COMPARED,
-      authorJW: compared ? v2.authorJW : NOT_COMPARED,
-      retraction: true,
-      reason: `cited work is retracted (recorded when the source entered the library${notice ? `: ${notice}` : ""})` + (v2.verdict === "OK" ? " \u2014 the metadata matches the registrar record" : compared ? ` \u2014 also: ${v2.reason}` : ` \u2014 the registrar re-fetch did not compare: ${v2.reason}`)
-    };
-  }
-  return v2;
-}
-async function registrarVerdict(ck, claimed, claimedTitle, claimedAuthorsD14, facts) {
-  if (!claimed.DOI) return verdictWithoutDoi(ck, claimed, claimedTitle, claimedAuthorsD14, facts);
-  const dataCiteArxiv = arxivIdOfDataCiteDoi(claimed.DOI);
-  if (dataCiteArxiv !== null) {
-    const eprint = typeof claimed.eprint === "string" && claimed.eprint.trim() ? claimed.eprint : dataCiteArxiv;
-    if (normArxiv(eprint) !== dataCiteArxiv) {
-      return {
-        citekey: ck,
-        verdict: "MIS-CITED",
-        titleJW: NOT_COMPARED,
-        authorJW: NOT_COMPARED,
-        reason: `the DOI ${claimed.DOI} names arXiv:${dataCiteArxiv}, but the entry's eprint is ${eprint}`
-      };
-    }
-    return verdictWithoutDoi(ck, { ...claimed, eprint: dataCiteArxiv, archivePrefix: "arXiv" }, claimedTitle, claimedAuthorsD14, facts);
-  }
-  if (isReservedDryRunId(claimed.DOI)) {
-    if (!networkMode().dryRun) {
-      return { citekey: ck, verdict: "FABRICATED", titleJW: 0, authorJW: 0, reason: RESERVED_DRY_RUN_REASON };
-    }
-    const synthetic = await fetchById10(claimed.DOI);
-    if (!synthetic) {
-      return {
-        citekey: ck,
-        verdict: "FABRICATED",
-        titleJW: 0,
-        authorJW: 0,
-        reason: `dry-run: reserved DOI ${claimed.DOI} is not a source the synthetic provider minted`
-      };
-    }
-    return andGate(ck, synthetic, claimedTitle, claimedAuthorsD14, "dry-run synthetic source; ");
-  }
-  let actual;
-  try {
-    actual = await sources.crossref.fetchById(claimed.DOI);
-  } catch (err) {
-    if (isOfflineEgressError(err)) return unverifiable(ck, err, `Crossref re-fetch of ${claimed.DOI}`);
-    if (isSourceLookupError(err)) {
-      return {
-        citekey: ck,
-        verdict: "UNVERIFIABLE",
-        titleJW: 0,
-        authorJW: 0,
-        reason: err.permanent ? `Crossref re-fetch of ${claimed.DOI}: ${err.reason}` : `Crossref re-fetch of ${claimed.DOI} failed: ${err.reason} \u2014 re-run verify once the lookup answers`
-      };
-    }
-    throw err;
-  }
-  if (!actual) return crossrefNotFound(ck, claimed, claimedTitle, claimedAuthorsD14, facts);
-  const titleJW = titleSimilarity(actual.title, claimedTitle);
-  const authorJW = jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0]));
-  if (actual.retracted === true || actual.retraction_status === "retracted") {
-    const why = actual.retraction_details ? `: ${actual.retraction_details}` : "";
-    return {
-      citekey: ck,
-      verdict: "MIS-CITED",
-      titleJW,
-      authorJW,
-      retraction: true,
-      reason: `cited work is retracted (Crossref's record of ${claimed.DOI} at verify time${why})`
-    };
-  }
-  const retractionDois = [...new Map(
-    [claimed.DOI, actual.doi].filter((d3) => typeof d3 === "string" && d3.length > 0).map((d3) => [normalizeDoi(d3) ?? d3.toLowerCase(), d3])
-  ).values()];
-  let liveRetraction = null;
-  let retractionUnavailable = null;
-  let retractionUnknown = null;
-  for (const d3 of retractionDois) {
-    let hit;
-    try {
-      hit = await fetchById2(d3);
-    } catch (err) {
-      if (isOfflineEgressError(err)) {
-        retractionUnavailable ??= { err, doi: d3 };
-        continue;
-      }
-      if (isRetractionLookupError(err)) {
-        retractionUnknown ??= err.message;
-        continue;
-      }
-      throw err;
-    }
-    if (hit !== null) {
-      liveRetraction = hit;
-      break;
-    }
-  }
-  if (liveRetraction !== null) {
-    const why = liveRetraction.retraction_details ? `: ${liveRetraction.retraction_details}` : "";
-    return {
-      citekey: ck,
-      verdict: "MIS-CITED",
-      titleJW,
-      authorJW,
-      retraction: true,
-      reason: `cited work is retracted (Retraction Watch, re-queried at verify time${why})`
-    };
-  }
-  if (retractionUnavailable !== null) {
-    return unverifiable(ck, retractionUnavailable.err, `Retraction Watch re-query of ${retractionUnavailable.doi}`);
-  }
-  if (retractionUnknown !== null) {
-    return {
-      citekey: ck,
-      verdict: "UNVERIFIABLE",
-      titleJW: 0,
-      authorJW: 0,
-      reason: `${retractionUnknown} (Retraction Watch re-query) \u2014 re-run verify once the lookup answers`
-    };
-  }
-  const actualDoi = actual.doi ?? claimed.DOI;
-  if ((normalizeDoi(actualDoi) ?? actualDoi.toLowerCase()) !== (normalizeDoi(claimed.DOI) ?? claimed.DOI.toLowerCase())) {
-    if (titleJW >= 0.98 && authorJW >= 0.95) {
-      return {
-        citekey: ck,
-        verdict: "OK",
-        titleJW,
-        authorJW,
-        reason: `multi-DOI redirect: ${claimed.DOI} \u2192 ${actualDoi}, strict-match OK`
-      };
-    }
-    return {
-      citekey: ck,
-      verdict: "MIS-CITED",
-      titleJW,
-      authorJW,
-      reason: `claimed DOI ${claimed.DOI} resolves to different work (canonical: ${actualDoi})`
-    };
-  }
-  if (titleJW >= TITLE_JW_THRESHOLD && authorJW >= AUTHOR_JW_THRESHOLD) {
-    return {
-      citekey: ck,
-      verdict: "OK",
-      titleJW,
-      authorJW,
-      reason: "D-11 AND-gate passed"
-    };
-  }
+function row(ck, verdict, reason, scores, checkedAt) {
   return {
     citekey: ck,
-    verdict: "MIS-CITED",
-    titleJW,
-    authorJW,
-    reason: `JW below threshold (title=${titleJW.toFixed(2)}/${TITLE_JW_THRESHOLD}, author=${authorJW.toFixed(2)}/${AUTHOR_JW_THRESHOLD})`
+    verdict,
+    titleJW: scores?.titleJW ?? NOT_COMPARED,
+    authorJW: scores?.authorJW ?? NOT_COMPARED,
+    reason,
+    ...verdict === "RETRACTED" ? { retraction: true } : {},
+    ...checkedAt !== void 0 ? { checkedAt } : {}
   };
 }
-async function crossrefNotFound(ck, claimed, claimedTitle, claimedAuthorsD14, facts) {
-  const doi = claimed.DOI;
+function noAnswerRow(ck, what, why) {
+  return row(ck, "UNVERIFIABLE-NETWORK", `${what} failed: ${why} \u2014 ${RETRY_ONLINE}`);
+}
+function fromLookup(res, record2, what, notFound) {
+  if (res.kind === "found") return { kind: "record", candidate: res.candidate, ...record2 };
+  if (res.kind === "not-found") return { kind: "not-found", reason: notFound(res.reason) };
+  return res.permanent ? { kind: "uncomparable", reason: `${what}: ${res.reason}`, agency: record2.agency } : { kind: "no-answer", reason: `${what} failed: ${res.reason}` };
+}
+async function guarded(run, what) {
+  try {
+    return await run();
+  } catch (err) {
+    if (isOfflineEgressError(err)) return { kind: "no-answer", reason: what, offline: err };
+    throw err;
+  }
+}
+async function resolveDoi(doi, opts) {
+  const crossref = await guarded(
+    async () => fromLookup(
+      await sources.crossref.lookupById(doi, opts),
+      { agency: "Crossref", label: `Crossref's record of ${doi}`, prefix: "" },
+      `Crossref re-fetch of ${doi}`,
+      () => ""
+    ),
+    `Crossref re-fetch of ${doi}`
+  );
+  if (crossref.kind !== "not-found") return crossref;
   const notResolved = `DOI ${doi} did not resolve via Crossref`;
   let ra;
   try {
     ra = await registrationAgency(doi);
   } catch (err) {
-    if (isOfflineEgressError(err)) return unverifiable(ck, err, `${notResolved}; doi.org agency lookup of ${doiPrefix(doi) ?? doi}`);
+    if (isOfflineEgressError(err)) return { kind: "no-answer", reason: `${notResolved}; doi.org agency lookup of ${doiPrefix(doi) ?? doi}`, offline: err };
     throw err;
   }
   if (ra.kind === "failed") {
-    return {
-      citekey: ck,
-      verdict: "UNVERIFIABLE",
-      titleJW: 0,
-      authorJW: 0,
-      reason: `${notResolved}, and doi.org could not say which agency registered it (${ra.reason}) \u2014 re-run verify once the lookup answers`
-    };
+    return { kind: "no-answer", reason: `${notResolved}, and doi.org could not say which agency registered it (${ra.reason})` };
   }
   if (ra.kind === "unknown-prefix") {
-    return {
-      citekey: ck,
-      verdict: "FABRICATED",
-      titleJW: 0,
-      authorJW: 0,
-      reason: `${notResolved} (no registration agency holds its prefix${doiPrefix(doi) !== null ? ` ${doiPrefix(doi)}` : ""})`
-    };
+    return { kind: "not-found", reason: `${notResolved} (no registration agency holds its prefix${doiPrefix(doi) !== null ? ` ${doiPrefix(doi)}` : ""})` };
   }
-  if (/^crossref$/i.test(ra.agency)) {
-    return { citekey: ck, verdict: "FABRICATED", titleJW: 0, authorJW: 0, reason: notResolved };
+  if (/^crossref$/i.test(ra.agency)) return { kind: "not-found", reason: notResolved };
+  const agency = ra.agency;
+  const elsewhere = `DOI ${doi} is registered with ${agency}, not Crossref`;
+  if (/^datacite$/i.test(agency)) {
+    return guarded(
+      async () => fromLookup(
+        await sources.datacite.lookupById(doi, opts),
+        { agency: "DataCite", label: `DataCite's record of ${doi}`, prefix: `${elsewhere}; re-fetched from DataCite` },
+        `${elsewhere}; DataCite lookup`,
+        (why) => `${elsewhere}, and DataCite has no record of it (${why})`
+      ),
+      `${elsewhere}; DataCite lookup of ${doi}`
+    );
   }
-  const elsewhere = `DOI ${doi} is registered with ${ra.agency}, not Crossref`;
-  if (doilessIdentifiers2(claimed).length === 0) {
-    return {
-      citekey: ck,
-      verdict: "UNVERIFIABLE",
-      titleJW: NOT_COMPARED,
-      authorJW: NOT_COMPARED,
-      reason: `${elsewhere}, which the verifier cannot query yet \u2014 give the work's arXiv id, PMID or ISBN (pensmith add), or cite its Crossref-registered version`
-    };
+  if (servesContentNegotiation(agency)) {
+    return guarded(
+      async () => fromLookup(
+        await lookupById11(doi, opts),
+        { agency, label: `${agency}'s record of ${doi}`, prefix: `${elsewhere}; re-fetched through doi.org content negotiation` },
+        `${elsewhere}; doi.org content negotiation`,
+        (why) => `${elsewhere}, and doi.org does not know it (${why})`
+      ),
+      `${elsewhere}; doi.org content negotiation of ${doi}`
+    );
   }
-  const v2 = await verdictWithoutDoi(ck, claimed, claimedTitle, claimedAuthorsD14, facts);
-  if (v2.verdict === "FABRICATED") {
-    return {
-      ...v2,
-      verdict: "UNVERIFIABLE",
-      titleJW: NOT_COMPARED,
-      authorJW: NOT_COMPARED,
-      reason: `${elsewhere}, which the verifier cannot query yet, and ${v2.reason}`
-    };
+  return { kind: "uncomparable", reason: `${elsewhere}, which serves no record the verifier can read`, agency };
+}
+async function aliasAsserted(claimed, record2) {
+  const returned = normalizeDoi(record2.doi ?? "") ?? "";
+  for (const r2 of record2.relations ?? []) {
+    if (ALIAS_RELATIONS.has(r2.type) && r2.doi === claimed) return { asserted: true, how: `the record asserts ${r2.type} ${claimed}` };
   }
-  return { ...v2, reason: `${elsewhere}; ${v2.reason}` };
+  let res;
+  try {
+    res = await fetch2(`https://doi.org/${claimed}`, { method: "HEAD", followRedirects: false, timeoutMs: 1e4 });
+  } catch {
+    return null;
+  }
+  const target = normalizeDoi(res.headers["location"] ?? "");
+  if (res.status >= 300 && res.status < 400 && target !== null && target === returned) {
+    return { asserted: true, how: `doi.org redirects ${claimed} to ${returned}` };
+  }
+  return { asserted: false, how: `neither the record's relations nor doi.org's handle of ${claimed} name ${returned}` };
+}
+function retractedNotice(c2) {
+  if (c2.retracted === true || c2.retraction_status === "retracted") return c2.retraction_details ?? "the record is marked retracted";
+  return null;
+}
+async function retractionRequery(c2, dois, scores, checkedAt, facts) {
+  const unique = [...new Map(dois.filter((d3) => d3.length > 0).map((d3) => [normalizeDoi(d3) ?? d3.toLowerCase(), d3])).values()];
+  let noAnswer = null;
+  for (const d3 of unique) {
+    try {
+      const hit = await fetchById2(d3, refreshOf(c2.ck, facts));
+      if (hit !== null) {
+        return row(c2.ck, "RETRACTED", `cited work is retracted (Retraction Watch, re-queried at verify time${hit.retraction_details ? `: ${hit.retraction_details}` : ""})`, scores, checkedAt);
+      }
+    } catch (err) {
+      if (isOfflineEgressError(err)) {
+        noAnswer ??= offlineRow(c2.ck, err, `Retraction Watch re-query of ${d3}`);
+        continue;
+      }
+      if (isRetractionLookupError(err)) {
+        noAnswer ??= row(c2.ck, "UNVERIFIABLE-NETWORK", `${err.message} (Retraction Watch re-query) \u2014 ${RETRY_ONLINE}`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  return noAnswer;
+}
+function retractionUnknownNote(agency) {
+  if (/^datacite$/i.test(agency)) return `retraction status unknown (${DATACITE_RETRACTION_UNKNOWN})`;
+  if (agency === "arXiv") return "retraction status unknown (no retraction data for arXiv preprints)";
+  if (agency === "the books registries" || agency === "Open Library") return "retraction status unknown (no retraction data for books)";
+  return `retraction status unknown (no retraction data for ${agency} DOIs)`;
+}
+async function compareRecord(c2, record2, opts, facts) {
+  const match = matchWork(c2.work, record2);
+  const scores = { titleJW: match.titleJW, authorJW: match.authorJW };
+  const checkedAt = record2.last_verified;
+  const notice = retractedNotice(record2);
+  if (notice !== null) return row(c2.ck, "RETRACTED", `cited work is retracted (${opts.label} at verify time: ${notice})`, scores, checkedAt);
+  if (!match.ok) return row(c2.ck, "MIS-CITED", `${opts.prefix ? `${opts.prefix}: ` : ""}${match.detail}`, scores, checkedAt);
+  if (opts.retractionDois !== void 0) {
+    const rw = await retractionRequery(c2, opts.retractionDois, scores, checkedAt, facts);
+    if (rw !== null) return rw;
+  }
+  const unknown2 = opts.retractionDois === void 0 && opts.agency !== "PubMed" ? `; ${retractionUnknownNote(opts.agency)}` : "";
+  return row(c2.ck, "OK", `${opts.prefix ? `${opts.prefix}; ` : ""}${match.detail}${unknown2}`, scores, checkedAt);
 }
 function bibIdentifiers(claimed) {
   const eprint = typeof claimed.eprint === "string" ? claimed.eprint.trim() : "";
@@ -128855,151 +131489,340 @@ function bibIdentifiers(claimed) {
 function doilessIdentifiers2(claimed) {
   return doilessIdentifiers(bibIdentifiers(claimed));
 }
-async function lookupAt(registrar, id, facts) {
+function arxivIdsToAsk(keys, bibByCitekey) {
+  const out2 = [];
+  for (const ck of keys) {
+    const claimed = bibByCitekey.get(ck);
+    if (!claimed) continue;
+    if (!claimed.DOI) {
+      for (const { registrar, id } of doilessIdentifiers2(claimed)) if (registrar === "arxiv") out2.push({ ck, id });
+      continue;
+    }
+    const dataCiteArxiv = arxivIdOfDataCiteDoi(claimed.DOI);
+    if (dataCiteArxiv !== null) out2.push({ ck, id: dataCiteArxiv });
+  }
+  return out2;
+}
+async function lookupAt(registrar, id, ck, facts) {
   switch (registrar) {
     case "arxiv":
-      return facts.arxivAnswers?.get(id) ?? sources.arxiv.lookupById(id);
+      return facts.arxivAnswers?.get(id) ?? sources.arxiv.lookupById(id, refreshOf(ck, facts));
     case "pubmed":
-      return sources.pubmed.lookupById(id);
+      return sources.pubmed.lookupById(id, { ...refreshOf(ck, facts), abstract: false });
     case "books":
-      return sources.books.lookupById(id);
+      return sources.books.lookupById(id, refreshOf(ck, facts));
   }
 }
-async function verdictWithoutDoi(ck, claimed, claimedTitle, claimedAuthorsD14, facts = NO_LIBRARY_FACTS) {
+async function verdictByIdentifiers(c2, claimed, facts) {
   const ids = doilessIdentifiers2(claimed);
-  if (ids.length === 0) {
-    const byoFile = facts.unidentifiedByo.get(ck);
-    if (byoFile !== void 0) {
-      return {
-        citekey: ck,
-        verdict: "UNVERIFIABLE",
-        titleJW: NOT_COMPARED,
-        authorJW: NOT_COMPARED,
-        reason: `your own PDF ${byoFile} was not identified by any registrar, so this citation cannot be checked upstream \u2014 give its identifier: pensmith add <DOI or arXiv id> --pdf .paper/${byoFile}`
-      };
-    }
-    return {
-      citekey: ck,
-      verdict: "FABRICATED",
-      titleJW: 0,
-      authorJW: 0,
-      reason: "no DOI, arXiv id, PMID or ISBN in citation entry (cannot verify upstream)"
-    };
-  }
   let undecided = null;
   const notFound = [];
   for (const { registrar, id, label } of ids) {
     const who = REGISTRAR_LABEL[registrar];
     let res;
     try {
-      res = await lookupAt(registrar, id, facts);
+      res = await lookupAt(registrar, id, c2.ck, facts);
     } catch (err) {
       if (isOfflineEgressError(err)) {
-        undecided ??= unverifiable(ck, err, `${who} lookup of ${label}`);
+        undecided ??= offlineRow(c2.ck, err, `${who} lookup of ${label}`);
         continue;
       }
       throw err;
     }
     if (res.kind === "failed") {
-      undecided ??= {
-        citekey: ck,
-        verdict: "UNVERIFIABLE",
-        titleJW: 0,
-        authorJW: 0,
-        reason: res.permanent ? `${who} lookup of ${label}: ${res.reason}` : `${who} lookup of ${label} failed: ${res.reason} \u2014 re-run verify once the lookup answers`
-      };
+      undecided ??= res.permanent ? row(c2.ck, "UNVERIFIABLE", `${who} lookup of ${label}: ${res.reason}`) : noAnswerRow(c2.ck, `${who} lookup of ${label}`, res.reason);
       continue;
     }
     if (res.kind === "not-found") {
       notFound.push(`${label}: ${res.reason}`);
       continue;
     }
-    const actual = res.candidate;
-    if (actual.retracted === true || actual.retraction_status === "retracted") {
-      const why = actual.retraction_details ? `: ${actual.retraction_details}` : "";
-      return {
-        citekey: ck,
-        verdict: "MIS-CITED",
-        titleJW: titleSimilarity(actual.title, claimedTitle),
-        authorJW: jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0])),
-        retraction: true,
-        reason: `cited work is retracted (${who}'s record of ${label} at verify time${why})`
-      };
-    }
-    return andGate(ck, actual, claimedTitle, claimedAuthorsD14, `${label} re-fetched from ${who}; `);
+    return compareRecord(
+      c2,
+      res.candidate,
+      { label: `${who}'s record of ${label}`, prefix: `${label} re-fetched from ${who}`, agency: registrar === "pubmed" ? "PubMed" : who },
+      facts
+    );
   }
   if (undecided !== null) return undecided;
-  return {
-    citekey: ck,
-    verdict: "FABRICATED",
-    titleJW: 0,
-    authorJW: 0,
-    reason: `no registrar has this work (${notFound.join("; ")})`
-  };
+  return row(c2.ck, "FABRICATED", `no registrar has this work (${notFound.join("; ")})`, { titleJW: 0, authorJW: 0 });
 }
-function andGate(ck, actual, claimedTitle, claimedAuthorsD14, prefix) {
-  const titleJW = titleSimilarity(actual.title, claimedTitle);
-  const authorJW = jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0]));
-  if (titleJW >= TITLE_JW_THRESHOLD && authorJW >= AUTHOR_JW_THRESHOLD) {
-    return { citekey: ck, verdict: "OK", titleJW, authorJW, reason: `${prefix}D-11 AND-gate passed` };
+async function byoEvidence(c2, facts) {
+  const entry = facts.byo.get(c2.ck);
+  if (entry === void 0 || entry.byo === null || facts.root === void 0) return null;
+  const res = await byoText(facts.root, entry);
+  if (res.available || res.code === "no-text" || res.code === "unreadable" || res.code === "text-mismatch") {
+    return { kind: "ok", file: entry.byo.file, sha256: entry.byo.sha256 };
   }
-  return {
-    citekey: ck,
-    verdict: "MIS-CITED",
-    titleJW,
-    authorJW,
-    reason: `${prefix}JW below threshold (title=${titleJW.toFixed(2)}/${TITLE_JW_THRESHOLD}, author=${authorJW.toFixed(2)}/${AUTHOR_JW_THRESHOLD})`
-  };
+  if (res.code === "asserted" || res.code === "none") return null;
+  return { kind: "altered", reason: res.reason };
+}
+function okByoRow(c2, ev, because) {
+  return row(c2.ck, "OK-BYO", `your own PDF ${ev.file} (sha256 ${ev.sha256.slice(0, 12)}) still matches what you ingested; ${because}`);
+}
+async function orByo(c2, failed, facts) {
+  const ev = await byoEvidence(c2, facts);
+  return ev?.kind === "ok" ? okByoRow(c2, ev, `the registrar lookup got no answer (${failed.reason})`) : failed;
+}
+async function verdictWithoutIdentifier(c2, claimed, facts) {
+  const ev = await byoEvidence(c2, facts);
+  if (ev?.kind === "ok") return okByoRow(c2, ev, "the entry has no DOI, arXiv id, PMID or ISBN");
+  const found = await metadataSearch(c2.work, { isBook: claimed.type === "book", ...refreshOf(c2.ck, facts) });
+  if (found.kind === "match") {
+    const crossrefRecord = found.candidate.source === "crossref" && typeof found.candidate.doi === "string";
+    return compareRecord(
+      c2,
+      found.candidate,
+      {
+        label: `${found.registrar}'s record of ${found.identifier}`,
+        prefix: `no identifier in the entry; the metadata search matched ${found.identifier} (${found.registrar})`,
+        agency: crossrefRecord ? "Crossref" : found.registrar,
+        ...crossrefRecord ? { retractionDois: [found.candidate.doi] } : {}
+      },
+      facts
+    );
+  }
+  if (ev?.kind === "altered") {
+    return row(c2.ck, "UNVERIFIABLE", `your own PDF can no longer stand in for this entry (${ev.reason}), and ${found.reason} \u2014 re-add the PDF (pensmith add <pdf>) or give the work's identifier`);
+  }
+  if (found.kind === "no-answer") return row(c2.ck, "UNVERIFIABLE-NETWORK", `no DOI, arXiv id, PMID or ISBN, and ${found.reason} \u2014 ${RETRY_ONLINE}`);
+  return row(
+    c2.ck,
+    "UNRESOLVABLE",
+    `no DOI, arXiv id, PMID or ISBN, and ${found.reason} \u2014 add the work's identifier (pensmith add <DOI, arXiv id, PMID or ISBN>)`,
+    { titleJW: 0, authorJW: 0 }
+  );
+}
+async function verdictForDoi(c2, claimed, doi, facts) {
+  const norm2 = normalizeDoi(doi);
+  if (norm2 === null) return row(c2.ck, "FABRICATED", `the entry's DOI ${JSON.stringify(doi)} is not a DOI`, { titleJW: 0, authorJW: 0 });
+  const dataCiteArxiv = arxivIdOfDataCiteDoi(norm2);
+  if (dataCiteArxiv !== null) {
+    const eprint = typeof claimed.eprint === "string" && claimed.eprint.trim() ? claimed.eprint : dataCiteArxiv;
+    if (normArxiv(eprint) !== dataCiteArxiv) {
+      return row(c2.ck, "MIS-CITED", `the DOI ${doi} names arXiv:${dataCiteArxiv}, but the entry's eprint is ${eprint}`);
+    }
+    const { DOI: _doi, ...rest } = claimed;
+    void _doi;
+    const v2 = await verdictByIdentifiers(c2, { ...rest, eprint: dataCiteArxiv, archivePrefix: "arXiv" }, facts);
+    return v2.verdict === "UNVERIFIABLE-NETWORK" ? orByo(c2, v2, facts) : v2;
+  }
+  if (isReservedDryRunId(norm2)) {
+    if (!networkMode().dryRun) return row(c2.ck, "FABRICATED", RESERVED_DRY_RUN_REASON, { titleJW: 0, authorJW: 0 });
+    const synthetic = await fetchById11(doi);
+    if (!synthetic) return row(c2.ck, "FABRICATED", `dry-run: reserved DOI ${doi} is not a source the synthetic provider minted`, { titleJW: 0, authorJW: 0 });
+    const match = matchWork(c2.work, synthetic);
+    const scores = { titleJW: match.titleJW, authorJW: match.authorJW };
+    return row(c2.ck, match.ok ? "OK" : "MIS-CITED", `dry-run synthetic source; ${match.detail}`, scores, synthetic.last_verified);
+  }
+  const res = await resolveDoi(doi.trim(), refreshOf(c2.ck, facts));
+  switch (res.kind) {
+    case "record": {
+      const returned = normalizeDoi(res.candidate.doi ?? "") ?? norm2;
+      const retractionDois = res.agency === "Crossref" ? { retractionDois: [doi, res.candidate.doi ?? returned] } : {};
+      if (returned === norm2) return compareRecord(c2, res.candidate, { label: res.label, prefix: res.prefix, agency: res.agency, ...retractionDois }, facts);
+      const alias = await aliasAsserted(norm2, res.candidate);
+      if (alias === null) {
+        return noAnswerRow(c2.ck, `${res.agency} answered ${doi} with the record of ${returned}; doi.org's handle check of ${doi}`, "no answer");
+      }
+      if (!alias.asserted) {
+        const m3 = matchWork(c2.work, res.candidate);
+        return row(
+          c2.ck,
+          "MIS-CITED",
+          `claimed DOI ${doi} answers with another work's record (${returned}): ${alias.how} \u2014 an alias passes only when the registrar asserts it`,
+          { titleJW: m3.titleJW, authorJW: m3.authorJW },
+          res.candidate.last_verified
+        );
+      }
+      return compareRecord(
+        c2,
+        res.candidate,
+        { label: res.label, prefix: `${res.prefix ? `${res.prefix}; ` : ""}${doi} \u2192 ${returned} (${alias.how})`, agency: res.agency, ...retractionDois },
+        facts
+      );
+    }
+    case "not-found":
+      return row(c2.ck, "FABRICATED", res.reason, { titleJW: 0, authorJW: 0 });
+    case "no-answer":
+      return orByo(c2, res.offline !== void 0 ? offlineRow(c2.ck, res.offline, res.reason) : row(c2.ck, "UNVERIFIABLE-NETWORK", `${res.reason} \u2014 ${RETRY_ONLINE}`), facts);
+    case "uncomparable": {
+      if (doilessIdentifiers2(claimed).length === 0) {
+        return row(
+          c2.ck,
+          "UNVERIFIABLE",
+          `${res.reason} \u2014 give the work's arXiv id, PMID or ISBN (pensmith add), or cite its Crossref- or DataCite-registered version`
+        );
+      }
+      const v2 = await verdictByIdentifiers(c2, claimed, facts);
+      if (v2.verdict === "FABRICATED") {
+        return { ...v2, verdict: "UNVERIFIABLE", titleJW: NOT_COMPARED, authorJW: NOT_COMPARED, reason: `${res.reason}, and ${v2.reason}` };
+      }
+      if (v2.verdict === "UNVERIFIABLE-NETWORK") return orByo(c2, { ...v2, reason: `${res.reason}; ${v2.reason}` }, facts);
+      return { ...v2, reason: `${res.reason}; ${v2.reason}` };
+    }
+  }
+}
+async function registrarVerdict(c2, claimed, facts) {
+  if (claimed.DOI) return verdictForDoi(c2, claimed, claimed.DOI, facts);
+  if (doilessIdentifiers2(claimed).length > 0) {
+    const v2 = await verdictByIdentifiers(c2, claimed, facts);
+    return v2.verdict === "UNVERIFIABLE-NETWORK" ? orByo(c2, v2, facts) : v2;
+  }
+  return verdictWithoutIdentifier(c2, claimed, facts);
+}
+async function verdictForCitekey(ck, claimed, facts) {
+  if (!claimed) return row(ck, "FABRICATED", "citekey not in .paper/CITATIONS.bib (drafter invented)", { titleJW: 0, authorJW: 0 });
+  const authors = normalizeBibAuthors(claimed.author);
+  const editors = normalizeBibAuthors(claimed.editor);
+  const title = bibTitle(claimed);
+  if (!title || authors.length === 0 && editors.length === 0) {
+    return row(ck, "MIS-CITED", "claimed citation metadata incomplete (empty title, or no author or editor)", { titleJW: 0, authorJW: 0 });
+  }
+  const c2 = { ck, work: { title, authors, editors, year: bibYear(claimed) }, doi: claimed.DOI ?? null };
+  const v2 = await registrarVerdict(c2, claimed, facts);
+  if (claimed.retracted === true || typeof claimed.note === "string" && claimed.note.trim().toUpperCase() === "RETRACTED") {
+    if (v2.verdict === "RETRACTED") return v2;
+    const compared = v2.verdict === "OK" || v2.verdict === "MIS-CITED";
+    const notice = facts.retractionDetails.get(ck);
+    return {
+      ...row(
+        ck,
+        "RETRACTED",
+        `cited work is retracted (recorded when the source entered the library${notice ? `: ${notice}` : ""})` + (v2.verdict === "OK" ? " \u2014 the metadata matches the registrar record" : compared ? ` \u2014 also: ${v2.reason}` : ` \u2014 the registrar re-fetch did not compare: ${v2.reason}`),
+        compared ? { titleJW: v2.titleJW, authorJW: v2.authorJW } : void 0
+      ),
+      ...v2.checkedAt !== void 0 ? { checkedAt: v2.checkedAt } : {}
+    };
+  }
+  return v2;
+}
+async function bareRow(b3, facts) {
+  const key2 = bareIdentifierKey(b3);
+  const found = /* @__PURE__ */ __name((c2, where) => {
+    const notice = retractedNotice(c2);
+    if (notice !== null) return row(key2, "RETRACTED", `cited work is retracted (bare identifier in the text, ${where}: ${notice})`, void 0, c2.last_verified);
+    return row(key2, "OK", `bare identifier in the text (line ${b3.line}): ${where} has "${c2.title}"`, void 0, c2.last_verified);
+  }, "found");
+  const fromLookup2 = /* @__PURE__ */ __name(async (who, run) => {
+    let res2;
+    try {
+      res2 = await run();
+    } catch (err) {
+      if (isOfflineEgressError(err)) return offlineRow(key2, err, `${who} lookup of the bare identifier on line ${b3.line}`);
+      throw err;
+    }
+    if (res2.kind === "found") return found(res2.candidate, who);
+    if (res2.kind === "not-found") return row(key2, "FABRICATED", `bare identifier in the text (line ${b3.line}): ${who} has no such record (${res2.reason})`, { titleJW: 0, authorJW: 0 });
+    return res2.permanent ? row(key2, "UNVERIFIABLE", `bare identifier in the text (line ${b3.line}): ${who}: ${res2.reason}`) : noAnswerRow(key2, `${who} lookup of the bare identifier on line ${b3.line}`, res2.reason);
+  }, "fromLookup");
+  if (b3.kind === "arxiv") return fromLookup2("arXiv", () => sources.arxiv.lookupById(b3.id));
+  if (b3.kind === "pmid") return fromLookup2("PubMed", () => sources.pubmed.lookupById(b3.id, { abstract: false }));
+  const arxiv = arxivIdOfDataCiteDoi(b3.id);
+  if (arxiv !== null) return fromLookup2("arXiv", () => sources.arxiv.lookupById(arxiv));
+  if (isReservedDryRunId(b3.id) && !networkMode().dryRun) return row(key2, "FABRICATED", `bare identifier in the text (line ${b3.line}): ${RESERVED_DRY_RUN_REASON}`, { titleJW: 0, authorJW: 0 });
+  const res = await resolveDoi(b3.id, {});
+  switch (res.kind) {
+    case "record": {
+      const notice = retractedNotice(res.candidate);
+      if (notice === null && res.agency === "Crossref") {
+        const c2 = { ck: key2, work: { title: res.candidate.title, authors: res.candidate.authors, year: res.candidate.year ?? null }, doi: b3.id };
+        const rw = await retractionRequery(c2, [b3.id, res.candidate.doi ?? b3.id], { titleJW: NOT_COMPARED, authorJW: NOT_COMPARED }, res.candidate.last_verified, facts);
+        if (rw !== null) return rw;
+      }
+      const v2 = found(res.candidate, res.agency);
+      return res.agency === "Crossref" || v2.verdict !== "OK" ? v2 : { ...v2, reason: `${v2.reason}; ${retractionUnknownNote(res.agency)}` };
+    }
+    case "not-found":
+      return row(key2, "FABRICATED", `bare identifier in the text (line ${b3.line}): ${res.reason}`, { titleJW: 0, authorJW: 0 });
+    case "no-answer":
+      return res.offline !== void 0 ? offlineRow(key2, res.offline, res.reason) : row(key2, "UNVERIFIABLE-NETWORK", `${res.reason} \u2014 ${RETRY_ONLINE}`);
+    case "uncomparable":
+      return row(key2, "UNVERIFIABLE", `bare identifier in the text (line ${b3.line}): ${res.reason}`);
+  }
+}
+function bareIdentifiersOf(draftMd) {
+  const all = findBareIdentifiers(draftMd);
+  if (all.length === 0) return all;
+  const cites = findCitations(draftMd);
+  return all.filter((b3) => !cites.some((c2) => b3.start < c2.end && c2.start < b3.end));
+}
+function retractionWarningLine(r2) {
+  const notice = /^cited work is retracted \((.*)\)(?: — .*)?$/su.exec(r2.reason)?.[1] ?? r2.reason;
+  return `pensmith verify: RETRACTED \u2014 ${r2.citekey}: ${notice}`;
 }
 async function runPass1(draftMd, citationsBibPath, opts = {}) {
-  const bibText = readFileSync28(citationsBibPath, "utf8");
-  const entries = await parseBibFileAt(bibText, citationsBibPath);
+  const entries = opts.bibEntries !== void 0 ? [...opts.bibEntries] : await parseBibFileAt(readFileSync28(citationsBibPath, "utf8"), citationsBibPath);
   const bibByCitekey = new Map(
     entries.map((e2) => [String(e2["id"] ?? ""), e2])
   );
   const unique = extractCitedKeysForVerification(draftMd);
-  let facts = unique.length > 0 ? await libraryFacts(opts.root) : NO_LIBRARY_FACTS;
-  const arxivIds = arxivIdsToAsk(unique, bibByCitekey);
-  if (arxivIds.length > 1) facts = { ...facts, arxivAnswers: await sources.arxiv.lookupByIds(arxivIds) };
-  const results = [];
-  for (const ck of unique) {
-    results.push(await verdictForCitekey(ck, bibByCitekey.get(ck), facts));
+  const bare = bareIdentifiersOf(draftMd);
+  const refresh = opts.refresh ?? /* @__PURE__ */ new Set();
+  let facts = unique.length > 0 || bare.length > 0 ? await libraryFacts(opts.root, refresh) : { ...NO_LIBRARY_FACTS, refresh };
+  const arxivAsk = arxivIdsToAsk(unique, bibByCitekey);
+  if (arxivAsk.length > 1) {
+    const answers = /* @__PURE__ */ new Map();
+    const fresh = [...new Set(arxivAsk.filter((a3) => refresh.has(a3.ck)).map((a3) => a3.id))];
+    const cached2 = [...new Set(arxivAsk.filter((a3) => !refresh.has(a3.ck)).map((a3) => a3.id))].filter((id) => !fresh.includes(id));
+    if (fresh.length > 1) for (const [k2, v2] of await sources.arxiv.lookupByIds(fresh, { refresh: true })) answers.set(k2, v2);
+    if (cached2.length > 1) for (const [k2, v2] of await sources.arxiv.lookupByIds(cached2)) answers.set(k2, v2);
+    facts = { ...facts, arxivAnswers: answers };
   }
+  const results = [];
+  for (const ck of unique) results.push(await verdictForCitekey(ck, bibByCitekey.get(ck), facts));
+  for (const b3 of bare) results.push(await bareRow(b3, facts));
+  for (const r2 of results) if (r2.verdict === "RETRACTED") process.stderr.write(`${retractionWarningLine(r2)}
+`);
   return results;
 }
-async function runFreshnessForDraft(draftMd, citationsBibPath) {
-  const bibText = readFileSync28(citationsBibPath, "utf8");
-  const entries = await parseBibFileAt(bibText, citationsBibPath);
-  const doiByCitekey = new Map(
-    entries.map((e2) => [
-      String(e2.id ?? ""),
-      e2.DOI ?? null
-    ])
-  );
-  const unique = extractCitedKeysForVerification(draftMd);
-  return probeFreshnessAll(
-    unique.map((ck) => ({ citekey: ck, doi: doiByCitekey.get(ck) ?? null }))
-  );
+async function runFreshnessForDraft(draftMd, citationsBibPath, opts = {}) {
+  const entries = opts.bibEntries !== void 0 ? [...opts.bibEntries] : await parseBibFileAt(readFileSync28(citationsBibPath, "utf8"), citationsBibPath);
+  const bibByCitekey = new Map(entries.map((e2) => [String(e2["id"] ?? ""), e2]));
+  let library = [];
+  if (opts.root !== void 0) {
+    try {
+      library = (await tryLoadLibrary(opts.root))?.entries ?? [];
+    } catch {
+      library = [];
+    }
+  }
+  const status = new Map(library.map((e2) => [e2.citekey, e2.retraction_status]));
+  const probes = extractCitedKeysForVerification(draftMd).map((ck) => {
+    const e2 = bibByCitekey.get(ck);
+    if (!e2) return { citekey: ck, inBib: false, doi: null, registrar: null };
+    const ids = doilessIdentifiers2(e2);
+    return {
+      citekey: ck,
+      inBib: true,
+      doi: typeof e2.DOI === "string" && e2.DOI.trim() ? e2.DOI : null,
+      registrar: ids.length > 0 ? REGISTRAR_LABEL[ids[0].registrar] : null,
+      recheck: status.get(ck) === "unknown"
+    };
+  });
+  return probeFreshnessAll(probes, opts.root !== void 0 ? { root: opts.root } : {});
 }
-var UNVERIFIABLE_OFFLINE_REASON, UNVERIFIABLE_DRY_RUN_REASON, RESERVED_DRY_RUN_REASON, NOT_COMPARED, NO_LIBRARY_FACTS, REGISTRAR_LABEL;
+var UNVERIFIABLE_OFFLINE_REASON, UNVERIFIABLE_DRY_RUN_REASON, RESERVED_DRY_RUN_REASON, RETRY_ONLINE, NOT_COMPARED, NO_LIBRARY_FACTS, ALIAS_RELATIONS, REGISTRAR_LABEL;
 var init_pass1 = __esm({
   "bin/lib/verify/pass1.ts"() {
     "use strict";
-    init_fuzzy();
-    init_author_normalize();
     init_sources();
     init_citations();
     init_freshness();
     init_retraction_watch();
     init_dry_run();
+    init_doi_cn();
     init_citation_token();
     init_doi();
     init_http();
     init_lookup();
     init_http_mock();
-    init_markup();
     init_shape();
     init_full_text();
+    init_byo_text();
+    init_name_match();
+    init_metadata_search();
+    init_datacite();
     init_library2();
     init_doi_ra();
     init_pass1_identifiers();
@@ -129007,229 +131830,1041 @@ var init_pass1 = __esm({
     UNVERIFIABLE_OFFLINE_REASON = "offline: no recorded fixture \u2014 re-run online";
     UNVERIFIABLE_DRY_RUN_REASON = "dry-run: no live re-fetch under --dry-run \u2014 re-run online";
     RESERVED_DRY_RUN_REASON = "reserved dry-run identifier (a synthetic --dry-run source is never a real citation)";
-    __name(unverifiable, "unverifiable");
-    __name(normalizeBibAuthors, "normalizeBibAuthors");
-    __name(surnameOf, "surnameOf");
-    __name(titleSimilarity, "titleSimilarity");
+    RETRY_ONLINE = "re-run verify once the lookup answers";
+    __name(offlineRow, "offlineRow");
     NOT_COMPARED = Number.NaN;
-    __name(arxivIdOfDataCiteDoi, "arxivIdOfDataCiteDoi");
-    NO_LIBRARY_FACTS = { retractionDetails: /* @__PURE__ */ new Map(), unidentifiedByo: /* @__PURE__ */ new Map() };
-    __name(arxivIdsToAsk, "arxivIdsToAsk");
-    __name(libraryFacts, "libraryFacts");
+    __name(normalizeBibAuthors, "normalizeBibAuthors");
     __name(bibTitle, "bibTitle");
-    __name(verdictForCitekey, "verdictForCitekey");
-    __name(registrarVerdict, "registrarVerdict");
-    __name(crossrefNotFound, "crossrefNotFound");
+    __name(bibYear, "bibYear");
+    __name(arxivIdOfDataCiteDoi, "arxivIdOfDataCiteDoi");
+    NO_LIBRARY_FACTS = { root: void 0, retractionDetails: /* @__PURE__ */ new Map(), byo: /* @__PURE__ */ new Map(), refresh: /* @__PURE__ */ new Set() };
+    __name(libraryFacts, "libraryFacts");
+    __name(refreshOf, "refreshOf");
+    __name(row, "row");
+    __name(noAnswerRow, "noAnswerRow");
+    __name(fromLookup, "fromLookup");
+    __name(guarded, "guarded");
+    __name(resolveDoi, "resolveDoi");
+    ALIAS_RELATIONS = /* @__PURE__ */ new Set(["is-identical-to", "is-version-of", "has-version", "is-preprint-of", "has-preprint"]);
+    __name(aliasAsserted, "aliasAsserted");
+    __name(retractedNotice, "retractedNotice");
+    __name(retractionRequery, "retractionRequery");
+    __name(retractionUnknownNote, "retractionUnknownNote");
+    __name(compareRecord, "compareRecord");
     REGISTRAR_LABEL = { arxiv: "arXiv", pubmed: "PubMed", books: "the books registries" };
     __name(bibIdentifiers, "bibIdentifiers");
     __name(doilessIdentifiers2, "doilessIdentifiers");
+    __name(arxivIdsToAsk, "arxivIdsToAsk");
     __name(lookupAt, "lookupAt");
-    __name(verdictWithoutDoi, "verdictWithoutDoi");
-    __name(andGate, "andGate");
+    __name(verdictByIdentifiers, "verdictByIdentifiers");
+    __name(byoEvidence, "byoEvidence");
+    __name(okByoRow, "okByoRow");
+    __name(orByo, "orByo");
+    __name(verdictWithoutIdentifier, "verdictWithoutIdentifier");
+    __name(verdictForDoi, "verdictForDoi");
+    __name(registrarVerdict, "registrarVerdict");
+    __name(verdictForCitekey, "verdictForCitekey");
+    __name(bareRow, "bareRow");
+    __name(bareIdentifiersOf, "bareIdentifiersOf");
+    __name(retractionWarningLine, "retractionWarningLine");
     __name(runPass1, "runPass1");
     __name(runFreshnessForDraft, "runFreshnessForDraft");
   }
 });
 
+// bin/lib/verify/source-text.ts
+import { createHash as createHash14 } from "node:crypto";
+import * as fsp10 from "node:fs/promises";
+import * as path26 from "node:path";
+function memoized(key2, fresh, fn) {
+  const full = `${networkMode().sourcesOffline ? "offline" : "live"}|${key2}`;
+  const hit = memo.get(full);
+  if (!fresh && hit !== void 0 && Date.now() - hit.at < MEMO_TTL_MS) return hit.value;
+  const value = fn();
+  memo.set(full, { at: Date.now(), value });
+  return value;
+}
+function extractOnce(bytes, contentSha) {
+  const hit = extractions.get(contentSha);
+  if (hit !== void 0) return hit;
+  const p2 = extractPdf(bytes).then((ex) => ({ text: ex.text, imageOnly: ex.imageOnly }));
+  p2.catch(() => extractions.delete(contentSha));
+  extractions.set(contentSha, p2);
+  if (extractions.size > MAX_EXTRACTIONS) extractions.delete(extractions.keys().next().value);
+  return p2;
+}
+function sha256Hex5(data) {
+  return createHash14("sha256").update(data).digest("hex");
+}
+function sourceTextCacheFile(url) {
+  return path26.join(pensmithSourceTextCacheDir(), `${sha256Hex5(url)}.json`);
+}
+async function readCacheEntry(url, source) {
+  let raw;
+  try {
+    raw = await fsp10.readFile(sourceTextCacheFile(url), "utf8");
+  } catch {
+    return null;
+  }
+  let e2;
+  try {
+    e2 = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (e2.url !== url || e2.source !== source || typeof e2.text !== "string" || typeof e2.text_sha256 !== "string" || typeof e2.content_sha256 !== "string" || typeof e2.final_url !== "string" || typeof e2.saved_at !== "string" || e2.text.length > SOURCE_TEXT_MAX_CHARS || sha256Hex5(e2.text) !== e2.text_sha256) {
+    return null;
+  }
+  const savedAt = Date.parse(e2.saved_at);
+  if (!Number.isFinite(savedAt)) return null;
+  const age = Date.now() - savedAt;
+  return { entry: e2, fresh: age >= 0 && age < sourceTtlMs(source) };
+}
+async function writeCacheEntry(entry) {
+  if (networkMode().sourcesOffline || entry.text.length > SOURCE_TEXT_MAX_CHARS) return;
+  const full = { ...entry, text_sha256: sha256Hex5(entry.text), saved_at: (/* @__PURE__ */ new Date()).toISOString() };
+  try {
+    await atomicWriteFile(sourceTextCacheFile(entry.url), `${JSON.stringify(full)}
+`);
+  } catch {
+  }
+}
+function textOf(origin, label, url, finalUrl, text4, fromCache) {
+  let prepared = null;
+  return {
+    kind: "text",
+    source: {
+      origin,
+      url,
+      finalUrl,
+      label,
+      text: text4,
+      fromCache,
+      prepared: /* @__PURE__ */ __name(() => prepared ??= prepareQuoteText(text4), "prepared")
+    }
+  };
+}
+function hostOf3(url) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url.slice(0, 80);
+  }
+}
+function fetchFailure(err, label) {
+  if (isOfflineEgressError(err)) return { kind: "no-answer", reason: `${label}: ${err.message}` };
+  if (err instanceof SsrfBlockedError || err instanceof RedirectError || err instanceof ResponseTooLargeError) {
+    return { kind: "no-text", reason: `fetch failed: ${errorFailureReason(err)} (${label})` };
+  }
+  return { kind: "no-answer", reason: `no answer from ${label}: ${errorFailureReason(err)} \u2014 retry verification when online` };
+}
+async function pdfText(url, source, origin, label, opts) {
+  const live = !networkMode().sourcesOffline;
+  const cached2 = live ? await readCacheEntry(url, source) : null;
+  if (cached2 !== null && cached2.fresh && opts.refresh !== true) {
+    return textOf(origin, label, url, cached2.entry.final_url, cached2.entry.text, true);
+  }
+  let bytes;
+  let finalUrl = url;
+  try {
+    const res = await fetch2(url, { source, noCache: true, maxBytes: MAX_PDF_BYTES });
+    finalUrl = res.finalUrl ?? url;
+    const pdf = checkPdfResponse(res);
+    if (!pdf.ok) return { kind: "no-text", reason: `fetch failed: ${pdf.reason} (${label})` };
+    bytes = pdf.bytes;
+  } catch (err) {
+    return fetchFailure(err, label);
+  }
+  const contentSha = sha256Hex5(bytes);
+  if (cached2 !== null && cached2.entry.content_sha256 === contentSha) {
+    await writeCacheEntry({ url, final_url: finalUrl, content_sha256: contentSha, text: cached2.entry.text, source });
+    return textOf(origin, label, url, finalUrl, cached2.entry.text, false);
+  }
+  let ex;
+  try {
+    ex = await extractOnce(bytes, contentSha);
+  } catch (err) {
+    const why = err instanceof PdfTimeoutError ? "its text could not be read in time" : `it could not be read (${(errorFailureReason(err).split("\n")[0] ?? "").slice(0, 160)})`;
+    return { kind: "no-text", reason: `fetch failed: the PDF answered but ${why} (${label})` };
+  }
+  if (ex.imageOnly || ex.text.replace(/\s/g, "").length < 50) {
+    return { kind: "no-text", reason: `image-only PDF: no extractable text (${label})` };
+  }
+  await writeCacheEntry({ url, final_url: finalUrl, content_sha256: contentSha, text: ex.text, source });
+  return textOf(origin, label, url, finalUrl, ex.text, false);
+}
+async function europePmcText(pmcid, opts) {
+  const label = `the Europe PMC full text of ${pmcid}`;
+  const url = fullTextXmlUrl(pmcid);
+  const live = !networkMode().sourcesOffline;
+  const cached2 = live ? await readCacheEntry(url, "europepmc") : null;
+  if (cached2 !== null && cached2.fresh && opts.refresh !== true && cached2.entry.ids !== void 0) {
+    return { attempt: textOf("Europe PMC full text", label, url, cached2.entry.final_url, cached2.entry.text, true), ids: cached2.entry.ids };
+  }
+  let r2;
+  try {
+    r2 = await lookupFullText(pmcid);
+  } catch (err) {
+    return { attempt: fetchFailure(err, label), ids: null };
+  }
+  if (r2.kind === "not-found") return { attempt: { kind: "no-text", reason: `no open-access full text at Europe PMC for ${pmcid}` }, ids: null };
+  if (r2.kind === "failed") {
+    const definitive = r2.status !== void 0 && r2.status >= 400 && r2.status < 500 && r2.status !== 429;
+    return {
+      attempt: definitive ? { kind: "no-text", reason: `fetch failed: ${r2.reason} (${label})` } : { kind: "no-answer", reason: `no answer from ${label}: ${r2.reason} \u2014 retry verification when online` },
+      ids: null
+    };
+  }
+  const text4 = r2.article.text;
+  if (text4.replace(/\s/g, "").length < 50) return { attempt: { kind: "no-text", reason: `${label} has no body text` }, ids: r2.article.ids };
+  await writeCacheEntry({ url, final_url: r2.url, content_sha256: sha256Hex5(r2.body), text: text4, source: "europepmc", ids: r2.article.ids });
+  return { attempt: textOf("Europe PMC full text", label, url, r2.url, text4, false), ids: r2.article.ids };
+}
+async function unpaywallPdfs(doi, refresh) {
+  let r2;
+  try {
+    r2 = await lookupOaPdfUrls(doi, { refresh });
+  } catch (err) {
+    return fetchFailure(err, `the Unpaywall lookup of DOI ${doi}`);
+  }
+  if (r2.kind === "found") {
+    if (r2.pdfUrls.length > 0) return { urls: r2.pdfUrls };
+    return r2.isOa ? { kind: "no-text", reason: `no open-access copy: Unpaywall lists no PDF of DOI ${doi}, only landing pages` } : { kind: "no-text", reason: `paywalled (abstract only): Unpaywall lists no open-access copy of DOI ${doi}` };
+  }
+  if (r2.kind === "not-found") return { kind: "no-text", reason: `no open-access copy: Unpaywall has no record of DOI ${doi}` };
+  if (r2.noEmail === true) {
+    const envName = contactEmail().envName;
+    return { kind: "no-text", reason: `Unpaywall needs a contact email \u2014 set ${envName} (the open-access copy of DOI ${doi} was not looked up)` };
+  }
+  const definitive = r2.status !== void 0 && r2.status >= 400 && r2.status < 500 && r2.status !== 429;
+  return definitive ? { kind: "no-text", reason: `Unpaywall answered ${r2.reason} for DOI ${doi}` } : { kind: "no-answer", reason: `no answer from Unpaywall for DOI ${doi}: ${r2.reason} \u2014 retry verification when online` };
+}
+function showsTitle(title, text4) {
+  const head = text4.slice(0, 6e3);
+  const main2 = title.split(/[:?]\s|\.\s/u)[0] ?? title;
+  return [title, main2].some((t) => t.trim().split(/\s+/u).length >= 2 && matchQuote(t, head).ratio >= 0.9);
+}
+async function* sourceTextAttempts(id, opts = {}) {
+  const fresh = opts.refresh === true;
+  let routes = 0;
+  const doi = id.doi !== null && !isDataCiteArxivDoi(id.doi) ? normalizeDoi(id.doi) : null;
+  if (doi !== null) {
+    routes += 1;
+    const up = await memoized(`unpaywall|${doi}`, fresh, () => unpaywallPdfs(doi, fresh));
+    if ("urls" in up) {
+      for (const url of up.urls) {
+        const label = `the open-access PDF at ${hostOf3(url)}`;
+        yield await memoized(`pdf|generic|${url}`, fresh, () => pdfText(url, "generic", "open-access PDF", label, opts));
+      }
+    } else {
+      yield up;
+    }
+  }
+  const pmcid = id.pmcid !== null ? normPmcid2(id.pmcid) : null;
+  if (pmcid !== null) {
+    routes += 1;
+    if (doi === null && id.pmid === null) {
+      yield { kind: "no-text", reason: `the PMCID ${pmcid} is not tied to a DOI or PMID pensmith verifies, so its Europe PMC text is not used` };
+    } else {
+      const r2 = await memoized(`europepmc|${pmcid}`, fresh, () => europePmcText(pmcid, opts));
+      if (r2.attempt.kind === "text") {
+        const ids = r2.ids;
+        const same = ids !== null && (doi !== null && ids.doi === doi || id.pmid !== null && ids.pmid === id.pmid);
+        yield same ? r2.attempt : {
+          kind: "no-text",
+          reason: `the Europe PMC full text of ${pmcid} is another article (DOI ${ids?.doi ?? "none"}, PMID ${ids?.pmid ?? "none"}), so it is not used`
+        };
+      } else {
+        yield r2.attempt;
+      }
+    }
+  }
+  if (id.arxiv !== null) {
+    routes += 1;
+    const url = arxivPdfUrl(id.arxiv);
+    const label = `the arXiv PDF of ${id.arxiv}`;
+    const a3 = await memoized(`pdf|arxiv|${url}`, fresh, () => pdfText(url, "arxiv", "arXiv PDF", label, opts));
+    if (a3.kind === "text" && !id.arxivIsIdentity && (id.title === null || !showsTitle(id.title, a3.source.text))) {
+      yield { kind: "no-text", reason: `${label} does not show this work's title, so it is not used (the entry's arXiv id is not the identifier Pass 1 checks)` };
+    } else {
+      yield a3;
+    }
+  }
+  if (routes === 0) yield { kind: "no-text", reason: "no open-access copy: the entry has no DOI, PMCID or arXiv id to find one by" };
+}
+function str7(v2) {
+  if (typeof v2 === "string") return v2.trim() === "" ? null : v2.trim();
+  if (Array.isArray(v2) && typeof v2[0] === "string") return str7(v2[0]);
+  return null;
+}
+function sourceIdentity(bib, library) {
+  const doi = str7(bib?.DOI);
+  const eprint = str7(bib?.eprint);
+  const prefix = str7(bib?.archivePrefix);
+  const arxivEprint = eprint !== null && (prefix === null || /^arxiv$/i.test(prefix)) ? eprint : null;
+  const arxiv = arxivIdOfEntry({ doi, arxiv: arxivEprint });
+  const pmid = str7(bib?.PMID);
+  const pmcid = str7(bib?.PMCID) ?? library?.pmcid ?? null;
+  return {
+    doi,
+    pmid: pmid !== null && /^\d{1,9}$/.test(pmid) ? pmid : null,
+    pmcid,
+    arxiv,
+    arxivIsIdentity: arxiv !== null && (doi === null || isDataCiteArxivDoi(doi)),
+    title: str7(bib?.title)
+  };
+}
+async function bibEntriesOf(file) {
+  const st = await fsp10.stat(file);
+  const stamp = `${st.size}:${st.mtimeMs}`;
+  const hit = bibMemo.get(file);
+  if (hit !== void 0 && hit.stamp === stamp) return hit.entries;
+  const entries = fsp10.readFile(file, "utf8").then(async (text4) => {
+    const parsed = await parseBibFileAt(text4, file);
+    return new Map(parsed.map((e2) => [String(e2.id ?? ""), e2]));
+  });
+  bibMemo.set(file, { stamp, entries });
+  return entries;
+}
+async function sourceTextPassage(root, citekey, claim) {
+  try {
+    const bib = (await bibEntriesOf(libraryPaths(root).bib)).get(citekey);
+    if (bib === void 0) return null;
+    const lib = await tryLoadLibrary(root);
+    const entry = lib?.entries.find((e2) => e2.citekey === citekey) ?? null;
+    for await (const a3 of sourceTextAttempts(sourceIdentity(bib, entry))) {
+      if (a3.kind === "text") return passagesNearClaim(a3.source.text, claim);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+var SOURCE_TEXT_MAX_CHARS, MEMO_TTL_MS, memo, extractions, MAX_EXTRACTIONS, bibMemo;
+var init_source_text = __esm({
+  "bin/lib/verify/source-text.ts"() {
+    "use strict";
+    init_atomic_write();
+    init_http();
+    init_http_mock();
+    init_pdf_response();
+    init_pdf_text();
+    init_paths();
+    init_unpaywall();
+    init_europepmc();
+    init_contact_email();
+    init_search_failure();
+    init_full_text();
+    init_doi();
+    init_fuzzy();
+    init_byo_text();
+    init_library2();
+    init_citations();
+    SOURCE_TEXT_MAX_CHARS = 4 * 1024 * 1024;
+    MEMO_TTL_MS = 6e4;
+    memo = /* @__PURE__ */ new Map();
+    __name(memoized, "memoized");
+    extractions = /* @__PURE__ */ new Map();
+    MAX_EXTRACTIONS = 16;
+    __name(extractOnce, "extractOnce");
+    __name(sha256Hex5, "sha256Hex");
+    __name(sourceTextCacheFile, "sourceTextCacheFile");
+    __name(readCacheEntry, "readCacheEntry");
+    __name(writeCacheEntry, "writeCacheEntry");
+    __name(textOf, "textOf");
+    __name(hostOf3, "hostOf");
+    __name(fetchFailure, "fetchFailure");
+    __name(pdfText, "pdfText");
+    __name(europePmcText, "europePmcText");
+    __name(unpaywallPdfs, "unpaywallPdfs");
+    __name(showsTitle, "showsTitle");
+    __name(sourceTextAttempts, "sourceTextAttempts");
+    __name(str7, "str");
+    __name(sourceIdentity, "sourceIdentity");
+    bibMemo = /* @__PURE__ */ new Map();
+    __name(bibEntriesOf, "bibEntriesOf");
+    __name(sourceTextPassage, "sourceTextPassage");
+  }
+});
+
 // bin/lib/verify/pass3.ts
-function unavailableVerdict(reason) {
-  return { verdict: "PDF_UNAVAILABLE", levRatio: 0, reason };
+function byoEntries(entries) {
+  return new Map(entries.filter((e2) => e2.byo !== null).map((e2) => [e2.citekey, e2]));
 }
-async function byoEntries(root) {
-  if (root === void 0) return /* @__PURE__ */ new Map();
-  const lib = await tryLoadLibrary(root);
-  return new Map((lib?.entries ?? []).filter((e2) => e2.byo !== null).map((e2) => [e2.citekey, e2]));
-}
-async function checkPdfAt(q3, url, source, what) {
-  let resp;
-  try {
-    resp = await fetch2(url, { source, noCache: true, maxBytes: MAX_PDF_BYTES });
-  } catch (err) {
-    if (isOfflineEgressError(err)) return unavailableVerdict(`text unavailable (${offlineLabel(err)}) \u2014 re-run online to check the quote`);
-    return unavailableVerdict(`${what} fetch failed: ${errorFailureReason(err)}`);
-  }
-  const pdf = checkPdfResponse(resp);
-  if (!pdf.ok) return unavailableVerdict(`${what} fetch returned ${pdf.reason}`);
-  let text4;
-  try {
-    text4 = await extractPdfText(pdf.bytes);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return unavailableVerdict(`${what} text extraction failed: ${(msg.split(/\r?\n/)[0] ?? "").slice(0, 200)}`);
-  }
-  if (text4.replace(/\s/g, "").length < 50) {
-    return { verdict: "TEXT_UNAVAILABLE", levRatio: 0, reason: "PDF appears image-only or scanned (<50 non-whitespace chars)" };
-  }
-  const ratio = levenshteinSubstring(nfkcNormalize(q3.text), nfkcNormalize(text4));
-  if (ratio >= QUOTE_LEV_THRESHOLD) return { verdict: "OK", levRatio: ratio, reason: `levenshtein-substring above threshold (${what})` };
-  return { verdict: "NOT_FOUND", levRatio: ratio, reason: `quote not found in the ${what} (lev=${ratio.toFixed(3)} < ${QUOTE_LEV_THRESHOLD})` };
-}
-async function checkUnpaywall(q3, doi) {
-  let lookup;
-  try {
-    lookup = await lookupById7(doi);
-  } catch (err) {
-    if (!isOfflineEgressError(err)) throw err;
-    return unavailableVerdict(`text unavailable (${offlineLabel(err)}) \u2014 re-run online to check the quote`);
-  }
-  if (lookup.kind === "failed") {
-    return unavailableVerdict(`${lookup.reason} \u2014 the open-access copy of DOI ${doi} was not looked up`);
-  }
-  if (lookup.kind === "not-found") return unavailableVerdict(`Unpaywall has no record of DOI ${doi} (${lookup.reason})`);
-  const oaUrl = lookup.candidate.oa_pdf_url;
-  if (!oaUrl) return unavailableVerdict(`No OA PDF available for DOI ${doi}`);
-  return checkPdfAt(q3, oaUrl, "generic", "OA PDF");
-}
-async function checkOpenAccess(q3, claimed) {
-  const doi = claimed?.DOI;
-  const arxiv = claimed !== void 0 ? arxivIdOfEntry({ doi: doi ?? null, arxiv: arxivEprint(claimed) }) : null;
-  if (!doi && arxiv === null) return unavailableVerdict("No DOI for citekey \u2014 cannot fetch OA PDF");
+async function checkQuote(q3, claimed, libEntry, root, refresh, byoTexts, prepared) {
   const mode = networkMode();
-  if (mode.sourcesOffline) {
-    return unavailableVerdict(`text unavailable (${mode.dryRun ? "dry-run" : "offline"}) \u2014 re-run online to check the quote`);
+  const doi = typeof claimed?.DOI === "string" ? claimed.DOI : void 0;
+  if (doi !== void 0 && isReservedDryRunId(doi)) {
+    return mode.dryRun ? { verdict: "UNVERIFIABLE-QUOTE", levRatio: 0, reason: "text unavailable (dry-run): a synthetic dry-run source has no text" } : { verdict: "NOT_FOUND", levRatio: 0, reason: `reserved dry-run identifier ${doi} \u2014 a synthetic source cannot be quoted` };
   }
-  const viaDoi = doi && !isDataCiteArxivDoi(doi) ? await checkUnpaywall(q3, doi) : null;
-  if (viaDoi !== null && viaDoi.verdict !== "PDF_UNAVAILABLE") return viaDoi;
-  if (arxiv === null) return viaDoi ?? unavailableVerdict("No DOI for citekey \u2014 cannot fetch OA PDF");
-  const viaArxiv = await checkPdfAt(q3, arxivPdfUrl(arxiv), "arxiv", `arXiv PDF of ${arxiv}`);
-  if (viaArxiv.verdict === "PDF_UNAVAILABLE" && viaDoi !== null) {
-    return { ...viaArxiv, reason: `${viaDoi.reason}; ${viaArxiv.reason}` };
+  const checked = [];
+  let best = 0;
+  let altered = null;
+  const noText = [];
+  const noAnswer = [];
+  if (libEntry?.byo != null && root !== void 0) {
+    let pending = byoTexts.get(q3.citekey);
+    if (pending === void 0) {
+      pending = byoText(root, libEntry);
+      byoTexts.set(q3.citekey, pending);
+    }
+    const t = await pending;
+    const name = libEntry.byo.file;
+    if (t.available) {
+      let p2 = prepared.get(t);
+      if (p2 === void 0) {
+        p2 = prepareQuoteText(t.text);
+        prepared.set(t, p2);
+      }
+      const m3 = matchQuote(q3.text, p2);
+      const where = `your local file ${name} (sha256 ${t.sha256.slice(0, 12)}\u2026)`;
+      if (m3.verbatim) return { verdict: "PASS", levRatio: 1, reason: `verified against ${where}`, localFile: name };
+      if (m3.ratio >= QUOTE_LEV_THRESHOLD) {
+        return { verdict: "FUZZY", levRatio: m3.ratio, reason: `verified against ${where} at lev=${pct(m3.ratio)} (not verbatim)`, localFile: name };
+      }
+      checked.push(`your local file ${name}`);
+      best = Math.max(best, m3.ratio);
+    } else if (byoCopyAltered(t.code)) {
+      altered = t.reason;
+    } else {
+      noText.push(`your local file: ${t.reason}`);
+    }
   }
-  return viaArxiv;
-}
-function arxivEprint(claimed) {
-  const eprint = typeof claimed.eprint === "string" ? claimed.eprint.trim() : "";
-  const prefix = typeof claimed.archivePrefix === "string" ? claimed.archivePrefix.trim() : "";
-  return eprint && (prefix === "" || /^arxiv$/i.test(prefix)) ? eprint : null;
+  if (claimed === void 0) {
+    noText.push("the source is not in CITATIONS.bib (see its Pass-1 row)");
+  } else {
+    for await (const a3 of sourceTextAttempts(sourceIdentity(claimed, libEntry ?? null), { refresh })) {
+      if (a3.kind === "no-text") {
+        noText.push(a3.reason);
+        continue;
+      }
+      if (a3.kind === "no-answer") {
+        noAnswer.push(a3.reason);
+        continue;
+      }
+      const m3 = matchQuote(q3.text, a3.source.prepared());
+      if (m3.verbatim) return { verdict: "PASS", levRatio: 1, reason: `verbatim in ${a3.source.label}` };
+      if (m3.ratio >= QUOTE_LEV_THRESHOLD) return { verdict: "FUZZY", levRatio: m3.ratio, reason: `found in ${a3.source.label} at lev=${pct(m3.ratio)} (not verbatim)` };
+      checked.push(a3.source.label);
+      best = Math.max(best, m3.ratio);
+    }
+  }
+  const unanswered = noAnswer.length > 0 ? `; ${noAnswer.join("; ")}` : "";
+  if (altered !== null) {
+    const elsewhere = checked.length > 0 ? `and it is not in ${checked.join(", ")}` : `no open-access copy has it (${[...noText, ...noAnswer].join("; ") || "none found"})`;
+    return {
+      verdict: "NOT_FOUND",
+      levRatio: best,
+      reason: `quote cannot be checked against your local file: ${altered} \u2014 restore that PDF, or attach the right copy with \`pensmith add <identifier> --pdf <file> --replace-pdf\`; ${elsewhere}`
+    };
+  }
+  if (checked.length > 0) {
+    return {
+      verdict: "NOT_FOUND",
+      levRatio: best,
+      reason: `quote not found in ${checked.join(", ")} (best lev=${pct(best)} < ${QUOTE_LEV_THRESHOLD})${unanswered}`
+    };
+  }
+  if (noAnswer.length > 0) {
+    return { verdict: "UNVERIFIABLE-NETWORK", levRatio: 0, reason: [...noAnswer, ...noText].join("; ") };
+  }
+  return { verdict: "UNVERIFIABLE-QUOTE", levRatio: 0, reason: noText.join("; ") || "no open-access copy" };
 }
 async function runPass3(draftMd, bibByCitekey, opts = {}) {
-  const quotes = extractQuotes(draftMd);
+  const minWords = opts.minWords ?? (opts.root !== void 0 ? tryReadPaperConfigSync(opts.root)?.verification?.quote_min_words : void 0);
+  const quotes = extractQuotes(draftMd, minWords !== void 0 ? { minWords } : {});
   const results = [];
-  const mode = networkMode();
-  const byo = quotes.length > 0 ? await byoEntries(opts.root) : /* @__PURE__ */ new Map();
+  if (quotes.length === 0) return results;
+  const library = opts.root !== void 0 ? (await tryLoadLibrary(opts.root))?.entries ?? [] : [];
+  const byKey = new Map(library.map((e2) => [e2.citekey, e2]));
+  const byo = byoEntries(library);
   const byoTexts = /* @__PURE__ */ new Map();
+  const prepared = /* @__PURE__ */ new WeakMap();
   for (const q3 of quotes) {
-    const snippet = q3.text.slice(0, 40);
-    const push = /* @__PURE__ */ __name((v2) => void results.push({ citekey: q3.citekey, quoteSnippet: snippet, ...v2 }), "push");
-    const claimed = bibByCitekey.get(q3.citekey);
-    if (claimed?.DOI !== void 0 && isReservedDryRunId(claimed.DOI)) {
-      push(
-        mode.dryRun ? unavailableVerdict("text unavailable (dry-run): a synthetic dry-run source has no text") : { verdict: "NOT_FOUND", levRatio: 0, reason: `reserved dry-run identifier ${claimed.DOI} \u2014 a synthetic source cannot be quoted` }
-      );
-      continue;
-    }
-    let localMiss = null;
-    let localUnavailable = null;
-    let localAltered = null;
-    const entry = byo.get(q3.citekey);
-    if (entry !== void 0 && opts.root !== void 0) {
-      let t = byoTexts.get(q3.citekey);
-      if (t === void 0) {
-        t = await byoText(opts.root, entry);
-        byoTexts.set(q3.citekey, t);
-      }
-      const name = entry.byo.file;
-      if (t.available) {
-        const ratio = levenshteinSubstring(nfkcNormalize(q3.text), nfkcNormalize(t.text));
-        if (ratio >= QUOTE_LEV_THRESHOLD) {
-          push({ verdict: "OK", levRatio: ratio, reason: `verified against your local file ${name} (sha256 ${t.sha256.slice(0, 12)}\u2026)` });
-          continue;
-        }
-        localMiss = { ratio, file: name };
-      } else if (byoCopyAltered(t.code)) {
-        localAltered = t.reason;
-      } else {
-        localUnavailable = `your local file: ${t.reason}`;
-      }
-    }
-    const oa = await checkOpenAccess(q3, claimed);
-    if (oa.verdict === "OK") {
-      push(oa);
-      continue;
-    }
-    if (localAltered !== null) {
-      const oaNote = oa.verdict === "NOT_FOUND" ? "and it is not in the OA PDF" : `the open-access copy: ${oa.reason}`;
-      push({
-        verdict: "NOT_FOUND",
-        levRatio: oa.levRatio,
-        reason: `quote cannot be checked against your local file: ${localAltered} \u2014 restore that PDF, or attach the right copy with \`pensmith add <identifier> --pdf <file> --replace-pdf\`; ${oaNote}`
+    const ids = { id: q3.id, quoteSha256: quoteTextSha256(q3.text) };
+    const where = { line: q3.line, ...q3.locator !== void 0 ? { locator: q3.locator } : {} };
+    const push = /* @__PURE__ */ __name((citekey, v2) => void results.push({ citekey, ...ids, quoteSnippet: q3.text.slice(0, 40), ...v2, ...where }), "push");
+    if (q3.citekey === null) {
+      push(UNATTRIBUTED_CITEKEY, {
+        verdict: "UNATTRIBUTED",
+        levRatio: 0,
+        reason: 'a direct quote with no citation to attribute it to \u2014 cite its source right after the quote ("\u2026" [@key]) or paraphrase it'
       });
       continue;
     }
-    if (localMiss !== null) {
-      const oaNote = oa.verdict === "NOT_FOUND" ? "nor in the OA PDF" : `the open-access copy: ${oa.reason}`;
-      push({
-        verdict: "NOT_FOUND",
-        levRatio: Math.max(localMiss.ratio, oa.levRatio),
-        reason: `quote not found in your local file ${localMiss.file} (lev=${localMiss.ratio.toFixed(3)} < ${QUOTE_LEV_THRESHOLD}); ${oaNote}`
-      });
-      continue;
-    }
-    push(localUnavailable !== null && oa.verdict !== "NOT_FOUND" ? { ...oa, reason: `${oa.reason}; ${localUnavailable}` } : oa);
+    const key2 = q3.citekey;
+    const entry = byo.get(key2) ?? byKey.get(key2);
+    push(key2, await checkQuote({ ...q3, citekey: key2 }, bibByCitekey.get(key2), entry, opts.root, opts.refresh?.has(key2) === true, byoTexts, prepared));
   }
   return results;
 }
+var pct;
 var init_pass3 = __esm({
   "bin/lib/verify/pass3.ts"() {
     "use strict";
     init_fuzzy();
-    init_normalize();
-    init_pdf_text();
-    init_unpaywall();
-    init_http();
-    init_pdf_response();
-    init_search_failure();
     init_http_mock();
     init_doi();
     init_quote_extractor();
     init_byo_text();
-    init_full_text();
     init_library2();
-    __name(unavailableVerdict, "unavailableVerdict");
+    init_config2();
+    init_verdicts();
+    init_source_text();
     __name(byoEntries, "byoEntries");
-    __name(checkPdfAt, "checkPdfAt");
-    __name(checkUnpaywall, "checkUnpaywall");
-    __name(checkOpenAccess, "checkOpenAccess");
-    __name(arxivEprint, "arxivEprint");
+    pct = /* @__PURE__ */ __name((r2) => r2.toFixed(3), "pct");
+    __name(checkQuote, "checkQuote");
     __name(runPass3, "runPass3");
   }
 });
 
-// bin/lib/verify/pass2.ts
-function extractClaimSentences(draftMd, citekey) {
-  const token = `[@${citekey}]`;
-  const sentences = draftMd.split(/(?<=[.!?])\s+/);
+// bin/lib/verify/clock.ts
+function verificationNow() {
+  if (isTestContext()) {
+    const raw = process.env[TEST_NOW_ENV];
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      const t = Date.parse(raw.trim());
+      if (Number.isFinite(t)) return new Date(t);
+    }
+  }
+  return /* @__PURE__ */ new Date();
+}
+function needsRecheck(lastVerified, recheckAfterDays = DEFAULT_RECHECK_AFTER_DAYS, now = verificationNow()) {
+  if (typeof lastVerified !== "string" || lastVerified.length === 0) return true;
+  const at = Date.parse(lastVerified);
+  if (!Number.isFinite(at)) return true;
+  const days = Number.isFinite(recheckAfterDays) && recheckAfterDays >= 0 ? recheckAfterDays : DEFAULT_RECHECK_AFTER_DAYS;
+  return now.getTime() - at > days * DAY_MS;
+}
+var TEST_NOW_ENV, DEFAULT_RECHECK_AFTER_DAYS, DAY_MS;
+var init_clock = __esm({
+  "bin/lib/verify/clock.ts"() {
+    "use strict";
+    init_http_mock();
+    TEST_NOW_ENV = "PENSMITH_TEST_NOW";
+    DEFAULT_RECHECK_AFTER_DAYS = 30;
+    DAY_MS = 24 * 60 * 60 * 1e3;
+    __name(verificationNow, "verificationNow");
+    __name(needsRecheck, "needsRecheck");
+  }
+});
+
+// bin/lib/verify/gate.ts
+import { existsSync as existsSync23, readFileSync as readFileSync29 } from "node:fs";
+import { join as join17 } from "node:path";
+function hasStubMarker(text4) {
+  return text4.split(/\r?\n/).some((l2) => l2.trim() === STUB_DRAFT_MARKER);
+}
+function loadBibliography(root) {
+  const path29 = join17(paperDir(root), "CITATIONS.bib");
+  if (!existsSync23(path29)) return { path: path29, exists: false, entries: [], problems: [] };
+  let text4;
+  try {
+    text4 = readFileSync29(path29, "utf8");
+  } catch (e2) {
+    return { path: path29, exists: false, entries: [], problems: [], unreadable: e2.code ?? e2.message };
+  }
+  const { entries, problems } = parseBibEntries(text4);
+  return { path: path29, exists: true, entries, problems };
+}
+function unassignedReason(scope, key2) {
+  return scope.kind === "section" ? `not in section ${scope.id}'s assigned_sources \u2014 re-plan the section's sources with \`pensmith plan ${scope.id} --revise\`, or assign it to the section with \`pensmith add --remap ${key2} --section ${scope.id}\`` : `not in the assigned_sources of any section of the paper \u2014 cite only a section's assigned sources (\`pensmith plan <N> --revise\`, or \`pensmith add --remap ${key2} --section <N>\`), then re-verify and recompile`;
+}
+function bibProblemLine(p2) {
+  return `line ${p2.line}${p2.key !== null ? ` (${p2.key})` : ""}: ${p2.detail}`;
+}
+function bibAwareRow(r2, bib, parsedKeys, cited) {
+  const base = {
+    kind: "pass1",
+    key: r2.citekey,
+    verdict: r2.verdict,
+    titleJW: r2.titleJW,
+    authorJW: r2.authorJW,
+    reason: r2.reason,
+    ...r2.retraction === true ? { retraction: true } : {},
+    ...r2.checkedAt !== void 0 ? { checkedAt: r2.checkedAt } : {}
+  };
+  if (parsedKeys.has(r2.citekey) || !cited.has(r2.citekey)) return base;
+  const bad = bib.problems.find((p2) => p2.key === r2.citekey);
+  if (bad !== void 0) {
+    return {
+      kind: "pass1",
+      key: r2.citekey,
+      verdict: "UNPARSEABLE",
+      titleJW: Number.NaN,
+      authorJW: Number.NaN,
+      reason: `its .paper/CITATIONS.bib entry (line ${bad.line}) does not parse: ${bad.detail} \u2014 fix that entry by hand, or re-render the file from LIBRARY.json (\`pensmith verify\` does it when the paper has a LIBRARY.json)`
+    };
+  }
+  if (r2.verdict !== "FABRICATED") return base;
+  if (!bib.exists) {
+    if (bib.unreadable !== void 0) {
+      return { ...base, reason: `.paper/CITATIONS.bib could not be read (${bib.unreadable}), so this citation cannot be checked \u2014 make the file readable (or rebuild it with \`pensmith research\` / \`pensmith add <id>\`), then re-verify` };
+    }
+    return { ...base, reason: ".paper/CITATIONS.bib is missing, so this citation cannot be checked \u2014 rebuild it with `pensmith research` (or `pensmith add <id>`), then re-verify" };
+  }
+  if (bib.entries.length === 0 && bib.problems.length === 0) {
+    return { ...base, reason: ".paper/CITATIONS.bib has no entries, so this key is in no bibliography \u2014 add the source (`pensmith add <id>`) or cite one the paper has" };
+  }
+  const unkeyed = bib.problems.filter((p2) => p2.key === null);
+  return unkeyed.length > 0 ? { ...base, reason: `${r2.reason} (CITATIONS.bib also has entries that do not parse: ${unkeyed.map(bibProblemLine).join("; ")})` } : base;
+}
+function bibMap(entries) {
+  return new Map(entries.map((e2) => [String(e2["id"] ?? ""), e2]));
+}
+function acceptanceFor(row2, sets) {
+  if (row2.verdict !== ACCEPTABLE_QUOTE_VERDICT) return null;
+  for (const set of sets) {
+    for (const a3 of set.acceptances) {
+      if (a3.citekey === row2.key && a3.quote_sha256 === row2.quoteSha256 && a3.draft_sha256 === set.currentDraftHash) {
+        return set.section !== void 0 ? { a: a3, section: set.section } : { a: a3 };
+      }
+    }
+  }
+  return null;
+}
+function applyAcceptances(rows, sets) {
+  const accepted = [];
+  const out2 = rows.map((r2) => {
+    if (r2.kind !== "pass3") return r2;
+    const hit = acceptanceFor(r2, sets);
+    if (hit === null) {
+      if (r2.accepted === void 0) return r2;
+      const { accepted: _drop, ...rest } = r2;
+      void _drop;
+      return rest;
+    }
+    accepted.push({
+      id: r2.id,
+      citekey: r2.key,
+      excerpt: hit.a.excerpt,
+      acceptedAt: hit.a.accepted_at,
+      via: hit.a.via,
+      ...hit.section !== void 0 ? { section: hit.section } : {}
+    });
+    return { ...r2, accepted: { at: hit.a.accepted_at, via: hit.a.via } };
+  });
+  return { rows: out2, accepted };
+}
+function gateOutcome(rows) {
+  return sectionOutcome(rows.map((r2) => ({ verdict: r2.verdict, accepted: r2.kind === "pass3" && r2.accepted !== void 0 })));
+}
+async function recomputeGate(input2) {
+  const bib = input2.bib ?? loadBibliography(input2.root);
+  const runPass12 = input2.deps?.runPass1 ?? runPass1;
+  const runPass32 = input2.deps?.runPass3 ?? runPass3;
+  const citedKeys = extractCitedKeysForVerification(input2.text);
+  const parsedKeys = new Set(bib.entries.map((e2) => String(e2["id"] ?? "")));
+  const pass1 = await runPass12(input2.text, bib.path, {
+    root: input2.root,
+    bibEntries: bib.entries,
+    ...input2.refresh !== void 0 ? { refresh: input2.refresh } : {}
+  });
+  const rows = [];
+  const cited = new Set(citedKeys);
+  for (const r2 of pass1) {
+    rows.push(bibAwareRow(r2, bib, parsedKeys, cited));
+    if (citedKeys.includes(r2.citekey) && !input2.allowedKeys.has(r2.citekey)) {
+      rows.push({ kind: "pass1", key: r2.citekey, verdict: "UNASSIGNED", titleJW: Number.NaN, authorJW: Number.NaN, reason: unassignedReason(input2.scope, r2.citekey) });
+    }
+  }
+  for (const scan of input2.scanners ?? TEXT_SCANNERS) {
+    for (const f2 of scan(input2.text)) {
+      rows.push({ kind: "text", key: `L${f2.line}`, line: f2.line, verdict: f2.verdict, form: f2.form, text: f2.text, reason: f2.reason });
+    }
+  }
+  const pass3 = await runPass32(input2.text, bibMap(bib.entries), {
+    root: input2.root,
+    ...input2.refresh !== void 0 ? { refresh: input2.refresh } : {}
+  });
+  for (const r2 of pass3) {
+    rows.push({
+      kind: "pass3",
+      key: r2.citekey,
+      id: r2.id,
+      quoteSha256: r2.quoteSha256,
+      snippet: r2.quoteSnippet,
+      verdict: r2.verdict,
+      levRatio: r2.levRatio,
+      reason: r2.reason,
+      ...r2.localFile !== void 0 ? { localFile: r2.localFile } : {}
+    });
+  }
+  if (!input2.dryRun && hasStubMarker(input2.text)) {
+    rows.push({
+      kind: "draft",
+      verdict: "PLACEHOLDER",
+      reason: `this is stub text written with no model configured (PENSMITH_NO_LLM=1 or --dry-run), not real prose \u2014 re-draft it with a model configured: \`pensmith write ${input2.scope.kind === "section" ? input2.scope.id : "<N>"}\``
+    });
+  }
+  if (citedKeys.length === 0 && input2.allowedKeys.size > 0) {
+    rows.push({ kind: "draft", verdict: "NO-CITATIONS", reason: `no citations; ${input2.allowedKeys.size} source${input2.allowedKeys.size === 1 ? "" : "s"} assigned` });
+  }
+  const lifted = applyAcceptances(rows, input2.acceptanceSets ?? []);
+  const checkedAt = {};
+  for (const r2 of lifted.rows) {
+    if (r2.kind === "pass1" && PASSING_VERDICTS.has(r2.verdict) && r2.checkedAt !== void 0) checkedAt[r2.key] = r2.checkedAt;
+  }
+  const byoQuotes = [];
+  for (const r2 of lifted.rows) {
+    if (r2.kind === "pass3" && r2.localFile !== void 0 && PASSING_VERDICTS.has(r2.verdict)) {
+      byoQuotes.push({ id: r2.id, citekey: r2.key, snippet: r2.snippet, localFile: r2.localFile });
+    }
+  }
+  return { rows: lifted.rows, outcome: gateOutcome(lifted.rows), accepted: lifted.accepted, byoQuotes, checkedAt, citedKeys, bib };
+}
+async function recheckKeys(root, citedKeys) {
+  const out2 = /* @__PURE__ */ new Set();
+  if (citedKeys.length === 0) return out2;
+  let days = DEFAULT_RECHECK_AFTER_DAYS;
+  try {
+    const cfg = tryReadPaperConfigSync(root)?.verification?.recheck_after_days;
+    if (typeof cfg === "number") days = cfg;
+  } catch {
+  }
+  let lib;
+  try {
+    lib = await tryLoadLibrary(root);
+  } catch {
+    return out2;
+  }
+  if (lib === null) return out2;
+  const byKey = new Map(lib.entries.map((e2) => [e2.citekey, e2]));
+  const now = verificationNow();
+  for (const key2 of citedKeys) {
+    const e2 = byKey.get(key2);
+    if (e2 !== void 0 && needsRecheck(e2.last_verified ?? null, days, now)) out2.add(key2);
+  }
+  return out2;
+}
+var STUB_DRAFT_MARKER, TEXT_SCANNERS;
+var init_gate = __esm({
+  "bin/lib/verify/gate.ts"() {
+    "use strict";
+    init_pass1();
+    init_pass3();
+    init_citations();
+    init_citation_token();
+    init_unsupported_forms();
+    init_paths();
+    init_library2();
+    init_config2();
+    init_clock();
+    init_verdicts();
+    STUB_DRAFT_MARKER = "<!-- stub draft (no model configured) \u2014 not real prose -->";
+    __name(hasStubMarker, "hasStubMarker");
+    TEXT_SCANNERS = Object.freeze([findUnparseableCitations, findUnsupportedForms]);
+    __name(loadBibliography, "loadBibliography");
+    __name(unassignedReason, "unassignedReason");
+    __name(bibProblemLine, "bibProblemLine");
+    __name(bibAwareRow, "bibAwareRow");
+    __name(bibMap, "bibMap");
+    __name(acceptanceFor, "acceptanceFor");
+    __name(applyAcceptances, "applyAcceptances");
+    __name(gateOutcome, "gateOutcome");
+    __name(recomputeGate, "recomputeGate");
+    __name(recheckKeys, "recheckKeys");
+  }
+});
+
+// bin/lib/verify/pass4.ts
+function orphanAuditRequest(paragraph) {
+  return buildPromptRequest("orphan-label", { paragraph: paragraph.slice(0, PASS4_MAX_PARAGRAPH_CHARS) });
+}
+function lines(md) {
   const out2 = [];
-  for (const raw of sentences) {
-    const sentence = raw.trim();
-    if (sentence.length > 0 && sentence.includes(token)) {
-      out2.push(sentence);
+  let start = 0;
+  for (; ; ) {
+    const nl = md.indexOf("\n", start);
+    const rawEnd = nl === -1 ? md.length : nl;
+    const end = rawEnd > start && md[rawEnd - 1] === "\r" ? rawEnd - 1 : rawEnd;
+    out2.push({ start, end, text: md.slice(start, end) });
+    if (nl === -1) return out2;
+    start = nl + 1;
+  }
+}
+function proseParagraphs(md) {
+  const out2 = [];
+  let first2 = null;
+  let last = null;
+  let fence = null;
+  const flush = /* @__PURE__ */ __name(() => {
+    if (first2 !== null && last !== null) {
+      const text4 = md.slice(first2.start, last.end);
+      if (text4.trim().length > 0) out2.push({ index: out2.length + 1, start: first2.start, end: last.end, text: text4 });
+    }
+    first2 = null;
+    last = null;
+  }, "flush");
+  const all = lines(md);
+  for (let i = 0; i < all.length; i += 1) {
+    const line = all[i];
+    const f2 = FENCE_RE.exec(line.text);
+    if (fence !== null) {
+      if (f2 !== null && f2[0].trim()[0] === fence) fence = null;
+      continue;
+    }
+    if (f2 !== null) {
+      flush();
+      fence = f2[0].trim()[0];
+      continue;
+    }
+    const next = all[i + 1];
+    const setextTitle = next !== void 0 && /^ {0,3}(?:=+|-+)[ \t]*$/.test(next.text) && line.text.trim() !== "";
+    if (line.text.trim() === "" || NON_PROSE_LINE_RE.test(line.text) || setextTitle) {
+      flush();
+      if (setextTitle) i += 1;
+      continue;
+    }
+    if (first2 === null) first2 = line;
+    last = line;
+  }
+  flush();
+  return out2;
+}
+function oneLine11(s2) {
+  return s2.replace(/\s+/g, " ").trim();
+}
+function prose(text4) {
+  return oneLine11(replaceCitations(text4, () => " "));
+}
+function draftSentences(md) {
+  const citations = findCitations(md);
+  const out2 = [];
+  for (const p2 of proseParagraphs(md)) {
+    const inside = citations.filter((c2) => c2.start >= p2.start && c2.start < p2.end);
+    const cuts = [];
+    for (const m3 of p2.text.matchAll(BOUNDARY_RE)) {
+      const at = p2.start + m3.index;
+      if (inside.some((c2) => at >= c2.start && at < c2.end)) continue;
+      cuts.push(p2.start + m3.index + m3[0].length);
+    }
+    const pieces = [];
+    let from = p2.start;
+    for (const cut of [...cuts, p2.end]) {
+      if (cut <= from) continue;
+      const raw = md.slice(from, cut);
+      const lead = raw.length - raw.trimStart().length;
+      if (raw.trim().length > 0) pieces.push({ start: from + lead, end: cut });
+      from = cut;
+    }
+    const merged = [];
+    for (const piece of pieces) {
+      const onlyCitations = prose(md.slice(piece.start, piece.end)).replace(/[\p{P}\s]/gu, "") === "";
+      const prev = merged[merged.length - 1];
+      if (onlyCitations && prev !== void 0) prev.end = piece.end;
+      else merged.push({ ...piece });
+    }
+    for (const s2 of merged) {
+      const text4 = md.slice(s2.start, s2.end);
+      out2.push({
+        paragraph: p2.index,
+        start: s2.start,
+        end: s2.end,
+        text: oneLine11(text4),
+        citations: inside.filter((c2) => c2.start >= s2.start && c2.start < s2.end)
+      });
     }
   }
   return out2;
 }
-function pass2Placeholder(claimSentence, citekey) {
+function classify(sentence) {
+  const text4 = prose(sentence.text);
+  if (/\?["'”’»)\]]*$/.test(text4)) return null;
+  if (DEFINITION_MARKERS.test(text4)) return null;
+  if (text4.split(/\s+/).filter((w3) => /[\p{L}\p{N}]/u.test(w3)).length < CLAIM_MIN_WORDS) return null;
+  const strong = STRONG_MARKERS.filter(([, re]) => re.test(text4)).map(([name]) => name);
+  const weak = [...new Set([...text4.matchAll(WEAK_MARKERS)].map((m3) => m3[1].toLowerCase()))];
+  if (strong.length === 0 && weak.length === 0) return null;
+  const confidence = strong.length > 0 || weak.length >= 2 ? "HIGH" : "AMBIGUOUS";
+  return { claimConfidence: confidence, cited: sentence.citations.length > 0, markers: [...strong, ...weak] };
+}
+function auditParagraph(paragraph, sentences) {
+  const claims = [];
+  const orphans = [];
+  for (const s2 of sentences) {
+    const c2 = classify(s2);
+    if (c2 === null) continue;
+    const orphan = c2.claimConfidence === "HIGH" && !c2.cited;
+    claims.push({ paragraphIndex: paragraph.index, sentence: s2.text, confidence: c2.claimConfidence, cited: c2.cited, isOrphan: orphan, by: orphan ? "floor" : null });
+    if (orphan) orphans.push(s2.text);
+  }
   return {
-    citekey,
-    claimSentence,
-    verdict: "UNCLEAR",
-    rationale: "LLM stubbed (PENSMITH_NO_LLM): no claim-support judgment was made.",
-    evidence: ""
+    paragraph,
+    sentences,
+    result: { paragraphIndex: paragraph.index, totalSentences: sentences.length, claimsDetected: claims.length, orphanCount: orphans.length, claims, orphans }
   };
 }
-function pass2Skipped(claimSentence, citekey, why) {
-  return { citekey, claimSentence, verdict: "UNCLEAR", rationale: `${why}: no claim-support judgment was made.`, evidence: "" };
+function matchKey(s2) {
+  return prose(s2.normalize("NFKC")).replace(/[“”«»]/g, '"').replace(/[‘’]/g, "'").replace(/[\s.!?;:,"']+$/u, "").toLowerCase();
+}
+function applyAudit(audit, answer) {
+  const cited = new Set(audit.sentences.flatMap((s2) => s2.citations.flatMap((c2) => citationItems(c2).map((i) => i.key))));
+  const byKey = new Map(audit.sentences.map((s2) => [matchKey(s2.text), s2]));
+  let added = 0;
+  for (const claim of answer.claims) {
+    if (!claim.needs_citation) continue;
+    if (claim.supported_by.some((k2) => cited.has(k2.replace(/^-?@/, "")))) continue;
+    const key2 = matchKey(claim.sentence);
+    let sentence = byKey.get(key2);
+    if (sentence === void 0 && key2.split(" ").length >= 3) {
+      const holders = audit.sentences.filter((s2) => matchKey(s2.text).includes(key2));
+      if (holders.length === 1) sentence = holders[0];
+    }
+    if (sentence === void 0 || sentence.citations.length > 0) continue;
+    const r2 = audit.result;
+    if (r2.orphans.includes(sentence.text)) continue;
+    const existing = r2.claims.find((c2) => c2.sentence === sentence.text);
+    if (existing !== void 0) {
+      existing.isOrphan = true;
+      existing.by = "llm";
+    } else {
+      r2.claims.push({ paragraphIndex: r2.paragraphIndex, sentence: sentence.text, confidence: "AMBIGUOUS", cited: false, isOrphan: true, by: "llm" });
+      r2.claimsDetected += 1;
+    }
+    r2.orphans.push(sentence.text);
+    r2.orphanCount += 1;
+    added += 1;
+  }
+  const order = new Map(audit.sentences.map((s2, i) => [s2.text, i]));
+  audit.result.orphans.sort((a3, b3) => (order.get(a3) ?? 0) - (order.get(b3) ?? 0));
+  return added;
+}
+function reportAdvisoryFailure(pass, count, err) {
+  const detail = (err instanceof Error ? err.message : String(err)).replace(/^pensmith: /, "").split("\n")[0] ?? "";
+  process.stderr.write(
+    `pensmith verify: WARN \u2014 ${pass}, advisory, could not judge ${count} claim(s): ${detail} (recorded as UNCLEAR in VERIFICATION.md)
+`
+  );
+}
+async function runPass4(draftMd, opts) {
+  const sentences = draftSentences(draftMd);
+  const audits = proseParagraphs(draftMd).map((p2) => auditParagraph(p2, sentences.filter((s2) => s2.paragraph === p2.index)));
+  const results = audits.map((a3) => a3.result);
+  if (process.env["PENSMITH_NO_LLM"] === "1") return results;
+  let failed = 0;
+  let firstError;
+  for (const audit of audits) {
+    if (audit.result.claimsDetected === 0) continue;
+    try {
+      const request2 = orphanAuditRequest(audit.paragraph.text);
+      const res = await complete({
+        slug: "orphan-label",
+        section: opts.n,
+        system: request2.system,
+        messages: request2.messages,
+        stubHint: requestHints(request2)
+      });
+      applyAudit(audit, res.data);
+    } catch (err) {
+      if (err instanceof MissingApiKeyError) break;
+      if (isFatalLlmError(err)) throw err;
+      failed += 1;
+      firstError ??= err;
+    }
+  }
+  if (failed > 0) reportAdvisoryFailure("Pass 4 (orphan audit)", failed, firstError);
+  return results;
+}
+function cell2(text4, max) {
+  const t = text4.replace(/[\r\n|]+/g, " ").replace(/</g, "\u2039").replace(/>/g, "\u203A").replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max - 1)}\u2026` : t;
+}
+function renderPass4Section(results) {
+  if (results.length === 0) {
+    return "## Pass-4 (orphan claims, advisory)\n\n_(no paragraphs to audit)_\n";
+  }
+  const total = results.reduce((a3, r2) => a3 + r2.orphanCount, 0);
+  const lines2 = [
+    "## Pass-4 (orphan claims, advisory \u2014 deterministic floor + per-paragraph audit)",
+    "",
+    `Orphan claims: ${total} (a claim sentence that carries no citation).`,
+    "",
+    "| Paragraph | Sentences | Claims | Orphans | Orphan sentences |",
+    "|-----------|-----------|--------|---------|------------------|"
+  ];
+  for (const r2 of results) {
+    const sentences = r2.orphans.map((s2) => {
+      const byLlm = r2.claims.some((c2) => c2.sentence === s2 && c2.by === "llm");
+      return `"${cell2(s2, PASS4_SENTENCE_CHARS)}"${byLlm ? " (audit)" : ""}`;
+    });
+    lines2.push(`| ${r2.paragraphIndex} | ${r2.totalSentences} | ${r2.claimsDetected} | ${r2.orphanCount} | ${sentences.length > 0 ? sentences.join(" \xB7 ") : "\u2014"} |`);
+  }
+  lines2.push("");
+  return lines2.join("\n");
+}
+var PASS4_MAX_PARAGRAPH_CHARS, CLAIM_MIN_WORDS, STRONG_MARKERS, WEAK_MARKERS, DEFINITION_MARKERS, FENCE_RE, NON_PROSE_LINE_RE, BOUNDARY_RE, PASS4_SENTENCE_CHARS;
+var init_pass4 = __esm({
+  "bin/lib/verify/pass4.ts"() {
+    "use strict";
+    init_anthropic();
+    init_citation_token();
+    init_prompt_request();
+    PASS4_MAX_PARAGRAPH_CHARS = 4e3;
+    __name(orphanAuditRequest, "orphanAuditRequest");
+    CLAIM_MIN_WORDS = 8;
+    STRONG_MARKERS = [
+      [
+        "causal",
+        /\b(?:caus(?:e|es|ed|ing)|lead(?:s|ing)?\s+to|led\s+to|result(?:s|ed|ing)?\s+in|increas(?:e|es|ed|ing)|decreas(?:e|es|ed|ing)|reduc(?:e|es|ed|ing)|improv(?:e|es|ed|ing)|lower(?:s|ed|ing)?|rais(?:e|es|ed|ing)|driv(?:e|es|ing)|drove|prevent(?:s|ed|ing)?)\b/i
+      ],
+      ["universal", /\b(?:every(?:one|body)?|all|always|never|no\s+one|nobody|none)\b/i],
+      [
+        "evidential",
+        /\b(?:show(?:s|ed|n|ing)?|demonstrat(?:e|es|ed|ing)|find(?:s)?|found|report(?:s|ed|ing)?|indicat(?:e|es|ed|ing)|prov(?:e|es|ed|en|ing)|reveal(?:s|ed|ing)?|confirm(?:s|ed|ing)?|establish(?:es|ed|ing)?)\b/i
+      ],
+      ["statistic", /\d(?:[\d.,]*\d)?\s?%|\b\d(?:[\d.,]*\d)?\s*(?:percent|per\s+cent)\b|\bper\s*cent\b|\bpercent(?:age)?s?\b|\b\d+(?:\.\d+)?\s*(?:times|-?fold)\b|\btwice\s+as\b/i],
+      ["comparative", /\b(?:more|less|higher|lower|greater|fewer|larger|smaller)\s+than\b|\b(?:rose|fell|doubled|tripled|halved|quadrupled)\b/i]
+    ];
+    WEAK_MARKERS = /\b(is|are|demonstrates|shows|proves|indicates|suggests|reveals|confirms|establishes|argues|claims|because|therefore|thus|hence|consequently)\b/gi;
+    DEFINITION_MARKERS = /\b(?:defined as|refers to|known as)\b/i;
+    FENCE_RE = /^ {0,3}(?:`{3,}|~{3,})/;
+    NON_PROSE_LINE_RE = /^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*_][ \t]*){3,}$|=+[ \t]*$|\||<!--.*-->[ \t]*$)/;
+    __name(lines, "lines");
+    __name(proseParagraphs, "proseParagraphs");
+    BOUNDARY_RE = /[.!?]+["'”’»)\]]*(?=\s|$)/g;
+    __name(oneLine11, "oneLine");
+    __name(prose, "prose");
+    __name(draftSentences, "draftSentences");
+    __name(classify, "classify");
+    __name(auditParagraph, "auditParagraph");
+    __name(matchKey, "matchKey");
+    __name(applyAudit, "applyAudit");
+    __name(reportAdvisoryFailure, "reportAdvisoryFailure");
+    __name(runPass4, "runPass4");
+    __name(cell2, "cell");
+    PASS4_SENTENCE_CHARS = 140;
+    __name(renderPass4Section, "renderPass4Section");
+  }
+});
+
+// bin/lib/verify/pass2.ts
+function collectClaimPairs(draftMd) {
+  const seen = /* @__PURE__ */ new Set();
+  const out2 = [];
+  for (const s2 of draftSentences(draftMd)) {
+    for (const c2 of s2.citations) {
+      for (const item of citationItems(c2)) {
+        const id = `${item.key}\0${s2.text}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out2.push({ citekey: item.key, claimSentence: s2.text });
+      }
+    }
+  }
+  return out2;
+}
+function pass2Placeholder(p2) {
+  return { ...p2, verdict: "UNCLEAR", rationale: "LLM stubbed (PENSMITH_NO_LLM): no claim-support judgment was made.", evidence: "" };
+}
+function pass2Skipped(p2, why) {
+  return { ...p2, verdict: "UNCLEAR", rationale: `${why}: no claim-support judgment was made.`, evidence: "" };
+}
+function noSourceText(p2) {
+  return { ...p2, verdict: "UNCLEAR", rationale: NO_SOURCE_TEXT_RATIONALE, evidence: "" };
 }
 function pass2NotRun(draftMd, reason) {
-  return collectClaimPairs(draftMd).map((p2) => pass2Skipped(p2.claimSentence, p2.citekey, `not run (${reason})`));
-}
-function collectClaimPairs(draftMd) {
-  const citekeys = [...draftMd.matchAll(CITEKEY_RE2)].map((m3) => m3[1]).filter((s2) => Boolean(s2));
-  const unique = [...new Set(citekeys)];
-  return unique.map((citekey) => {
-    const sentences = extractClaimSentences(draftMd, citekey);
-    return { citekey, claimSentence: sentences[0] ?? "" };
-  });
+  return collectClaimPairs(draftMd).map((p2) => pass2Skipped(p2, `not run (${reason})`));
 }
 function normalizeTitle(title) {
   if (Array.isArray(title)) return title.filter(Boolean).join(" ");
@@ -129239,444 +132874,596 @@ function normalizeAuthors(author) {
   if (!author) return [];
   return author.map((a3) => {
     if (typeof a3 === "string") return a3;
-    const family = a3.family ?? "";
-    const given = a3.given ?? "";
-    return [given, family].filter(Boolean).join(" ").trim();
+    return [a3.given ?? "", a3.family ?? ""].filter(Boolean).join(" ").trim();
   }).filter(Boolean).slice(0, 5);
 }
-function claimAbstract(bibEntry) {
-  return (bibEntry?.abstract ?? "").slice(0, PASS2_MAX_ABSTRACT_CHARS);
-}
-function claimSupportRequest(citekey, claimSentence, bibEntry, sourceText = claimAbstract(bibEntry)) {
+function claimSupportRequest(citekey, claimSentence, bibEntry, sourceText = claimSupportAbstract(bibEntry) ?? "") {
   return buildPromptRequest("claim-support", {
     citation: { citekey, title: normalizeTitle(bibEntry?.title), authors: normalizeAuthors(bibEntry?.author) },
     claim: claimSentence,
-    abstract: sourceText
+    source_text: sourceText
   });
 }
 function clampText(text4, max) {
-  return text4.replace(/[\r\n|]+/g, " ").trim().slice(0, max);
+  return text4.replace(/[\r\n|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 }
-function byoSourceText(root, share) {
-  let entries = null;
-  const texts = /* @__PURE__ */ new Map();
-  return async (citekey, claim, abstract) => {
-    if (root === void 0 || !share) return abstract;
-    entries ??= tryLoadLibrary(root).then((lib) => new Map((lib?.entries ?? []).filter((e2) => e2.byo !== null).map((e2) => [e2.citekey, e2])));
-    const entry = (await entries).get(citekey);
-    if (entry === void 0) return abstract;
-    let t = texts.get(citekey);
-    if (t === void 0) {
-      t = byoText(root, entry);
-      texts.set(citekey, t);
-    }
-    const r2 = await t;
-    if (!r2.available) return abstract;
-    const passages = byoPassages(r2.text, claim);
-    const head = abstract ? `${abstract}
-
-` : "";
-    return `${head}Passages from the full text of the user's own copy (${entry.byo.file}):
-${passages}`;
-  };
+function toPass2Result(data, p2, sourceText) {
+  const evidence = data.evidence.length > 0 && sourceText.includes(data.evidence) ? data.evidence : "";
+  return { ...p2, verdict: data.verdict, rationale: clampText(data.rationale, 200), evidence };
 }
-function toPass2Result(data, citekey, claimSentence, abstract) {
-  const evidence = data.evidence.length > 0 && abstract.includes(data.evidence) ? data.evidence : "";
-  return { citekey, claimSentence, verdict: data.verdict, rationale: clampText(data.rationale, 200), evidence };
+function fetchFullTextSetting(root) {
+  if (root === void 0) return true;
+  try {
+    return tryReadPaperConfigSync(root)?.verification?.fetch_full_text !== false;
+  } catch {
+    return true;
+  }
 }
 async function runPass2(draftMd, bibByCitekey, opts) {
-  const noLlm = process.env["PENSMITH_NO_LLM"] === "1";
   const pairs = collectClaimPairs(draftMd);
   if (pairs.length === 0) return [];
-  if (noLlm) {
-    return pairs.map((p2) => pass2Placeholder(p2.claimSentence, p2.citekey));
+  const useFullText = opts.fullText !== void 0 && (opts.fetchFullText ?? fetchFullTextSetting(opts.root));
+  const texts = new SourceTexts(bibByCitekey, opts, useFullText);
+  if (process.env["PENSMITH_NO_LLM"] === "1") {
+    const out2 = [];
+    for (const p2 of pairs) out2.push(await texts.mayHaveText(p2.citekey) ? pass2Placeholder(p2) : noSourceText(p2));
+    return out2;
   }
-  const results = [];
-  const byoSource = byoSourceText(opts.root, opts.shareByoPassages === true);
+  const results = new Array(pairs.length);
+  const semaphore = new Semaphore(PASS2_CONCURRENCY);
   let noKey = null;
+  let fatal = void 0;
   let failed = 0;
   let firstError;
-  for (const pair of pairs) {
-    if (noKey !== null) {
-      results.push(pass2Skipped(pair.claimSentence, pair.citekey, noKey));
-      continue;
-    }
-    const bibEntry = bibByCitekey.get(pair.citekey);
-    const abstract = await byoSource(pair.citekey, pair.claimSentence, claimAbstract(bibEntry));
-    try {
-      const request2 = claimSupportRequest(pair.citekey, pair.claimSentence, bibEntry, abstract);
-      const res = await complete({
-        slug: "claim-support",
-        section: opts.n,
-        system: request2.system,
-        messages: request2.messages,
-        stubHint: requestHints(request2)
-      });
-      results.push(toPass2Result(res.data, pair.citekey, pair.claimSentence, abstract));
-    } catch (err) {
-      if (err instanceof MissingApiKeyError) {
-        noKey = NO_LLM_SKIP_REASON;
-        results.push(pass2Skipped(pair.claimSentence, pair.citekey, noKey));
-        continue;
-      }
-      if (isFatalLlmError(err)) throw err;
-      failed += 1;
-      firstError ??= err;
-      results.push({
-        citekey: pair.citekey,
-        claimSentence: pair.claimSentence,
-        verdict: "UNCLEAR",
-        rationale: clampText(`LLM error: ${String(err)}`, 200),
-        evidence: ""
-      });
-    }
-  }
+  await Promise.all(
+    pairs.map(
+      (pair, i) => semaphore.withLock(async () => {
+        if (fatal !== void 0) {
+          results[i] = pass2Skipped(pair, "not run (stopped)");
+          return;
+        }
+        if (noKey !== null) {
+          results[i] = pass2Skipped(pair, noKey);
+          return;
+        }
+        const sourceText = await texts.text(pair.citekey, pair.claimSentence);
+        if (sourceText === "") {
+          results[i] = noSourceText(pair);
+          return;
+        }
+        try {
+          const request2 = claimSupportRequest(pair.citekey, pair.claimSentence, bibByCitekey.get(pair.citekey), sourceText);
+          const res = await complete({
+            slug: "claim-support",
+            section: opts.n,
+            system: request2.system,
+            messages: request2.messages,
+            stubHint: requestHints(request2)
+          });
+          results[i] = toPass2Result(res.data, pair, sourceText);
+        } catch (err) {
+          if (err instanceof MissingApiKeyError) {
+            noKey = NO_LLM_SKIP_REASON;
+            results[i] = pass2Skipped(pair, noKey);
+            return;
+          }
+          if (isFatalLlmError(err)) {
+            fatal ??= err;
+            results[i] = pass2Skipped(pair, "not run (stopped)");
+            return;
+          }
+          failed += 1;
+          firstError ??= err;
+          results[i] = { ...pair, verdict: "UNCLEAR", rationale: clampText(`LLM error: ${String(err)}`, 200), evidence: "" };
+        }
+      })
+    )
+  );
+  if (fatal !== void 0) throw fatal;
   if (failed > 0) reportAdvisoryFailure("Pass 2 (claim support)", failed, firstError);
   return results;
 }
-function reportAdvisoryFailure(pass, count, err) {
-  const detail = (err instanceof Error ? err.message : String(err)).replace(/^pensmith: /, "").split("\n")[0] ?? "";
-  process.stderr.write(
-    `pensmith verify: WARN \u2014 ${pass}, advisory, could not judge ${count} claim(s): ${detail} (recorded as UNCLEAR in VERIFICATION.md)
-`
-  );
+function cell3(text4, max) {
+  return clampText(text4.replace(/</g, "\u2039").replace(/>/g, "\u203A"), max);
 }
 function renderPass2Section(results) {
   if (results.length === 0) {
     return "## Pass-2 (claim support, advisory)\n\n_(no citations to judge)_\n";
   }
-  const lines = [
+  const lines2 = [
     "## Pass-2 (claim support, advisory \u2014 LLM-judged)",
     "",
-    "| Citekey | Claim Sentence | Verdict | Rationale |",
-    "|---------|---------------|---------|-----------|"
+    PASS2_TABLE_HEADER,
+    "|---------|----------------|---------|-----------|----------|"
   ];
   for (const r2 of results) {
-    const sentence = clampText(r2.claimSentence, 60);
-    const rationale = clampText(r2.rationale, 200);
-    lines.push(`| ${r2.citekey} | ${sentence} | **${r2.verdict}** | ${rationale} |`);
+    lines2.push(
+      `| ${cell3(r2.citekey, 120)} | ${cell3(r2.claimSentence, PASS2_SENTENCE_CHARS)} | **${r2.verdict}** | ${cell3(r2.rationale, 200)} | ${cell3(r2.evidence, PASS2_EVIDENCE_CHARS)} |`
+    );
   }
-  lines.push("");
-  return lines.join("\n");
+  lines2.push("");
+  return lines2.join("\n");
 }
-var CITEKEY_RE2, NO_LLM_SKIP_REASON, PASS2_MAX_ABSTRACT_CHARS;
+var PASS2_CONCURRENCY, PASS2_FULL_TEXT_CHARS, NO_SOURCE_TEXT_RATIONALE, NO_LLM_SKIP_REASON, PASS2_SENTENCE_CHARS, PASS2_EVIDENCE_CHARS, SourceTexts;
 var init_pass2 = __esm({
   "bin/lib/verify/pass2.ts"() {
     "use strict";
     init_anthropic();
-    init_prompt_request();
+    init_budget();
     init_byo_text();
+    init_citation_token();
+    init_config2();
     init_library2();
-    CITEKEY_RE2 = /\[@([a-z][a-z0-9_-]*)\]/g;
-    __name(extractClaimSentences, "extractClaimSentences");
-    __name(pass2Placeholder, "pass2Placeholder");
+    init_prompt_request();
+    init_source_context();
+    init_pass4();
+    init_verdicts();
+    init_pass4();
+    PASS2_CONCURRENCY = 5;
+    PASS2_FULL_TEXT_CHARS = BYO_PASSAGE_CHARS;
+    NO_SOURCE_TEXT_RATIONALE = "no source text (no abstract or full text)";
     NO_LLM_SKIP_REASON = "skipped (no LLM configured)";
-    __name(pass2Skipped, "pass2Skipped");
-    __name(pass2NotRun, "pass2NotRun");
+    PASS2_SENTENCE_CHARS = 120;
+    PASS2_EVIDENCE_CHARS = 160;
     __name(collectClaimPairs, "collectClaimPairs");
+    __name(pass2Placeholder, "pass2Placeholder");
+    __name(pass2Skipped, "pass2Skipped");
+    __name(noSourceText, "noSourceText");
+    __name(pass2NotRun, "pass2NotRun");
     __name(normalizeTitle, "normalizeTitle");
     __name(normalizeAuthors, "normalizeAuthors");
-    PASS2_MAX_ABSTRACT_CHARS = 4e3;
-    __name(claimAbstract, "claimAbstract");
     __name(claimSupportRequest, "claimSupportRequest");
     __name(clampText, "clampText");
-    __name(byoSourceText, "byoSourceText");
     __name(toPass2Result, "toPass2Result");
+    SourceTexts = class {
+      constructor(bib, opts, useFullText) {
+        this.bib = bib;
+        this.opts = opts;
+        this.useFullText = useFullText;
+      }
+      bib;
+      opts;
+      useFullText;
+      static {
+        __name(this, "SourceTexts");
+      }
+      library = null;
+      byo = /* @__PURE__ */ new Map();
+      entries() {
+        const root = this.opts.root;
+        this.library ??= root === void 0 ? Promise.resolve(/* @__PURE__ */ new Map()) : tryLoadLibrary(root).then(
+          (lib) => new Map((lib?.entries ?? []).map((e2) => [e2.citekey, e2])),
+          () => /* @__PURE__ */ new Map()
+        );
+        return this.library;
+      }
+      /** The LIBRARY.json abstract, else the bib abstract (clipped), or null. */
+      async abstract(citekey) {
+        const entry = (await this.entries()).get(citekey);
+        return claimSupportAbstract(entry) ?? claimSupportAbstract(this.bib.get(citekey));
+      }
+      /** Whether any text could exist for `citekey` without reading or fetching it (the LLM-stubbed path). */
+      async mayHaveText(citekey) {
+        if (await this.abstract(citekey) !== null) return true;
+        if (this.useFullText) return true;
+        return this.opts.shareByoPassages === true && (await this.entries()).get(citekey)?.byo != null;
+      }
+      /** The labelled source text sent for `claim`, or '' when there is none. */
+      async text(citekey, claim) {
+        const parts = [];
+        const abstract = await this.abstract(citekey);
+        if (abstract !== null) parts.push(`Abstract:
+${abstract}`);
+        const fullText = this.opts.fullText;
+        if (this.useFullText && fullText !== void 0) {
+          let passage = null;
+          try {
+            passage = await fullText(citekey, claim);
+          } catch {
+            passage = null;
+          }
+          const t = passage?.replace(/\s+/g, " ").trim() ?? "";
+          if (t.length > 0) parts.push(`Passage from the open-access full text nearest the claim:
+${clip(t, PASS2_FULL_TEXT_CHARS)}`);
+        }
+        const byo = await this.byoPassage(citekey, claim);
+        if (byo !== null) parts.push(byo);
+        return parts.join("\n\n");
+      }
+      /** A hash-verified bring-your-own PDF's passages nearest `claim`, only with send_byo_passages. */
+      async byoPassage(citekey, claim) {
+        const root = this.opts.root;
+        if (root === void 0 || this.opts.shareByoPassages !== true) return null;
+        const entry = (await this.entries()).get(citekey);
+        if (entry === void 0 || entry.byo === null) return null;
+        let t = this.byo.get(citekey);
+        if (t === void 0) {
+          t = byoText(root, entry);
+          this.byo.set(citekey, t);
+        }
+        const r2 = await t;
+        if (!r2.available) return null;
+        return `Passages from the full text of the user's own copy (${entry.byo.file}):
+${byoPassages(r2.text, claim)}`;
+      }
+    };
+    __name(fetchFullTextSetting, "fetchFullTextSetting");
     __name(runPass2, "runPass2");
-    __name(reportAdvisoryFailure, "reportAdvisoryFailure");
+    __name(cell3, "cell");
     __name(renderPass2Section, "renderPass2Section");
   }
 });
 
-// bin/lib/verify/pass4.ts
-function orphanLabelRequest(sentence, paragraph) {
-  return buildPromptRequest("orphan-label", { paragraph: paragraph.slice(0, 500), sentence });
+// bin/lib/verify/verification-md.ts
+function safeSnippet(s2) {
+  return s2.replace(/[\r\n]+/g, " ").replace(/\*/g, "\\*");
 }
-function wordCount2(sentence) {
-  return sentence.trim().split(/\s+/).filter(Boolean).length;
+function oneLine12(s2) {
+  return s2.replace(/\s*[\r\n]+\s*/g, " ").replace(/\*/g, "\\*").trim();
 }
-function countDistinctMarkers(sentence) {
-  const seen = /* @__PURE__ */ new Set();
-  for (const m3 of sentence.matchAll(CLAIM_MARKERS)) {
-    const surface = m3[1];
-    if (surface) seen.add(surface.toLowerCase());
+function renderQuoteRow(row2) {
+  const lev = Number.isFinite(row2.levRatio) ? row2.levRatio.toFixed(3) : "n/a";
+  const accepted = row2.accepted ? ` \u2014 accepted by you ${row2.accepted.at} (${row2.accepted.via === "flag" ? "--accept-quote" : "at the prompt"})` : "";
+  return `- ${row2.key} [${row2.id}] ("${safeSnippet(row2.snippet)}\u2026"): **${row2.verdict}** \u2014 lev=${lev} \u2014 ${oneLine12(row2.reason)}${accepted}`;
+}
+function renderGateRow(row2) {
+  switch (row2.kind) {
+    case "pass1":
+      return renderPass1VerdictRow(row2.key, row2.verdict, row2.titleJW, row2.authorJW, oneLine12(row2.reason));
+    case "text":
+      return renderPass1VerdictRow(row2.key, row2.verdict, Number.NaN, Number.NaN, oneLine12(`\`${row2.text.replace(/`/g, "'").slice(0, 80)}\`: ${row2.reason}`));
+    case "pass3":
+      return renderQuoteRow(row2);
+    case "draft":
+      return `- ${DRAFT_ROW_KEY}: **${row2.verdict}** \u2014 ${oneLine12(row2.reason)}`;
   }
-  return seen.size;
 }
-function splitSentences(para) {
-  return para.split(SENTENCE_BOUNDARY_RE).map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+function orderedLabels(present, vocabulary) {
+  const known = vocabulary.filter((v2) => present.includes(v2));
+  const extra = [...new Set(present.filter((v2) => !vocabulary.includes(v2)))].sort();
+  return [...known, ...extra];
 }
-function locateSpan(para, sentence, fromIndex) {
-  const start = para.indexOf(sentence, fromIndex);
-  if (start === -1) return { start: 0, end: sentence.length };
-  return { start, end: start + sentence.length };
+function countBy(labels) {
+  const m3 = /* @__PURE__ */ new Map();
+  for (const l2 of labels) m3.set(l2, (m3.get(l2) ?? 0) + 1);
+  return m3;
 }
-function citekeyOffsets(para) {
-  const offsets = [];
-  for (const m3 of para.matchAll(CITEKEY_RE3)) {
-    if (typeof m3.index === "number") offsets.push(m3.index);
-  }
-  return offsets;
+function summaryLabel(row2) {
+  return row2.kind === "pass3" && row2.accepted ? ACCEPTED_QUOTE_LABEL : row2.verdict;
 }
-function findCitekeys(para) {
-  return new Set(
-    [...para.matchAll(CITEKEY_RE3)].map((m3) => m3[1]).filter((s2) => Boolean(s2))
-  );
-}
-function isOrphan(offsets, claim, hasAnyCitekey = true) {
-  if (claim.claimConfidence !== "HIGH") return false;
-  if (!hasAnyCitekey) return true;
-  for (const off of offsets) {
-    const distance = off < claim.startIndex ? claim.startIndex - off : off > claim.endIndex ? off - claim.endIndex : 0;
-    if (distance <= ORPHAN_PROXIMITY_CHARS) return false;
-  }
-  return true;
-}
-function extractClaimsFromParagraph(para) {
+function summaryRows(doc) {
   const out2 = [];
-  let cursor = 0;
-  for (const sentence of splitSentences(para)) {
-    const { start, end } = locateSpan(para, sentence, cursor);
-    cursor = end;
-    if (sentence.endsWith("?")) continue;
-    if (DEFINITION_MARKERS.test(sentence)) continue;
-    if (wordCount2(sentence) < CLAIM_MIN_WORDS) continue;
-    const markers = countDistinctMarkers(sentence);
-    if (markers === 0) continue;
-    out2.push({
-      sentence,
-      startIndex: start,
-      endIndex: end,
-      claimConfidence: markers >= 2 ? "HIGH" : "AMBIGUOUS"
-      // R7
-    });
+  const pass1 = doc.rows.filter((r2) => r2.kind === "pass1" || r2.kind === "text").map(summaryLabel);
+  const pass3 = doc.rows.filter((r2) => r2.kind === "pass3").map(summaryLabel);
+  const draft = doc.rows.filter((r2) => r2.kind === "draft").map(summaryLabel);
+  const add = /* @__PURE__ */ __name((pass, labels, vocabulary) => {
+    const counts = countBy(labels);
+    for (const label of orderedLabels([...counts.keys()], vocabulary)) out2.push({ pass, verdict: label, count: counts.get(label) ?? 0 });
+  }, "add");
+  add("Pass-1", pass1, PASS1_VERDICTS);
+  add("Pass-3", pass3, [...PASS3_VERDICTS, ACCEPTED_QUOTE_LABEL, ...LEGACY_UNAVAILABLE_VERDICTS, "OK"]);
+  add("Draft", draft, DRAFT_VERDICTS);
+  if (doc.pass2Verdicts) add("Pass-2", doc.pass2Verdicts, ["SUPPORTED", "PARTIAL", "UNSUPPORTED", "UNCLEAR"]);
+  if (doc.pass4Orphans !== null && doc.pass4Orphans !== void 0) out2.push({ pass: "Pass-4", verdict: "orphans", count: doc.pass4Orphans });
+  if (doc.freshness) {
+    out2.push({ pass: "Freshness", verdict: "WARN", count: doc.freshness.reduce((n2, r2) => n2 + r2.warnings.length, 0) });
+    out2.push({ pass: "Freshness", verdict: "not probed", count: doc.freshness.reduce((n2, r2) => n2 + (r2.skipped?.length ?? 0), 0) });
+    const unknownRetraction = doc.freshness.reduce((n2, r2) => n2 + (r2.info ?? []).filter((i) => i.probe === "retraction-watch" && i.status === "unknown").length, 0);
+    if (unknownRetraction > 0) out2.push({ pass: "Freshness", verdict: "retraction status unknown", count: unknownRetraction });
   }
   return out2;
 }
-function auditParagraph(para, paragraphIndex) {
-  const totalSentences = splitSentences(para).length;
-  const claims = extractClaimsFromParagraph(para);
-  const offsets = citekeyOffsets(para);
-  const hasAnyCitekey = findCitekeys(para).size > 0;
-  const claimResults = [];
-  const ambiguous = [];
-  let orphanCount = 0;
-  for (const claim of claims) {
-    if (claim.claimConfidence === "HIGH") {
-      const orphan = isOrphan(offsets, claim, hasAnyCitekey);
-      if (orphan) orphanCount += 1;
-      claimResults.push({
-        paragraphIndex,
-        sentence: claim.sentence,
-        confidence: "HIGH",
-        isOrphan: orphan,
-        label: "claim"
-      });
-    } else {
-      ambiguous.push({ index: claimResults.length, claim });
-      claimResults.push({
-        paragraphIndex,
-        sentence: claim.sentence,
-        confidence: "AMBIGUOUS",
-        isOrphan: false,
-        label: "UNCLEAR"
-      });
-    }
-  }
-  return {
-    result: {
-      paragraphIndex,
-      totalSentences,
-      claimsDetected: claims.length,
-      orphanCount,
-      claims: claimResults
-    },
-    ambiguous,
-    offsets
-  };
+function renderSummaryTable(rows) {
+  const lines2 = [SUMMARY_TABLE_HEADER, "|------|---------|-------|"];
+  for (const r2 of rows) lines2.push(`| ${r2.pass} | ${r2.verdict} | ${r2.count} |`);
+  if (rows.length === 0) lines2.push("| \u2014 | nothing to check | 0 |");
+  return lines2.join("\n");
 }
-function orphanLabelPlaceholder() {
-  return "UNCLEAR";
+function renderSummary(rows) {
+  return [SUMMARY_HEADING, "", renderSummaryTable(rows)].join("\n");
 }
-async function runPass4(draftMd, opts) {
-  const noLlm = process.env["PENSMITH_NO_LLM"] === "1";
-  const paragraphs = draftMd.split(/\n{2,}/);
-  const audits = [];
-  for (let i = 0; i < paragraphs.length; i++) {
-    const para = (paragraphs[i] ?? "").trim();
-    if (para.length === 0) continue;
-    audits.push(auditParagraph(para, i));
+function renderAcceptedQuotes(accepted) {
+  if (accepted.length === 0) return "";
+  const lines2 = [ACCEPTED_QUOTES_HEADING, "", "| Quote | Citekey | Accepted | Via |", "|-------|---------|----------|-----|"];
+  for (const a3 of accepted) {
+    const excerpt3 = a3.excerpt.replace(/\|/g, "/").replace(/[\r\n]+/g, " ");
+    lines2.push(`| ${a3.id} "${excerpt3}" | ${a3.citekey} | ${a3.acceptedAt} | ${a3.via === "flag" ? "--accept-quote" : "prompt"} |`);
   }
-  const results = audits.map((a3) => a3.result);
-  const hasAmbiguous = audits.some((a3) => a3.ambiguous.length > 0);
-  if (noLlm || !hasAmbiguous) {
-    return results;
-  }
-  let noKey = false;
-  let failed = 0;
-  let firstError;
-  for (const audit of audits) {
-    const paraText = (paragraphs[audit.result.paragraphIndex] ?? "").trim();
-    for (const { index, claim } of audit.ambiguous) {
-      let label = orphanLabelPlaceholder();
-      if (noKey) continue;
-      try {
-        const request2 = orphanLabelRequest(claim.sentence, paraText);
-        const res = await complete({
-          slug: "orphan-label",
-          section: opts.n,
-          system: request2.system,
-          messages: request2.messages,
-          stubHint: requestHints(request2)
-        });
-        label = res.data.label;
-      } catch (err) {
-        if (err instanceof MissingApiKeyError) {
-          noKey = true;
-          continue;
-        }
-        if (isFatalLlmError(err)) throw err;
-        failed += 1;
-        firstError ??= err;
-        label = "UNCLEAR";
-      }
-      const record2 = audit.result.claims[index];
-      if (record2) {
-        record2.label = label;
-        if (label === "claim") {
-          record2.isOrphan = isOrphan(audit.offsets, {
-            ...claim,
-            claimConfidence: "HIGH"
-            // proximity test only; does NOT promote to orphanCount
-          });
-        }
-      }
-    }
-  }
-  if (failed > 0) reportAdvisoryFailure("Pass 4 (orphan labels)", failed, firstError);
-  return results;
+  return lines2.join("\n");
 }
-function renderPass4Section(results) {
-  if (results.length === 0) {
-    return "## Pass-4 (orphan claims, advisory)\n\n_(no paragraphs to audit)_\n";
-  }
-  const lines = [
-    "## Pass-4 (orphan claims, advisory \u2014 deterministic extraction + edge-case LLM labels)",
+function renderVerificationMd(doc) {
+  const pass1 = doc.rows.filter((r2) => r2.kind === "pass1" || r2.kind === "text");
+  const pass3 = doc.rows.filter((r2) => r2.kind === "pass3");
+  const draft = doc.rows.filter((r2) => r2.kind === "draft");
+  const accepted = renderAcceptedQuotes(doc.accepted ?? []);
+  const lines2 = [
+    ...doc.offlineMarker !== null ? [doc.offlineMarker, ""] : [],
+    `# VERIFICATION (Section ${doc.sectionId}, ${doc.slug})`,
     "",
-    "| Paragraph | Sentences | Claims | Orphans |",
-    "|-----------|-----------|--------|---------|"
+    `Status: ${doc.status}`,
+    `Draft: ${doc.draftHash !== null ? `sha256 ${doc.draftHash}` : "none"}`,
+    "",
+    renderSummary(summaryRows(doc)),
+    "",
+    PASS1_HEADING,
+    "",
+    ...pass1.length > 0 ? pass1.map(renderGateRow) : ["_(no citations to check)_"],
+    "",
+    PASS3_HEADING,
+    "",
+    ...pass3.length > 0 ? pass3.map(renderGateRow) : ["_(no direct quotes)_"],
+    "",
+    DRAFT_CHECKS_HEADING,
+    "",
+    ...draft.map(renderGateRow),
+    ...(doc.notes ?? []).map(oneLine12),
+    ...draft.length === 0 && (doc.notes ?? []).length === 0 ? ["_(no draft findings)_"] : [],
+    "",
+    ...accepted.length > 0 ? [accepted, ""] : [],
+    ...doc.freshnessSection ? [doc.freshnessSection, ""] : [],
+    ...doc.pass2Section ? [doc.pass2Section, ""] : [],
+    ...doc.pass4Section ? [doc.pass4Section, ""] : []
   ];
-  for (const r2 of results) {
-    lines.push(`| ${r2.paragraphIndex} | ${r2.totalSentences} | ${r2.claimsDetected} | ${r2.orphanCount} |`);
-  }
-  lines.push("");
-  return lines.join("\n");
+  return lines2.join("\n");
 }
-var CLAIM_MIN_WORDS, CLAIM_MARKERS, DEFINITION_MARKERS, ORPHAN_PROXIMITY_CHARS, SENTENCE_BOUNDARY_RE, CITEKEY_RE3;
-var init_pass4 = __esm({
-  "bin/lib/verify/pass4.ts"() {
+var SUMMARY_HEADING, PASS1_HEADING, PASS3_HEADING, DRAFT_CHECKS_HEADING, ACCEPTED_QUOTES_HEADING, SUMMARY_TABLE_HEADER, NO_CITATIONS_NOTE, ACCEPTED_QUOTE_LABEL, DRAFT_ROW_KEY;
+var init_verification_md = __esm({
+  "bin/lib/verify/verification-md.ts"() {
     "use strict";
-    init_anthropic();
-    init_pass2();
-    init_prompt_request();
-    __name(orphanLabelRequest, "orphanLabelRequest");
-    CLAIM_MIN_WORDS = 8;
-    CLAIM_MARKERS = /\b(is|are|demonstrates|shows|proves|indicates|suggests|reveals|confirms|establishes|argues|claims|because|therefore|thus|hence|consequently)\b/gi;
-    DEFINITION_MARKERS = /\b(defined as|refers to|known as)\b/i;
-    ORPHAN_PROXIMITY_CHARS = 500;
-    SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+/;
-    CITEKEY_RE3 = /\[@([a-z][a-z0-9_-]*)\]/g;
-    __name(wordCount2, "wordCount");
-    __name(countDistinctMarkers, "countDistinctMarkers");
-    __name(splitSentences, "splitSentences");
-    __name(locateSpan, "locateSpan");
-    __name(citekeyOffsets, "citekeyOffsets");
-    __name(findCitekeys, "findCitekeys");
-    __name(isOrphan, "isOrphan");
-    __name(extractClaimsFromParagraph, "extractClaimsFromParagraph");
-    __name(auditParagraph, "auditParagraph");
-    __name(orphanLabelPlaceholder, "orphanLabelPlaceholder");
-    __name(runPass4, "runPass4");
-    __name(renderPass4Section, "renderPass4Section");
+    init_verdict_rows();
+    init_verdicts();
+    SUMMARY_HEADING = "## Summary";
+    PASS1_HEADING = "## Pass-1 (citation integrity, deterministic \u2014 D-11 AND-gate)";
+    PASS3_HEADING = "## Pass-3 (quote integrity, deterministic \u2014 levenshtein-substring)";
+    DRAFT_CHECKS_HEADING = "## Draft checks";
+    ACCEPTED_QUOTES_HEADING = "## Accepted quotes";
+    SUMMARY_TABLE_HEADER = "| Pass | Verdict | Count |";
+    NO_CITATIONS_NOTE = "Note: DRAFT.md cites no sources ([@citekey]) \u2014 Pass 1 and Pass 3 had nothing to check.";
+    ACCEPTED_QUOTE_LABEL = "UNVERIFIABLE-QUOTE (accepted)";
+    DRAFT_ROW_KEY = "draft";
+    __name(safeSnippet, "safeSnippet");
+    __name(oneLine12, "oneLine");
+    __name(renderQuoteRow, "renderQuoteRow");
+    __name(renderGateRow, "renderGateRow");
+    __name(orderedLabels, "orderedLabels");
+    __name(countBy, "countBy");
+    __name(summaryLabel, "summaryLabel");
+    __name(summaryRows, "summaryRows");
+    __name(renderSummaryTable, "renderSummaryTable");
+    __name(renderSummary, "renderSummary");
+    __name(renderAcceptedQuotes, "renderAcceptedQuotes");
+    __name(renderVerificationMd, "renderVerificationMd");
+  }
+});
+
+// bin/lib/schemas/quote-acceptances.ts
+var QUOTE_ACCEPTANCES_SCHEMA_VERSION, QUOTE_ACCEPTANCES_FILE, ACCEPTANCE_EXCERPT_MAX, SHA2562, QuoteAcceptanceSchema, QuoteAcceptancesSchema;
+var init_quote_acceptances = __esm({
+  "bin/lib/schemas/quote-acceptances.ts"() {
+    "use strict";
+    init_zod();
+    QUOTE_ACCEPTANCES_SCHEMA_VERSION = 1;
+    QUOTE_ACCEPTANCES_FILE = "QUOTE-ACCEPTANCES.json";
+    ACCEPTANCE_EXCERPT_MAX = 80;
+    SHA2562 = /^[0-9a-f]{64}$/;
+    QuoteAcceptanceSchema = external_exports.object({
+      /** The quote's id in the draft it was accepted in (`q1`, …) — informational; the binding is the hashes. */
+      quote_id: external_exports.string().regex(/^q[1-9]\d*$/),
+      /** The source the quote is attributed to. */
+      citekey: external_exports.string().min(1).max(512),
+      /** quoteTextSha256 of the whole quote. */
+      quote_sha256: external_exports.string().regex(SHA2562),
+      /** The start of the quote, for the reader of the record and the reports. */
+      excerpt: external_exports.string().max(ACCEPTANCE_EXCERPT_MAX),
+      /** computeDraftHash of the section's DRAFT.md and assigned_sources when the quote was accepted. */
+      draft_sha256: external_exports.string().regex(SHA2562),
+      /** When the user accepted it (ISO-8601). */
+      accepted_at: external_exports.string().datetime(),
+      /** `verify N --accept-quote <id>` (flag) or the interactive `quote-accept` gate (prompt). */
+      via: external_exports.enum(["flag", "prompt"])
+    }).strict();
+    QuoteAcceptancesSchema = external_exports.object({
+      $schemaVersion: external_exports.literal(QUOTE_ACCEPTANCES_SCHEMA_VERSION),
+      acceptances: external_exports.array(QuoteAcceptanceSchema)
+    }).strict();
+  }
+});
+
+// bin/lib/quote-acceptance.ts
+import { existsSync as existsSync24, readFileSync as readFileSync30 } from "node:fs";
+import { dirname as dirname9, join as join18 } from "node:path";
+function quoteAcceptancesPath(sectionDir) {
+  return join18(sectionDir, QUOTE_ACCEPTANCES_FILE);
+}
+function sectionDirOfPlan(planPath) {
+  return dirname9(planPath);
+}
+function loadQuoteAcceptances(sectionDir) {
+  const file = quoteAcceptancesPath(sectionDir);
+  if (!existsSync24(file)) return { acceptances: [], problem: null };
+  try {
+    const parsed = QuoteAcceptancesSchema.safeParse(JSON.parse(readFileSync30(file, "utf8")));
+    if (!parsed.success) {
+      const issue2 = parsed.error.issues[0];
+      return { acceptances: [], problem: `${QUOTE_ACCEPTANCES_FILE} does not match its schema (${issue2 ? `${issue2.path.join(".")}: ${issue2.message}` : "invalid"}) \u2014 it accepts nothing` };
+    }
+    return { acceptances: parsed.data.acceptances, problem: null };
+  } catch (e2) {
+    return { acceptances: [], problem: `${QUOTE_ACCEPTANCES_FILE} is not readable JSON (${e2.message.split("\n")[0] ?? ""}) \u2014 it accepts nothing` };
+  }
+}
+function acceptableRows(rows, ids, section) {
+  const out2 = [];
+  for (const id of ids) {
+    if (!QUOTE_ID_RE.test(id)) {
+      throw new QuoteAcceptanceError(`--accept-quote ${id}: a quote id is q1, q2, \u2026 as VERIFICATION.md lists them \u2014 nothing was recorded`);
+    }
+    const matching = rows.filter((r2) => r2.id === id);
+    if (matching.length === 0) {
+      throw new QuoteAcceptanceError(`--accept-quote ${id}: section ${section}'s draft has no quote ${id} \u2014 nothing was recorded`);
+    }
+    const other = matching.find((r2) => r2.verdict !== ACCEPTABLE_QUOTE_VERDICT);
+    if (other !== void 0) {
+      throw new QuoteAcceptanceError(
+        `--accept-quote ${id}: its verdict is ${other.verdict} (${other.citekey === UNATTRIBUTED_CITEKEY ? "no citation" : `[@${other.citekey}]`}) \u2014 only an ${ACCEPTABLE_QUOTE_VERDICT} quote (no source text to check it against) can be accepted; nothing was recorded`
+      );
+    }
+    out2.push(...matching);
+  }
+  return out2;
+}
+async function recordQuoteAcceptances(sectionDir, rows, draftSha256, via, at = /* @__PURE__ */ new Date()) {
+  const file = quoteAcceptancesPath(sectionDir);
+  const accepted_at = at.toISOString();
+  const fresh = rows.filter((r2) => r2.verdict === ACCEPTABLE_QUOTE_VERDICT).map((r2) => ({
+    quote_id: r2.id,
+    citekey: r2.citekey,
+    quote_sha256: r2.quoteSha256,
+    excerpt: excerptOf(r2.snippet),
+    draft_sha256: draftSha256,
+    accepted_at,
+    via
+  }));
+  if (fresh.length === 0) return [];
+  return withLock(file, async () => {
+    const current = loadQuoteAcceptances(sectionDir).acceptances.filter((a3) => a3.draft_sha256 === draftSha256);
+    const same = /* @__PURE__ */ __name((a3, b3) => a3.citekey === b3.citekey && a3.quote_sha256 === b3.quote_sha256, "same");
+    const kept = current.filter((a3) => !fresh.some((f2) => same(a3, f2)));
+    const record2 = QuoteAcceptancesSchema.parse({ $schemaVersion: QUOTE_ACCEPTANCES_SCHEMA_VERSION, acceptances: [...kept, ...fresh] });
+    await atomicWriteFile(file, JSON.stringify(record2, null, 2) + "\n");
+    return fresh;
+  });
+}
+function excerptOf(text4) {
+  const flat = text4.replace(/\s+/g, " ").trim();
+  return flat.length <= ACCEPTANCE_EXCERPT_MAX ? flat : `${flat.slice(0, ACCEPTANCE_EXCERPT_MAX - 1)}\u2026`;
+}
+var QuoteAcceptanceError;
+var init_quote_acceptance = __esm({
+  "bin/lib/quote-acceptance.ts"() {
+    "use strict";
+    init_atomic_write();
+    init_lock();
+    init_exit_codes();
+    init_verdicts();
+    init_quote_acceptances();
+    __name(quoteAcceptancesPath, "quoteAcceptancesPath");
+    __name(sectionDirOfPlan, "sectionDirOfPlan");
+    __name(loadQuoteAcceptances, "loadQuoteAcceptances");
+    QuoteAcceptanceError = class extends PensmithError {
+      static {
+        __name(this, "QuoteAcceptanceError");
+      }
+      constructor(message) {
+        super(message, EXIT_USAGE);
+        this.name = "QuoteAcceptanceError";
+      }
+    };
+    __name(acceptableRows, "acceptableRows");
+    __name(recordQuoteAcceptances, "recordQuoteAcceptances");
+    __name(excerptOf, "excerptOf");
   }
 });
 
 // bin/cli/verify.ts
 var verify_exports = {};
 __export(verify_exports, {
+  COMPILE_REVERIFY_NOT_RUN: () => COMPILE_REVERIFY_NOT_RUN,
   default: () => verify_default,
+  repeatedFlagValues: () => repeatedFlagValues,
   verifyCommand: () => verifyCommand,
   verifySection: () => verifySection
 });
-import { readFileSync as readFileSync29, existsSync as existsSync23 } from "node:fs";
-import path26 from "node:path";
-async function rerenderBibIfBroken(root, bibPath) {
-  let text4;
-  try {
-    text4 = readFileSync29(bibPath, "utf8");
-  } catch {
-    return;
-  }
-  try {
-    await parseBibFile(text4);
-    return;
-  } catch {
-  }
+import { readFileSync as readFileSync31, existsSync as existsSync25 } from "node:fs";
+async function rerenderBibIfBroken(root, bib) {
+  if (!bib.exists || bib.problems.length === 0) return bib;
   let result;
   try {
     result = await rerenderCitations(root);
   } catch (e2) {
-    if (e2 instanceof LibraryNotFoundError) return;
+    if (e2 instanceof LibraryNotFoundError) return bib;
     throw e2;
   }
+  const first2 = bib.problems[0];
+  const problem = result.previousProblem ?? (first2 ? `line ${first2.line}${first2.key !== null ? ` (${first2.key})` : ""}: ${first2.detail}` : "invalid BibTeX");
   process.stderr.write(
-    `pensmith verify: .paper/CITATIONS.bib did not parse (${result.previousProblem ?? "invalid BibTeX"}) \u2014 re-rendered it from LIBRARY.json${result.backup ? `; the old file is kept at ${result.backup}` : ""}
+    `pensmith verify: .paper/CITATIONS.bib did not parse (${problem}) \u2014 re-rendered it from LIBRARY.json${result.backup ? `; the old file is kept at ${result.backup}` : ""}
 `
   );
+  return loadBibliography(root);
 }
 function stopReason(err) {
   const msg = err instanceof Error ? err.message : String(err);
   return msg.replace(/\s*\r?\n\s*/g, " ").replace(/\|/g, "/").trim().slice(0, 160) || "stopped";
 }
-async function verifySection(n2, slug, suffix) {
+function asPass1Results(rows) {
+  return rows.flatMap(
+    (r2) => r2.kind === "pass1" ? [{ citekey: r2.key, verdict: r2.verdict, titleJW: r2.titleJW, authorJW: r2.authorJW, reason: r2.reason }] : []
+  );
+}
+function asPass3Results(rows) {
+  return rows.flatMap(
+    (r2) => r2.kind === "pass3" ? [{ citekey: r2.key, id: r2.id, quoteSha256: r2.quoteSha256, quoteSnippet: r2.snippet, verdict: r2.verdict, levRatio: r2.levRatio, reason: r2.reason, ...r2.localFile !== void 0 ? { localFile: r2.localFile } : {} }] : []
+  );
+}
+function quoteRows(rows) {
+  return rows.filter((r2) => r2.kind === "pass3").map((r2) => ({ id: r2.id, citekey: r2.key, quoteSha256: r2.quoteSha256, verdict: r2.verdict, snippet: r2.snippet }));
+}
+async function askQuoteAcceptance(rows, id, yolo) {
+  const open4 = rows.filter((r2) => r2.verdict === ACCEPTABLE_QUOTE_VERDICT);
+  if (open4.length === 0 || !canPrompt()) return [];
+  const ids = [...new Set(open4.map((r2) => r2.id))];
+  out(
+    `pensmith verify: section ${id} has ${ids.length} quote(s) no source text could be checked against (UNVERIFIABLE-QUOTE). Accepting a quote records that YOU vouch for it; add the source's PDF (\`pensmith add <pdf>\`) or paraphrase instead when you can.
+`
+  );
+  const outcome = await runGate("quote-accept", {
+    yolo,
+    question: {
+      id: "quote-accept",
+      kind: "multiselect",
+      label: "Accept these quotes whose source text cannot be checked?",
+      options: [
+        ...ids.map((q3) => {
+          const r2 = open4.find((x3) => x3.id === q3);
+          const keys = open4.filter((x3) => x3.id === q3).map((x3) => `@${x3.citekey}`).join(", ");
+          return { value: q3, label: `${q3} "${r2.snippet}\u2026" [${keys}]` };
+        }),
+        { value: "*", label: "accept all of them" }
+      ],
+      default: []
+    }
+  });
+  if (outcome.kind !== "answered" || outcome.answer.kind !== "multiselect") return [];
+  const picked = outcome.answer.value;
+  if (picked.includes("*")) return open4;
+  return open4.filter((r2) => picked.includes(r2.id));
+}
+async function verifySection(n2, slug, suffix, opts = {}) {
+  const root = projectRoot();
+  const advisory = opts.advisory !== false;
+  const writePaperFiles = opts.writePaperFiles !== false;
   const id = formatSectionId(sectionIdOf(n2, suffix));
   const logged = loggedSectionId(n2, suffix);
-  const markerPrefix = /* @__PURE__ */ __name(() => {
-    const m3 = offlineMarkerLine();
-    return m3 !== null ? `${m3}
-
-` : "";
-  }, "markerPrefix");
   const draftPath = sectionDraft(n2, slug);
   const verifPath = sectionVerification(n2, slug);
-  const bibPath = path26.join(paperDir(), "CITATIONS.bib");
-  if (!existsSync23(draftPath)) {
-    const body = `${markerPrefix()}# VERIFICATION (Section ${id}, ${slug})
-
-Status: unverifiable
-Reason: DRAFT.md missing at ${draftPath} \u2014 run \`pensmith write ${id}\` first.
-`;
-    await atomicWriteFile(verifPath, body);
-    const planPath2 = sectionPlan(n2, slug);
-    if (existsSync23(planPath2)) {
-      await updatePlanFrontmatter(planPath2, (fm) => {
-        if (fm.status !== "planned") fm.status = "writing";
-        delete fm.failure_reason;
-      });
+  const planPath = sectionPlan(n2, slug);
+  for (const q3 of opts.acceptQuotes ?? []) {
+    if (!QUOTE_ID_RE.test(q3)) {
+      throw new QuoteAcceptanceError(`--accept-quote ${q3}: a quote id is q1, q2, \u2026 as VERIFICATION.md lists them \u2014 nothing was recorded`);
     }
-    out(`pensmith verify: DRAFT.md missing \u2014 wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first
-`);
-    return { ok: false, status: "unverifiable", path: verifPath };
   }
-  const planForBlock = sectionPlan(n2, slug);
-  if (existsSync23(planForBlock)) {
+  let assignedSources = [];
+  if (existsSync25(planPath)) {
     let block = null;
     try {
-      const { frontmatter } = await loadFrontmatterDoc("plan", planForBlock);
+      const { frontmatter } = await loadFrontmatterDoc("plan", planPath, { writeBack: true });
       const reason = frontmatter["failure_reason"];
       block = typeof reason === "string" && reason.trim().length > 0 ? sectionWriteBlockReason(frontmatter, id) : null;
+      assignedSources = Array.isArray(frontmatter["assigned_sources"]) ? frontmatter["assigned_sources"].map(String) : [];
     } catch {
       block = null;
+      assignedSources = [];
     }
     if (block !== null) {
       process.stderr.write(`pensmith verify: section ${id} not verified \u2014 ${block}
@@ -129684,93 +133471,157 @@ Reason: DRAFT.md missing at ${draftPath} \u2014 run \`pensmith write ${id}\` fir
       return { ok: false, status: "failed", blocked: true, path: verifPath };
     }
   }
-  const draftMd = readFileSync29(draftPath, "utf8");
-  const citedKeys = extractCitedKeysForVerification(draftMd);
-  const bibExists = existsSync23(bibPath);
-  if (!bibExists && citedKeys.length > 0) {
-    const body = `${markerPrefix()}# VERIFICATION (Section ${id}, ${slug})
-
-Status: failed
-Reason: .paper/CITATIONS.bib is missing, so the ${citedKeys.length} source(s) DRAFT.md cites cannot be checked \u2014 run \`pensmith research\` to rebuild it, then \`pensmith verify ${id}\`.
-`;
-    await atomicWriteFile(verifPath, body);
-    out(`pensmith verify: CITATIONS.bib missing \u2014 wrote failed VERIFICATION.md to ${verifPath}
+  if (!existsSync25(draftPath)) {
+    await atomicWriteFile(
+      verifPath,
+      renderVerificationMd({
+        sectionId: id,
+        slug,
+        offlineMarker: offlineMarkerLine(),
+        status: "unverifiable",
+        draftHash: null,
+        rows: [],
+        notes: [`Reason: DRAFT.md missing at ${draftPath} \u2014 run \`pensmith write ${id}\` first.`]
+      })
+    );
+    await updatePlanFrontmatter(planPath, (fm) => {
+      if (fm.status !== "planned") fm.status = "writing";
+      delete fm.failure_reason;
+      delete fm.verified_against_draft_hash;
+    });
+    out(`pensmith verify: DRAFT.md missing \u2014 wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first
 `);
-    return { ok: false, status: "failed", path: verifPath, exitCode: EXIT_ERROR };
+    return { ok: false, status: "unverifiable", path: verifPath };
   }
-  if (bibExists) await rerenderBibIfBroken(projectRoot(), bibPath);
-  const pass1 = bibExists ? await runPass1(draftMd, bibPath, { root: projectRoot() }) : [];
-  const bibEntries = bibExists ? await parseBibFileAt(readFileSync29(bibPath, "utf8"), bibPath) : [];
-  const bibByCitekey = new Map(
-    bibEntries.map((e2) => [String(e2.id ?? ""), e2])
-  );
-  const pass3 = await runPass3(draftMd, bibByCitekey, { root: projectRoot() });
-  const freshness = bibExists ? await runFreshnessForDraft(draftMd, bibPath) : [];
-  const hasFail = pass1.some((r2) => r2.verdict === "FABRICATED" || r2.verdict === "MIS-CITED") || pass3.some((r2) => r2.verdict === "NOT_FOUND");
-  const blockingUnverifiable = pass1.some((r2) => r2.verdict === "UNVERIFIABLE");
-  const hasUnverifiable = blockingUnverifiable || pass3.some((r2) => r2.verdict === "PDF_UNAVAILABLE" || r2.verdict === "TEXT_UNAVAILABLE");
-  const status = hasFail ? "failed" : hasUnverifiable ? "unverifiable" : "verified";
-  let advisoryStop = void 0;
-  let pass2;
-  let pass4 = null;
-  try {
-    const shareByoPassages = tryReadPaperConfigSync(projectRoot())?.verification?.send_byo_passages === true;
-    pass2 = await runPass2(draftMd, bibByCitekey, { n: logged, root: projectRoot(), shareByoPassages });
-  } catch (err) {
-    if (!isFatalLlmError(err)) throw err;
-    advisoryStop = err;
-    pass2 = pass2NotRun(draftMd, stopReason(err));
-  }
-  if (advisoryStop === void 0) {
+  await updatePlanFrontmatter(planPath, (fm) => {
+    fm.status = "verifying";
+    delete fm.verified_against_draft_hash;
+  });
+  const draftBytes = readFileSync31(draftPath);
+  const draftMd = draftBytes.toString("utf8");
+  const draftHash = computeDraftHash(draftBytes, assignedSources);
+  let bib = loadBibliography(root);
+  if (writePaperFiles) bib = await rerenderBibIfBroken(root, bib);
+  const sectionDir = sectionDirOfPlan(planPath);
+  const acceptancesRead = loadQuoteAcceptances(sectionDir);
+  if (acceptancesRead.problem !== null) process.stderr.write(`pensmith verify: WARN \u2014 section ${id}: ${acceptancesRead.problem}
+`);
+  let acceptanceSets = [{ currentDraftHash: draftHash, acceptances: acceptancesRead.acceptances, section: id }];
+  const cited = extractCitedKeysForVerification(draftMd);
+  const refresh = writePaperFiles ? await recheckKeys(root, cited) : /* @__PURE__ */ new Set();
+  let gate = await recomputeGate({
+    root,
+    text: draftMd,
+    allowedKeys: new Set(assignedSources),
+    scope: { kind: "section", id },
+    dryRun: networkMode().dryRun,
+    refresh,
+    acceptanceSets,
+    bib,
+    ...opts.gateDeps !== void 0 ? { deps: opts.gateDeps } : {}
+  });
+  let acceptError = null;
+  let toAccept = [];
+  let via = "flag";
+  if ((opts.acceptQuotes ?? []).length > 0) {
     try {
-      pass4 = await runPass4(draftMd, { n: logged });
+      toAccept = acceptableRows(quoteRows(gate.rows), opts.acceptQuotes ?? [], id);
+    } catch (e2) {
+      if (!(e2 instanceof QuoteAcceptanceError)) throw e2;
+      acceptError = e2;
+    }
+  } else if (opts.interactive === true) {
+    const open4 = quoteRows(gate.rows.filter((r2) => !(r2.kind === "pass3" && r2.accepted !== void 0)));
+    toAccept = await askQuoteAcceptance(open4, id, opts.yolo === true);
+    via = "prompt";
+  }
+  if (toAccept.length > 0) {
+    const recorded2 = await recordQuoteAcceptances(sectionDir, toAccept, draftHash, via);
+    acceptanceSets = [{ currentDraftHash: draftHash, acceptances: [...acceptanceSets[0].acceptances, ...recorded2], section: id }];
+    const lifted = applyAcceptances(gate.rows, acceptanceSets);
+    gate = { ...gate, rows: lifted.rows, accepted: lifted.accepted, outcome: gateOutcome(lifted.rows) };
+    out(`pensmith verify: accepted ${[...new Set(recorded2.map((a3) => a3.quote_id))].join(", ")} for section ${id} (recorded in QUOTE-ACCEPTANCES.json)
+`);
+  }
+  const status = gate.outcome.status;
+  const blocked = gate.outcome.blocked;
+  let freshness = null;
+  let freshnessNote = null;
+  let advisoryStop = void 0;
+  let pass2 = [];
+  let pass4 = null;
+  if (advisory) {
+    if (bib.exists && bib.problems.length === 0) {
+      freshness = await runFreshnessForDraft(draftMd, bib.path, { bibEntries: bib.entries, ...writePaperFiles ? { root } : {} });
+    } else if (bib.exists) freshnessNote = "freshness not probed: .paper/CITATIONS.bib has entries that do not parse";
+    const bibByCitekey = new Map(bib.entries.map((e2) => [String(e2["id"] ?? ""), e2]));
+    try {
+      const shareByoPassages = tryReadPaperConfigSync(root)?.verification?.send_byo_passages === true;
+      const modelReady = await assertLlmConfigured("verify").then(
+        () => true,
+        () => false
+      );
+      pass2 = await runPass2(draftMd, bibByCitekey, {
+        n: logged,
+        root,
+        shareByoPassages,
+        ...modelReady ? { fullText: /* @__PURE__ */ __name((key2, claim) => sourceTextPassage(root, key2, claim), "fullText") } : {}
+      });
     } catch (err) {
       if (!isFatalLlmError(err)) throw err;
       advisoryStop = err;
+      pass2 = pass2NotRun(draftMd, stopReason(err));
+    }
+    if (advisoryStop === void 0) {
+      try {
+        pass4 = await runPass4(draftMd, { n: logged });
+      } catch (err) {
+        if (!isFatalLlmError(err)) throw err;
+        advisoryStop = err;
+      }
+    }
+    if (advisoryStop === void 0 && pass2.some((r2) => r2.rationale.startsWith(NO_LLM_SKIP_REASON))) {
+      process.stderr.write(`pensmith verify: advisory claim-support and orphan checks ${NO_LLM_SKIP_REASON} \u2014 the blocking Pass 1 and Pass 3 verdicts are unaffected.
+`);
     }
   }
-  if (advisoryStop === void 0 && pass2.some((r2) => r2.rationale.startsWith(NO_LLM_SKIP_REASON))) {
-    process.stderr.write(`pensmith verify: advisory claim-support and orphan checks ${NO_LLM_SKIP_REASON} \u2014 the blocking Pass 1 and Pass 3 verdicts are unaffected.
-`);
-  }
-  const offlineMarker = offlineMarkerLine();
-  const lines = [
-    ...offlineMarker !== null ? [offlineMarker, ""] : [],
-    `# VERIFICATION (Section ${id}, ${slug})`,
-    "",
-    `Status: ${status}`,
-    "",
-    "## Pass-1 (citation integrity, deterministic \u2014 D-11 AND-gate)",
-    "",
-    ...pass1.map((r2) => renderPass1VerdictRow(r2.citekey, r2.verdict, r2.titleJW, r2.authorJW, r2.reason)),
-    "",
-    "## Pass-3 (quote integrity, deterministic \u2014 levenshtein-substring)",
-    "",
-    ...pass3.map((r2) => renderPass3VerdictRow(r2.citekey, r2.quoteSnippet, r2.verdict, r2.levRatio, r2.reason)),
-    "",
-    ...citedKeys.length === 0 ? ["Note: DRAFT.md cites no sources ([@citekey]) \u2014 Pass 1 and Pass 3 had nothing to check.", ""] : [],
-    renderFreshnessTable(freshness),
-    "",
-    renderPass2Section(pass2),
-    "",
-    pass4 !== null ? renderPass4Section(pass4) : `## Pass-4 (orphan claims, advisory)
+  const notes = [];
+  if (gate.citedKeys.length === 0 && assignedSources.length === 0) notes.push(NO_CITATIONS_NOTE);
+  const notRun = `${COMPILE_REVERIFY_NOT_RUN} ${id}\``;
+  await atomicWriteFile(
+    verifPath,
+    renderVerificationMd({
+      sectionId: id,
+      slug,
+      offlineMarker: offlineMarkerLine(),
+      status,
+      draftHash,
+      rows: gate.rows,
+      notes,
+      accepted: gate.accepted,
+      freshness,
+      freshnessSection: !advisory ? `## Source Freshness (RSCH-10)
+
+_(${notRun})_
+` : freshnessNote !== null ? `## Source Freshness (RSCH-10)
+
+_(${freshnessNote} \u2014 fix the bibliography, then re-verify)_
+` : renderFreshnessTable(freshness ?? []),
+      pass2Verdicts: advisory ? pass2.map((r2) => r2.verdict) : null,
+      pass2Section: advisory ? renderPass2Section(pass2) : `## Pass-2 (claim support, advisory)
+
+_(${notRun})_
+`,
+      pass4Orphans: pass4 !== null ? pass4.reduce((s2, r2) => s2 + r2.orphanCount, 0) : null,
+      pass4Section: !advisory ? `## Pass-4 (orphan claims, advisory)
+
+_(${notRun})_
+` : pass4 !== null ? renderPass4Section(pass4) : `## Pass-4 (orphan claims, advisory)
 
 _(not run: ${stopReason(advisoryStop)})_
-`,
-    ""
-  ];
-  await atomicWriteFile(verifPath, lines.join("\n"));
-  const planPath = sectionPlan(n2, slug);
-  let assignedSources = [];
-  try {
-    if (existsSync23(planPath)) {
-      const { frontmatter } = await loadFrontmatterDoc("plan", planPath, { writeBack: true });
-      assignedSources = Array.isArray(frontmatter["assigned_sources"]) ? frontmatter["assigned_sources"].map(String) : [];
-    }
-  } catch {
-    assignedSources = [];
-  }
-  const draftHash = computeDraftHash(readFileSync29(draftPath), assignedSources);
+`
+    })
+  );
   const persisted = await updatePlanFrontmatter(planPath, (fm) => {
     fm.status = status;
     fm.verified_against_draft_hash = draftHash;
@@ -129782,40 +133633,82 @@ _(not run: ${stopReason(advisoryStop)})_
 `
     );
   }
+  if (writePaperFiles && Object.keys(gate.checkedAt).length > 0) {
+    try {
+      await recordLastVerified(root, gate.checkedAt);
+    } catch (e2) {
+      if (!(e2 instanceof LibraryNotFoundError)) throw e2;
+    }
+  }
   out(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}
 `);
   if (advisoryStop !== void 0) throw advisoryStop;
-  return { ok: status !== "failed" && !blockingUnverifiable, status, blocked: hasFail || blockingUnverifiable, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
+  if (acceptError !== null) throw acceptError;
+  return {
+    ok: !blocked,
+    status,
+    blocked,
+    path: verifPath,
+    gate,
+    pass1: asPass1Results(gate.rows),
+    pass3: asPass3Results(gate.rows),
+    freshness,
+    pass2,
+    pass4
+  };
 }
-var verifyCommand, verify_default;
+function repeatedFlagValues(rawArgs, name) {
+  const out2 = [];
+  for (let i = 0; i < rawArgs.length; i++) {
+    const tok = rawArgs[i] ?? "";
+    if (tok === "--") break;
+    if (tok === `--${name}`) {
+      const v2 = rawArgs[i + 1];
+      if (v2 !== void 0) {
+        out2.push(v2);
+        i++;
+      }
+    } else if (tok.startsWith(`--${name}=`)) out2.push(tok.slice(name.length + 3));
+  }
+  return out2;
+}
+var COMPILE_REVERIFY_NOT_RUN, verifyCommand, verify_default;
 var init_verify = __esm({
   "bin/cli/verify.ts"() {
     "use strict";
     init_dist4();
     init_fuzzy();
     init_pass1();
-    init_pass3();
     init_pass2();
     init_pass4();
     init_anthropic();
-    init_citation_token();
-    init_citations();
+    init_source_text();
     init_library2();
+    init_citation_token();
     init_atomic_write();
     init_paths();
-    init_verdict_rows();
+    init_verdicts();
+    init_gate();
+    init_verification_md();
+    init_quote_acceptance();
     init_frontmatter();
     init_draft_hash();
     init_plan_status();
     init_section_slug();
     init_section_id();
     init_http_mock();
-    init_exit_codes();
     init_config2();
+    init_gates();
     init_output_sink();
+    COMPILE_REVERIFY_NOT_RUN = "not run \u2014 compile staleness re-verify; run `pensmith verify";
     __name(rerenderBibIfBroken, "rerenderBibIfBroken");
     __name(stopReason, "stopReason");
+    __name(asPass1Results, "asPass1Results");
+    __name(asPass3Results, "asPass3Results");
+    __name(quoteRows, "quoteRows");
+    __name(askQuoteAcceptance, "askQuoteAcceptance");
     __name(verifySection, "verifySection");
+    __name(repeatedFlagValues, "repeatedFlagValues");
     verifyCommand = defineCommand({
       meta: {
         name: "verify",
@@ -129832,15 +133725,23 @@ var init_verify = __esm({
           type: "string",
           description: "Section slug (lowercase-kebab; defaults to the outline's slug for <n>)."
         },
+        "accept-quote": {
+          type: "string",
+          description: "Accept one quote whose source text cannot be checked (UNVERIFIABLE-QUOTE), by its id in VERIFICATION.md (q1, q2, \u2026); repeat the flag for several.",
+          valueHint: "q1"
+        },
         yolo: {
           type: "boolean",
-          description: "Skip approval gates.",
+          description: "Skip approval gates (never accepts a quote).",
           default: false
         }
       },
-      async run({ args }) {
+      async run({ args, rawArgs }) {
         const { n: n2, slug, suffix } = resolveSectionArg("verify", projectRoot(), args.n, args.slug);
-        return verifySection(n2, slug, suffix);
+        const fromRaw = repeatedFlagValues(rawArgs ?? [], "accept-quote");
+        const single = args["accept-quote"];
+        const acceptQuotes = fromRaw.length > 0 ? fromRaw : typeof single === "string" && single.length > 0 ? [single] : [];
+        return verifySection(n2, slug, suffix, { acceptQuotes, interactive: true, yolo: args.yolo === true });
       }
     });
     verify_default = verifyCommand;
@@ -129856,7 +133757,7 @@ __export(write_exports, {
   resolveVoiceHint: () => resolveVoiceHint,
   writeCommand: () => writeCommand
 });
-import { existsSync as existsSync24, readFileSync as readFileSync30, rmSync as rmSync5 } from "node:fs";
+import { existsSync as existsSync26, readFileSync as readFileSync32, rmSync as rmSync5 } from "node:fs";
 import path27 from "node:path";
 function makeSubscriberNonFatal(paperRoot) {
   const goal = readGoalFromConfig(paperRoot);
@@ -129919,11 +133820,13 @@ async function writeOneSection(paperRoot, section, entries) {
     });
   }
   const call = /* @__PURE__ */ __name(async (messages) => (await complete({ slug: "section-drafter", section: loggedSectionId(input2.section.n, input2.section.suffix), system: req.system, messages, stubHint: requestHints(req) })).text, "call");
+  const quoteMinWords = tryReadPaperConfigSync(paperRoot)?.verification?.quote_min_words;
+  const containment = { assigned: input2.sources, section: id, fullText, ...quoteMinWords !== void 0 ? { quoteMinWords } : {} };
   let draft = await call(req.messages);
-  let violations = checkDraft(draft, { assigned: input2.sources, section: id, fullText });
+  let violations = checkDraft(draft, containment);
   if (violations.length > 0) {
     draft = await call(correctiveMessages(req.messages, draft, containmentCorrection(violations, input2.sources)));
-    violations = checkDraft(draft, { assigned: input2.sources, section: id, fullText });
+    violations = checkDraft(draft, containment);
   }
   const draftPath = sectionDraft(section.n, section.slug, paperRoot);
   const rejectedPath = path27.join(path27.dirname(draftPath), "DRAFT.rejected.md");
@@ -129936,8 +133839,11 @@ async function writeOneSection(paperRoot, section, entries) {
     });
     throw new DraftContainmentError(reason, id, path27.relative(paperRoot, rejectedPath).split(path27.sep).join("/"));
   }
+  if (isNoLlmMode()) draft = `${STUB_DRAFT_MARKER}
+
+${draft}`;
   await atomicWriteFile(draftPath, draft);
-  if (existsSync24(rejectedPath)) rmSync5(rejectedPath, { force: true });
+  if (existsSync26(rejectedPath)) rmSync5(rejectedPath, { force: true });
   if (!await updatePlanFrontmatter(planPath, (fm) => {
     fm.status = "written";
     delete fm.failure_reason;
@@ -129958,8 +133864,8 @@ async function verifyWritten(section, id) {
 }
 function waveExitCode(codes) {
   if (codes.includes(EXIT_COST_CAP)) return EXIT_COST_CAP;
-  const first = codes[0];
-  if (first !== void 0 && codes.every((c2) => c2 === first)) return first;
+  const first2 = codes[0];
+  if (first2 !== void 0 && codes.every((c2) => c2 === first2)) return first2;
   return EXIT_ERROR;
 }
 var DEFAULT_MAX_PARALLEL, DraftContainmentError, writeCommand, write_default;
@@ -129978,8 +133884,10 @@ var init_write = __esm({
     init_tutorial();
     init_replay();
     init_anthropic();
+    init_gate();
     init_prompt_request();
     init_library2();
+    init_config2();
     init_byo_text();
     init_full_text();
     init_section_slug();
@@ -130050,7 +133958,7 @@ var init_write = __esm({
           let outlineSectionCount = 0;
           const idBySlug = /* @__PURE__ */ new Map();
           try {
-            const rows = parseOutline(readFileSync30(outlinePath2, "utf8")).sections;
+            const rows = parseOutline(readFileSync32(outlinePath2, "utf8")).sections;
             outlineSectionCount = rows.length;
             for (const r2 of rows) idBySlug.set(r2.slug, formatSectionId(sectionIdOf(r2.n, r2.suffix)));
           } catch {
@@ -130482,15 +134390,15 @@ function promiseAllObject(promisesObj) {
 __name(promiseAllObject, "promiseAllObject");
 function randomString(length = 10) {
   const chars = "abcdefghijklmnopqrstuvwxyz";
-  let str6 = "";
+  let str8 = "";
   for (let i = 0; i < length; i++) {
-    str6 += chars[Math.floor(Math.random() * chars.length)];
+    str8 += chars[Math.floor(Math.random() * chars.length)];
   }
-  return str6;
+  return str8;
 }
 __name(randomString, "randomString");
-function esc(str6) {
-  return JSON.stringify(str6);
+function esc(str8) {
+  return JSON.stringify(str8);
 }
 __name(esc, "esc");
 var captureStackTrace = Error.captureStackTrace ? Error.captureStackTrace : (..._args) => {
@@ -130582,8 +134490,8 @@ var getParsedType2 = /* @__PURE__ */ __name((data) => {
 }, "getParsedType");
 var propertyKeyTypes = /* @__PURE__ */ new Set(["string", "number", "symbol"]);
 var primitiveTypes = /* @__PURE__ */ new Set(["string", "number", "bigint", "boolean", "symbol", "undefined"]);
-function escapeRegex(str6) {
-  return str6.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function escapeRegex(str8) {
+  return str8.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 __name(escapeRegex, "escapeRegex");
 function clone(inst, def, params) {
@@ -131476,9 +135384,9 @@ var Doc = class {
       return;
     }
     const content = arg;
-    const lines = content.split("\n").filter((x3) => x3);
-    const minIndent = Math.min(...lines.map((x3) => x3.length - x3.trimStart().length));
-    const dedented = lines.map((x3) => x3.slice(minIndent)).map((x3) => " ".repeat(this.indent * 2) + x3);
+    const lines2 = content.split("\n").filter((x3) => x3);
+    const minIndent = Math.min(...lines2.map((x3) => x3.length - x3.trimStart().length));
+    const dedented = lines2.map((x3) => x3.slice(minIndent)).map((x3) => " ".repeat(this.indent * 2) + x3);
     for (const line of dedented) {
       this.content.push(line);
     }
@@ -131487,8 +135395,8 @@ var Doc = class {
     const F = Function;
     const args = this?.args;
     const content = this?.content ?? [``];
-    const lines = [...content.map((x3) => `  ${x3}`)];
-    return new F(...args, lines.join("\n"));
+    const lines2 = [...content.map((x3) => `  ${x3}`)];
+    return new F(...args, lines2.join("\n"));
   }
 };
 
@@ -132121,7 +136029,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
     return (payload, ctx) => fn(shape, payload, ctx);
   }, "generateFastpass");
   let fastpass;
-  const isObject9 = isObject;
+  const isObject10 = isObject;
   const jit = !globalConfig.jitless;
   const allowsEval2 = allowsEval;
   const fastEnabled = jit && allowsEval2.value;
@@ -132130,7 +136038,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
   inst._zod.parse = (payload, ctx) => {
     value ?? (value = _normalized.value);
     const input2 = payload.value;
-    if (!isObject9(input2)) {
+    if (!isObject10(input2)) {
       payload.issues.push({
         expected: "object",
         code: "invalid_type",
@@ -139727,12 +143635,12 @@ var UriTemplate = class _UriTemplate {
    * A template expression is a sequence of characters enclosed in curly braces,
    * like {foo} or {?bar}.
    */
-  static isTemplate(str6) {
-    return /\{[^}\s]+\}/.test(str6);
+  static isTemplate(str8) {
+    return /\{[^}\s]+\}/.test(str8);
   }
-  static validateLength(str6, max, context) {
-    if (str6.length > max) {
-      throw new Error(`${context} exceeds maximum length of ${max} characters (got ${str6.length})`);
+  static validateLength(str8, max, context) {
+    if (str8.length > max) {
+      throw new Error(`${context} exceeds maximum length of ${max} characters (got ${str8.length})`);
     }
   }
   get variableNames() {
@@ -139861,8 +143769,8 @@ var UriTemplate = class _UriTemplate {
     }
     return result;
   }
-  escapeRegExp(str6) {
-    return str6.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  escapeRegExp(str8) {
+    return str8.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
   partToRegExp(part) {
     const patterns = [];
@@ -141127,8 +145035,8 @@ function isHumanizerSkillPresent() {
   const skillPath = join7(userHomeDir(), ".claude", "skills", "humanizer");
   if (!existsSync7(skillPath)) return false;
   try {
-    const stat2 = statSync6(skillPath);
-    if (!stat2.isDirectory()) return false;
+    const stat3 = statSync6(skillPath);
+    if (!stat3.isDirectory()) return false;
     return readdirSync3(skillPath).length > 0;
   } catch {
     return false;
@@ -141618,18 +145526,18 @@ function buildServer(paperRoot) {
   return server;
 }
 __name(buildServer, "buildServer");
-function oneLine9(e2) {
+function oneLine13(e2) {
   const msg = e2 instanceof Error ? e2.message : String(e2);
   return msg.replace(/\s*\r?\n\s*/g, " ").trim() || "unexpected error";
 }
-__name(oneLine9, "oneLine");
+__name(oneLine13, "oneLine");
 async function main() {
   setOutputSink(process.stderr);
   const paperRoot = servicePaperRoot();
   try {
     await migrateLegacyLayout(paperRoot);
   } catch (e2) {
-    process.stderr.write(`pensmith (mcp): ${oneLine9(e2)}
+    process.stderr.write(`pensmith (mcp): ${oneLine13(e2)}
 `);
   }
   const server = buildServer(paperRoot);
@@ -141639,7 +145547,7 @@ async function main() {
 __name(main, "main");
 if (isMainModule(import.meta.url)) {
   main().catch((e2) => {
-    process.stderr.write(`pensmith (mcp): could not start \u2014 ${oneLine9(e2)}
+    process.stderr.write(`pensmith (mcp): could not start \u2014 ${oneLine13(e2)}
 `);
     process.exit(1);
   });

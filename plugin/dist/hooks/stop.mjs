@@ -7591,8 +7591,11 @@ var init_llm_models = __esm({
       // ~80 output tokens each, so its budget fits a full batch with headroom.
       s("topic-disambiguator", "research", "judgment", "low", 4e3, 1200, 2500, true, true),
       s("source-evaluator", "research", "judgment", "low", 24e3, 12e3, 37e3, true, true),
-      s("claim-support", "verify", "judgment", "low", 2e3, 350, 1200, true, true),
-      s("orphan-label", "verify", "judgment", "low", 1e3, 120, 700, true, true)
+      // Phase 20 (D-20-28, D-20-29): claim-support reads the source text — the
+      // abstract (<= 4000 chars) plus a full-text passage (<= 2400) — and
+      // orphan-label audits one paragraph (<= 4000 chars) and lists its claims.
+      s("claim-support", "verify", "judgment", "low", 2e3, 350, 2200, true, true),
+      s("orphan-label", "verify", "judgment", "low", 2e3, 500, 1800, true, true)
     ];
     SLUGS = Object.freeze(
       Object.fromEntries(SLUG_LIST.map((x) => [x.slug, x]))
@@ -7759,7 +7762,7 @@ function citationStyleKey(name) {
   if (t.length === 0) return null;
   return Object.prototype.hasOwnProperty.call(CITATION_STYLE_KEYS, t) ? CITATION_STYLE_KEYS[t] : null;
 }
-var CURRENT_CONFIG_VERSION, CITATION_STYLE_NAMES, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HumanizerSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
+var CURRENT_CONFIG_VERSION, DEFAULT_QUOTE_MIN_WORDS, CITATION_STYLE_NAMES, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HumanizerSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
 var init_config = __esm({
   "bin/lib/schemas/config.ts"() {
     "use strict";
@@ -7767,7 +7770,8 @@ var init_config = __esm({
     init_tutorial();
     init_runtime_config();
     init_lookup_table();
-    CURRENT_CONFIG_VERSION = 2;
+    CURRENT_CONFIG_VERSION = 3;
+    DEFAULT_QUOTE_MIN_WORDS = 5;
     CITATION_STYLE_NAMES = [
       "APA",
       "MLA",
@@ -7851,6 +7855,11 @@ var init_config = __esm({
       // PDFs nearest each claim to the configured model provider; off by default
       // (PRD §9: a bring-your-own PDF's contents stay local). Phase 19 review round 2.
       send_byo_passages: external_exports.boolean().optional(),
+      // Pass 3 checks every direct quote of at least this many words (VRFY-18):
+      // 1..DEFAULT_QUOTE_MIN_WORDS — a paper may only ask for a stricter floor.
+      quote_min_words: external_exports.number().int().min(1, { message: `quote_min_words must be between 1 and ${DEFAULT_QUOTE_MIN_WORDS}` }).max(DEFAULT_QUOTE_MIN_WORDS, {
+        message: `quote_min_words must be between 1 and ${DEFAULT_QUOTE_MIN_WORDS}: a higher floor would leave longer direct quotes unchecked by Pass 3 (PRD \xA714) \u2014 lower it to check shorter quotes too`
+      }).optional(),
       flag_threshold: external_exports.enum(["low", "medium", "high"]).optional(),
       recheck_after_days: NonNegInt.optional(),
       plagiarism_check: external_exports.boolean().optional(),
@@ -7971,6 +7980,22 @@ var init_v1_to_v2 = __esm({
   }
 });
 
+// bin/lib/migrations/config/v2_to_v3.ts
+function migrate3(input) {
+  const out = { schema_version: 3 };
+  for (const [k, v] of Object.entries(input)) {
+    if (k === "schema_version") continue;
+    out[k] = v;
+  }
+  return out;
+}
+var init_v2_to_v3 = __esm({
+  "bin/lib/migrations/config/v2_to_v3.ts"() {
+    "use strict";
+    __name(migrate3, "migrate");
+  }
+});
+
 // bin/lib/config-text.ts
 var init_config_text = __esm({
   "bin/lib/config-text.ts"() {
@@ -8044,12 +8069,14 @@ var init_config2 = __esm({
     init_tutorial();
     init_v0_to_v1();
     init_v1_to_v2();
+    init_v2_to_v3();
     init_config_text();
     init_disciplines();
     init_config();
     MIGRATIONS = Object.freeze({
       0: migrate,
-      1: migrate2
+      1: migrate2,
+      2: migrate3
     });
     EMPTY_CONFIG = Object.freeze({ schema_version: CURRENT_CONFIG_VERSION });
     DEFAULTS = Object.freeze({
@@ -8059,6 +8086,7 @@ var init_config2 = __esm({
       "project.pii_redaction": false,
       "sources.require_doi": true,
       "verification.fetch_full_text": true,
+      "verification.quote_min_words": DEFAULT_QUOTE_MIN_WORDS,
       "verification.plagiarism_check": true,
       "humanizer.enabled": true,
       "humanizer.honesty_score": true,

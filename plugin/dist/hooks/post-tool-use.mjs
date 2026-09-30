@@ -443,14 +443,14 @@ function resolvePaperRoot(opts) {
   }
   return { kind: "root", root: cwd, source: "fallback" };
 }
-function parseSectionDirName(basename2) {
-  if (typeof basename2 !== "string" || basename2.length === 0) return null;
-  if (basename2.includes("\0")) return null;
-  if (basename2.includes("/") || basename2.includes("\\")) return null;
-  if (basename2 === "." || basename2 === "..") return null;
-  if (basename2.includes("..")) return null;
-  if (/^[a-zA-Z]:/.test(basename2)) return null;
-  const m2 = /^(\d{2})([a-z])?-([a-z0-9-]+)$/.exec(basename2);
+function parseSectionDirName(basename3) {
+  if (typeof basename3 !== "string" || basename3.length === 0) return null;
+  if (basename3.includes("\0")) return null;
+  if (basename3.includes("/") || basename3.includes("\\")) return null;
+  if (basename3 === "." || basename3 === "..") return null;
+  if (basename3.includes("..")) return null;
+  if (/^[a-zA-Z]:/.test(basename3)) return null;
+  const m2 = /^(\d{2})([a-z])?-([a-z0-9-]+)$/.exec(basename3);
   if (!m2) return null;
   const n = Number(m2[1]);
   if (!Number.isInteger(n) || n < 0 || n > 99) return null;
@@ -16836,13 +16836,14 @@ var init_draft_hash = __esm({
 });
 
 // bin/lib/schemas/compile-inputs.ts
-var COMPILE_INPUTS_SCHEMA_VERSION, SHA256_OR_EMPTY, CompileInputsSectionSchema, CompileInputsSchema;
+var COMPILE_INPUTS_SCHEMA_VERSION, SHA256_OR_EMPTY, SHA256, CompileInputsSectionSchema, CompileInputsSchema;
 var init_compile_inputs = __esm({
   "bin/lib/schemas/compile-inputs.ts"() {
     "use strict";
     init_zod();
-    COMPILE_INPUTS_SCHEMA_VERSION = 1;
+    COMPILE_INPUTS_SCHEMA_VERSION = 2;
     SHA256_OR_EMPTY = /^(?:[0-9a-f]{64})?$/;
+    SHA256 = /^[0-9a-f]{64}$/;
     CompileInputsSectionSchema = external_exports.object({
       /** `1`, `1a` — the section id (GRND-09). */
       id: external_exports.string().regex(/^[1-9][0-9]?[a-z]?$/),
@@ -16850,14 +16851,42 @@ var init_compile_inputs = __esm({
       /** sha256 of the section's DRAFT.md bytes ('' when it had none). */
       draft_sha256: external_exports.string().regex(SHA256_OR_EMPTY),
       /** sha256 of the section's VERIFICATION.md bytes ('' when it had none). */
-      verification_sha256: external_exports.string().regex(SHA256_OR_EMPTY)
+      verification_sha256: external_exports.string().regex(SHA256_OR_EMPTY),
+      /** The section's verified_against_draft_hash when compiled (null: recorded by a v1 compile — stale). */
+      verified_against_draft_hash: external_exports.string().regex(SHA256).nullable()
     }).strict();
     CompileInputsSchema = external_exports.object({
       $schemaVersion: external_exports.literal(COMPILE_INPUTS_SCHEMA_VERSION),
       compiled_at: external_exports.string().datetime(),
+      /** sha256 of the `.paper/DRAFT.md` bytes compile wrote (null: recorded by a v1 compile — stale). */
+      compiled_draft_sha256: external_exports.string().regex(SHA256).nullable(),
       /** The compiled sections in (n, suffix) order. */
       sections: external_exports.array(CompileInputsSectionSchema)
     }).strict();
+  }
+});
+
+// bin/lib/migrations/compile-inputs/v1_to_v2.ts
+function migrate6(input) {
+  const src = typeof input === "object" && input !== null && !Array.isArray(input) ? input : {};
+  const sections = Array.isArray(src["sections"]) ? src["sections"] : [];
+  return {
+    ...src,
+    $schemaVersion: 2,
+    compiled_draft_sha256: typeof src["compiled_draft_sha256"] === "string" ? src["compiled_draft_sha256"] : null,
+    sections: sections.map((s2) => {
+      const sec = typeof s2 === "object" && s2 !== null && !Array.isArray(s2) ? s2 : {};
+      return {
+        ...sec,
+        verified_against_draft_hash: typeof sec["verified_against_draft_hash"] === "string" ? sec["verified_against_draft_hash"] : null
+      };
+    })
+  };
+}
+var init_v1_to_v24 = __esm({
+  "bin/lib/migrations/compile-inputs/v1_to_v2.ts"() {
+    "use strict";
+    __name(migrate6, "migrate");
   }
 });
 
@@ -16885,7 +16914,10 @@ function currentSectionInputs(paperRoot, s2) {
 }
 function readCompileInputs(paperRoot) {
   try {
-    const parsed = CompileInputsSchema.safeParse(JSON.parse(readFileSync5(compileInputsPath(paperRoot), "utf8")));
+    let value = JSON.parse(readFileSync5(compileInputsPath(paperRoot), "utf8"));
+    const version = typeof value === "object" && value !== null ? value["$schemaVersion"] : void 0;
+    if (version === 1) value = migrate6(value);
+    const parsed = CompileInputsSchema.safeParse(value);
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -16913,6 +16945,7 @@ var init_compile_inputs2 = __esm({
     init_paths();
     init_section_id();
     init_compile_inputs();
+    init_v1_to_v24();
     COMPILE_INPUTS_FILE = "COMPILE-INPUTS.json";
     __name(compileInputsPath, "compileInputsPath");
     __name(fileSha256, "fileSha256");
@@ -17218,53 +17251,34 @@ var init_section_registry = __esm({
   }
 });
 
+// bin/lib/verify/verdicts.ts
+var FAILING_VERDICTS, UNVERIFIABLE_VERDICTS, BLOCKING_VERDICTS;
+var init_verdicts = __esm({
+  "bin/lib/verify/verdicts.ts"() {
+    "use strict";
+    FAILING_VERDICTS = /* @__PURE__ */ new Set([
+      "FABRICATED",
+      "MIS-CITED",
+      "RETRACTED",
+      "UNASSIGNED",
+      "UNPARSEABLE",
+      "UNSUPPORTED-FORM",
+      "UNRESOLVABLE",
+      "NOT_FOUND",
+      "UNATTRIBUTED",
+      "NO-CITATIONS"
+    ]);
+    UNVERIFIABLE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK", "UNVERIFIABLE", "UNVERIFIABLE-QUOTE", "PLACEHOLDER"]);
+    BLOCKING_VERDICTS = /* @__PURE__ */ new Set([...FAILING_VERDICTS, ...UNVERIFIABLE_VERDICTS]);
+  }
+});
+
 // bin/lib/verify/verdict-rows.ts
-function parseBlockingVerdictRows(verificationMd) {
-  const out2 = [];
-  for (const line of verificationMd.split(/\r?\n/)) {
-    const any = /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
-    const verdict = any?.[1];
-    if (verdict === void 0 || !BLOCKING_VERDICTS.has(verdict)) continue;
-    const pass3 = /^\s*-\s*(\S+?)\s+\(".*"\):\s*\*\*[A-Z_-]+\*\*/u.exec(line);
-    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*[A-Z_-]+\*\*/u.exec(line);
-    const citekey = pass3?.[1] ?? pass1?.[1];
-    const retraction = /\bcited work is retracted\b/.test(line);
-    out2.push({ citekey: citekey ?? UNREADABLE_CITEKEY, verdict, ...retraction ? { retraction: true } : {} });
-  }
-  return out2;
-}
-function sectionVerificationReasons(verificationMd, dryRunNow) {
-  const status = /^Status:\s*(\S+)/m.exec(verificationMd)?.[1];
-  if (status === void 0) {
-    return ["no verifiable VERIFICATION.md (no Status line: the section was never verified, or the verifier output is unreadable)"];
-  }
-  const dryRun = dryRunVerificationReason(verificationMd, dryRunNow);
-  if (dryRun !== null) return [dryRun];
-  const reasons = [];
-  if (status.toLowerCase() === "failed") reasons.push("VERIFICATION.md Status is 'failed'");
-  for (const row of parseBlockingVerdictRows(verificationMd)) reasons.push(blockingRowReason(row));
-  return reasons;
-}
-function blockingRowReason(row) {
-  const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
-  return row.verdict === "UNVERIFIABLE" ? `${cite} is UNVERIFIABLE (its source could not be checked: offline, --dry-run or a failed lookup) \u2014 re-run online` : `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ": the cited work is retracted" : ""})`;
-}
-function dryRunVerificationReason(verificationMd, dryRunNow) {
-  if (dryRunNow) return null;
-  const first = verificationMd.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
-  return first.startsWith(DRY_RUN_VERIFICATION_MARKER) ? "verified under --dry-run against synthetic sources \u2014 re-run `pensmith verify` without --dry-run" : null;
-}
-var BLOCKING_VERDICTS, UNREADABLE_CITEKEY, DRY_RUN_VERIFICATION_MARKER;
 var init_verdict_rows = __esm({
   "bin/lib/verify/verdict-rows.ts"() {
     "use strict";
-    BLOCKING_VERDICTS = /* @__PURE__ */ new Set(["FABRICATED", "MIS-CITED", "NOT_FOUND", "UNVERIFIABLE"]);
-    __name(parseBlockingVerdictRows, "parseBlockingVerdictRows");
-    UNREADABLE_CITEKEY = "(unreadable verdict row)";
-    __name(sectionVerificationReasons, "sectionVerificationReasons");
-    __name(blockingRowReason, "blockingRowReason");
-    DRY_RUN_VERIFICATION_MARKER = "> OFFLINE MODE (--dry-run)";
-    __name(dryRunVerificationReason, "dryRunVerificationReason");
+    init_verdicts();
+    init_verdicts();
   }
 });
 
@@ -17363,7 +17377,7 @@ var init_research_sentinel = __esm({
 
 // bin/lib/router.ts
 import { existsSync as existsSync4, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
-import { join as join5 } from "node:path";
+import { basename as basename2, join as join5 } from "node:path";
 function readSectionInfo(planPath) {
   const none = { stub: false, failureReason: null, verifiedHash: null, assignedSources: [] };
   if (!existsSync4(planPath)) {
@@ -17396,22 +17410,6 @@ function draftHashOf(draftPath, assignedSources) {
     return null;
   }
 }
-function verificationBlockers(verificationPath) {
-  let md;
-  try {
-    md = readFileSync8(verificationPath, "utf8");
-  } catch {
-    return ["its VERIFICATION.md is missing or unreadable"];
-  }
-  const reasons = sectionVerificationReasons(md, dryRunWorkspaceActive());
-  const unverifiable = parseBlockingVerdictRows(md).filter((r) => r.verdict === "UNVERIFIABLE");
-  if (reasons.length > 1 && unverifiable.length === reasons.length) {
-    const keys = unverifiable.map((r) => `[@${r.citekey}]`);
-    const list2 = `${keys.slice(0, -1).join(", ")} and ${keys[keys.length - 1]}`;
-    return [`${list2} are UNVERIFIABLE (their sources could not be checked: offline, --dry-run or a failed lookup)`];
-  }
-  return reasons;
-}
 function mtimeOf(p) {
   try {
     return statSync3(p).mtimeMs;
@@ -17430,6 +17428,8 @@ function compiledSectionCount(pDir) {
 function compiledDraftStale(pDir, sections, paperRoot) {
   const compiledAt = mtimeOf(join5(pDir, "DRAFT.md"));
   if (compiledAt === null) return true;
+  const record = readCompileInputs(paperRoot);
+  if (record !== null && (record.compiled_draft_sha256 === null || record.sections.some((s2) => s2.verified_against_draft_hash === null))) return true;
   const current = compiledInputsCurrent(paperRoot, sections);
   if (current !== null) return !current;
   for (const { n, slug } of sections) {
@@ -17490,8 +17490,8 @@ async function resolveNextAction(paperRoot, opts = {}) {
       }
       switch (r.status) {
         case "verified":
+          if (!existsSync4(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
           continue;
-        // the ONLY continue case
         case "planned":
           return r.stub ? { verb: "plan", ...id } : { verb: "write", ...id };
         case "writing":
@@ -17516,20 +17516,15 @@ async function resolveNextAction(paperRoot, opts = {}) {
           return { verb: "verify", ...id };
         // the draft changed: re-attempt verification — NOT continue
         case "unverifiable": {
+          if (!existsSync4(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
           if (r.verifiedHash === null || draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) !== r.verifiedHash) {
             return { verb: "verify", ...id };
           }
-          const blockers = verificationBlockers(sectionVerification(n, slug, paperRoot));
-          if (blockers.length === 0) continue;
-          return {
-            verb: "status",
-            reason: "attention",
-            section: id,
-            detail: `section ${label} could not be verified: ${blockers.join("; ")} \u2014 its draft has not changed since; re-run the check with \`pensmith verify ${label}\` once the sources can be reached`
-          };
+          continue;
         }
         case "written":
         case "verifying":
+          if (!existsSync4(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
           return { verb: "verify", ...id };
         default:
           return {
@@ -17540,9 +17535,19 @@ async function resolveNextAction(paperRoot, opts = {}) {
           };
       }
     }
+    const record = readCompileInputs(paperRoot);
+    if (record !== null && record.compiled_draft_sha256 !== null && existsSync4(join5(pDir, "DRAFT.md")) && fileSha256(join5(pDir, "DRAFT.md")) !== record.compiled_draft_sha256) {
+      return {
+        verb: "status",
+        reason: "attention",
+        detail: `${basename2(pDir)}/DRAFT.md was edited after compile \u2014 make the edit in the section drafts (then \`pensmith\` re-verifies them) and run \`pensmith compile\`, which replaces the edited file`
+      };
+    }
     if (compiledDraftStale(pDir, sections, paperRoot)) return { verb: "compile" };
     const finalAt = mtimeOf(join5(pDir, "FINAL.md"));
-    if (finalAt === null || finalAt < (mtimeOf(join5(pDir, "DRAFT.md")) ?? 0)) return { verb: "done" };
+    if (finalAt === null || finalAt < (mtimeOf(join5(pDir, "DRAFT.md")) ?? 0)) {
+      return record === null ? { verb: "compile" } : { verb: "done" };
+    }
     return { verb: "status", reason: "done" };
   } catch (e) {
     process.stderr.write(
@@ -17564,10 +17569,12 @@ var init_router = __esm({
     init_compile_inputs2();
     init_section_registry();
     init_verdict_rows();
+    init_verdicts();
     init_research_sentinel();
+    init_verdicts();
+    init_compile_inputs2();
     __name(readSectionInfo, "readSectionInfo");
     __name(draftHashOf, "draftHashOf");
-    __name(verificationBlockers, "verificationBlockers");
     __name(mtimeOf, "mtimeOf");
     __name(compiledSectionCount, "compiledSectionCount");
     __name(compiledDraftStale, "compiledDraftStale");
@@ -18838,8 +18845,11 @@ var init_llm_models = __esm({
       // ~80 output tokens each, so its budget fits a full batch with headroom.
       s("topic-disambiguator", "research", "judgment", "low", 4e3, 1200, 2500, true, true),
       s("source-evaluator", "research", "judgment", "low", 24e3, 12e3, 37e3, true, true),
-      s("claim-support", "verify", "judgment", "low", 2e3, 350, 1200, true, true),
-      s("orphan-label", "verify", "judgment", "low", 1e3, 120, 700, true, true)
+      // Phase 20 (D-20-28, D-20-29): claim-support reads the source text — the
+      // abstract (<= 4000 chars) plus a full-text passage (<= 2400) — and
+      // orphan-label audits one paragraph (<= 4000 chars) and lists its claims.
+      s("claim-support", "verify", "judgment", "low", 2e3, 350, 2200, true, true),
+      s("orphan-label", "verify", "judgment", "low", 2e3, 500, 1800, true, true)
     ];
     SLUGS = Object.freeze(
       Object.fromEntries(SLUG_LIST.map((x) => [x.slug, x]))
@@ -19007,7 +19017,7 @@ function citationStyleKey(name) {
   if (t.length === 0) return null;
   return Object.prototype.hasOwnProperty.call(CITATION_STYLE_KEYS, t) ? CITATION_STYLE_KEYS[t] : null;
 }
-var CURRENT_CONFIG_VERSION, CITATION_STYLE_NAMES2, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HumanizerSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
+var CURRENT_CONFIG_VERSION, DEFAULT_QUOTE_MIN_WORDS, CITATION_STYLE_NAMES2, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HumanizerSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
 var init_config = __esm({
   "bin/lib/schemas/config.ts"() {
     "use strict";
@@ -19015,7 +19025,8 @@ var init_config = __esm({
     init_tutorial();
     init_runtime_config();
     init_lookup_table();
-    CURRENT_CONFIG_VERSION = 2;
+    CURRENT_CONFIG_VERSION = 3;
+    DEFAULT_QUOTE_MIN_WORDS = 5;
     CITATION_STYLE_NAMES2 = [
       "APA",
       "MLA",
@@ -19099,6 +19110,11 @@ var init_config = __esm({
       // PDFs nearest each claim to the configured model provider; off by default
       // (PRD §9: a bring-your-own PDF's contents stay local). Phase 19 review round 2.
       send_byo_passages: external_exports.boolean().optional(),
+      // Pass 3 checks every direct quote of at least this many words (VRFY-18):
+      // 1..DEFAULT_QUOTE_MIN_WORDS — a paper may only ask for a stricter floor.
+      quote_min_words: external_exports.number().int().min(1, { message: `quote_min_words must be between 1 and ${DEFAULT_QUOTE_MIN_WORDS}` }).max(DEFAULT_QUOTE_MIN_WORDS, {
+        message: `quote_min_words must be between 1 and ${DEFAULT_QUOTE_MIN_WORDS}: a higher floor would leave longer direct quotes unchecked by Pass 3 (PRD \xA714) \u2014 lower it to check shorter quotes too`
+      }).optional(),
       flag_threshold: external_exports.enum(["low", "medium", "high"]).optional(),
       recheck_after_days: NonNegInt.optional(),
       plagiarism_check: external_exports.boolean().optional(),
@@ -19169,7 +19185,7 @@ var init_config = __esm({
 });
 
 // bin/lib/migrations/config/v0_to_v1.ts
-function migrate7(input) {
+function migrate8(input) {
   const out2 = { schema_version: 1 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
@@ -19199,12 +19215,12 @@ var init_v0_to_v13 = __esm({
       anthropic: "ANTHROPIC_API_KEY",
       openai: "OPENAI_API_KEY"
     });
-    __name(migrate7, "migrate");
+    __name(migrate8, "migrate");
   }
 });
 
 // bin/lib/migrations/config/v1_to_v2.ts
-function migrate8(input) {
+function migrate9(input) {
   const out2 = { schema_version: 2 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
@@ -19212,10 +19228,26 @@ function migrate8(input) {
   }
   return out2;
 }
-var init_v1_to_v24 = __esm({
+var init_v1_to_v25 = __esm({
   "bin/lib/migrations/config/v1_to_v2.ts"() {
     "use strict";
-    __name(migrate8, "migrate");
+    __name(migrate9, "migrate");
+  }
+});
+
+// bin/lib/migrations/config/v2_to_v3.ts
+function migrate10(input) {
+  const out2 = { schema_version: 3 };
+  for (const [k, v] of Object.entries(input)) {
+    if (k === "schema_version") continue;
+    out2[k] = v;
+  }
+  return out2;
+}
+var init_v2_to_v32 = __esm({
+  "bin/lib/migrations/config/v2_to_v3.ts"() {
+    "use strict";
+    __name(migrate10, "migrate");
   }
 });
 
@@ -19400,7 +19432,8 @@ var init_config2 = __esm({
     init_config();
     init_tutorial();
     init_v0_to_v13();
-    init_v1_to_v24();
+    init_v1_to_v25();
+    init_v2_to_v32();
     init_config_text();
     init_disciplines();
     init_config();
@@ -19414,8 +19447,9 @@ var init_config2 = __esm({
       }
     };
     MIGRATIONS = Object.freeze({
-      0: migrate7,
-      1: migrate8
+      0: migrate8,
+      1: migrate9,
+      2: migrate10
     });
     VERIFY_QUOTES_REFUSAL = "verify_quotes is not configurable: Pass 3 quote verification is a blocking pass (PRD \xA714) \u2014 turning it off would let a quote-NOT_FOUND citation reach the compiled paper. Remove it from [verification].";
     __name(paperConfigPath, "paperConfigPath");
@@ -19439,6 +19473,7 @@ var init_config2 = __esm({
       "project.pii_redaction": false,
       "sources.require_doi": true,
       "verification.fetch_full_text": true,
+      "verification.quote_min_words": DEFAULT_QUOTE_MIN_WORDS,
       "verification.plagiarism_check": true,
       "humanizer.enabled": true,
       "humanizer.honesty_score": true,
