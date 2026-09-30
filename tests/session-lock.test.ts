@@ -69,7 +69,9 @@ async function holdLock(sb: Sandbox, root: string, kind: 'cli' | 'mcp', claude?:
     const timer = setTimeout(() => reject(new Error(`holder did not take the lock: ${err}`)), 20_000);
     child.stdout?.on('data', (c: Buffer) => {
       buf += c.toString();
-      const line = buf.split('\n').find((l) => l.startsWith('{'));
+      // Complete lines only: the text after the last newline may be the first
+      // chunk of a line still arriving, and parsing it would throw.
+      const line = buf.split('\n').slice(0, -1).find((l) => l.startsWith('{'));
       if (!line) return;
       clearTimeout(timer);
       const parsed = JSON.parse(line) as { pid: number; file: string };
