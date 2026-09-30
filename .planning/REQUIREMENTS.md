@@ -486,7 +486,7 @@ Every source adapter works against today's live APIs, failures reach the user, a
   - A 200 whose body fails the adapter's schema leaves the HTTP cache directory unchanged
   - docs/ lists the per-source floors, and PRD §12 is amended wherever they differ from its table
   - (covers: SWP-13 (ARCH-12), SWP-14 (ARCH-13); PRD §12, §14 (HTTP caching + backoff))
-- [ ] **GRND-14**: **Drafter quote policy: direct quotes only from sources with real text.** The drafter is told which assigned sources have legitimately available full text (OA or BYO, from the source-context flag that SRC-03 and SRC-15 populate in this phase). Direct quotes may come only from those; other sources are paraphrased. Re-pin `section-drafter.md`. This keeps UNVERIFIABLE-QUOTE (VRFY-20) rare.
+- [x] **GRND-14**: **Drafter quote policy: direct quotes only from sources with real text.** The drafter is told which assigned sources have legitimately available full text (OA or BYO, from the source-context flag that SRC-03 and SRC-15 populate in this phase). Direct quotes may come only from those; other sources are paraphrased. Re-pin `section-drafter.md`. This keeps UNVERIFIABLE-QUOTE (VRFY-20) rare.
   - The captured drafter request marks each source's full-text availability
   - A mock drafter that quotes a source flagged without full text is corrected on the one retry into a paraphrase or a quote from an OA source
   - (covers: E2E-18; PRD §7.6, §7.7)
@@ -1196,7 +1196,7 @@ Which phases cover which requirements.
 | SRC-15 | Phase 19 | Complete |
 | SRC-16 | Phase 19 | Complete |
 | SRC-17 | Phase 19 | Complete |
-| GRND-14 | Phase 19 | Pending (library half built; drafter half and acceptance at the Phase 18/19 merge — exact wiring in 19-SUMMARY merge notes, "Closer" row) |
+| GRND-14 | Phase 19 | Complete (closed at the Phase 18/19 merge: the drafter's `full_text` comes from `full-text.ts`, `checkDraft`'s `quote-without-full-text` violation goes through write's one corrective turn; both acceptance tests pass — `tests/grnd14-quote-policy.test.ts`, 19-VERIFICATION §9) |
 | GRND-17 | Phase 19 | Complete |
 | SEC-02 | Phase 19 | Complete |
 | VRFY-09 | Phase 20 | Pending |

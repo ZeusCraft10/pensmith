@@ -310,14 +310,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 ### Pending Todos
 
 - Phase 20 (VRFY-13): Pass-1 author matching for PubMed "Family Initials" names and compound surnames. It blocks an unattended live `--yolo` run of the PRD §15 assignment (18-VERIFICATION.md U1). Include a live-lane check that the §15 assignment reaches done unaided.
-- Phase 19: re-record the e2e corpus after the adapter URL changes (`npm run cassettes:refresh -- --corpus e2e`) and keep `tests/e2e-chain.test.ts` green (18-PLAN.md §9).
 - Phase 21 (EXP-04): without pandoc, the md export of a note style renders the full note inline and leaves a doubled period after the DOI.
 - Phase 22 (REV-03): `plan N --revise` removes one flagged citation per run.
 - Intake (minor): `disciplineMentionFrom` does not read a bare course-code line (`Biology 210: …`), so the offline stub falls back to `other`.
 - CI-06: after the maintainer pushes, record the first green 6-leg `ci.yml` run, then mark CI-06 Complete and tick Phase 17 in ROADMAP.md.
 - Phase 20 (VRFY): the freshness table prints `DOI HEAD | ok` for a citekey with no DOI. It is advisory, but misleading.
 - Phase 23 (PLUG-01 / CI-05): `claude plugin validate .` fails on the `plugin.json` `skills` shape. This predates Phase 17.
-- Phase 18/19 merge (GRND-14): delegate Phase 18's `source-context.ts fullTextAvailable` to `full-text.ts` (adding the `arxiv` field). Add the `quote-without-full-text` violation to `draft-containment.ts checkDraft` (`quotesWithoutFullText` + `describeQuotesWithoutFullText`). Add and run the two GRND-14 acceptance tests, then tick GRND-14 (19-SUMMARY merge notes, "Closer" row).
 - SRC-06: the maintainer runs `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` and one keyed `pensmith research --yolo`, records the output in 19-VERIFICATION §8.4, then marks SRC-06 Complete.
 - Follow-ups from the Phase 19 closer: PubMed entries have no abstract (esummary), so Pass 2 has no text and APA lowercases the proper nouns of a Title Case title ("china") — VRFY-21 / EXP-03. `done` reads the citation style only from INTAKE.md, so a paper without one exports raw `[@key]` tokens — EXP-03.
 

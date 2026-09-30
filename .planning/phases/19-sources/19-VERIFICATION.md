@@ -1,20 +1,22 @@
 ---
 phase: 19-sources
 verified: 2026-09-29
-verified_at_branch: v1/p19 (HEAD 4f47eff, after review round 3; the closer re-ran the gate and the user-path checks in §8)
+verified_at_branch: v1/p19 (HEAD 4f47eff, after review round 3; the closer re-ran the gate and the user-path checks in §8); re-verified on the v1.0.0 branch at the Phase 18/19 merge (§9)
 status: gaps_found
-score: 18/20 requirements fully met; SRC-06 NOT fully met (built and tested; its acceptance's keyed live OpenAlex round trip is unobserved — no key here); GRND-14 NOT met on this branch (library half built; drafter half and acceptance at the Phase 18/19 merge)
-gaps: [SRC-06 (keyed OpenAlex / Semantic Scholar live round trip — maintainer runs it with keys), GRND-14 (drafter wiring + acceptance at the Phase 18/19 merge; the flag's basis equals Pass 3's)]
-success_criteria: 6/8 met; criterion 1 (OpenAlex keyed live) and criterion 7 (the drafter's quote policy) open — §8.3
-review_rounds: [round 1 (fixer, 2026-09-28): see §5, round 2 (fixer, 2026-09-29): see §6, round 3 (fixer, 2026-09-29): see §7, closer (2026-09-29): see §8]
-open_items: [OpenAlex keyed live round trip (no key), Semantic Scholar keyed round trip (no key), GRND-14 drafter half (Phase 18/19 merge), CI-06 cross-OS run (inherited from Phase 17)]
+score: 19/20 requirements fully met (GRND-14 closed at the Phase 18/19 merge, §9); SRC-06 NOT fully met (built and tested; its acceptance's keyed live OpenAlex round trip is unobserved — no key here)
+gaps: [SRC-06 (keyed OpenAlex / Semantic Scholar live round trip — maintainer runs it with keys)]
+success_criteria: 7/8 met; criterion 1 (OpenAlex keyed live) open — §8.3; criterion 7 (the drafter's quote policy) met at the Phase 18/19 merge — §9
+review_rounds: [round 1 (fixer, 2026-09-28): see §5, round 2 (fixer, 2026-09-29): see §6, round 3 (fixer, 2026-09-29): see §7, closer (2026-09-29): see §8, Phase 18/19 merge (2026-09-30): see §9]
+open_items: [OpenAlex keyed live round trip (no key), Semantic Scholar keyed round trip (no key), CI-06 cross-OS run (inherited from Phase 17)]
 ---
 
 # Phase 19: Sources and Library (SOURCES): Verification
 
 **Goal (ROADMAP):** every source adapter works against today's live APIs and reports failures to the user; every ingest goes through the Phase 17 library writer; books, hashed bring-your-own PDFs and Zotero items are first-class sources; the drafter and `plan --research` can use this phase's full-text flags and evaluator.
 
-**Result:** 18 of 20 requirements are fully met on the real user path. Two are not: **GRND-14** — nothing in this branch's drafter path reads the full-text flag and no draft check enforces it; that half needs Phase 18's `source-context.ts` / `draft-containment.ts` and runs at the merge (19-PLAN §2, §9). Its library half (`full-text.ts`, based on the text Pass 3 can actually check, and `oa_url` populated at ingest only for an Unpaywall link that served a PDF) is built and tested. **SRC-06** — every part is built and tested (MockAgent, the synthetic budget-exhausted 429 through the built CLI, a fake key reaching both services, and — at the closer — OpenAlex's real keyless exhaustion reported through `research`), but its first acceptance bullet, a keyed OpenAlex live round trip returning results, needs a key this environment does not have; the closer moved it from Complete to Pending (§8.4). Since review round 1, Pass 1 resolves a DOI-less entry at its own registrar (arXiv id, PMID, ISBN), so ROADMAP criterion 7's "a History paper can cite a book with an ISBN" holds end to end (verify, compile, done — §5, re-run at the closer in §8.2).
+**Result at the Phase 18/19 merge (§9):** 19 of 20 requirements are fully met. GRND-14 closed at the merge: the drafter request's `full_text` comes from `full-text.ts`, and `write`'s containment check corrects, then rejects, a direct quote from a source without it; both acceptance tests pass. SRC-06's keyed live round trip is the one open item. The paragraph below is the branch-time result (§1–§8).
+
+**Result (on `v1/p19`):** 18 of 20 requirements are fully met on the real user path. Two are not: **GRND-14** — nothing in this branch's drafter path reads the full-text flag and no draft check enforces it; that half needs Phase 18's `source-context.ts` / `draft-containment.ts` and runs at the merge (19-PLAN §2, §9). Its library half (`full-text.ts`, based on the text Pass 3 can actually check, and `oa_url` populated at ingest only for an Unpaywall link that served a PDF) is built and tested. **SRC-06** — every part is built and tested (MockAgent, the synthetic budget-exhausted 429 through the built CLI, a fake key reaching both services, and — at the closer — OpenAlex's real keyless exhaustion reported through `research`), but its first acceptance bullet, a keyed OpenAlex live round trip returning results, needs a key this environment does not have; the closer moved it from Complete to Pending (§8.4). Since review round 1, Pass 1 resolves a DOI-less entry at its own registrar (arXiv id, PMID, ISBN), so ROADMAP criterion 7's "a History paper can cite a book with an ISBN" holds end to end (verify, compile, done — §5, re-run at the closer in §8.2).
 
 ## 1. Gate (integration HEAD, 2026-09-28, Node 22, Linux, as root)
 
@@ -195,3 +197,39 @@ Side observations, none of which is a Phase 19 acceptance item (listed as follow
 | GRND-14 | **Pending** | The drafter half and the acceptance tests run at the Phase 18/19 merge. The library half is built: `full-text.ts`, `open-access.ts`, and `describeQuotesWithoutFullText` for the corrective text. The exact wiring against Phase 18's current `source-context.ts` / `draft-containment.ts` is in 19-SUMMARY "Closer". |
 
 Phase 19 is **not complete**: 18 of 20 requirements are Complete, and the ROADMAP checkbox stays unticked.
+
+## 9. Phase 18/19 merge (2026-09-30, v1.0.0 branch)
+
+Phase 19 was merged into the v1.0.0 branch after Phase 18 closed (merge commit d0b9bb5). The first integrator was interrupted by a container restart after committing its in-progress work (01a815b); the resumed integrator reviewed that work, completed it, re-ran the GRND-14 acceptance and the gate, and then merged the cross-platform CI fixes (`v1/ci-fix-18`).
+
+### 9.1 GRND-14 wiring (exactly the 19-SUMMARY "Closer" row)
+
+| File | Change |
+|---|---|
+| `bin/lib/source-context.ts` | `fullTextAvailable(entry: Pick<SourceContextInput, 'byo' \| 'oa_url' \| 'doi' \| 'arxiv'>)` delegates to `full-text.ts fullTextAvailable`; `SourceContextInput` gains `arxiv`, and `byo` is `LibraryEntry['byo']`. The drafter record's `full_text` is therefore exactly what Pass 3 can check: a non-asserted hashed BYO PDF, an Unpaywall-confirmed `oa_url` with a (non-DataCite) DOI, or an arXiv id. |
+| `bin/lib/draft-containment.ts` | `DraftViolationKind` adds `'quote-without-full-text'`; `checkDraft(draft, { assigned, section, fullText })` pushes one violation per `quotesWithoutFullText(draft, fullText)` result, with `describeQuotesWithoutFullText` as its message; `failureReason` / `containmentCorrection` carry that text. |
+| `bin/cli/write.ts` | `withVerifiedByo` re-checks each assigned BYO PDF through `byoText(root, entry)` before the drafter request is built (a PDF missing, changed or attached at the user's word counts as no BYO text); `fullTextByCitekey` over the section's assigned LIBRARY entries builds the map `checkDraft` reads, so the request's `full_text` and the check agree. write's one corrective turn and failure path (`DRAFT.rejected.md`, `status: failed` + `failure_reason`, exit 4) apply unchanged. |
+| `templates/prompts/section-drafter.md` | unchanged: Phase 18 already tells the drafter to quote only from `full_text: true` sources (no re-pin). |
+
+### 9.2 GRND-14 acceptance
+
+`tests/grnd14-quote-policy.test.ts` (built through the CLI with the RUN-21 mock LLM, offline):
+- (1) The captured `section-drafter` request marks `full_text` true for a BYO PDF that still verifies, an Unpaywall OA PDF (`oa_url` + DOI) and an arXiv id, and false for an abstract-only source and for a BYO PDF deleted since ingest. **pass**
+- (2) A draft quoting the abstract-only source gets exactly one corrective turn naming the quote ("paraphrase them, or quote only a source marked full_text: true"); the kept draft quotes only full-text sources and the section is `written`. **pass**
+- (2) A second violation (the retry quotes the deleted BYO copy) is rejected: `DRAFT.rejected.md`, `status: failed` with the reason, exit 4, no VERIFICATION.md. **pass**
+
+`tests/citekey-grammar-gates.test.ts` also runs a narrative-citation quote through `checkDraft` (`quote-without-full-text`). GRND-14 is **Complete**.
+
+### 9.3 The e2e corpus re-record (18-PLAN §9.9, D-18-31)
+
+Phase 19 changed the adapters' request URLs and research's shape (5–10 queries per scope, the evaluator's one batch with a verdict for every candidate, the `[sources]` policy), so the corpus was re-recorded with `npm run cassettes:refresh -- --corpus e2e` (`PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org`, recorded 2026-09-29T23:58:57Z). The recorder now drives research's own discovery and pass (`research-orchestrator.ts discoverCandidates` / `runResearchPass` over the computer-science adapter plan), refuses a candidate batch over the evaluator's 150, keeps only sources whose retraction check is clear and whose live Pass 1 is OK, and shares one cassette-entry writer (every email address redacted, non-text bodies base64) with the per-adapter recorder.
+
+- Five scripted queries (`transformer self-attention mechanism`, `attention mechanism neural machine translation`, `multi-head attention transformer architecture`, `scaled dot-product attention transformer`, `transformer attention interpretability`); 28 cassettes under `tests/fixtures/cassettes/e2e/` (arxiv, crossref, pubmed, retraction-watch, semanticscholar); the evaluator script has 129 verdicts, 6 kept: cai2024, meng2023, catapang2022, sun2026, li2022, smaldone2025, each verified live at recording time; 3 sections; run bound 8.
+- **What stayed unrecorded (expected misses in MANIFEST.json):** OpenAlex for all five queries (keyless search was rate-limited; re-probed at the merge, it still answered HTTP 429 "Anonymous search is temporarily rate-limited while the search cluster is under elevated load") and Semantic Scholar for four of the five (keyless shared-pool 429). Offline, those (adapter, query) pairs fail closed exactly as the manifest says, and the chain completes from the other adapters. Nothing in the corpus is synthetic.
+- `tests/e2e-chain.test.ts` and `tests/e2e-corpus-manifest.test.ts` pass.
+
+### 9.4 Post-merge fixes
+
+- `bin/lib/full-text.ts`: a blank `oa_url` is not an open-access PDF.
+- `tests/helpers/section-fixture.ts` writes a current-version LIBRARY.json (v2 entries through the library's own v2 → v3 migration), so a read never has to migrate — and rewrite — it.
+- `tests/mock-llm.test.ts` (the stub's queries are the topic's deterministic expansion, SRC-08), `tests/research-request-shape.test.ts` (the evaluator record carries `type` and `tier_hint`, SRC-09; the CLI case uses a recorded research query), `tests/bare-chain.test.ts` (the D-18-43 case's quoted source now has an open-access PDF, which Pass 3 cannot fetch offline — a quote from an abstract-only source is corrected at write), `tests/dry-run-boundary.test.ts` (the dry-run export is the format this host makes — DOCX with Pandoc, else Markdown — and a .docx's XML parts are checked for markers), `tests/add-identifiers.test.ts` (drains the session log before reading its http records; the doi.org RA case was flaky under a loaded full run).
