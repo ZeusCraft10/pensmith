@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "hooks": [
+    { "event": "SessionStart", "script": "session-start.ts" },
+    { "event": "PreCompact",   "script": "pre-compact.ts"  },
+    { "event": "PostToolUse",  "script": "post-tool-use.ts" },
+    { "event": "Stop",         "script": "stop.ts"          }
+  ]
+}
