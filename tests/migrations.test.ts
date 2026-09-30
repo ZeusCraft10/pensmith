@@ -437,6 +437,20 @@ test('config.toml v0 → v1: pure; adds schema_version; drops only the retired n
   );
 });
 
+test('config.toml v1 → v2 and v2 → v3: pure; only the version changes (S-20: optional keys with defaults)', async () => {
+  const { migrate: v1ToV2 } = await import('../bin/lib/migrations/config/v1_to_v2.js');
+  const { migrate: v2ToV3 } = await import('../bin/lib/migrations/config/v2_to_v3.js');
+  const input = { schema_version: 1, project: { title: 'T' }, verification: { send_byo_passages: true, quote_min_words: 3 } };
+  const frozen = JSON.stringify(input);
+  const v2 = v1ToV2(input);
+  const v3 = v2ToV3(v2);
+  assert.equal(JSON.stringify(input), frozen, 'the input is not mutated');
+  assert.deepEqual(v2, { ...input, schema_version: 2 });
+  assert.deepEqual(v3, { ...input, schema_version: 3 });
+  assert.deepEqual(Object.keys(v3)[0], 'schema_version', 'the version stays the first key');
+  assert.deepEqual(v2ToV3({}), { schema_version: 3 });
+});
+
 test('runtime.json v1 → v2 via loadAndMigrate: first provider entry wins; written back as v2', async () => {
   const { Schema: RuntimeSchema, CURRENT_RUNTIME_CONFIG_VERSION } = await import('../bin/lib/schemas/runtime-config.js');
   const { migrate: runtimeV1ToV2 } = await import('../bin/lib/migrations/runtime-config/v1_to_v2.js');

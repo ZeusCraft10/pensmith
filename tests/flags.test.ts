@@ -641,11 +641,15 @@ test('H3 / RUN-04: --dry-run research, add, verify (incl. Pass 3), compile and d
     assert.ok(/10\.0000\/pensmith-dryrun\./.test(library), 'dry-run research writes synthetic sources (in the workspace)');
     assert.match(byVerb.get('add')?.stderr ?? '', /unavailable \(dry-run\)/, 'add reports unavailable (dry-run)');
     const verification = readFileSync(join(fx.paperRoot, '.paper-dry-run', 'sections', '01-intro', 'VERIFICATION.md'), 'utf8');
-    assert.match(verification, /text unavailable \(dry-run\)/, 'Pass 3 ran on the quote without a request');
+    assert.match(verification, /UNVERIFIABLE-QUOTE.*text unavailable \(dry-run\)/, 'Pass 3 ran on the quote without a request');
     assert.match(verification, /- dryrunsrc2020: \*\*OK\*\* .*dry-run synthetic source/, 'Pass 1 accepted the synthetic source under --dry-run');
-    assert.equal(byVerb.get('compile')?.status, 0, `compile: ${byVerb.get('compile')?.stderr}`);
-    assert.equal(byVerb.get('done')?.status, 0, `done: ${byVerb.get('done')?.stderr}`);
-    assert.ok(existsSync(join(fx.paperRoot, '.paper-dry-run', 'export', 'DRAFT.dry-run.md')), 'the dry-run export is named DRAFT.dry-run.*');
+    // Phase 20 (D-20-02, D-20-03): a quote no text can be checked against is
+    // UNVERIFIABLE-QUOTE and blocks — compile and done refuse (with no socket);
+    // the dry-run export itself is covered by tests/dry-run-workspace.test.ts.
+    assert.equal(byVerb.get('compile')?.status, 4, `compile: ${byVerb.get('compile')?.stderr}`);
+    assert.match(byVerb.get('compile')?.stderr ?? '', /UNVERIFIABLE-QUOTE/);
+    assert.equal(byVerb.get('done')?.status, 4, `done: ${byVerb.get('done')?.stderr}`);
+    assert.ok(!existsSync(join(fx.paperRoot, '.paper-dry-run', 'export')), 'nothing was exported');
     assert.ok(!existsSync(join(fx.paperRoot, '.paper-dry-run', 'COSTS.jsonl')), 'no LLM cost was recorded');
     assert.ok(!existsSync(join(fx.paperRoot, '.paper', 'COSTS.jsonl')), 'no LLM cost was recorded');
   });
@@ -674,11 +678,15 @@ test('H3 / RUN-04: PENSMITH_OFFLINE=1 research, add, verify (incl. Pass 3), comp
     const verification = readFileSync(join(fx.paperRoot, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), 'utf8');
     assert.match(verification, /- aspelmeyer2009: \*\*OK\*\* .*D-11 AND-gate passed/, 'Pass 1 re-fetched the recorded Crossref work');
     assert.ok(!readFileSync(join(fx.paperRoot, '.paper', 'CITATIONS.bib'), 'utf8').includes('gkab1112'), 'the refused DOI was not added');
-    assert.match(verification, /text unavailable \(offline\)/, 'Pass 3 ran on the quote without a request');
-    assert.equal(byVerb.get('compile')?.status, 0, `compile: ${byVerb.get('compile')?.stderr}`);
+    // Phase 20 (D-20-02, D-20-03): with no contact email Unpaywall is not asked,
+    // so no text can be checked — UNVERIFIABLE-QUOTE, which blocks compile and
+    // done (with no socket). Offline done's GPTZero and plagiarism paths are
+    // covered by tests/offline-fail-closed.test.ts and tests/honesty.test.ts.
+    assert.match(verification, /UNVERIFIABLE-QUOTE.*Unpaywall needs a contact email/, 'Pass 3 ran on the quote without a request');
+    assert.equal(byVerb.get('compile')?.status, 4, `compile: ${byVerb.get('compile')?.stderr}`);
+    assert.match(byVerb.get('compile')?.stderr ?? '', /UNVERIFIABLE-QUOTE/);
     const done = byVerb.get('done');
-    assert.equal(done?.status, 0, `done: ${done?.stderr}`);
-    assert.match(`${done?.stdout ?? ''}${done?.stderr ?? ''}`, /score unavailable \(offline\)/, 'GPTZero (key present) sends nothing offline');
-    assert.match(`${done?.stdout ?? ''}${done?.stderr ?? ''}`, /plagiarism check skipped \(offline\)/, 'no DDG query offline');
+    assert.equal(done?.status, 4, `done: ${done?.stderr}`);
+    assert.ok(!existsSync(join(fx.paperRoot, '.paper', 'export')), 'nothing was exported');
     assert.ok(!existsSync(join(fx.paperRoot, '.paper', 'COSTS.jsonl')), 'no LLM cost was recorded');
   });

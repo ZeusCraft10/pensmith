@@ -9,7 +9,7 @@
 //   1. read + TOML-parse (a parse error is a one-line ConfigError);
 //   2. version gate: no `schema_version` is v0; a version newer than this
 //      build is refused with an upgrade message;
-//   3. migrate v0 → v1 → v2 (bin/lib/migrations/config/); the async loader writes
+//   3. migrate v0 → v1 → v2 → v3 (bin/lib/migrations/config/); the async loader writes
 //      the migrated file back (writeBack defaults on);
 //   4. refusals: `[verification] verify_quotes` (PRD §14: Pass 3 is blocking)
 //      and `[runtime] endpoint` / `api_key_env` (S-18: they live only in the
@@ -36,6 +36,7 @@ import { SLUGS, canonicalSlug } from './llm-models.js';
 import {
   CONFIG_TABLES,
   CURRENT_CONFIG_VERSION,
+  DEFAULT_QUOTE_MIN_WORDS,
   PaperConfigSchema,
   PaperSlugOverrideSchema,
   type PaperConfig,
@@ -43,6 +44,7 @@ import {
 import { PROJECT_CONFIG_FRAGMENT, PROJECT_CONFIG_FRAGMENT_DEFAULTS } from './tutorial.js';
 import { migrate as v0ToV1 } from './migrations/config/v0_to_v1.js';
 import { migrate as v1ToV2 } from './migrations/config/v1_to_v2.js';
+import { migrate as v2ToV3 } from './migrations/config/v2_to_v3.js';
 import { editTomlText } from './config-text.js';
 import { isDisciplineSlug, presetFor } from './disciplines.js';
 
@@ -60,6 +62,7 @@ export class ConfigError extends PensmithError {
 const MIGRATIONS: Readonly<Record<number, (raw: Record<string, unknown>) => Record<string, unknown>>> = Object.freeze({
   0: v0ToV1,
   1: v1ToV2,
+  2: v2ToV3,
 });
 
 export const VERIFY_QUOTES_REFUSAL =
@@ -547,6 +550,7 @@ const DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({
   'project.pii_redaction': false,
   'sources.require_doi': true,
   'verification.fetch_full_text': true,
+  'verification.quote_min_words': DEFAULT_QUOTE_MIN_WORDS,
   'verification.plagiarism_check': true,
   'humanizer.enabled': true,
   'humanizer.honesty_score': true,

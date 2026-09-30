@@ -806,6 +806,9 @@ export type HttpSource =
   | 'datacite'
   | 'openalex'
   | 'unpaywall'
+  // Phase 20 (VRFY-19, D-20-18): Europe PMC's open-access full text
+  // (www.ebi.ac.uk/europepmc/webservices/rest/PMC<id>/fullTextXML) for Pass 3.
+  | 'europepmc'
   | 'arxiv'
   | 'pubmed'
   | 'semanticscholar'
@@ -938,6 +941,8 @@ const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   arxiv: 7 * ONE_DAY_MS,
   pubmed: 7 * ONE_DAY_MS,
   unpaywall: 1 * ONE_DAY_MS,
+  // Phase 20 (VRFY-19): an open-access article's full text changes as rarely as its metadata.
+  europepmc: 7 * ONE_DAY_MS,
   semanticscholar: 7 * ONE_DAY_MS,
   'retraction-watch': 1 * ONE_DAY_MS,
   // Phase 19 seam S-B: book metadata changes rarely; a Zotero library changes
@@ -956,6 +961,16 @@ const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
 // re-hit the origin every second.
 const NEGATIVE_RESPONSE_TTL_MS = ONE_HOUR_MS;
 
+/**
+ * How long an answer fetched as `source` stays fresh (the TTL table above).
+ * Phase 20 (VRFY-19, D-20-18): the extracted-text cache of Pass 3
+ * (bin/lib/verify/source-text.ts) keeps a source's text exactly as long as
+ * this module keeps an answer from the service that fetched it.
+ */
+export function sourceTtlMs(source: HttpSource): number {
+  return TTL_MS_BY_SOURCE[source];
+}
+
 // ============================================================
 //   Per-host TokenBucket seeds (ARCH-13, SRC-17, D-19-08; docs/SOURCES.md)
 // ============================================================
@@ -973,6 +988,8 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
   // OpenAlex: 10/s within the (keyed) daily budget.
   openalex: 10,
   unpaywall: 10,
+  // Europe PMC's REST API asks for moderate use; pensmith asks at most 5/s (Phase 20, VRFY-19).
+  europepmc: 5,
   // arXiv API terms: no more than one request every three seconds.
   arxiv: 1 / 3,
   // NCBI E-utilities without an API key: 3 requests per second.

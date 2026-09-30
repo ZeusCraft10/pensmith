@@ -24,8 +24,18 @@ import { lookupTable } from '../lookup-table.js';
 /**
  * v2 (Phase 19, review round 3): `[verification] send_byo_passages` and the
  * `[sources] allowed_databases` values `books` / `nber` (migrations/config/v1_to_v2.ts).
+ * v3 (Phase 20, VRFY-18): `[verification] quote_min_words` (migrations/config/v2_to_v3.ts).
  */
-export const CURRENT_CONFIG_VERSION = 2;
+export const CURRENT_CONFIG_VERSION = 3;
+
+/**
+ * `[verification] quote_min_words` (VRFY-18, D-20-17): a direct quote of at
+ * least this many words is checked by Pass 3. The default is also the most a
+ * paper may ask for: a config.toml travels with a shared paper, and a higher
+ * floor would leave longer quotes unchecked (PRD §14; D-20-04 — a local file
+ * can add refusals, never remove them). A lower value checks more quotes.
+ */
+export const DEFAULT_QUOTE_MIN_WORDS = 5;
 
 /** The 8 citation styles (display names from PRD §10 / the intake clarifier, plus their CSL keys). */
 export const CITATION_STYLE_NAMES = [
@@ -171,6 +181,18 @@ export const VerificationSchema = z.object({
   // PDFs nearest each claim to the configured model provider; off by default
   // (PRD §9: a bring-your-own PDF's contents stay local). Phase 19 review round 2.
   send_byo_passages: z.boolean().optional(),
+  // Pass 3 checks every direct quote of at least this many words (VRFY-18):
+  // 1..DEFAULT_QUOTE_MIN_WORDS — a paper may only ask for a stricter floor.
+  quote_min_words: z
+    .number()
+    .int()
+    .min(1, { message: `quote_min_words must be between 1 and ${DEFAULT_QUOTE_MIN_WORDS}` })
+    .max(DEFAULT_QUOTE_MIN_WORDS, {
+      message:
+        `quote_min_words must be between 1 and ${DEFAULT_QUOTE_MIN_WORDS}: a higher floor would leave longer ` +
+        'direct quotes unchecked by Pass 3 (PRD §14) — lower it to check shorter quotes too',
+    })
+    .optional(),
   flag_threshold: z.enum(['low', 'medium', 'high']).optional(),
   recheck_after_days: NonNegInt.optional(),
   plagiarism_check: z.boolean().optional(),

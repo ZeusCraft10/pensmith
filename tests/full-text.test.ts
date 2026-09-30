@@ -89,3 +89,16 @@ test('GRND-14 (review round 3): describeQuotesWithoutFullText is the corrective 
   assert.doesNotMatch(msg, /vaswani2017/);
   assert.equal(describeQuotesWithoutFullText([]), '');
 });
+
+test('VRFY-19 (D-20-18): the flag never marks what Pass 3 cannot check — an arXiv id beside another DOI is not marked (Pass 3 needs the PDF to show the title)', () => {
+  assert.equal(fullTextSource({ ...NONE, doi: '10.1038/nature14539', arxiv: '1706.03762' }), null);
+  assert.equal(fullTextSource({ ...NONE, doi: '10.1038/nature14539', arxiv: '1706.03762', oa_url: 'https://arxiv.org/pdf/1706.03762' }), 'open-access PDF');
+  assert.equal(fullTextSource({ ...NONE, doi: null, arxiv: '1706.03762' }), 'arXiv PDF');
+});
+
+test('VRFY-18: quotesWithoutFullText reads the same extractor — a 5-word quote counts, an unattributed quote is left to Pass 3, the word floor is the caller\'s', () => {
+  const flags = new Map([['lecun2015', false]]);
+  const draft = 'They wrote "deep learning allows computational models" [@lecun2015]. Critics say "the whole field is overhyped" in passing.';
+  assert.deepEqual(quotesWithoutFullText(draft, flags).map((q) => [q.citekey, q.quote]), [['lecun2015', 'deep learning allows computational models']]);
+  assert.deepEqual(quotesWithoutFullText('A short "three word quote" [@lecun2015].', flags, { minWords: 3 }).map((q) => q.quote), ['three word quote']);
+});

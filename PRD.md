@@ -291,9 +291,11 @@ Bounded to a single section. Four passes, all scoped to this section's draft:
 - Advisory: Pass 2 never changes a section's status.
 
 **Pass 3 — Quotation verification:**
-- For every direct quote in this section, fetch OA full text and confirm presence.
-- PASS / NOT_FOUND / FUZZY_MATCH.
-- NOT_FOUND blocks compile.
+- For every direct quote in this section, fetch OA full text and confirm presence. *(Amended in v1.0.0 Phase 20 — VRFY-18, VRFY-19, VRFY-20; D-20-17..19. The quotes, sources and outcomes below make the gate exact.)*
+- A direct quote is any quote of at least `[verification] quote_min_words` words (§10; default 5) in straight or typographic double quotes, typographic single quotes, or a block quote (one quote per `>` run), attributed by a citation right after it (any Pandoc form; a cluster checks the quote against each key), right before it in the same sentence (`@k notes that "…"`), or a narrative citation introducing it. Each quote is numbered `q1`, `q2`, … in the section. Shorter quotes (scare quotes), quoted titles (after "titled", "entitled", "called", "named", "the article", "the book", "the paper", or Title Case of at most 12 words with no sentence end inside) and quotes inside code are not direct quotes.
+- The text is looked for in this order: the user's own PDF of the source (re-hashed, §7.19; read locally, no network), every open-access PDF Unpaywall lists for its DOI (best first), the Europe PMC open-access full text of its PMCID (used only when the article names the DOI or PMID the citation carries), then the arXiv PDF of its arXiv id (beside a non-arXiv DOI, only when the PDF shows the entry's title). Every fetch goes through the one egress gate with redirects followed; the extracted text is cached in the user data folder (`source-text/`, with the fetching source's TTL) so a second verify, compile or done on an unchanged paper fetches no PDF. Offline, only recorded answers are read.
+- Outcomes: PASS (found verbatim after normalization), FUZZY (found above the 0.95 similarity threshold), NOT_FOUND (the source's text was read and the quote is not in it), UNVERIFIABLE-QUOTE (a definitive answer with no text to check, with its reason: no open-access copy, Unpaywall needs a contact email — set `PENSMITH_CONTACT_EMAIL`, paywalled (abstract only), `fetch failed: …`, image-only PDF), UNVERIFIABLE-NETWORK (no usable answer — offline with no recording, a timeout, a 429 or 5xx after retries; retry verification when online), and UNATTRIBUTED (a direct quote with no citation). A quote checked against the user's own PDF says so (`verified against your local file <name>`).
+- NOT_FOUND, UNATTRIBUTED, UNVERIFIABLE-QUOTE and UNVERIFIABLE-NETWORK all block compile. UNVERIFIABLE-QUOTE is the one a user can resolve without new text: add the source's PDF, paraphrase the quote, or accept that one quote for the draft as written. It was added because this section listed only PASS / NOT_FOUND / FUZZY_MATCH, so a quote from a paywalled source would otherwise compile unchecked.
 
 **Pass 4 — Per-paragraph claim audit:**
 - For each paragraph, list claims it makes and which sources support each. *(Amended in v1.0.0 Phase 20 — VRFY-23, D-20-29: the `orphan-label` prompt audits each paragraph with a claim once and returns its claims with `needs_citation` and `supported_by`; it can only ADD orphans.)*
@@ -543,10 +545,10 @@ Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/Open
 
 ## 10. Per-project config (`.paper/config.toml`)
 
-`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 2` (v2 since Phase 19: `[verification] send_byo_passages` and the `books` / `nber` values of `[sources] allowed_databases`). An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
+`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 3` (v2 since Phase 19: `[verification] send_byo_passages` and the `books` / `nber` values of `[sources] allowed_databases`; v3 since Phase 20: `[verification] quote_min_words`). An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
 
 ```toml
-schema_version = 2                   # MANDATORY — see §14 NFRs
+schema_version = 3                   # MANDATORY — see §14 NFRs
 
 [project]
 # `pensmith new` writes mode, goal, class, discipline_preset, citation_style,
@@ -579,6 +581,7 @@ peer_reviewed_only = false           # true: only sources whose tier is peer-rev
 [verification]
 fetch_full_text = true
 send_byo_passages = false           # Pass 2 may send your own PDFs' passages nearest a claim to the model (off: §9)
+quote_min_words = 5                  # Pass 3 checks every direct quote of at least this many words (1–5: a paper may only lower the floor)
 flag_threshold = "low"               # low | medium | high
 recheck_after_days = 30
 plagiarism_check = true              # free distinctive-phrase check

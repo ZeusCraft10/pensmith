@@ -200,14 +200,14 @@ test('RUN-27: Pass 1 accepts a reserved DOI ONLY under --dry-run (AND-gate again
   assert.equal(mis?.verdict, 'MIS-CITED', mis?.reason);
 });
 
-test('RUN-27: Pass 3 — a quote from a reserved DOI is NOT_FOUND outside --dry-run, "text unavailable (dry-run)" under it', async () => {
+test('RUN-27: Pass 3 — a quote from a reserved DOI is NOT_FOUND outside --dry-run, UNVERIFIABLE-QUOTE "text unavailable (dry-run)" under it (D-20-02: PDF_UNAVAILABLE is never written)', async () => {
   const s = dryRun.syntheticSource('00c0ffee');
   const map = new Map([['syn', { DOI: s.doi ?? '' }]]);
   const [outside] = await runPass3(QUOTE_DRAFT('syn'), map);
   assert.equal(outside?.verdict, 'NOT_FOUND');
   assert.match(outside?.reason ?? '', /reserved dry-run identifier/);
   const [inside] = await underDryRun(() => runPass3(QUOTE_DRAFT('syn'), map));
-  assert.equal(inside?.verdict, 'PDF_UNAVAILABLE');
+  assert.equal(inside?.verdict, 'UNVERIFIABLE-QUOTE');
   assert.match(inside?.reason ?? '', /text unavailable \(dry-run\)/);
 });
 

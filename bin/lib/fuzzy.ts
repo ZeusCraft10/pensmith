@@ -13,8 +13,12 @@
 //   that). First-author surname comparison runs through
 //   bin/lib/author-normalize.ts before reaching jaroWinkler.
 //
-//   Pass 3 verdict:
-//     levenshteinSubstring(claimedQuote, extractedPdfText) >= QUOTE_LEV_THRESHOLD (0.95)
+//   Pass 3 verdict (matchQuote, Phase 20 VRFY-19):
+//     the normalized quote occurs verbatim in the normalized source text → PASS;
+//     else its best match anywhere in the text (the smallest edit distance to
+//     ANY substring, of any length) scores >= QUOTE_LEV_THRESHOLD (0.95) → FUZZY;
+//     else NOT_FOUND. A quote with elisions (`…`, `...`, `[…]`) is matched
+//     segment by segment, in order.
 //
 // Hand-rolled per RESEARCH.md "Standard Stack" — no npm dependency added.
 // Algorithm is ~80 LOC for Jaro-Winkler + ~40 LOC for Levenshtein, fully
@@ -23,14 +27,12 @@
 // normalization), which is itself zero-dep.
 //
 // Threat model:
-//   - T-3-DOS-01 (DoS via pathological Levenshtein input): classical 2-row DP
-//     is O(|a|·|b|); for QUOTE_LEV_THRESHOLD=0.95 on quotes <= 500 chars and
-//     PDF haystack <= 100KB, sliding-window cost is bounded by
-//     |needle| * |haystack| chars * |needle| ops ≈ 500 * 100000 * 500 = 25M
-//     operations worst case. Property test (numRuns: 100, maxLength: 50)
-//     completes in <5s on commodity hardware. Ukkonen banding (O(|a|·k) where
-//     k = ⌈|needle| * (1 - QUOTE_LEV_THRESHOLD)⌉) is documented as a future
-//     optimization if profiling shows regression — not required for Plan 03-01.
+//   - T-3-DOS-01 (DoS via pathological Levenshtein input): the quote search
+//     is Sellers' approximate substring match with Ukkonen's cut-off — O(k·n)
+//     on the source text of n characters, k = ⌊|quote| × (1 − 0.95)⌋ — after
+//     an O(n) verbatim check; a real paper (10⁵ characters) and a book (10⁶)
+//     are searched in milliseconds. The best-match ratio reported for a quote
+//     that is NOT found is bounded the same way (DIAGNOSTIC_CELLS).
 //   - T-3-04 (accent-mark mismatch): nfkcNormalize is applied to BOTH inputs
 //     of jaroWinkler and levenshteinSubstring BEFORE measurement; see Pitfall 5
 //     in 03-RESEARCH.md.
@@ -272,52 +274,225 @@ export function levenshtein(a: string, b: string): number {
   return prev[n]!;
 }
 
+// ---------------------------------------------------------------------------
+// Approximate substring search (Pass 3).
+// ---------------------------------------------------------------------------
+
 /**
- * Best-match ratio of `needle` as a substring of `haystack`, in [0, 1].
- *
- * Slides a window of `needle.length` chars across `haystack`, computes
- * Levenshtein distance to `needle` at each window position, and returns
- * `1 - (minDist / needle.length)`.
- *
- * Pre-normalizes both inputs via {@link normalizeForFuzzy} (NFKC + diacritic
- * strip + lowercase) BEFORE the sliding-window scan, so that PDF distortion
- * artifacts (soft hyphens, ligatures, smart quotes) don't fool the matcher.
- *
- * Used by Pass-3 quote integrity: a quote that scores >= QUOTE_LEV_THRESHOLD
- * (0.95) anywhere in the source PDF passes; below = NOT_FOUND.
- *
- * Edge cases:
- *   - needle === haystack → 1 (perfect match).
- *   - needle === "" → 1 (vacuous match; same convention as jaroWinkler).
- *   - needle.length > haystack.length → 0 (can't fit).
+ * The smallest edit distance between `p` and any substring of `t` (Sellers'
+ * semi-global alignment: the match may start and end anywhere in `t`), when it
+ * is at most `maxDist`; else null. Ukkonen's cut-off keeps only the rows that
+ * can still end at or under `maxDist` active, so a search costs O(maxDist·|t|)
+ * on text. Stops early at an exact occurrence.
+ */
+export function substringDistance(p: string, t: string, maxDist: number): number | null {
+  const m = p.length;
+  if (m === 0) return 0;
+  const k = Math.max(0, Math.floor(maxDist));
+  if (k >= m) return bestAlignmentFull(p, t);
+  // C[i]: the edit distance of p[0..i) against the best substring of t ending
+  // at the current position; C[0] is always 0 (the match may start anywhere).
+  const C = new Uint32Array(m + 1);
+  for (let i = 0; i <= m; i += 1) C[i] = i;
+  let lact = Math.min(k + 1, m); // the last row that can still be <= k
+  let best: number | null = null;
+  for (let j = 0; j < t.length; j += 1) {
+    const tc = t.charCodeAt(j);
+    let pC = 0; // C[i-1] of the previous column
+    let nC = 0; // C[i-1] of this column
+    for (let i = 1; i <= lact; i += 1) {
+      const old = C[i]!;
+      if (p.charCodeAt(i - 1) === tc) {
+        nC = pC;
+      } else {
+        if (pC < nC) nC = pC;
+        if (old < nC) nC = old;
+        nC += 1;
+      }
+      pC = old;
+      C[i] = nC;
+    }
+    while (lact > 0 && C[lact]! > k) lact -= 1;
+    if (lact === m) {
+      const d = C[m]!;
+      if (best === null || d < best) best = d;
+      if (best === 0) return 0;
+    } else {
+      lact += 1;
+    }
+  }
+  return best;
+}
+
+/** The smallest edit distance between `p` and any substring of `t`, with no cut-off (O(|p|·|t|)). */
+function bestAlignmentFull(p: string, t: string): number {
+  const m = p.length;
+  let prev = new Uint32Array(m + 1);
+  let curr = new Uint32Array(m + 1);
+  for (let i = 0; i <= m; i += 1) prev[i] = i;
+  let best = prev[m]!;
+  for (let j = 0; j < t.length; j += 1) {
+    const tc = t.charCodeAt(j);
+    curr[0] = 0;
+    for (let i = 1; i <= m; i += 1) {
+      const cost = p.charCodeAt(i - 1) === tc ? 0 : 1;
+      const sub = prev[i - 1]! + cost;
+      const del = prev[i]! + 1;
+      const ins = curr[i - 1]! + 1;
+      curr[i] = sub < del ? (sub < ins ? sub : ins) : del < ins ? del : ins;
+    }
+    if (curr[m]! < best) best = curr[m]!;
+    const tmp = prev;
+    prev = curr;
+    curr = tmp;
+  }
+  return best;
+}
+
+/**
+ * Best-match ratio of `needle` as a substring of `haystack`, in [0, 1]:
+ * `1 − d / |needle|`, where d is the smallest edit distance between the
+ * needle and ANY substring of the haystack (both pre-normalized via
+ * {@link normalizeForFuzzy}: NFKC, diacritics, smart quotes, dashes,
+ * lowercase). An exact occurrence is 1; an empty needle is 1 (vacuous match,
+ * as jaroWinkler).
  *
  * @example
- * levenshteinSubstring("attention is all you need", "we propose attention is all you need as a baseline") // > 0.99
- * levenshteinSubstring("hello", "world") // ≈ 0.2
+ * levenshteinSubstring("attention is all you need", "we propose attention is all you need as a baseline") // 1
+ * levenshteinSubstring("hello", "world") // 0.2
  */
 export function levenshteinSubstring(needle: string, haystack: string): number {
-  // Strict-equality short-circuit on raw inputs.
   if (needle === haystack) return 1;
-
   const N = normalizeForFuzzy(needle);
   const H = normalizeForFuzzy(haystack);
+  if (N.length === 0 || H.includes(N)) return 1;
+  return 1 - bestAlignmentFull(N, H) / N.length;
+}
 
-  if (N === H) return 1;
-  if (N.length === 0) return 1; // vacuous match per plan task 1.2 behavior contract
-  if (N.length > H.length) return 0;
+// ---------------------------------------------------------------------------
+// Quote matching (Pass 3, VRFY-19).
+// ---------------------------------------------------------------------------
 
-  const nLen = N.length;
-  let minDist = nLen;
+/**
+ * A source text or a quote as Pass 3 compares them: normalizeForFuzzy (NFKC
+ * — ligatures —, soft hyphens removed, smart quotes straightened, dashes to
+ * `-`, `…` to `...`, diacritics stripped, whitespace collapsed, lowercase),
+ * spaced dots `. . .` read as `...`, and a word a PDF broke across a line
+ * (`trans- former`) joined.
+ */
+export function normalizeForQuote(s: string): string {
+  return normalizeForFuzzy(s)
+    .replace(/\.(?:\s*\.){2}/g, '...')
+    .replace(/(\p{L})-\s+(\p{Ll})/gu, '$1$2');
+}
 
-  // Sliding window: at each start position s in [0, H.length - nLen],
-  // compute levenshtein(H.substring(s, s + nLen), N) and track the min.
-  // Early-exit if we hit 0 (exact substring match).
-  for (let s = 0; s <= H.length - nLen; s++) {
-    const window = H.substring(s, s + nLen);
-    const d = levenshtein(window, N);
-    if (d < minDist) minDist = d;
-    if (minDist === 0) break;
+/** A source text normalized once for many quotes. */
+export interface PreparedText {
+  readonly normalized: string;
+}
+
+export function prepareQuoteText(text: string): PreparedText {
+  return { normalized: normalizeForQuote(text) };
+}
+
+export interface QuoteMatch {
+  /** True when the normalized quote (every segment of an elided one) occurs verbatim. */
+  readonly verbatim: boolean;
+  /**
+   * 1 − (edit distance / quote length) of the best match found, in [0, 1].
+   * A quote that is not found reports the best match within the diagnostic
+   * bound (0 when no passage comes close).
+   */
+  readonly ratio: number;
+}
+
+/** Cells (quote length × text length) the diagnostic ratio of an unmatched quote may cost. */
+const DIAGNOSTIC_CELLS = 60_000_000;
+
+/** An elision mark in a normalized quote: `...` (from `…` too), optionally in brackets. */
+const ELISION_RE = /\s*\[?\s*\.\.\.\s*\]?\s*/g;
+
+/** The quote's matchable core: leading and trailing punctuation dropped (a quote's own `.` or `,`). */
+function core(s: string): string {
+  return s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+}
+
+/** One segment's best match at or after `from`: its distance (null when none within `maxDist`) and where it ends. */
+function segmentMatch(seg: string, text: string, from: number, maxDist: number): { dist: number | null; end: number } {
+  const at = text.indexOf(seg, from);
+  if (at !== -1) return { dist: 0, end: at + seg.length };
+  const rest = text.slice(from);
+  const dist = substringDistance(seg, rest, maxDist);
+  if (dist === null) return { dist: null, end: from };
+  // Where the best match ends: the first end position at that distance.
+  const end = firstEndAt(seg, rest, dist);
+  return { dist, end: from + end };
+}
+
+/** The first end offset (exclusive) in `t` of a substring within `dist` of `p`. */
+function firstEndAt(p: string, t: string, dist: number): number {
+  const m = p.length;
+  const C = new Uint32Array(m + 1);
+  for (let i = 0; i <= m; i += 1) C[i] = i;
+  let lact = Math.min(dist + 1, m);
+  for (let j = 0; j < t.length; j += 1) {
+    const tc = t.charCodeAt(j);
+    let pC = 0;
+    let nC = 0;
+    for (let i = 1; i <= lact; i += 1) {
+      const old = C[i]!;
+      if (p.charCodeAt(i - 1) === tc) nC = pC;
+      else {
+        if (pC < nC) nC = pC;
+        if (old < nC) nC = old;
+        nC += 1;
+      }
+      pC = old;
+      C[i] = nC;
+    }
+    while (lact > 0 && C[lact]! > dist) lact -= 1;
+    if (lact === m) return j + 1;
+    lact += 1;
   }
+  return t.length;
+}
 
-  return 1 - minDist / nLen;
+/**
+ * How well `quote` matches the source `text` (a prepared text is normalized
+ * once for all of a source's quotes). Verbatim after normalization is the
+ * PASS case; `ratio >= QUOTE_LEV_THRESHOLD` the FUZZY case; below it the
+ * quote is NOT_FOUND. A quote with elisions matches when each of its
+ * segments does, in order.
+ */
+export function matchQuote(quote: string, text: string | PreparedText): QuoteMatch {
+  const hay = typeof text === 'string' ? normalizeForQuote(text) : text.normalized;
+  const needle = normalizeForQuote(quote);
+  const segments = needle
+    .split(ELISION_RE)
+    .map(core)
+    .filter((s) => /[\p{L}\p{N}]/u.test(s));
+  if (segments.length === 0) return { verbatim: true, ratio: 1 };
+  let from = 0;
+  let total = 0;
+  let distSum = 0;
+  let verbatim = true;
+  let found = true;
+  for (const seg of segments) {
+    total += seg.length;
+    const maxDist = Math.floor(seg.length * (1 - QUOTE_LEV_THRESHOLD));
+    const m = segmentMatch(seg, hay, from, maxDist);
+    if (m.dist === null) {
+      found = false;
+      break;
+    }
+    if (m.dist > 0) verbatim = false;
+    distSum += m.dist;
+    from = m.end;
+  }
+  if (found) return { verbatim, ratio: total === 0 ? 1 : 1 - distSum / total };
+  // Not found: the best whole-quote match within the diagnostic bound, for the row.
+  const whole = segments.join(' ');
+  if (whole.length * hay.length > DIAGNOSTIC_CELLS) return { verbatim: false, ratio: 0 };
+  const d = substringDistance(whole, hay, Math.floor(whole.length * 0.5));
+  return { verbatim: false, ratio: d === null ? 0 : Math.max(0, 1 - d / whole.length) };
 }

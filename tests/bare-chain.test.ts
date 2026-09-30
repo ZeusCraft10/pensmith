@@ -230,7 +230,7 @@ test('GRND-18: the step exits with the last verb\'s code — a blocking verify e
   assert.equal(verify.status, EXIT_BLOCKED, `${verify.stdout}\n${verify.stderr}`);
 });
 
-test('review round 3 (D-18-43): a section left `unverifiable` by advisory rows only (its quoted source\'s text cannot be fetched) is verified ONCE; the chain moves on', async () => {
+test('review round 3 (D-18-43), Phase 20 (D-20-03): a section left `unverifiable` by a quote whose source text cannot be checked is verified ONCE; next and resume report attention instead of re-billing it', async () => {
   const sb = await sandbox('bare-chain-advisory');
   await seedPaper(sb.root, TWO_SECTIONS);
   // GRND-14 (Phase 18/19 merge): the drafter may keep a direct quote only from a
@@ -242,22 +242,33 @@ test('review round 3 (D-18-43): a section left `unverifiable` by advisory rows o
   const lib = JSON.parse(readFileSync(libPath, 'utf8')) as { entries: Array<Record<string, unknown>> };
   for (const e of lib.entries) if (e['citekey'] === RECORDED.citekey) e['oa_url'] = 'https://example.org/aspelmeyer2009.pdf';
   writeFileSync(libPath, `${JSON.stringify(lib, null, 2)}\n`);
-  // A direct quote: offline, Pass 3 cannot fetch that PDF — PDF/TEXT_UNAVAILABLE, advisory (Pitfall 3).
+  // A direct quote: offline with no contact email, Pass 3 cannot ask Unpaywall
+  // for the source's open-access copy — UNVERIFIABLE-QUOTE, which blocks
+  // (D-20-02, D-20-03; before Phase 20 it was the advisory PDF/TEXT_UNAVAILABLE
+  // and the chain moved on to §2).
   sb.mock.script('section-drafter', {
     text: `# Introduction\n\nAs the authors put it, "measurement always shapes what is observed in these systems, whatever the apparatus and whatever the observer happens to intend" [@${RECORDED.citekey}].\n`,
   });
   const r = await sb.run(['--yolo']);
-  assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
+  assert.equal(r.status, EXIT_BLOCKED, `${r.stdout}\n${r.stderr}`);
   const verification = readFileSync(sectionFile(sb.root, 1, 'introduction', 'VERIFICATION.md'), 'utf8');
   assert.match(verification, /^Status: unverifiable$/m);
-  assert.match(verification, /\*\*(?:PDF|TEXT)_UNAVAILABLE\*\*/);
-  assert.doesNotMatch(verification, /\*\*UNVERIFIABLE(?:-NETWORK)?\*\*/, 'no blocking row');
-  assert.match(r.stderr, /^pensmith: ran plan §1, write §1; next: plan §2$/m, 'write verified §1 once; the chain does not verify it again');
+  assert.match(verification, /UNVERIFIABLE-QUOTE/);
+  assert.match(verification, /Unpaywall needs a contact email/);
+  assert.doesNotMatch(verification, /(?:PDF|TEXT)_UNAVAILABLE/, 'nothing writes the pre-Phase-20 labels');
+  assert.match(
+    r.stderr,
+    /^pensmith: ran plan §1, write §1 \(exit 4\); next: status \(attention: section 1 could not be verified: .*UNVERIFIABLE-QUOTE/m,
+    'write verified §1 once; the chain does not verify it again',
+  );
+  assert.ok(!existsSync(sectionFile(sb.root, 2, 'discussion', 'DRAFT.md')), 'a blocking section stops the chain');
   const calls = sb.mock.requests.length;
-  const next = await sb.run(['next', '--yolo']);
-  assert.equal(next.status, EXIT_OK, `${next.stdout}\n${next.stderr}`);
-  assert.match(next.stderr, /^pensmith next: → plan$/m, 'the router walks on to §2, never back to verify §1');
-  assert.ok(sb.mock.requests.length > calls);
+  for (const verb of ['next', 'resume']) {
+    const r2 = await sb.run([verb, '--yolo']);
+    assert.equal(r2.status, EXIT_OK, `${r2.stdout}\n${r2.stderr}`);
+    assert.match(r2.stdout, /attention: section 1 could not be verified: .*UNVERIFIABLE-QUOTE/);
+  }
+  assert.equal(sb.mock.requests.length, calls, 'no model call: the unchanged draft is not re-verified');
 });
 
 test('GRND-18: `plan` typed without a number stays one verb (the chain is only for bare / next / resume)', async () => {

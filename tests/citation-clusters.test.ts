@@ -225,8 +225,9 @@ test('Pass 3 input: a quote followed by [-@k] or @k, or introduced by a narrativ
   assert.deepEqual(keys(`@vaswani2017 puts it this way:\n\n> ${QUOTE}\n\nNext.\n`), ['block:vaswani2017']);
   assert.deepEqual(keys(`@vaswani2017 puts it this way:\r\n\r\n> ${QUOTE}\r\n\r\nNext.\r\n`), ['block:vaswani2017'], 'CRLF alike');
   assert.deepEqual(keys(`> ${QUOTE}\n\n-@vaswani2017 again.\n`), ['block:vaswani2017']);
-  // A narrative citation in an EARLIER sentence does not claim the quote.
-  assert.deepEqual(keys(`@vaswani2017 built it. Later work says "${QUOTE}".`), []);
+  // A narrative citation in an EARLIER sentence does not claim the quote: it is
+  // UNATTRIBUTED (a null key), which Pass 3 blocks (VRFY-18).
+  assert.deepEqual(keys(`@vaswani2017 built it. Later work says "${QUOTE}".`), ['inline:null']);
 });
 
 test('Pass 3 input: a cited quote after a short "quoted" phrase is still extracted (the closing mark never swallows the next quote)', () => {

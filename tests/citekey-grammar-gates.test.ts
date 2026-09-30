@@ -93,7 +93,7 @@ test('review round 2: a quote cited with a mixed-case key, a locator or a cluste
   // Pass 3 checks every one of them (offline here: the text is unavailable, but none is dropped).
   const pass3 = await runPass3(draft, new Map());
   assert.equal(pass3.length, 4);
-  assert.ok(pass3.every((r) => r.verdict !== 'OK'), 'nothing passes without text');
+  assert.ok(pass3.every((r) => r.verdict !== 'PASS' && r.verdict !== 'FUZZY'), 'nothing passes without text');
   // Pass 1 reads the same keys; a key the library does not have is FABRICATED (blocking).
   const root = paper();
   await ingestZoteroItems(root, [LECUN]);

@@ -279,6 +279,27 @@ const QUERY_SETS = {
     // SRC-03: the current shape (raw_author_name), several OA locations.
     { file: 'doi-s41586-020-2649-2', calls: [{ fn: 'lookupById', arg: '10.1038/s41586-020-2649-2' }] },
     { file: 'doi-pone-0000001', calls: [{ fn: 'lookupById', arg: '10.1371/journal.pone.0000001' }] },
+    // Pass 3 (VRFY-19, D-20-18). An erratum whose only open-access copy is its
+    // arXiv PDF (29 KB, recorded in oa-pdf/arxiv-1205-6430): the offline chain
+    // Unpaywall → listed PDF → real text.
+    { file: 'doi-s0218301312920012', calls: [{ fn: 'lookupById', arg: '10.1142/S0218301312920012' }] },
+    // A BMC letter whose listed Springer PDF is larger than a cassette may be
+    // (so offline it has no answer) and whose Europe PMC full text is recorded
+    // (europepmc/pmc13598034): Pass 3 reads the Europe PMC text.
+    { file: 'doi-s43044-026-00785-w', calls: [{ fn: 'lookupById', arg: '10.1186/s43044-026-00785-w' }] },
+  ],
+  // Pass 3's third source (VRFY-19): Europe PMC's open-access full text (JATS).
+  europepmc: [
+    // "Sex disparities in STEMI care" (Dziewierz et al. 2026, 10.1186/s43044-026-00785-w), 16 KB.
+    { file: 'pmc13598034', calls: [{ fn: 'lookupFullText', arg: 'PMC13598034' }] },
+  ],
+  // Open-access PDFs Pass 3 reads (source-text.ts), redirects recorded hop by
+  // hop, bodies base64 (D-19-07). A PDF must fit the cassette cap: base64
+  // grows it by a third, so only PDFs under ~37 KB can be recorded.
+  'oa-pdf': [
+    // arXiv's `.pdf` URL answers 301 to /pdf/<id>, which serves the PDF Unpaywall
+    // lists for 10.1142/S0218301312920012 (Kisslinger et al., an erratum, 29 KB).
+    { file: 'arxiv-1205-6430', calls: [{ fn: 'fetch', arg: 'https://arxiv.org/pdf/1205.6430.pdf' }] },
   ],
   'retraction-watch': [
     // No retraction notice: a live "not retracted" answer.
@@ -426,8 +447,8 @@ async function runChild(adapter, files = []) {
   const spec = files.length > 0 ? all.filter((c) => files.includes(c.file)) : all;
   const bin = (rel) => pathToFileURL(path.join(REPO_ROOT, 'bin', 'lib', rel)).href;
   const http = await import(bin('http.js'));
-  // `generic`: plain URL fetches through the one transport (no adapter module).
-  const mod = adapter === 'generic'
+  // `generic` and `oa-pdf`: plain URL fetches through the one transport (no adapter module).
+  const mod = adapter === 'generic' || adapter === 'oa-pdf'
     ? {
         fetch: (url) => http.fetch(url, { source: 'generic', noCache: true, maxBytes: 16 * 1024 * 1024 }),
         // open-access.ts's PDF check: only the first bytes of the listed PDF
@@ -497,6 +518,12 @@ async function runChild(adapter, files = []) {
     if (call.fn === 'fetch') {
       const res = await mod.fetch(call.arg);
       if (res.status !== 200) throw new Error(`fetch answered HTTP ${res.status}`);
+      return;
+    }
+    if (call.fn === 'lookupFullText') {
+      // Europe PMC (Pass 3): record the open-access full text only.
+      const r = await mod.lookupFullText(call.arg);
+      if (r.kind !== 'found') throw new Error(`full text ${r.kind}: ${r.reason}`);
       return;
     }
     await mod[call.fn](call.arg);
