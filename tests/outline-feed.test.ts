@@ -147,7 +147,7 @@ test('GRND-07: a legacy OUTLINE.md (6 columns) registers with stubs seeded from 
   });
 });
 
-test('GRND-18: outline offers only the sources the citation verifier can check; a DataCite-only or identifier-less one is named, never allocated — an arXiv-only preprint and an ISBN-only book are offered', async () => {
+test('GRND-18: outline offers only the sources the citation verifier can check; an identifier-less one is named, never allocated — an arXiv-only preprint, an ISBN-only book and (VRFY-11) a DataCite DOI are offered', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     const { DEFAULT_SOURCES } = await import('./helpers/section-fixture.js');
     await seedBriefPaper(sb.root, {}, {
@@ -161,18 +161,18 @@ test('GRND-18: outline offers only the sources the citation verifier can check; 
     });
     // A reply that allocates a source outline was never offered is rejected like an invented key.
     const bad = threeSectionOutline();
-    bad.sections[1] = { ...bad.sections[1]!, assigned_sources: ['bahdanau2015', 'weights2020'] };
+    bad.sections[1] = { ...bad.sections[1]!, assigned_sources: ['bahdanau2015', 'huang2018'] };
     sb.mock!.script('outline-author', { data: bad }, { data: threeSectionOutline() });
     const r = await sb.runTsx(null, ['outline', '--yolo'], { env: { ANTHROPIC_API_KEY: KEY } });
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
-    const withheld = 'weights2020 \\(a DataCite DOI \\(10\\.5281\\) the verifier cannot check yet, and no arXiv id, PMID or ISBN\\), huang2018 \\(no DOI, arXiv id, PMID or ISBN\\)';
-    assert.match(r.stderr, new RegExp(`pensmith outline: WARN — 2 of 8 source\\(s\\) in LIBRARY\\.json are not offered to the outline because the citation verifier would not pass a citation of them: ${withheld}`));
+    const withheld = 'huang2018 \\(no DOI, arXiv id, PMID or ISBN\\)';
+    assert.match(r.stderr, new RegExp(`pensmith outline: WARN — 1 of 8 source\\(s\\) in LIBRARY\\.json are not offered to the outline because the citation verifier would not pass a citation of them: ${withheld}`));
     const { user } = requestParts(sb.mock!.bodiesFor('outline-author')[0]!);
     const offered = (JSON.parse(parsePromptBlocks(user).get('sources')!) as Array<{ citekey: string }>).map((s) => s.citekey);
-    assert.deepEqual(offered, [...DEFAULT_SOURCES.map((s) => s.citekey), 'raffel2019', 'kuhn1996'], 'Pass 1 checks an arXiv DataCite DOI at arXiv and an ISBN at the books registries');
+    assert.deepEqual(offered, [...DEFAULT_SOURCES.map((s) => s.citekey), 'raffel2019', 'kuhn1996', 'weights2020'], 'Pass 1 checks an arXiv DataCite DOI at arXiv, an ISBN at the books registries and a Zenodo DOI at DataCite');
     assert.equal(sb.mock!.callCount('outline-author'), 2, 'the unofferable key got the corrective turn');
     const rows = parseOutline(fs.readFileSync(path.join(sb.paper, 'OUTLINE.md'), 'utf8')).sections;
-    assert.ok(rows.every((row) => !row.assigned_sources.includes('weights2020') && !row.assigned_sources.includes('huang2018')));
+    assert.ok(rows.every((row) => !row.assigned_sources.includes('huang2018')));
 
     // D-18-37: where the user decides — the approval gate — the withheld sources are named too.
     sb.mock!.script('outline-author', { data: threeSectionOutline() });
@@ -181,7 +181,7 @@ test('GRND-18: outline offers only the sources the citation verifier can check; 
     const gate = asked.stderr.slice(asked.stderr.indexOf('Proposed outline:'));
     assert.match(
       gate,
-      new RegExp(`Not offered to the outline \\(2 of 8 LIBRARY\\.json source\\(s\\)\\) because the citation verifier would not pass a citation of them: ${withheld}\\. To use one the verifier cannot check, \`pensmith add\` its DOI, arXiv id, PMID or ISBN`),
+      new RegExp(`Not offered to the outline \\(1 of 8 LIBRARY\\.json source\\(s\\)\\) because the citation verifier would not pass a citation of them: ${withheld}\\. To use one the verifier cannot check, \`pensmith add\` its DOI, arXiv id, PMID or ISBN`),
     );
   });
 });
