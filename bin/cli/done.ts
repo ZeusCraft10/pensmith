@@ -28,6 +28,7 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
+import { runFreshnessForDraft } from '../lib/verify/pass1.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
@@ -798,6 +799,24 @@ function writeExportFindings(
   }
 }
 
+/**
+ * Re-check, live, the retraction status of every source `text` cites whose
+ * LIBRARY.json status is `unknown` (research or an earlier verify could not
+ * decide it), recording each decided answer (VRFY-15, D-20-13). Skipped under
+ * --dry-run and for a bibliography that does not parse; never throws (a
+ * failed re-check leaves the status unknown, as verify does).
+ */
+async function recheckUnknownRetractions(paperRoot: string, text: string): Promise<void> {
+  if (networkMode().dryRun) return;
+  const bib = loadBibliography(paperRoot);
+  if (!bib.exists || bib.problems.length > 0) return;
+  try {
+    await runFreshnessForDraft(text, bib.path, { bibEntries: bib.entries, root: paperRoot, onlyRecheck: true });
+  } catch {
+    // advisory bookkeeping: the gate core's Pass 1 still decides the export
+  }
+}
+
 /** True when FINAL.md is absent or older than the compiled DRAFT.md. Never throws. */
 function finalMdStale(finalMdPath: string, draftPath: string): boolean {
   try {
@@ -876,6 +895,11 @@ export const doneCommand = defineCommand({
       const current = new Map(sections.map((s) => [s.id, s.verifiedHash]));
       reasons.push(...compileRecordProblems(paperRoot, sections.map((s) => s.identity), current));
     }
+    // VRFY-15 (D-20-13): every cited source whose LIBRARY.json retraction
+    // status is `unknown` is re-checked live before export, never from the
+    // cache; a decided answer is recorded through the library writer — a
+    // retraction then blocks through Pass 1's stored-retraction rule below.
+    await recheckUnknownRetractions(paperRoot, draftMd);
     const bib = loadBibliography(paperRoot);
     const draftGate = await recomputeExportGate(paperRoot, draftMd, { sections, bib, recheck: true });
     for (const r of draftGate.refusals) reasons.push(`.paper/DRAFT.md: ${r}`);

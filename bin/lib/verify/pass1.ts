@@ -1005,7 +1005,12 @@ export async function runPass1(
 export async function runFreshnessForDraft(
   draftMd: string,
   citationsBibPath: string,
-  opts: { readonly bibEntries?: ReadonlyArray<Record<string, unknown>>; readonly root?: string } = {},
+  opts: {
+    readonly bibEntries?: ReadonlyArray<Record<string, unknown>>;
+    readonly root?: string;
+    /** Probe only the keys whose LIBRARY.json retraction status is `unknown` (done's re-check, D-20-13). */
+    readonly onlyRecheck?: boolean;
+  } = {},
 ): Promise<FreshnessResult[]> {
   const entries = opts.bibEntries !== undefined ? [...opts.bibEntries] : await parseBibFileAt(readFileSync(citationsBibPath, 'utf8'), citationsBibPath);
   const bibByCitekey = new Map<string, BibEntry>(entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]));
@@ -1030,5 +1035,6 @@ export async function runFreshnessForDraft(
       recheck: status.get(ck) === 'unknown',
     };
   });
-  return probeFreshnessAll(probes, opts.root !== undefined ? { root: opts.root } : {});
+  const list = opts.onlyRecheck === true ? probes.filter((p) => p.recheck === true) : probes;
+  return probeFreshnessAll(list, opts.root !== undefined ? { root: opts.root } : {});
 }

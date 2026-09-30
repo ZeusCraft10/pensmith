@@ -118,7 +118,10 @@ with `pensmith verify N`, and records no claim or decision for it.
      for the current draft, …) is listed with the
      staleness reasons — so a hand-appended fake citation is named as both.
    Citations whose `last_verified` is older than `[verification]
-   recheck_after_days` are re-checked past the HTTP cache (VRFY-28). With no
+   recheck_after_days` are re-checked past the HTTP cache (VRFY-28), and a
+   cited source whose `LIBRARY.json` retraction status is `unknown` is
+   re-checked live first, its decided answer recorded through the library
+   writer (VRFY-15, D-20-13) — a retraction then blocks as RETRACTED. With no
    `.paper/DRAFT.md` at all, the section records are checked first: when a
    section's verification blocks (compile refused, so there is no draft), done
    prints those reasons and exits EXIT_BLOCKED (4); only a paper that has not

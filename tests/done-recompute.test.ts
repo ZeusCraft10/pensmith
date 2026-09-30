@@ -175,6 +175,27 @@ test('VRFY-20 (paper scope): every section quote is indexed by its text with its
   assert.deepEqual(index.get(quoteTextSha256(c)), { section: '2', id: 'q2' });
 });
 
+test('VRFY-15 / D-20-13 (built CLI): done re-checks a cited source whose LIBRARY.json retraction status is unknown and records the answer', async () => {
+  const { upsertSources } = await import('../bin/lib/library.js');
+  const p = seedGatePaper('done-recheck-unknown', [SECTIONS[0]!], null);
+  await upsertSources(
+    p.root,
+    [{ source: 'crossref', id: '10.1038/nature14539', doi: '10.1038/nature14539', title: 'Deep learning', authors: ['LeCun, Yann', 'Bengio, Yoshua', 'Hinton, Geoffrey'], year: 2015, retraction_status: 'unknown', last_verified: new Date().toISOString(), citekey: 'lecun2015', raw: {} }],
+    { provenance: 'research' },
+  );
+  assert.equal(p.cli(['verify', '1']).status, EXIT_OK);
+  assert.equal(p.cli(['compile', '--yolo']).status, EXIT_OK);
+  // Unknown again (as research or an unanswered earlier check would leave it).
+  const libPath = join(p.root, '.paper', 'LIBRARY.json');
+  const lib = JSON.parse(readFileSync(libPath, 'utf8')) as { entries: Array<Record<string, unknown>> };
+  for (const e of lib.entries) if (e['citekey'] === 'lecun2015') e['retraction_status'] = 'unknown';
+  writeFileSync(libPath, `${JSON.stringify(lib, null, 2)}\n`);
+  const d = p.cli(['done', '--yolo', '--format', 'md']);
+  assert.equal(d.status, EXIT_OK, `${d.stdout}\n${d.stderr}`);
+  const after = JSON.parse(readFileSync(libPath, 'utf8')) as { entries: Array<Record<string, unknown>> };
+  assert.equal(after.entries.find((e) => e['citekey'] === 'lecun2015')?.['retraction_status'], 'clear', 'the recorded Retraction Watch answer decided it');
+});
+
 function runCliWithInput(p: GatePaper, args: readonly string[], input: string): { status: number | null; stdout: string; stderr: string } {
   const r = runCli(p.sb, p.root, args, { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input, timeoutMs: 120_000 });
   assert.doesNotMatch(r.stderr, STACK_LINE, r.stderr);

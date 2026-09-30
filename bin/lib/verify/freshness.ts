@@ -27,9 +27,11 @@
 //         clean, D-20-13).
 //
 // A key whose LIBRARY.json retraction status is `unknown` (research could not
-// decide it) is RE-CHECKED on every verify and done, never from the HTTP
-// cache (`refresh`); a decided answer (clear / retracted) is recorded through
-// the library writer (library.ts recordRetractionStatuses, under its lock).
+// decide it) is RE-CHECKED on every verify (with the rest of the probe) and
+// done (only those keys, before export: runFreshnessForDraft `onlyRecheck`),
+// never from the HTTP cache (`refresh`); a decided answer (clear / retracted)
+// is recorded through the library writer (library.ts recordRetractionStatuses,
+// under its lock).
 //
 // SSRF mitigation (T-04-05): the DOI is format-validated via doi.ts BEFORE any
 // request, and the HEAD target is always `https://doi.org/<normalized-doi>`.

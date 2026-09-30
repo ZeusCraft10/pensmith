@@ -46,9 +46,9 @@ or after editing DRAFT.md by hand).
 
 - `.paper/sections/<NN>-<slug>/VERIFICATION.md` — Status, draft hash, the Summary table, then the Pass-1, Pass-3 and draft-check rows, the accepted quotes and the advisory sections
 - `.paper/sections/<NN>-<slug>/QUOTE-ACCEPTANCES.json` — only when the user accepts a quote (step 7a)
-- `.paper/LIBRARY.json` — `last_verified` of the citations a registrar confirmed (step 10, through the library writer)
+- `.paper/LIBRARY.json` — `last_verified` of the citations a registrar confirmed (step 10), and the `retraction_status` of a cited source the library held as `unknown` once the freshness probe's live re-check decides it (VRFY-15), both through the library writer — which re-renders `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris` from the library when an entry changed (`last_verified` is written into the bib)
 - `.paper/sections/<NN>-<slug>/PLAN.md` — frontmatter status updated to `'verifying'` → `'verified'` | `'failed'` | `'unverifiable'` (D-08-AMENDED)
-- Only when `.paper/CITATIONS.bib` does not parse and `.paper/LIBRARY.json` exists: `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris` re-rendered from the library, the unreadable file kept as `.paper/CITATIONS.bib.unparsed-<time>.bak`, one stderr notice (SRC-12). This is the one write verify makes outside the section folder.
+- Only when `.paper/CITATIONS.bib` does not parse and `.paper/LIBRARY.json` exists: `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris` re-rendered from the library, the unreadable file kept as `.paper/CITATIONS.bib.unparsed-<time>.bak`, one stderr notice (SRC-12). These library-writer writes are the only ones verify makes outside the section folder.
 
 ## Body
 
@@ -149,6 +149,6 @@ or after editing DRAFT.md by hand).
 
     **Exit code** (RUN-09): 0 for `verified`; **4** (EXIT_BLOCKED) for `failed` and `unverifiable`; **2** (EXIT_USAGE) for an `--accept-quote` id that cannot be accepted (after the verification is written; nothing is recorded).
 
-11. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/` — except the bib repair of step 3 and the `last_verified` record of step 10 (paper-level files written by the library writer; no other section's files are ever touched).
+11. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/` — except the bib repair of step 3, the `last_verified` record of step 10 and a decided `unknown` retraction status (paper-level files written by the library writer, which re-renders CITATIONS.bib / .ris when an entry changed; no other section's files are ever touched).
 
 12. **Shell fallback** (TIER-06 equivalence path): `pensmith verify <N> [--accept-quote <id>] [--yolo]` (`--accept-quote` repeats, one quote id each). The MCP tool `pensmith_verify` takes the same ids as `accept_quote: ["q1", …]`, only after the user answered an AskUserQuestion confirmation.
