@@ -92,6 +92,33 @@ test('seam S-B: formatReference and provenanceTags', () => {
   assert.deepEqual(provenanceTags(mixed), ['search', 'zotero', 'bring-your-own', 'plan-research', 'imported']);
 });
 
+test('VRFY-15 (D-20-13): a DOI another agency registered says why its retraction status is unknown; a failed lookup says it failed', () => {
+  const zenodo = entry({
+    citekey: 'montani2023',
+    doi: '10.5281/zenodo.1212303',
+    title: 'spaCy',
+    authors: ['Montani, Ines'],
+    year: 2023,
+    retracted: false,
+    retraction_status: 'unknown',
+    retraction_details: 'no retraction data for DataCite DOIs',
+    last_verified: NOW,
+  }, ['research:openalex']);
+  const failed = entry({
+    citekey: 'doe2020',
+    doi: '10.5555/doe',
+    title: 'A paper',
+    authors: ['Doe, Jane'],
+    year: 2020,
+    retracted: false,
+    retraction_status: 'unknown',
+    last_verified: NOW,
+  });
+  const block = renderSourcesBlock([zenodo, failed]);
+  assert.match(block, /Retraction: retraction status unknown \(no retraction data for DataCite DOIs; it is re-checked at verify time\)/);
+  assert.match(block, /Retraction: retraction status unknown \(the lookup failed; it is re-checked at verify time\)/);
+});
+
 test('seam S-B: renderSourcesBlock is deterministic, ordered by relevance, list-only', () => {
   const block = renderSourcesBlock([BYO, WAKEFIELD, KUHN, LECUN]);
   assert.equal(block, renderSourcesBlock([LECUN, KUHN, WAKEFIELD, BYO]), 'input order does not matter');
