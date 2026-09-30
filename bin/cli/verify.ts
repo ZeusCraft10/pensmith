@@ -55,6 +55,7 @@ import {
   applyAcceptances,
   gateOutcome,
   type GateResult,
+  type GateInput,
   type GateRow,
   type LoadedBibliography,
   type Pass3GateRow,
@@ -137,6 +138,12 @@ export interface VerifySectionOptions {
   readonly interactive?: boolean;
   /** --yolo (the quote-accept gate never takes it as an answer). */
   readonly yolo?: boolean;
+  /**
+   * The Pass-1 / Pass-3 implementations the gate core runs (default: the
+   * production runPass1 / runPass3) — the seam a test uses to make a pass throw
+   * mid-verify (VRFY-16); the CLI never passes it.
+   */
+  readonly gateDeps?: GateInput['deps'];
 }
 
 /** What verifySection returns (the exit code follows exitCodeForResult). */
@@ -332,6 +339,7 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
     refresh,
     acceptanceSets,
     bib,
+    ...(opts.gateDeps !== undefined ? { deps: opts.gateDeps } : {}),
   });
 
   // VRFY-20: record the quotes the user accepts — by flag, or at the prompt.

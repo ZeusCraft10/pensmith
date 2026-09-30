@@ -97,9 +97,12 @@ function safeSnippet(s: string): string {
   return s.replace(/[\r\n]+/g, ' ').replace(/\*/g, '\\*');
 }
 
-/** A reason safe inside a row (one line). */
+/**
+ * A reason safe inside a row: one line, and no `**` a reader could take for a
+ * verdict (a registrar title or a failure message with asterisks is escaped).
+ */
 function oneLine(s: string): string {
-  return s.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+  return s.replace(/\s*[\r\n]+\s*/g, ' ').replace(/\*/g, '\\*').trim();
 }
 
 /** Render a Pass-3 row in the Phase 20 format (with its quote id). */
