@@ -302,7 +302,8 @@ function compiledSectionCount(pDir: string): number | null {
  * record (migrated with null hashes) cannot show done the compiled draft is the
  * one compile wrote (VRFY-27), so it is compiled again. A paper compiled before
  * that record existed falls back to the mtimes and COMPILE-REPORT.md
- * `sections_count` (done then asks for a recompile). Never throws.
+ * `sections_count`; when it still needs done, the walk sends it to compile
+ * first (done would refuse a draft with no record). Never throws.
  */
 function compiledDraftStale(
   pDir: string,
@@ -579,7 +580,13 @@ export async function resolveNextAction(
     // (done writes it after reading DRAFT.md, on every run that finds it absent
     // or older — so this never loops).
     const finalAt = mtimeOf(join(pDir, 'FINAL.md'));
-    if (finalAt === null || finalAt < (mtimeOf(join(pDir, 'DRAFT.md')) ?? 0)) return { verb: 'done' };
+    if (finalAt === null || finalAt < (mtimeOf(join(pDir, 'DRAFT.md')) ?? 0)) {
+      // VRFY-27: done exports only a compiled draft whose COMPILE-INPUTS.json
+      // proves it is the one compile wrote. With no usable record (a draft an
+      // older pensmith compiled, or a record that does not parse) done could
+      // only refuse, run after run — compile it again first.
+      return record === null ? { verb: 'compile' } : { verb: 'done' };
+    }
     return { verb: 'status', reason: 'done' };
   } catch (e) {
     // C5-HIGH BACKSTOP: any fs/parse op that throws despite the per-read guards

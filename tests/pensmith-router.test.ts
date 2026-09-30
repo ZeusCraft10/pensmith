@@ -201,8 +201,8 @@ test('VRFY-16: a verified section whose DRAFT.md is gone → { verb: "write" } �
   assert.equal((await resolveNextAction(root)).verb, 'write');
 });
 
-// === (f) DRAFT.md present, no FINAL.md → done ===
-test('UX-01 (f): DRAFT.md present, no FINAL.md → { verb: "done" }', { skip: !built }, async () => {
+// === (f) DRAFT.md present (with its compile record), no FINAL.md → done ===
+test('UX-01 (f): DRAFT.md present, no FINAL.md → { verb: "done" }; with no compile record → compile (VRFY-27)', { skip: !built }, async () => {
   const resolveNextAction = await loadResolve();
   const root = freshRoot();
   writeState(root, [{ n: 1, slug: 'intro' }]);
@@ -210,9 +210,23 @@ test('UX-01 (f): DRAFT.md present, no FINAL.md → { verb: "done" }', { skip: !b
   writePaperFile(root, 'OUTLINE.md');
   writeSectionPlan(root, 1, 'intro', 'verified');
   writePaperFile(root, 'DRAFT.md');
+  // done exports only a compiled draft its COMPILE-INPUTS.json vouches for: an
+  // older pensmith's compile (no record) is compiled again first, never sent to
+  // a done that can only refuse it.
+  assert.equal((await resolveNextAction(root)).verb, 'compile', 'VRFY-27: no compile record → compile');
+  await writeCompileRecordFor(root, [{ n: 1, slug: 'intro' }]);
   const decision = await resolveNextAction(root);
   assert.equal(decision.verb, 'done', 'UX-01: DRAFT.md + no FINAL.md routes to done');
 });
+
+/** The COMPILE-INPUTS.json compile writes, for the compiled DRAFT.md and `sections` as they are now. */
+async function writeCompileRecordFor(root: string, sections: Array<{ n: number; slug: string }>): Promise<void> {
+  const { writeCompileInputs } = await import('../bin/lib/compile-inputs.js');
+  const { createHash } = await import('node:crypto');
+  const compiledSha = createHash('sha256').update(readFileSync(join(root, '.paper', 'DRAFT.md'))).digest('hex');
+  const verifiedHashes = new Map(sections.map((s) => [String(s.n), 'a'.repeat(64)]));
+  await writeCompileInputs(root, sections, new Date().toISOString(), { compiledDraftSha256: compiledSha, verifiedHashes });
+}
 
 // ===========================================================================
 // C3-HIGH-1 TOTALITY — every SectionStateSchema state + the mixed stuck case.
@@ -517,7 +531,7 @@ test('GRND-18: "failed" whose draft hash equals verified_against_draft_hash → 
   });
 
 // A section redone or added after the last compile is compiled again (GRND-09/10, HARDEN-01's section redo).
-test('GRND-18: a section newer than the compiled DRAFT.md → compile; FINAL.md older than DRAFT.md → done; a changed section count → compile',
+test('GRND-18: a section newer than the compiled DRAFT.md → compile; FINAL.md older than DRAFT.md → done (compile first with no compile record); a changed section count → compile',
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const { utimesSync } = await import('node:fs');
@@ -536,9 +550,13 @@ test('GRND-18: a section newer than the compiled DRAFT.md → compile; FINAL.md 
     // §1 redone after the compile.
     utimesSync(sec, t(4), t(4));
     assert.equal((await resolveNextAction(root)).verb, 'compile');
-    // Recompiled; FINAL.md is now older than the compiled draft.
+    // Recompiled; FINAL.md is now older than the compiled draft. With no
+    // COMPILE-INPUTS.json done could only refuse (VRFY-27): compile writes one.
     utimesSync(join(root, '.paper', 'DRAFT.md'), t(5), t(5));
+    assert.equal((await resolveNextAction(root)).verb, 'compile', 'no compile record: compile before done');
+    await writeCompileRecordFor(root, [{ n: 1, slug: 'intro' }]);
     assert.equal((await resolveNextAction(root)).verb, 'done');
+    rmSync(join(root, '.paper', 'COMPILE-INPUTS.json'));
     utimesSync(join(root, '.paper', 'FINAL.md'), t(6), t(6));
     assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' });
     // A re-outline registered a second (verified) section the compiled draft does not hold.

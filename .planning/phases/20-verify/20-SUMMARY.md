@@ -42,6 +42,8 @@ Four streams built Phase 20 in parallel on seam S-C, then an integration pass me
 - With a missing or empty CITATIONS.bib the gate core rewrote every FABRICATED row to "the bibliography is missing / has no entries", including a bare identifier found in the prose, whose verdict came from its registrar; only cited keys' rows are rewritten now (`tests/gate-core.test.ts`).
 - The live e2e recording found two IEEE records that Crossref holds with the family and given names swapped ("Qi, Lin", "Xiulian, Du"), which Pass 1 called MIS-CITED. `name-match.ts` `authorSimilarity` now also reads the two names crosswise; both parts must match, and an initial matches the name it begins, so a different person still fails (`tests/name-match.test.ts`).
 - A **verified** section whose DRAFT.md was deleted still let the walk go on to compile, which could only refuse it (`missing … DRAFT.md — run \`pensmith write 1\``), and every bare run then said `ran compile (exit 4); next: compile`. The router now sends it to write like a written, verifying or unverifiable section without its draft (VRFY-16; `tests/pensmith-router.test.ts`, `tests/verify-malformed-bib.test.ts` through the built CLI). `workflows/next.md` still described the pre-S-13 routing (an unverifiable section as attention naming `verify N`, and "compile accepts" an unverifiable section); it now says the walk goes past it and compile refuses it with its options.
+- A compiled DRAFT.md with no COMPILE-INPUTS.json (compiled by a pensmith older than D-18-39, or a record that does not parse) and no current FINAL.md was routed to done, which refuses a draft with no record (VRFY-27) — so every bare run said `ran done (exit 4); next: done`. The router now sends it to compile first, which writes the record; a paper whose FINAL.md is current still reports done (`tests/pensmith-router.test.ts`; built CLI: compile, then done exports).
+- HARDEN-03 failed on seed 699952924: `findUnsupportedForms` read `$x, … -@k$` (two citation keys holding `$`) as inline TeX math and skipped the "(World Health Organization, 2020)" between them. A `$` inside a citation that began before it is part of the key and opens no math; math that opens first still runs to its closing `$`, as Pandoc reads it (`tests/unsupported-forms.test.ts`; the property test passes on that seed and on six random seeds of 4000 drafts).
 - The test runner leaked every test's mkdtemp dir into the system temp dir (the streams filled a disk with ~85k of them): `scripts/run-tests.mjs` points `TMPDIR` / `TEMP` / `TMP` at the per-run dir (the data dir is its `data/`), deleted with the run.
 
 **Cross-stream acceptance suites (§7.3).**
@@ -68,13 +70,14 @@ Edited in place, no new files there:
 | `skills/verify-section.md` | gate + integration | the `--accept-quote` route; the verdict list |
 | `workflows/add.md` | integration | DataCite / content-negotiation DOIs are added |
 | `workflows/write.md` | integration | containment also refuses citation forms the verifier cannot check; the quote floor is `quote_min_words` |
-| `workflows/next.md` | integration | S-13 routing (an unverifiable section does not stop the others; compile refuses it with its options); a section whose DRAFT.md is gone is re-drafted (VRFY-16) |
+| `workflows/next.md` | integration | S-13 routing (an unverifiable section does not stop the others; compile refuses it with its options); a section whose DRAFT.md is gone is re-drafted (VRFY-16); a compiled draft with no compile record is compiled again before done (VRFY-27) |
 | `workflows/outline.md`, `workflows/plan.md`, `skills/plan-section.md` | integration | Zenodo / figshare / Dryad DOIs are no longer withheld |
 
 ## Hand-offs
 
 - Phase 23 (PLUG-07 / PLUG-10): the MCP tools call `bin/lib/verify/gate.ts` `recomputeGate` and `bin/lib/quote-acceptance.ts` `recordQuoteAcceptances` (after an AskUserQuestion confirmation) as they stand.
 - Phase 21/22 (EXP-03 / EXP-04): note-style footnotes are produced by the exporter after the gate and never re-enter it.
+- Phase 21/22 (EXP): Pandoc reads `[@k 33]` (a number with no comma) as page 33, while the offline exporter keeps the number as a suffix. Phase 20 left exports unchanged (20-grammar-SUMMARY "Locators unchanged"); aligning the offline exporter with Pandoc is an export item.
 - The recorded e2e corpus (D-20-16) was re-recorded after the merge with `npm run cassettes:refresh -- --corpus e2e` (`PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org`). It has six kept sources, each OK at live Pass 1. The OpenAlex searches (keyless daily budget) and some Semantic Scholar searches were rate-limited and are recorded as expected misses. PubMed `efetch` answers exceed the 51200-byte cassette cap and stay unrecorded; this is named in the adapter's status and is never fatal. Re-record the corpus once OpenAlex has keyless budget again if you want those searches in it.
 
 ## Verification (integration, 2026-09-30, Node 22, as root in the cloud container)

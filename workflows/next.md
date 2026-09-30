@@ -69,7 +69,9 @@ Once every section is verified, compile runs whenever the compiled `DRAFT.md` is
 `COMPILE-INPUTS.json` says it was made from other sections or other section draft/verification
 bytes (a redone, re-verified, added or dropped section — decided from content, so a git checkout
 or a sync client that reorders mtimes does not recompile), and done runs whenever `FINAL.md` is
-missing or older than the compiled draft (done refreshes it every time it exports). When the
+missing or older than the compiled draft (done refreshes it every time it exports). done exports
+only a compiled draft its `COMPILE-INPUTS.json` proves compile wrote (VRFY-27), so a compiled
+draft with no usable record (an older pensmith's compile) is compiled again first. When the
 user's OUTLINE.md and STATE.json list different sections, the router reports attention naming
 `pensmith outline`, which applies the edited outline.
 
