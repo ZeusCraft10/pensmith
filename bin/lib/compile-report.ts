@@ -9,6 +9,10 @@
 //   3. ## Citation Density
 //   4. ## Compile-Staleness Resolved
 //   5. ## Advisory Findings   (Phase 4 writes the explicit empty marker)
+// then, D-14 additive (Phase 20, VRFY-19 / VRFY-20), always present with an
+// empty marker when there is nothing to list:
+//   6. ## Accepted Quotes                   (quotes accepted without a source check, with their timestamps)
+//   7. ## Quotes Verified Against Your Files (quotes checked against the user's own PDFs)
 //
 // Body sections with no entries emit their own explicit empty marker so the
 // reader can distinguish "ran, nothing to report" from "section omitted".
@@ -96,6 +100,32 @@ export function citationDensityForReport(r: CitationDensityReport): { entries: C
   };
 }
 
+/** A quote the user accepted although no source text could be checked (VRFY-20). */
+export interface AcceptedQuoteEntry {
+  /** The section (`1`, `1a`). */
+  section: string;
+  /** The quote's id in its section draft (`q1`). */
+  id: string;
+  citekey: string;
+  excerpt: string;
+  /** When the user accepted it (ISO-8601). */
+  accepted_at: string;
+  via: 'flag' | 'prompt';
+}
+
+/** A quote verified against the user's own PDF (VRFY-19). */
+export interface LocalFileQuoteEntry {
+  id: string;
+  citekey: string;
+  excerpt: string;
+  /** The PDF (`sources/<file>`). */
+  file: string;
+}
+
+/** The empty markers of the two quote sections (D-14 additive, Phase 20). */
+export const ACCEPTED_QUOTES_EMPTY_MARKER = '_No quotes accepted without a source check._';
+export const LOCAL_FILE_QUOTES_EMPTY_MARKER = '_No quotes verified against your own files._';
+
 /** One compile-staleness resolution entry. */
 export interface StalenessEntry {
   section: string;
@@ -120,6 +150,10 @@ export interface CompileReportInput {
   /** The paper-wide density line (discipline, band, mean per paragraph). */
   citation_density_summary?: CitationDensitySummary;
   staleness_resolved?: StalenessEntry[];
+  /** Quotes accepted without a source check (VRFY-20; D-14 additive `## Accepted Quotes`). */
+  accepted_quotes?: AcceptedQuoteEntry[];
+  /** Quotes verified against the user's own PDFs (VRFY-19; `## Quotes Verified Against Your Files`). */
+  local_file_quotes?: LocalFileQuoteEntry[];
   /**
    * The offline marker line for the body (D-17-08). undefined → derived from the
    * current network mode (http-mock.ts offlineMarkerLine); null → no marker.
@@ -233,6 +267,16 @@ export function renderCompileReport(input: CompileReportInput): string {
 
   const marker = input.offline_marker !== undefined ? input.offline_marker : offlineMarkerLine();
 
+  const quoteText = (s: string): string => s.replace(/[\r\n]+/g, ' ').replace(/"/g, "'");
+  const acceptedBody = (input.accepted_quotes ?? []).length
+    ? (input.accepted_quotes ?? []).map(
+        (a) => `- section ${a.section} ${a.id} [@${a.citekey}] "${quoteText(a.excerpt)}" — accepted ${a.accepted_at} (${a.via === 'flag' ? '--accept-quote' : 'at the prompt'})`,
+      )
+    : [ACCEPTED_QUOTES_EMPTY_MARKER];
+  const localBody = (input.local_file_quotes ?? []).length
+    ? (input.local_file_quotes ?? []).map((q) => `- ${q.id} [@${q.citekey}] "${quoteText(q.excerpt)}…" — verified against your local file ${q.file}`)
+    : [LOCAL_FILE_QUOTES_EMPTY_MARKER];
+
   return [
     renderFrontmatter(input),
     '',
@@ -246,6 +290,10 @@ export function renderCompileReport(input: CompileReportInput): string {
     section('## Compile-Staleness Resolved', stalenessBody),
     '',
     section('## Advisory Findings', [ADVISORY_EMPTY_MARKER]),
+    '',
+    section('## Accepted Quotes', acceptedBody),
+    '',
+    section('## Quotes Verified Against Your Files', localBody),
     '',
   ].join('\n');
 }

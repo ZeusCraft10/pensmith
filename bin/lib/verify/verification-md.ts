@@ -33,7 +33,7 @@
 //
 // PURE: no I/O.
 
-import { renderPass1VerdictRow } from './verdict-rows.js';
+import { renderPass1VerdictRow, dryRunVerificationReason } from './verdict-rows.js';
 import { DRAFT_VERDICTS, LEGACY_UNAVAILABLE_VERDICTS, PASS1_VERDICTS, PASS3_VERDICTS, UNATTRIBUTED_CITEKEY } from './verdicts.js';
 import type { GateRow, AcceptedQuote } from './gate.js';
 import type { FreshnessResult } from './freshness.js';
@@ -336,6 +336,33 @@ export function summaryMismatches(md: string): string[] {
   check('Pass-3', doc.pass3.map(label));
   check('Draft', doc.draft.map(label));
   if (doc.summary.some((s) => s.pass === 'Pass-2') || doc.pass2Verdicts.length > 0) check('Pass-2', doc.pass2Verdicts);
+  return out;
+}
+
+/**
+ * What a section's VERIFICATION.md adds to compile's and done's refusals
+ * (D-20-04 — a local record can only make the gate stricter): missing, no
+ * Status line, `Status: failed`, a --dry-run verification outside --dry-run
+ * (RUN-27), or a `Draft:` hash of another draft than `draftHash`. Its verdict
+ * rows are never trusted either way: the gate core recomputes them.
+ */
+export function verificationRecordReasons(md: string | null, id: string, draftHash: string, dryRun: boolean): string[] {
+  if (md === null) return [`missing VERIFICATION.md (the section was never verified) — run \`pensmith verify ${id}\``];
+  const doc = parseVerificationMd(md);
+  if (doc.status === null) {
+    return [`no verifiable VERIFICATION.md (no Status line: the section was never verified, or the verifier output is unreadable) — run \`pensmith verify ${id}\``];
+  }
+  const dry = dryRunVerificationReason(md, dryRun);
+  if (dry !== null) return [dry];
+  const out: string[] = [];
+  if (doc.status.toLowerCase() === 'failed') {
+    out.push(
+      `VERIFICATION.md Status is 'failed' — repair the flagged citations (\`pensmith plan ${id} --revise\`) or re-draft (\`pensmith write ${id}\`), then \`pensmith verify ${id}\``,
+    );
+  }
+  if (doc.draftHash !== null && doc.draftHash !== draftHash) {
+    out.push(`VERIFICATION.md judged another draft than DRAFT.md holds — run \`pensmith verify ${id}\``);
+  }
   return out;
 }
 

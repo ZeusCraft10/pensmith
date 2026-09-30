@@ -40,11 +40,12 @@
 //   planned + `stub: true` (the outline's) → plan
 //   planned (a planner-written PLAN.md)   → write
 //   writing                               → write
-//   written / verifying                   → verify
+//   written / verifying                   → verify (a crashed verify left `verifying`)
+//   written / verifying / unverifiable WITHOUT a DRAFT.md → write (VRFY-16)
 //   unverifiable, draft changed           → verify
-//   unverifiable, the draft verify judged → continue when its VERIFICATION.md
-//     has advisory rows only (compile accepts it); else status/attention
-//     naming `pensmith verify N` (never a paid verify loop)
+//   unverifiable, the draft verify judged → continue (S-13: the other sections
+//     go on; compile recomputes it and refuses with its options — never a
+//     paid verify loop; `status` names them, unverifiableSectionDetail)
 //   failed WITH a DRAFT.md, draft changed → verify (re-attempt verification)
 //   failed, the draft verify judged       → status/attention naming the repair
 //   failed WITHOUT a DRAFT.md or with a failure_reason → status/attention,
@@ -57,6 +58,10 @@
 // outlineProblem); OUTLINE.md rows that disagree with STATE.json's
 // registrations → status/attention naming the divergence and `pensmith
 // outline` (D-18-38).
+// After the walk: a compiled DRAFT.md whose bytes differ from the sha256
+// COMPILE-INPUTS.json recorded (a hand edit, VRFY-27) → status/attention
+// (recompiling would replace the edit); else compile when the compiled draft
+// is stale, done when FINAL.md is, status/done otherwise.
 //
 // Imports: loadState/StateNotFoundError (state.ts), existsSync (node:fs), join
 // (node:path), paperDir/sectionPlan (paths.ts), loadFrontmatterDocSync
@@ -65,7 +70,7 @@
 // HANDOFF.json per H4).
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { loadState, StateNotFoundError } from './state.js';
 import { dryRunWorkspaceActive, paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { loadFrontmatterDocSync } from './frontmatter.js';
@@ -76,6 +81,8 @@ import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
 import { parseBlockingVerdictRows, sectionVerificationReasons } from './verify/verdict-rows.js';
 import { RETRY_ONLINE_VERDICTS } from './verify/verdicts.js';
 import { isResearchDone } from './research-sentinel.js';
+import { ACCEPTABLE_QUOTE_VERDICT } from './verify/verdicts.js';
+import { readCompileInputs, fileSha256 } from './compile-inputs.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -202,8 +209,8 @@ function draftHashOf(draftPath: string, assignedSources: readonly string[]): str
 
 /**
  * Why a section's VERIFICATION.md may not compile (verdict-rows.ts
- * sectionVerificationReasons, the gate compile and done share); a missing or
- * unreadable file is one reason. Never throws.
+ * sectionVerificationReasons); a missing or unreadable file is one reason.
+ * Never throws.
  */
 function verificationBlockers(verificationPath: string): string[] {
   let md: string;
@@ -221,6 +228,45 @@ function verificationBlockers(verificationPath: string): string[] {
     return [`${list} are UNVERIFIABLE (their sources could not be checked: offline, --dry-run or a failed lookup)`];
   }
   return reasons;
+}
+
+/**
+ * What an `unverifiable` section needs, in one line naming the remedies
+ * (S-13, VRFY-20, VRFY-24): a quote no source text could be checked against
+ * (UNVERIFIABLE-QUOTE) — add the source's PDF, paraphrase it, or accept that
+ * one quote; stub text (PLACEHOLDER) — re-draft with a model configured; a
+ * source that could not be reached — re-run the check online. Null when the
+ * section's VERIFICATION.md names no blocking row. The walk goes on past such
+ * a section (compile refuses it with the same options); `status` shows this
+ * line. Never throws.
+ */
+export function unverifiableSectionDetail(verificationPath: string, label: string): string | null {
+  let md: string;
+  try {
+    md = readFileSync(verificationPath, 'utf8');
+  } catch {
+    return `section ${label} could not be verified: its VERIFICATION.md is missing or unreadable — run \`pensmith verify ${label}\``;
+  }
+  const rows = parseBlockingVerdictRows(md);
+  if (rows.length === 0) return null;
+  const parts: string[] = [];
+  const quotes = rows.filter((r) => r.verdict === ACCEPTABLE_QUOTE_VERDICT);
+  if (quotes.length > 0) {
+    const ids = [...new Set(quotes.map((q) => q.quoteId ?? '?'))];
+    parts.push(
+      `${ids.length} quote(s) (${ids.join(', ')}) could not be checked against any source text — add the source's PDF (\`pensmith add <pdf>\`), ` +
+        `paraphrase (\`pensmith plan ${label} --revise\`), or accept a quote (\`pensmith verify ${label} --accept-quote ${ids[0] as string}\`)`,
+    );
+  }
+  if (rows.some((r) => r.verdict === 'PLACEHOLDER')) {
+    parts.push(`its draft is stub text written with no model configured (PLACEHOLDER) — re-draft it with a model: \`pensmith write ${label}\``);
+  }
+  const network = rows.filter((r) => r.verdict === 'UNVERIFIABLE' || RETRY_ONLINE_VERDICTS.has(r.verdict));
+  if (network.length > 0) {
+    parts.push(`${network.map((r) => `[@${r.citekey}]`).join(', ')} could not be checked (offline or a failed lookup) — re-run \`pensmith verify ${label}\` online`);
+  }
+  if (parts.length === 0) parts.push(verificationBlockers(verificationPath).join('; '));
+  return `section ${label} could not be verified: ${parts.join('; ')}`;
 }
 
 /** A file's mtime (ms), or null when it is absent or unreadable. Never throws. */
@@ -416,7 +462,7 @@ export async function resolveNextAction(
 
       switch (r.status) {
         case 'verified':
-          continue; // the ONLY continue case
+          continue; // compile refuses a verified section whose DRAFT.md is gone, naming `pensmith write N`
         case 'planned':
           // GRND-13: the outline's stub still needs its plan; a planned
           // section (no `stub`) is ready to draft. Only write sets 'writing'.
@@ -460,30 +506,25 @@ export async function resolveNextAction(
           }
           return { verb: 'verify', ...id }; // the draft changed: re-attempt verification — NOT continue
         case 'unverifiable': {
-          // Review round 3: `unverifiable` is verify's verdict when a check
-          // could not run. When it judged THIS draft (unchanged since), the
-          // section's VERIFICATION.md decides — through the one gate compile
-          // and done share: only advisory rows (a quoted source's text was
-          // unavailable, PDF_UNAVAILABLE / TEXT_UNAVAILABLE, Pitfall 3) pass,
-          // so the walk goes on to compile; a blocking UNVERIFIABLE row (a
-          // lookup failed, or it ran offline) is attention naming the re-run.
-          // Never a paid verify loop on an unchanged draft.
+          // `unverifiable` is verify's verdict when a check could not run (a
+          // lookup failed or ran offline, a quote's source text is unavailable
+          // — UNVERIFIABLE-QUOTE — or the draft is stub text — PLACEHOLDER).
+          // S-13 (Phase 20): when verify judged THIS draft (unchanged since),
+          // the section does not stop the others and is never re-verified in a
+          // loop — the walk goes on; when it is the last open item the walk
+          // reaches compile, which recomputes it and refuses with the
+          // section's options (sectionAttention words them for `status`).
+          if (!existsSync(sectionDraft(n, slug, paperRoot))) return { verb: 'write', ...id }; // VRFY-16: the draft is gone — re-draft
           if (r.verifiedHash === null || draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) !== r.verifiedHash) {
             return { verb: 'verify', ...id }; // the draft changed (or was never judged): verify it
           }
-          const blockers = verificationBlockers(sectionVerification(n, slug, paperRoot));
-          if (blockers.length === 0) continue;
-          return {
-            verb: 'status',
-            reason: 'attention',
-            section: id,
-            detail:
-              `section ${label} could not be verified: ${blockers.join('; ')} — ` +
-              `its draft has not changed since; re-run the check with \`pensmith verify ${label}\` once the sources can be reached`,
-          };
+          continue;
         }
         case 'written':
-        case 'verifying': // re-attempt verification — NOT continue
+        case 'verifying': // re-attempt verification (a verify that crashed) — NOT continue
+          // VRFY-16: a section whose draft is gone is re-drafted, never
+          // re-verified (verify would only report the missing draft again).
+          if (!existsSync(sectionDraft(n, slug, paperRoot))) return { verb: 'write', ...id };
           return { verb: 'verify', ...id };
         default:
           // Unrecognized status (hand-edited PLAN.md): surface a stuck-section
@@ -498,8 +539,22 @@ export async function resolveNextAction(
     }
 
     // All sections verified (the walk fell through ONLY because every section
-    // was 'verified', or 'unverifiable' with advisory rows only on the draft
-    // verify judged — which compile accepts, Pitfall 3).
+    // was 'verified', or 'unverifiable' on the draft verify judged — S-13:
+    // compile recomputes such a section and refuses it with its options).
+    //
+    // VRFY-27: a compiled DRAFT.md edited by hand after compile is not the
+    // paper done may export — and recompiling would silently replace the
+    // edit. Name it instead of dispatching either.
+    const record = readCompileInputs(paperRoot);
+    if (record !== null && record.compiled_draft_sha256 !== null && existsSync(join(pDir, 'DRAFT.md')) && fileSha256(join(pDir, 'DRAFT.md')) !== record.compiled_draft_sha256) {
+      return {
+        verb: 'status',
+        reason: 'attention',
+        detail:
+          `${basename(pDir)}/DRAFT.md was edited after compile — make the edit in the section drafts (then \`pensmith\` re-verifies them) ` +
+          'and run `pensmith compile`, which replaces the edited file',
+      };
+    }
     // The compiled DRAFT.md is current only when no section's draft or
     // verification changed after it and it covers the registered sections: a
     // section redone, re-verified or added by a re-outline (GRND-09/10) since

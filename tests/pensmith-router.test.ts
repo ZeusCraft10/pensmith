@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -226,6 +226,9 @@ test('UX-01 / C3-HIGH-1 (h): first section "written" → { verb: "verify", n, sl
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
     writeSectionPlan(root, 1, 'intro', 'written');
+    // VRFY-16 (Phase 20): with its DRAFT.md gone the section is re-drafted, never re-verified.
+    assert.equal((await resolveNextAction(root)).verb, 'write', '"written" without a DRAFT.md routes to write');
+    writeDraft(root, 1, 'intro');
     const decision = await resolveNextAction(root);
     assert.notEqual(decision, undefined, 'C3-HIGH-1: resolver must not return undefined for "written"');
     assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "written" routes to verify');
@@ -237,6 +240,9 @@ test('UX-01 / C3-HIGH-1 (i): first section "verifying" → { verb: "verify", n, 
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
     writeSectionPlan(root, 1, 'intro', 'verifying');
+    // VRFY-16 (Phase 20): with its DRAFT.md gone the section is re-drafted, never re-verified.
+    assert.equal((await resolveNextAction(root)).verb, 'write', '"verifying" without a DRAFT.md routes to write');
+    writeDraft(root, 1, 'intro');
     const decision = await resolveNextAction(root);
     assert.notEqual(decision, undefined, 'C3-HIGH-1: resolver must not return undefined for "verifying"');
     assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "verifying" routes to verify');
@@ -261,6 +267,9 @@ test('UX-01 / C3-HIGH-1 (k): first section "unverifiable" → { verb: "verify" }
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
     writeSectionPlan(root, 1, 'intro', 'unverifiable');
+    // VRFY-16 (Phase 20): with its DRAFT.md gone the section is re-drafted, never re-verified.
+    assert.equal((await resolveNextAction(root)).verb, 'write', '"unverifiable" without a DRAFT.md routes to write');
+    writeDraft(root, 1, 'intro');
     const decision = await resolveNextAction(root);
     assert.notEqual(decision, undefined, 'C3-HIGH-1: resolver must not return undefined for "unverifiable"');
     assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "unverifiable" re-attempts verify (must NOT continue to compile)');
@@ -533,7 +542,9 @@ test('GRND-18 / D-18-39 (review round 2): with COMPILE-INPUTS.json the compiled 
     writePaperFile(root, 'DRAFT.md');
     // First resolve moves the legacy root STATE.json into .paper/ (as a real run would).
     await resolveNextAction(root);
-    await writeCompileInputs(root, [{ n: 1, slug: 'intro' }], new Date().toISOString());
+    const { createHash } = await import('node:crypto');
+    const compiledSha = createHash('sha256').update(readFileSync(join(root, '.paper', 'DRAFT.md'))).digest('hex');
+    await writeCompileInputs(root, [{ n: 1, slug: 'intro' }], new Date().toISOString(), { compiledDraftSha256: compiledSha, verifiedHashes: new Map() });
     writePaperFile(root, 'FINAL.md');
     const t = (s: number): Date => new Date(Date.UTC(2026, 0, 1, 0, 0, s));
     const sec = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
@@ -554,6 +565,17 @@ test('GRND-18 / D-18-39 (review round 2): with COMPILE-INPUTS.json the compiled 
     writeFileSync(verif, '# VERIFICATION\n\nStatus: verified\n\n(re-run)\n');
     assert.equal((await resolveNextAction(root)).verb, 'compile');
     writeFileSync(verif, '# VERIFICATION\n\nStatus: verified\n');
+    // VRFY-27: a hand edit of the compiled DRAFT.md → attention (recompiling would replace it), never compile or done.
+    const compiledPath = join(root, '.paper', 'DRAFT.md');
+    const compiledBytes = readFileSync(compiledPath);
+    writeFileSync(compiledPath, `${compiledBytes.toString('utf8')}\nA sentence added by hand.\n`);
+    const edited = await resolveNextAction(root);
+    assert.equal(edited.verb, 'status');
+    assert.equal((edited as { reason?: string }).reason, 'attention');
+    assert.match((edited as { detail?: string }).detail ?? '', /\.paper\/DRAFT\.md was edited after compile — make the edit in the section drafts .* `pensmith compile`/);
+    writeFileSync(compiledPath, compiledBytes);
+    utimesSync(compiledPath, t(2), t(2));
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' }, 'the bytes compile wrote');
     // A second registered (verified) section the compiled draft does not hold → compile.
     const statePath = join(root, '.paper', 'STATE.json');
     const state = JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, unknown>;
@@ -584,7 +606,7 @@ async function draftHash(text: string): Promise<string> {
   return computeDraftHash(Buffer.from(text), ['a2020']);
 }
 
-test('review round 3: "unverifiable" on the draft verify judged — advisory rows only (PDF_UNAVAILABLE) walk on to compile; a blocking UNVERIFIABLE row is attention naming `pensmith verify N`; a changed draft is verified',
+test('review round 3 + S-13 (Phase 20): "unverifiable" on the draft verify judged never loops on verify — the walk goes on to compile (which recomputes and refuses a blocking row with its options); a changed draft is verified; a deleted draft is re-drafted',
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
@@ -593,17 +615,27 @@ test('review round 3: "unverifiable" on the draft verify judged — advisory row
     writeDraft(root, 1, 'intro');
     const verification = join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md');
     writeFileSync(verification, '# VERIFICATION\n\nStatus: unverifiable\n\n- a2020: **OK** — titleJW=1.00\n- a2020 ("a twenty-word quote…"): **PDF_UNAVAILABLE** — no open-access full text\n');
-    assert.equal((await resolveNextAction(root)).verb, 'compile', 'advisory only: compile accepts it (Pitfall 3), so no paid verify loop');
+    assert.equal((await resolveNextAction(root)).verb, 'compile', 'advisory only: no paid verify loop');
 
-    writeFileSync(verification, '# VERIFICATION\n\nStatus: unverifiable\n\n- a2020: **UNVERIFIABLE** — Crossref lookup failed\n');
-    const blocked = await resolveNextAction(root);
-    assert.equal(blocked.verb, 'status');
-    assert.equal(blocked.reason, 'attention');
-    assert.deepEqual(blocked.section, { n: 1, slug: 'intro' });
-    assert.match(blocked.detail ?? '', /section 1 could not be verified: citation \[@a2020\] is UNVERIFIABLE .* `pensmith verify 1` once the sources can be reached$/);
+    // A blocking row (a failed lookup, an uncheckable quote, a stub draft): S-13 —
+    // the section does not stop the walk and is never re-verified in a loop;
+    // compile recomputes it and refuses with its options.
+    writeFileSync(verification, '# VERIFICATION\n\nStatus: unverifiable\n\n- a2020: **UNVERIFIABLE-NETWORK** — Crossref lookup failed\n');
+    assert.equal((await resolveNextAction(root)).verb, 'compile', 'S-13: the stop surfaces at compile');
+    const { unverifiableSectionDetail } = (await import(new URL('../bin/lib/router.js', import.meta.url).href)) as {
+      unverifiableSectionDetail: (p: string, label: string) => string | null;
+    };
+    assert.match(unverifiableSectionDetail(verification, '1') ?? '', /\[@a2020\] could not be checked .* re-run `pensmith verify 1` online$/);
+    writeFileSync(verification, '# VERIFICATION\n\nStatus: unverifiable\n\n- a2020 [q1] ("attention mechanisms are nothing more t…"): **UNVERIFIABLE-QUOTE** — lev=0.000 — no open-access copy\n- draft: **PLACEHOLDER** — stub text\n');
+    const detail = unverifiableSectionDetail(verification, '1') ?? '';
+    assert.match(detail, /1 quote\(s\) \(q1\) could not be checked .*`pensmith add <pdf>`.*`pensmith plan 1 --revise`.*`pensmith verify 1 --accept-quote q1`/);
+    assert.match(detail, /stub text .*PLACEHOLDER.* `pensmith write 1`/);
+    assert.equal((await resolveNextAction(root)).verb, 'compile');
 
     writeFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'Draft text, revised.\n');
     assert.equal((await resolveNextAction(root)).verb, 'verify', 'the draft changed since: verify it');
+    rmSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'));
+    assert.equal((await resolveNextAction(root)).verb, 'write', 'VRFY-16: a deleted draft is re-drafted, never re-verified');
   });
 
 test('review round 3 (D-18-38): OUTLINE.md missing while STATE.json registers sections → attention naming restore / `outline --force`, never an `outline` dispatch',

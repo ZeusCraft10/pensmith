@@ -19,8 +19,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadState } from './state.js';
-import { readSectionInfo, resolveNextAction, type RouterDecision } from './router.js';
-import { paperDir, sectionPlan } from './paths.js';
+import { readSectionInfo, resolveNextAction, unverifiableSectionDetail, type RouterDecision } from './router.js';
+import { paperDir, sectionPlan, sectionVerification } from './paths.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import { CURRENT_CONFIG_VERSION, effectiveConfigRows, paperConfigPath, readPaperModeSync, tryReadPaperConfigSync } from './config.js';
 import { parseIntakeMd } from './intake-parse.js';
@@ -31,6 +31,16 @@ import { isApiKeyPresent, resolveRuntime, resolveSlug } from './runtime.js';
 import { SLUG_NAMES, slugSpec, LOCAL_PROVIDERS, effectiveEffort, modelCapabilities, describeCacheReach, systemCacheReach } from './llm-models.js';
 import { loadPrompt } from './prompt-loader.js';
 import { estimateTokens } from './estimator.js';
+
+/**
+ * An unverifiable section's status text: `unverifiable` plus what it needs
+ * (S-13, VRFY-20, VRFY-24 — the quote options, a stub draft to re-draft, a
+ * check to re-run online), from its VERIFICATION.md. Never throws.
+ */
+function unverifiableStatus(verificationPath: string, id: string, dash: string): string {
+  const detail = unverifiableSectionDetail(verificationPath, id);
+  return detail === null ? 'unverifiable' : `unverifiable ${dash} ${detail.replace(/^section \S+ could not be verified: /, '')}`;
+}
 
 export type GlyphSet = 'unicode' | 'ascii';
 export type SectionPhase = 'verified' | 'in-progress' | 'pending' | 'attention';
@@ -186,7 +196,9 @@ export async function buildStatusView(
           ? 'outlined (not planned)'
           : r.status === 'failed' && r.failureReason
             ? `failed ${marks.dash} ${r.failureReason}`
-            : r.status;
+            : r.status === 'unverifiable'
+              ? unverifiableStatus(sectionVerification(n, slug, root), formatSectionId(sectionIdOf(n, suffix)), marks.dash)
+              : r.status;
     const phase = phaseOf(r.status, r.absent || r.stub, r.corrupt);
     const row: StatusSectionRow = { n, id: formatSectionId(sectionIdOf(n, suffix)), slug, title: titles.get(slug) ?? slug, status, phase, glyph: glyphs[phase] };
     if (suffix !== undefined) row.suffix = suffix;
