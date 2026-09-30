@@ -76,6 +76,9 @@ export const RECORDED_QUERY = 'attention mechanisms in neural networks';
 export const RECORDED_DOI = '10.1038/nphys1170';
 /** A DataCite DOI Crossref answers 404 for (a real "did not resolve" fixture). */
 export const RECORDED_CROSSREF_404_DOI = '10.48550/arXiv.1706.03762';
+/** A DOI registered with ISTIC, not Crossref (Zou et al. 2026, Zhonghua Wei Chang Wai Ke Za Zhi), and its PMID. */
+export const ISTIC_DOI = '10.3760/cma.j.cn441530-20260508-00189-1';
+export const ISTIC_PMID = '42706103';
 /** A retracted work with a Retraction Watch record in Crossref (Wakefield et al. 1998). */
 export const RECORDED_RETRACTED_DOI = '10.1016/S0140-6736(97)11096-0';
 /** An arXiv id recorded for lookups. */
@@ -143,6 +146,9 @@ const QUERY_SETS = {
     { file: 'works-arxiv-doi-404', calls: [{ fn: 'lookupById', arg: RECORDED_CROSSREF_404_DOI }] },
     // A DOI no registrar ever minted: Crossref's definitive 404 (Pass 1 FABRICATED).
     { file: 'works-no-such-doi-404', calls: [{ fn: 'lookupById', arg: '10.5555/pensmith-no-such-work-2017' }] },
+    // An ISTIC-registered DOI (a PubMed-indexed article, PMID 42706103): Crossref's 404 says
+    // nothing about it — Pass 1 asks doi.org for the agency and checks the PMID instead.
+    { file: 'works-istic-404', calls: [{ fn: 'lookupById', arg: ISTIC_DOI }] },
     // SRC-05: a complete journal record (Nature 521(7553), 436-444).
     { file: 'works-nature14539', calls: [{ fn: 'lookupById', arg: '10.1038/nature14539' }] },
     // SRC-05: a consortium author (name only).
@@ -192,6 +198,8 @@ const QUERY_SETS = {
   pubmed: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3 }] },
     { file: 'esummary-31978945', calls: [{ fn: 'lookupById', arg: '31978945' }] },
+    // The PubMed record of the ISTIC-registered DOI above (Pass 1's PMID fallback).
+    { file: 'esummary-42706103', calls: [{ fn: 'lookupById', arg: ISTIC_PMID }] },
     researchFrom2015(),
     ...planResearch(),
   ],
@@ -236,14 +244,19 @@ const QUERY_SETS = {
       calls: [{ fn: 'confirmOpenAccessPdf', arg: 'https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0000001&type=printable' }],
     },
     // doi.org's registration-agency lookup (bin/lib/sources/doi-ra.ts): asked
-    // when Crossref answers 404 for a DOI `add` resolves — a Crossref prefix
-    // (Nature), a DataCite prefix (Zenodo) and a prefix no agency holds.
+    // when Crossref answers 404 for a DOI `add` resolves or Pass 1 re-fetches —
+    // a Crossref prefix (Nature), a DataCite prefix (Zenodo), a prefix no
+    // agency holds, Crossref's test prefix (Pass 1's "did not resolve"
+    // fixture, 10.5555) and an ISTIC prefix (the Chinese Medical Association,
+    // 10.3760: Pass 1 falls back to the entry's PMID).
     {
       file: 'doi-ra-prefixes',
       calls: [
         { fn: 'fetch', arg: 'https://doi.org/ra/10.1038' },
         { fn: 'fetch', arg: 'https://doi.org/ra/10.5281' },
         { fn: 'fetch', arg: 'https://doi.org/ra/10.99999' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.5555' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.3760' },
       ],
     },
   ],

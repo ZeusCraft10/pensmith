@@ -24,6 +24,7 @@
 // byo-text.ts before it builds the drafter request (write.ts withVerifiedByo).
 
 import { fullTextAvailable as fullTextFromLibrary } from './full-text.js';
+import { citationCheckRoute, uncheckableReason } from './verify/pass1-identifiers.js';
 import type { LibraryEntry } from './schemas/library.js';
 
 /** The library fields this module reads (a LibraryEntry, or a legacy v1 record). */
@@ -43,6 +44,9 @@ export interface SourceContextInput {
   readonly tier?: unknown;
   /** The DOI (read by verifierBlindSpot). */
   readonly doi?: string | null | undefined;
+  /** The PMID and ISBN (read by verifierBlindSpot: Pass 1 resolves them at PubMed and the books registries). */
+  readonly pmid?: string | null | undefined;
+  readonly isbn?: string | null | undefined;
   /** A synthetic --dry-run source (RUN-27). */
   readonly synthetic?: boolean | null | undefined;
   /** Flagged retracted at research time (Retraction Watch); Pass 1 always blocks a citation of it. */
@@ -202,39 +206,43 @@ export function libraryCitekeys(entries: readonly SourceContextInput[]): Set<str
 }
 
 // ---------------------------------------------------------------------------
-// Which sources the citation verifier can check (GRND-18).
+// Which sources the citation verifier can check (GRND-18, D-18-37).
 //
-// Pass 1 (verify/pass1.ts) re-fetches every cited source by its DOI through
-// Crossref: a source with no DOI is FABRICATED ("no DOI in citation entry") and
-// one whose DOI Crossref does not register — arXiv's DataCite DOIs and the other
-// DataCite repositories — is FABRICATED ("did not resolve via Crossref"), on
-// every run — as does a source flagged retracted (Pass 1 blocks it as
-// MIS-CITED). Offering such a source to the outline or the planner only strands
-// the section at verify, so outline and plan are fed the checkable ones and
-// name the others. When Pass 1 gains an arXiv / DataCite path (Phase 19/20),
-// THIS predicate is what widens.
+// Offering the outline or the planner a source Pass 1 can never pass only
+// strands the section at verify, so outline and plan are fed the checkable
+// ones and name the others. What Pass 1 can check is ONE predicate shared with
+// Pass 1 itself (verify/pass1-identifiers.ts citationCheckRoute): a Crossref
+// DOI; a DataCite arXiv DOI (checked at arXiv); no DOI but an arXiv id
+// (arXiv), a PMID (PubMed) or an ISBN (the books registries); another agency's
+// DOI with one of those. Withheld: a source flagged retracted (Pass 1 always
+// blocks it, review round 3), one with no DOI, arXiv id, PMID or ISBN, a
+// DataCite (Zenodo, figshare, Dryad) DOI with none of those (VRFY-11), and a
+// synthetic --dry-run source outside a dry run.
 // ---------------------------------------------------------------------------
 
-/** DOI prefixes registered with DataCite, which Crossref does not resolve: arXiv, Zenodo, figshare, Dryad. */
-export const DATACITE_DOI_PREFIXES: readonly string[] = Object.freeze(['10.48550', '10.5281', '10.6084', '10.5061']);
+export { DATACITE_DOI_PREFIXES, NO_IDENTIFIER_REASON } from './verify/pass1-identifiers.js';
 
 /** The reason a retracted source is withheld (verifierBlindSpot); it never becomes citable. */
 export const RETRACTED_REASON = 'retracted (Retraction Watch)';
 
+/** The reason a synthetic --dry-run source is withheld outside a dry run. */
+export const SYNTHETIC_REASON = 'a synthetic --dry-run source';
+
 /**
  * Why the citation verifier would never pass a citation of `entry` (null when
- * it can): retracted (Pass 1 always blocks it as MIS-CITED; review round 3),
- * no DOI, a DataCite DOI, or a synthetic --dry-run source outside a dry run.
- * Pure: the caller passes whether this is a dry run.
+ * it can): retracted, a synthetic --dry-run source outside a dry run, or
+ * identifiers no registrar Pass 1 asks can resolve (uncheckableReason). Pure:
+ * the caller passes whether this is a dry run.
  */
-export function verifierBlindSpot(entry: Pick<SourceContextInput, 'doi' | 'synthetic' | 'retracted'>, dryRun: boolean): string | null {
+export function verifierBlindSpot(
+  entry: Pick<SourceContextInput, 'doi' | 'arxiv' | 'pmid' | 'isbn' | 'synthetic' | 'retracted'>,
+  dryRun: boolean,
+): string | null {
   if (entry.retracted === true) return RETRACTED_REASON;
-  const doi = typeof entry.doi === 'string' ? entry.doi.trim().toLowerCase() : '';
-  if (doi.length === 0) return 'no DOI';
-  const prefix = doi.split('/')[0] ?? '';
-  if (DATACITE_DOI_PREFIXES.includes(prefix)) return `a DataCite DOI (${prefix}) Crossref does not resolve`;
-  if (entry.synthetic === true && !dryRun) return 'a synthetic --dry-run source';
-  return null;
+  if (entry.synthetic === true && !dryRun) return SYNTHETIC_REASON;
+  const route = citationCheckRoute(entry);
+  if (route.kind === 'dry-run-doi') return dryRun ? null : SYNTHETIC_REASON;
+  return uncheckableReason(entry);
 }
 
 /** The library split into the sources the verifier can check and the others (with why), in library order. */
@@ -260,15 +268,22 @@ export function describeExcluded(excluded: ReadonlyArray<{ citekey: string; reas
 }
 
 /**
- * What the user can do about the withheld sources: a source with no Crossref
- * DOI becomes usable once its published version's DOI is added; a retracted
- * one is never cited.
+ * What the user can do about the withheld sources: a source with no
+ * identifier the verifier resolves becomes usable once one is added; a
+ * retracted one is never cited; a synthetic one exists only in a dry run.
  */
 export function excludedRemedy(excluded: ReadonlyArray<{ citekey: string; reason: string }>): string {
   const retracted = excluded.some((x) => x.reason === RETRACTED_REASON);
-  const fixable = excluded.some((x) => x.reason !== RETRACTED_REASON);
+  const synthetic = excluded.some((x) => x.reason === SYNTHETIC_REASON);
+  const fixable = excluded.some((x) => x.reason !== RETRACTED_REASON && x.reason !== SYNTHETIC_REASON);
   const parts: string[] = [];
-  if (fixable) parts.push('to use one the verifier cannot check, `pensmith add` the DOI of its published (Crossref-registered) version');
+  if (fixable) {
+    parts.push(
+      'to use one the verifier cannot check, `pensmith add` its DOI, arXiv id, PMID or ISBN ' +
+        '(for a Zenodo / figshare / Dryad record, the DOI of its published version)',
+    );
+  }
   if (retracted) parts.push('a retracted source is never cited');
+  if (synthetic) parts.push('a synthetic --dry-run source is never cited outside a dry run');
   return parts.join('; ');
 }

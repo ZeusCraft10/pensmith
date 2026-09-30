@@ -44,6 +44,15 @@
 // and says where the flag came from (the library's notice, when `opts.root`
 // names the paper). The label becomes RETRACTED in Phase 20 (VRFY-15).
 //
+// A Crossref 404 (review round 1 of the Phase 18/19 merge): Crossref's
+// "not found" proves only that Crossref did not register the DOI. doi.org's
+// agency lookup (sources/doi-ra.ts) decides: Crossref's own prefix, or a
+// prefix no agency holds → FABRICATED; another agency (DataCite, ISTIC, JaLC,
+// mEDRA, …) → the entry's arXiv id / PMID / ISBN at their own registrars,
+// else UNVERIFIABLE naming the agency (crossrefNotFound). Which registrar Pass
+// 1 asks is shared with the outline / planner source filter
+// (pass1-identifiers.ts citationCheckRoute).
+//
 // DataCite arXiv DOIs (Phase 19 review round 2): Semantic Scholar and OpenAlex
 // give an arXiv-only work the DOI `10.48550/arXiv.<id>`. It is not a Crossref
 // DOI — Crossref's 404 for it says nothing about the work — so such an entry
@@ -66,9 +75,9 @@
 // unhydrated bring-your-own entry, read from LIBRARY.json when `opts.root` is
 // given): it is UNVERIFIABLE (blocking), with the command that identifies it,
 // because the user's real document is not an invented one (S-03; its OK-BYO
-// verdict is Phase 20, VRFY-14). Other DataCite DOIs, the metadata search for
-// identifier-less entries and the remaining registrars are Phase 20 (VRFY-11,
-// VRFY-12).
+// verdict is Phase 20, VRFY-14). A DataCite (non-arXiv) record itself, the
+// metadata search for identifier-less entries and the remaining registrars are
+// Phase 20 (VRFY-11, VRFY-12).
 //
 // Reserved dry-run identifiers (RUN-27, D-17-11): under --dry-run a reserved
 // `10.0000/pensmith-dryrun.*` DOI is re-fetched from the synthetic provider and
@@ -93,6 +102,8 @@ import { plainText } from '../markup.js';
 import { normArxiv } from '../migrations/library/shape.js';
 import { isDataCiteArxivDoi } from '../full-text.js';
 import { tryLoadLibrary } from '../library.js';
+import { registrationAgency, doiPrefix } from '../sources/doi-ra.js';
+import { doilessIdentifiers as routeIdentifiers, type CitationIdentifiers, type NoDoiRegistrar } from './pass1-identifiers.js';
 import type { LibraryEntry } from '../schemas/library.js';
 
 export type { FreshnessResult } from './freshness.js';
@@ -357,12 +368,7 @@ async function registrarVerdict(
     }
     throw err;
   }
-  if (!actual) {
-    return {
-      citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
-      reason: `DOI ${claimed.DOI} did not resolve via Crossref`,
-    };
-  }
+  if (!actual) return crossrefNotFound(ck, claimed, claimedTitle, claimedAuthorsD14, facts);
 
   const titleJW = titleSimilarity(actual.title, claimedTitle);
   const authorJW = jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0]));
@@ -471,21 +477,82 @@ async function registrarVerdict(
   };
 }
 
-/** The registrars Pass 1 asks for an entry without a DOI, in the order it asks them. */
-type NoDoiRegistrar = 'arxiv' | 'pubmed' | 'books';
+/**
+ * Crossref has no record of the DOI (its definitive 404). That proves nothing
+ * about a DOI another agency registered, so doi.org is asked which agency
+ * holds the prefix (sources/doi-ra.ts — only the prefix leaves the machine):
+ *   - Crossref's own prefix, or a prefix no agency holds → FABRICATED;
+ *   - another agency (DataCite, ISTIC, JaLC, mEDRA, …) → the entry's arXiv id,
+ *     PMID and ISBN at their own registrars (the DOI-less path); with none, or
+ *     when none of them has the work, UNVERIFIABLE naming the agency
+ *     (blocking — a real work registered elsewhere is never called invented);
+ *   - an agency lookup that could not be answered → UNVERIFIABLE.
+ */
+async function crossrefNotFound(
+  ck: string,
+  claimed: BibEntry,
+  claimedTitle: string,
+  claimedAuthorsD14: string[],
+  facts: LibraryFacts,
+): Promise<Pass1Result> {
+  const doi = claimed.DOI as string;
+  const notResolved = `DOI ${doi} did not resolve via Crossref`;
+  let ra: Awaited<ReturnType<typeof registrationAgency>>;
+  try {
+    ra = await registrationAgency(doi);
+  } catch (err) {
+    if (isOfflineEgressError(err)) return unverifiable(ck, err, `${notResolved}; doi.org agency lookup of ${doiPrefix(doi) ?? doi}`);
+    throw err;
+  }
+  if (ra.kind === 'failed') {
+    return {
+      citekey: ck, verdict: 'UNVERIFIABLE', titleJW: 0, authorJW: 0,
+      reason: `${notResolved}, and doi.org could not say which agency registered it (${ra.reason}) — re-run verify once the lookup answers`,
+    };
+  }
+  if (ra.kind === 'unknown-prefix') {
+    return {
+      citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
+      reason: `${notResolved} (no registration agency holds its prefix${doiPrefix(doi) !== null ? ` ${doiPrefix(doi)}` : ''})`,
+    };
+  }
+  if (/^crossref$/i.test(ra.agency)) {
+    return { citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0, reason: notResolved };
+  }
+  const elsewhere = `DOI ${doi} is registered with ${ra.agency}, not Crossref`;
+  if (doilessIdentifiers(claimed).length === 0) {
+    return {
+      citekey: ck, verdict: 'UNVERIFIABLE', titleJW: NOT_COMPARED, authorJW: NOT_COMPARED,
+      reason: `${elsewhere}, which the verifier cannot query yet — give the work's arXiv id, PMID or ISBN (pensmith add), or cite its Crossref-registered version`,
+    };
+  }
+  const v = await verdictWithoutDoi(ck, claimed, claimedTitle, claimedAuthorsD14, facts);
+  if (v.verdict === 'FABRICATED') {
+    return {
+      ...v, verdict: 'UNVERIFIABLE', titleJW: NOT_COMPARED, authorJW: NOT_COMPARED,
+      reason: `${elsewhere}, which the verifier cannot query yet, and ${v.reason}`,
+    };
+  }
+  return { ...v, reason: `${elsewhere}; ${v.reason}` };
+}
+
 const REGISTRAR_LABEL: Record<NoDoiRegistrar, string> = { arxiv: 'arXiv', pubmed: 'PubMed', books: 'the books registries' };
+
+/** A bib entry's identifiers, as the shared route (pass1-identifiers.ts) reads them. */
+function bibIdentifiers(claimed: BibEntry): CitationIdentifiers {
+  const eprint = typeof claimed.eprint === 'string' ? claimed.eprint.trim() : '';
+  const prefix = typeof claimed.archivePrefix === 'string' ? claimed.archivePrefix.trim() : '';
+  return {
+    doi: claimed.DOI ?? null,
+    arxiv: eprint && (prefix === '' || /^arxiv$/i.test(prefix)) ? eprint : null,
+    pmid: typeof claimed.PMID === 'string' ? claimed.PMID : null,
+    isbn: typeof claimed.ISBN === 'string' ? claimed.ISBN : null,
+  };
+}
 
 /** The identifiers a DOI-less entry carries, each with the registrar that answers for it. */
 function doilessIdentifiers(claimed: BibEntry): Array<{ registrar: NoDoiRegistrar; id: string; label: string }> {
-  const out: Array<{ registrar: NoDoiRegistrar; id: string; label: string }> = [];
-  const eprint = typeof claimed.eprint === 'string' ? claimed.eprint.trim() : '';
-  const prefix = typeof claimed.archivePrefix === 'string' ? claimed.archivePrefix.trim() : '';
-  if (eprint && (prefix === '' || /^arxiv$/i.test(prefix))) out.push({ registrar: 'arxiv', id: eprint, label: `arXiv:${eprint}` });
-  const pmid = typeof claimed.PMID === 'string' ? claimed.PMID.trim() : '';
-  if (pmid) out.push({ registrar: 'pubmed', id: pmid, label: `PMID ${pmid}` });
-  const isbn = typeof claimed.ISBN === 'string' ? claimed.ISBN.trim() : '';
-  if (isbn) out.push({ registrar: 'books', id: `isbn:${isbn}`, label: `ISBN ${isbn}` });
-  return out;
+  return routeIdentifiers(bibIdentifiers(claimed));
 }
 
 async function lookupAt(registrar: NoDoiRegistrar, id: string): Promise<LookupResult> {

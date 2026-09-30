@@ -29,7 +29,7 @@ Phase: 19 — Sources and Library (SOURCES). **Merged** into the main branch on 
 
 Phase 18 — Grounded Generation (GROUND) is **Complete** (2026-09-29): all 21 of its requirements and the Phase 17 carry-over RUN-26 (`.planning/phases/18-ground/18-VERIFICATION.md`). Phase 17 — Tier-2 Runtime Foundations (RUNTIME) is open on CI-06 only.
 
-Next up: Phase 20 — Verifier Completeness (VERIFY). See the 19-SUMMARY "Hand-offs" section and 18-VERIFICATION's caveats (VRFY-13 author normalisation; VRFY-11 widening `verifierBlindSpot`).
+Next up: Phase 20 — Verifier Completeness (VERIFY). See the 19-SUMMARY "Hand-offs" section and 18-VERIFICATION's caveats (VRFY-13 author normalisation; VRFY-11's DataCite resolution — `verifierBlindSpot` already follows Pass 1's arXiv / PMID / ISBN route since the merge's review round 1).
 Last activity: 2026-09-30. Phase 18/19 merge completed and the CI fixes merged; the gate is green on Node 22 and Node 24 apart from the root-only atomic-write case (19-VERIFICATION §9.6).
 
 ## Performance Metrics
@@ -302,7 +302,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
   - D-18-28/30: one bare step, and the dry-run loop.
   - D-18-29: the `.paper-dry-run/` workspace.
   - D-18-31: the e2e corpus.
-  - D-18-37/46: `verifierBlindSpot`, which VRFY-11 widens.
+  - D-18-37/46: `verifierBlindSpot` — since the merge's review round 1 it reads Pass 1's route (`verify/pass1-identifiers.ts`); VRFY-11 adds DataCite.
   - D-18-39: `COMPILE-INPUTS.json`.
   - D-18-40/42: the fail-closed Pandoc citation reader (VRFY-09 replaces it).
   - D-18-45: `stopAfterOutline` (GRND-11 attaches there).
@@ -347,4 +347,4 @@ Resume file: None
 
 - Push the branch and confirm that the `ci.yml` matrix (Node 22 and 24 × ubuntu/macOS/Windows) is green; the `v1/ci-fix-18` fixes for the Node 24, macOS and Windows failures are merged, but no run with them has been observed. That closes CI-06, and with it Phase 17. It is also the cross-OS evidence for RUN-10, RUN-22, RUN-23 and CI-09, for Phase 18's new parsers, workspace copies, archive moves and fake-TTY preload, and for Phase 19's PDF worker (Windows worker threads), CRLF parsers and junction handling.
 - With keys: run the keyed `live:sources` and one keyed `research` to close SRC-06 (19-VERIFICATION §8.4).
-- Run /gsd:plan-phase 20 (Verifier Completeness). Include VRFY-13's author normalisation, with a live-lane check that the PRD §15 assignment reaches done unaided, VRFY-11's widening of `verifierBlindSpot` (Pass 1 already resolves arXiv ids, PMIDs, ISBNs and DataCite arXiv DOIs since Phase 19), and the Phase 19 hand-offs (19-SUMMARY "Hand-offs").
+- Run /gsd:plan-phase 20 (Verifier Completeness). Include VRFY-13's author normalisation, with a live-lane check that the PRD §15 assignment reaches done unaided, VRFY-11's DataCite resolution (`verifierBlindSpot` already follows Pass 1's route for arXiv ids, PMIDs, ISBNs and DataCite arXiv DOIs since the merge's review round 1), and the Phase 19 hand-offs (19-SUMMARY "Hand-offs").

@@ -147,35 +147,41 @@ test('GRND-07: a legacy OUTLINE.md (6 columns) registers with stubs seeded from 
   });
 });
 
-test('GRND-18: outline offers only the sources the citation verifier can check; an arXiv-only or identifier-less one is named, never allocated', async () => {
+test('GRND-18: outline offers only the sources the citation verifier can check; a DataCite-only or identifier-less one is named, never allocated — an arXiv-only preprint and an ISBN-only book are offered', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     const { DEFAULT_SOURCES } = await import('./helpers/section-fixture.js');
     await seedBriefPaper(sb.root, {}, {
       sources: [
         ...DEFAULT_SOURCES,
-        { citekey: 'raffel2019', title: 'Exploring the Limits of Transfer Learning', author: 'Raffel, Colin', year: 2019, doi: '10.48550/arXiv.1910.10683' },
+        { citekey: 'raffel2019', title: 'Exploring the Limits of Transfer Learning', author: 'Raffel, Colin', year: 2019, doi: '10.48550/arXiv.1910.10683', arxiv: '1910.10683' },
+        { citekey: 'kuhn1996', title: 'The Structure of Scientific Revolutions', author: 'Kuhn, Thomas S.', year: 1996, doi: null, isbn: '9780226458083' },
+        { citekey: 'weights2020', title: 'Model weights', author: 'Lab, Some', year: 2020, doi: '10.5281/zenodo.1234567' },
         { citekey: 'huang2018', title: 'An untitled preprint', author: 'Huang, Wei', year: 2018, doi: null },
       ],
     });
     // A reply that allocates a source outline was never offered is rejected like an invented key.
     const bad = threeSectionOutline();
-    bad.sections[1] = { ...bad.sections[1]!, assigned_sources: ['bahdanau2015', 'raffel2019'] };
+    bad.sections[1] = { ...bad.sections[1]!, assigned_sources: ['bahdanau2015', 'weights2020'] };
     sb.mock!.script('outline-author', { data: bad }, { data: threeSectionOutline() });
     const r = await sb.runTsx(null, ['outline', '--yolo'], { env: { ANTHROPIC_API_KEY: KEY } });
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
-    assert.match(r.stderr, /pensmith outline: WARN — 2 of 6 source\(s\) in LIBRARY\.json are not offered to the outline because the citation verifier would not pass a citation of them: raffel2019 \(a DataCite DOI \(10\.48550\) Crossref does not resolve\), huang2018 \(no DOI\)/);
+    const withheld = 'weights2020 \\(a DataCite DOI \\(10\\.5281\\) the verifier cannot check yet, and no arXiv id, PMID or ISBN\\), huang2018 \\(no DOI, arXiv id, PMID or ISBN\\)';
+    assert.match(r.stderr, new RegExp(`pensmith outline: WARN — 2 of 8 source\\(s\\) in LIBRARY\\.json are not offered to the outline because the citation verifier would not pass a citation of them: ${withheld}`));
     const { user } = requestParts(sb.mock!.bodiesFor('outline-author')[0]!);
     const offered = (JSON.parse(parsePromptBlocks(user).get('sources')!) as Array<{ citekey: string }>).map((s) => s.citekey);
-    assert.deepEqual(offered, DEFAULT_SOURCES.map((s) => s.citekey));
+    assert.deepEqual(offered, [...DEFAULT_SOURCES.map((s) => s.citekey), 'raffel2019', 'kuhn1996'], 'Pass 1 checks an arXiv DataCite DOI at arXiv and an ISBN at the books registries');
     assert.equal(sb.mock!.callCount('outline-author'), 2, 'the unofferable key got the corrective turn');
     const rows = parseOutline(fs.readFileSync(path.join(sb.paper, 'OUTLINE.md'), 'utf8')).sections;
-    assert.ok(rows.every((row) => !row.assigned_sources.includes('raffel2019') && !row.assigned_sources.includes('huang2018')));
+    assert.ok(rows.every((row) => !row.assigned_sources.includes('weights2020') && !row.assigned_sources.includes('huang2018')));
 
     // D-18-37: where the user decides — the approval gate — the withheld sources are named too.
     sb.mock!.script('outline-author', { data: threeSectionOutline() });
     const asked = await sb.runTsx(null, ['outline', '--force'], { env: { ANTHROPIC_API_KEY: KEY, PENSMITH_PROMPT_MODE: 'numbered' }, input: 'y\n' });
     assert.equal(asked.status, 0, `${asked.stdout}\n${asked.stderr}`);
     const gate = asked.stderr.slice(asked.stderr.indexOf('Proposed outline:'));
-    assert.match(gate, /Not offered to the outline \(2 of 6 LIBRARY\.json source\(s\)\) because the citation verifier would not pass a citation of them: raffel2019 \(a DataCite DOI \(10\.48550\) Crossref does not resolve\), huang2018 \(no DOI\)\. To use one the verifier cannot check, `pensmith add` the DOI of its published/);
+    assert.match(
+      gate,
+      new RegExp(`Not offered to the outline \\(2 of 8 LIBRARY\\.json source\\(s\\)\\) because the citation verifier would not pass a citation of them: ${withheld}\\. To use one the verifier cannot check, \`pensmith add\` its DOI, arXiv id, PMID or ISBN`),
+    );
   });
 });

@@ -14,8 +14,9 @@ every section a stub PLAN.md ("outlined (not planned)" in status); `plan N`
 replaces the stub with the section's claims, structure and sources. The planner
 sees only that section's own sources — its outline allocation, its PLAN.md
 `assigned_sources` and its `plan N --research` additions, minus any source the
-citation verifier cannot check yet (no DOI, or an arXiv/DataCite DOI; `plan`
-names them in a WARN) — and a reply that names any other citekey is refused:
+citation verifier cannot check yet (no DOI, arXiv id, PMID or ISBN, or only a
+Zenodo / figshare / Dryad DataCite DOI; or flagged retracted; `plan` names them
+in a WARN) — and a reply that names any other citekey is refused:
 nothing is written and the stub stays as it was. If the user edited OUTLINE.md
 so that section N no longer matches its registration, `plan` refuses and names
 `pensmith outline`, which applies the edited outline.

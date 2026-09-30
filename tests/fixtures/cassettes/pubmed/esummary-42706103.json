@@ -1,0 +1,170 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42706103&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "42706103": {
+          "uid": "42706103",
+          "pubdate": "2026 Aug 25",
+          "epubdate": "",
+          "source": "Zhonghua Wei Chang Wai Ke Za Zhi",
+          "authors": [
+            {
+              "name": "Zou PR",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lin QF",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhang ZT",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Jie YH",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Li T",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Xu TY",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zou XJ",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ye Q",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Li ZQ",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wang W",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhao YB",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wang H",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yuan ZX",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Yuan ZX",
+          "title": "[Application of transformer in intelligent diagnosis and treatment of peritoneal metastasis: current status and prospects].",
+          "sorttitle": "application of transformer in intelligent diagnosis and treatment of peritoneal metastasis current status and prospects",
+          "volume": "29",
+          "issue": "8",
+          "pages": "1077-1082",
+          "lang": [
+            "chi"
+          ],
+          "nlmuniqueid": "101177990",
+          "issn": "1671-0274",
+          "essn": "",
+          "pubtype": [
+            "Journal Article",
+            "Review",
+            "English Abstract"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42706103"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3760/cma.j.cn441530-20260508-00189-1"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/07 23:35"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/07 23:34"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/07 22:03"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Zhonghua wei chang wai ke za zhi = Chinese journal of gastrointestinal surgery",
+          "elocationid": "doi: 10.3760/cma.j.cn441530-20260508-00189-1",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/08/25 00:00",
+          "sortfirstauthor": "Zou PR",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "42706103"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T01:59:01.678Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

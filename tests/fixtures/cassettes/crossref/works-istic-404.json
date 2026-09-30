@@ -1,0 +1,17 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.3760%2Fcma.j.cn441530-20260508-00189-1",
+    "status": 404,
+    "response": "Resource not found.",
+    "responseHeaders": {
+      "content-type": "text/plain"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T01:59:00.502Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

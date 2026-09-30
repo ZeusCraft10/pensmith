@@ -119,6 +119,25 @@ test('Crossref\'s definitive 404 for a DOI no registrar minted is still FABRICAT
   assert.match(r.reason, /did not resolve via Crossref/);
 });
 
+test('review round 1 (merge): a Crossref 404 for a DOI another agency registered is never FABRICATED — the PMID is checked at PubMed, else UNVERIFIABLE naming the agency', async () => {
+  // The live-chain case: a PubMed hit whose DOI ISTIC registered (doi.org/ra/10.3760 → ISTIC).
+  const title = '[Application of transformer in intelligent diagnosis and treatment of peritoneal metastasis: current status and prospects].';
+  const bib = bibFile([{ citekey: 'zou2026', title, author: 'Zou, PR', doi: '10.3760/cma.j.cn441530-20260508-00189-1', year: 2026 }]);
+  writeFileSync(bib, readFileSync(bib, 'utf8').replace('  year = {2026},', '  year = {2026},\n  pmid = {42706103},'));
+  const [withPmid] = await runPass1('A claim [@zou2026].\n', bib);
+  assert.equal(withPmid!.verdict, 'OK', withPmid!.reason);
+  assert.match(withPmid!.reason, /^DOI 10\.3760\/cma\.j\.cn441530-20260508-00189-1 is registered with ISTIC, not Crossref; PMID 42706103 re-fetched from PubMed; D-11 AND-gate passed$/);
+  // Without the PMID there is nothing the verifier can query: blocking, but never "invented".
+  const bare = await verdict({ citekey: 'zou2026', title, author: 'Zou, PR', doi: '10.3760/cma.j.cn441530-20260508-00189-1', year: 2026 });
+  assert.equal(bare.verdict, 'UNVERIFIABLE');
+  assert.match(bare.reason, /is registered with ISTIC, not Crossref, which the verifier cannot query yet — give the work's arXiv id, PMID or ISBN/);
+  // A PMID that names another work is still a mismatch (MIS-CITED), not a pass.
+  writeFileSync(bib, readFileSync(bib, 'utf8').replace('pmid = {42706103}', 'pmid = {31978945}'));
+  const [wrongPmid] = await runPass1('A claim [@zou2026].\n', bib);
+  assert.equal(wrongPmid!.verdict, 'MIS-CITED', wrongPmid!.reason);
+  assert.match(wrongPmid!.reason, /registered with ISTIC.*PMID 31978945 re-fetched from PubMed; JW below threshold/);
+});
+
 test('review round 2: a DataCite arXiv DOI (research writes it from Semantic Scholar / OpenAlex) is re-fetched at arXiv — OK, never FABRICATED by Crossref\'s 404', async () => {
   const r = await verdict({ citekey: 'vaswani2017', title: 'Attention Is All You Need', author: 'Vaswani, Ashish', doi: '10.48550/arXiv.1706.03762', year: 2017 });
   assert.equal(r.verdict, 'OK', r.reason);

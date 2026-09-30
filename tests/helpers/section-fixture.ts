@@ -27,6 +27,10 @@ export interface FixtureSource {
    * (source-context.ts verifierBlindSpot). `null` makes a source it cannot.
    */
   doi?: string | null;
+  /** An arXiv id, PMID or ISBN-13 (Pass 1 resolves each at its own registrar when there is no DOI). */
+  arxiv?: string | null;
+  pmid?: string | null;
+  isbn?: string | null;
 }
 
 export const DEFAULT_SOURCES: readonly FixtureSource[] = Object.freeze([
@@ -41,10 +45,10 @@ export function libraryEntry(s: FixtureSource): Record<string, unknown> {
   return {
     citekey: s.citekey,
     doi: s.doi === undefined ? `10.5555/fixture.${s.citekey}` : s.doi,
-    arxiv: null,
-    pmid: null,
+    arxiv: s.arxiv ?? null,
+    pmid: s.pmid ?? null,
     pmcid: null,
-    isbn: null,
+    isbn: s.isbn ?? null,
     title: s.title,
     authors: [s.author],
     year: s.year,
