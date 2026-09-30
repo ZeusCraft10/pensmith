@@ -216,11 +216,16 @@ test('SEC-02: the test seam is refused outside a test context', () => {
   const env = { ...process.env };
   delete env['PENSMITH_TEST'];
   delete env['NODE_TEST_CONTEXT'];
+  // No test context: redirect every platform's data dir (HOME on macOS) so the
+  // child can never resolve the real one (CI-09).
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-worker-home-'));
+  for (const k of ['HOME', 'USERPROFILE', 'XDG_DATA_HOME', 'LOCALAPPDATA']) env[k] = home;
   const r = spawnSync(
     process.execPath,
     ['--import', TSX, '--input-type=module', '-e', `const m = await import(${JSON.stringify(mod)}); try { m.__setPdfWorkerTestSeam({ testHang: true }); console.log('accepted'); } catch { console.log('refused'); }`],
     { cwd: REPO, env, encoding: 'utf8', timeout: 60_000 },
   );
+  fs.rmSync(home, { recursive: true, force: true });
   assert.equal(r.stdout.trim(), 'refused', r.stderr);
 });
 
