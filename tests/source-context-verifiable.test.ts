@@ -105,7 +105,7 @@ test('review round 3: a source flagged retracted is withheld from outline and pl
   assert.ok(!JSON.stringify(buildOutlineSources(checkable)).includes('wakefield1998'), 'the outline is never offered the retracted source');
   assert.equal(
     excludedRemedy(excluded),
-    'to use one the verifier cannot check, `pensmith add` its DOI, arXiv id, PMID or ISBN (for a Zenodo / figshare / Dryad record, the DOI of its published version); ' +
+    'to use one the verifier cannot check, `pensmith add` its DOI, arXiv id, PMID or ISBN; ' +
       'a retracted source is never cited',
   );
   assert.equal(excludedRemedy(excluded.slice(0, 1)), 'a retracted source is never cited');

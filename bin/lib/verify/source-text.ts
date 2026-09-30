@@ -350,10 +350,10 @@ async function europePmcText(pmcid: string, opts: SourceTextOptions): Promise<{ 
 }
 
 /** Unpaywall's PDFs for `doi`, or the attempt that stands for them when there are none. Never throws. */
-async function unpaywallPdfs(doi: string): Promise<{ urls: readonly string[] } | TextAttempt> {
+async function unpaywallPdfs(doi: string, refresh: boolean): Promise<{ urls: readonly string[] } | TextAttempt> {
   let r: Awaited<ReturnType<typeof lookupOaPdfUrls>>;
   try {
-    r = await lookupOaPdfUrls(doi);
+    r = await lookupOaPdfUrls(doi, { refresh });
   } catch (err) {
     return fetchFailure(err, `the Unpaywall lookup of DOI ${doi}`);
   }
@@ -391,7 +391,7 @@ export async function* sourceTextAttempts(id: SourceIdentity, opts: SourceTextOp
   const doi = id.doi !== null && !isDataCiteArxivDoi(id.doi) ? normalizeDoi(id.doi) : null;
   if (doi !== null) {
     routes += 1;
-    const up = await memoized(`unpaywall|${doi}`, fresh, () => unpaywallPdfs(doi));
+    const up = await memoized(`unpaywall|${doi}`, fresh, () => unpaywallPdfs(doi, fresh));
     if ('urls' in up) {
       for (const url of up.urls) {
         const label = `the open-access PDF at ${hostOf(url)}`;

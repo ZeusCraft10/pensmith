@@ -35,6 +35,7 @@ import { normArxiv, normIsbn } from './migrations/library/shape.js';
 import { sources } from './sources/index.js';
 import { lookupFailed, lookupFound, lookupNotFound, isSourceLookupError, type LookupResult } from './sources/lookup.js';
 import { registrationAgency, doiPrefix } from './sources/doi-ra.js';
+import * as doiContent from './sources/doi-cn.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
 export type SourceInput =
@@ -355,30 +356,45 @@ export async function lookupIdentifier(input: IdentifierInput): Promise<LookupRe
 
 /**
  * Crossref answered 404 for `doi`: definitive only when Crossref registers the
- * DOI's prefix (D-19-05, review round 3). doi.org names the prefix's agency:
- * Crossref → not-found (the identifier is wrong); another agency (DataCite for
- * Zenodo, Figshare, Dryad …) → failed, saying so — this version reads DOI
- * records from Crossref only; no agency → not-found (the prefix does not
+ * DOI's prefix (D-19-05, review round 3). doi.org names the prefix's agency,
+ * and the DOI is then read where Pass 1 reads it (VRFY-11, D-20-10):
+ * Crossref → not-found (the identifier is wrong); DataCite (Zenodo, Figshare,
+ * Dryad …) → DataCite's record (sources/datacite.ts); mEDRA, JaLC, KISTI →
+ * doi.org content negotiation (sources/doi-cn.ts); an agency that serves no
+ * record → failed, saying so; no agency → not-found (the prefix does not
  * exist); the question unanswered → failed with the reason. The typed
  * OfflineEgressError propagates.
  */
 async function crossrefNotFound(doi: string, notFound: LookupResult): Promise<LookupResult> {
   const ra = await registrationAgency(doi);
   switch (ra.kind) {
-    case 'agency':
-      return /^crossref$/i.test(ra.agency)
-        ? notFound
-        : lookupFailed(
-            `registered with ${ra.agency}, not Crossref — this version adds DOIs registered with Crossref only ` +
-              '(an arXiv DataCite DOI is read as its arXiv id); Crossref has no record of it',
-            { permanent: true },
-          );
+    case 'agency': {
+      if (/^crossref$/i.test(ra.agency)) return notFound;
+      const elsewhere = `registered with ${ra.agency}, not Crossref`;
+      const r = /^datacite$/i.test(ra.agency)
+        ? await sources.datacite.lookupById(doi)
+        : doiContent.servesContentNegotiation(ra.agency)
+          ? await doiContent.lookupById(doi)
+          : null;
+      if (r === null) {
+        return lookupFailed(
+          `${elsewhere}, which serves no record pensmith can read — add the work by its arXiv id, PMID or ISBN instead`,
+          { permanent: true },
+        );
+      }
+      if (r.kind === 'found') return r;
+      if (r.kind === 'not-found') return lookupNotFound(`${elsewhere}, and ${ra.agency} has no record of it (${r.reason})`);
+      return lookupFailed(`${elsewhere}; ${ra.agency} lookup failed (${r.reason})`, {
+        ...(r.status !== undefined ? { status: r.status } : {}),
+        ...(r.retryAfterMs !== undefined ? { retryAfterMs: r.retryAfterMs } : {}),
+        ...(r.permanent === true ? { permanent: true } : {}),
+      });
+    }
     case 'unknown-prefix':
       return lookupNotFound(`no registration agency holds the DOI prefix ${doiPrefix(doi) ?? doi}`);
     case 'failed':
       return lookupFailed(
-        `Crossref has no record of this DOI, and doi.org could not say which agency registered it (${ra.reason}); ` +
-          'it may be registered with another agency such as DataCite, which this version cannot add',
+        `Crossref has no record of this DOI, and doi.org could not say which agency registered it (${ra.reason}) — try again later`,
       );
   }
 }

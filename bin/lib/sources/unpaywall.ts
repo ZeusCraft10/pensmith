@@ -267,7 +267,7 @@ export function oaPdfUrls(item: Pick<UnpaywallResponse, 'best_oa_location' | 'oa
   return out;
 }
 
-export async function lookupOaPdfUrls(id: string): Promise<OaPdfLookup> {
+export async function lookupOaPdfUrls(id: string, opts: { readonly refresh?: boolean } = {}): Promise<OaPdfLookup> {
   const doi = normalizeDoi(id);
   if (doi === null) return { kind: 'not-found', reason: `not a DOI: ${JSON.stringify(id.slice(0, 80))}` };
   const email = contactEmail().email;
@@ -278,7 +278,9 @@ export async function lookupOaPdfUrls(id: string): Promise<OaPdfLookup> {
   }
   const url = `${BASE}/v2/${encodeURIComponent(doi)}?email=${encodeURIComponent(email)}`;
   const ex = await exchange(
-    () => httpFetch(url, { source: 'unpaywall', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(RECORD) }),
+    // VRFY-28: a citation due for a re-check asks Unpaywall again (the HTTP
+    // cache read is skipped and the fresh answer written back).
+    () => httpFetch(url, { source: 'unpaywall', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(RECORD), ...(opts.refresh === true ? { refresh: true } : {}) }),
     { service: SERVICE, check: RECORD },
   );
   if (ex.kind === 'failed') return { kind: 'failed', reason: ex.reason, ...(ex.status !== undefined ? { status: ex.status } : {}) };

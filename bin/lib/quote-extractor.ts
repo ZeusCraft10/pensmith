@@ -40,7 +40,8 @@
 import {
   citationItems,
   findCitations,
-  findNarrativeCitations,
+  offsetInSpans,
+  provableCodeSpans,
   replaceCitations,
   type CitationCluster,
 } from './citation-token.js';
@@ -86,7 +87,7 @@ interface Candidate {
   readonly kind: QuoteKind;
   /** Offset of the opening mark (a block quote: of its first line). */
   readonly start: number;
-  /** The offset the code probe overwrites (see provablyInCode), or -1 when none can be probed. */
+  /** The offset whose code-ness decides whether the quote is in code (provableCodeSpans), or -1 (then its start). */
   readonly probe: number;
   readonly text: string;
   readonly attribution: readonly Attribution[];
@@ -482,50 +483,6 @@ function inlineCandidates(
 // Code.
 // ---------------------------------------------------------------------------
 
-/** Characters the probe may overwrite: none of them changes how the grammar proves code. */
-const PROBE_SAFE = new Set([' ', '\t', '"', '“', '”', '‘', '’', "'", '>', '*', '_']);
-const KEY_START_RE = /[\p{L}\p{N}_*]/u;
-const FENCE_LIKE_RE = /^ {0,3}(?:`{3,}|~{3,})/;
-
-/**
- * Which probe offsets lie in code the one citation grammar (citation-token.ts)
- * proves Pandoc reads as code. The grammar skips a narrative `@key` there and
- * nowhere else, so each probe character is overwritten with `@` — making the
- * word after it a narrative citation — and the probe is in code exactly when
- * the grammar reports that citation in a control copy with every backtick and
- * tilde neutralised (no code at all) but not in the draft itself. Only
- * characters that play no part in the grammar's code proof are overwritten; a
- * probe it cannot place counts as text (fail closed: the quote is checked).
- */
-function provablyInCode(md: string, probes: readonly number[]): Set<number> {
-  const out = new Set<number>();
-  if (!md.includes('`') && !md.includes('~')) return out;
-  const usable = probes.filter((p) => {
-    if (p < 0 || !PROBE_SAFE.has(md[p] ?? '') || !KEY_START_RE.test(md[p + 1] ?? '')) return false;
-    const lineStart = md.lastIndexOf('\n', p) + 1;
-    return !FENCE_LIKE_RE.test(md.slice(lineStart, p + 1));
-  });
-  if (usable.length === 0) return out;
-  // Every probe character is one UTF-16 unit, so offsets stay put.
-  let probed = '';
-  let last = 0;
-  for (const p of [...new Set(usable)].sort((a, b) => a - b)) {
-    probed += md.slice(last, p) + '@';
-    last = p + 1;
-  }
-  probed += md.slice(last);
-  const control = probed.replace(/[`~]/g, "'");
-  const starts = (text: string): Set<number> => {
-    const s = new Set<number>();
-    for (const c of findNarrativeCitations(text)) s.add(text[c.start] === '-' ? c.start + 1 : c.start);
-    return s;
-  };
-  const inDraft = starts(probed);
-  const inControl = starts(control);
-  for (const p of usable) if (inControl.has(p) && !inDraft.has(p)) out.add(p);
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // The extractor.
 // ---------------------------------------------------------------------------
@@ -547,12 +504,15 @@ export function extractQuotes(draftMd: string, opts: ExtractQuotesOptions = {}):
   for (const run of blockRuns(lines)) for (let i = run.first; i <= run.last; i += 1) blocked.add(i);
 
   const candidates = [...blocks, ...inlineCandidates(md, lines, blocked, cites, minWords)].sort((a, b) => a.start - b.start);
-  const code = provablyInCode(md, candidates.map((c) => c.probe));
+  // Quotes inside code the one grammar proves Pandoc reads as code (fenced
+  // blocks, inline code spans) are not quotes; code it cannot prove counts as
+  // text (fail closed: the quote is checked).
+  const code = provableCodeSpans(md);
 
   const out: ExtractedQuote[] = [];
   let n = 0;
   for (const c of candidates) {
-    if (code.has(c.probe)) continue;
+    if (offsetInSpans(c.probe >= 0 ? c.probe : c.start, code)) continue;
     const id = quoteId(n);
     n += 1;
     const line = lineAt(md, c.start);

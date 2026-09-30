@@ -46,6 +46,12 @@ export interface CheckDraftOptions {
    * Omitted: the quote policy is not checked (a caller with no library).
    */
   readonly fullText?: ReadonlyMap<string, boolean>;
+  /**
+   * `[verification] quote_min_words` (D-20-17): the word floor Pass 3 counts a
+   * direct quote at, so write asks the drafter to paraphrase exactly the quotes
+   * Pass 3 would check. Default: the extractor's default (5).
+   */
+  readonly quoteMinWords?: number;
 }
 
 /** Every containment violation of `draft` (empty when it is contained). */
@@ -58,7 +64,7 @@ export function checkDraft(draft: string, opts: CheckDraftOptions): DraftViolati
   }
   if (opts.fullText !== undefined) {
     // One violation per quote, each carrying the corrective text for that quote.
-    for (const q of quotesWithoutFullText(draft, opts.fullText)) {
+    for (const q of quotesWithoutFullText(draft, opts.fullText, opts.quoteMinWords !== undefined ? { minWords: opts.quoteMinWords } : {})) {
       out.push({ kind: 'quote-without-full-text', citekey: q.citekey, message: describeQuotesWithoutFullText([q]), quote: q });
     }
   }

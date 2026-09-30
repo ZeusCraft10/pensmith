@@ -21,8 +21,10 @@
 //                form always carries a blocking finding (so it can never be
 //                verified), and on a sample, Pass 1 over an empty bibliography
 //                gives every Pandoc key a FABRICATED row and a blocked outcome.
-//                (The gate-level half — the rows through the gate core at
-//                verify, compile and done — runs in the Phase 20 integration.)
+//                The gate-level half runs the drafts through the ONE gate
+//                core verify, compile and done share (verify/gate.ts
+//                recomputeGate): a flagged draft is never `verified`, and a
+//                key missing from the bibliography is a blocking FABRICATED.
 //
 // `Claim A [@smith2020 [see note]].` is a fixed regression example.
 //
@@ -46,6 +48,7 @@ import {
 import { findUnsupportedForms } from '../bin/lib/verify/unsupported-forms.js';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
 import { sectionOutcome } from '../bin/lib/verify/verdicts.js';
+import { recomputeGate, rowBlocks } from '../bin/lib/verify/gate.js';
 import { exportDraft } from '../bin/lib/exporter.js';
 
 const RUNS = Math.max(1000, Number(process.env['PENSMITH_PROPERTY_RUNS'] ?? 1000));
@@ -199,7 +202,24 @@ const block: fc.Arbitrary<{ text: string; flagged: boolean; note?: string }> = f
   { weight: 1, arbitrary: fc.tuple(fc.integer({ min: 1, max: 9 }), key).map(([n, k]) => ({ text: `A claim.[^n${n}]`, flagged: true, note: `[^n${n}]: Fakeson, A. (2019). See @${k}.` })) },
 );
 
-const draft: fc.Arbitrary<Draft> = fc.tuple(fc.array(block, { minLength: 1, maxLength: 4 }), fc.boolean()).map(([blocks, crlf]) => {
+/**
+ * A block with no unsupported or unparseable form: citations and noise only
+ * (Property A and B still apply to it; a clean draft must never be blocked for
+ * nothing — the Pass-1 gate still sees every key).
+ */
+const cleanSegment = fc.oneof({ weight: 4, arbitrary: citation.filter((s) => !s.flagged) }, { weight: 3, arbitrary: noise });
+const cleanBlock: fc.Arbitrary<{ text: string; flagged: boolean; note?: string }> = fc.oneof(
+  { weight: 6, arbitrary: fc.array(cleanSegment, { minLength: 1, maxLength: 6 }).map((segs) => ({ text: segs.map((x) => x.text).join(' '), flagged: false })) },
+  { weight: 1, arbitrary: key.map((k) => ({ text: `\`\`\`\n@${k} and \\cite{${k}}\n\`\`\``, flagged: false })) },
+);
+
+// A mixed draft is clean only about one time in ten (every block must draw no
+// flagged segment), so a quarter of the drafts are drawn from clean blocks
+// only: both shapes stay well represented whatever the seed.
+const draft: fc.Arbitrary<Draft> = fc.tuple(
+  fc.oneof({ weight: 3, arbitrary: fc.array(block, { minLength: 1, maxLength: 4 }) }, { weight: 1, arbitrary: fc.array(cleanBlock, { minLength: 1, maxLength: 4 }) }),
+  fc.boolean(),
+).map(([blocks, crlf]) => {
   const notes = blocks.flatMap((b) => (b.note !== undefined ? [b.note] : []));
   const md = [...blocks.map((b) => b.text), ...notes].join('\n\n') + '\n';
   return { md: crlf ? md.replace(/\n/g, '\r\n') : md, flagged: blocks.some((b) => b.flagged) };
@@ -283,6 +303,38 @@ test('HARDEN-03 (Property C): Pass 1 over an empty bibliography gives every Pand
     const verdicts = new Map(rows.map((r) => [r.citekey, r.verdict] as const));
     for (const k of keys[i] as string[]) assert.equal(verdicts.get(k), 'FABRICATED', `${k} in ${JSON.stringify(d.md)}`);
     if (rows.length > 0) assert.equal(sectionOutcome(rows).blocked, true);
+  }
+});
+
+test('HARDEN-03 (Property C, gate level): the ONE gate core never passes a generated draft with a form it cannot check, and every Pandoc key missing from the bibliography is a blocking FABRICATED row', async (t) => {
+  if (!requirePandoc(t)) return;
+  const sample = fc.sample(draft, { seed: SEED + 3, numRuns: 60 });
+  const keys = pandocKeysAll(sample.map((d) => d.md));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-harden03-gate-'));
+  try {
+    fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
+    const bib = { path: path.join(root, '.paper', 'CITATIONS.bib'), exists: true, entries: [], problems: [] };
+    let flagged = 0;
+    for (const [i, d] of sample.entries()) {
+      const pandoc = keys[i] as string[];
+      // The allowed set holds every key the draft names, so UNASSIGNED never
+      // decides the outcome: only the text findings and the registrar rows do.
+      const allowed = new Set([...pandoc, ...extractCitedKeysForVerification(d.md)]);
+      const gate = await recomputeGate({ root, text: d.md, allowedKeys: allowed, scope: { kind: 'section', id: '1' }, dryRun: false, bib });
+      const where = JSON.stringify(d.md);
+      if (d.flagged) {
+        flagged += 1;
+        assert.ok(gate.rows.some((r) => r.kind === 'text' && rowBlocks(r)), `a flagged draft has a blocking text row: ${where}`);
+        assert.notEqual(gate.outcome.status, 'verified', `a flagged draft is never verified: ${where}`);
+        assert.equal(gate.outcome.blocked, true, where);
+      }
+      const verdicts = new Map(gate.rows.filter((r) => r.kind === 'pass1').map((r) => [r.key, r.verdict] as const));
+      for (const k of pandoc) assert.equal(verdicts.get(k), 'FABRICATED', `${k} (not in the bibliography) in ${where}`);
+      if (pandoc.length > 0) assert.equal(gate.outcome.blocked, true, `a draft citing keys the bibliography lacks blocks: ${where}`);
+    }
+    assert.ok(flagged > 0, 'the sample holds flagged drafts (the check is not vacuous)');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 

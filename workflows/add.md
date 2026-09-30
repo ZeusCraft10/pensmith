@@ -86,10 +86,11 @@ with an identifier and attaches that PDF as the work's bring-your-own copy
    `lookup failed (<reason>) — nothing added`, exit 1. A failed lookup is never
    read as "no such work". Crossref's 404 is "not found" only for a DOI Crossref
    registers: pensmith asks doi.org which agency holds the DOI's prefix (only
-   the prefix is sent), and a DataCite DOI (Zenodo, Figshare, Dryad) is
-   `registered with DataCite, not Crossref — this version adds DOIs registered
-   with Crossref only … — nothing added` (a failure, never "check the
-   identifier"); a prefix no agency holds is `not found`. Offline with no recorded answer it is `DOI
+   the prefix is sent) and reads the DOI there, as `verify` does (VRFY-11): a
+   DataCite DOI (Zenodo, Figshare, Dryad) at DataCite, an mEDRA / JaLC / KISTI
+   DOI through doi.org content negotiation; that agency's own "no record" is
+   `not found`, and an agency that serves no record says so (a failure, never
+   "check the identifier"); a prefix no agency holds is `not found`. Offline with no recorded answer it is `DOI
    verification unavailable (offline) — <id> NOT added; re-run online to verify
    and add it` (arXiv / PMID / ISBN likewise), exit 1; under `--dry-run` the
    line reads `(dry-run)` and exits 0. A reserved `--dry-run` identifier is

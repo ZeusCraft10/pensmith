@@ -178,13 +178,20 @@ test('SRC-13: a failed lookup reports `lookup failed (<reason>)`, exit 1, nothin
   assert.equal(fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), false);
 });
 
-test('SRC-13 (review round 3): Crossref\'s 404 is "not found" only for a Crossref DOI — a DataCite DOI (Zenodo) says which agency registered it; an unknown prefix is not found (doi.org RA lookup, recorded)', async () => {
+test('SRC-13 (review round 3), VRFY-11: Crossref\'s 404 is "not found" only for a Crossref DOI — a DataCite DOI (Zenodo) is read at DataCite and added; DataCite\'s own 404 is not found; an unknown prefix is not found (doi.org RA lookup, recorded)', async () => {
   const root = paper();
   const notFound = { lookupById: async () => lookupNotFound('HTTP 404 (Crossref has no record of this DOI)') };
-  const zenodo = await withCrossref(notFound, () => runAdd(root, { source: 'https://doi.org/10.5281/zenodo.3242074' }));
-  assert.equal(zenodo.result['exitCode'], 1);
-  assert.match(zenodo.stderr, /pensmith add: DOI 10\.5281\/zenodo\.3242074: registered with DataCite, not Crossref — this version adds DOIs registered with Crossref only \(an arXiv DataCite DOI is read as its arXiv id\); Crossref has no record of it — nothing added\./);
-  assert.doesNotMatch(zenodo.stderr, /check the identifier/);
+  // D-20-10: doi.org names DataCite for 10.5281, and the record is DataCite's (recorded).
+  const zenodo = await withCrossref(notFound, () => runAdd(root, { source: 'https://doi.org/10.5281/zenodo.1212303' }));
+  assert.equal(zenodo.result['ok'], true, zenodo.stderr);
+  const lib = JSON.parse(fs.readFileSync(path.join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<Record<string, unknown>> };
+  const added = lib.entries.find((e) => e['doi'] === '10.5281/zenodo.1212303');
+  assert.ok(added, `the Zenodo record is in LIBRARY.json: ${JSON.stringify(lib.entries.map((e) => e['doi']))}`);
+  assert.match(fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8'), /10\.5281\/zenodo\.1212303/);
+  // A DOI under DataCite's prefix that DataCite itself does not know: not found (the registrar that holds it said so).
+  const fakeZenodo = await withCrossref(notFound, () => runAdd(root, { source: '10.5281/zenodo.pensmith-fake-2099' }));
+  assert.equal(fakeZenodo.result['exitCode'], 1);
+  assert.match(fakeZenodo.stderr, /DOI 10\.5281\/zenodo\.pensmith-fake-2099: not found \(registered with DataCite, not Crossref, and DataCite has no record of it \(.*\)\) — nothing added; check the identifier\./);
   const bogus = await withCrossref(notFound, () => runAdd(root, { source: '10.99999/not-a-real-work' }));
   assert.equal(bogus.result['exitCode'], 1);
   assert.match(bogus.stderr, /DOI 10\.99999\/not-a-real-work: not found \(no registration agency holds the DOI prefix 10\.99999\) — nothing added; check the identifier\./);
@@ -194,7 +201,15 @@ test('SRC-13 (review round 3): Crossref\'s 404 is "not found" only for a Crossre
   const ra = (await httpRecords(root)).filter((u) => u.startsWith('https://doi.org/'));
   assert.ok(ra.includes('https://doi.org/ra/10.5281') && ra.includes('https://doi.org/ra/10.99999'), JSON.stringify(ra));
   for (const u of ra) assert.match(u, /^https:\/\/doi\.org\/ra\/10\.\d+$/, 'a prefix, never the DOI');
-  assert.equal(fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), false);
+});
+
+test('VRFY-11: an mEDRA DOI is read through doi.org content negotiation and added (recorded)', async () => {
+  const root = paper();
+  const notFound = { lookupById: async () => lookupNotFound('HTTP 404 (Crossref has no record of this DOI)') };
+  const medra = await withCrossref(notFound, () => runAdd(root, { source: '10.1400/19806' }));
+  assert.equal(medra.result['ok'], true, medra.stderr);
+  const lib = JSON.parse(fs.readFileSync(path.join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<Record<string, unknown>> };
+  assert.ok(lib.entries.some((e) => e['doi'] === '10.1400/19806'), JSON.stringify(lib.entries.map((e) => e['doi'])));
 });
 
 test('SRC-11/SRC-13: `add isbn:<ISBN>` goes to the books adapter by registry name', async () => {

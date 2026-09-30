@@ -238,7 +238,7 @@ test('GRND-18: the step exits with the last verb\'s code — a blocking verify e
   assert.equal(verify.status, EXIT_BLOCKED, `${verify.stdout}\n${verify.stderr}`);
 });
 
-test('review round 3 (D-18-43), Phase 20 (D-20-03): a section left `unverifiable` by a quote whose source text cannot be checked is verified ONCE; next and resume report attention instead of re-billing it', async () => {
+test('review round 3 (D-18-43), Phase 20 (D-20-03, S-13): a section left `unverifiable` by a quote whose source text cannot be checked is verified ONCE; the other sections go on and compile refuses it naming the quote remedies', async () => {
   const sb = await sandbox('bare-chain-advisory');
   await seedPaper(sb.root, TWO_SECTIONS);
   // GRND-14 (Phase 18/19 merge): the drafter may keep a direct quote only from a
@@ -252,8 +252,7 @@ test('review round 3 (D-18-43), Phase 20 (D-20-03): a section left `unverifiable
   writeFileSync(libPath, `${JSON.stringify(lib, null, 2)}\n`);
   // A direct quote: offline with no contact email, Pass 3 cannot ask Unpaywall
   // for the source's open-access copy — UNVERIFIABLE-QUOTE, which blocks
-  // (D-20-02, D-20-03; before Phase 20 it was the advisory PDF/TEXT_UNAVAILABLE
-  // and the chain moved on to §2).
+  // (D-20-02, D-20-03; before Phase 20 it was the advisory PDF/TEXT_UNAVAILABLE).
   sb.mock.script('section-drafter', {
     text: `# Introduction\n\nAs the authors put it, "measurement always shapes what is observed in these systems, whatever the apparatus and whatever the observer happens to intend" [@${RECORDED.citekey}].\n`,
   });
@@ -261,21 +260,32 @@ test('review round 3 (D-18-43), Phase 20 (D-20-03): a section left `unverifiable
   assert.equal(r.status, EXIT_BLOCKED, `${r.stdout}\n${r.stderr}`);
   const verification = readFileSync(sectionFile(sb.root, 1, 'introduction', 'VERIFICATION.md'), 'utf8');
   assert.match(verification, /^Status: unverifiable$/m);
-  assert.match(verification, /UNVERIFIABLE-QUOTE/);
+  assert.match(verification, /\[q1\] \(".*"\): \*\*UNVERIFIABLE-QUOTE\*\*/);
   assert.match(verification, /Unpaywall needs a contact email/);
   assert.doesNotMatch(verification, /(?:PDF|TEXT)_UNAVAILABLE/, 'nothing writes the pre-Phase-20 labels');
-  assert.match(
-    r.stderr,
-    /^pensmith: ran plan §1, write §1 \(exit 4\); next: status \(attention: section 1 could not be verified: .*UNVERIFIABLE-QUOTE/m,
-    'write verified §1 once; the chain does not verify it again',
-  );
-  assert.ok(!existsSync(sectionFile(sb.root, 2, 'discussion', 'DRAFT.md')), 'a blocking section stops the chain');
+  // write verified §1 once; S-13: the unverifiable section does not stop the walk.
+  assert.match(r.stderr, /^pensmith: ran plan §1, write §1 \(exit 4\); next: plan §2$/m, 'write verified §1 once; the chain does not verify it again');
+  const drafts = sb.calls('section-drafter');
+  assert.equal(drafts, 1);
+  // §2's step runs; §1 is never re-verified (its draft is unchanged).
+  sb.mock.script('section-drafter', { text: `# Discussion\n\nMeasurement shapes what is observed [@${RECORDED.citekey}].\n` });
+  const n2 = await sb.run(['next', '--yolo']);
+  assert.equal(n2.status, EXIT_OK, `${n2.stdout}\n${n2.stderr}`);
+  assert.match(n2.stderr, /^pensmith: ran plan §2, write §2(, verify §2)?; next: compile$/m, 'S-13: §2 goes on; §1 is not re-verified');
+  assert.equal(statusOf(sb.root, 1, 'introduction'), 'unverifiable');
+  assert.equal(statusOf(sb.root, 2, 'discussion'), 'verified');
+  // compile recomputes §1 and refuses the quote, naming its three remedies.
   const calls = sb.mock.requests.length;
-  for (const verb of ['next', 'resume']) {
-    const r2 = await sb.run([verb, '--yolo']);
-    assert.equal(r2.status, EXIT_OK, `${r2.stdout}\n${r2.stderr}`);
-    assert.match(r2.stdout, /attention: section 1 could not be verified: .*UNVERIFIABLE-QUOTE/);
-  }
+  const c = await sb.run(['resume', '--yolo']);
+  assert.equal(c.status, EXIT_BLOCKED, `${c.stdout}\n${c.stderr}`);
+  assert.match(
+    `${c.stdout}\n${c.stderr}`,
+    /section 1 \(introduction\): quote q1 \(".*"\) \[@aspelmeyer2009\] is UNVERIFIABLE-QUOTE — .*pensmith add <pdf>.*pensmith plan 1 --revise.*pensmith verify 1 --accept-quote q1/,
+    'compile names the quote and its remedies',
+  );
+  assert.ok(!existsSync(join(sb.root, '.paper', 'DRAFT.md')), 'nothing compiled');
+  const st = await sb.run(['status']);
+  assert.match(st.stdout, /#1 introduction: unverifiable - .*quote\(s\) \(q1\) could not be checked against any source text/);
   assert.equal(sb.mock.requests.length, calls, 'no model call: the unchanged draft is not re-verified');
 });
 

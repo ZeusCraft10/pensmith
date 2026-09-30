@@ -66,6 +66,8 @@ export interface ExchangeOptions {
 
 /** The article for a service name in a reason (`an OpenAlex answer`, `a Crossref answer`). */
 function article(service: string): string {
+  // By sound, not letter: "a Europe PMC answer", "an Unpaywall answer".
+  if (/^(?:eu|uni(?!n)|one\b)/i.test(service)) return 'a';
   return /^[aeiou]/i.test(service) ? 'an' : 'a';
 }
 

@@ -58,6 +58,7 @@ import { complete, assertLlmConfigured, correctiveMessages, isFatalLlmError, isN
 import { STUB_DRAFT_MARKER } from '../lib/verify/gate.js';
 import { requestHints } from '../lib/prompt-request.js';
 import { tryLoadLibrary } from '../lib/library.js';
+import { tryReadPaperConfigSync } from '../lib/config.js';
 import type { SourceContextInput } from '../lib/source-context.js';
 import { byoText } from '../lib/byo-text.js';
 import { fullTextByCitekey } from '../lib/full-text.js';
@@ -205,11 +206,14 @@ async function writeOneSection(
     (await complete({ slug: 'section-drafter', section: loggedSectionId(input.section.n, input.section.suffix), system: req.system, messages, stubHint: requestHints(req) })).text;
 
   // FEED-04 containment and the GRND-14 quote policy: one corrective turn, then fail the section.
+  // The quote floor Pass 3 uses (`[verification] quote_min_words`, D-20-17).
+  const quoteMinWords = tryReadPaperConfigSync(paperRoot)?.verification?.quote_min_words;
+  const containment = { assigned: input.sources, section: id, fullText, ...(quoteMinWords !== undefined ? { quoteMinWords } : {}) };
   let draft = await call(req.messages);
-  let violations = checkDraft(draft, { assigned: input.sources, section: id, fullText });
+  let violations = checkDraft(draft, containment);
   if (violations.length > 0) {
     draft = await call(correctiveMessages(req.messages, draft, containmentCorrection(violations, input.sources)));
-    violations = checkDraft(draft, { assigned: input.sources, section: id, fullText });
+    violations = checkDraft(draft, containment);
   }
   const draftPath = sectionDraft(section.n, section.slug, paperRoot);
   const rejectedPath = path.join(path.dirname(draftPath), 'DRAFT.rejected.md');

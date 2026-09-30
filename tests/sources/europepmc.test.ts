@@ -84,7 +84,7 @@ test('VRFY-19: Europe PMC\'s three-way answer — 404 not-found, a non-JATS 200 
     assert.match(missing.kind === 'not-found' ? missing.reason : '', /HTTP 404 \(Europe PMC has no open-access full text of PMC\d+\)/);
     const html = await lookupFullText(id(base + 1));
     assert.deepEqual(html.kind === 'failed' ? [html.kind, html.status] : [html.kind], ['failed', 200]);
-    assert.match(html.kind === 'failed' ? html.reason : '', /^response is not an? Europe PMC answer \(no JATS <article>\)$/);
+    assert.match(html.kind === 'failed' ? html.reason : '', /^response is not a Europe PMC answer \(no JATS <article>\)$/);
     const busy = await lookupFullText(id(base + 2));
     assert.equal(busy.kind, 'failed');
     assert.ok(agents.every((ua) => /^pensmith\/\S+$/.test(ua)) && agents.length > 0, 'no contact email, no key');

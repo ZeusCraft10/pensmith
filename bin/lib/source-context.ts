@@ -229,11 +229,12 @@ export function libraryCitekeys(entries: readonly SourceContextInput[]): Set<str
 // strands the section at verify, so outline and plan are fed the checkable
 // ones and name the others. What Pass 1 can check is ONE predicate shared with
 // Pass 1 itself (verify/pass1-identifiers.ts citationCheckRoute): a Crossref
-// DOI; a DataCite arXiv DOI (checked at arXiv); no DOI but an arXiv id
-// (arXiv), a PMID (PubMed) or an ISBN (the books registries); another agency's
-// DOI with one of those. Withheld: a source flagged retracted (Pass 1 always
-// blocks it, review round 3), one with no DOI, arXiv id, PMID or ISBN, a
-// DataCite (Zenodo, figshare, Dryad) DOI with none of those (VRFY-11), and a
+// DOI; a DataCite DOI — Zenodo, figshare, Dryad at DataCite (VRFY-11), an
+// arXiv DOI at arXiv; another agency's DOI (content negotiation, else its
+// other identifiers); no DOI but an arXiv id (arXiv), a PMID (PubMed) or an
+// ISBN (the books registries). Withheld: a source flagged retracted (Pass 1
+// always blocks it, review round 3), one with no DOI, arXiv id, PMID or ISBN
+// (Pass 1's metadata search may find no match — UNRESOLVABLE), and a
 // synthetic --dry-run source outside a dry run.
 // ---------------------------------------------------------------------------
 
@@ -295,10 +296,7 @@ export function excludedRemedy(excluded: ReadonlyArray<{ citekey: string; reason
   const fixable = excluded.some((x) => x.reason !== RETRACTED_REASON && x.reason !== SYNTHETIC_REASON);
   const parts: string[] = [];
   if (fixable) {
-    parts.push(
-      'to use one the verifier cannot check, `pensmith add` its DOI, arXiv id, PMID or ISBN ' +
-        '(for a Zenodo / figshare / Dryad record, the DOI of its published version)',
-    );
+    parts.push('to use one the verifier cannot check, `pensmith add` its DOI, arXiv id, PMID or ISBN');
   }
   if (retracted) parts.push('a retracted source is never cited');
   if (synthetic) parts.push('a synthetic --dry-run source is never cited outside a dry run');
