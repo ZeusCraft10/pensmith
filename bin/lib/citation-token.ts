@@ -566,7 +566,7 @@ function fencedCodeBlocks(lines: readonly SourceLine[]): Array<[number, number]>
   return out;
 }
 
-/** A paragraph that holds a construct able to take a backtick (math, a table cell, attributes, a note, a link or span, an escape): no inline-code proof there. */
+/** A construct able to take a backtick (math, a table cell, attributes, a note, a link or span, an escape): outside the proven code spans of its paragraph, no inline-code proof there. */
 const BACKTICK_TAKER_RE = /[$|{}^~\\]|\][ \t\r\n]*[([{:]/;
 /** Paragraphs longer than this are not searched for code spans (every `@key` in them counts). */
 const MAX_PARAGRAPH_LINES = 64;
@@ -647,7 +647,7 @@ function inlineCodeSpans(md: string, lines: readonly SourceLine[], fences: Reado
     i = k + 1;
     const last = para[para.length - 1] as SourceLine;
     const text = md.slice(first.start, last.end);
-    if (!text.includes('`') || BACKTICK_TAKER_RE.test(text)) continue;
+    if (!text.includes('`')) continue;
     if (para.length > MAX_PARAGRAPH_LINES || text.length > MAX_PARAGRAPH_CHARS) continue;
     // The one-line spans of each possible block start, keyed by absolute offsets.
     const pairings = para.map((from) =>
@@ -658,13 +658,28 @@ function inlineCodeSpans(md: string, lines: readonly SourceLine[], fences: Reado
           .map(([s, e]) => `${s}:${e}`),
       ),
     );
+    const agreed: Array<[number, number]> = [];
     para.forEach((line, li) => {
       for (const span of pairings[0] as Set<string>) {
         const [s, e] = span.split(':').map(Number) as [number, number];
         if (s < line.start || e > line.end) continue;
-        if (pairings.slice(0, li + 1).every((p) => p.has(span))) out.push([s, e]);
+        if (pairings.slice(0, li + 1).every((p) => p.has(span))) agreed.push([s, e]);
       }
     });
+    // Pandoc reads left to right: a construct that can take a backtick (math,
+    // a note, a link destination, an escape, …) only does so when it opens
+    // before the backtick. One that lies wholly inside a proven span is that
+    // span's literal text (`` `[^1]` ``, `` `\cite{x}` ``), so the proof
+    // stands; any other one voids it for the paragraph (fail closed).
+    const takers = new RegExp(BACKTICK_TAKER_RE.source, 'g');
+    let proven = true;
+    for (let m = takers.exec(text); m !== null && proven; m = takers.exec(text)) {
+      const s = first.start + m.index;
+      const e = s + m[0].length;
+      if (!agreed.some(([a, b]) => s > a && e < b)) proven = false;
+      if (m[0].length === 0) takers.lastIndex += 1;
+    }
+    if (proven) out.push(...agreed);
   }
   return out;
 }

@@ -201,5 +201,7 @@ test('VRFY-10: a clean draft — the stub drafter\'s prose with Pandoc citations
 
 test('VRFY-10: only code the grammar proves is code is skipped; an inline code span next to a backslash is scanned (fail closed)', () => {
   assert.deepEqual(found('Use `x[1]` to index.'), [], 'a provable inline code span');
+  assert.deepEqual(found('Footnotes in code: `[^1]` are not notes [@k].'), [], 'a construct inside the code span is its literal text');
+  assert.deepEqual(found('Footnotes in code: `[^1]` and a note^[x] outside.').map((f) => f[0]), ['footnote', 'inline-note'], 'a note outside the span voids the proof (fail closed)');
   assert.deepEqual(found('Use `\\cite{x}` to cite.').map((f) => f[0]), ['tex-cite'], 'an escape in the paragraph voids the inline-code proof');
 });

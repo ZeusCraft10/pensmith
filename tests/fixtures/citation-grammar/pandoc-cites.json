@@ -1121,6 +1121,51 @@
    "pandoc": [
     "good"
    ]
+  },
+  {
+   "name": "inline code holding a footnote marker and a key",
+   "md": "Footnotes in code: `[^1] @inside` are not notes [@good].",
+   "pandoc": [
+    "good"
+   ],
+   "expect": "equal"
+  },
+  {
+   "name": "inline code holding math, a pipe and braces",
+   "md": "Write `$x$ | {y} @inside` here [@good].",
+   "pandoc": [
+    "good"
+   ],
+   "expect": "equal"
+  },
+  {
+   "name": "inline code holding a link destination and a tilde",
+   "md": "The form `[a](@inside) ~x~` is shown [@good].",
+   "pandoc": [
+    "good"
+   ],
+   "expect": "equal"
+  },
+  {
+   "name": "a taker before the code span voids the proof (math opens first)",
+   "md": "Let $a `b` @inside$ hold [@good].",
+   "pandoc": [
+    "good"
+   ]
+  },
+  {
+   "name": "a taker after the code span voids the proof (a link destination)",
+   "md": "See [`x`](@evil) and `@inside` [@good].",
+   "pandoc": [
+    "good"
+   ]
+  },
+  {
+   "name": "a superscript opened before the code span",
+   "md": "A ^sup `@inside` x^ note [@good].",
+   "pandoc": [
+    "good"
+   ]
   }
  ]
 }
