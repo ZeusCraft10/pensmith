@@ -78,3 +78,29 @@ test('SRC-12: PubMed compact names ("Zhu N") become "Family, Initials" and parse
     assert.equal(fromPubmedCompactName(s), s, s);
   }
 });
+
+test('SRC-12: a registrar display name that reads as a group is braced (one literal name); a person\'s name is not', async () => {
+  const { displayAuthorName, isGroupDisplayName } = await import('../bin/lib/person-name.js');
+  const groups: Array<[string, string]> = [
+    [' The ATLAS Collaboration', '{The ATLAS Collaboration}'],
+    ['CMS Collaboration', '{CMS Collaboration}'],
+    ['Gemini Team', '{Gemini Team}'],
+    ['Dphep Study Group', '{Dphep Study Group}'],
+    ['World Health Organization', '{World Health Organization}'],
+    ['The SPRINT Research Group', '{The SPRINT Research Group}'],
+    ['PIONEER Investigators', '{PIONEER Investigators}'],
+    ['ENCODE Project Consortium', '{ENCODE Project Consortium}'],
+    ['Open Science Collaboration.', '{Open Science Collaboration.}'],
+  ];
+  for (const [input, want] of groups) {
+    assert.equal(isGroupDisplayName(input), true, input);
+    assert.equal(displayAuthorName(input), want, input);
+    const parsed = parsePersonName(want)!;
+    assert.equal(parsed.literal, true, input);
+    assert.equal(parsed.family, want.slice(1, -1), input);
+  }
+  for (const person of ['Ashish Vaswani', 'Laurens van der Maaten', 'Martin Luther King Jr.', 'Aristotle', 'Vaswani, Ashish', '{Already Braced Consortium}', 'Thea Group-Smith', 'Grace Hopper', 'Theodore Groupman']) {
+    assert.equal(isGroupDisplayName(person), false, person);
+  }
+  assert.equal(displayAuthorName('  Ashish   Vaswani '), 'Ashish Vaswani', 'whitespace collapsed, otherwise unchanged');
+});

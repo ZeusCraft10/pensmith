@@ -35,6 +35,7 @@ import { contactEmail } from '../contact-email.js';
 import { exchange, jsonShape, statusReason, validator, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
+import { displayAuthorName } from '../person-name.js';
 import { normalizeDoi } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { OaLocationSchema, type OaLocation } from '../schemas/source-types.js';
@@ -90,7 +91,7 @@ export function unpaywallAuthorName(a: UnpaywallAuthor): string {
   const family = String(a.family ?? '').trim();
   const given = String(a.given ?? '').trim();
   if (family) return given ? `${family}, ${given}` : family;
-  return String(a.raw_author_name ?? '').replace(/\s+/g, ' ').trim();
+  return displayAuthorName(String(a.raw_author_name ?? ''));
 }
 
 function httpUrl(v: unknown): string | undefined {

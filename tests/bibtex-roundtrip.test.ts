@@ -261,6 +261,39 @@ function pandocBinary(): string | null {
   return null;
 }
 
+test('SRC-12: an arXiv collaboration author (recorded 1207.7214) is written, read back and cited as the group — never "Collaboration, T. A."', async (t) => {
+  const { fetchById } = await import('../bin/lib/sources/arxiv.js');
+  const c = await fetchById('1207.7214');
+  assert.ok(c);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-bib-atlas-'));
+  const target = path.join(dir, 'CITATIONS.bib');
+  const src: BibSource = { citekey: c.citekey, title: c.title, authors: c.authors, arxiv: c.arxiv ?? null, type: c.type ?? null, ...(c.year !== undefined ? { year: c.year } : {}) };
+  await writeBibtex([src], target);
+  const bib = fs.readFileSync(target, 'utf8');
+  assert.match(bib, /@misc\{atlas2012,/);
+  assert.match(bib, /author = \{\{The ATLAS Collaboration\}\}/);
+  const entries = await parseBib(bib);
+  assert.deepEqual(entries[0]!['author'], [{ family: 'The ATLAS Collaboration' }]);
+  assert.equal(await renderInText(entries, 'apa'), '(The ATLAS Collaboration, 2012)');
+  assert.match(await renderApa(entries), /^The ATLAS Collaboration\. \(2012\)\. Observation of a new particle/);
+
+  const pandoc = pandocBinary();
+  if (pandoc === null) {
+    t.diagnostic('pandoc is not on PATH: the citeproc half of this check needs it (the offline half ran above)');
+    return;
+  }
+  fs.writeFileSync(path.join(dir, 'doc.md'), 'Higgs [@atlas2012].\n');
+  const r = spawnSync(
+    pandoc,
+    ['doc.md', '--citeproc', '--bibliography', 'CITATIONS.bib', '--csl', path.join(REPO, 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain', '--wrap=none'],
+    { cwd: dir, encoding: 'utf8' },
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Higgs \(The ATLAS Collaboration, 2012\)\./);
+  assert.match(r.stdout, /The ATLAS Collaboration\. \(2012\)\. Observation of a new particle/);
+  assert.doesNotMatch(r.stdout, /Collaboration, T/);
+});
+
 test('SRC-12: pandoc citeproc (when on PATH) renders "(Vaswani & Shazeer, 2017)" from the written bib', (t) => {
   const pandoc = pandocBinary();
   if (pandoc === null) {

@@ -46,6 +46,7 @@ import { type SearchOptions } from './search-failure.js';
 import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
+import { displayAuthorName } from '../person-name.js';
 import { isbn13CheckDigit } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -159,7 +160,7 @@ export function openLibraryToCandidate(work: OlWork, wantIsbn?: string): SourceC
   const title = bookTitle(work, edition);
   if (!title) return null;
   const authorList = (edition?.author_name?.length ? edition.author_name : work.author_name) ?? [];
-  const authors = authorList.map((a) => String(a).replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const authors = authorList.map((a) => displayAuthorName(String(a))).filter(Boolean);
   if (authors.length === 0) return null;
   const year = yearIn(edition?.publish_date?.[0]) ?? (typeof work.first_publish_year === 'number' ? yearIn(String(work.first_publish_year)) : undefined);
   const publisher = str(edition?.publisher?.[0]);
@@ -191,7 +192,7 @@ export function googleBooksToCandidate(volume: GbVolume, wantIsbn: string): Sour
   const base = plainTextOpt(str(info.title));
   if (!base) return null;
   const subtitle = plainTextOpt(str(info.subtitle));
-  const authors = (info.authors ?? []).map((a) => String(a).replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const authors = (info.authors ?? []).map((a) => displayAuthorName(String(a))).filter(Boolean);
   if (authors.length === 0) return null;
   const year = yearIn(info.publishedDate);
   const publisher = str(info.publisher);
@@ -313,7 +314,7 @@ async function editionAuthors(editionKey: string, indexNames: readonly string[])
       const a = await openLibraryRecord(`${OPEN_LIBRARY}${key}.json`);
       const name = a ? str(a['name']) ?? str(a['personal_name']) : undefined;
       if (name === undefined) return null;
-      names.push(name);
+      names.push(displayAuthorName(name));
     }
     return names;
   }

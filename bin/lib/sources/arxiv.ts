@@ -38,6 +38,7 @@ import { type SearchOptions } from './search-failure.js';
 import { exchange, statusReason, validator, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
+import { displayAuthorName } from '../person-name.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
 const BASE = 'https://export.arxiv.org';
@@ -115,7 +116,7 @@ function parseEntry(entryXml: string): ArxivEntry | null {
   const authors = extractAll(entryXml, 'author')
     .map((block) => {
       const name = extractOne(block, 'name');
-      return name ? texToText(decodeXmlEntities(name)) : '';
+      return name ? displayAuthorName(texToText(decodeXmlEntities(name))) : '';
     })
     .filter(Boolean);
 
@@ -167,7 +168,8 @@ function toCandidate(entry: ArxivEntry): SourceCandidate | null {
   }
 
   const arxiv = entryArxivId(entry.id);
-  // arXiv emits "Given Family" display names; author-normalize handles them.
+  // arXiv emits "Given Family" display names (author-normalize reads them);
+  // a collaboration's name is braced (displayAuthorName, SRC-12).
   return {
     source: 'arxiv',
     id: entry.id,

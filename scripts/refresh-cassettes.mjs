@@ -188,6 +188,9 @@ const QUERY_SETS = {
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3, pauseMs: 3500 }] },
     { file: 'id-1706.03762', calls: [{ fn: 'lookupById', arg: RECORDED_ARXIV_ID, pauseMs: 3500 }] },
     { file: 'id-hep-th-9901001', calls: [{ fn: 'lookupById', arg: RECORDED_OLD_ARXIV_ID, pauseMs: 3500 }] },
+    // SRC-12: a collaboration as the only author ("The ATLAS Collaboration") is
+    // one braced name, never a person called "Collaboration, The ATLAS".
+    { file: 'id-1207.7214', calls: [{ fn: 'lookupById', arg: '1207.7214', pauseMs: 3500 }] },
     // PDF identification's arXiv title search (source-input.ts arxivTitleQuery),
     // asked when OpenAlex's only match is a later re-post (review round 2).
     { file: 'search-title-attention', calls: [{ fn: 'search', arg: `ti:"${BYO_PDF_TITLE}"`, limit: TITLE_LIMIT, minLimit: TITLE_LIMIT, pauseMs: 3500 }] },

@@ -27,6 +27,7 @@ import { type SearchOptions } from './search-failure.js';
 import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
+import { displayAuthorName } from '../person-name.js';
 import { s2ApiKeyValue } from '../runtime.js';
 import { normalizeDoi, normalizePmid, normalizePmcid } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
@@ -114,7 +115,8 @@ export function s2ToCandidate(item: S2Paper): SourceCandidate | null {
   const title = plainText(String(item.title ?? ''));
   if (!title) return null;
 
-  const authors = (item.authors ?? []).map((a) => String(a?.name ?? '').trim()).filter(Boolean);
+  // "Given Family" display names; a collaboration's name is braced (SRC-12).
+  const authors = (item.authors ?? []).map((a) => displayAuthorName(String(a?.name ?? ''))).filter(Boolean);
   if (authors.length === 0) return null;
 
   const year = typeof item.year === 'number' && item.year >= 1800 && item.year <= 2100 ? item.year : undefined;

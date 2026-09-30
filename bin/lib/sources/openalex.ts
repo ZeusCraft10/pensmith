@@ -41,6 +41,7 @@ import { type SearchOptions } from './search-failure.js';
 import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
+import { displayAuthorName } from '../person-name.js';
 import { normalizeDoi, normalizePmid, normalizePmcid } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import type { SourceType } from '../schemas/source-types.js';
@@ -153,9 +154,10 @@ export function openAlexToCandidate(item: OpenAlexWork): SourceCandidate | null 
   const title = plainText(String(item.title ?? item.display_name ?? ''));
   if (!title) return null;
 
-  // OpenAlex emits "Given Family" display names; author-normalize handles them.
+  // OpenAlex emits "Given Family" display names (author-normalize reads them);
+  // a collaboration's or an organisation's name is braced (SRC-12).
   const authors = (item.authorships ?? [])
-    .map((a) => String(a.author?.display_name ?? a.raw_author_name ?? '').trim())
+    .map((a) => displayAuthorName(String(a.author?.display_name ?? a.raw_author_name ?? '')))
     .filter(Boolean);
   if (authors.length === 0) return null;
 

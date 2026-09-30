@@ -19,6 +19,14 @@
 //   "王小明" (one token)        → family only
 //
 // Pure: no I/O. Whitespace is collapsed; Unicode is NFC-normalized.
+//
+// A registrar that has no name-only field (arXiv, OpenAlex, Semantic Scholar,
+// Unpaywall's raw names, Open Library) sends a collaboration or organisation
+// as a plain display string, "The ATLAS Collaboration". Read as "Given
+// Family" it becomes a person called "Collaboration, The ATLAS", so those
+// adapters pass each name through `displayAuthorName`, which braces a name
+// that reads as a group (SRC-12) the way Crossref's and PubMed's collective
+// names are braced.
 
 /** A parsed personal or corporate name. */
 export interface PersonName {
@@ -67,6 +75,45 @@ function isBracedLiteral(s: string): boolean {
     }
   }
   return depth === 0;
+}
+
+/**
+ * The last words that make a display name a group, not a person: "The ATLAS
+ * Collaboration", "Dphep Study Group", "World Health Organization", "The
+ * SPRINT Research Group", "PIONEER Investigators". Compared case-insensitively.
+ */
+const GROUP_WORDS: ReadonlySet<string> = new Set([
+  'collaboration', 'collaborations', 'collaborative', 'collaborators', 'consortium', 'consortia',
+  'group', 'groups', 'team', 'investigators', 'organization', 'organisation', 'institute',
+  'committee', 'project', 'network', 'society', 'association', 'council', 'foundation',
+  'commission', 'agency', 'alliance', 'initiative', 'federation', 'coalition', 'partnership',
+  'laboratory', 'laboratories', 'programme',
+]);
+
+/**
+ * True when a display name (no comma, not braced) names a group: it starts
+ * with "The" and has more words, or its last word is a group word (above).
+ * A person's name never starts with "The" and never ends in one of them.
+ */
+export function isGroupDisplayName(input: string): boolean {
+  if (typeof input !== 'string') return false;
+  const s = clean(input);
+  if (!s || s.includes(',') || isBracedLiteral(s)) return false;
+  const words = s.split(' ');
+  if (words.length < 2) return false;
+  if (/^the$/i.test(words[0]!)) return true;
+  const last = words[words.length - 1]!.replace(/[^\p{L}]/gu, '').toLowerCase();
+  return GROUP_WORDS.has(last);
+}
+
+/**
+ * A registrar's display name as LIBRARY.json stores it: a group's name braced
+ * (`{The ATLAS Collaboration}`, one literal name — SRC-12), anything else with
+ * its whitespace collapsed.
+ */
+export function displayAuthorName(input: string): string {
+  const s = typeof input === 'string' ? clean(input) : '';
+  return isGroupDisplayName(s) ? `{${s.replace(/[{}]/g, '')}}` : s;
 }
 
 /**

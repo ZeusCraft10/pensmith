@@ -189,3 +189,9 @@ threeWayContract({
   rateLimitReason: /^HTTP 429 — rate limited; set PENSMITH_S2_API_KEY$/,
   offlineMissId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
 });
+
+test('SRC-12: a Semantic Scholar author that is a collaboration is one braced name, keyed by its name', () => {
+  const c = s2.s2ToCandidate({ paperId: 'abc', title: 'Gemini: a family of highly capable multimodal models', year: 2023, authors: [{ name: 'Gemini Team' }] });
+  assert.deepEqual(c?.authors, ['{Gemini Team}']);
+  assert.equal(c?.citekey, 'gemini2023');
+});

@@ -17,7 +17,7 @@ function entryTitles(xml: string): string[] {
 }
 
 test('arxiv: the recorded cassettes come from the https endpoint (the http host answers 301)', () => {
-  for (const name of ['search-attention-neural-networks', 'id-1706.03762', 'id-hep-th-9901001']) {
+  for (const name of ['search-attention-neural-networks', 'id-1706.03762', 'id-hep-th-9901001', 'id-1207.7214']) {
     for (const e of recorded('arxiv', name)) assert.equal(e.scope, 'https://export.arxiv.org');
   }
 });
@@ -75,6 +75,16 @@ test('SRC-02: an old-style id (hep-th/9901001v2) → the DOI and journal referen
   assert.equal(arxiv.canonicalArxivId('HEP-TH/9901001'), 'hep-th/9901001');
   assert.equal(arxiv.canonicalArxivId('math.GT/0309136'), 'math/0309136');
   assert.equal(arxiv.canonicalArxivId('arXiv:math.GT/0309136v1'), 'math/0309136');
+});
+
+test('SRC-12: a collaboration as the author (1207.7214, "The ATLAS Collaboration") is one braced name keyed by its name (recorded)', async () => {
+  const [entry] = recorded('arxiv', 'id-1207.7214');
+  assert.match(String(entry!.response), /<name> The ATLAS Collaboration<\/name>/, 'the registrar sends a plain display name');
+  const c = await arxiv.fetchById('arXiv:1207.7214');
+  assert.ok(c);
+  assert.deepEqual(c.authors, ['{The ATLAS Collaboration}']);
+  assert.equal(c.citekey, 'atlas2012', 'keyed by the name, not "collaboration2012"');
+  assert.equal(c.year, 2012);
 });
 
 test('lookupById of something that is not an arXiv id is not-found without a request', async () => {

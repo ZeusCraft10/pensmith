@@ -183,6 +183,15 @@ test('SRC-05: the inverted-index abstract, CSL types and identifier forms', () =
   assert.equal(retracted?.retracted, true);
 });
 
+test('SRC-12: an OpenAlex author that is a collaboration is one braced name, keyed by its name', () => {
+  const c = openalex.openAlexToCandidate({
+    id: 'https://openalex.org/W2', title: 'Data preservation in high energy physics', publication_year: 2009,
+    authorships: [{ author: { display_name: 'Dphep Study Group' } }, { author: { display_name: 'Ashish Vaswani' } }],
+  });
+  assert.deepEqual(c?.authors, ['{Dphep Study Group}', 'Ashish Vaswani']);
+  assert.equal(c?.citekey, 'dphep2009');
+});
+
 test('RUN-03: an unrecorded OpenAlex query or id is a typed offline miss — never the first search result', async () => {
   await assertOfflineMiss(() => openalex.fetchById('W0000000000'), 'fetchById miss');
   await assertOfflineMiss(() => openalex.search('medieval Icelandic sagas', { limit: 10 }), 'search miss');
