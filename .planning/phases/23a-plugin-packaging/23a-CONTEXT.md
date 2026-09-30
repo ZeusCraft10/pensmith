@@ -117,16 +117,17 @@ Phase 20 (VERIFY) is being implemented at the same time in the main checkout `/h
   |---|---|
   | SessionStart | matcher `startup|resume|compact`, timeout 10 |
   | PreCompact | timeout 10 (PLUG-14) |
-  | PostToolUse | matcher `mcp__plugin_pensmith_pensmith__.*`, timeout 10 |
+  | PostToolUse | matcher `^mcp__(?:plugin_pensmith_)?pensmith__.*` (review round 1; was `mcp__plugin_pensmith_pensmith__.*`), timeout 10 |
   | Stop | timeout 10 |
 
-  - **PostToolUse matcher.** The PostToolUse matcher covers only the plugin's own MCP tools. A checkpoint marks pensmith progress, and in Tier 1 that progress flows through the pensmith tools (Phase 23b's submit tools as well). The narrow matcher also means other projects never pay a node spawn per Write or Edit.
+  - **PostToolUse matcher.** The PostToolUse matcher covers only the pensmith MCP tools. *Review round 1:* it also names `mcp__pensmith__*`, because at the repo root with `--plugin-dir ./plugin` Claude Code keeps the developer `.mcp.json` server (`pensmith`, source project) and drops the plugin's (observed live, D-23a-07), and it is anchored with `^` because Claude Code tests a regex matcher unanchored. A checkpoint marks pensmith progress, and in Tier 1 that progress flows through the pensmith tools (Phase 23b's submit tools as well). The narrow matcher also means other projects never pay a node spawn per Write or Edit.
   - **Fallback.** If the CI-pinned Claude Code rejects exec form, the stream falls back to the shell form `node "${CLAUDE_PLUGIN_ROOT}/dist/hooks/<name>.mjs"` and records the reason. The planner did not observe such a rejection on 2.1.285.
 
 - **D-23a-07 — The developer `.mcp.json` is `node ${PWD:-.}/plugin/dist/mcp/server.mjs`.** It uses no `${CLAUDE_PLUGIN_ROOT}` and needs no build step.
   - **Why this form.** Claude Code deduplicates a plugin server against a project server only when the expanded command lines match. With `${PWD}`, a checkout opened at the repo root with `--plugin-dir ./plugin` registers the server exactly once (observed). A plain relative path registers it twice (observed). `:-.` falls back to a relative path where `PWD` is unset (PowerShell, cmd).
   - **Limitations, documented in CONTRIBUTING.** Claude Code must be opened at the repo root, because a subdirectory launch fails for any relative form. Under Git Bash on Windows, `PWD` holds an MSYS path, so developers there launch from PowerShell or cmd.
   - **Verification.** The stream re-checks this in a fresh clone and may adopt a strictly better form it finds, recording the evidence.
+  - **Review round 1.** Kept. `${PWD}` is the inherited environment variable, so a launcher that starts Claude Code in the root with another `PWD` fails with `CONNECTION_CLOSED`; `${CLAUDE_PROJECT_DIR}` is not expanded in `.mcp.json` (observed: "Missing environment variables: CLAUDE_PROJECT_DIR", and `${CLAUDE_PROJECT_DIR:-.}` connects only through its `.` fallback), so no variable names the project folder. CONTRIBUTING documents the stale-`PWD` case, and `scripts/plugin-session-check.mjs` records PWD = root (connected), unset (connected) and another folder (the limitation). The dedupe keeps the **project** server, not the plugin's: the PostToolUse matcher and the `pensmith` skill's `allowed-tools` name both tool spellings, and the session check proves `/pensmith status` and its checkpoint in that setup.
 
 - **D-23a-08 — The homemade validator enforces the spec and rejects the old shapes.**
   - **Invocation.** `scripts/validate-plugin-manifest.cjs [--root <dir>]` validates the following:
@@ -156,7 +157,7 @@ Phase 20 (VERIFY) is being implemented at the same time in the main checkout `/h
   | verify N | `pensmith_verify` |
 
   - **Verbs without a tool yet.** For every other verb, the skill says it runs in the Tier-2 CLI in this release. Claude may run `pensmith <verb>` through Bash when it is on PATH; otherwise Claude tells the user how to install the CLI. The skill never pretends those verbs run key-free, and it never writes paper files itself.
-  - **Allowed tools.** `allowed-tools` pre-approves only the read-only `mcp__plugin_pensmith_pensmith__pensmith_status`.
+  - **Allowed tools.** `allowed-tools` pre-approves only the read-only `pensmith_status`: `mcp__plugin_pensmith_pensmith__pensmith_status mcp__pensmith__pensmith_status` (review round 1: the second is the same tool from the developer `.mcp.json` server Claude Code keeps at the repo root, D-23a-07).
   - **Server not connected.** If the pensmith MCP tools are missing, the skill tells the user to install Node.js ≥ 22, put `node` on PATH, and restart Claude Code (CI-05 has a static test for this).
   - **What Phase 23b changes.** Phase 23b (PLUG-09) replaces the CLI fallback with the key-free MCP flow. Only this skill, and no plumbing skill, needs rewriting then.
 - **D-23a-11 — Documentation.** The plumbing namespace is documented in a new `docs/PLUMBING.md`: each `/pensmith:<name>`, the verb it maps to, and scripting with `claude -p "/pensmith:verify-section 3"`. The README links it from its documentation list, never from the quick start, which stays `/pensmith` only. The README Tier-1 install section needs no build step, requires Node ≥ 22 on PATH, and describes the Tier-1 state truthfully; key-free Tier-1 generation is Phase 23b.
@@ -189,12 +190,12 @@ Phase 20 (VERIFY) is being implemented at the same time in the main checkout `/h
     - It reads Claude Code's stdin JSON, bounded at 2 s.
     - It resolves the paper with `resolvePaperRoot({mode:'hook', cwd: input.cwd ?? workingDirectory()})`. It never follows the `open` pointer.
     - It always exits 0, sends diagnostics only to stderr, and writes only protocol JSON to stdout.
-  - **Outside a paper.** When `hasPaper(root)` is false, each hook exits 0 in < 500 ms with no output and creates no files. Heavy modules are loaded through dynamic `import()` after the paper check. esbuild inlines those modules but defers their initialisation.
+  - **Outside a paper.** When `hasPaper(root)` is false, each hook exits 0 in < 500 ms with no output and creates no files. *Review round 1:* the check is `hasCurrentLayoutPaper(root)` — a `.paper/` directory and no pre-v1 root STATE.json awaiting the legacy-layout move — so a hook never moves the user's files; the next CLI or MCP run does, under the session lock. Heavy modules are loaded through dynamic `import()` after the paper check. esbuild inlines those modules but defers their initialisation.
   - **What each hook does.** Hook logic lives in unit-testable `bin/lib` modules (`bin/lib/hooks/*.ts`); the `hooks/*.ts` files are thin entries.
 
     | Hook | Behaviour |
     |---|---|
-    | SessionStart | Emits one line, `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`. The context carries the router's next step (`resolveNextAction`, read-only), a summary of any not-done `HANDOFF.json`, and the instruction to run `/pensmith` to continue. It never emits `systemMessage`. |
+    | SessionStart | Emits one line, `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`. The context carries the router's next step (`resolveNextAction`, read-only), a summary of any not-done `HANDOFF.json`, and the instruction to run `/pensmith` to continue. It never emits `systemMessage`. *Review round 1:* the context holds only validated or router-derived values — the step without the router's attention detail (which can quote a PLAN.md `failure_reason`, VERIFICATION.md rows or an OUTLINE.md problem) and HANDOFF's `last_updated`, `phase`, `section` and `position`, never its `next_action` or `current_section` text — because `.paper/` may be shared and additionalContext reaches the model. |
     | PreCompact | Writes `.paper/HANDOFF.json` v2 (D-23a-16) within its 10 s deadline. |
     | PostToolUse | Reads `tool_name` and `session_id`. It appends at most one checkpoint per minute to `pensmithDataDir()/checkpoints/<projectHash(root)>.jsonl`, under a sentinel lock. The checkpoint holds `{ts, session_id, tool_name, next}`. Checkpoints never go under `.claude/` or `.paper/`, because `.paper/` may sit in a sync folder and is seeded into dry runs. |
     | Stop | Keeps the D-17-37 policy. It releases the session lock only when the owner is kind `mcp` and its `claudeSessionId` equals stdin `session_id`. It flushes the session log. |
@@ -211,6 +212,7 @@ Phase 20 (VERIFY) is being implemented at the same time in the main checkout `/h
   - **Source of the values.** They derive from the router's decision, not from a STATE.json field that no longer exists.
   - **Migration.** `bin/lib/migrations/handoff/v1_to_v2.ts` maps v1 phases `plan`, `write` and `verify` to `sectioning` with the matching `position`. `resume` and `session-start` read v1 and v2 through it (S-20). A file newer than v2 is ignored, never downgraded; HANDOFF is a disposable pointer file, and a newer one never blocks.
   - **Size bound.** The ≤ 5,120-byte bound stays.
+  - **Review round 1 amendments.** (1) `breadcrumbs` are dropped from v2: v1 read them from `.paper/BREADCRUMBS.jsonl`, which nothing ever wrote, and nothing read them back; the v1 schema keeps the field so an old file parses, the migration drops it, and a v2 file that still has it parses (unknown keys are stripped). (2) Assembly is total: a current slug over the 120-character bound is recorded as null and a section pointer that fails its schema is dropped (STATE.json slugs are unbounded). (3) "Never downgraded" holds for the writer too: `writeHandoff` re-reads the file under its lock and leaves a newer one byte-identical.
 
 ### CI (CI-05, PLUG-03)
 
