@@ -33,6 +33,8 @@ import {
 import { HandoffV1Schema } from '../bin/lib/schemas/handoff.js';
 import { migrate } from '../bin/lib/migrations/handoff/v1_to_v2.js';
 import type { RouterDecision } from '../bin/lib/router.js';
+import { CLI_BIN, runCli, sandbox } from './helpers/paper-cli-harness.js';
+import { seedThreeSectionPaper } from './helpers/status-fixture.js';
 
 const NOW = new Date('2026-09-30T12:00:00.000Z');
 
@@ -198,6 +200,30 @@ test('HANDOFF reader: v1 is migrated in memory, v2 read as is, a newer file igno
     assert.deepEqual(readHandoff(dir), { kind: 'invalid' }, junk);
     assert.equal(loadHandoff(dir), null);
   }
+});
+
+// ---------------------------------------------------------------------------
+// `pensmith resume` (the built CLI) reads it
+// ---------------------------------------------------------------------------
+
+test('HANDOFF v2: `pensmith resume` prints phase, section and position (a v1 file migrated), consumes it, and leaves a newer one', async () => {
+  assert.ok(existsSync(CLI_BIN), 'dist/ is missing — run `npm run build`');
+  const sb = sandbox('handoff-resume');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  const file = join(root, '.paper', 'HANDOFF.json');
+  writeFileSync(file, JSON.stringify(v1('write', {
+    section_pointers: [{ slug: 'methods', plan_path: join(root, '.paper', 'sections', '02-methods', 'PLAN.md'), draft_path: null, verification_path: null, state: 'writing' }],
+  })));
+  const r = runCli(sb, root, ['resume']);
+  assert.match(r.stderr, /pensmith resume: last at phase='sectioning', section='2', position='write'\. Next: Resume write on section methods/, r.stderr);
+  assert.equal(existsSync(file), false, 'resume consumes the HANDOFF');
+
+  const newer = JSON.stringify({ schema_version: 3, phase: 'from-the-future' });
+  writeFileSync(file, newer);
+  const r2 = runCli(sb, root, ['resume']);
+  assert.doesNotMatch(r2.stderr, /last at phase/, 'a newer HANDOFF gives no summary');
+  assert.equal(readFileSync(file, 'utf8'), newer, 'and is not consumed');
 });
 
 // ---------------------------------------------------------------------------

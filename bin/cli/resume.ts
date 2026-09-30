@@ -182,7 +182,7 @@ async function runReplay(paperRoot: string, entryId: string, yolo: boolean): Pro
 }
 
 /**
- * `pensmith resume: last at phase sectioning, section 2 (write). Next: …` —
+ * `pensmith resume: last at phase='sectioning', section='2', position='write'. Next: …` —
  * the HANDOFF summary (v1 files are read through the in-memory migration).
  */
 export function handoffSummaryLine(h: Handoff): string {

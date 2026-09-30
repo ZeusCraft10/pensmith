@@ -39,7 +39,7 @@ structurally incapable of returning `{ verb:'resume' }`.
 
 0. **`--replay <entryId>`** → the Replay section above; nothing below runs.
 
-1. **Read HANDOFF.json** (summary only, via `safeReadHandoff()` — `existsSync` + `JSON.parse` + `HandoffSchema.safeParse`, never throws). Print to stderr: `pensmith resume: last at phase='X', section='Y'. Next: Z`. If HANDOFF absent or done, skip the summary print.
+1. **Read HANDOFF.json** (summary only, via `readHandoff()` in `bin/lib/handoff.ts` — never throws). HANDOFF.json v2 (written by the PreCompact hook from the router's decision) carries `phase` (intake, research, outline, sectioning, compile, export, done or attention), `section` (the section id as `status` prints it, e.g. `2` or `1a`), `position` (plan, write or verify while `phase` is sectioning), `current_section` (the slug), `next_action`, `breadcrumbs` and `section_pointers`. A v1 file is migrated in memory (its `plan`/`write`/`verify` phase becomes `sectioning` with that position); a file written by a newer pensmith is ignored and left in place. Print to stderr: `pensmith resume: last at phase='sectioning', section='2', position='write'. Next: <next_action>`. If HANDOFF is absent, invalid, newer or done, skip the summary print.
 
 2. **Read the paper mode** via `readGoalFromConfig(paperRoot)` + `stopAfterResearchFor(config)`.
 
@@ -49,6 +49,6 @@ structurally incapable of returning `{ verb:'resume' }`.
 
 5. **Run the step** via `runRouted` (`bin/pensmith.ts`): each verb is dispatched with `dispatchVerb(verb, verbArgs)` forwarding `--dry-run`, `--estimate`, `--yolo`, `--show-prompts` (C3-HIGH-2); a section's step is plan → write → verify; under `--dry-run` steps repeat until done, attention, a failure or a refused gate. In Tier 1, run the same step with the per-verb workflows.
 
-6. **Consume HANDOFF.json** (best-effort `rmSync` in finally — stale pointer must not re-trigger a resume loop).
+6. **Consume HANDOFF.json** (best-effort `rmSync` in finally — stale pointer must not re-trigger a resume loop). A newer pensmith's HANDOFF.json is not consumed.
 
 7. Shell fallback (TIER-06): `pensmith resume [--dry-run] [--estimate] [--yolo] [--show-prompts] [--replay <entryId>]`.
