@@ -1076,6 +1076,51 @@
     "f",
     "t"
    ]
+  },
+  {
+   "name": "raw TeX inside a fenced block (Phase 20: the code proof reads only outside fence interiors)",
+   "md": "```\n\\cite{x} and @evil here\n```\n\nText [@good].",
+   "expect": "equal",
+   "pandoc": [
+    "good"
+   ]
+  },
+  {
+   "name": "raw HTML inside a fenced block",
+   "md": "```html\n<div>@evil</div>\n```\n\nText [@good].",
+   "expect": "equal",
+   "pandoc": [
+    "good"
+   ]
+  },
+  {
+   "name": "a comment opener inside a fenced block",
+   "md": "```\n<!-- @evil\n```\n\n[@good] -->",
+   "expect": "equal",
+   "pandoc": [
+    "good"
+   ]
+  },
+  {
+   "name": "raw HTML before a fenced block still voids the proof",
+   "md": "<div>\n\n```\n@evil\n```\n\n</div>\n\n[@good]",
+   "pandoc": [
+    "good"
+   ]
+  },
+  {
+   "name": "a bare carriage return inside a fenced block ends it early",
+   "md": "```\ncode\r```\r@evil says\n```\n\n[@good]",
+   "pandoc": [
+    "good"
+   ]
+  },
+  {
+   "name": "raw TeX outside a fenced block still voids the proof",
+   "md": "\\begin{comment}\n\n```\n@evil\n```\n\n\\end{comment}\n\n[@good]",
+   "pandoc": [
+    "good"
+   ]
   }
  ]
 }
