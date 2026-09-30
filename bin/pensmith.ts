@@ -846,10 +846,20 @@ export interface RoutedOptions {
   readonly first?: RouterDecision;
 }
 
-/** `pensmith: ran plan §1, write §1, verify §1 (exit 4); next: verify §1`. */
+/**
+ * `pensmith: ran plan §1, write §1, verify §1 (exit 4); next: verify §1`.
+ * A step that only reported attention, which the router still reports, says
+ * so in a few words: `status` printed the message just above, and repeating
+ * it twice more made the summary a paragraph (GRND-18).
+ */
 function chainLine(steps: readonly ChainStep[], next: RouterDecision): string {
-  const ran = steps.map((s) => (s.code === EXIT_OK ? s.label : `${s.label} (exit ${s.code})`)).join(', ');
-  return `pensmith: ran ${ran}; next: ${describeDecision(next)}`;
+  const label = (s: ChainStep, text: string): string => (s.code === EXIT_OK ? text : `${text} (exit ${s.code})`);
+  const nextText = describeDecision(next);
+  const only = steps.length === 1 ? steps[0] : undefined;
+  if (only !== undefined && next.verb === 'status' && next.reason === 'attention' && only.label === nextText) {
+    return `pensmith: ran ${label(only, 'status (needs attention — see above)')}; next: do what it names, then run pensmith again`;
+  }
+  return `pensmith: ran ${steps.map((s) => label(s, s.label)).join(', ')}; next: ${nextText}`;
 }
 
 /**

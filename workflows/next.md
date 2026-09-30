@@ -40,7 +40,11 @@ It ends with one stderr line naming what ran and what comes next:
 pensmith: ran plan §2, write §2; next: plan §3
 pensmith: ran write §1 (exit 4); next: status (attention: section 1 failed verification (see its VERIFICATION.md) and its draft has not changed since — …)
 pensmith: ran done; next: status (done)
+pensmith: ran status (needs attention — see above); next: do what it names, then run pensmith again
 ```
+
+The last form is a step that could only report attention: `status` has just printed
+the message and the command that fixes it, so the summary does not repeat it.
 
 State machine: `new → research → outline → (plan → write → verify per section) → compile → done`.
 The resolver reads the configured paper mode and may halt early for mode-specific termination

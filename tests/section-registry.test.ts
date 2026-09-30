@@ -132,7 +132,10 @@ test('D-18-38 / review round 2: a deleted row no longer loops the router on comp
   writeOutline(root, [THREE[0]!, THREE[1]!]);
   for (let i = 0; i < 2; i += 1) {
     const bare = runCli(sb, root, ['--yolo']);
-    assert.match(bare.stderr, /ran status \(attention: OUTLINE\.md and STATE\.json disagree: STATE\.json registers §3 "conclusion", which OUTLINE\.md does not list/, bare.stderr);
+    assert.match(bare.stdout, /attention: OUTLINE\.md and STATE\.json disagree: STATE\.json registers §3 "conclusion", which OUTLINE\.md does not list/, bare.stdout);
+    // GRND-18 (merge review round 2): the summary line says it in a few words — the message is printed once.
+    assert.match(bare.stderr, /^pensmith: ran status \(needs attention — see above\); next: do what it names, then run pensmith again$/m, bare.stderr);
+    assert.equal(`${bare.stdout}${bare.stderr}`.split('OUTLINE.md and STATE.json disagree').length - 1, 1, 'the attention message appears once');
     assert.doesNotMatch(bare.stderr, /ran compile/);
   }
   const applied = runCli(sb, root, ['outline', '--yolo']);
