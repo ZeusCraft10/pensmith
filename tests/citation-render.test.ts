@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 
 const citationsPath = new URL('../bin/lib/citations.ts', import.meta.url);
-const apaCslPath = new URL('../templates/citation-styles/apa.csl', import.meta.url);
+const apaCslPath = new URL('../plugin/templates/citation-styles/apa.csl', import.meta.url);
 const fixtureBibPath = new URL('../tests/fixtures/known-good-fixture/CITATIONS.bib', import.meta.url);
 
 const shouldSkip = !existsSync(citationsPath) || !existsSync(apaCslPath) || !existsSync(fixtureBibPath);
@@ -21,10 +21,10 @@ test('citation-render: bin/lib/citations.ts production module exists (D-22)', ()
   );
 });
 
-test('citation-render: templates/citation-styles/apa.csl exists (D-22)', () => {
+test('citation-render: plugin/templates/citation-styles/apa.csl exists (D-22)', () => {
   assert.ok(
     existsSync(apaCslPath),
-    'MISSING: templates/citation-styles/apa.csl — Plan 05 must create before this test passes (D-22)',
+    'MISSING: plugin/templates/citation-styles/apa.csl — Plan 05 must create before this test passes (D-22)',
   );
 });
 
@@ -88,11 +88,11 @@ const stylesToTest = [
 ] as const;
 
 for (const style of stylesToTest) {
-  const cslPath = new URL(`../templates/citation-styles/${style}.csl`, import.meta.url);
+  const cslPath = new URL(`../plugin/templates/citation-styles/${style}.csl`, import.meta.url);
 
   // 1. Existence guard — PASSES NOW (files committed in Task 1).
-  test(`citation-render: templates/citation-styles/${style}.csl exists (CITE-02/03)`, () => {
-    assert.ok(existsSync(cslPath), `MISSING: templates/citation-styles/${style}.csl`);
+  test(`citation-render: plugin/templates/citation-styles/${style}.csl exists (CITE-02/03)`, () => {
+    assert.ok(existsSync(cslPath), `MISSING: plugin/templates/citation-styles/${style}.csl`);
   });
 
   // 2. Render — skip-guarded on the existing shouldSkip OR a missing .csl.
@@ -134,7 +134,7 @@ for (const style of stylesToTest) {
 // They feature-detect renderStyle the same way the per-style loop does so
 // the suite stays GREEN if run against a citations.ts that predates 10-01.
 
-const ieeeCslPath = new URL('../templates/citation-styles/ieee.csl', import.meta.url);
+const ieeeCslPath = new URL('../plugin/templates/citation-styles/ieee.csl', import.meta.url);
 
 // 1. Determinism + collision guard (CITE-02): two back-to-back renderStyle
 //    calls for the same style yield byte-identical output and the second

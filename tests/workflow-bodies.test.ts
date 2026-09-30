@@ -52,7 +52,7 @@ const BODY_HEADING_RE = /^## Body$/m;
 const sources: Record<string, string> = {};
 for (const verb of STUB_VERBS) {
   sources[verb] = readFileSync(
-    join(__dirname, '..', 'workflows', `${verb}.md`),
+    join(__dirname, '..', 'plugin', 'workflows', `${verb}.md`),
     'utf8',
   );
 }

@@ -57,7 +57,7 @@ before(async () => {
   pkg = await packAndInstall('installed-offline');
   const { pkgDir, scratch } = pkg;
   assert.ok(!existsSync(join(pkgDir, 'tests')), 'the package ships no tests/ directory');
-  assert.ok(existsSync(join(pkgDir, 'templates', 'dry-run', 'corpus.json')), 'the dry-run corpus ships under templates/');
+  assert.ok(existsSync(join(pkgDir, 'plugin', 'templates', 'dry-run', 'corpus.json')), 'the dry-run corpus ships under plugin/templates/');
   const pkgName = (JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as { name: string }).name;
   const binRel = (JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8')) as { bin: Record<string, string> }).bin[pkgName];
   assert.ok(binRel, 'package.json bin entry');

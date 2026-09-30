@@ -15,6 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 import { command } from '../bin/pensmith.js';
 
@@ -57,17 +58,11 @@ test('TIER-04: dispatcher registers exactly 16 verbs (UX-02 canonical, runtime i
   }
 });
 
-test('TIER-04 preflight: workflows/*.md keys match dispatcher verbs', () => {
-  const workflowsDir = 'workflows';
-  if (!existsSync(workflowsDir)) {
-    // Workflows ship in 02-06; this preflight is a no-op until then.
-    return;
-  }
+test('TIER-04 preflight: plugin/workflows/*.md keys match dispatcher verbs', () => {
+  // The workflow bodies live in the canonical plugin/ directory (PLUG-02).
+  const workflowsDir = join('plugin', 'workflows');
+  assert.ok(existsSync(workflowsDir), `${workflowsDir} must exist`);
   const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.md'));
-  if (files.length === 0) {
-    // No workflow .md files yet — 02-06 lands them; skip the preflight for now.
-    return;
-  }
   const workflowVerbs = files.map((f) => f.replace(/\.md$/, '')).sort();
   const dispatcherVerbs = [...EXPECTED_16].sort();
   assert.deepEqual(

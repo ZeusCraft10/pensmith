@@ -133,7 +133,7 @@ test('zero-trace Test B2: zeroTracePatch removes docProps/custom.xml (absolute b
     // What Pandoc writes for `--bibliography`/`--csl`: absolute local paths in custom properties.
     const paperRoot = join(dir, 'home', 'student', 'papers', 'essay');
     const bib = join(paperRoot, '.paper', 'export', 'CITATIONS.bib');
-    const csl = join(dir, 'lib', 'node_modules', 'pensmith', 'templates', 'citation-styles', 'apa.csl');
+    const csl = join(dir, 'lib', 'node_modules', 'pensmith', 'plugin', 'templates', 'citation-styles', 'apa.csl');
     const zip = await JSZip.loadAsync(readFileSync(FIXTURE_DOCX));
     zip.file('docProps/custom.xml',
       '<?xml version="1.0" encoding="UTF-8"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" ' +
