@@ -224,14 +224,30 @@ export const SectionPlannerSchema = z.object({
   voice: z.string().default('').describe('one line of voice direction for the drafter'),
 });
 
+/**
+ * claim-support (Pass 2, VRFY-21/22, D-20-28): the verdict, a short rationale
+ * and the evidence — a verbatim substring of the source text sent (pass2.ts
+ * keeps it only when it is one).
+ */
 export const ClaimSupportSchema = z.object({
   verdict: z.enum(['SUPPORTED', 'PARTIAL', 'UNSUPPORTED', 'UNCLEAR']),
   rationale: z.string().describe('at most 200 characters, no markdown'),
-  evidence: z.string().describe('a verbatim substring of the source abstract, or ""'),
+  evidence: z.string().describe('a verbatim substring of the source text, or ""'),
 });
 
+/**
+ * orphan-label (Pass 4, VRFY-23, D-20-29): the per-paragraph audit — every
+ * claim sentence of the paragraph, whether it needs a source, and the keys of
+ * the paragraph's citations that support it. pass4.ts only ever ADDS orphans
+ * from it (a claim that needs a source, names no key the paragraph cites and
+ * carries no citation); it can never lower the deterministic count.
+ */
 export const OrphanLabelSchema = z.object({
-  label: z.enum(['claim', 'definition', 'UNCLEAR']),
+  claims: z.array(z.object({
+    sentence: z.string().describe('the claim sentence, copied verbatim from the paragraph'),
+    needs_citation: z.boolean().describe('true when a reader would need a source for the sentence'),
+    supported_by: z.array(z.string()).default([]).describe('keys of the citations in the paragraph that support it ([] when none)'),
+  })).default([]).describe('every sentence of the paragraph that makes a claim'),
 });
 
 export type TopicDisambiguation = z.infer<typeof TopicDisambiguatorSchema>;
@@ -429,7 +445,7 @@ export const CONTRACTS: Readonly<Record<string, Contract>> = Object.freeze({
   'outline-author': { slug: 'outline-author', schema: OutlineSchema, coerce: coerceOutline },
   'section-planner': { slug: 'section-planner', schema: SectionPlannerSchema, fromText: plannerFromText },
   'claim-support': { slug: 'claim-support', schema: ClaimSupportSchema },
-  'orphan-label': { slug: 'orphan-label', schema: OrphanLabelSchema },
+  'orphan-label': { slug: 'orphan-label', schema: OrphanLabelSchema, coerce: wrapArray('claims') },
 });
 
 export function contractFor(slug: string): Contract | null {

@@ -1,482 +1,467 @@
-// bin/lib/verify/pass4.ts — Pass 4 (per-paragraph orphan-claim audit), advisory (VRFY-06).
+// bin/lib/verify/pass4.ts — Pass 4 (orphan claims), advisory (VRFY-06, VRFY-23, D-20-29).
 //
-// Modeled structurally on TWO analogs:
-//   - bin/lib/quote-extractor.ts — the deterministic, pure-Node, no-NLP/no-LLM
-//     extraction shape (named threshold constants + regex iteration).
-//   - bin/lib/verify/freshness.ts — the advisory side-channel shape: this module
-//     runs AFTER the blocking verdict (Pass 1 + Pass 3) is frozen and NEVER feeds
-//     back into `hasFail` / `status`. runPass4 returns Pass4Result[] ONLY. There
-//     is NO hasFail / status reference anywhere in this file by design (VRFY-07;
-//     tests/verify-advisory-isolation.test.ts is the structural gate).
+// An orphan claim is a sentence that asserts something a reader would need a
+// source for, while the sentence carries no citation. Pass 4 finds them per
+// paragraph in two layers:
 //
-// CORE DETERMINISM (the load-bearing correctness property, PRD §14):
-//   Steps 1-2 (sentence split, claim extraction, orphan detection, orphanCount)
-//   are PURE-NODE regex implementing the PINNED rule R1-R8 authored in Plan
-//   05-01 Task 1 (the single source of truth from which every
-//   tests/fixtures/pass4-orphan.json expected_orphan_count was mechanically
-//   derived). Same input -> identical orphan set every time. NO NLP library, NO
-//   Date, NO Math.random, NO locale-sensitive collation.
+//   1. A DETERMINISTIC FLOOR (pure Node, no NLP, no LLM — PRD §14 determinism):
+//      paragraphs split on blank lines (headings, fenced code, tables, rules
+//      and comment lines are not prose), sentences on a `.`, `!` or `?` (and
+//      any closing quote or bracket) followed by whitespace or the end — never
+//      inside a citation, and a citation left alone after the full stop joins
+//      its sentence. A sentence of at least CLAIM_MIN_WORDS words (citations
+//      not counted) that is not a question and not a definition is a claim
+//      (HIGH) when it holds ONE strong marker — a causal verb, a universal
+//      quantifier, an evidential verb in any inflection, a statistic or
+//      percentage, a comparative change — or TWO distinct weak markers (the
+//      R6 list); one weak marker alone makes it AMBIGUOUS. A HIGH claim is an
+//      orphan when the sentence itself carries no citation of any Pandoc form
+//      (citation-token.ts findCitations: clusters, locators, `[-@k]`, `@{k}`,
+//      narrative `@k`). The floor catches "Social media use clearly causes
+//      depression in every adolescent." and "Studies show that 73% of
+//      American cities …" (the audit's CORE-35 / SWP-82 sentences).
 //
-// PINNED RULE R1-R8 (copied verbatim from Plan 05-01 Task 1 — do not paraphrase):
-//   R1 — Sentence split: split a paragraph on a `.`, `!`, or `?` terminator
-//        followed by whitespace OR end-of-string. No NLP, no abbreviation
-//        handling (residual abbreviation false-positives are an accepted advisory
-//        limitation). Trim each resulting sentence.
-//   R2 — In-text citation marker: a `[@citekey]` token matching CITEKEY_RE. "Has
-//        a citation within proximity" = a `[@citekey]` token appears within
-//        ORPHAN_PROXIMITY_CHARS=500 characters of the sentence's character span
-//        inside the paragraph (paragraphs are short, so in practice this is "the
-//        paragraph contains a [@citekey]").
-//   R3 — Rhetorical skip: a sentence ending in `?` is NOT a claim (discarded
-//        BEFORE marker counting).
-//   R4 — Definition skip: a sentence matching DEFINITION_MARKERS is NOT a claim
-//        (discarded BEFORE marker counting).
-//   R5 — Length skip: a sentence with word count < CLAIM_MIN_WORDS=8 is NOT a
-//        claim. This is a PRE-FILTER applied BEFORE R6 marker counting (same skip
-//        stage as R3/R4). A sentence dropped at R5 is never marker-counted and
-//        can never be a claim or orphan. Word count is the trimmed sentence split
-//        on whitespace (NO stripCites — [@citekey] tokens count as words).
-//   R6 — Marker counting: count DISTINCT case-insensitive surface forms matched
-//        by CLAIM_MARKERS in the surviving sentence.
-//   R7 — Confidence: 0 distinct markers -> NOT a claim (dropped); exactly 1 ->
-//        'AMBIGUOUS'; 2+ -> 'HIGH'.
-//   R8 — orphanCount (the deterministic, LLM-INDEPENDENT summary number the
-//        fixtures assert): count ONLY 'HIGH'-confidence claim sentences with NO
-//        in-text citation within proximity (R2). AMBIGUOUS sentences are NEVER
-//        counted toward orphanCount regardless of any later LLM Step-3 label.
+//   2. A PER-PARAGRAPH LLM AUDIT (the hash-pinned `orphan-label` slug): every
+//      paragraph with a claim or an ambiguous sentence is sent once; the model
+//      lists its claims ({sentence, needs_citation, supported_by}). It can only
+//      ADD orphans: a sentence it marks needs_citation, whose supported_by
+//      names no key the paragraph really cites, that is a sentence of the
+//      paragraph, and that carries no citation. The deterministic count is a
+//      floor no answer can lower. Under PENSMITH_NO_LLM=1 the audit is skipped
+//      with zero calls; with no provider key it is skipped once; any other
+//      failure is reported on stderr and leaves the floor.
 //
-// STEP 3 (advisory edge-case labeling — the ONLY LLM seam):
-//   For AMBIGUOUS sentences ONLY, the hash-pinned `orphan-label` prompt is asked
-//   for a {claim, definition, UNCLEAR} label. This is purely advisory metadata
-//   for the per-claim `label` field; it NEVER changes orphanCount (R8 invariant)
-//   and NEVER reclassifies a HIGH claim. Each call goes through complete(), which
-//   checks the SESSION cost cap before sending (RUN-18; there is no per-section
-//   Pass-4 cap any more) — under PENSMITH_NO_LLM=1 Step 3 is skipped entirely,
-//   every AMBIGUOUS claim is labeled 'UNCLEAR', and ZERO network calls are made
-//   (CI path). orphan-label is a judgment slug with a structured contract
-//   (RUN-25, RUN-26): complete() returns the validated {label} object.
+// ADVISORY by construction: this module returns Pass4Result[] only and never
+// reads or writes a blocking verdict (VRFY-07; tests/verify-advisory-isolation
+// .test.ts is the structural gate). done runs it over the exact text it
+// exports and feeds the confirmation summary (D-20-24).
 
 import { complete, isFatalLlmError, MissingApiKeyError } from '../anthropic.js';
-import { reportAdvisoryFailure } from './pass2.js';
-import type { OrphanLabel as OrphanLabelData } from '../llm-contracts.js';
+import { citationItems, findCitations, replaceCitations, type CitationCluster } from '../citation-token.js';
+import type { OrphanLabel as OrphanAudit } from '../llm-contracts.js';
 import { buildPromptRequest, requestHints, type PromptRequest } from '../prompt-request.js';
 
-// FEED-05 (D-18-04): the sentence and its paragraph are draft text —
-// untrusted. They reach the model only as data blocks the ONE renderer fences
-// (prompt-request.ts → untrusted-fence.ts), after every spelling of a fence
-// marker and every closing block tag in them has been neutralised. The fence
-// constants live in bin/lib/untrusted-fence.ts alone.
+// FEED-05 (D-18-04): the paragraph is draft text — untrusted. It reaches the
+// model only as a data block the ONE renderer fences (prompt-request.ts →
+// untrusted-fence.ts), after every spelling of a fence marker and every
+// closing block tag in it has been neutralised.
+
+/** The longest paragraph an orphan-audit request carries (a denial-of-service and cost bound). */
+export const PASS4_MAX_PARAGRAPH_CHARS = 4000;
 
 /**
- * The orphan-label request for one AMBIGUOUS sentence: the fixed template as
- * the system prompt (the cacheable prefix, RUN-26) and one data message with
- * the fenced `paragraph` (at most 500 characters) and `sentence` blocks.
+ * The orphan-audit request for one paragraph: the fixed template as the system
+ * prompt (the cacheable prefix, RUN-26) and one data message with the fenced
+ * `paragraph` block.
  */
-export function orphanLabelRequest(sentence: string, paragraph: string): PromptRequest {
-  return buildPromptRequest('orphan-label', { paragraph: paragraph.slice(0, 500), sentence });
+export function orphanAuditRequest(paragraph: string): PromptRequest {
+  return buildPromptRequest('orphan-label', { paragraph: paragraph.slice(0, PASS4_MAX_PARAGRAPH_CHARS) });
 }
 
-// ---- Named knob constants (PINNED rule — quote-extractor.ts constant-at-top style).
+// ---- The floor's rule (named constants; the fixtures' expectations follow them) ----
 
-/** R5 — minimum word count for a sentence to be a candidate claim. */
-const CLAIM_MIN_WORDS = 8;
+/** A sentence shorter than this (citations not counted) is never a claim. */
+export const CLAIM_MIN_WORDS = 8;
+
+/** Strong markers: one is enough for a claim (D-20-29). */
+const STRONG_MARKERS: ReadonlyArray<readonly [string, RegExp]> = [
+  [
+    'causal',
+    /\b(?:caus(?:e|es|ed|ing)|lead(?:s|ing)?\s+to|led\s+to|result(?:s|ed|ing)?\s+in|increas(?:e|es|ed|ing)|decreas(?:e|es|ed|ing)|reduc(?:e|es|ed|ing)|improv(?:e|es|ed|ing)|lower(?:s|ed|ing)?|rais(?:e|es|ed|ing)|driv(?:e|es|ing)|drove|prevent(?:s|ed|ing)?)\b/i,
+  ],
+  ['universal', /\b(?:every(?:one|body)?|all|always|never|no\s+one|nobody|none)\b/i],
+  [
+    'evidential',
+    /\b(?:show(?:s|ed|n|ing)?|demonstrat(?:e|es|ed|ing)|find(?:s)?|found|report(?:s|ed|ing)?|indicat(?:e|es|ed|ing)|prov(?:e|es|ed|en|ing)|reveal(?:s|ed|ing)?|confirm(?:s|ed|ing)?|establish(?:es|ed|ing)?)\b/i,
+  ],
+  ['statistic', /\d(?:[\d.,]*\d)?\s?%|\b\d(?:[\d.,]*\d)?\s*(?:percent|per\s+cent)\b|\bper\s*cent\b|\bpercent(?:age)?s?\b|\b\d+(?:\.\d+)?\s*(?:times|-?fold)\b|\btwice\s+as\b/i],
+  ['comparative', /\b(?:more|less|higher|lower|greater|fewer|larger|smaller)\s+than\b|\b(?:rose|fell|doubled|tripled|halved|quadrupled)\b/i],
+];
+
+/** Weak markers (the R6 list): two distinct ones make a claim, one an AMBIGUOUS sentence. */
+const WEAK_MARKERS = /\b(is|are|demonstrates|shows|proves|indicates|suggests|reveals|confirms|establishes|argues|claims|because|therefore|thus|hence|consequently)\b/gi;
+
+/** Definition-style sentences are not claims (R4). */
+const DEFINITION_MARKERS = /\b(?:defined as|refers to|known as)\b/i;
+
+// ---- Paragraphs and sentences (shared with Pass 2: one citing-sentence splitter) ----
+
+/** One prose paragraph of a draft: offsets into the draft and its text. */
+export interface DraftParagraph {
+  /** 1-based, among the prose paragraphs. */
+  readonly index: number;
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+}
+
+/** One sentence of a draft: its paragraph, offsets, one-line text and the citations it carries. */
+export interface DraftSentence {
+  readonly paragraph: number;
+  readonly start: number;
+  readonly end: number;
+  /** The sentence with its whitespace collapsed. */
+  readonly text: string;
+  /** Every citation (any Pandoc form) that starts inside the sentence. */
+  readonly citations: readonly CitationCluster[];
+}
+
+const FENCE_RE = /^ {0,3}(?:`{3,}|~{3,})/;
+/** Lines that are not prose: headings, rules, table rows, a setext underline, a comment line. */
+const NON_PROSE_LINE_RE = /^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*_][ \t]*){3,}$|=+[ \t]*$|\||<!--.*-->[ \t]*$)/;
+
+interface SourceLine {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+}
+
+function lines(md: string): SourceLine[] {
+  const out: SourceLine[] = [];
+  let start = 0;
+  for (;;) {
+    const nl = md.indexOf('\n', start);
+    const rawEnd = nl === -1 ? md.length : nl;
+    const end = rawEnd > start && md[rawEnd - 1] === '\r' ? rawEnd - 1 : rawEnd;
+    out.push({ start, end, text: md.slice(start, end) });
+    if (nl === -1) return out;
+    start = nl + 1;
+  }
+}
+
+/** The prose paragraphs of `md` (CRLF-safe), in order. */
+export function proseParagraphs(md: string): DraftParagraph[] {
+  const out: DraftParagraph[] = [];
+  let first: SourceLine | null = null;
+  let last: SourceLine | null = null;
+  let fence: string | null = null;
+  const flush = (): void => {
+    if (first !== null && last !== null) {
+      const text = md.slice(first.start, last.end);
+      if (text.trim().length > 0) out.push({ index: out.length + 1, start: first.start, end: last.end, text });
+    }
+    first = null;
+    last = null;
+  };
+  const all = lines(md);
+  for (let i = 0; i < all.length; i += 1) {
+    const line = all[i] as SourceLine;
+    const f = FENCE_RE.exec(line.text);
+    if (fence !== null) {
+      if (f !== null && (f[0].trim()[0] as string) === fence) fence = null;
+      continue;
+    }
+    if (f !== null) {
+      flush();
+      fence = f[0].trim()[0] as string;
+      continue;
+    }
+    const next = all[i + 1];
+    const setextTitle = next !== undefined && /^ {0,3}(?:=+|-+)[ \t]*$/.test(next.text) && line.text.trim() !== '';
+    if (line.text.trim() === '' || NON_PROSE_LINE_RE.test(line.text) || setextTitle) {
+      flush();
+      if (setextTitle) i += 1;
+      continue;
+    }
+    if (first === null) first = line;
+    last = line;
+  }
+  flush();
+  return out;
+}
+
+/** A sentence boundary: terminal punctuation (and closing quotes or brackets) followed by whitespace or the end. */
+const BOUNDARY_RE = /[.!?]+["'”’»)\]]*(?=\s|$)/g;
+
+function oneLine(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/** `text` without its citations (every Pandoc form), whitespace collapsed. */
+function prose(text: string): string {
+  return oneLine(replaceCitations(text, () => ' '));
+}
 
 /**
- * R6 — claim marker surface forms. Distinct case-insensitive matches in a
- * surviving sentence drive the R7 confidence: 1 -> AMBIGUOUS, 2+ -> HIGH.
- * Global + case-insensitive so matchAll yields every occurrence for dedup.
+ * The sentences of `md`: each prose paragraph split at every boundary that is
+ * not inside a citation (`[see @a, p. 5. Also @b]` stays whole); a piece that
+ * is nothing but citations and punctuation (`… shown. [@k]`) joins the
+ * sentence before it.
  */
-const CLAIM_MARKERS =
-  /\b(is|are|demonstrates|shows|proves|indicates|suggests|reveals|confirms|establishes|argues|claims|because|therefore|thus|hence|consequently)\b/gi;
+export function draftSentences(md: string): DraftSentence[] {
+  const citations = findCitations(md);
+  const out: DraftSentence[] = [];
+  for (const p of proseParagraphs(md)) {
+    const inside = citations.filter((c) => c.start >= p.start && c.start < p.end);
+    const cuts: number[] = [];
+    for (const m of p.text.matchAll(BOUNDARY_RE)) {
+      const at = p.start + m.index;
+      if (inside.some((c) => at >= c.start && at < c.end)) continue;
+      cuts.push(p.start + m.index + m[0].length);
+    }
+    const pieces: Array<{ start: number; end: number }> = [];
+    let from = p.start;
+    for (const cut of [...cuts, p.end]) {
+      if (cut <= from) continue;
+      const raw = md.slice(from, cut);
+      const lead = raw.length - raw.trimStart().length;
+      if (raw.trim().length > 0) pieces.push({ start: from + lead, end: cut });
+      from = cut;
+    }
+    const merged: Array<{ start: number; end: number }> = [];
+    for (const piece of pieces) {
+      const onlyCitations = prose(md.slice(piece.start, piece.end)).replace(/[\p{P}\s]/gu, '') === '';
+      const prev = merged[merged.length - 1];
+      if (onlyCitations && prev !== undefined) prev.end = piece.end;
+      else merged.push({ ...piece });
+    }
+    for (const s of merged) {
+      const text = md.slice(s.start, s.end);
+      out.push({
+        paragraph: p.index,
+        start: s.start,
+        end: s.end,
+        text: oneLine(text),
+        citations: inside.filter((c) => c.start >= s.start && c.start < s.end),
+      });
+    }
+  }
+  return out;
+}
 
-/** R4 — definition-style sentences are NOT claims (Pitfall 6 precision guard). */
-const DEFINITION_MARKERS = /\b(defined as|refers to|known as)\b/i;
-
-/** R2 — a [@citekey] within this many chars of a claim sentence span = cited. */
-const ORPHAN_PROXIMITY_CHARS = 500;
-
-/** R1 — sentence boundary: a terminator (. ! ?) followed by whitespace. The
- *  lookbehind keeps the terminal punctuation attached to the preceding
- *  sentence so R3's trailing-`?` test and R6 word counting see it. */
-const SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+/;
-
-/** R2 — canonical [@citekey] token regex (verbatim from pass1.ts / quote-extractor.ts). */
-const CITEKEY_RE = /\[@([a-z][a-z0-9_-]*)\]/g;
-
-// ---- Step-3 LLM labeling (advisory edge-case labeling — AMBIGUOUS only) ----
-
-/** Step-3 advisory label vocabulary (parsed from the orphan-label response). */
-type OrphanLabel = 'claim' | 'definition' | 'UNCLEAR';
-
-// ---- Exported result interfaces (from 05-PATTERNS §pass4.ts) ----------------
+// ---- The floor ----
 
 export interface ExtractedClaim {
   sentence: string;
+  /** Offsets of the sentence in the paragraph text passed in. */
   startIndex: number;
   endIndex: number;
-  /** HIGH = 2+ distinct markers; AMBIGUOUS = exactly 1 (R7). */
+  /** HIGH = a strong marker or 2+ distinct weak markers; AMBIGUOUS = exactly one weak marker. */
   claimConfidence: 'HIGH' | 'AMBIGUOUS';
+  /** True when the sentence itself carries a citation (any Pandoc form). */
+  cited: boolean;
+  /** The marker classes (and weak markers) that made it a claim. */
+  markers: string[];
 }
+
+/** The claim reading of one sentence, or null when it is not a claim (too short, a question, a definition, no marker). */
+function classify(sentence: DraftSentence): Omit<ExtractedClaim, 'startIndex' | 'endIndex' | 'sentence'> | null {
+  const text = prose(sentence.text);
+  if (/\?["'”’»)\]]*$/.test(text)) return null; // R3 question
+  if (DEFINITION_MARKERS.test(text)) return null; // R4 definition
+  if (text.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length < CLAIM_MIN_WORDS) return null; // R5 length
+  const strong = STRONG_MARKERS.filter(([, re]) => re.test(text)).map(([name]) => name);
+  const weak = [...new Set([...text.matchAll(WEAK_MARKERS)].map((m) => (m[1] as string).toLowerCase()))];
+  if (strong.length === 0 && weak.length === 0) return null;
+  const confidence = strong.length > 0 || weak.length >= 2 ? 'HIGH' : 'AMBIGUOUS';
+  return { claimConfidence: confidence, cited: sentence.citations.length > 0, markers: [...strong, ...weak] };
+}
+
+/**
+ * The claims of one paragraph under the deterministic floor, in order. Pure
+ * and deterministic (same input → deep-equal output; PRD §14).
+ */
+export function extractClaimsFromParagraph(para: string): ExtractedClaim[] {
+  const out: ExtractedClaim[] = [];
+  for (const s of draftSentences(para)) {
+    const c = classify(s);
+    if (c !== null) out.push({ sentence: s.text, startIndex: s.start, endIndex: s.end, ...c });
+  }
+  return out;
+}
+
+// ---- Results ----
 
 export interface Pass4ClaimResult {
   paragraphIndex: number;
   sentence: string;
   confidence: 'HIGH' | 'AMBIGUOUS';
+  /** The sentence carries a citation. */
+  cited: boolean;
   isOrphan: boolean;
-  label: 'claim' | 'definition' | 'UNCLEAR';
+  /** Who flagged the orphan: the deterministic floor or the paragraph audit; null when not an orphan. */
+  by: 'floor' | 'llm' | null;
 }
 
 export interface Pass4Result {
+  /** 1-based, among the draft's prose paragraphs. */
   paragraphIndex: number;
   totalSentences: number;
   claimsDetected: number;
-  /** R8 — HIGH-confidence orphans ONLY; LLM-independent and deterministic. */
+  /** The paragraph's orphans: the deterministic floor plus the orphans the audit added. */
   orphanCount: number;
   claims: Pass4ClaimResult[];
+  /** The orphan sentences, in order (orphanCount of them). */
+  orphans: string[];
 }
 
-// ---- Deterministic helpers (pure-Node — no NLP, no LLM) ---------------------
-
-/**
- * R5 word count on the TRIMMED RAW sentence split on whitespace. Deliberately
- * does NOT strip [@citekey] tokens (per the PINNED rule a citekey token counts
- * as one word) — this is the single source of truth for both the extractor and
- * the fixtures' R5 walks.
- */
-function wordCount(sentence: string): number {
-  return sentence.trim().split(/\s+/).filter(Boolean).length;
+interface ParagraphAudit {
+  readonly paragraph: DraftParagraph;
+  readonly sentences: DraftSentence[];
+  readonly result: Pass4Result;
 }
 
-/**
- * R6 — count DISTINCT case-insensitive CLAIM_MARKERS surface forms in a
- * sentence. "Distinct" = number of unique lower-cased marker matches (e.g.
- * `is` twice -> 1; `proves` + `is` -> 2). Pure regex iteration, deterministic.
- */
-function countDistinctMarkers(sentence: string): number {
-  const seen = new Set<string>();
-  for (const m of sentence.matchAll(CLAIM_MARKERS)) {
-    const surface = m[1];
-    if (surface) seen.add(surface.toLowerCase());
+function auditParagraph(paragraph: DraftParagraph, sentences: DraftSentence[]): ParagraphAudit {
+  const claims: Pass4ClaimResult[] = [];
+  const orphans: string[] = [];
+  for (const s of sentences) {
+    const c = classify(s);
+    if (c === null) continue;
+    const orphan = c.claimConfidence === 'HIGH' && !c.cited;
+    claims.push({ paragraphIndex: paragraph.index, sentence: s.text, confidence: c.claimConfidence, cited: c.cited, isOrphan: orphan, by: orphan ? 'floor' : null });
+    if (orphan) orphans.push(s.text);
   }
-  return seen.size;
+  return {
+    paragraph,
+    sentences,
+    result: { paragraphIndex: paragraph.index, totalSentences: sentences.length, claimsDetected: claims.length, orphanCount: orphans.length, claims, orphans },
+  };
+}
+
+/** A sentence reduced for matching the audit's copy against the paragraph's: citations out, whitespace, quotes and case folded. */
+function matchKey(s: string): string {
+  return prose(s.normalize('NFKC'))
+    .replace(/[“”«»]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[\s.!?;:,"']+$/u, '')
+    .toLowerCase();
 }
 
 /**
- * Split a paragraph into trimmed sentences (R1). Pure regex boundary —
- * terminator followed by whitespace OR end-of-string — with NO NLP and NO
- * abbreviation handling. Empty fragments are dropped.
+ * Apply one paragraph's audit: every claim the model marks needs_citation
+ * whose supported_by names no key the paragraph cites becomes an orphan when
+ * it is a sentence of the paragraph that carries no citation and is not one
+ * already. Returns how many orphans it added (never fewer than zero).
  */
-function splitSentences(para: string): string[] {
-  return para
-    .split(SENTENCE_BOUNDARY_RE)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
-/**
- * Locate the trusted character span of a sentence inside the paragraph. Uses
- * indexOf from a running cursor so repeated sentences resolve to successive
- * spans (deterministic). Falls back to [0, sentence.length) if not found
- * (whitespace-normalization edge) — span is only used for R2 proximity, which
- * for short paragraphs is "paragraph contains a [@citekey]".
- */
-function locateSpan(para: string, sentence: string, fromIndex: number): { start: number; end: number } {
-  const start = para.indexOf(sentence, fromIndex);
-  if (start === -1) return { start: 0, end: sentence.length };
-  return { start, end: start + sentence.length };
-}
-
-/**
- * R2 — collect every [@citekey] token's character offset inside the paragraph.
- * Used by isOrphan for the ORPHAN_PROXIMITY_CHARS distance test.
- */
-function citekeyOffsets(para: string): number[] {
-  const offsets: number[] = [];
-  for (const m of para.matchAll(CITEKEY_RE)) {
-    if (typeof m.index === 'number') offsets.push(m.index);
+function applyAudit(audit: ParagraphAudit, answer: OrphanAudit): number {
+  const cited = new Set(audit.sentences.flatMap((s) => s.citations.flatMap((c) => citationItems(c).map((i) => i.key))));
+  const byKey = new Map(audit.sentences.map((s) => [matchKey(s.text), s] as const));
+  let added = 0;
+  for (const claim of answer.claims) {
+    if (!claim.needs_citation) continue;
+    if (claim.supported_by.some((k) => cited.has(k.replace(/^-?@/, '')))) continue;
+    const key = matchKey(claim.sentence);
+    let sentence = byKey.get(key);
+    if (sentence === undefined && key.split(' ').length >= 3) {
+      const holders = audit.sentences.filter((s) => matchKey(s.text).includes(key));
+      if (holders.length === 1) sentence = holders[0];
+    }
+    if (sentence === undefined || sentence.citations.length > 0) continue;
+    const r = audit.result;
+    if (r.orphans.includes(sentence.text)) continue;
+    const existing = r.claims.find((c) => c.sentence === sentence.text);
+    if (existing !== undefined) {
+      existing.isOrphan = true;
+      existing.by = 'llm';
+    } else {
+      r.claims.push({ paragraphIndex: r.paragraphIndex, sentence: sentence.text, confidence: 'AMBIGUOUS', cited: false, isOrphan: true, by: 'llm' });
+      r.claimsDetected += 1;
+    }
+    r.orphans.push(sentence.text);
+    r.orphanCount += 1;
+    added += 1;
   }
-  return offsets;
+  // Keep the orphan list in sentence order.
+  const order = new Map(audit.sentences.map((s, i) => [s.text, i] as const));
+  audit.result.orphans.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+  return added;
 }
 
 /**
- * Private findCitekeys (canonical dedup-extraction regex from pass1.ts lines
- * 191-194). Exported indirectly via runPass4 (Task 2) — not part of the public
- * surface. Deterministic Set of unique citekeys in the paragraph.
+ * One stderr line when an advisory pass could not judge some claims because
+ * the model call failed (RUN-12): the rows keep their conservative defaults in
+ * VERIFICATION.md and verify still exits on its deterministic verdict, but the
+ * failure — e.g. a model the provider does not serve, and the key that
+ * selects it — is never silent.
  */
-function findCitekeys(para: string): Set<string> {
-  return new Set(
-    [...para.matchAll(CITEKEY_RE)].map((m) => m[1]).filter((s): s is string => Boolean(s)),
+export function reportAdvisoryFailure(pass: string, count: number, err: unknown): void {
+  const detail = (err instanceof Error ? err.message : String(err)).replace(/^pensmith: /, '').split('\n')[0] ?? '';
+  process.stderr.write(
+    `pensmith verify: WARN — ${pass}, advisory, could not judge ${count} claim(s): ${detail} ` +
+      '(recorded as UNCLEAR in VERIFICATION.md)\n',
   );
 }
 
 /**
- * R2/R8 — a HIGH-confidence claim is an orphan when NO [@citekey] token appears
- * within ORPHAN_PROXIMITY_CHARS of the claim sentence's span. AMBIGUOUS claims
- * are NEVER auto-flagged here and NEVER contribute to orphanCount (R8). The
- * optional `hasAnyCitekey` fast-path lets the caller skip the offset scan when
- * the Step-2 findCitekeys set is empty (paragraph has no citations at all).
+ * Pass 4 advisory orphan audit over `draftMd`: one Pass4Result per prose
+ * paragraph. The deterministic floor runs first; then, unless the LLM is
+ * stubbed, each paragraph with a claim or an ambiguous sentence is audited
+ * once (`orphan-label`) and may add orphans. The session cost cap and an
+ * invalid runtime configuration are rethrown (verify writes its deterministic
+ * verdict first); every other failure leaves the floor and is reported.
  */
-function isOrphan(offsets: number[], claim: ExtractedClaim, hasAnyCitekey = true): boolean {
-  if (claim.claimConfidence !== 'HIGH') return false;
-  if (!hasAnyCitekey) return true; // R2: no [@citekey] anywhere -> uncited -> orphan
-  for (const off of offsets) {
-    // Distance from the citekey to the nearest edge of the sentence span.
-    const distance =
-      off < claim.startIndex
-        ? claim.startIndex - off
-        : off > claim.endIndex
-          ? off - claim.endIndex
-          : 0;
-    if (distance <= ORPHAN_PROXIMITY_CHARS) return false; // cited within proximity
-  }
-  return true; // no citekey within proximity -> orphan
-}
-
-// ---- Public deterministic extraction (Step 1) ------------------------------
-
-/**
- * Deterministic per-paragraph claim extraction implementing the PINNED rule
- * R1-R7 IN ORDER. Returns ONLY sentences that survive the R3/R4/R5 skip stage
- * AND have >=1 distinct marker (R6/R7): 1 -> AMBIGUOUS, 2+ -> HIGH. Pure-Node,
- * no NLP library, no LLM, no Date/Math.random — assert.deepEqual-identical
- * across repeated calls on the same input (VRFY-06 / PRD §14 determinism).
- *
- * CRITICAL ordering: R5 (the 8-word floor) runs BEFORE R6 marker counting, so a
- * sub-8-word sentence is dropped before it can ever be classified HIGH/orphan.
- */
-export function extractClaimsFromParagraph(para: string): ExtractedClaim[] {
-  const out: ExtractedClaim[] = [];
-  let cursor = 0;
-  for (const sentence of splitSentences(para)) {
-    const { start, end } = locateSpan(para, sentence, cursor);
-    cursor = end;
-
-    // --- Skip stage (R3, R4, R5 — all BEFORE R6 marker counting) ---
-    if (sentence.endsWith('?')) continue; // R3 rhetorical
-    if (DEFINITION_MARKERS.test(sentence)) continue; // R4 definition
-    if (wordCount(sentence) < CLAIM_MIN_WORDS) continue; // R5 length floor
-
-    // --- R6 marker counting + R7 confidence (only for survivors) ---
-    const markers = countDistinctMarkers(sentence);
-    if (markers === 0) continue; // R7: not a claim
-    out.push({
-      sentence,
-      startIndex: start,
-      endIndex: end,
-      claimConfidence: markers >= 2 ? 'HIGH' : 'AMBIGUOUS', // R7
-    });
-  }
-  return out;
-}
-
-// ---- Deterministic per-paragraph audit (Step 1 + Step 2, no LLM) -----------
-
-/**
- * Run the deterministic core (Step 1 extraction + Step 2 orphan detection) for a
- * single paragraph. orphanCount counts HIGH-confidence orphans ONLY (R8) and is
- * LLM-independent. The per-claim `label` defaults conservatively: HIGH claims ->
- * 'claim'; AMBIGUOUS claims -> 'UNCLEAR' (Task 2 may refine the AMBIGUOUS label
- * via the advisory Step-3 LLM, but that NEVER changes orphanCount).
- */
-function auditParagraph(para: string, paragraphIndex: number): {
-  result: Pass4Result;
-  ambiguous: Array<{ index: number; claim: ExtractedClaim }>;
-  offsets: number[];
-} {
-  const totalSentences = splitSentences(para).length;
-  const claims = extractClaimsFromParagraph(para);
-  const offsets = citekeyOffsets(para);
-  // Step-2 canonical citekey set (pass1.ts dedup pattern). Its emptiness is the
-  // fast no-citation path for isOrphan (R2).
-  const hasAnyCitekey = findCitekeys(para).size > 0;
-
-  const claimResults: Pass4ClaimResult[] = [];
-  const ambiguous: Array<{ index: number; claim: ExtractedClaim }> = [];
-  let orphanCount = 0;
-
-  for (const claim of claims) {
-    if (claim.claimConfidence === 'HIGH') {
-      const orphan = isOrphan(offsets, claim, hasAnyCitekey);
-      if (orphan) orphanCount += 1; // R8 — HIGH orphans ONLY
-      claimResults.push({
-        paragraphIndex,
-        sentence: claim.sentence,
-        confidence: 'HIGH',
-        isOrphan: orphan,
-        label: 'claim',
-      });
-    } else {
-      // AMBIGUOUS — never counted toward orphanCount (R8). label deferred to
-      // Step 3 (Task 2); conservative default until then.
-      ambiguous.push({ index: claimResults.length, claim });
-      claimResults.push({
-        paragraphIndex,
-        sentence: claim.sentence,
-        confidence: 'AMBIGUOUS',
-        isOrphan: false,
-        label: 'UNCLEAR',
-      });
-    }
-  }
-
-  return {
-    result: {
-      paragraphIndex,
-      totalSentences,
-      claimsDetected: claims.length,
-      orphanCount,
-      claims: claimResults,
-    },
-    ambiguous,
-    offsets,
-  };
-}
-
-/**
- * Conservative offline placeholder for the Step-3 label (UNCLEAR-bias). Mirrors
- * the revise.ts Tier-2-placeholder stance: deterministic, never confident. Used
- * under PENSMITH_NO_LLM=1 (or no key) for every AMBIGUOUS sentence with NO
- * network call.
- */
-function orphanLabelPlaceholder(): OrphanLabel {
-  return 'UNCLEAR';
-}
-
-
-/**
- * Pass 4 advisory orphan audit. Splits `draftMd` into paragraphs on /\n{2,}/,
- * runs the deterministic core (Step 1 extraction + Step 2 orphan detection, R1-R8)
- * per paragraph, and returns one Pass4Result per paragraph. orphanCount is the
- * deterministic HIGH-only count (R8) — computed in Step 2 and byte-identical
- * whether or not the Step-3 LLM ran.
- *
- * Step 3 (advisory, AMBIGUOUS sentences only): under PENSMITH_NO_LLM=1 (or no
- * ANTHROPIC_API_KEY) every AMBIGUOUS claim is labeled 'UNCLEAR' with ZERO network
- * calls (CI path). Otherwise each AMBIGUOUS sentence is sent to the hash-pinned
- * `orphan-label` prompt behind an assertBudget pre-call gate; the parsed label
- * populates that record's `label` (and, when confirmed 'claim', its audit-only
- * per-claim `isOrphan`) — but NEVER changes orphanCount or reclassifies a HIGH
- * claim (R8 invariant). Advisory by construction — NEVER mutates hasFail/status.
- */
-export async function runPass4(
-  draftMd: string,
-  opts: { n: number | string },
-): Promise<Pass4Result[]> {
-  // Presence check ONLY — never reads the key VALUE (the resolved key, when the
-  // live branch is reached, comes from getProviderApiKey('anthropic')).
-  // Provider-agnostic offline gate (mirrors pass2): only PENSMITH_NO_LLM
-  // short-circuits; complete() owns provider + key resolution and the per-call
-  // catch yields UNCLEAR if no key resolves. (`|| !ANTHROPIC_API_KEY` wrongly
-  // skipped valid non-Anthropic configs.)
-  const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-
-  const paragraphs = draftMd.split(/\n{2,}/);
-  const audits: Array<{
-    result: Pass4Result;
-    ambiguous: Array<{ index: number; claim: ExtractedClaim }>;
-    offsets: number[];
-  }> = [];
-  for (let i = 0; i < paragraphs.length; i++) {
-    const para = (paragraphs[i] ?? '').trim();
-    if (para.length === 0) continue;
-    audits.push(auditParagraph(para, i));
-  }
-
+export async function runPass4(draftMd: string, opts: { n: number | string }): Promise<Pass4Result[]> {
+  const sentences = draftSentences(draftMd);
+  const audits = proseParagraphs(draftMd).map((p) => auditParagraph(p, sentences.filter((s) => s.paragraph === p.index)));
   const results = audits.map((a) => a.result);
-  const hasAmbiguous = audits.some((a) => a.ambiguous.length > 0);
+  if (process.env['PENSMITH_NO_LLM'] === '1') return results;
 
-  // --- Step 3 (advisory edge-case labeling — AMBIGUOUS sentences ONLY) ---
-  if (noLlm || !hasAmbiguous) {
-    // Offline / no-ambiguous: every AMBIGUOUS claim keeps the conservative
-    // 'UNCLEAR' placeholder already set in auditParagraph. Zero network calls.
-    return results;
-  }
-
-  // Live branch (a configured model + >=1 AMBIGUOUS sentence).
-  // Set once no provider key is configured: the remaining AMBIGUOUS claims keep
-  // the conservative UNCLEAR label with no further call (advisory; verify still
-  // writes its deterministic verdict — D-V1-04).
-  let noKey = false;
   let failed = 0;
   let firstError: unknown;
   for (const audit of audits) {
-    const paraText = (paragraphs[audit.result.paragraphIndex] ?? '').trim();
-    for (const { index, claim } of audit.ambiguous) {
-      let label: OrphanLabel = orphanLabelPlaceholder();
-      if (noKey) continue;
-      try {
-        // WR-04 / FEED-05: the renderer fences both blocks (orphanLabelRequest).
-        const request = orphanLabelRequest(claim.sentence, paraText);
-
-        // Route through the transport chokepoint (complete() → http.ts, D-06):
-        // the session cost-cap check before sending, retry/backoff, and the
-        // actual-usage cost record after.
-        const res = await complete<OrphanLabelData>({
-          slug: 'orphan-label',
-          section: opts.n,
-          system: request.system,
-          messages: request.messages,
-          stubHint: requestHints(request),
-        });
-        label = (res.data as OrphanLabelData).label;
-      } catch (err) {
-        // No provider key: skip the rest (never fatal, see noKey above).
-        if (err instanceof MissingApiKeyError) {
-          noKey = true;
-          continue;
-        }
-        // The session cost cap and invalid configuration stop verify (RUN-18;
-        // verify writes its deterministic verdict first). Any other failure ->
-        // conservative UNCLEAR (advisory must not crash verify).
-        if (isFatalLlmError(err)) throw err;
-        failed += 1;
-        firstError ??= err;
-        label = 'UNCLEAR';
-      }
-
-      // Write ONLY the per-claim advisory label. When Step 3 confirms 'claim',
-      // populate the audit-only per-claim isOrphan (uncited -> true per R2) for
-      // audit completeness. This NEVER feeds orphanCount (R8 invariant — that was
-      // frozen in Step 2 and counts HIGH claims only).
-      const record = audit.result.claims[index];
-      if (record) {
-        record.label = label;
-        if (label === 'claim') {
-          record.isOrphan = isOrphan(audit.offsets, {
-            ...claim,
-            claimConfidence: 'HIGH', // proximity test only; does NOT promote to orphanCount
-          });
-        }
-      }
+    if (audit.result.claimsDetected === 0) continue;
+    try {
+      // WR-04 / FEED-05: the renderer fences the paragraph (orphanAuditRequest).
+      const request = orphanAuditRequest(audit.paragraph.text);
+      const res = await complete<OrphanAudit>({
+        slug: 'orphan-label',
+        section: opts.n,
+        system: request.system,
+        messages: request.messages,
+        stubHint: requestHints(request),
+      });
+      applyAudit(audit, res.data as OrphanAudit);
+    } catch (err) {
+      // No provider key: the audit is skipped for every paragraph (the floor stands; D-V1-04).
+      if (err instanceof MissingApiKeyError) break;
+      if (isFatalLlmError(err)) throw err;
+      failed += 1;
+      firstError ??= err;
     }
   }
-
-  if (failed > 0) reportAdvisoryFailure('Pass 4 (orphan labels)', failed, firstError);
+  if (failed > 0) reportAdvisoryFailure('Pass 4 (orphan audit)', failed, firstError);
   return results;
 }
 
-// ---- Advisory render (deterministic, no LLM) -------------------------------
+// ---- Render (deterministic, no LLM) ----
 
 /**
- * Render the `## Pass-4` advisory section for VERIFICATION.md. Deterministic,
- * no LLM. Mirrors renderFreshnessTable: a per-paragraph orphan-count table. The
- * table carries integer counts only (no LLM-generated sentence text), so there
- * is no Markdown/HTML injection surface from the table body itself
- * (LLM-output-injection mitigation, T-05-03-01/02). Empty results -> a "no
- * paragraphs to audit" section.
+ * A sentence as a table cell: one line, no pipes, no HTML tag (`<` and `>`
+ * become `‹` and `›`: draft text never renders as markup in VERIFICATION.md,
+ * T-05-03-01), at most `max` characters.
+ */
+function cell(text: string, max: number): string {
+  const t = text.replace(/[\r\n|]+/g, ' ').replace(/</g, '‹').replace(/>/g, '›').replace(/\s+/g, ' ').trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+}
+
+/** The longest orphan sentence shown in the Pass-4 table. */
+export const PASS4_SENTENCE_CHARS = 140;
+
+/**
+ * Render the `## Pass-4` advisory section: one row per prose paragraph with
+ * its counts and its orphan sentences (each clamped, table-safe; an orphan
+ * the paragraph audit added is marked "(audit)"). Deterministic, no LLM.
  */
 export function renderPass4Section(results: ReadonlyArray<Pass4Result>): string {
   if (results.length === 0) {
     return '## Pass-4 (orphan claims, advisory)\n\n_(no paragraphs to audit)_\n';
   }
+  const total = results.reduce((a, r) => a + r.orphanCount, 0);
   const lines = [
-    '## Pass-4 (orphan claims, advisory — deterministic extraction + edge-case LLM labels)',
+    '## Pass-4 (orphan claims, advisory — deterministic floor + per-paragraph audit)',
     '',
-    '| Paragraph | Sentences | Claims | Orphans |',
-    '|-----------|-----------|--------|---------|',
+    `Orphan claims: ${total} (a claim sentence that carries no citation).`,
+    '',
+    '| Paragraph | Sentences | Claims | Orphans | Orphan sentences |',
+    '|-----------|-----------|--------|---------|------------------|',
   ];
   for (const r of results) {
-    lines.push(`| ${r.paragraphIndex} | ${r.totalSentences} | ${r.claimsDetected} | ${r.orphanCount} |`);
+    const sentences = r.orphans.map((s) => {
+      const byLlm = r.claims.some((c) => c.sentence === s && c.by === 'llm');
+      return `"${cell(s, PASS4_SENTENCE_CHARS)}"${byLlm ? ' (audit)' : ''}`;
+    });
+    lines.push(`| ${r.paragraphIndex} | ${r.totalSentences} | ${r.claimsDetected} | ${r.orphanCount} | ${sentences.length > 0 ? sentences.join(' · ') : '—'} |`);
   }
   lines.push('');
   return lines.join('\n');

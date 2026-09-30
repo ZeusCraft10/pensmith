@@ -847,10 +847,11 @@ export function findUnparseableCitations(md: string): TextFinding[] {
   if (!md.includes('@')) return [];
   const code = provableCodeSpans(md);
   const loose = tableMayCut(md);
-  const out: Array<TextFinding & { readonly at: number }> = [];
+  const out: Array<{ readonly at: number; readonly finding: TextFinding }> = [];
   const report = (form: string, at: number, end: number): void => {
     if (offsetInSpans(at, code)) return;
-    out.push({ verdict: 'UNPARSEABLE', form, text: findingText(md, at, end), line: lineOfOffset(md, at), reason: UNPARSEABLE_REASONS[form] as string, at });
+    const finding: TextFinding = { verdict: 'UNPARSEABLE', form, text: findingText(md, at, end), line: lineOfOffset(md, at), reason: UNPARSEABLE_REASONS[form] as string };
+    out.push({ at, finding });
   };
   for (const [pStart, pEnd] of paragraphSpans(md)) {
     const para = md.slice(pStart, pEnd);
@@ -902,7 +903,7 @@ export function findUnparseableCitations(md: string): TextFinding[] {
     }
     for (const b of stack) if (b.hasKey) report('unbalanced-bracket', pStart + b.open, pEnd);
   }
-  return out.sort((a, b) => a.at - b.at).map(({ at: _at, ...f }) => f);
+  return out.sort((a, b) => a.at - b.at).map((f) => f.finding);
 }
 
 /** The offset just past the `]` closing the bracket around offset `i` on its line, or its line end. */

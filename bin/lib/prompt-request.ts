@@ -68,8 +68,10 @@ export const PROMPT_INPUTS: Readonly<Record<string, readonly PromptInputSpec[]>>
     input('plan', true, false),
     input('sources', true, true),
   ],
-  'claim-support': [input('citation', true, true), input('claim', true, true), input('abstract', true, true)],
-  'orphan-label': [input('paragraph', true, true), input('sentence', true, true)],
+  // Phase 20 (D-20-28, D-20-30): claim-support judges the source text (the
+  // abstract plus full-text passages); orphan-label audits a whole paragraph.
+  'claim-support': [input('citation', true, true), input('claim', true, true), input('source_text', true, true)],
+  'orphan-label': [input('paragraph', true, true)],
   'smoother': [input('boundary', true, false), input('tail', true, true), input('head', true, true)],
   'revise-swap': [input('flag', true, false), input('voice', true, false), input('available_sources', true, true), input('claim', true, true)],
   'pass1-fuzzy-judge': [input('comparison', true, true)],

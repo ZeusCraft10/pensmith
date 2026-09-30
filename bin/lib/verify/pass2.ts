@@ -1,71 +1,87 @@
-// bin/lib/verify/pass2.ts — Pass 2 (claim support) advisory side-channel (VRFY-03).
+// bin/lib/verify/pass2.ts — Pass 2 (claim support), advisory (VRFY-03, VRFY-21, VRFY-22, D-20-28).
 //
 // Modeled structurally on bin/lib/verify/freshness.ts: an advisory pass that
 // runs AFTER the blocking verdict (Pass 1 + Pass 3) is frozen and NEVER feeds
 // back into `hasFail` / `status`. This module returns Pass2Result[] ONLY — the
-// orchestrator wiring (Plan 05-04) reads the results below the locked status
-// line. There is NO hasFail / status reference anywhere in this file by design
-// (VRFY-07; tests/verify-advisory-isolation.test.ts is the structural gate).
+// verify orchestrator renders it below the locked status line. There is NO
+// hasFail / status reference anywhere in this file by design (VRFY-07;
+// tests/verify-advisory-isolation.test.ts is the structural gate).
 //
-// For each in-text [@citekey] occurrence Pass 2:
-//   1. extracts the citing sentence deterministically (pure regex, no LLM), and
-//   2. (live branch only) asks the hash-pinned `claim-support` prompt for a
-//      verdict in {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}.
+// Every (citing sentence, citekey) pair of the draft is judged once:
+//   1. the sentences come from Pass 4's splitter (pass4.ts draftSentences —
+//      never split inside a citation), and the keys of each sentence from the
+//      one citation grammar (citation-token.ts citationItems), so
+//      `[@smith2020, p. 5]`, `[@a; @b]`, `[-@k]`, `@{k}` and a narrative `@k`
+//      all yield their keys;
+//   2. the SOURCE TEXT the judge reads is the LIBRARY.json abstract (clipped by
+//      source-context.ts claimSupportAbstract), else the bib `abstract`; when
+//      `[verification] fetch_full_text` is not false and the caller passes a
+//      `fullText(citekey, claim)` provider (verify: the open-access text's
+//      passage nearest the claim — never the user's own PDF), that passage is
+//      added; a bring-your-own PDF's passages are added only with
+//      `[verification] send_byo_passages = true` (PRD §9: the contents of a
+//      bring-your-own PDF stay local by default; byo-text.ts re-hashes the PDF);
+//   3. a pair with no source text at all is UNCLEAR "no source text (no
+//      abstract or full text)" and makes NO model call — never a judgment on
+//      the title alone;
+//   4. otherwise the hash-pinned `claim-support` prompt is asked (at most
+//      PASS2_CONCURRENCY requests in flight, budget.ts Semaphore) for a verdict
+//      in {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR} with evidence, and the
+//      evidence is kept only when it is a verbatim substring of the text sent.
 //
-// The source text the judge reads is the bib abstract. Only when the user
-// turned on `[verification] send_byo_passages` (off by default — PRD §9: the
-// contents of a bring-your-own PDF stay local; Phase 19 review round 2), a
-// source whose bring-your-own PDF still matches its recorded hashes (SRC-15,
-// S-17) also gets the passages of that PDF's text nearest the claim
-// (byo-text.ts byoPassages), sent to the configured model provider; `evidence`
-// must be a verbatim substring of the text the judge read.
+// UNCLEAR-bias is the load-bearing correctness property (VRFY-03): the
+// offline placeholder, the no-text rule and the prompt all default to UNCLEAR
+// rather than manufacturing a confident SUPPORTED on thin evidence.
 //
-// UNCLEAR-bias is the load-bearing correctness property (VRFY-03): both the
-// offline placeholder AND the prompt default to UNCLEAR rather than manufacturing
-// a confident SUPPORTED on thin evidence.
-//
-// Offline guard (Pattern 4 — analog: bin/cli/revise.ts): under PENSMITH_NO_LLM=1
-// Pass 2 returns a conservative UNCLEAR placeholder for every citation and
-// issues NO network call. This is the CI path.
+// Offline guard: under PENSMITH_NO_LLM=1 every pair with source text is a
+// conservative UNCLEAR placeholder and NO model call, full-text fetch or BYO
+// read is made.
 //
 // Cost: every live claim-support call goes through complete(), which checks the
 // SESSION cost cap before sending (RUN-18) and records the actual cost after.
-// There is no per-section Pass-2 cap any more — the session cap is the only cap
-// (D-17-26). claim-support is a judgment slug (claude-haiku-4-5 by default,
-// RUN-26) with a structured contract (RUN-25): complete() returns the validated
+// claim-support is a judgment slug (claude-haiku-4-5 by default, RUN-26) with a
+// structured contract (RUN-25): complete() returns the validated
 // {verdict, rationale, evidence} object. The api key is resolved ONLY inside the
 // transport; the value never reaches a log or the cost ledger (T-05-02-02).
 
 import { complete, isFatalLlmError, MissingApiKeyError } from '../anthropic.js';
+import { Semaphore } from '../budget.js';
+import { byoText, byoPassages, BYO_PASSAGE_CHARS, type ByoTextResult } from '../byo-text.js';
+import { citationItems } from '../citation-token.js';
+import { tryReadPaperConfigSync } from '../config.js';
+import { tryLoadLibrary } from '../library.js';
 import type { ClaimSupport } from '../llm-contracts.js';
 import { buildPromptRequest, requestHints, type PromptRequest } from '../prompt-request.js';
-import { byoText, byoPassages, type ByoTextResult } from '../byo-text.js';
-import { tryLoadLibrary } from '../library.js';
 import type { LibraryEntry } from '../schemas/library.js';
+import { claimSupportAbstract, clip } from '../source-context.js';
+import { draftSentences, reportAdvisoryFailure } from './pass4.js';
+import { PASS2_TABLE_HEADER } from './verdicts.js';
 
-// FEED-05 (D-18-04): the claim sentence (draft text), the source abstract and
-// the source metadata (both from the registrars) are untrusted. They reach the
-// model only as data blocks the ONE renderer fences (prompt-request.ts →
-// untrusted-fence.ts), after every spelling of a fence marker and every
-// closing block tag in them has been neutralised — a crafted abstract can
-// neither end its fence nor its block. The fence constants live in
-// bin/lib/untrusted-fence.ts alone (tests/pass2-injection.test.ts greps).
+export { reportAdvisoryFailure } from './pass4.js';
+
+// FEED-05 (D-18-04): the claim sentence (draft text), the source text and the
+// source metadata (from the registrars, an open-access copy or the user's
+// PDF) are untrusted. They reach the model only as data blocks the ONE
+// renderer fences (prompt-request.ts → untrusted-fence.ts), after every
+// spelling of a fence marker and every closing block tag in them has been
+// neutralised — a crafted abstract can neither end its fence nor its block.
+// The fence constants live in bin/lib/untrusted-fence.ts alone
+// (tests/pass2-injection.test.ts greps).
 
 export type Pass2Verdict = 'SUPPORTED' | 'PARTIAL' | 'UNSUPPORTED' | 'UNCLEAR';
 
 export interface Pass2Result {
   citekey: string;
-  /** The sentence in the draft that carries the [@citekey] token. */
+  /** The sentence in the draft that carries the citation. */
   claimSentence: string;
   verdict: Pass2Verdict;
   /** <=200 chars, table-cell-safe (no markdown/HTML/newlines). */
   rationale: string;
-  /** Verbatim substring of the source abstract, or '' (anti-fabrication). */
+  /** A verbatim substring of the source text the judge read, or '' (anti-fabrication). */
   evidence: string;
 }
 
-/** The bib metadata shape the caller (Plan 05-04) supplies — widened to carry
- *  title / author / abstract so the live claim-support prompt has source text. */
+/** The bib metadata shape the caller supplies: title / author / abstract for the request. */
 export type Pass2BibEntry = {
   DOI?: string;
   title?: string | string[];
@@ -73,81 +89,73 @@ export type Pass2BibEntry = {
   abstract?: string;
 };
 
+/** Returns the passage of a source's open-access full text nearest `claim`, or null (never the user's own PDF). */
+export type FullTextProvider = (citekey: string, claim: string) => Promise<string | null>;
+
+/** At most this many claim-support requests are in flight at once (VRFY-21). */
+export const PASS2_CONCURRENCY = 5;
+
+/** The longest full-text passage one request carries. */
+export const PASS2_FULL_TEXT_CHARS = BYO_PASSAGE_CHARS;
+
+/** The rationale of a pair whose source has no text at all (no request is made). */
+export const NO_SOURCE_TEXT_RATIONALE = 'no source text (no abstract or full text)';
+
+/** Why an advisory pass made no model call when no provider key is configured. */
+export const NO_LLM_SKIP_REASON = 'skipped (no LLM configured)';
+
+/** The longest claim sentence and evidence shown in the Pass-2 table. */
+export const PASS2_SENTENCE_CHARS = 120;
+export const PASS2_EVIDENCE_CHARS = 160;
+
 interface ClaimPair {
   citekey: string;
   claimSentence: string;
 }
 
-const CITEKEY_RE = /\[@([a-z][a-z0-9_-]*)\]/g;
-
 /**
- * Deterministic claim-sentence extraction. Splits `draftMd` into sentences on a
- * pure-regex boundary (terminal . / ! / ? followed by whitespace) and returns
- * the sentence(s) that contain the literal `[@<citekey>]` token. No NLP, no LLM
- * — identical input always yields identical output (PRD §14 determinism).
+ * Every (citing sentence, citekey) pair of `draftMd`, in document order, each
+ * once: a sentence citing A and B yields two pairs; the same sentence citing A
+ * twice, or repeated word for word, yields one.
  */
-function extractClaimSentences(draftMd: string, citekey: string): string[] {
-  const token = `[@${citekey}]`;
-  // Split on a sentence boundary: terminal punctuation followed by whitespace.
-  // The lookbehind keeps the punctuation attached to the preceding sentence.
-  const sentences = draftMd.split(/(?<=[.!?])\s+/);
-  const out: string[] = [];
-  for (const raw of sentences) {
-    const sentence = raw.trim();
-    if (sentence.length > 0 && sentence.includes(token)) {
-      out.push(sentence);
+function collectClaimPairs(draftMd: string): ClaimPair[] {
+  const seen = new Set<string>();
+  const out: ClaimPair[] = [];
+  for (const s of draftSentences(draftMd)) {
+    for (const c of s.citations) {
+      for (const item of citationItems(c)) {
+        const id = `${item.key}\u0000${s.text}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push({ citekey: item.key, claimSentence: s.text });
+      }
     }
   }
   return out;
 }
 
-/**
- * Conservative offline placeholder (UNCLEAR-bias). Mirrors the revise.ts
- * Tier-2-placeholder stance: deterministic, reproducible, never confident.
- */
-function pass2Placeholder(claimSentence: string, citekey: string): Pass2Result {
-  return {
-    citekey,
-    claimSentence,
-    verdict: 'UNCLEAR',
-    rationale: 'LLM stubbed (PENSMITH_NO_LLM): no claim-support judgment was made.',
-    evidence: '',
-  };
+/** Conservative placeholder under PENSMITH_NO_LLM (UNCLEAR-bias, deterministic). */
+function pass2Placeholder(p: ClaimPair): Pass2Result {
+  return { ...p, verdict: 'UNCLEAR', rationale: 'LLM stubbed (PENSMITH_NO_LLM): no claim-support judgment was made.', evidence: '' };
 }
 
-/** Why an advisory pass made no model call when no provider key is configured. */
-export const NO_LLM_SKIP_REASON = 'skipped (no LLM configured)';
-
 /** A conservative UNCLEAR row for a pair that was not judged (`why` says why). */
-function pass2Skipped(claimSentence: string, citekey: string, why: string): Pass2Result {
-  return { citekey, claimSentence, verdict: 'UNCLEAR', rationale: `${why}: no claim-support judgment was made.`, evidence: '' };
+function pass2Skipped(p: ClaimPair, why: string): Pass2Result {
+  return { ...p, verdict: 'UNCLEAR', rationale: `${why}: no claim-support judgment was made.`, evidence: '' };
+}
+
+/** The row of a pair whose source has no text: never judged on its title alone. */
+function noSourceText(p: ClaimPair): Pass2Result {
+  return { ...p, verdict: 'UNCLEAR', rationale: NO_SOURCE_TEXT_RATIONALE, evidence: '' };
 }
 
 /**
  * The Pass-2 rows for a verify whose advisory passes were stopped (the session
- * cost cap, an invalid runtime config): one UNCLEAR row per cited source with
- * `not run: <reason>`, in the pinned table shape `done` parses.
+ * cost cap, an invalid runtime config): one UNCLEAR row per (sentence, key)
+ * pair with `not run: <reason>`, in the pinned table shape `done` parses.
  */
 export function pass2NotRun(draftMd: string, reason: string): Pass2Result[] {
-  return collectClaimPairs(draftMd).map((p) => pass2Skipped(p.claimSentence, p.citekey, `not run (${reason})`));
-}
-
-/**
- * Build the ordered, de-duplicated list of (citekey, claimSentence) pairs to
- * judge. Each UNIQUE citekey contributes one pair using its first extracted
- * claim sentence; a citekey with no resolvable sentence still produces a pair
- * with an empty sentence so the offline placeholder path is total over the
- * draft's citations.
- */
-function collectClaimPairs(draftMd: string): ClaimPair[] {
-  const citekeys = [...draftMd.matchAll(CITEKEY_RE)]
-    .map((m) => m[1])
-    .filter((s): s is string => Boolean(s));
-  const unique = [...new Set(citekeys)];
-  return unique.map((citekey) => {
-    const sentences = extractClaimSentences(draftMd, citekey);
-    return { citekey, claimSentence: sentences[0] ?? '' };
-  });
+  return collectClaimPairs(draftMd).map((p) => pass2Skipped(p, `not run (${reason})`));
 }
 
 /** Normalize a CSL-style title (string | string[]) to a single string. */
@@ -162,219 +170,252 @@ function normalizeAuthors(author: Pass2BibEntry['author']): string[] {
   return author
     .map((a) => {
       if (typeof a === 'string') return a;
-      const family = a.family ?? '';
-      const given = a.given ?? '';
-      return [given, family].filter(Boolean).join(' ').trim();
+      return [a.given ?? '', a.family ?? ''].filter(Boolean).join(' ').trim();
     })
     .filter(Boolean)
     .slice(0, 5);
 }
 
 /**
- * The longest abstract a claim-support request carries. A registrar abstract
- * has no length limit of its own, and an unbounded payload is both cost and a
- * denial-of-service surface (review round 2; source-context.ts clips its
- * abstracts the same way). Evidence must quote the text actually sent.
- */
-export const PASS2_MAX_ABSTRACT_CHARS = 4000;
-
-/** The abstract of a bib entry as Pass 2 sends it (clipped). */
-function claimAbstract(bibEntry: Pass2BibEntry | undefined): string {
-  return (bibEntry?.abstract ?? '').slice(0, PASS2_MAX_ABSTRACT_CHARS);
-}
-
-/**
- * The claim-support request for one (citation, claim sentence) pair: the fixed
+ * The claim-support request for one (claim sentence, citation) pair: the fixed
  * template as the system prompt — byte-identical for every pair, so from the
  * second call on it is read from the prompt cache where the model's minimum
  * allows (RUN-26) — and one data message with the `citation`, `claim` and
- * `abstract` blocks, each fenced (18-PLAN.md §3.3). `sourceText` is what the
- * `abstract` block carries: the clipped abstract by default, or runPass2's
- * byoSourceText (the abstract plus a verified BYO PDF's passages, opt-in).
+ * `source_text` blocks, each fenced (18-PLAN.md §3.3). `sourceText` defaults
+ * to the bib entry's clipped abstract.
  */
 export function claimSupportRequest(
   citekey: string,
   claimSentence: string,
   bibEntry: Pass2BibEntry | undefined,
-  sourceText: string = claimAbstract(bibEntry),
+  sourceText: string = claimSupportAbstract(bibEntry) ?? '',
 ): PromptRequest {
   return buildPromptRequest('claim-support', {
     citation: { citekey, title: normalizeTitle(bibEntry?.title), authors: normalizeAuthors(bibEntry?.author) },
     claim: claimSentence,
-    abstract: sourceText,
+    source_text: sourceText,
   });
 }
 
 /** Clamp a free-text field to a table-cell-safe single line of <=max chars. */
 function clampText(text: string, max: number): string {
-  return text.replace(/[\r\n|]+/g, ' ').trim().slice(0, max);
-}
-
-/**
- * The source text Pass 2 sends for one claim: the bib abstract, plus — only
- * with `share` (`[verification] send_byo_passages`) and for a source whose
- * bring-your-own PDF still matches its recorded hashes — the passages of that
- * PDF's text nearest the claim (byo-text.ts). Otherwise the abstract alone.
- */
-function byoSourceText(root: string | undefined, share: boolean): (citekey: string, claim: string, abstract: string) => Promise<string> {
-  let entries: Promise<Map<string, LibraryEntry>> | null = null;
-  const texts = new Map<string, Promise<ByoTextResult>>();
-  return async (citekey, claim, abstract) => {
-    if (root === undefined || !share) return abstract;
-    entries ??= tryLoadLibrary(root).then((lib) => new Map((lib?.entries ?? []).filter((e) => e.byo !== null).map((e) => [e.citekey, e])));
-    const entry = (await entries).get(citekey);
-    if (entry === undefined) return abstract;
-    let t = texts.get(citekey);
-    if (t === undefined) {
-      t = byoText(root, entry);
-      texts.set(citekey, t);
-    }
-    const r = await t;
-    if (!r.available) return abstract;
-    const passages = byoPassages(r.text, claim);
-    const head = abstract ? `${abstract}\n\n` : '';
-    return `${head}Passages from the full text of the user's own copy (${entry.byo!.file}):\n${passages}`;
-  };
+  return text.replace(/[\r\n|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
 /**
  * Turn the validated claim-support object into a Pass2Result. The schema
- * already pins the verdict enum; this step keeps the table-cell and
- * anti-fabrication guarantees:
- *   - rationale clamped to <=200 chars, newline/pipe-stripped
- *   - evidence must be a verbatim substring of the abstract, else '' (T-05-02-01)
+ * pins the verdict enum; this step keeps the table-cell and anti-fabrication
+ * guarantees: the rationale clamped to <=200 chars, and the evidence kept
+ * only when it is a verbatim substring of the source text sent (T-05-02-01).
  */
-function toPass2Result(
-  data: ClaimSupport,
-  citekey: string,
-  claimSentence: string,
-  abstract: string,
-): Pass2Result {
-  const evidence = data.evidence.length > 0 && abstract.includes(data.evidence) ? data.evidence : '';
-  return { citekey, claimSentence, verdict: data.verdict, rationale: clampText(data.rationale, 200), evidence };
+function toPass2Result(data: ClaimSupport, p: ClaimPair, sourceText: string): Pass2Result {
+  const evidence = data.evidence.length > 0 && sourceText.includes(data.evidence) ? data.evidence : '';
+  return { ...p, verdict: data.verdict, rationale: clampText(data.rationale, 200), evidence };
+}
+
+export interface Pass2Options {
+  /** The section as logged (`1`, or `1a` for an inserted section). */
+  n: number | string;
+  /**
+   * The project root: the LIBRARY.json abstracts, `[verification]
+   * fetch_full_text` and, with `shareByoPassages`, the passages of a source's
+   * hash-verified bring-your-own PDF (read only through byo-text.ts).
+   */
+  root?: string;
+  /** `[verification] send_byo_passages` (default false: BYO text never leaves the machine, PRD §9). */
+  shareByoPassages?: boolean;
+  /** The open-access full-text passage nearest a claim (quotes' source-text module, passed in by verify). */
+  fullText?: FullTextProvider;
+  /** `[verification] fetch_full_text`; read from the paper's config.toml when omitted (default true). */
+  fetchFullText?: boolean;
+}
+
+/** The source text of one pair, assembled lazily per source and claim. */
+class SourceTexts {
+  private library: Promise<Map<string, LibraryEntry>> | null = null;
+  private readonly byo = new Map<string, Promise<ByoTextResult>>();
+
+  constructor(
+    private readonly bib: ReadonlyMap<string, Pass2BibEntry>,
+    private readonly opts: Pass2Options,
+    private readonly useFullText: boolean,
+  ) {}
+
+  private entries(): Promise<Map<string, LibraryEntry>> {
+    const root = this.opts.root;
+    this.library ??= root === undefined
+      ? Promise.resolve(new Map())
+      : tryLoadLibrary(root).then(
+          (lib) => new Map((lib?.entries ?? []).map((e) => [e.citekey, e] as const)),
+          () => new Map<string, LibraryEntry>(),
+        );
+    return this.library;
+  }
+
+  /** The LIBRARY.json abstract, else the bib abstract (clipped), or null. */
+  async abstract(citekey: string): Promise<string | null> {
+    const entry = (await this.entries()).get(citekey);
+    return claimSupportAbstract(entry) ?? claimSupportAbstract(this.bib.get(citekey));
+  }
+
+  /** Whether any text could exist for `citekey` without reading or fetching it (the LLM-stubbed path). */
+  async mayHaveText(citekey: string): Promise<boolean> {
+    if ((await this.abstract(citekey)) !== null) return true;
+    if (this.useFullText) return true;
+    return this.opts.shareByoPassages === true && (await this.entries()).get(citekey)?.byo != null;
+  }
+
+  /** The labelled source text sent for `claim`, or '' when there is none. */
+  async text(citekey: string, claim: string): Promise<string> {
+    const parts: string[] = [];
+    const abstract = await this.abstract(citekey);
+    if (abstract !== null) parts.push(`Abstract:\n${abstract}`);
+    const fullText = this.opts.fullText;
+    if (this.useFullText && fullText !== undefined) {
+      let passage: string | null = null;
+      try {
+        passage = await fullText(citekey, claim);
+      } catch {
+        passage = null; // advisory: an unavailable full text leaves the abstract
+      }
+      const t = passage?.replace(/\s+/g, ' ').trim() ?? '';
+      if (t.length > 0) parts.push(`Passage from the open-access full text nearest the claim:\n${clip(t, PASS2_FULL_TEXT_CHARS)}`);
+    }
+    const byo = await this.byoPassage(citekey, claim);
+    if (byo !== null) parts.push(byo);
+    return parts.join('\n\n');
+  }
+
+  /** A hash-verified bring-your-own PDF's passages nearest `claim`, only with send_byo_passages. */
+  private async byoPassage(citekey: string, claim: string): Promise<string | null> {
+    const root = this.opts.root;
+    if (root === undefined || this.opts.shareByoPassages !== true) return null;
+    const entry = (await this.entries()).get(citekey);
+    if (entry === undefined || entry.byo === null) return null;
+    let t = this.byo.get(citekey);
+    if (t === undefined) {
+      t = byoText(root, entry);
+      this.byo.set(citekey, t);
+    }
+    const r = await t;
+    if (!r.available) return null;
+    return `Passages from the full text of the user's own copy (${entry.byo.file}):\n${byoPassages(r.text, claim)}`;
+  }
+}
+
+/** `[verification] fetch_full_text` of the paper at `root` (default true). */
+function fetchFullTextSetting(root: string | undefined): boolean {
+  if (root === undefined) return true;
+  try {
+    return tryReadPaperConfigSync(root)?.verification?.fetch_full_text !== false;
+  } catch {
+    return true;
+  }
 }
 
 /**
- * Pass 2 advisory claim-support run. Returns one Pass2Result per UNIQUE
- * [@citekey] in `draftMd`. Under PENSMITH_NO_LLM=1 (or when complete() cannot
- * resolve a provider key) every result is the conservative UNCLEAR placeholder
- * and no usable network call is made. A draft with zero citations returns [].
- * Advisory by construction — this function NEVER mutates shared blocking state.
+ * Pass 2 advisory claim-support run: one Pass2Result per (citing sentence,
+ * citekey) pair of `draftMd`, in document order (a draft with no citation
+ * returns []). Under PENSMITH_NO_LLM=1, and when no provider key is
+ * configured, no judgment is made (UNCLEAR rows). The session cost cap and an
+ * invalid runtime configuration are rethrown after the requests in flight
+ * settle (verify writes its deterministic verdict first). Advisory by
+ * construction — this function NEVER touches blocking state.
  */
 export async function runPass2(
   draftMd: string,
-  bibByCitekey: Map<string, Pass2BibEntry>,
-  opts: {
-    /** The section as logged (`1`, or `1a` for an inserted section). */
-    n: number | string;
-    /**
-     * The project root: with `shareByoPassages`, a source with a hash-verified
-     * bring-your-own PDF is judged on its abstract plus the passages of its own
-     * text nearest the claim (SRC-15; read only through byo-text.ts, which
-     * re-hashes the PDF).
-     */
-    root?: string;
-    /** `[verification] send_byo_passages` (default false: BYO text never leaves the machine, PRD §9). */
-    shareByoPassages?: boolean;
-  },
+  bibByCitekey: ReadonlyMap<string, Pass2BibEntry>,
+  opts: Pass2Options,
 ): Promise<Pass2Result[]> {
-  // Provider-agnostic offline gate: only PENSMITH_NO_LLM short-circuits to the
-  // placeholder. complete() owns provider + key resolution; if no provider key
-  // is configured it throws and the per-call catch below yields UNCLEAR. (The
-  // old `|| !ANTHROPIC_API_KEY` wrongly skipped valid non-Anthropic configs.)
-  const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
   const pairs = collectClaimPairs(draftMd);
   if (pairs.length === 0) return [];
+  const useFullText = opts.fullText !== undefined && (opts.fetchFullText ?? fetchFullTextSetting(opts.root));
+  const texts = new SourceTexts(bibByCitekey, opts, useFullText);
 
-  if (noLlm) {
-    return pairs.map((p) => pass2Placeholder(p.claimSentence, p.citekey));
+  // Provider-agnostic offline gate: only PENSMITH_NO_LLM short-circuits to the
+  // placeholder. complete() owns provider + key resolution.
+  if (process.env['PENSMITH_NO_LLM'] === '1') {
+    const out: Pass2Result[] = [];
+    for (const p of pairs) out.push((await texts.mayHaveText(p.citekey)) ? pass2Placeholder(p) : noSourceText(p));
+    return out;
   }
 
-  // ---- Live claim-support branch (a configured model: a provider, a local
-  // server or the RUN-21 mock LLM).
-  const results: Pass2Result[] = [];
-  const byoSource = byoSourceText(opts.root, opts.shareByoPassages === true);
+  const results: Pass2Result[] = new Array<Pass2Result>(pairs.length);
+  const semaphore = new Semaphore(PASS2_CONCURRENCY);
   // Set once no provider key is configured: the remaining pairs are skipped
   // (every call would fail the same way). Verify still writes its frozen
-  // Pass-1/Pass-3 verdict — the advisory passes never need a key (D-V1-04:
-  // Tier 1 has none; a user checking a hand-written draft may have none).
+  // Pass-1/Pass-3 verdict — the advisory passes never need a key (D-V1-04).
   let noKey: string | null = null;
+  let fatal: unknown = undefined;
   let failed = 0;
   let firstError: unknown;
-  for (const pair of pairs) {
-    if (noKey !== null) {
-      results.push(pass2Skipped(pair.claimSentence, pair.citekey, noKey));
-      continue;
-    }
-    const bibEntry = bibByCitekey.get(pair.citekey);
-    // The text the judge reads — the abstract, plus a hash-verified BYO PDF's
-    // passages nearest the claim when the user opted in — rides in the fenced
-    // abstract block, and `evidence` is checked against exactly that text.
-    const abstract = await byoSource(pair.citekey, pair.claimSentence, claimAbstract(bibEntry));
-    try {
-      // WR-04 / FEED-05: the renderer fences the untrusted blocks and strips
-      // fence markers from every payload (claimSupportRequest above).
-      const request = claimSupportRequest(pair.citekey, pair.claimSentence, bibEntry, abstract);
-
-      // Route through the transport chokepoint (complete() → http.ts, D-06):
-      // the session cost-cap check before sending, retry/backoff, and the
-      // actual-usage cost record after.
-      const res = await complete<ClaimSupport>({
-        slug: 'claim-support',
-        section: opts.n,
-        system: request.system,
-        messages: request.messages,
-        stubHint: requestHints(request),
-      });
-      results.push(toPass2Result(res.data as ClaimSupport, pair.citekey, pair.claimSentence, abstract));
-    } catch (err) {
-      // No provider key: skipped, never fatal (see noKey above).
-      if (err instanceof MissingApiKeyError) {
-        noKey = NO_LLM_SKIP_REASON;
-        results.push(pass2Skipped(pair.claimSentence, pair.citekey, noKey));
-        continue;
-      }
-      // The session cost cap and invalid configuration are never advisory —
-      // they stop verify (RUN-18; verify writes its deterministic verdict
-      // first). Any other failure (provider error, refusal, truncation, a reply
-      // that never matched the schema) surfaces as a conservative UNCLEAR —
-      // advisory must not crash verify.
-      if (isFatalLlmError(err)) throw err;
-      failed += 1;
-      firstError ??= err;
-      results.push({
-        citekey: pair.citekey,
-        claimSentence: pair.claimSentence,
-        verdict: 'UNCLEAR',
-        rationale: clampText(`LLM error: ${String(err)}`, 200),
-        evidence: '',
-      });
-    }
-  }
+  await Promise.all(
+    pairs.map((pair, i) =>
+      semaphore.withLock(async () => {
+        if (fatal !== undefined) {
+          results[i] = pass2Skipped(pair, 'not run (stopped)');
+          return;
+        }
+        if (noKey !== null) {
+          results[i] = pass2Skipped(pair, noKey);
+          return;
+        }
+        const sourceText = await texts.text(pair.citekey, pair.claimSentence);
+        if (sourceText === '') {
+          results[i] = noSourceText(pair);
+          return;
+        }
+        try {
+          // WR-04 / FEED-05: the renderer fences the untrusted blocks.
+          const request = claimSupportRequest(pair.citekey, pair.claimSentence, bibByCitekey.get(pair.citekey), sourceText);
+          // The transport chokepoint (complete() → http.ts, D-06): the session
+          // cost-cap check before sending, retry/backoff, the cost record after.
+          const res = await complete<ClaimSupport>({
+            slug: 'claim-support',
+            section: opts.n,
+            system: request.system,
+            messages: request.messages,
+            stubHint: requestHints(request),
+          });
+          results[i] = toPass2Result(res.data as ClaimSupport, pair, sourceText);
+        } catch (err) {
+          if (err instanceof MissingApiKeyError) {
+            noKey = NO_LLM_SKIP_REASON;
+            results[i] = pass2Skipped(pair, noKey);
+            return;
+          }
+          // The session cost cap and invalid configuration are never advisory
+          // — they stop verify. Any other failure (provider error, refusal,
+          // truncation, a reply that never matched the schema) is a
+          // conservative UNCLEAR: advisory must not crash verify.
+          if (isFatalLlmError(err)) {
+            fatal ??= err;
+            results[i] = pass2Skipped(pair, 'not run (stopped)');
+            return;
+          }
+          failed += 1;
+          firstError ??= err;
+          results[i] = { ...pair, verdict: 'UNCLEAR', rationale: clampText(`LLM error: ${String(err)}`, 200), evidence: '' };
+        }
+      }),
+    ),
+  );
+  if (fatal !== undefined) throw fatal;
   if (failed > 0) reportAdvisoryFailure('Pass 2 (claim support)', failed, firstError);
   return results;
 }
 
-/**
- * One stderr line when an advisory pass could not judge some claims because
- * the model call failed (RUN-12): the rows are UNCLEAR in VERIFICATION.md and
- * verify still exits on its deterministic verdict, but the failure — e.g. a
- * model the provider does not serve, and the key that selects it — is never
- * silent.
- */
-export function reportAdvisoryFailure(pass: string, count: number, err: unknown): void {
-  const detail = (err instanceof Error ? err.message : String(err)).replace(/^pensmith: /, '').split('\n')[0] ?? '';
-  process.stderr.write(
-    `pensmith verify: WARN — ${pass}, advisory, could not judge ${count} claim(s): ${detail} ` +
-      '(recorded as UNCLEAR in VERIFICATION.md)\n',
-  );
+/** A value as a table cell: one line, no pipes, no HTML tag, at most `max` characters. */
+function cell(text: string, max: number): string {
+  return clampText(text.replace(/</g, '‹').replace(/>/g, '›'), max);
 }
 
 /**
- * Render the `## Pass-2` advisory section for VERIFICATION.md. Deterministic,
- * no LLM. Mirrors renderFreshnessTable. Emits table-cell-safe text only (no
- * HTML; claim sentence truncated to ~60 chars) — LLM-output-injection
- * mitigation (T-05-02-03). Empty results → a "no citations" section.
+ * Render the `## Pass-2` advisory section for VERIFICATION.md: one row per
+ * (sentence, citekey) pair under PASS2_TABLE_HEADER (verdicts.ts), with the
+ * Evidence column (VRFY-22) — every cell one line, pipe-free, HTML-free and
+ * clamped (sentence 120, rationale 200, evidence 160 characters; T-05-02-03).
+ * Deterministic, no LLM. Empty results → a "no citations" section.
  */
 export function renderPass2Section(results: ReadonlyArray<Pass2Result>): string {
   if (results.length === 0) {
@@ -383,13 +424,13 @@ export function renderPass2Section(results: ReadonlyArray<Pass2Result>): string 
   const lines = [
     '## Pass-2 (claim support, advisory — LLM-judged)',
     '',
-    '| Citekey | Claim Sentence | Verdict | Rationale |',
-    '|---------|---------------|---------|-----------|',
+    PASS2_TABLE_HEADER,
+    '|---------|----------------|---------|-----------|----------|',
   ];
   for (const r of results) {
-    const sentence = clampText(r.claimSentence, 60);
-    const rationale = clampText(r.rationale, 200);
-    lines.push(`| ${r.citekey} | ${sentence} | **${r.verdict}** | ${rationale} |`);
+    lines.push(
+      `| ${cell(r.citekey, 120)} | ${cell(r.claimSentence, PASS2_SENTENCE_CHARS)} | **${r.verdict}** | ${cell(r.rationale, 200)} | ${cell(r.evidence, PASS2_EVIDENCE_CHARS)} |`,
+    );
   }
   lines.push('');
   return lines.join('\n');

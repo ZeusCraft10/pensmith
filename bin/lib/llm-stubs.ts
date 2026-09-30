@@ -284,7 +284,9 @@ const STUBS: Readonly<Record<string, (hint: StubHint) => unknown>> = Object.free
   'outline-author': outlineStub,
   'section-planner': plannerStub,
   'claim-support': () => ({ verdict: 'UNCLEAR', rationale: 'LLM stubbed: no claim-support judgment was made.', evidence: '' }),
-  'orphan-label': () => ({ label: 'UNCLEAR' }),
+  // The per-paragraph orphan audit (D-20-29) can only ADD orphans, so the
+  // conservative stub names no claim: the deterministic floor stands alone.
+  'orphan-label': () => ({ claims: [] }),
 });
 
 /** True when a deterministic structured stub exists for `slug`. */

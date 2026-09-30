@@ -133,8 +133,8 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // loadPrompt('claim-support') / loadPrompt('orphan-label') succeed WITHOUT
   // PENSMITH_ALLOW_PENDING_PROMPT_HASHES; runtime drift detection is restored).
   // Mirrors the Phase-4 smoother re-pin precedent exactly (Plan 04-05 Task 4).
-  'claim-support':       'f6d673bdef91ed677609678bda9f07b422ef3b5a3ac1766eadbd2bc189070a7a',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts; HARD-04c fence added Plan 15-06)
-  'orphan-label':        '76f3b8527b03115480d4cd99a631fd746abb0ce28906c0d486a5e1baaa3ac82d',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 4 Step 3 via pass4.ts; HARD-04c fence added Plan 15-06)
+  'claim-support':       '44727c65d9ffec142d9d0a8419c4caad551ea0a243efd655b9bc48c069275bf4',   // Phase 5 D-12 (re-pinned Phase 20 D-20-30: judged against the source text — abstract + full-text passages, input <source_text>; WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts)
+  'orphan-label':        'c1d45a9f9c7d74889a5f476a2f1b2e847e4edfae96ddf6604479da5334979dc0',   // Phase 5 D-12 (re-pinned Phase 20 D-20-29/30: the per-paragraph orphan audit, input <paragraph>, output {claims}; WN-3 lockstep with repo-files pin; ACTIVE Pass 4 via pass4.ts)
   // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts (Plan 09-02 wires the
   // TutorialSubscriber render seam). RE-PINNED to the real SHA-256 in Plan 09-03 Task 3
   // (the prompt bodies are byte-stable since 09-00 — see the byte-identical guard in

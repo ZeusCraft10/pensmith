@@ -139,6 +139,23 @@ function authorsOf(v: unknown): string[] {
   return out;
 }
 
+/**
+ * The longest abstract Pass 2's claim-support judge is sent (VRFY-21,
+ * D-20-28): a registrar abstract has no length limit of its own, and an
+ * unbounded payload is both cost and a denial-of-service surface.
+ */
+export const CLAIM_SUPPORT_ABSTRACT_CHARS = 4000;
+
+/**
+ * A source's abstract as Pass 2 sends it (the one accessor Pass 2 reads —
+ * the LIBRARY.json entry first, else the bib entry's `abstract`): one line,
+ * clipped like every other abstract of this module (clip), or null when there
+ * is none. `evidence` is checked against exactly this text.
+ */
+export function claimSupportAbstract(entry: { readonly abstract?: unknown } | null | undefined): string | null {
+  return textOrNull(entry?.abstract, CLAIM_SUPPORT_ABSTRACT_CHARS);
+}
+
 /** The library as a citekey map (the first entry wins for a duplicated key). */
 function byCitekey(entries: readonly SourceContextInput[]): Map<string, SourceContextInput> {
   const map = new Map<string, SourceContextInput>();
