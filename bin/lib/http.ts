@@ -1001,6 +1001,17 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
 // bucket, not semaphore). There is NO release()/return-token path — that is
 // intentional. Token return-on-exception is the Semaphore's concern (budget.ts),
 // not the rate bucket's. See RESEARCH A5.
+
+/**
+ * Tokens refill this much slower than the nominal rate. A service counts
+ * requests as they ARRIVE in its window; spacing grants exactly one interval
+ * apart leaves no room for the time between a grant and the request reaching
+ * the server, which varies from request to request (a slower first request
+ * puts the fourth of "3 per second" inside the first one's second). 5% (about
+ * 17 ms per interval at 3/s) absorbs that jitter — never faster than the rate.
+ */
+const GRANT_MARGIN = 1.05;
+
 class TokenBucket {
   private tokens: number;
   private lastRefillMs: number;
@@ -1050,7 +1061,7 @@ class TokenBucket {
     const now = Date.now();
     const elapsedSec = (now - this.lastRefillMs) / 1000;
     if (elapsedSec <= 0) return;
-    this.tokens = Math.min(this.capacity, this.tokens + elapsedSec * this.refillPerSec);
+    this.tokens = Math.min(this.capacity, this.tokens + (elapsedSec * this.refillPerSec) / GRANT_MARGIN);
     this.lastRefillMs = now;
   }
 
@@ -1091,7 +1102,7 @@ class TokenBucket {
   private _scheduleGrant(): void {
     this.timerPending = true;
     const deficit = Math.max(0, 1 - this.tokens);
-    const waitMs = Math.max(1, Math.ceil((deficit / this.refillPerSec) * 1000));
+    const waitMs = Math.max(1, Math.ceil(((deficit * GRANT_MARGIN) / this.refillPerSec) * 1000));
     setTimeout(() => {
       this.timerPending = false;
       this.refill();
