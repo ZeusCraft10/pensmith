@@ -467,4 +467,4 @@ The clone's `node_modules` was a symlink to this checkout's, so its regenerated 
 | PLUG-14 | Met on Linux; not met: its acceptance "pass on all 3 OSes in CI" waits for the first green `check` matrix | `[ ]`, Pending (unticked in the Phase 20 merge's review round 1; it was `[x]` with a caveat) |
 | CI-05 | Not met: never run on a runner; not a required check | `[ ]`, Pending (maintainer) |
 
-ROADMAP: Phase 23 stays unticked. 23b is still to come, and 23a itself leaves PLUG-04 and CI-05 open.
+ROADMAP: Phase 23 stays unticked. 23b is still to come, and 23a itself leaves PLUG-04, PLUG-14 (its 3-OS CI leg) and CI-05 open. The Phase 20 merge's review round 1 (23a-SUMMARY §11) unticked PLUG-14.
