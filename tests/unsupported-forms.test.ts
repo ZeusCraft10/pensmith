@@ -21,6 +21,15 @@ const POSITIVE: readonly Case[] = [
   ['Harvard pair', 'Trees cool cities (Smith 2020; Lee 2021).', [['author-date', 1, '(Smith 2020; Lee 2021)']]],
   ['corporate author', 'Heat kills (World Health Organization, 2020).', [['author-date', 1, '(World Health Organization, 2020)']]],
   ['corporate with abbreviation', 'Heat kills (World Health Organization [WHO], 2020).', [['author-date', 1, '(World Health Organization [WHO], 2020)']]],
+  // `$` is a citation-key character: a `$` in a key opens no TeX math, so the
+  // text between two such keys is scanned (HARDEN-03, seed 699952924) — and
+  // math that opens before a citation runs to its closing `$`, as in Pandoc.
+  [
+    'author-date between two keys holding `$`',
+    '[see @k$x, pp. 1-4; also -@smith2020] (World Health Organization, 2020) -@k$x notes @A argues',
+    [['author-date', 1, '(World Health Organization, 2020)']],
+  ],
+  ['author-date after math that swallows a key', 'Let $a [@k$x] (Smith, 2020) hold.', [['author-date', 1, '(Smith, 2020)']]],
   ['prefixes', 'Trees help (see also Smith, 2019; e.g., Lee, 2020).', [['author-date', 1, '(see also Smith, 2019; e.g., Lee, 2020)']]],
   ['particles and diacritics', 'Heat (van der Berg, 2011) and (García-López & O\'Neil, 2018a).', [['author-date', 1, '(van der Berg, 2011)'], ['author-date', 1, "(García-López & O'Neil, 2018a)"]]],
   ['n.d. and in press', 'One (Smith, n.d.) and two (Lee, in press).', [['author-date', 1, '(Smith, n.d.)'], ['author-date', 1, '(Lee, in press)']]],

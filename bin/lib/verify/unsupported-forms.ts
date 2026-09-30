@@ -25,7 +25,7 @@
 // PURE: no I/O. Line numbers are 1-based and count `\n`, so an LF and a CRLF
 // copy of a draft report the same lines.
 
-import { lineOfOffset, offsetInSpans, provableCodeSpans } from '../citation-token.js';
+import { findCitations, lineOfOffset, offsetInSpans, provableCodeSpans } from '../citation-token.js';
 import type { TextFinding } from './verdicts.js';
 
 /** The forms this scanner reports (TextFinding.form). */
@@ -91,11 +91,23 @@ const BLANK_RE = /^[ \t]*$/;
  * TeX math spans as Pandoc's `tex_math_dollars` reads them: `$$…$$`, and `$…$`
  * whose opening `$` is followed by a non-space, whose closing `$` follows a
  * non-space and is not followed by a digit, on one line; `\$` is literal.
+ * Pandoc reads left to right: a `$` inside a citation that began before it
+ * (`[@k$x]`, `-@k$x` — `$` is a key character) is part of that key and opens
+ * no math. A math span that opens first runs to its closing `$`, wherever that
+ * falls. (HARDEN-03 found two such keys hiding the author-date text between
+ * them as "math".)
  */
 function mathSpans(md: string, code: ReadonlyArray<readonly [number, number]>): Array<[number, number]> {
   const out: Array<[number, number]> = [];
+  if (!md.includes('$')) return out;
+  const cites = findCitations(md);
+  const inCitation = (at: number): boolean => cites.some((c) => c.start < at && at < c.end);
   const re = /(?<!\\)\$\$[\s\S]*?(?<!\\)\$\$|(?<![\\$])\$(?![\s$])(?:\\.|[^$\\\n])*?(?<![\s\\])\$(?![\d$])/g;
-  for (const m of md.matchAll(re)) {
+  for (let m = re.exec(md); m !== null; m = re.exec(md)) {
+    if (inCitation(m.index)) {
+      re.lastIndex = m.index + 1; // this `$` belongs to a key: look for math after it
+      continue;
+    }
     if (offsetInSpans(m.index, code)) continue;
     if (/\n[ \t]*\r?\n/.test(m[0])) continue; // math never spans a blank line
     out.push([m.index, m.index + m[0].length]);
