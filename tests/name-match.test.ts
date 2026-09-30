@@ -13,6 +13,7 @@ import {
   authorSimilarity,
   foldText,
   mainTitle,
+  isCorporateAuthor,
   matchWork,
   surnameForms,
   titleForms,
@@ -113,7 +114,8 @@ test('VRFY-13: a title is compared whole and without its subtitle (":", " - ", "
   assert.deepEqual(titleForms('[Translated title].'), ['translated title'], 'PubMed brackets and the final period');
   // The ESL book cited with its subtitle; Crossref keeps the subtitle apart.
   assert.equal(titleSimilarity({ title: 'The Elements of Statistical Learning', subtitle: 'Data Mining, Inference, and Prediction' }, 'The Elements of Statistical Learning: Data Mining, Inference, and Prediction'), 1);
-  assert.equal(titleSimilarity({ title: 'The Elements of Statistical Learning' }, 'The Elements of Statistical Learning: Data Mining, Inference, and Prediction'), 1);
+  // Crossref deposits the ESL book's main title only (no subtitle anywhere): a BOOK record may omit it.
+  assert.equal(titleSimilarity({ title: 'The Elements of Statistical Learning', type: 'book' }, 'The Elements of Statistical Learning: Data Mining, Inference, and Prediction'), 1);
   // Registrar markup and U+2010 / en dashes are not differences.
   assert.equal(titleSimilarity({ title: 'Oxygen <i>in vivo</i> ‐ a study' }, 'Oxygen in vivo - a study'), 1);
   assert.equal(titleSimilarity({ title: 'Medical Image Computing and Computer-Assisted Intervention – MICCAI 2015' }, 'Medical Image Computing and Computer-Assisted Intervention - MICCAI 2015'), 1);
@@ -157,4 +159,58 @@ test('D-20-11: the metadata search\'s strict title threshold is stricter than th
   assert.ok(STRICT_TITLE_JW > TITLE_JW_THRESHOLD);
   const near = matchWork({ title: 'Measured movement', authors: ['Aspelmeyer, M.'], year: 2009 }, { title: 'Measured measurement', authors: ['Aspelmeyer, Markus'], year: 2009 }, { titleThreshold: STRICT_TITLE_JW });
   assert.deepEqual(near.failing, ['title']);
+});
+
+test('VRFY-13 (review round 2): a subtitle the citation adds must be the record\'s — the claimed title is compared whole, except against a book record with no subtitle; the metadata search always compares it whole', () => {
+  // An invented subtitle on a journal / conference record: MIS-CITED (title).
+  const invented = matchWork({ title: 'Attention Is All You Need: Why Recurrence Still Wins', authors: ['Vaswani, Ashish'], year: 2017 }, { title: 'Attention is all you need', authors: ['Vaswani, Ashish'], year: 2017, type: 'paper-conference' });
+  assert.equal(invented.ok, false);
+  assert.deepEqual(invented.failing, ['title']);
+  assert.equal(titleSimilarity({ title: 'Deep learning' }, 'Deep learning: a review'), titleSimilarity({ title: 'Deep learning' }, 'Deep learning: a review', true), 'no record type: whole');
+  assert.ok(titleSimilarity({ title: 'Deep learning' }, 'Deep learning: a review') < TITLE_JW_THRESHOLD);
+  // The record's subtitle may be left out by the citation (the record's main title counts).
+  assert.equal(matchWork({ title: 'Deep learning', authors: ['LeCun, Yann'], year: 2015 }, { title: 'Deep learning: a review', authors: ['LeCun, Yann'], year: 2015 }).ok, true);
+  // A record that carries its own subtitle: the claimed title is compared whole against it.
+  assert.equal(matchWork({ title: 'Deep learning: a review', authors: ['LeCun, Yann'], year: 2015 }, { title: 'Deep learning', subtitle: 'a review', authors: ['LeCun, Yann'], year: 2015 }).ok, true);
+  assert.equal(matchWork({ title: 'Deep learning: a fake subtitle about bananas', authors: ['LeCun, Yann'], year: 2015 }, { title: 'Deep learning', subtitle: 'a review', authors: ['LeCun, Yann'], year: 2015, type: 'book' }).ok, false, 'a book record WITH a subtitle: the claimed one must be it');
+  // The metadata search (no identifier anchors it): "Introduction: …" never matches a record titled "Introduction".
+  const intro = matchWork(
+    { title: 'Introduction: The Politics of Climate Adaptation in Coastal Cities', authors: ['Smith, John'], year: 2019 },
+    { title: 'Introduction', authors: ['Smith, John'], year: 2020, type: 'book' },
+    { titleThreshold: STRICT_TITLE_JW, strictTitle: true },
+  );
+  assert.equal(intro.ok, false);
+  assert.deepEqual(intro.failing, ['title']);
+});
+
+test('VRFY-13 (review round 2): a consortium cited as the journal prints it — matched against every group the record lists, or, when the record lists persons only, by a strict title and the year', () => {
+  const persons = Array.from({ length: 40 }, (_, i) => `Person${i}, A.`);
+  // LIGO: Crossref lists the collaboration after 1,011 people.
+  const ligo = matchWork(
+    { title: 'Observation of Gravitational Waves from a Binary Black Hole Merger', authors: ['{LIGO Scientific Collaboration and Virgo Collaboration}'], year: 2016 },
+    { title: 'Observation of Gravitational Waves from a Binary Black Hole Merger', authors: ['Abbott, B. P.', ...persons, '{LIGO Scientific Collaboration and Virgo Collaboration}'], year: 2016 },
+  );
+  assert.equal(ligo.ok, true, ligo.detail);
+  assert.ok(ligo.authorJW >= 0.99);
+  // CMS / ATLAS / GBD 2019: persons only at Crossref — the strict title and the year.
+  for (const [who, title, year] of [
+    ['{CMS Collaboration}', 'Observation of a new boson at a mass of 125 GeV with the CMS experiment at the LHC', 2012],
+    ['Collaboration, CMS', 'Observation of a new boson at a mass of 125 GeV with the CMS experiment at the LHC', 2012],
+    ['{ATLAS Collaboration}', 'Observation of a new particle in the search for the Standard Model Higgs boson with the ATLAS detector at the LHC', 2012],
+    ['{GBD 2019 Diseases and Injuries Collaborators}', 'Global burden of 369 diseases and injuries in 204 countries and territories, 1990–2019: a systematic analysis for the Global Burden of Disease Study 2019', 2020],
+  ] as const) {
+    const m = matchWork({ title, authors: [who], year }, { title, authors: ['Chatrchyan, S.', ...persons], year });
+    assert.equal(m.ok, true, `${who}: ${m.detail}`);
+    assert.match(m.detail, /a consortium author, and the record lists its members only: title and year matched strictly/);
+  }
+  // Still MIS-CITED: another group, a wrong year, a looser title, a person's name.
+  const other = matchWork({ title: 'A title', authors: ['{ATLAS Collaboration}'], year: 2012 }, { title: 'A title', authors: ['Aad, G.', '{CMS Collaboration}'], year: 2012 });
+  assert.deepEqual(other.failing, ['first author'], 'the record names another group');
+  const year = matchWork({ title: 'A long enough title of a physics paper', authors: ['{CMS Collaboration}'], year: 2015 }, { title: 'A long enough title of a physics paper', authors: persons, year: 2012 });
+  assert.deepEqual(year.failing, ['first author', 'year']);
+  const loose = matchWork({ title: 'Observation of a new boson at the LHC', authors: ['{CMS Collaboration}'], year: 2012 }, { title: 'Observation of a new boson at a mass of 125 GeV with the CMS experiment at the LHC', authors: persons, year: 2012 });
+  assert.ok(loose.failing.includes('first author'), 'below the strict title: the group claim is not taken on trust');
+  assert.equal(matchWork({ title: 'A title', authors: ['Nobody, Nora'], year: 2012 }, { title: 'A title', authors: persons, year: 2012 }).ok, false, 'a person\'s name never passes by title');
+  assert.equal(isCorporateAuthor('{The ENCODE Project Consortium}'), true);
+  assert.equal(isCorporateAuthor('Smith, John'), false);
 });

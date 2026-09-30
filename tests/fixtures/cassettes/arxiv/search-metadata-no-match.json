@@ -1,0 +1,17 @@
+[
+  {
+    "scope": "https://export.arxiv.org",
+    "method": "GET",
+    "path": "/api/query?search_query=ti%3A%22A+Work+That+Was+Never+Published%22+AND+au%3ANobody&max_results=5",
+    "status": 200,
+    "response": "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\" xmlns:arxiv=\"http://arxiv.org/schemas/atom\" xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://arxiv.org/api/w9sVIwdPEYvvEoigEz6S8c8u/k4</id>\n  <title>arXiv Query: search_query=ti:\"A Work That Was Never Published\" AND au:Nobody&amp;id_list=&amp;start=0&amp;max_results=5</title>\n  <updated>2026-09-30T18:47:12Z</updated>\n  <link href=\"https://arxiv.org/api/query?search_query=ti:%22A+Work+That+Was+Never+Published%22+AND+au:Nobody&amp;start=0&amp;max_results=5&amp;id_list=\" type=\"application/atom+xml\"/>\n  <opensearch:itemsPerPage>5</opensearch:itemsPerPage>\n  <opensearch:totalResults>0</opensearch:totalResults>\n  <opensearch:startIndex>0</opensearch:startIndex>\n</feed>\n",
+    "responseHeaders": {
+      "content-type": "application/atom+xml; charset=utf-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T18:47:08.587Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "arxiv"
+    }
+  }
+]
