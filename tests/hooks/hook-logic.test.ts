@@ -12,8 +12,8 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { hostname as hostname_, tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { hookInputCwd, parseHookInput, readHookInput, HOOK_STDIN_MAX_BYTES, type HookStdin } from '../../bin/lib/hooks/stdin.js';
 import { hookPaperRoot } from '../../bin/lib/hooks/entry.js';
 import { buildSessionStartContext, sessionStartOutput } from '../../bin/lib/hooks/session-start.js';
@@ -21,7 +21,7 @@ import { collectSectionPointers, writePreCompactHandoff } from '../../bin/lib/ho
 import { checkpointFile, recordCheckpoint, CHECKPOINT_KEEP_LINES, CHECKPOINT_MAX_BYTES } from '../../bin/lib/hooks/post-tool-use.js';
 import { stopHook } from '../../bin/lib/hooks/stop.js';
 import { HandoffSchema } from '../../bin/lib/handoff.js';
-import { acquireSessionLock, readSessionLock } from '../../bin/lib/session-lock.js';
+import { acquireSessionLock, readSessionLock, sessionLockFile, type SessionOwner } from '../../bin/lib/session-lock.js';
 import { activePaperRoot, setActivePaperRoot } from '../../bin/lib/paths.js';
 import { out, resetOutputSink } from '../../bin/lib/output-sink.js';
 import { REPO, sandbox } from '../helpers/paper-cli-harness.js';
@@ -255,22 +255,99 @@ test('hooks/post-tool-use: one checkpoint per minute per paper; the file is trim
   assert.equal(checkpointFile(join(root, '.paper')), file, 'the .paper folder names the same paper');
 });
 
+/** Put §2 of the three-section fixture back to an outline stub: the router's step becomes `plan 2`. */
+function stubSection2(root: string): void {
+  writeFileSync(
+    join(root, '.paper', 'sections', '02-methods', 'PLAN.md'),
+    '---\nsection: 2\nslug: methods\ntitle: methods\ndepends_on: [intro]\nassigned_sources: []\nstatus: planned\nstub: true\nverified_against_draft_hash: null\n---\n## Brief\n\nx\n',
+  );
+}
+
+test('hooks/post-tool-use (review round 3): within the minute, a call that moved the paper replaces the last line (trailing edge); one that did not writes nothing', async () => {
+  const root = await paper();
+  let clock = Date.parse('2026-09-30T00:00:00.000Z');
+  const now = (): number => clock;
+  const status = 'mcp__plugin_pensmith_pensmith__pensmith_status';
+  const write = 'mcp__plugin_pensmith_pensmith__pensmith_write';
+  const first = await recordCheckpoint(root, { sessionId: 's1', toolName: status }, { now });
+  assert.equal(first.kind === 'written' && first.record.next, 'write 2');
+  const file = checkpointFile(root);
+
+  // Seconds later a mutating call moves the paper: the minute's line now says where it is.
+  clock += 5_000;
+  stubSection2(root);
+  const moved = await recordCheckpoint(root, { sessionId: 's1', toolName: write }, { now });
+  assert.equal(moved.kind, 'updated');
+  const lines = readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { ts: string; tool_name: string; next: string });
+  assert.equal(lines.length, 1, 'still one line in the minute');
+  assert.deepEqual(lines[0], { ts: new Date(clock).toISOString(), session_id: 's1', tool_name: write, next: 'plan 2' });
+
+  // A call that leaves the step where it is writes nothing.
+  clock += 5_000;
+  const before = readFileSync(file, 'utf8');
+  assert.equal((await recordCheckpoint(root, { sessionId: 's1', toolName: status }, { now })).kind, 'throttled');
+  assert.equal(readFileSync(file, 'utf8'), before);
+
+  // Lines stay a minute apart: the next append comes a minute after the last line.
+  clock += 54_999;
+  assert.equal((await recordCheckpoint(root, { sessionId: 's1', toolName: status }, { now })).kind, 'throttled');
+  clock += 1;
+  assert.equal((await recordCheckpoint(root, { sessionId: 's1', toolName: status }, { now })).kind, 'written');
+  assert.equal(readFileSync(file, 'utf8').trim().split('\n').length, 2);
+
+  // A torn last line is kept below the replaced record, never merged into it.
+  writeFileSync(file, readFileSync(file, 'utf8') + '{"ts":"torn');
+  clock += 1_000;
+  writeFileSync(
+    join(root, '.paper', 'sections', '02-methods', 'PLAN.md'),
+    '---\nsection: 2\nslug: methods\ntitle: methods\ndepends_on: [intro]\nassigned_sources: []\nstatus: writing\nverified_against_draft_hash: null\n---\n## Brief\n\nx\n',
+  );
+  assert.equal((await recordCheckpoint(root, { sessionId: 's2', toolName: write }, { now })).kind, 'updated');
+  const after = readFileSync(file, 'utf8').split('\n').filter((l) => l.length > 0);
+  assert.equal(after.length, 3);
+  assert.equal((JSON.parse(after[1]!) as { next: string; session_id: string }).next, 'write 2');
+  assert.equal(after[2], '{"ts":"torn');
+});
+
 // ---------------------------------------------------------------------------
 // Stop
 // ---------------------------------------------------------------------------
 
-test('hooks/stop: releases only an MCP lock of the given Claude session', async () => {
+/** A PID that belonged to a process which has exited (a holder killed before it could release). */
+function deadPid(): number {
+  const r = spawnSync(process.execPath, ['-e', ''], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  return r.pid!;
+}
+
+test('hooks/stop: releases only the MCP lock of the given Claude session that its server left behind — never a live call\'s, never a CLI lock', async () => {
   const root = await paper();
+  // A live holder (this process) is a tool call still in flight: kept, even for its own session (review round 3).
   const handle = await acquireSessionLock(root, { kind: 'mcp', verb: 'pensmith_write', claudeSessionId: 'claude-xyz' });
   try {
     assert.deepEqual(await stopHook(root, 'claude-other'), { released: false, errors: [] });
     assert.deepEqual(await stopHook(root, null), { released: false, errors: [] });
+    assert.deepEqual(await stopHook(root, 'claude-xyz'), { released: false, errors: [] }, 'an in-flight call keeps its lock');
     assert.equal(readSessionLock(root)?.claudeSessionId, 'claude-xyz');
-    assert.deepEqual(await stopHook(root, 'claude-xyz'), { released: true, errors: [] });
-    assert.equal(readSessionLock(root), null);
   } finally {
     await handle.release();
   }
+  assert.equal(readSessionLock(root), null, 'the call itself releases it when it ends');
+
+  // A record whose server is gone (killed before its release ran) is left behind: released for its own session only.
+  const file = sessionLockFile(root);
+  const leftBehind = (hostname: string): SessionOwner => ({
+    hostname, pid: deadPid(), sessionId: 'server-session', kind: 'mcp', verb: 'pensmith_write',
+    startedAt: new Date().toISOString(), claudeSessionId: 'claude-xyz', root,
+  });
+  for (const hostname of [hostname_(), 'a-name-this-host-had-before']) {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(leftBehind(hostname)));
+    assert.deepEqual(await stopHook(root, 'claude-other'), { released: false, errors: [] });
+    assert.deepEqual(await stopHook(root, 'claude-xyz'), { released: true, errors: [] }, `left behind (${hostname})`);
+    assert.equal(readSessionLock(root), null);
+  }
+
   const cli = await acquireSessionLock(root, { kind: 'cli', verb: 'write' });
   try {
     assert.equal((await stopHook(root, 'claude-xyz')).released, false, 'a CLI lock is never released');

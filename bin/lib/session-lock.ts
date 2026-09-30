@@ -27,7 +27,9 @@
 // sub-lock (withLock over the section's resource), so parallel tool calls for
 // DIFFERENT sections run in parallel while two writes to the SAME section
 // serialize. The Stop hook releases only an mcp-owned record whose
-// claudeSessionId matches its stdin session_id (releaseClaudeSessionLock).
+// claudeSessionId matches its stdin session_id and whose server process is no
+// longer running — a record a live server holds is a call still in flight
+// (releaseClaudeSessionLock).
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -354,10 +356,21 @@ export async function releaseSessionLock(root: string): Promise<void> {
 }
 
 /**
- * The Stop hook's policy (D-17-37): release the lock only when it is owned by
- * an MCP server of THIS Claude Code session. Every other record — a CLI
- * session, another Claude session, or none — is left alone (stale detection
- * handles crashed holders). Returns true when a record was removed.
+ * The Stop hook's policy (D-17-37): release the lock only when an MCP server of
+ * THIS Claude Code session LEFT it behind. Every other record — a CLI session,
+ * another Claude session, or none — is left alone (stale detection handles
+ * crashed holders). Returns true when a record was removed.
+ *
+ * Left behind means the recording server process is no longer running (review
+ * round 3). The server holds the record only while a tool call runs and
+ * removes it when the call ends, so a record whose process is alive belongs to
+ * a call still in flight: a pensmith_write the user interrupted with Esc
+ * (Claude Code stops waiting; the verb keeps drafting) or a background
+ * subagent's call, when the turn's Stop fires. Removing that record would let
+ * a CLI verb run on the paper alongside it (RUN-23). The PID is checked
+ * whatever the recorded hostname: the server Claude Code spawned runs on the
+ * machine the hook runs on, even when the host name changed since (a laptop
+ * changing networks), which stale detection's same-host rule cannot clear.
  */
 export function releaseClaudeSessionLock(root: string, claudeSessionId: string): boolean {
   if (!claudeSessionId) return false;
@@ -365,6 +378,7 @@ export function releaseClaudeSessionLock(root: string, claudeSessionId: string):
   const cur = readOwner(file);
   if (cur.kind !== 'owner') return false;
   if (cur.owner.kind !== 'mcp' || cur.owner.claudeSessionId !== claudeSessionId) return false;
+  if (isPidAlive(cur.owner.pid)) return false; // its call is still running
   return removeIfSame(file, cur.owner);
 }
 

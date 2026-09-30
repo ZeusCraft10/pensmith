@@ -17,4 +17,4 @@ the scriptable spelling of `/pensmith plan $ARGUMENTS` (and of
 `pensmith plan $ARGUMENTS` in a terminal), for automation such as
 `claude -p "/pensmith:plan-section ..."`. It adds no verb: pensmith keeps exactly 16.
 
-`N` is the section id as `pensmith status` shows it (`3`, or `1a` for a section a re-outline inserted). `--revise` re-plans a section whose draft or verification needs work.
+`N` is the section id as `pensmith status` shows it (`3`, or `1a` for a section a re-outline inserted). `--revise` repairs a citation the verifier flagged (FABRICATED, MIS-CITED, NOT_FOUND); on a clean section it changes nothing — `plan N` then `write N` re-plans and redrafts a section.

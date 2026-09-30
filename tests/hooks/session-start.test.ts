@@ -6,7 +6,7 @@
 //   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}
 // whose context names the router's next step, a not-done HANDOFF.json's
 // position (v1 and v2) and the /pensmith instruction — for every matcher
-// source (startup, resume, compact). It never emits `systemMessage` (shown to
+// source (startup, resume, clear, compact, fork). It never emits `systemMessage` (shown to
 // the user, never to Claude). Outside a paper it prints nothing (see
 // tests/hooks-noop.test.ts for the timing and no-files checks). Text a paper's
 // files carry (HANDOFF's next_action and current_section, a PLAN.md
@@ -45,11 +45,11 @@ function contextOf(frame: Frame): string {
   return ctx as string;
 }
 
-test('PLUG-14: SessionStart in a paper emits one additionalContext line naming the next step and /pensmith (startup, resume, compact)', async () => {
+test('PLUG-14: SessionStart in a paper emits one additionalContext line naming the next step and /pensmith (startup, resume, clear, compact, fork)', async () => {
   const sb = sandbox('hook-sessionstart');
   const root = sb.project('paper');
   await seedThreeSectionPaper(root);
-  for (const source of ['startup', 'resume', 'compact']) {
+  for (const source of ['startup', 'resume', 'clear', 'compact', 'fork']) {
     const r = runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source }) });
     assert.equal(r.status, 0, r.stderr);
     const ctx = contextOf(oneFrame(r.stdout));
@@ -117,7 +117,7 @@ test('PLUG-14: only the SessionStart after a compaction adds the HANDOFF summary
     next_action: 'Plan section §1',
     section_pointers: [],
   }));
-  for (const source of ['startup', 'resume', 'clear', undefined]) {
+  for (const source of ['startup', 'resume', 'clear', 'fork', undefined]) {
     // `undefined`: an input with no `source` field at all (an older Claude Code).
     const r = runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source }) });
     assert.equal(r.status, 0, r.stderr);

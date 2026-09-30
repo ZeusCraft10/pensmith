@@ -33,6 +33,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { JSONRPCMessageSchema, type JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import { graphViolations, loadChokepointRow } from './helpers/chokepoint-row.js';
+import { FENCE_OPEN, unfence } from '../bin/lib/untrusted-fence.js';
 
 const REPO = resolve('.');
 const CLI_BIN = join(REPO, 'dist', 'bin', 'pensmith.js');
@@ -247,11 +248,13 @@ for (const leg of LEGS) {
         assert.equal(o.isError, true, `${tool}: offline verification is unverifiable (blocked): ${o.text.slice(0, 400)}`);
         assert.match(o.text, /"exit_code": 4/);
       }
+      // The status text is the fenced block after the data note (review round 3).
+      const statusText = (o: { text: string }): string => unfence(o.text.slice(o.text.indexOf(FENCE_OPEN))) ?? '';
       for (const o of byTool('pensmith_status')) {
         assert.equal(o.isError, false, o.text);
-        assert.match(o.text, /^pensmith status:\n {2}paper: attention mechanisms in neural networks/);
+        assert.match(statusText(o), /^pensmith status:\n {2}paper: attention mechanisms in neural networks/);
       }
-      assert.match(byTool('pensmith_status').at(-1)!.text, /§3 conclusion: planned|#3 conclusion: planned/, 'the last status sees the parallel plans');
+      assert.match(statusText(byTool('pensmith_status').at(-1)!), /§3 conclusion: planned|#3 conclusion: planned/, 'the last status sees the parallel plans');
     } finally {
       await client.close();
     }

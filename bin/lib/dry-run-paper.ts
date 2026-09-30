@@ -20,11 +20,14 @@
 //
 // Not seeded: `export/` (a real paper's deliverables — the dry run writes its
 // own `export/*.dry-run.*`), `SESSION.log` and `COSTS.jsonl` (the real run's
-// bookkeeping: a dry run keeps its own log and spends nothing), and
+// bookkeeping: a dry run keeps its own log and spends nothing),
 // `INTAKE.raw.local` (the raw, pre-redaction assignment — GRND-05: it never
-// leaves `.paper/`). They are not part of the fingerprint either, so a
-// read-only real run that logs to SESSION.log does not discard a dry run's
-// progress.
+// leaves `.paper/`), and `HANDOFF.json` (the real Claude Code session's
+// resume pointer, D-23a-16: the PreCompact hook rewrites it on every
+// compaction and `pensmith resume` deletes it; a dry run is never resumed from
+// it — review round 3). They are not part of the fingerprint either, so a
+// read-only real run that logs to SESSION.log, or a compaction in the paper's
+// folder, does not discard a dry run's progress.
 //
 // The legacy boundary stays for normal runs: a paper a Phase 17 dry run made
 // INSIDE `.paper/` carries `.paper/DRY-RUN.md`; a normal run refuses to
@@ -48,7 +51,7 @@ export const DRY_RUN_MARKER = 'DRY-RUN.md';
 export const SEED_FILE = 'SEED.json';
 
 /** Paper-folder entries (top level) a seed never copies — see the module header. */
-export const SEED_EXCLUDED: ReadonlySet<string> = new Set(['export', 'SESSION.log', 'COSTS.jsonl', 'INTAKE.raw.local']);
+export const SEED_EXCLUDED: ReadonlySet<string> = new Set(['export', 'SESSION.log', 'COSTS.jsonl', 'INTAKE.raw.local', 'HANDOFF.json']);
 
 const WORKSPACE_MARKER_TEXT = [
   '# pensmith dry-run workspace',

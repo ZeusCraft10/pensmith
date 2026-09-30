@@ -11,7 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -21,6 +21,9 @@ import { fileURLToPath } from 'node:url';
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginVersion = createRequire(import.meta.url)('../scripts/plugin-version.cjs') as {
   expectedPluginVersion(packageVersion: string, pluginDir: string): string;
+  gitTrackedFiles(dir: string): string[] | null;
+  pluginContentHash(pluginDir: string): string;
+  walkFiles(dir: string): string[];
   writePluginVersion(pluginDir: string, version: string): boolean;
 };
 const VALIDATOR = path.join(REPO, 'scripts', 'validate-plugin-manifest.cjs');
@@ -216,6 +219,50 @@ test('PLUG-03: a re-stamped copy passes again, and the digest ignores CRLF line 
     const manifest = readFileSync(path.join(root, 'plugin', '.claude-plugin', 'plugin.json'), 'utf8');
     assert.match(manifest, new RegExp(`^ {2}"version": "${stamped.replace(/[.+]/g, '\\$&')}",$`, 'm'));
     assert.match(manifest, /"keywords": \[/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('PLUG-03 (review round 3): in a git checkout the digest covers the tracked files only — untracked and ignored files never change it', () => {
+  const { root, cleanup } = copyTree();
+  const git = (...args: string[]): string =>
+    execFileSync('git', ['-c', 'user.name=pensmith test', '-c', 'user.email=test@example.org', ...args], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    const plugin = path.join(root, 'plugin');
+    const onDisk = pluginVersion.pluginContentHash(plugin);
+    assert.equal(pluginVersion.gitTrackedFiles(plugin), null, 'a folder git does not track is walked');
+    git('init', '--quiet');
+    writeFileSync(path.join(root, '.gitignore'), 'plugin/.claude/\n');
+    git('add', '.');
+    git('commit', '--quiet', '-m', 'the plugin');
+    assert.deepEqual(pluginVersion.gitTrackedFiles(plugin), pluginVersion.walkFiles(plugin), 'a clean checkout: the tracked files are the files on disk');
+    assert.equal(pluginVersion.pluginContentHash(plugin), onDisk, 'and hash the same');
+
+    // Litter a working tree collects: ignored settings, an editor swap file, a dry-run workspace.
+    mkdirSync(path.join(plugin, '.claude'), { recursive: true });
+    writeFileSync(path.join(plugin, '.claude', 'settings.local.json'), '{}\n');
+    writeFileSync(path.join(plugin, 'skills', 'pensmith', '.SKILL.md.swp'), 'swap\n');
+    mkdirSync(path.join(plugin, '.paper-dry-run'), { recursive: true });
+    writeFileSync(path.join(plugin, '.paper-dry-run', 'STATE.json'), '{}\n');
+    assert.equal(pluginVersion.pluginContentHash(plugin), onDisk, 'untracked and ignored files do not change the stamp');
+    assert.equal(validate(root).status, 0, 'so validation passes with the committed stamp');
+
+    // An edit to a tracked file counts (the working tree is read), and a new
+    // file counts once it is staged — as it will be in the commit.
+    const f = path.join(plugin, 'workflows', 'status.md');
+    const original = readFileSync(f, 'utf8');
+    writeFileSync(f, `${original}\nAn edit.\n`);
+    assert.notEqual(pluginVersion.pluginContentHash(plugin), onDisk);
+    writeFileSync(f, original);
+    writeFileSync(path.join(plugin, 'workflows', 'NEW.md'), 'new\n');
+    assert.equal(pluginVersion.pluginContentHash(plugin), onDisk, 'not yet added: not in the stamp');
+    git('add', path.join('plugin', 'workflows', 'NEW.md'));
+    const staged = pluginVersion.pluginContentHash(plugin);
+    assert.notEqual(staged, onDisk, 'staged: in the stamp');
+    // A tracked file deleted from the working tree is gone from the stamp.
+    rmSync(path.join(plugin, 'workflows', 'NEW.md'));
+    assert.equal(pluginVersion.pluginContentHash(plugin), onDisk);
   } finally {
     cleanup();
   }

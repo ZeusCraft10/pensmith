@@ -4,9 +4,17 @@
 // After a pensmith MCP tool call (hooks.json matches
 // `^mcp__(?:plugin_pensmith_)?pensmith__.*`: the plugin's server, and the
 // developer .mcp.json server Claude Code keeps instead of it at the repo root,
-// PLUG-04), append a progress checkpoint for the paper: `{ts, session_id, tool_name, next}`, where `next` is the router's
-// next step after the call. At most one line per minute per paper, so a burst
-// of tool calls costs one append.
+// PLUG-04), record a progress checkpoint for the paper: `{ts, session_id,
+// tool_name, next}`, where `next` is the router's next step after the call.
+//
+// At most one line per minute per paper, throttled on the TRAILING edge
+// (review round 3): a call less than a minute after the last line does not
+// append — when the router's step is unchanged it writes nothing, and when the
+// call moved the paper (`next` differs) it REPLACES that last line. So the
+// file's last line always names the paper's current step: a read-only
+// pensmith_status that opens the minute can no longer hide the pensmith_write
+// seconds later that actually moved the paper. Consecutive lines stay at least
+// a minute apart, and a burst of calls that changes nothing costs no write.
 //
 // Where: `pensmithDataDir()/checkpoints/<projectHash>.jsonl` — the app data
 // dir, never the user's `.claude/` (the v0 hook wrote `.claude/CHECKPOINTS
@@ -57,18 +65,31 @@ export function checkpointFile(root: string): string {
   return path.join(pensmithDataDir(), 'checkpoints', `${projectHash(canonicalRoot(root))}.jsonl`);
 }
 
-/** The `ts` of the file's last well-formed line (ms), or 0. */
-function lastCheckpointAt(text: string): number {
-  const lines = text.split('\n').filter((l) => l.trim().length > 0);
+/** The file's last well-formed checkpoint line: its index among the non-empty lines, its time (ms) and its `next`. */
+interface LastCheckpoint {
+  readonly index: number;
+  readonly at: number;
+  readonly next: string | null;
+}
+
+function lastCheckpoint(lines: readonly string[]): LastCheckpoint | null {
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     try {
-      const ts = (JSON.parse(lines[i] ?? '') as { ts?: unknown }).ts;
-      if (typeof ts === 'string') return Date.parse(ts) || 0;
+      const rec = JSON.parse(lines[i] ?? '') as { ts?: unknown; next?: unknown };
+      if (rec !== null && typeof rec === 'object' && typeof rec.ts === 'string') {
+        return { index: i, at: Date.parse(rec.ts) || 0, next: typeof rec.next === 'string' ? rec.next : null };
+      }
     } catch {
       /* a torn line: look at the one before */
     }
   }
-  return 0;
+  return null;
+}
+
+/** `lines` bounded: past CHECKPOINT_MAX_BYTES, its last CHECKPOINT_KEEP_LINES lines. */
+function trimmed(lines: readonly string[]): readonly string[] {
+  const bytes = lines.reduce((n, l) => n + Buffer.byteLength(l, 'utf8') + 1, 0);
+  return bytes > CHECKPOINT_MAX_BYTES ? lines.slice(-CHECKPOINT_KEEP_LINES) : lines;
 }
 
 export interface CheckpointInput {
@@ -84,11 +105,18 @@ export interface CheckpointOptions {
 
 export type CheckpointOutcome =
   | { readonly kind: 'written'; readonly file: string; readonly record: CheckpointRecord }
+  /** Within the minute, the call moved the paper: the last line was replaced by this record. */
+  | { readonly kind: 'updated'; readonly file: string; readonly record: CheckpointRecord }
+  /** Within the minute, the router's step is unchanged: nothing written. */
   | { readonly kind: 'throttled'; readonly file: string }
   | { readonly kind: 'busy'; readonly file: string }
   | { readonly kind: 'failed'; readonly file: string; readonly error: string };
 
-/** Append one checkpoint for the paper at `root` unless one was written in the last minute. Never throws. */
+/**
+ * Record one checkpoint for the paper at `root` (see the module header): append
+ * it when the last line is a minute old or more; within the minute, replace the
+ * last line when the router's step changed, else write nothing. Never throws.
+ */
 export async function recordCheckpoint(root: string, input: CheckpointInput, opts: CheckpointOptions = {}): Promise<CheckpointOutcome> {
   const now = opts.now ?? Date.now;
   let file = '';
@@ -105,7 +133,9 @@ export async function recordCheckpoint(root: string, input: CheckpointInput, opt
         } catch {
           /* first checkpoint of this paper */
         }
-        if (now() - lastCheckpointAt(text) < CHECKPOINT_THROTTLE_MS) return { kind: 'throttled', file: target };
+        const lines = text.split('\n').filter((l) => l.trim().length > 0);
+        const last = lastCheckpoint(lines);
+        const withinMinute = last !== null && now() - last.at < CHECKPOINT_THROTTLE_MS;
         const decision = await resolveNextAction(root, opts.routeOptions ?? {});
         const record: CheckpointRecord = {
           ts: new Date(now()).toISOString(),
@@ -113,14 +143,20 @@ export async function recordCheckpoint(root: string, input: CheckpointInput, opt
           tool_name: input.toolName ?? 'unknown',
           next: nextStepLabel(decision),
         };
-        // A torn last line (a process killed mid-append) is closed first, so
-        // the new record never merges into it.
-        const line = (text.length > 0 && !text.endsWith('\n') ? '\n' : '') + JSON.stringify(record) + '\n';
+        if (withinMinute && last.next === record.next) return { kind: 'throttled', file: target };
+        const json = JSON.stringify(record);
+        if (withinMinute) {
+          // Trailing edge: the minute's line now names where the call left the paper.
+          const next = lines.map((l, i) => (i === last.index ? json : l));
+          await atomicWriteFile(target, trimmed(next).map((l) => l + '\n').join(''));
+          return { kind: 'updated', file: target, record };
+        }
         if (Buffer.byteLength(text, 'utf8') > CHECKPOINT_MAX_BYTES) {
-          const kept = text.split('\n').filter((l) => l.trim().length > 0).slice(-(CHECKPOINT_KEEP_LINES - 1));
-          await atomicWriteFile(target, kept.map((l) => l + '\n').join('') + line.replace(/^\n/, ''));
+          await atomicWriteFile(target, trimmed([...lines, json]).map((l) => l + '\n').join(''));
         } else {
-          await fsp.appendFile(target, line, 'utf8');
+          // A torn last line (a process killed mid-append) is closed first, so
+          // the new record never merges into it.
+          await fsp.appendFile(target, (text.length > 0 && !text.endsWith('\n') ? '\n' : '') + json + '\n', 'utf8');
         }
         return { kind: 'written', file: target, record };
       },

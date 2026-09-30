@@ -16945,17 +16945,17 @@ function parseOutline(raw) {
   let headerLineIdx = -1;
   let format = "canonical";
   for (let i2 = 0; i2 < lines.length; i2 += 1) {
-    const trimmed = lines[i2].trim();
-    if (paperTitle === "" && /^#\s+\S/.test(trimmed)) {
-      paperTitle = trimmed.replace(/^#\s+/, "").trim();
+    const trimmed2 = lines[i2].trim();
+    if (paperTitle === "" && /^#\s+\S/.test(trimmed2)) {
+      paperTitle = trimmed2.replace(/^#\s+/, "").trim();
       continue;
     }
-    if (thesis === "" && /^Thesis:\s*\S/.test(trimmed)) {
-      thesis = trimmed.replace(/^Thesis:\s*/, "").trim();
+    if (thesis === "" && /^Thesis:\s*\S/.test(trimmed2)) {
+      thesis = trimmed2.replace(/^Thesis:\s*/, "").trim();
       continue;
     }
-    if (trimmed.startsWith("|")) {
-      const cells = splitRow(trimmed);
+    if (trimmed2.startsWith("|")) {
+      const cells = splitRow(trimmed2);
       if (headerMatches(cells, OUTLINE_HEADER)) {
         headerLineIdx = i2;
         format = "canonical";
@@ -16980,17 +16980,17 @@ function parseOutline(raw) {
   let i = headerLineIdx + 1;
   for (; i < lines.length; i += 1) {
     const lineNo = i + 1;
-    const trimmed = lines[i].trim();
-    if (trimmed === "") continue;
-    if (!trimmed.startsWith("|")) {
-      if (/^##\s/.test(trimmed)) break;
+    const trimmed2 = lines[i].trim();
+    if (trimmed2 === "") continue;
+    if (!trimmed2.startsWith("|")) {
+      if (/^##\s/.test(trimmed2)) break;
       continue;
     }
-    const cells = splitRow(trimmed);
+    const cells = splitRow(trimmed2);
     if (isDelimiterRow(cells)) continue;
     if (cells.length !== header.length) {
       throw new Error(
-        `outline-parse: couldn't parse line ${lineNo}: expected ${header.length} columns, got ${cells.length}: ${JSON.stringify(trimmed)}`
+        `outline-parse: couldn't parse line ${lineNo}: expected ${header.length} columns, got ${cells.length}: ${JSON.stringify(trimmed2)}`
       );
     }
     const get = /* @__PURE__ */ __name((name) => cells[header.indexOf(name)] ?? "", "get");
@@ -17625,16 +17625,21 @@ function canonicalRoot(root) {
 function checkpointFile(root) {
   return path8.join(pensmithDataDir(), "checkpoints", `${projectHash(canonicalRoot(root))}.jsonl`);
 }
-function lastCheckpointAt(text) {
-  const lines = text.split("\n").filter((l) => l.trim().length > 0);
+function lastCheckpoint(lines) {
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     try {
-      const ts = JSON.parse(lines[i] ?? "").ts;
-      if (typeof ts === "string") return Date.parse(ts) || 0;
+      const rec = JSON.parse(lines[i] ?? "");
+      if (rec !== null && typeof rec === "object" && typeof rec.ts === "string") {
+        return { index: i, at: Date.parse(rec.ts) || 0, next: typeof rec.next === "string" ? rec.next : null };
+      }
     } catch {
     }
   }
-  return 0;
+  return null;
+}
+function trimmed(lines) {
+  const bytes = lines.reduce((n, l) => n + Buffer.byteLength(l, "utf8") + 1, 0);
+  return bytes > CHECKPOINT_MAX_BYTES ? lines.slice(-CHECKPOINT_KEEP_LINES) : lines;
 }
 async function recordCheckpoint(root, input, opts = {}) {
   const now = opts.now ?? Date.now;
@@ -17651,7 +17656,9 @@ async function recordCheckpoint(root, input, opts = {}) {
           text = await fsp4.readFile(target, "utf8");
         } catch {
         }
-        if (now() - lastCheckpointAt(text) < CHECKPOINT_THROTTLE_MS) return { kind: "throttled", file: target };
+        const lines = text.split("\n").filter((l) => l.trim().length > 0);
+        const last = lastCheckpoint(lines);
+        const withinMinute = last !== null && now() - last.at < CHECKPOINT_THROTTLE_MS;
         const decision = await resolveNextAction(root, opts.routeOptions ?? {});
         const record = {
           ts: new Date(now()).toISOString(),
@@ -17659,12 +17666,17 @@ async function recordCheckpoint(root, input, opts = {}) {
           tool_name: input.toolName ?? "unknown",
           next: nextStepLabel(decision)
         };
-        const line = (text.length > 0 && !text.endsWith("\n") ? "\n" : "") + JSON.stringify(record) + "\n";
+        if (withinMinute && last.next === record.next) return { kind: "throttled", file: target };
+        const json = JSON.stringify(record);
+        if (withinMinute) {
+          const next = lines.map((l, i) => i === last.index ? json : l);
+          await atomicWriteFile(target, trimmed(next).map((l) => l + "\n").join(""));
+          return { kind: "updated", file: target, record };
+        }
         if (Buffer.byteLength(text, "utf8") > CHECKPOINT_MAX_BYTES) {
-          const kept = text.split("\n").filter((l) => l.trim().length > 0).slice(-(CHECKPOINT_KEEP_LINES - 1));
-          await atomicWriteFile(target, kept.map((l) => l + "\n").join("") + line.replace(/^\n/, ""));
+          await atomicWriteFile(target, trimmed([...lines, json]).map((l) => l + "\n").join(""));
         } else {
-          await fsp4.appendFile(target, line, "utf8");
+          await fsp4.appendFile(target, (text.length > 0 && !text.endsWith("\n") ? "\n" : "") + json + "\n", "utf8");
         }
         return { kind: "written", file: target, record };
       },
@@ -17690,7 +17702,8 @@ var init_post_tool_use = __esm({
     CHECKPOINT_KEEP_LINES = 1e3;
     __name(canonicalRoot, "canonicalRoot");
     __name(checkpointFile, "checkpointFile");
-    __name(lastCheckpointAt, "lastCheckpointAt");
+    __name(lastCheckpoint, "lastCheckpoint");
+    __name(trimmed, "trimmed");
     __name(recordCheckpoint, "recordCheckpoint");
   }
 });

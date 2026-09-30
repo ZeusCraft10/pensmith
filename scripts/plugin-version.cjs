@@ -11,9 +11,9 @@
 // cached copy. Leaving the field out would let Claude Code use the commit SHA,
 // but `claude plugin validate --strict` (Phase 23 criterion 1, CI-05) fails on
 // a missing version. So the version is `<package.json version>+<content>`,
-// where <content> is the first 12 hex digits of a sha256 over every file in
-// plugin/ (plugin.json itself without its `version`): any change to what an
-// install copies changes the string, and nothing else does.
+// where <content> is the first 12 hex digits of a sha256 over plugin/'s files
+// (plugin.json itself without its `version`): any change to what an install
+// copies changes the string, and nothing else does.
 //
 //   node scripts/plugin-version.cjs            print the version plugin/ should carry
 //   node scripts/plugin-version.cjs --write    stamp it into plugin/.claude-plugin/plugin.json
@@ -24,11 +24,21 @@
 // validate:manifests`, CI), so a change under plugin/ that was not re-stamped
 // fails the build instead of silently never reaching installed users.
 //
-// Deterministic across OSes: files are walked in sorted POSIX-path order, text
+// Which files: what an install copies. In a git checkout that is the files git
+// tracks under plugin/ (`git ls-files`: the index, so a staged new file counts
+// and an untracked or ignored one — an editor swap file, `.claude/settings
+// .local.json`, a `.paper-dry-run/` — does not; review round 3), read from the
+// working tree. A stray local file therefore never changes the stamp, and a
+// stamp committed from a working tree is the one a clean clone recomputes.
+// Outside a git checkout (an installed package, a plugin cache copy, a test
+// fixture folder that git does not track) every file on disk is hashed.
+//
+// Deterministic across OSes: files are hashed in sorted POSIX-path order, text
 // files hash with LF line endings (a CRLF checkout hashes like an LF one), and
 // OS litter (.DS_Store, Thumbs.db, desktop.ini) is skipped.
 
 'use strict';
+const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -38,8 +48,12 @@ const IGNORED_NAMES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
 /** `<package version>+<12 hex>`: the form every stamped version has. */
 const STAMPED_VERSION_RE = /^(.+)\+([0-9a-f]{12})$/;
 
-/** Every file under `dir`, as sorted POSIX paths relative to it. */
-function listFiles(dir) {
+function sortPaths(paths) {
+  return paths.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** Every file on disk under `dir`, as sorted POSIX paths relative to it. */
+function walkFiles(dir) {
   const out = [];
   const walk = (abs, rel) => {
     for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
@@ -51,7 +65,46 @@ function listFiles(dir) {
     }
   };
   walk(dir, '');
-  return out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return sortPaths(out);
+}
+
+/**
+ * The files git tracks under `dir` (the index: staged additions count) that
+ * exist in the working tree, as sorted POSIX paths relative to `dir` — or null
+ * when `dir` is not tracked by a git work tree (no git, not a repository, or a
+ * folder the repository ignores): git must track the plugin manifest.
+ */
+function gitTrackedFiles(dir) {
+  let listed;
+  try {
+    listed = execFileSync('git', ['-c', 'core.quotepath=off', 'ls-files', '-z', '--cached', '--', '.'], {
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch {
+    return null;
+  }
+  const files = listed.split('\0').filter((f) => f.length > 0);
+  if (!files.includes(MANIFEST_REL)) return null;
+  // A tracked file deleted from the working tree is gone from what an install
+  // of this tree copies; OS litter is skipped as in the walk.
+  const kept = files.filter((rel) => {
+    if (IGNORED_NAMES.has(rel.slice(rel.lastIndexOf('/') + 1))) return false;
+    try {
+      return fs.statSync(path.join(dir, ...rel.split('/'))).isFile();
+    } catch {
+      return false;
+    }
+  });
+  return sortPaths(kept);
+}
+
+/** The files the digest covers (see the header): git's tracked files in a checkout, else every file on disk. */
+function listFiles(dir) {
+  return gitTrackedFiles(dir) ?? walkFiles(dir);
 }
 
 /** The bytes one file contributes: plugin.json without `version`; text with LF endings. */
@@ -126,10 +179,12 @@ function stampPluginVersion(repoRoot) {
 module.exports = {
   STAMPED_VERSION_RE,
   expectedPluginVersion,
+  gitTrackedFiles,
   listFiles,
   parseStampedVersion,
   pluginContentHash,
   stampPluginVersion,
+  walkFiles,
   writePluginVersion,
 };
 

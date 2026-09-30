@@ -7,8 +7,10 @@
 // `{ts, session_id, tool_name, next}` to pensmithDataDir()/checkpoints/
 // <projectHash>.jsonl — nothing under the user's `.claude/` or the paper's
 // `.paper/`, nothing on stdout. A checkpoint older than a minute lets the next
-// one through; every spelling of a paper (a symlink or junction) shares one
-// file; two papers get two files.
+// one through; within the minute a call that moved the paper replaces the
+// minute's line (the trailing edge, review round 3), so the last line always
+// names the paper's current step; every spelling of a paper (a symlink or
+// junction) shares one file; two papers get two files.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -89,6 +91,34 @@ test('PLUG-14: a checkpoint older than a minute lets the next one through; a tor
   assert.equal(after.length, 3);
   assert.equal(after[1], '{"ts":"torn', 'the torn line is closed, not merged');
   assert.equal((JSON.parse(after[2]!) as Checkpoint).next, 'write 2');
+});
+
+test('PLUG-14 (review round 3): pensmith_status then a pensmith_write that moves the paper within the minute — the one checkpoint names the new step', async () => {
+  const sb = sandbox('hook-posttool-trailing');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  const status = 'mcp__plugin_pensmith_pensmith__pensmith_status';
+  const first = runHook(sb, 'post-tool-use', { cwd: root, input: hookInput('post-tool-use', root, { tool_name: status }) });
+  assert.equal(first.status, 0, first.stderr);
+  const [name] = checkpointFiles(sb);
+  const file = join(checkpointDir(sb), name!);
+  assert.deepEqual(lines(file).map((c) => [c.tool_name, c.next]), [[status, 'write 2']]);
+  // The write left §2 back at an outline stub (what a failed containment or a
+  // re-outline can do): the router's step is now `plan 2`.
+  writeFileSync(
+    join(root, '.paper', 'sections', '02-methods', 'PLAN.md'),
+    '---\nsection: 2\nslug: methods\ntitle: methods\ndepends_on: [intro]\nassigned_sources: []\nstatus: planned\nstub: true\nverified_against_draft_hash: null\n---\n## Brief\n\nx\n',
+  );
+  const second = runHook(sb, 'post-tool-use', { cwd: root, input: hookInput('post-tool-use', root, { session_id: 'claude-2' }) });
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(second.stdout, '');
+  const got = lines(file);
+  assert.equal(got.length, 1, 'still one line in the minute');
+  assert.deepEqual([got[0]!.session_id, got[0]!.tool_name, got[0]!.next], ['claude-2', PLUGIN_TOOL, 'plan 2'], 'the line names where the write left the paper');
+  // A later read-only call that changes nothing leaves the line as it is.
+  const text = readFileSync(file, 'utf8');
+  assert.equal(runHook(sb, 'post-tool-use', { cwd: root, input: hookInput('post-tool-use', root, { tool_name: status }) }).status, 0);
+  assert.equal(readFileSync(file, 'utf8'), text);
 });
 
 test('PLUG-14: every spelling of a paper shares one checkpoint file; two papers get two', async () => {

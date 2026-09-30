@@ -4,17 +4,26 @@
 // parsers for `claude plugin details`, `claude mcp list` and `claude plugin
 // list --json` (fed the output Claude Code 2.1.285 prints), and the CGI
 // plumbing of the loopback git host that step 7 installs a git-marketplace
-// copy from (review round 2). The smoke itself
+// copy from (review round 2), and that host's repository preparation over the
+// detached, shallow checkout a pull request gets (review round 3). The smoke itself
 // runs the real Claude Code (`npm run plugin:smoke`, the CI `plugin` job).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { FENCE_OPEN, fenceUntrusted } from '../bin/lib/untrusted-fence.js';
 import {
+  bareRepoOnBranch,
   cmdShimTarget,
   executableNames,
   expandPluginRoot,
+  fencedText,
   findOnPath,
   gitCgiEnv,
+  gitSync,
   installPathOf,
   parseCgiHead,
   parseMcpList,
@@ -215,4 +224,67 @@ test('PLUG-03: gitCgiEnv maps one request onto the CGI variables git http-backen
   const get = gitCgiEnv({}, '/srv/git', { method: 'GET', url: '/pensmith.git/info/refs?service=git-upload-pack', headers: {} });
   assert.equal(get['CONTENT_LENGTH'], undefined, 'no body, no CONTENT_LENGTH');
   assert.equal(get['QUERY_STRING'], 'service=git-upload-pack');
+});
+
+test('CI-05 (review round 3): step 7\'s git host serves a pull request\'s detached, shallow checkout on a branch that a push moves and a fresh clone follows', (t) => {
+  const base = mkdtempSync(join(tmpdir(), 'pensmith-smoke-git-'));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  // The upstream repository: two commits.
+  const upstream = join(base, 'upstream');
+  gitSync(['init', '--quiet', upstream], base);
+  writeFileSync(join(upstream, 'status.md'), 'one\n');
+  gitSync(['add', 'status.md'], upstream);
+  gitSync(['commit', '--quiet', '-m', 'one'], upstream);
+  writeFileSync(join(upstream, 'status.md'), 'two\n');
+  gitSync(['commit', '--quiet', '-am', 'two'], upstream);
+  const tip = gitSync(['rev-parse', 'HEAD'], upstream).trim();
+
+  // What actions/checkout makes for a pull_request run: a depth-1 fetch of the
+  // merge ref, checked out detached. Then the smoke's step-3 clone of it.
+  const pr = join(base, 'pr');
+  gitSync(['init', '--quiet', pr], base);
+  gitSync(['fetch', '--quiet', '--depth=1', pathToFileURL(upstream).href, `+${tip}:refs/remotes/pull/1/merge`], pr);
+  gitSync(['checkout', '--quiet', '--force', 'refs/remotes/pull/1/merge'], pr);
+  const clone = join(base, 'clone');
+  gitSync(['clone', '--quiet', '--local', '--no-hardlinks', pr, clone], base);
+  assert.equal(gitSync(['rev-parse', '--abbrev-ref', 'HEAD'], clone).trim(), 'HEAD', 'the clone is detached, like the checkout');
+  assert.equal(gitSync(['rev-parse', '--is-shallow-repository'], clone).trim(), 'true', 'and shallow');
+
+  // The pre-round-3 sequence fails there: `git push origin HEAD` has no branch to update.
+  const plainBare = join(base, 'plain.git');
+  gitSync(['clone', '--quiet', '--bare', clone, plainBare], base);
+  const plainWork = join(base, 'plain-work');
+  gitSync(['clone', '--quiet', plainBare, plainWork], base);
+  writeFileSync(join(plainWork, 'status.md'), 'three\n');
+  gitSync(['commit', '--quiet', '-am', 'three'], plainWork);
+  assert.throws(() => gitSync(['push', '--quiet', 'origin', 'HEAD'], plainWork), 'a detached HEAD has no branch to push');
+
+  // bareRepoOnBranch: HEAD is a symbolic ref to the branch, which holds the checkout's commit.
+  const bare = join(base, 'host', 'pensmith.git');
+  assert.equal(bareRepoOnBranch(clone, bare, 'smoke'), tip);
+  assert.equal(gitSync(['--git-dir', bare, 'symbolic-ref', 'HEAD'], base).trim(), 'refs/heads/smoke');
+  assert.equal(gitSync(['--git-dir', bare, 'rev-parse', 'refs/heads/smoke'], base).trim(), tip);
+
+  // The smoke's update commit reaches the branch, and a fresh clone (what
+  // Claude Code makes of the marketplace URL) checks it out on that branch.
+  const work = join(base, 'work');
+  gitSync(['clone', '--quiet', '--branch', 'smoke', bare, work], base);
+  writeFileSync(join(work, 'status.md'), 'three\n');
+  gitSync(['commit', '--quiet', '-am', 'three'], work);
+  const pushed = gitSync(['rev-parse', 'HEAD'], work).trim();
+  gitSync(['push', '--quiet', 'origin', 'HEAD:refs/heads/smoke'], work);
+  assert.equal(gitSync(['--git-dir', bare, 'rev-parse', 'HEAD'], base).trim(), pushed, 'the served HEAD moved to the pushed commit');
+  const fresh = join(base, 'fresh');
+  gitSync(['clone', '--quiet', bare, fresh], base);
+  assert.equal(gitSync(['rev-parse', '--abbrev-ref', 'HEAD'], fresh).trim(), 'smoke');
+  assert.equal(gitSync(['rev-parse', 'HEAD'], fresh).trim(), pushed);
+});
+
+test('PLUG-03 (review round 3): fencedText reads the status text out of a pensmith_status result (note, then the fenced block)', () => {
+  const status = 'pensmith status:\n  paper: T\n  next: write §2\n';
+  const result = `pensmith_status: the next block is …\n${fenceUntrusted(status)}`;
+  assert.equal(fencedText(result), status);
+  assert.equal(fencedText(fenceUntrusted(status)), status);
+  assert.equal(fencedText(status), null, 'no fence, no status text');
+  assert.equal(fencedText(`${FENCE_OPEN}\n${status}`), null, 'an unclosed fence is not a block');
 });

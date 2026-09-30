@@ -5,8 +5,8 @@
 // tests/plugin-smoke-helpers.test.ts; the rest spawns processes. Nothing here
 // needs an API key, and nothing writes outside the temp dirs the callers make.
 
-import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -285,9 +285,48 @@ export function mcpHandshake({ command, args, env, cwd, timeoutMs = 30_000 }) {
   });
 }
 
+/**
+ * The text inside the one untrusted-data fence of a pensmith_status result
+ * (review round 3: the tool returns a data note, then the status text between
+ * the FEED-05 fence lines — bin/lib/untrusted-fence.ts), or null when `text`
+ * holds no complete fenced block. Pure.
+ */
+export function fencedText(text) {
+  const m = /(?:^|\n)<<<PENSMITH_UNTRUSTED_DATA_[0-9a-f-]+>>>\n([\s\S]*)\n<<<END_PENSMITH_UNTRUSTED_DATA_[0-9a-f-]+>>>(?:\n|$)/.exec(String(text));
+  return m ? m[1] : null;
+}
+
 // ---------------------------------------------------------------------------
 // A loopback git host (review round 2: the git-marketplace update check).
 // ---------------------------------------------------------------------------
+
+/** Run git with a fixed example identity (never the user's); returns stdout. */
+export function gitSync(args, cwd) {
+  return execFileSync('git', ['-c', 'user.name=pensmith plugin smoke', '-c', 'user.email=plugin-smoke@example.org', ...args], {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+}
+
+/**
+ * Make `bare` a bare clone of `source` that serves `source`'s checked-out
+ * commit on `branch`, with the bare repository's HEAD pointing at that branch
+ * (review round 3). A pull-request checkout (actions/checkout) is a detached,
+ * shallow HEAD, and every clone of it inherits that: a plain `git clone --bare`
+ * would leave HEAD a raw SHA, a clone of it on no branch, `git push origin
+ * HEAD` with no branch to update, and Claude Code's clone of the marketplace
+ * with no branch to pull a new commit from. Returns the served commit.
+ */
+export function bareRepoOnBranch(source, bare, branch) {
+  mkdirSync(path.dirname(bare), { recursive: true });
+  gitSync(['clone', '--quiet', '--bare', source, bare], path.dirname(bare));
+  const head = gitSync(['rev-parse', 'HEAD'], source).trim();
+  gitSync(['--git-dir', bare, 'update-ref', `refs/heads/${branch}`, head], path.dirname(bare));
+  gitSync(['--git-dir', bare, 'symbolic-ref', 'HEAD', `refs/heads/${branch}`], path.dirname(bare));
+  return head;
+}
 
 /**
  * Split a CGI response head (`Status: 200 OK`, `Content-Type: …`, a blank

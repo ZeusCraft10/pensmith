@@ -4,10 +4,12 @@
 // bundle.mjs).
 //
 // In a folder that holds a paper it releases the paper's session lock ONLY
-// when the pensmith MCP server of THIS Claude session holds it (owner kind
-// 'mcp' and claudeSessionId equal to the stdin `session_id`) and flushes the
-// session log (bin/lib/hooks/stop.ts). A CLI session's lock, or another Claude
-// session's, is never removed. Outside a paper it does nothing.
+// when the pensmith MCP server of THIS Claude session left it behind (owner
+// kind 'mcp', claudeSessionId equal to the stdin `session_id`, and the server
+// process no longer running — a live server's record is a call still in
+// flight) and flushes the session log (bin/lib/hooks/stop.ts). A CLI
+// session's lock, or another Claude session's, is never removed. Outside a
+// paper it does nothing.
 //
 // It writes nothing to stdout; diagnostics go to stderr. It always exits 0.
 

@@ -24,6 +24,8 @@ import { mkdtempSync, writeFileSync, mkdirSync, readdirSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { buildServer } from '../mcp/server.js';
+import { STATUS_DATA_NOTE } from '../mcp/tools.js';
+import { fenceUntrusted, unfence } from '../bin/lib/untrusted-fence.js';
 import { out, setOutputSink, resetOutputSink } from '../bin/lib/output-sink.js';
 import { buildStatusView, renderStatusView } from '../bin/lib/status-view.js';
 import { routeOptionsFor } from '../bin/cli/route-options.js';
@@ -235,11 +237,14 @@ test('PLUG-03: pensmith_status returns exactly the text `pensmith status` prints
     const res = await client.callTool({ name: 'pensmith_status', arguments: {} });
     assert.notEqual(res.isError, true);
     const content = res.content as Array<{ type: string; text: string }>;
-    assert.equal(content.length, 1, 'one text block: the status text');
-    assert.equal(content[0]!.type, 'text');
-    assert.equal(content[0]!.text, expected, 'byte-identical to the CLI rendering');
-    assert.match(content[0]!.text, /^pensmith status:\n {2}paper: Tidal Power and Coastal Ecology/);
-    assert.match(content[0]!.text, /next: write .2\n$/);
+    assert.equal(content.length, 2, 'two text blocks: the data note, then the fenced status text');
+    assert.deepEqual(content.map((c) => c.type), ['text', 'text']);
+    assert.equal(content[0]!.text, STATUS_DATA_NOTE);
+    assert.equal(content[1]!.text, fenceUntrusted(expected), 'the status text inside the FEED-05 fence');
+    const status = unfence(content[1]!.text);
+    assert.equal(status, expected, 'byte-identical to the CLI rendering');
+    assert.match(status ?? '', /^pensmith status:\n {2}paper: Tidal Power and Coastal Ecology/);
+    assert.match(status ?? '', /next: write .2\n$/);
     assert.equal(printed(), '', 'the status text was captured, not written to the process-wide sink');
   });
   assert.deepEqual(listTree(root), before, 'read-only: no file created or removed');
@@ -251,8 +256,9 @@ test('PLUG-03: pensmith_status on a folder without a paper is an error carrying 
   const res = await client.callTool({ name: 'pensmith_status', arguments: {} });
   assert.equal(res.isError, true);
   const content = res.content as Array<{ type: string; text: string }>;
-  assert.match(content[0]!.text, /^pensmith status: no active paper .* run `pensmith new` to start\.\n$/);
-  const body = JSON.parse(content[1]!.text) as { exit_code: number; classification: string };
+  assert.equal(content[0]!.text, STATUS_DATA_NOTE);
+  assert.match(unfence(content[1]!.text) ?? '', /^pensmith status: no active paper .* run `pensmith new` to start\.\n$/);
+  const body = JSON.parse(content[2]!.text) as { exit_code: number; classification: string };
   assert.deepEqual(body, { exit_code: 1, classification: 'EXIT_ERROR', message: null });
   assert.deepEqual(listTree(root), [], 'nothing created in a folder without a paper');
 });
@@ -275,7 +281,7 @@ test('PLUG-13: parallel pensmith_status calls and other printing never mix (the 
     await noise;
     for (const res of calls) {
       assert.notEqual(res.isError, true);
-      assert.equal((res.content as Array<{ text: string }>)[0]!.text, expected);
+      assert.equal(unfence((res.content as Array<{ text: string }>)[1]!.text), expected);
     }
     assert.equal(printed(), Array.from({ length: 20 }, (_, i) => `pensmith plan: line ${i}\n`).join(''), 'the other chain printed on the process sink, in order, and nothing else did');
   });

@@ -70,6 +70,10 @@ export declare function mcpHandshake(opts: {
   timeoutMs?: number;
 }): Promise<{ serverInfo: { name?: string; version?: string } | null; tools: string[]; stderr: string }>;
 
+export declare function fencedText(text: string): string | null;
+
+export declare function gitSync(args: string[], cwd: string): string;
+export declare function bareRepoOnBranch(source: string, bare: string, branch: string): string;
 export declare function parseCgiHead(buffer: Buffer | string): { status: number; headers: Record<string, string>; body: Buffer } | null;
 export declare function gitCgiEnv(
   baseEnv: Record<string, string | undefined>,

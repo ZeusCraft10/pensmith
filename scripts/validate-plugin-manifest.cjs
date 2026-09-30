@@ -64,7 +64,7 @@ const PLUGIN_NAME = 'pensmith';
 const MCP_SERVER_ARG = '${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs';
 const DEV_MCP_SERVER_ARG = '${PWD:-.}/plugin/dist/mcp/server.mjs';
 const HOOKS = {
-  SessionStart: { script: 'session-start', matcher: 'startup|resume|compact' },
+  SessionStart: { script: 'session-start', matcher: 'startup|resume|clear|compact|fork' },
   PreCompact: { script: 'pre-compact', matcher: null },
   PostToolUse: { script: 'post-tool-use', matcher: '^mcp__(?:plugin_pensmith_)?pensmith__.*' },
   Stop: { script: 'stop', matcher: null },

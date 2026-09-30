@@ -6,6 +6,9 @@
 //     `.paper/` in SEED.json; SESSION.log, COSTS.jsonl, INTAKE.raw.local and
 //     export/ are not copied;
 //   - keep: the next dry run keeps the workspace while `.paper/` is unchanged;
+//   - a compaction's `.paper/HANDOFF.json` (the PreCompact hook) and its
+//     removal by `pensmith resume` are neither seeded nor fingerprinted, so they
+//     keep the workspace (review round 3);
 //   - re-seed: after `.paper/` changes, the next dry run starts over from it;
 //   - `.paper/` sha256 AND mtime are unchanged by every dry run;
 //   - exports of a seeded compiled paper go to `.paper-dry-run/export/` as
@@ -20,7 +23,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import {
   ASSIGNMENT_FIXTURE,
@@ -40,6 +43,7 @@ import {
   dryRunWorkspaceActive,
 } from '../bin/lib/paths.js';
 import { SEED_FILE } from '../bin/lib/dry-run-paper.js';
+import { runHook } from './hooks/hook-runner.js';
 import { EXIT_APPROVAL, EXIT_USAGE } from '../bin/lib/exit-codes.js';
 
 /** relative path → `sha256 mtimeMs` for every file under `dir` (dirs: 'dir'). */
@@ -127,6 +131,23 @@ test('GRND-19: a dry run over a real paper seeds .paper-dry-run/ from it, keeps 
   const third = runCli(sb, root, ['--dry-run', 'research', '--yolo']);
   assert.equal(third.status, 0);
   assert.ok(existsSync(join(ws, 'SENTINEL')), 'still kept after a read-only real run');
+
+  // 3b. Neither does a Claude Code compaction in the paper's folder (review
+  // round 3): the PreCompact hook writes .paper/HANDOFF.json, `pensmith resume`
+  // deletes it — the real session's pointer, never seeded or fingerprinted.
+  const pre = runHook(sb, 'pre-compact', { cwd: root });
+  assert.equal(pre.status, 0, pre.stderr);
+  assert.ok(existsSync(join(real, 'HANDOFF.json')), 'the PreCompact hook wrote the real paper\'s HANDOFF.json');
+  const afterCompact = runCli(sb, root, ['--dry-run', 'research', '--yolo']);
+  assert.equal(afterCompact.status, 0, `${afterCompact.stdout}\n${afterCompact.stderr}`);
+  assert.doesNotMatch(afterCompact.stderr, /seeded the dry-run workspace/);
+  assert.ok(existsSync(join(ws, 'SENTINEL')), 'still kept after a compaction wrote HANDOFF.json');
+  assert.ok(!existsSync(join(ws, 'HANDOFF.json')), 'HANDOFF.json is not seeded');
+  assert.ok(!(JSON.parse(readFileSync(join(ws, SEED_FILE), 'utf8')) as { files: Array<{ path: string }> }).files.some((f) => f.path === 'HANDOFF.json'), 'nor fingerprinted');
+  rmSync(join(real, 'HANDOFF.json')); // what `pensmith resume` does with it
+  const afterResume = runCli(sb, root, ['--dry-run', 'research', '--yolo']);
+  assert.equal(afterResume.status, 0, `${afterResume.stdout}\n${afterResume.stderr}`);
+  assert.ok(existsSync(join(ws, 'SENTINEL')), 'still kept after the pointer was removed');
 
   // 4. Re-seed: the real paper changed → the workspace starts over from it.
   writeFileSync(join(real, 'NOTES.md'), '# my notes\n');

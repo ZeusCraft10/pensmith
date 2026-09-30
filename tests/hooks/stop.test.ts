@@ -3,13 +3,15 @@
 // hooks/stop.mjs` with the documented stdin JSON.
 //
 // The session-lock policy: Stop releases the paper's session lock ONLY when
-// the pensmith MCP server of THIS Claude session holds it (owner kind 'mcp'
-// and claudeSessionId === stdin session_id). A lock held by a running CLI
-// session (a live process that took it through session-lock.ts, as `pensmith
-// write` does), another Claude session's lock, or a call without a session id
-// leaves the lock in place. The hook prints nothing and always exits 0, also
-// when there is nothing to release (the session-log flush still runs:
-// Promise.allSettled, M1).
+// the pensmith MCP server of THIS Claude session left it behind (owner kind
+// 'mcp', claudeSessionId === stdin session_id, and the server process no
+// longer running). A lock held by a running CLI session (a live process that
+// took it through session-lock.ts, as `pensmith write` does), a lock a live
+// server holds for a call still in flight (review round 3: an interrupted
+// pensmith_write keeps drafting after the turn's Stop), another Claude
+// session's lock, or a call without a session id leaves the lock in place.
+// The hook prints nothing and always exits 0, also when there is nothing to
+// release (the session-log flush still runs: Promise.allSettled, M1).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -63,12 +65,20 @@ async function holdLock(sb: Sandbox, root: string, kind: 'cli' | 'mcp', claudeSe
   return child;
 }
 
-function stop(child: ChildProcess): Promise<void> {
+function stop(child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): Promise<void> {
   return new Promise((resolve) => {
-    if (child.exitCode !== null) return resolve();
+    if (child.exitCode !== null || child.signalCode !== null) return resolve();
     child.once('exit', () => resolve());
-    child.kill();
+    child.kill(signal);
   });
+}
+
+/**
+ * Kill the holder so its release never runs (SIGKILL: no exit handler) — the
+ * lock a crashed or killed MCP server leaves behind.
+ */
+function crash(child: ChildProcess): Promise<void> {
+  return stop(child, 'SIGKILL');
 }
 
 /** The lock record as the hook and the holder see it (the same isolated data dir). */
@@ -114,27 +124,46 @@ test('PLUG-14 / RUN-23: Stop leaves a lock held by a running CLI session in plac
   }
 });
 
-test('PLUG-14 / RUN-23: Stop releases the lock this Claude session\'s MCP server left, and only that one', async () => {
-  const sb = sandbox('hook-stop-mcp');
+test('PLUG-14 / RUN-23 (review round 3): Stop keeps the lock of this Claude session\'s MCP server while its call is in flight', async () => {
+  const sb = sandbox('hook-stop-mcp-live');
   const root = sb.project('paper');
   await seedThreeSectionPaper(root);
   const server = await holdLock(sb, root, 'mcp', 'claude-abc');
   try {
-    assert.equal(lockOf(sb, root)?.claudeSessionId, 'claude-abc');
-    // Another Claude session's Stop, and a Stop without a session id, leave it.
-    for (const input of [hookInput('stop', root, { session_id: 'claude-OTHER' }), hookInput('stop', root, { session_id: undefined }), '']) {
+    const owner = lockOf(sb, root);
+    assert.equal(owner?.claudeSessionId, 'claude-abc');
+    // The turn ends (Esc, or a background subagent's call still running) while
+    // the server is inside a pensmith_write: its record must stay, or a CLI
+    // verb could start on the paper beside it.
+    for (const input of [hookInput('stop', root, { session_id: 'claude-abc' }), hookInput('stop', root, { session_id: 'claude-OTHER' }), '']) {
       const r = runHook(sb, 'stop', { cwd: root, input });
       assert.equal(r.status, 0, r.stderr);
-      assert.equal(lockOf(sb, root)?.kind, 'mcp', `kept for ${JSON.stringify(input).slice(0, 60)}`);
+      assert.equal(r.stdout, '');
+      assert.deepEqual(lockOf(sb, root), owner, `kept for ${JSON.stringify(input).slice(0, 60)}`);
     }
-    const r = runHook(sb, 'stop', { cwd: root, input: hookInput('stop', root, { session_id: 'claude-abc' }) });
-    assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout, '');
-    assert.equal(lockOf(sb, root), null, 'this session\'s MCP lock is released');
-    assert.equal(existsSync(lockFileOf(sb, root)), false);
   } finally {
     await stop(server);
   }
+});
+
+test('PLUG-14 / RUN-23: Stop releases the lock this Claude session\'s MCP server left behind, and only that one', async () => {
+  const sb = sandbox('hook-stop-mcp');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  const server = await holdLock(sb, root, 'mcp', 'claude-abc');
+  await crash(server);
+  assert.equal(lockOf(sb, root)?.claudeSessionId, 'claude-abc', 'the killed server left its record behind');
+  // Another Claude session's Stop, and a Stop without a session id, leave it.
+  for (const input of [hookInput('stop', root, { session_id: 'claude-OTHER' }), hookInput('stop', root, { session_id: undefined }), '']) {
+    const r = runHook(sb, 'stop', { cwd: root, input });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(lockOf(sb, root)?.kind, 'mcp', `kept for ${JSON.stringify(input).slice(0, 60)}`);
+  }
+  const r = runHook(sb, 'stop', { cwd: root, input: hookInput('stop', root, { session_id: 'claude-abc' }) });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.equal(lockOf(sb, root), null, 'this session\'s left-behind MCP lock is released');
+  assert.equal(existsSync(lockFileOf(sb, root)), false);
 });
 
 test('PLUG-14 / RUN-23: Stop finds the lock whichever spelling of the paper folder it is given', async () => {
@@ -150,13 +179,11 @@ test('PLUG-14 / RUN-23: Stop finds the lock whichever spelling of the paper fold
   ];
   for (const c of cases) {
     const server = await holdLock(sb, root, 'mcp', 'claude-abc');
-    try {
-      const r = runHook(sb, 'stop', { cwd: c.cwd, input: c.input, env: c.env });
-      assert.equal(r.status, 0, r.stderr);
-      assert.equal(lockOf(sb, root), null, `released via ${c.env['PENSMITH_PAPER_ROOT'] ? 'PENSMITH_PAPER_ROOT' : 'the symlinked cwd'}`);
-    } finally {
-      await stop(server);
-    }
+    await crash(server);
+    assert.ok(lockOf(sb, root), 'the killed server left its record behind');
+    const r = runHook(sb, 'stop', { cwd: c.cwd, input: c.input, env: c.env });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(lockOf(sb, root), null, `released via ${c.env['PENSMITH_PAPER_ROOT'] ? 'PENSMITH_PAPER_ROOT' : 'the symlinked cwd'}`);
   }
 });
 

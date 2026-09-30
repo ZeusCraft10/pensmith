@@ -27,7 +27,7 @@
 //            tools; the debug log says `Loaded 8 skills`; in a CLI-made paper
 //            (`new`, then `outline` over a hand-written three-section
 //            OUTLINE.md — no model call, no network) `/pensmith status` calls
-//            pensmith_status, whose text equals the CLI's `status` stdout, and
+//            pensmith_status, whose fenced text equals the CLI's `status` stdout, and
 //            the reply names its next step and every section line.
 //   PLUG-04  in the clone's root, with project MCP servers approved, `claude
 //            mcp list` shows the developer .mcp.json server connected with no
@@ -70,6 +70,7 @@ import { fileURLToPath } from 'node:url';
 import {
   EXPECTED_SKILLS,
   PLUGIN_SERVER,
+  fencedText,
   parseMcpList,
   resolveClaude,
   runClaude,
@@ -298,10 +299,10 @@ function plug03(ctx) {
   });
   const called = st.transcript.toolUses.some((u) => u.name === TOOL('pensmith_status'));
   evidence('PLUG-03', called, `/pensmith status → tool calls: ${st.transcript.toolUses.map((u) => u.name).join(', ') || '(none)'}`);
-  const toolText = st.transcript.toolResults.map((r) => r.text).join('\n');
+  const toolText = fencedText(st.transcript.toolResults.map((r) => r.text).join('\n'));
   const summary = statusSummary(paper.status);
-  evidence('PLUG-03', toolText.trim() === paper.status.trim(),
-    `pensmith_status text equals \`pensmith status\` stdout (${paper.status.trim().split('\n').length} lines; next: ${summary.next}; sections: ${summary.sections.map((x) => `#${x.id} ${x.slug}`).join(', ')})`);
+  evidence('PLUG-03', toolText !== null && toolText.trim() === paper.status.trim(),
+    `pensmith_status text (inside its untrusted-data fence) equals \`pensmith status\` stdout (${paper.status.trim().split('\n').length} lines; next: ${summary.next}; sections: ${summary.sections.map((x) => `#${x.id} ${x.slug}`).join(', ')})`);
   const reply = st.transcript.result?.result ?? st.transcript.texts.join('\n');
   const verb = summary.next.split(' ')[0] ?? '';
   const target = sectionStepOf(summary.next)?.id ?? null;

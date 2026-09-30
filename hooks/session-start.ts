@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // hooks/session-start.ts — Claude Code SessionStart hook entry (PLUG-14,
 // D-23a-15). Bundled to plugin/dist/hooks/session-start.mjs (scripts/
-// bundle.mjs); plugin/hooks/hooks.json runs it for `startup|resume|compact`.
+// bundle.mjs); plugin/hooks/hooks.json runs it for every SessionStart source,
+// `startup|resume|clear|compact|fork` (review round 3: after `/clear` and in a
+// forked session the model's context also lacks the paper's step).
 //
 // In a folder that holds a paper it prints exactly ONE JSON line:
 //   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}

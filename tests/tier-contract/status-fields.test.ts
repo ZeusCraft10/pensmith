@@ -12,7 +12,9 @@
 //
 // PLUG-03 / D-23a-12: the Tier-1 `pensmith_status` tool returns exactly the text
 // `pensmith status` prints (the same verb under a capturing output sink), so
-// the second and third cases compare it byte for byte with the CLI's stdout.
+// the second and third cases compare it byte for byte with the CLI's stdout —
+// inside the FEED-05 fence, after a note that it is data (review round 3: the
+// text quotes the paper's files, which may be shared).
 //
 // Spawns dist/ — run `npm run build` first.
 
@@ -27,6 +29,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { withLlmSandbox } from '../helpers/llm-sandbox.js';
 import { seedThreeSectionPaper } from '../helpers/status-fixture.js';
 import { pensmithActivePointerPath } from '../../bin/lib/paths.js';
+import { unfence } from '../../bin/lib/untrusted-fence.js';
+import { STATUS_DATA_NOTE } from '../../mcp/tools.js';
 
 const CLI_BIN = path.resolve('dist', 'bin', 'pensmith.js');
 const MCP_BIN = path.resolve('dist', 'mcp', 'server.js');
@@ -123,7 +127,9 @@ test('PLUG-03 / D-23a-12: the pensmith_status tool text equals `pensmith status`
       assert.equal(cli.status, 0, cli.stderr);
       const tool = await callStatusTool({ ...env, PENSMITH_PAPER_ROOT: sb.root }, sb.root);
       assert.equal(tool.isError, false, tool.texts.join('\n'));
-      assert.deepEqual(tool.texts, [cli.stdout], `LANG=${LANG}: the tool returns exactly the CLI stdout`);
+      assert.equal(tool.texts.length, 2, 'the data note, then the fenced status text (review round 3)');
+      assert.equal(tool.texts[0], STATUS_DATA_NOTE);
+      assert.equal(unfence(tool.texts[1] ?? ''), cli.stdout, `LANG=${LANG}: inside the fence the tool returns exactly the CLI stdout`);
       assert.match(cli.stdout, LANG === 'C' ? /\n {4}\[x\] #1 intro: verified\n/ : /\n {4}✓ §1 intro: verified\n/, cli.stdout);
       assert.ok(cli.stdout.includes('cost: $1.23 last session / $1.23 total (cap $5.00)'), 'the tool shows the CLI cost meter, not the n/a of paper://state');
     }
@@ -148,8 +154,9 @@ test('D-17-33: pensmith_status addresses the server\'s paper — never the `pens
       // …the MCP server started there does not: its paper is its working directory.
       const tool = await callStatusTool(env, elsewhere);
       assert.equal(tool.isError, true);
-      assert.match(tool.texts[0] ?? '', /^pensmith status: no active paper — run `pensmith new` to start\.\n$/);
-      assert.deepEqual(JSON.parse(tool.texts[1] ?? '{}'), { exit_code: 1, classification: 'EXIT_ERROR', message: null });
+      assert.equal(tool.texts[0], STATUS_DATA_NOTE);
+      assert.match(unfence(tool.texts[1] ?? '') ?? '', /^pensmith status: no active paper — run `pensmith new` to start\.\n$/);
+      assert.deepEqual(JSON.parse(tool.texts[2] ?? '{}'), { exit_code: 1, classification: 'EXIT_ERROR', message: null });
       assert.ok(fs.existsSync(pointer), 'the pointer is left as it was');
     } finally {
       fs.rmSync(elsewhere, { recursive: true, force: true });

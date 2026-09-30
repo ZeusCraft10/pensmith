@@ -8198,6 +8198,15 @@ function readOwner(file) {
     return { kind: "unreadable", ageMs };
   }
 }
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
 function removeIfSame(file, owner) {
   const cur = readOwner(file);
   if (cur.kind === "gone") return false;
@@ -8217,6 +8226,7 @@ function releaseClaudeSessionLock(root, claudeSessionId) {
   const cur = readOwner(file);
   if (cur.kind !== "owner") return false;
   if (cur.owner.kind !== "mcp" || cur.owner.claudeSessionId !== claudeSessionId) return false;
+  if (isPidAlive(cur.owner.pid)) return false;
   return removeIfSame(file, cur.owner);
 }
 var STALE_SESSION_MS, SECTION_WAIT_MS;
@@ -8236,6 +8246,7 @@ var init_session_lock = __esm({
     __name(sessionLockFile, "sessionLockFile");
     __name(isOwner, "isOwner");
     __name(readOwner, "readOwner");
+    __name(isPidAlive, "isPidAlive");
     __name(removeIfSame, "removeIfSame");
     __name(releaseClaudeSessionLock, "releaseClaudeSessionLock");
   }

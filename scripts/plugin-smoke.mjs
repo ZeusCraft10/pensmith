@@ -27,7 +27,9 @@
 //   7. Updates reach a git-marketplace install (review round 2): the clone is
 //      served as a bare repository over smart HTTP on 127.0.0.1 (`git
 //      http-backend`, the transport Claude Code clones a git-hosted marketplace
-//      with) and installed from that URL in a second isolated config — a
+//      with), on a named branch its HEAD points at whatever the checkout's
+//      HEAD is (a pull request's checkout is detached and shallow; review
+//      round 3), and installed from that URL in a second isolated config — a
 //      COPIED install under the plugin cache, versioned by plugin.json's
 //      content-stamped version. A commit then changes a file under plugin/ and
 //      re-stamps the version (`scripts/plugin-version.cjs --write`, as
@@ -56,6 +58,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   EXPECTED_HOOK_EVENTS,
+  bareRepoOnBranch,
+  gitSync,
   startGitHttpBackend,
   EXPECTED_SKILLS,
   EXPECTED_TOOLS,
@@ -74,6 +78,9 @@ import {
 } from './plugin-smoke-lib.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** The branch step 7 serves the clone's commit on (whatever the checkout's HEAD was: a branch or detached). */
+const SMOKE_BRANCH = 'pensmith-plugin-smoke';
 
 function parseArgs(argv) {
   const opts = { repo: REPO_ROOT, negative: path.join(REPO_ROOT, 'tests', 'fixtures', 'plugin-legacy'), tools: [], keep: false };
@@ -133,14 +140,6 @@ function isolatedEnv(tmp) {
   return env;
 }
 
-/** Run git with a fixed example identity (never the user's). */
-function git(args, cwd) {
-  return execFileSync('git', ['-c', 'user.name=pensmith plugin smoke', '-c', 'user.email=plugin-smoke@example.org', ...args], {
-    cwd,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-}
 
 /** plugin list --json's pensmith entry: {version, installPath}. */
 function installedEntry(run) {
@@ -162,7 +161,9 @@ async function checkGitMarketplaceUpdate({ claude, clone, tmp }) {
   const hostRoot = path.join(tmp, 'git-host');
   mkdirSync(hostRoot, { recursive: true });
   const bare = path.join(hostRoot, 'pensmith.git');
-  execFileSync('git', ['clone', '--quiet', '--bare', clone, bare], { stdio: ['ignore', 'pipe', 'pipe'] });
+  // On a named branch whatever the checkout's HEAD is — a pull-request
+  // checkout is detached and shallow (bareRepoOnBranch, review round 3).
+  bareRepoOnBranch(clone, bare, SMOKE_BRANCH);
   const probe = runClaude({ command: 'git', prefix: [], path: 'git' }, ['http-backend'], {
     cwd: hostRoot,
     env: { ...process.env, GIT_PROJECT_ROOT: hostRoot, REQUEST_METHOD: 'GET', PATH_INFO: '/pensmith.git/HEAD', GIT_HTTP_EXPORT_ALL: '1' },
@@ -190,15 +191,15 @@ async function checkGitMarketplaceUpdate({ claude, clone, tmp }) {
 
     // A new commit: one file under plugin/ changes, and the version is re-stamped.
     const work = path.join(tmp, 'git-work');
-    execFileSync('git', ['clone', '--quiet', bare, work], { stdio: ['ignore', 'pipe', 'pipe'] });
+    execFileSync('git', ['clone', '--quiet', '--branch', SMOKE_BRANCH, bare, work], { stdio: ['ignore', 'pipe', 'pipe'] });
     const marker = `plugin smoke update marker ${Date.now().toString(36)}`;
     const changed = path.join(work, 'plugin', 'workflows', 'status.md');
     appendFileSync(changed, `\n<!-- ${marker} -->\n`);
     execFileSync(process.execPath, [path.join(work, 'scripts', 'plugin-version.cjs'), '--write'], { cwd: work, stdio: ['ignore', 'pipe', 'pipe'] });
     const secondVersion = manifestVersion(work);
     if (secondVersion === firstVersion) fail(`re-stamping after a plugin/ change kept the version ${firstVersion}`);
-    git(['commit', '--quiet', '-am', 'plugin smoke: change a workflow body'], work);
-    git(['push', '--quiet', 'origin', 'HEAD'], work);
+    gitSync(['commit', '--quiet', '-am', 'plugin smoke: change a workflow body'], work);
+    gitSync(['push', '--quiet', 'origin', `HEAD:refs/heads/${SMOKE_BRANCH}`], work);
 
     const mupdate = run(['plugin', 'marketplace', 'update', 'pensmith']);
     if (mupdate.status !== 0) fail('claude plugin marketplace update pensmith', shown(mupdate));

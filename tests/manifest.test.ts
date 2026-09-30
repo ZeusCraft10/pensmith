@@ -84,7 +84,7 @@ test('PLUG-01: plugin/hooks/hooks.json is the spec shape — 4 events, exec form
   assert.ok(!Array.isArray(manifest.hooks), 'hooks is an object keyed by event');
   assert.equal(typeof manifest.description, 'string');
   const want: Record<string, { script: string; matcher?: string }> = {
-    SessionStart: { script: 'session-start', matcher: 'startup|resume|compact' },
+    SessionStart: { script: 'session-start', matcher: 'startup|resume|clear|compact|fork' },
     PreCompact: { script: 'pre-compact' },
     PostToolUse: { script: 'post-tool-use', matcher: '^mcp__(?:plugin_pensmith_)?pensmith__.*' },
     Stop: { script: 'stop' },

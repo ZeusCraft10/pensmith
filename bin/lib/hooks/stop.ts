@@ -2,11 +2,13 @@
 // HOOK-04 / M1 / C2-M2).
 //
 // When the agent stops, release the paper's session lock ONLY when an MCP
-// server of THIS Claude Code session holds it: owner kind 'mcp' and owner
-// claudeSessionId equal to the `session_id` Claude Code passes on stdin
-// (session-lock.ts releaseClaudeSessionLock). A CLI session's lock, another
-// Claude session's, or none is left alone — a crashed holder is cleared by
-// stale detection, never forced. Then flush the session log.
+// server of THIS Claude Code session left it behind: owner kind 'mcp', owner
+// claudeSessionId equal to the `session_id` Claude Code passes on stdin, and
+// the owner process no longer running (session-lock.ts
+// releaseClaudeSessionLock). A live server's record is a tool call still in
+// flight — an interrupted pensmith_write keeps drafting — and is kept (review
+// round 3). A CLI session's lock, another Claude session's, or none is left
+// alone. Then flush the session log.
 //
 // Both run under Promise.allSettled (never Promise.all), so a failing release
 // can never abandon the flush (M1 / C2-M2). Returns what happened; the entry
@@ -16,7 +18,7 @@ import { closeSessionLog } from '../session-log.js';
 import { releaseClaudeSessionLock } from '../session-lock.js';
 
 export interface StopOutcome {
-  /** True when this session's MCP lock was removed. */
+  /** True when the lock this session's MCP server left behind was removed. */
   readonly released: boolean;
   /** One line per step that failed (the entry writes them to stderr). */
   readonly errors: readonly string[];
