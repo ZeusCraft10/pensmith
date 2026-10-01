@@ -22906,9 +22906,9 @@ function failedCitationStarts(text4, loose) {
   }
   return out2;
 }
-function locatorTerm(text4) {
+function locatorTerm(text4, terms) {
   let best = null;
-  for (const [term, label] of LOCATOR_TERMS) {
+  for (const [term, label] of terms) {
     const t = term.exec(text4);
     if (t !== null && (best === null || t[0].length > best.length)) best = { label, length: t[0].length };
   }
@@ -22920,11 +22920,12 @@ function locatorWords(text4, accept) {
   let value = first2[0];
   let at = first2[0].length;
   for (; ; ) {
-    const m3 = /^([,&\-–—]?)(\s*)/u.exec(text4.slice(at));
+    const m3 = /^(--(?!-)|[,&\-–]?)(\s*)/u.exec(text4.slice(at));
     const word = LOCATOR_VALUE_RE.exec(text4.slice(at + m3[0].length));
     if (m3[0] === "" && word !== null || word === null || !accept(word[0])) break;
     if (m3[1] === "" && m3[2] !== void 0 && m3[2].includes("\n")) break;
-    value += `${m3[1]}${m3[2] !== "" ? " " : ""}${word[0]}`;
+    const sep = m3[1] === "--" ? "\u2013" : m3[1];
+    value += `${sep}${m3[2] !== "" ? " " : ""}${word[0]}`;
     at += m3[0].length + word[0].length;
   }
   return { value, length: at };
@@ -22942,19 +22943,19 @@ function delimitedLocator(text4) {
   }
   return null;
 }
-function splitLocator(suffix) {
+function splitLocator(suffix, terms = LOCATOR_TERMS) {
   const lead = /^,?\s*/u.exec(suffix);
   const text4 = suffix.slice(lead[0].length);
   if (text4 === "") return null;
   const delimited = delimitedLocator(text4);
   if (delimited !== null) {
     const inner = delimited.inner.trimStart();
-    const term2 = locatorTerm(inner);
+    const term2 = locatorTerm(inner, terms);
     const value = (term2 !== null ? inner.slice(term2.length) : inner).trim().replace(/\s+/gu, " ");
     if (value === "") return null;
     return { locator: value, label: term2?.label ?? "page", rest: text4.slice(delimited.length) };
   }
-  const term = locatorTerm(text4);
+  const term = locatorTerm(text4, terms);
   if (term !== null) {
     const afterTerm = text4.slice(term.length);
     const gap = /^\s*/u.exec(afterTerm);
@@ -23162,7 +23163,7 @@ var init_citation_token = __esm({
       [/^(?:paras?\.|paragraphs?\b|¶¶?)/i, "paragraph"],
       [/^(?:ll?\.|lines?\b)/i, "line"],
       [/^(?:nn?\.|notes?\b)/i, "note"],
-      [/^(?:nos?\.|numbers?\b)/i, "issue"],
+      [/^(?:nos?\.|issues?\b)/i, "issue"],
       [/^(?:cols?\.|columns?\b)/i, "column"],
       [/^(?:pts?\.|parts?\b)/i, "part"],
       [/^(?:vv?\.|verses?\b)/i, "verse"],
@@ -78652,9 +78653,11 @@ var init_config = __esm({
       honesty_backend: external_exports.enum(HONESTY_BACKENDS, {
         errorMap: /* @__PURE__ */ __name(() => ({ message: `honesty_backend must be one of: ${HONESTY_BACKENDS.join(", ")}` }), "errorMap")
       }).optional(),
-      // EXP-17 (D-21-20): the answer to the detector-consent question, asked once
-      // in a terminal and recorded here (true: send the paper to the detector;
-      // false: never). Unset means not asked yet; --yolo never answers it.
+      // EXP-17 (D-21-20, review round 1): an opt-out a paper may carry — false:
+      // never send this paper to a detector. It never GRANTS consent: config.toml
+      // travels with a shared paper, so the user's own answer to the
+      // detector-consent question is recorded in the pensmith data dir
+      // (detector-consent.ts); `true` here is not consent. --yolo never answers it.
       honesty_consent: external_exports.boolean().optional()
     });
     CompileSchema = external_exports.object({
@@ -81632,7 +81635,7 @@ var init_gates = __esm({
       { id: "revise-swap", label: "Apply this citation swap to the section?", yolo: "skip", yoloChoice: "apply the proposed swap", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "PRD \xA77.5", summary: "the revise swap" },
       { id: "cost-cap", label: "This call would exceed your cost cap. Continue?", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_COST_CAP, declineExit: EXIT_COST_CAP, requirement: "RUN-18", summary: "the cost cap" },
       { id: "estimate-proceed", label: "Proceed?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "RUN-20", summary: "the estimate confirmation" },
-      // EXP-17 (D-21-20): backend-neutral — the disclosure line before it names the detector and its host; the answer is recorded in config.toml ([humanizer] honesty_consent).
+      // EXP-17 (D-21-20): backend-neutral — the disclosure line before it names the detector and its host; the answer is recorded per paper and detector in the pensmith data dir (detector-consent.ts), never in config.toml, which travels with a shared paper (review round 1).
       { id: "detector-consent", label: "Send the full paper text to the configured AI detector for a score (your answer is saved)?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "EXP-17", summary: "detector consent" },
       { id: "paper-pointer", label: "Continue the active paper, or start a new paper here?", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_USAGE, declineExit: EXIT_USAGE, requirement: "RUN-14", summary: "the active-paper choice" },
       { id: "sketch-confirm", label: "Proceed to intake with this thesis?", yolo: "skip", yoloChoice: "proceed to intake", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "ERGO-05", summary: "the `sketch` confirmation" },
@@ -82412,13 +82415,26 @@ var init_v1_to_v27 = __esm({
   }
 });
 
+// bin/lib/migrations/done-record/v2_to_v3.ts
+function migrate16(input2) {
+  const src = typeof input2 === "object" && input2 !== null && !Array.isArray(input2) ? input2 : {};
+  const draft = src["mode"] === void 0 || src["mode"] === "draft";
+  return { ...src, ...draft && src["exported"] === void 0 ? { exported: true } : {}, $schemaVersion: 3 };
+}
+var init_v2_to_v35 = __esm({
+  "bin/lib/migrations/done-record/v2_to_v3.ts"() {
+    "use strict";
+    __name(migrate16, "migrate");
+  }
+});
+
 // bin/lib/schemas/done-record.ts
 var DONE_RECORD_SCHEMA_VERSION, SHA2562, OUTLINE_EXPORT_PATH, DoneRecordSchema, OutlineDoneRecordSchema, DoneRecordFileSchema;
 var init_done_record = __esm({
   "bin/lib/schemas/done-record.ts"() {
     "use strict";
     init_zod();
-    DONE_RECORD_SCHEMA_VERSION = 2;
+    DONE_RECORD_SCHEMA_VERSION = 3;
     SHA2562 = /^[0-9a-f]{64}$/;
     OUTLINE_EXPORT_PATH = /^export\/(?:OUTLINE|ANNOTATED-BIBLIOGRAPHY)(?:\.dry-run)?\.(?:md|docx|pdf|tex)$/;
     DoneRecordSchema = external_exports.object({
@@ -82431,7 +82447,9 @@ var init_done_record = __esm({
       /** sha256 of the `.paper/FINAL.md` done left: the text it exported. */
       final_sha256: external_exports.string().regex(SHA2562),
       /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
-      humanized: external_exports.boolean()
+      humanized: external_exports.boolean(),
+      /** True when an export rendered that FINAL.md; false when `pensmith humanize` wrote it and nothing exported it yet (v3). */
+      exported: external_exports.boolean()
     }).strict();
     OutlineDoneRecordSchema = external_exports.object({
       $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
@@ -82439,10 +82457,17 @@ var init_done_record = __esm({
       done_at: external_exports.string().datetime(),
       /** sha256 of the `.paper/OUTLINE.md` the export was made from. */
       outline_sha256: external_exports.string().regex(SHA2562),
-      /** sha256 of the `.paper/CITATIONS.bib` the gate judged. */
+      /** sha256 of the `.paper/CITATIONS.bib` the outline export was made from (as it stands after done's library writes). */
       bib_sha256: external_exports.string().regex(SHA2562),
       /** sha256 of the `.paper/ANNOTATED-BIBLIOGRAPHY.md` done wrote. */
       annotated_sha256: external_exports.string().regex(SHA2562),
+      /**
+       * sha256 of the annotated bibliography done's earlier run left, which this
+       * record replaces (v3): done writes the record BEFORE the file, so a done
+       * stopped between the two leaves that older text — done's own, `stale`,
+       * never `edited` (review round 1).
+       */
+      previous_annotated_sha256: external_exports.string().regex(SHA2562).optional(),
       /** The export files made from these inputs, relative to the paper folder. */
       outline_exports: external_exports.array(external_exports.string().regex(OUTLINE_EXPORT_PATH)).min(1)
     }).strict();
@@ -82466,6 +82491,7 @@ function readDoneRecordFile(paperRoot) {
   const version2 = typeof value === "object" && value !== null ? value["$schemaVersion"] : void 0;
   if (typeof version2 === "number" && Number.isInteger(version2) && version2 > DONE_RECORD_SCHEMA_VERSION) return { kind: "newer", version: version2 };
   if (version2 === 1) value = migrate15(value);
+  if (version2 === 1 || version2 === 2) value = migrate16(value);
   const parsed = DoneRecordFileSchema.safeParse(value);
   if (!parsed.success) return { kind: "invalid" };
   return parsed.data.mode === "outline" ? { kind: "outline", record: parsed.data } : { kind: "draft", record: parsed.data };
@@ -82493,9 +82519,16 @@ function finalMdState(paperRoot) {
   if (finalSha === "") return "edited";
   const draftSha = fileSha256(join9(dir, "DRAFT.md"));
   const record2 = readDoneRecord(paperRoot);
-  if (record2 !== null && record2.final_sha256 === finalSha) return record2.compiled_draft_sha256 === draftSha ? "current" : "stale";
+  if (record2 !== null && record2.final_sha256 === finalSha) {
+    if (record2.compiled_draft_sha256 !== draftSha) return "stale";
+    return record2.exported ? "current" : "unexported";
+  }
   if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? "current" : "stale";
   return finalSha === draftSha ? "stale" : "edited";
+}
+function unexportedFinalReason(paperRoot) {
+  const dir = basename2(paperDir(paperRoot));
+  return `${dir}/FINAL.md holds the humanized text \`pensmith humanize\` wrote, and no export has rendered it yet \u2014 \`pensmith export\` exports it (\`pensmith done\` humanizes the compiled draft again and exports that)`;
 }
 function editedFinalReason(paperRoot) {
   const dir = basename2(paperDir(paperRoot));
@@ -82511,6 +82544,7 @@ function outlineDoneState(paperRoot) {
   const annotated = annotatedBibliographyPath(paperRoot);
   if (existsSync11(annotated)) {
     const sha = fileSha256(annotated);
+    if (record2 !== null && sha !== "" && sha !== record2.annotated_sha256 && sha === record2.previous_annotated_sha256) return { state: "stale", record: record2 };
     if (record2 === null || sha === "" || sha !== record2.annotated_sha256) return { state: "edited", record: record2 };
   } else {
     return { state: record2 === null ? "absent" : "stale", record: record2 };
@@ -82532,6 +82566,7 @@ var init_done_record2 = __esm({
     init_exit_codes();
     init_paths();
     init_v1_to_v27();
+    init_v2_to_v35();
     init_done_record();
     DONE_RECORD_FILE = "DONE-RECORD.json";
     __name(doneRecordPath, "doneRecordPath");
@@ -82540,6 +82575,7 @@ var init_done_record2 = __esm({
     __name(newerDoneRecordReason, "newerDoneRecordReason");
     __name(verificationCheckedSha256, "verificationCheckedSha256");
     __name(finalMdState, "finalMdState");
+    __name(unexportedFinalReason, "unexportedFinalReason");
     __name(editedFinalReason, "editedFinalReason");
     ANNOTATED_BIBLIOGRAPHY_FILE = "ANNOTATED-BIBLIOGRAPHY.md";
     __name(annotatedBibliographyPath, "annotatedBibliographyPath");
@@ -83373,8 +83409,11 @@ async function resolveNextAction(paperRoot, opts = {}) {
       };
     }
     if (compiledDraftStale(pDir, sections2, paperRoot)) return { verb: "compile" };
+    const doneRecord = readDoneRecordFile(paperRoot);
+    if (doneRecord.kind === "newer") return { verb: "status", reason: "attention", detail: newerDoneRecordReason(paperRoot, doneRecord.version) };
     const finalState = finalMdState(paperRoot);
     if (finalState === "edited") return { verb: "status", reason: "attention", detail: editedFinalReason(paperRoot) };
+    if (finalState === "unexported") return { verb: "status", reason: "attention", detail: unexportedFinalReason(paperRoot) };
     if (finalState !== "current") {
       return record2 === null ? { verb: "compile" } : { verb: "done" };
     }

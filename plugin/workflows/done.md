@@ -76,8 +76,9 @@ decision for it.
 - `--style <name|path.csl>` — the citation style (EXP-03, D-21-24): `--style` >
   config.toml `[project] citation_style` > the intake brief's style > the
   discipline preset's default. One of the 8 bundled styles (any alias: "APA 7",
-  "Chicago") or a local `.csl` file (relative to the project root, or absolute)
-  that is a well-formed, independent CSL 1.0 style. An unknown name or a bad file
+  "Chicago") or a local `.csl` file (absolute, or relative to the folder the
+  command is typed in; config.toml's relative path is the project root's) that
+  is a well-formed, independent CSL 1.0 style. An unknown name or a bad file
   is EXIT_USAGE with the reason. done prints `style: <name> (from <source>)`.
 - `--raw` — skip the humanizer (`humanizer skipped (--raw)`; no request is sent).
 - `--no-verify` — skip ONLY the whole-paper Pass 4 audit, with a warning; the
@@ -98,9 +99,11 @@ decision for it.
   writers and zero trace") — named after the compiled draft whichever text it
   holds, carrying ZERO pensmith trace (scanned).
 - `.paper/export/CITATIONS.bib` and `.paper/export/CITATIONS.ris` — the bundled
-  bibliography (DONE-08): ONLY the sources the exported document cites, each
-  entry exactly as in `.paper/CITATIONS.bib` / `.ris` (never the whole research
-  library). A document that cites nothing gets neither file.
+  bibliography (DONE-08): ONLY the sources the exported document cites (never
+  the whole research library). The `.bib` holds those entries filtered from the
+  exact `.paper/CITATIONS.bib` bytes the gate judged; the `.ris` is rendered from
+  the same parsed entries (D-21-11), never taken from `.paper/CITATIONS.ris`.
+  A document that cites nothing gets neither file.
 - `.paper/VERIFICATION.md` — a SOURCE artifact (not in the export dir) carrying
   `## Gate` (the exported text's file and sha256 and the summary of the
   recomputed rows), `## Decisions` (`| Section | Row | Claim | Decision |` —
@@ -115,8 +118,8 @@ decision for it.
 - `.paper/FINAL.md` — the finished paper (EXP-15, D-21-19): exactly the text
   this done exported — the accepted humanized text, else the compiled draft —
   written ONCE, after the export and VERIFICATION.md. `.paper/DONE-RECORD.json`
-  then records the sha256 of the compiled draft the gate judged and of FINAL.md
-  (`bin/lib/done-record.ts`).
+  (v3) then records the sha256 of the compiled draft the gate judged and of
+  FINAL.md, and that an export rendered it (`exported`; `bin/lib/done-record.ts`).
 - `.paper/LIBRARY.json` — `last_verified` of the citations a registrar
   confirmed during done's gate, and the retraction statuses re-checked, through
   the one library writer (VRFY-28, VRFY-15).
@@ -239,7 +242,11 @@ decision for it.
    hash-pinned contract (`references/humanizer-contract.md`), the voice to keep
    and the section text with every citation and every direct quote masked as a
    placeholder (the rewrite guard, `bin/lib/rewrite-guard.ts`), inside the
-   FEED-05 fence. Each reply must pass `validateRewrite`; then `acceptHumanized`
+   FEED-05 fence. Each reply must pass `validateRewrite` — every placeholder
+   once, in its own paragraph and on its own claim (a citation moved to another
+   sentence's claim is rejected), the paragraph count kept (a preamble or
+   closing chatter paragraph is rejected), no fence marker and no added
+   "pensmith"; then `acceptHumanized`
    — the rewrite guard over the whole text, the cited-key diff and the gate
    core over the humanized bytes (GATE-04) — must pass it. A rejection exits
    EXIT_BLOCKED (4) with every reason, exports nothing and leaves FINAL.md
@@ -306,14 +313,20 @@ decision for it.
    - `--only score` (`pensmith score`): step 3 (the consent rules apply), the
      line and the framing note printed; nothing written.
    - `--only humanize` (`pensmith humanize`): steps 4–5 without a score, then
-     FINAL.md and DONE-RECORD.json — no export, no confirmation (FINAL.md is
-     the finished paper; an export renders it). A skipped humanizer writes
-     nothing; a failed one exits 1.
+     FINAL.md and DONE-RECORD.json with `exported: false` — no export, no
+     confirmation (FINAL.md is the finished paper; an export renders it). Until
+     an export renders that FINAL.md the router reports attention naming
+     `pensmith export` — never "complete" while `export/` may hold an older
+     text. A skipped humanizer writes nothing; a failed one exits 1.
    - `--only export` (`pensmith export`): the confirmation (step 7) applies;
-     exports FINAL.md when it is done's own and current — re-gated through
-     `acceptHumanized` — else the compiled draft (writing FINAL.md and the
-     record as a raw done does); VERIFICATION.md says the plagiarism and honesty
+     exports FINAL.md when it is done's own and current (or the humanized text
+     `pensmith humanize` left unexported) — re-gated through `acceptHumanized`
+     — else the compiled draft (writing FINAL.md and the record as a raw done
+     does, `exported: true`); VERIFICATION.md says the plagiarism and honesty
      steps were skipped (`--only export`).
+   A DONE-RECORD.json written by a newer pensmith is never overwritten: an
+   exporting or humanizing done refuses before any step (exit 1), and the router
+   reports it as attention.
 
 10. **Shell fallback** (TIER-06 equivalence path): `pensmith done [--yolo]
    [--format md|docx|pdf|latex|tex] [--style <name|path.csl>] [--raw]
@@ -334,20 +347,42 @@ decision for it.
   Liberation Serif family shipped in `templates/fonts/`, footnotes at the foot
   of the page, page numbers) or a standalone LaTeX article that compiles under
   pdfLaTeX and XeTeX. A pandoc failure falls back to the built-in writer of the
-  same format, never to Markdown. stdout names the writer —
+  same format, never to Markdown, and the note names the failure by its TeX or
+  pandoc error line (never pandoc's argv). stdout names the writer —
   `pensmith export: DRAFT.docx — pandoc docx writer` or
   `… — built-in docx writer — pandoc not found` — and a `note —` line names
   anything the built-in writer wrote as text (it reads a Markdown subset).
+- **Every character is shown or named** (EXP-09, review round 1): pandoc with
+  pdfLaTeX gets a header declaring each character of the document its set-up
+  cannot print (Greek and the common symbols as math, sub- and superscript
+  digits), a XeTeX-family engine gets the shipped Liberation Serif as its main
+  font, and the built-in PDF writer folds a character its font lacks to one it
+  has (U+2011 to a hyphen, the thin spaces to a space). A character no path can
+  show (CJK in Liberation Serif) is printed as `?` and named in a
+  `pensmith export: note —` line with its code point — on every path, the
+  built-in LaTeX included — never dropped silently. A note cited in a table
+  cell or a heading reaches the foot of the page (the built-in LaTeX writes it
+  as `\footnotemark` / `\footnotetext`).
 - **Citations are rendered in the paper's style by one citeproc engine over the
   whole document** (D-21-03): notes numbered across the document for a note
   style, numbers in first-citation order for a numeric style, and every form the
   gate accepts — clusters, locators (`[@k, p. 5]`, and `[@k 33]` as page 33, as
   pandoc reads it), prefixes and suffixes, `[-@k]`, `@{k}` and narrative `@k`.
   Titles are case-protected, so "China" stays capitalised in every style
-  (D-21-06). A `.csl` file path works wherever a style key does (D-21-07). On
+  (D-21-06). A `.csl` file path works wherever a style key does (D-21-07). As
+  pandoc does, a note marker moves past the punctuation after its citation
+  (`claim [@k]...` → `claim...¹`; under en-US a period after a closing quote
+  goes inside it), a locator is read with the terms of the style's own locale
+  (Harvard's en-GB keeps `chap. 2` as text), `--` in a locator is a range and
+  a label is joined to its value by a non-breaking space (the goldens and the
+  locator oracle check them against pandoc 3.9). On
   the pandoc path pandoc runs in a fresh temporary directory on neutral names
   only (`input.md`, `references.json`, `style.csl`, `out.<ext>`, D-21-09), so
-  nothing it records can name a local path.
+  nothing it records can name a local path, and with `--sandbox`, no implicit
+  figures and a Lua filter that prints every image as its Markdown text (as the
+  built-in writers do): pandoc fetches or embeds no URL and no file the gate did
+  not read — a PDF build fetched an image even under `--sandbox` — and tectonic
+  runs `--only-cached` while sources are offline or under `--dry-run`.
 - **Nothing is rendered that the gate did not read** (D-21-12): the exporter
   renders only keys the checked text cites, the bibliography holds exactly the
   rendered keys, and the export bibliography exactly the cited keys — a note
@@ -366,9 +401,17 @@ decision for it.
   bibliography files — is scanned (`bin/lib/export/zero-trace.ts`): a pensmith
   name, an offline or stub marker, a generator comment, a local home path, an
   author or producer field, an XMP packet or a metadata-bearing embedded image
-  is a finding. Any finding, or a scrub that fails, deletes everything the
-  export wrote and refuses with `ZeroTraceError` (EXIT_ERROR) — never a
-  Markdown fallback.
+  is a finding (in author content — the text, the references, link targets —
+  only this machine's paths count: the paper's folder, `$HOME`, the OS user's
+  home path, outside web addresses; a source's URL holding `/home/x/` is not a
+  trace), and so is an untrusted-data fence marker. Any finding, or a scrub
+  that fails, deletes everything the export wrote and refuses with
+  `ZeroTraceError` (EXIT_ERROR) — never a Markdown fallback. A docx hyperlink's
+  target is never rewritten by the scrub (it is what the link's text shows).
+- **Nothing the exporter adds carries an unverified citation** (carry-over 4):
+  a note-style footnote is built after the gate, but its text is the engine's
+  rendering of a citation the gate read, of an entry the gate verified — the
+  same keys D-21-12 asserts.
 
 ### Outline-only mode
 
@@ -396,14 +439,22 @@ write nothing; `--only export` is the outline export:
    "Summary (abstract excerpt)" (no model call; "no abstract available" without
    one), why it is relevant (the research evaluator's reason) and the sections
    it supports. Every value read from the library is escaped: the file holds no
-   citation and no markup.
+   citation and no markup. A value that carries an attribution, a direct quote
+   or an identifier no section verified (an abstract's `Smith et al. (2019)`, a
+   `why_relevant` that names `[3]`) is left out of the file — "left out — it
+   holds an attribution, a quotation or an identifier no section verified" —
+   and done names it in a `pensmith done: note —` line.
 4. `export/OUTLINE.<ext>` (its citations rendered, a References list, and
    `export/CITATIONS.bib` / `.ris` of the listed sources) and
    `export/ANNOTATED-BIBLIOGRAPHY.<ext>`, through the same writers, scrub and
    scan. A routed done (bare `/pensmith`) exports Markdown; `pensmith done
    --format docx` adds the `.docx` pair.
-5. `DONE-RECORD.json` v2 records the outline export: the sha256 of OUTLINE.md,
-   CITATIONS.bib and ANNOTATED-BIBLIOGRAPHY.md and the files exported. The
+5. `DONE-RECORD.json` (v3) records the outline export — written before
+   ANNOTATED-BIBLIOGRAPHY.md, naming the text it replaces, so a done stopped
+   between the two leaves a paper done again, never an "edited" one: the sha256
+   of OUTLINE.md, CITATIONS.bib and ANNOTATED-BIBLIOGRAPHY.md and the files
+   exported (an earlier format's export still on disk stays listed; one removed
+   since is dropped). The
    router reports `status (done)` — `outline only — complete:
    export/OUTLINE.md and export/ANNOTATED-BIBLIOGRAPHY.md` — while they hold
    those bytes, and routes to done again when the outline or its sources change.

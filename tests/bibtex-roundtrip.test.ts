@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { renderBibtex, writeBibtex, normalizeBibValue, type BibSource } from '../bin/lib/bibtex-write.js';
 import { plainText } from '../bin/lib/markup.js';
-import { parseBib, parseBibSync, renderInText, renderApa } from '../bin/lib/citations.js';
+import { parseBib, parseBibSync, renderApa, renderDocumentCitations, runsText } from '../bin/lib/citations.js';
 import { parsePersonName } from '../bin/lib/person-name.js';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
@@ -262,7 +262,8 @@ const VASWANI: BibSource = { citekey: 'vaswani2017', title: 'Attention Is All Yo
 
 test('SRC-12: the offline renderer cites Vaswani & Shazeer 2017 as "(Vaswani & Shazeer, 2017)"', async () => {
   const entries = await parseBib(renderBibtex([VASWANI]));
-  assert.equal(await renderInText(entries, 'apa'), '(Vaswani & Shazeer, 2017)');
+  const doc = await renderDocumentCitations(entries, 'apa', [{ items: [{ id: String(entries[0]?.['id']) }] }]);
+  assert.equal(runsText(doc.citations[0]?.inline ?? []), '(Vaswani & Shazeer, 2017)');
   const reference = await renderApa(entries);
   assert.match(reference, /^Vaswani, A\., & Shazeer, N\. \(2017\)\. Attention Is All You Need\. https:\/\/arxiv\.org\/abs\/1706\.03762/);
 });
@@ -289,7 +290,8 @@ test('SRC-12: an arXiv collaboration author (recorded 1207.7214) is written, rea
   assert.match(bib, /author = \{\{The ATLAS Collaboration\}\}/);
   const entries = await parseBib(bib);
   assert.deepEqual(entries[0]!['author'], [{ family: 'The ATLAS Collaboration' }]);
-  assert.equal(await renderInText(entries, 'apa'), '(The ATLAS Collaboration, 2012)');
+  const cited = await renderDocumentCitations(entries, 'apa', [{ items: [{ id: String(entries[0]?.['id']) }] }]);
+  assert.equal(runsText(cited.citations[0]?.inline ?? []), '(The ATLAS Collaboration, 2012)');
   assert.match(await renderApa(entries), /^The ATLAS Collaboration\. \(2012\)\. Observation of a new particle/);
 
   const pandoc = pandocBinary();

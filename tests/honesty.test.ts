@@ -39,7 +39,7 @@ import {
   honestyLine,
   measureHonesty,
   renderHonestySection,
-  selectBackend,
+  configuredBackend,
   type HonestyOutcome,
 } from '../bin/lib/honesty.js';
 import { _resetBucketsForTest } from '../bin/lib/http.js';
@@ -311,7 +311,7 @@ test('EXP-18: honesty_backend = "originality" → POST api.originality.ai/api/v3
 });
 
 test('EXP-18: every configured backend is a real adapter (no not-implemented stub)', async () => {
-  for (const name of ['gptzero', 'originality', 'sapling']) assert.equal(selectBackend({ honestyBackend: name }).name, name);
+  for (const name of ['gptzero', 'originality', 'sapling'] as const) assert.equal(configuredBackend({ backend: name }), name);
   assert.doesNotMatch(readFileSync(honestySrc, 'utf8'), /notImplementedBackend/);
 });
 

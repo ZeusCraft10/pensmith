@@ -7897,9 +7897,11 @@ var init_config = __esm({
       honesty_backend: external_exports.enum(HONESTY_BACKENDS, {
         errorMap: /* @__PURE__ */ __name(() => ({ message: `honesty_backend must be one of: ${HONESTY_BACKENDS.join(", ")}` }), "errorMap")
       }).optional(),
-      // EXP-17 (D-21-20): the answer to the detector-consent question, asked once
-      // in a terminal and recorded here (true: send the paper to the detector;
-      // false: never). Unset means not asked yet; --yolo never answers it.
+      // EXP-17 (D-21-20, review round 1): an opt-out a paper may carry — false:
+      // never send this paper to a detector. It never GRANTS consent: config.toml
+      // travels with a shared paper, so the user's own answer to the
+      // detector-consent question is recorded in the pensmith data dir
+      // (detector-consent.ts); `true` here is not consent. --yolo never answers it.
       honesty_consent: external_exports.boolean().optional()
     });
     CompileSchema = external_exports.object({

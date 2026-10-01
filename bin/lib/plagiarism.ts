@@ -262,16 +262,6 @@ export function selectPlagiarismPhrases(draftMd: string, opts: PlagiarismOptions
   return chosen.sort((a, b) => a.order - b.order).map((w) => ({ phrase: w.phrase, location: w.location }));
 }
 
-/**
- * The phrases' text only (the DONE-02 surface): `maxPhrases` distinctive
- * windows of the draft's body text. `minWords` is kept for its callers; every
- * window has 6–10 words.
- */
-export function extractDistinctivePhrases(text: string, minWords = PHRASE_MIN_WORDS, maxPhrases = DEFAULT_PLAGIARISM_MAX_PHRASES): string[] {
-  void minWords;
-  return selectPlagiarismPhrases(text, { maxPhrases }).map((p) => p.phrase);
-}
-
 // ============================================================
 //   DuckDuckGo: query, parse, match
 // ============================================================

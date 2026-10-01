@@ -89,12 +89,6 @@ export interface HonestyNotApplicable {
   readonly reason: string;
 }
 
-/** Pluggable backend strategy (DONE-05): score() resolves to a score or null and never throws. */
-export interface HonestyBackend {
-  name: string;
-  score(text: string): Promise<HonestyScore | null>;
-}
-
 export interface HonestyOptions {
   /** The paper root (config.toml: backend, honesty_score, the honesty_consent opt-out; the key of the consent recorded in the data dir). */
   readonly paperRoot?: string;
@@ -483,15 +477,3 @@ export async function scoreHonestyWithOptions(text: string, opts: HonestyOptions
   return null;
 }
 
-/** scoreHonestyWithOptions with the configured backend (DONE-05). */
-export async function scoreHonesty(text: string, config?: { honestyBackend?: string }): Promise<HonestyScore | null> {
-  const b = config?.honestyBackend;
-  return scoreHonestyWithOptions(text, b === 'gptzero' || b === 'originality' || b === 'sapling' ? { backend: b } : {});
-}
-
-/** A backend object (DONE-05): every configured name is a real adapter; an unknown name is GPTZero. */
-export function selectBackend(config?: { honestyBackend?: string }): HonestyBackend {
-  const b = config?.honestyBackend;
-  const name: HonestyBackendName = b === 'originality' || b === 'sapling' ? b : 'gptzero';
-  return { name, score: (text: string) => scoreHonestyWithOptions(text, { backend: name }) };
-}

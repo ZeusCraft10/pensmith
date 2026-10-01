@@ -7,20 +7,14 @@
 // tests/fixtures/lint-chokepoint-fixture.ts is the regression gate.
 //
 // =====================================================================
-//   renderInText — in-text sibling of renderStyle (Phase 13 / REND-01)
+//   The export's renderer (Phase 21)
 // =====================================================================
-// renderInText(entries, style) is the per-entry in-text CSL renderer. It
-// is the D-19-compliant delegate for exporter.ts: exporter.ts imports
-// { parseBib, renderStyle, renderInText } from './citations.js' — it
-// NEVER imports Cite or any citation-js symbol directly. All citation-js /
-// Cite usage stays inside this file (the D-19 chokepoint).
-//
-// Implementation note: renderInText calls ensureStyleTemplate(style) for
-// Pitfall-2 memoization, then constructs a new Cite([entries], …) and
-// calls .format('citation', …). One combined in-text string is returned
-// for the provided entries group (callers pass ONE entry per call to get
-// a per-key string — Pitfall 1). Offline + deterministic: same
-// format:'text' / lang:'en-US' options as renderStyle.
+// exporter.ts (through bin/lib/export/render.ts) renders citations with
+// renderDocumentCitations — one citeproc engine over the whole document,
+// below — and never imports Cite or any citation-js symbol directly. The
+// Phase-13 per-entry in-text renderer (renderInText, renderCitationItems,
+// which numbered every numeric citation [1]) is gone (Phase 21 review round
+// 1): nothing may render a citation outside the document pass.
 //
 // =====================================================================
 //   Why parseBib is async, parseBibtex is the alias (executor reconciliation)
@@ -707,45 +701,6 @@ export async function renderStyle(
   });
 }
 
-// =====================================================================
-//   Public: renderInText (REND-01 / Phase 13 — per-entry in-text renderer)
-// =====================================================================
-/**
- * Render the supplied parsed entries as an in-text citation in the given
- * `style` using the bundled `templates/citation-styles/<style>.csl`.
- *
- * This is the in-text SIBLING of renderStyle (which renders a full bibliography).
- * Pass ONE entry at a time to get a per-key in-text string that can be
- * substituted token-by-token into a document (Pitfall 1 guard — passing all
- * entries at once yields one combined string for the entire group). For a
- * single-entry group in numeric styles (IEEE, Vancouver, AMA) the result
- * is always [1] or "1" — correct for single-entry groups; correct sequential
- * numbering for a full document requires the Pandoc citeproc path.
- *
- * Accepts the array returned from `parseBib` (or a one-element slice of it).
- * Registration is memoized via ensureStyleTemplate (Pitfall 2 collision guard).
- *
- * DETERMINISTIC + OFFLINE: format:'text' + lang:'en-US' (same as renderStyle).
- * No wall-clock, no fetch — byte-stable for identical input.
- *
- * Throws a clear TypeError on a non-array input (mirrors renderStyle's guard).
- */
-export async function renderInText(
-  entries: Array<Record<string, unknown>>,
-  style: string,
-): Promise<string> {
-  if (!Array.isArray(entries)) {
-    throw new TypeError('renderInText: input must be an array of parsed entries (from parseBib)');
-  }
-  const template = ensureStyleTemplate(style);
-  const cite = new Cite(entries, { forceType: '@csl/object' });
-  return cite.format('citation', {
-    format: 'text',
-    template,
-    lang: 'en-US',
-  });
-}
-
 /**
  * One cited source of a citation, as CSL's citation items carry it (review
  * round 3 of Phase 18: the offline renderer keeps what Pandoc keeps).
@@ -764,50 +719,6 @@ export interface CitationItemInput {
   readonly suppressAuthor?: boolean;
   /** Only the author (the name part of a narrative citation). */
   readonly authorOnly?: boolean;
-}
-
-/**
- * Render ONE citation — its items in order, with their prefixes, suffixes,
- * locators and author suppression — in `style`, as renderInText does for a
- * bare key. `entries` is the parsed bibliography (every item's id must be in
- * it); `citedInOrder` the document's cited keys in first-citation order (so a
- * numeric style numbers them as the bibliography does when it is rendered from
- * entries in that order). A style that cannot print a part (an author-only
- * item in a numeric style) yields the text citeproc gives; the caller decides.
- */
-export async function renderCitationItems(
-  entries: Array<Record<string, unknown>>,
-  style: string,
-  items: readonly CitationItemInput[],
-  citedInOrder: readonly string[] = [],
-): Promise<string> {
-  if (!Array.isArray(entries)) {
-    throw new TypeError('renderCitationItems: input must be an array of parsed entries (from parseBib)');
-  }
-  const template = ensureStyleTemplate(style);
-  // A numeric style numbers sources in the order the document first cites
-  // them: one prior citation of every cited key in that order gives each item
-  // its document number (not "[1]" for each citation). A note style is left
-  // alone — a prior citation would print "Ibid.".
-  const citationsPre = citedInOrder.length > 0 && !noteStyles.has(template)
-    ? [{ citationItems: citedInOrder.map((id) => ({ id })), properties: { noteIndex: 0 } }]
-    : [];
-  const cite = new Cite(entries, { forceType: '@csl/object' });
-  const entry = items.map((i) => ({
-    id: i.id,
-    ...(i.prefix ? { prefix: i.prefix } : {}),
-    ...(i.suffix ? { suffix: i.suffix } : {}),
-    ...(i.locator ? { locator: i.locator, label: i.label ?? 'page' } : {}),
-    ...(i.suppressAuthor ? { 'suppress-author': true } : {}),
-    ...(i.authorOnly ? { 'author-only': true } : {}),
-  }));
-  return cite.format('citation', {
-    format: 'text',
-    template,
-    lang: 'en-US',
-    entry,
-    citationsPre,
-  } as Parameters<typeof cite.format>[1]);
 }
 
 // =====================================================================
