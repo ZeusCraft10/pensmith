@@ -205,3 +205,25 @@ test('review round 2 (built CLI, upgrade path): a FINAL.md an older pensmith exp
   assert.ok(existsSync(paperFile(p, 'DONE-RECORD.json')));
   assert.match(p.cli(['status'], ENV).stdout, /current: complete/);
 });
+
+test('Phase 21 integration (built CLI): a DONE-RECORD.json a newer pensmith wrote makes an exporting or humanizing done refuse BEFORE any step — exit 1, nothing exported, FINAL.md and the record untouched; --only score still runs', () => {
+  const p = finishedPaper('done-record-newer');
+  const recordFile = paperFile(p, 'DONE-RECORD.json');
+  const newer = JSON.stringify({ $schemaVersion: 3, mode: 'something-new' });
+  writeFileSync(recordFile, newer);
+  for (const args of [['done', '--yolo', '--format', 'md'], ['export', '--yolo', '--format', 'md'], ['humanize']]) {
+    const d = p.cli(args, ENV);
+    assert.equal(d.status, 1, `${args.join(' ')}: ${d.stdout}\n${d.stderr}`);
+    assert.match(d.stderr, /^pensmith: \.paper\/DONE-RECORD\.json was written by a newer pensmith \(record v3; this one reads v2\) [-—] upgrade pensmith to finish this paper \(the record is left as it is\)$/m, args.join(' '));
+    assert.doesNotMatch(d.stdout + d.stderr, STACK_LINE, 'one line, no stack trace');
+    assert.doesNotMatch(d.stdout, /plagiarism check|honesty check|humanizer/, `${args.join(' ')}: no step ran before the refusal`);
+    assert.equal(existsSync(join(p.root, '.paper', 'export')), false, `${args.join(' ')}: nothing exported`);
+    assert.equal(existsSync(paperFile(p, 'FINAL.md')), false, `${args.join(' ')}: no FINAL.md`);
+    assert.equal(readFileSync(recordFile, 'utf8'), newer, `${args.join(' ')}: the record is byte-identical`);
+  }
+  // A step that writes nothing (the score) still runs: the record is only read.
+  const score = p.cli(['score'], ENV);
+  assert.equal(score.status, EXIT_OK, `${score.stdout}\n${score.stderr}`);
+  assert.match(score.stdout, /Pensmith honesty check: /);
+  assert.equal(readFileSync(recordFile, 'utf8'), newer);
+});
