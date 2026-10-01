@@ -337,6 +337,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   const prep = await prepareText(text, plan.entries, opts.style ?? null);
   assertRenderedKeys(prep, gatedKeys, plan);
   const localeNote = prep.localeFallback !== null ? [`the style's locale ${prep.localeFallback} is not bundled: the built-in renderer used en-US terms`] : [];
+  if (prep.unprinted.length > 0) notes.push(`the style prints nothing for a citation of ${prep.unprinted.join(', ')} (no printed form) — it was left out of the text, as pandoc leaves it out`);
 
   // 3. The writer, and the document's bytes (still nothing written).
   const pandoc = format !== 'md' && (opts.pandocPresent ?? isPandocPresent());
@@ -419,7 +420,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     throw new ZeroTraceError(findings, written);
   }
 
-  const how = writer === 'pandoc' ? `pandoc ${FORMAT_LABEL[format]} writer` : notes[0]?.startsWith('built-in') === true ? (notes[0] as string) : `built-in ${FORMAT_LABEL[format]} writer`;
+  const how = writer === 'pandoc' ? `pandoc ${FORMAT_LABEL[format]} writer` : (notes.find((n) => n.startsWith('built-in ')) ?? `built-in ${FORMAT_LABEL[format]} writer`);
   writeOut(`pensmith export: ${basename(outputPath)} — ${how}\n`);
   for (const n of notes) if (n !== how) writeOut(`pensmith export: note — ${n}\n`);
   return {

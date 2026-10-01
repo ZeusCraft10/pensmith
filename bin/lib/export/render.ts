@@ -78,6 +78,8 @@ export interface PreparedText {
   readonly unresolved: readonly string[];
   /** The style's default locale when it is not available (rendered in en-US), else null. */
   readonly localeFallback: string | null;
+  /** Keys of citations the style prints nothing for (removed, as pandoc removes them: "no printed form"). */
+  readonly unprinted: readonly string[];
 }
 
 /**
@@ -130,7 +132,7 @@ export async function prepareText(
   style: string | null,
 ): Promise<PreparedText> {
   const empty = (unresolved: string[] = []): PreparedText => ({
-    text, placed: [], notes: [], bibliography: [], referencesTitle: 'References', hangingIndent: false, noteStyle: false, renderedKeys: [], unresolved, localeFallback: null,
+    text, placed: [], notes: [], bibliography: [], referencesTitle: 'References', hangingIndent: false, noteStyle: false, renderedKeys: [], unresolved, localeFallback: null, unprinted: [],
   });
   const known = new Set(entries.map((e) => String(e['id'] ?? '')));
   // The citations in order, each with its items and the span it covers.
@@ -208,5 +210,6 @@ export async function prepareText(
     renderedKeys,
     unresolved,
     localeFallback: doc.localeFallback,
+    unprinted: [...new Set(placed.filter((p) => p.parts.every((x) => x.kind === 'text')).flatMap((p) => p.keys))],
   };
 }
