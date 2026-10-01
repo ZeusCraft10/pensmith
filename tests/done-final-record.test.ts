@@ -2,8 +2,9 @@
 // (main-branch merge review, round 1): FINAL.md is the file pensmith calls
 // the finished paper, so a FINAL.md no gate judged is never reported as one.
 //
-// In Tier 2 no humanizer runs (the built CLI has no Task transport), so done
-// exports the compiled DRAFT.md. Before this, a FINAL.md newer than DRAFT.md
+// These sandboxes install no humanizer skill, so done skips the humanizer and
+// exports the compiled DRAFT.md (tests/humanizer-task.test.ts covers the
+// humanized path, Phase 21 EXP-14). Before this, a FINAL.md newer than DRAFT.md
 // was kept as "a humanized manuscript of this compile", and the router called
 // the paper complete from FINAL.md's mtime alone:
 //
