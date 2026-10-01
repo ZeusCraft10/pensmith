@@ -98,6 +98,34 @@ export function escapeLatex(s: string): string {
   return out.replace(/\[/g, '{[}').replace(/\]/g, '{]}');
 }
 
+/** True for a character pdfLaTeX's T1 / utf8 / textcomp set-up prints without a declaration. */
+function pdfTexKnows(ch: string): boolean {
+  const cp = ch.codePointAt(0) as number;
+  return cp < 0x0180 || '–—‘’“”‚„‹›«»·°§¶©®'.includes(ch);
+}
+
+/**
+ * pandoc's standalone LaTeX for pdfLaTeX (the scrub of the pandoc path,
+ * export/pandoc.ts): pandoc writes every character as it is, and pdfLaTeX
+ * stops on one its T1 / utf8 set-up has no declaration for (`α`). Each such
+ * character of the document gets a `\DeclareUnicodeCharacter` under
+ * `\ifPDFTeX` — Greek and the common symbols as math, anything else as
+ * `?` — so the file compiles under pdfLaTeX as under XeTeX / LuaTeX, which
+ * print the characters themselves.
+ */
+export function declarePdfTexCharacters(tex: string): string {
+  const at = tex.indexOf('\\begin{document}');
+  if (at === -1) return tex;
+  const chars = [...new Set([...tex.slice(at)].filter((ch) => !pdfTexKnows(ch)))].sort();
+  if (chars.length === 0) return tex;
+  const decl = chars.map((ch) => {
+    const code = (ch.codePointAt(0) as number).toString(16).toUpperCase().padStart(4, '0');
+    const mapped = GREEK_MAP[ch] ?? (LATEX_CHARS[ch]?.startsWith('\\ensuremath') === true ? LATEX_CHARS[ch] : undefined);
+    return `  \\DeclareUnicodeCharacter{${code}}{${mapped ?? '?'}}`;
+  });
+  return `${tex.slice(0, at)}\\ifPDFTeX\n${decl.join('\n')}\n\\fi\n${tex.slice(at)}`;
+}
+
 function inlinesTex(nodes: readonly Inline[], notes: ReadonlyArray<readonly Inline[]>, inNote = false): string {
   return nodes
     .map((n) => {

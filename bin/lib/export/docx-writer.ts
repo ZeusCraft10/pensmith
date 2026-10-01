@@ -5,8 +5,9 @@
 // It writes WordprocessingML with jszip from the document model
 // (document.ts): Word's built-in style IDs — Normal, Heading1–6 (the paper's
 // `# title` is Heading 1 and its `## sections` Heading 2, D-21-13), Quote,
-// SourceCode, FootnoteText, FootnoteReference, Hyperlink, Bibliography (a
-// hanging indent) — emphasis, strong, strikeout, superscript, subscript, small
+// FootnoteText, FootnoteReference, Hyperlink, Bibliography (a hanging indent),
+// and for code the two styles pandoc's docx reader takes as code (SourceCode,
+// VerbatimChar) — emphasis, strong, strikeout, superscript, subscript, small
 // caps and links as run properties, lists through numbering.xml (each list
 // numbered afresh, nested levels indented), real footnotes in
 // word/footnotes.xml, pipe tables as tables, and the bibliography under its
@@ -56,7 +57,7 @@ interface RunProps {
 function rPr(p: RunProps): string {
   const parts: string[] = [];
   if (p.link) parts.push('<w:rStyle w:val="Hyperlink"/>');
-  if (p.code) parts.push('<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Courier New"/>');
+  if (p.code && !p.link) parts.push('<w:rStyle w:val="VerbatimChar"/>');
   if (p.bold) parts.push('<w:b/><w:bCs/>');
   if (p.italic) parts.push('<w:i/><w:iCs/>');
   if (p.strike) parts.push('<w:strike/>');
@@ -247,6 +248,7 @@ const STYLES_XML = (): string => {
     '<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="99"/>' +
     '<w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>' +
     '<w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:uiPriority w:val="99"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>' +
+    '<w:style w:type="character" w:styleId="VerbatimChar"><w:name w:val="Verbatim Char"/><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Courier New"/><w:sz w:val="22"/></w:rPr></w:style>' +
     '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:uiPriority w:val="99"/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>' +
     '<w:style w:type="paragraph" w:styleId="Bibliography"><w:name w:val="Bibliography"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="37"/>' +
     '<w:pPr><w:ind w:left="720" w:hanging="720"/></w:pPr></w:style>' +
