@@ -211,7 +211,7 @@ export function recordedErrorBody(status: number, response: unknown): string | n
 export type OfflineReason = '--dry-run' | 'PENSMITH_OFFLINE=1' | 'test runner';
 
 export interface NetworkMode {
-  /** Source, registrar, detector and plagiarism requests are answered from fixtures (or refused). */
+  /** Source and registrar requests are answered from fixtures (or refused); the detector and plagiarism checks send nothing (RUN-03). */
   readonly sourcesOffline: boolean;
   /** Every model call returns a deterministic stub; no provider is contacted. */
   readonly llmStubbed: boolean;
@@ -289,7 +289,7 @@ export function offlineBanner(mode: NetworkMode = networkMode(), workspace?: str
       ? `${base}; working in ${workspace} (the real .paper/ is never written)`
       : base;
   }
-  return `OFFLINE MODE (reason: ${mode.reason}): sources, verification, detector and plagiarism results are recorded fixtures, not live`;
+  return `OFFLINE MODE (reason: ${mode.reason}): sources and verification are recorded fixtures, not live; the detector score and the plagiarism check are skipped`;
 }
 
 /** The reason label of a stubbed-LLM run (--dry-run sets PENSMITH_NO_LLM=1 too). */

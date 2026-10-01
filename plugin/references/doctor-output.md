@@ -51,7 +51,7 @@ The command exits 0 when no probe FAILs and 1 otherwise.
 > Can pensmith read your Zotero library (SRC-16)? With ZOTERO_API_KEY: one authenticated request, `GET https://api.zotero.org/keys/current` — `Zotero: authenticated (…)` (PASS) only when it answers 200, `Zotero: key rejected` (WARN, fix: https://www.zotero.org/settings/keys) on 403, `Zotero: not checked (…)` (WARN) on any other answer, `Zotero: not checked (offline)` (SKIP) offline with no recorded answer — never "authenticated" from the key's presence alone. Without a key: the Zotero 7 local API (`PENSMITH_ZOTERO_LOCAL=1`) or a public group (`ZOTERO_GROUP_ID`), one keyless request. Otherwise WARN: `Zotero: MCP server detected — not authenticated for the CLI` when a Zotero MCP server is configured for Claude Code (`.claude.json` in `$CLAUDE_CONFIG_DIR` or the home folder, the project's `.mcp.json`, a legacy `mcp_servers.json`), else `Zotero: not detected`, with setup steps. The detail names the MCP detection and the files checked. Optional: research uses the scholarly sources either way.
 
 ### pandoc-presence (DOCT-02 ecosystem)
-> Pandoc binary on PATH — WARN if not found: `pensmith done` then cannot export .docx or .pdf and falls back to Markdown.
+> Pandoc binary on PATH — WARN if not found: `pensmith done` then makes .docx, .pdf and .tex with its built-in writers, which read a Markdown subset (never a Markdown fallback; install pandoc for its own output).
 
 ### humanizer-skill-presence (DOCT-02 ecosystem)
 > Humanizer skill at ~/.claude/skills/humanizer/ — WARN if missing: `pensmith done` then skips the humanize step.

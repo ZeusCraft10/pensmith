@@ -211,3 +211,31 @@ test('D-20-28 / D-20-29 (review round 2): a drafted section\'s verify is priced 
     assert.ok(!compiled.rows.some((r) => r.step === 'compile'), 'compiled already');
   });
 });
+
+test('GRND-11 (Phase 21 integration): an outline-only paper is priced as its outline and a done that makes no model call — no section, compile or humanizer rows', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    await twoSectionPaper(sb);
+    sb.writePaperConfig('schema_version = 4\n\n[project]\nmode = "outline"\n');
+    const res = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 });
+    const steps = res.rows.map((r) => r.step);
+    assert.deepEqual(steps, ['done'], 'the registered outline needs only its outline-only done');
+    const done = res.rows[0]!;
+    assert.deepEqual(done.calls, []);
+    assert.equal(done.usd, 0);
+    assert.match(done.note ?? '', /no model calls/);
+    // A scoped `done --estimate` (the --yolo pre-flight) prices no humanizer either.
+    const scoped = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'done' } });
+    assert.deepEqual(scoped.rows.map((r) => [r.step, r.calls.length, r.usd]), [['done', 0, 0]]);
+    const compile = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'compile' } });
+    assert.deepEqual(compile.rows.map((r) => [r.step, r.calls.length]), [['compile', 0]]);
+  });
+  // Before the outline: new → research → outline → done, never plan/write/verify/compile.
+  await withLlmSandbox({}, async (sb) => {
+    sb.writePaperConfig('schema_version = 4\n\n[project]\nmode = "outline"\n');
+    const res = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 });
+    const steps = res.rows.map((r) => r.step);
+    assert.ok(steps.includes('outline'), steps.join(', '));
+    assert.ok(!steps.some((s) => /^(plan|write|verify) §|^compile$/.test(s)), steps.join(', '));
+    assert.equal(steps[steps.length - 1], 'done');
+  });
+});

@@ -113,13 +113,13 @@ test('RUN-02: the OFFLINE MODE banner copy is fixed (D-17-08)', () => {
   withModeEnv({ PENSMITH_OFFLINE: '1' }, () => {
     assert.equal(
       offlineBanner(),
-      'OFFLINE MODE (reason: PENSMITH_OFFLINE=1): sources, verification, detector and plagiarism results are recorded fixtures, not live',
+      'OFFLINE MODE (reason: PENSMITH_OFFLINE=1): sources and verification are recorded fixtures, not live; the detector score and the plagiarism check are skipped',
     );
   });
   withModeEnv({ PENSMITH_TEST: '1' }, () => {
     assert.equal(
       offlineBanner(),
-      'OFFLINE MODE (reason: test runner): sources, verification, detector and plagiarism results are recorded fixtures, not live',
+      'OFFLINE MODE (reason: test runner): sources and verification are recorded fixtures, not live; the detector score and the plagiarism check are skipped',
     );
   });
   withModeEnv({ PENSMITH_DRY_RUN: '1' }, () => {
@@ -184,7 +184,7 @@ test('RUN-02: announceModes prints the banners exactly once per process, before 
     const first = captureStderr(() => announceModes({ verb: 'status' }));
     const second = captureStderr(() => announceModes({ verb: 'status' }));
     assert.deepEqual(first.trimEnd().split('\n'), [
-      'OFFLINE MODE (reason: PENSMITH_OFFLINE=1): sources, verification, detector and plagiarism results are recorded fixtures, not live',
+      'OFFLINE MODE (reason: PENSMITH_OFFLINE=1): sources and verification are recorded fixtures, not live; the detector score and the plagiarism check are skipped',
       'LLM STUBBED (PENSMITH_NO_LLM=1): every model call returns a deterministic stub; no provider is contacted',
     ]);
     assert.equal(second, '', 'the banner is printed once per invocation');

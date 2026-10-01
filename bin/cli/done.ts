@@ -49,8 +49,6 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
-import { runFreshnessForDraft } from '../lib/verify/pass1.js';
-import { decidedRetractions, type DecidedRetraction } from '../lib/verify/freshness.js';
 import { type Pass2Result } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, locationLabel, type PlagiarismResult } from '../lib/plagiarism.js';
 import {
@@ -70,7 +68,7 @@ import { EXIT_BLOCKED, EXIT_ERROR, EXIT_USAGE, PensmithError } from '../lib/exit
 import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { sectionRegistryProblem } from '../lib/section-registry.js';
 import { compileRecordProblems, fileSha256, readCompileInputs } from '../lib/compile-inputs.js';
-import { editedFinalReason, finalMdState, readDoneRecord, writeDoneRecord } from '../lib/done-record.js';
+import { assertDoneRecordWritable, editedFinalReason, finalMdState, readDoneRecord, writeDoneRecord } from '../lib/done-record.js';
 import { loadBibliography, type AcceptedQuote, type ByoQuote, type GateResult, type LoadedBibliography } from '../lib/verify/gate.js';
 import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
 import { recordLastVerified, recordRetractionStatuses, LibraryNotFoundError } from '../lib/library.js';
@@ -84,6 +82,7 @@ import { assertLlmConfigured, complete, isFatalLlmError, MissingApiKeyError, Run
 import {
   doneSections,
   runExportBlockingGate,
+  recheckUnknownRetractions,
   recomputeExportGate,
   readUnsupportedClaims,
   unjudgedClaimSections,
@@ -262,6 +261,8 @@ export {
   unjudgedClaimSections,
   readSectionAdvisory,
   unjudgedLine,
+  recheckUnknownRetractions,
+  type RetractionRecheck,
   type ExportBlock,
   type DoneSection,
   type UnsupportedClaim,
@@ -493,47 +494,6 @@ function writeExportFindings(
   for (const q of byoQuotes) {
     writeOut(`  - ${q.id} [@${q.citekey}] "${cell(q.snippet, 60)}…" verified against your local file ${q.localFile}\n`);
   }
-}
-
-/** What done's re-check of `unknown` retraction statuses found (VRFY-15, D-20-13). */
-export interface RetractionRecheck {
-  /** One refusal line per cited source found retracted now. */
-  readonly retracted: string[];
-  /** The decided statuses (and an `unknown` that stays so for good, with its reason), recorded once done exports. */
-  readonly decided: Record<string, DecidedRetraction>;
-}
-
-/**
- * Re-check, live, the retraction status of every source `text` cites whose
- * LIBRARY.json status is `unknown` because a lookup failed (research or an
- * earlier verify could not decide it) — never one whose agency publishes no
- * retraction data (recorded; it stays unknown for good). The re-check sends no
- * DOI HEAD, and a status it decides (or records for good) is never asked
- * again, so a second done on an unchanged paper asks nothing (VRFY-26). Nothing is written
- * here. Skipped under --dry-run and for a bibliography that does not parse;
- * never throws (a failed re-check leaves the status unknown, as verify does —
- * the gate core's Pass 1 still decides).
- */
-export async function recheckUnknownRetractions(paperRoot: string, text: string): Promise<RetractionRecheck> {
-  const none: RetractionRecheck = { retracted: [], decided: {} };
-  if (networkMode().dryRun) return none;
-  const bib = loadBibliography(paperRoot);
-  if (!bib.exists || bib.problems.length > 0) return none;
-  let results;
-  try {
-    results = await runFreshnessForDraft(text, bib.path, { bibEntries: bib.entries, root: paperRoot, onlyRecheck: true, record: false });
-  } catch {
-    return none;
-  }
-  const out: RetractionRecheck = { retracted: [], decided: decidedRetractions(results) };
-  for (const r of results) {
-    if (r.recheck?.status === 'retracted') {
-      out.retracted.push(
-        `citation [@${r.citekey}] is RETRACTED — ${r.recheck.details ?? 'it appears in Retraction Watch'} (re-checked now: LIBRARY.json had its retraction status unknown) — replace the source`,
-      );
-    }
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -782,6 +742,10 @@ export const doneCommand = defineCommand({
     // the compiled DRAFT.md exactly as compile wrote it from those sections;
     // and the ONE gate core recomputed over the DRAFT.md bytes about to be
     // exported. Every reason is collected and listed.
+    // A DONE-RECORD.json a newer pensmith wrote is never overwritten: a run
+    // that would write the record (an export or --only humanize) refuses
+    // before any paid or third-party step, not after its export.
+    if (only === null || only === 'export' || only === 'humanize') assertDoneRecordWritable(paperRoot);
     const sections = doneSections(paperRoot);
     const blocking = runExportBlockingGate(paperRoot);
     const reasons = [...blocking.reasons];

@@ -17,8 +17,8 @@ required:
   - humanizer skill
 
 degrade_if_missing:
-  - if no Pandoc: markdown-only export (latex is still produced via the offline md→tex writer; docx/pdf fall back to a markdown deliverable in the export dir). The offline path renders every citation form the gates accept in the paper's style — locators and prefixes kept, `-@key` as the year only, a narrative `@key` as "Author (Year)" ("Author [n]" in a numeric style, numbered in first-citation order like the References list)
-  - if no PDF engine: markdown-only fallback for the pdf format (never an ENOENT crash)
+  - if no Pandoc: the built-in writer of the requested format (a real .docx, a real PDF, a standalone LaTeX article; `md` is always the built-in writer) — never a Markdown fallback; stdout says `built-in <format> writer — pandoc not found`. Citations are rendered in the paper's style by the same whole-document citeproc engine as with pandoc (every citation form the gate accepts; notes numbered across the document; numeric styles in first-citation order; `[@k 33]` as page 33)
+  - if no PDF engine (pandoc present, no pdflatex / xelatex / lualatex / tectonic): the built-in PDF writer, with a one-line note (never an ENOENT crash, never a Markdown fallback)
   - if no humanizer skill: print `humanizer skill not found at ~/.claude/skills/humanizer/SKILL.md — skipping`, export the compiled draft (FINAL.md = DRAFT.md) and report the after score as `N/A (humanizer not installed)` — never fail
   - if no model transport (no model configured, PENSMITH_NO_LLM, --dry-run, offline with a non-loopback endpoint): skip the humanizer with the reason, as above
   - if no detector key (GPTZERO_API_KEY / ORIGINALITY_API_KEY / SAPLING_API_KEY for the configured backend): the score line says `skipped (no <KEY> set)` — never a number
@@ -93,9 +93,10 @@ decision for it.
 ## Outputs
 
 - The exported deliverable in the DISTINCT export dir (default `.paper/export/`):
-  `DRAFT.docx` / `DRAFT.pdf` / `DRAFT.tex` / `DRAFT.md` per `--format` (with the
-  Pandoc-absent markdown fallback), named after the compiled draft whichever
-  text it holds — carrying ZERO pensmith trace.
+  `DRAFT.docx` / `DRAFT.pdf` / `DRAFT.tex` / `DRAFT.md` per `--format` — always
+  the requested format, by pandoc or by the built-in writer (below, "Export
+  writers and zero trace") — named after the compiled draft whichever text it
+  holds, carrying ZERO pensmith trace (scanned).
 - `.paper/export/CITATIONS.bib` and `.paper/export/CITATIONS.ris` — the bundled
   bibliography (DONE-08): ONLY the sources the exported document cites, each
   entry exactly as in `.paper/CITATIONS.bib` / `.ris` (never the whole research
@@ -139,7 +140,8 @@ decision for it.
 
 > **LOCKED INVARIANT — zero exported trace + always-confirm gate.** Every
 > per-format export ends with the MANDATORY scrub (`zeroTracePatch` for docx,
-> `zeroTracePdf` for pdf). The export-confirmation gate ALWAYS prompts (generic
+> `zeroTracePdf` for pdf) and the zero-trace scan of every written file
+> (`scanExportFile`; a finding deletes what the export wrote, `ZeroTraceError`). The export-confirmation gate ALWAYS prompts (generic
 > confirm even on a clean paper); only `--yolo` skips it.
 
 0. **Flags** — every check above that is EXIT_USAGE (`--format`, `--only`,
@@ -267,10 +269,13 @@ decision for it.
    source `DRAFT.md`), from the exact text and bibliography bytes the gate
    checked (a temporary copy — an edit made while done ran is not exported;
    done warns and names the checked text's sha256), in the resolved style.
-   docx → `zeroTracePatch`; pdf → `zeroTracePdf`; latex → the offline md→tex
-   writer (no generator comment); md → the trace-free body. Bundle the
-   cited-only `.paper/export/CITATIONS.bib` / `.ris` (library.ts
-   `exportCitedCitations`, written before any Pandoc run). Then record
+   The writer is pandoc or the built-in writer of the format (md: always
+   built-in); docx → `zeroTracePatch`; pdf → `zeroTracePdf`; then every written
+   file is scanned (a finding deletes what the export wrote and exits 1,
+   `ZeroTraceError`). The cited-only `.paper/export/CITATIONS.bib` / `.ris`
+   (library.ts `planExportCitations`, planned and checked before anything is
+   written — a citing text whose keys the bibliography lacks is an error that
+   writes nothing — then `writeExportCitations`) carry the same keys. Then record
    `last_verified` and the re-checked retraction statuses, write the source
    `.paper/VERIFICATION.md`, then `.paper/FINAL.md` (the exported text) and
    `.paper/DONE-RECORD.json`. FINAL.md is never replaced before this point, so
@@ -362,8 +367,11 @@ decision for it.
 (GRND-11, D-21-25 — amends the GRND-02 stop.) A paper whose intake chose
 "outline only" (`[project] mode = "outline"`) never plans, drafts or verifies a
 section: once the outline is approved the router names `done`, and done runs
-the outline export (`bin/lib/outline-export.ts` `runOutlineDone`) instead of
-steps 0–7:
+the outline export (`bin/lib/outline-export.ts` `runOutlineDone`) after step 0
+(the flags, and the style resolved and printed as `style: <name> (from
+<source>)`) instead of steps 1–9. `--only humanize`, `--only score` and `--only
+plagiarism` (and their aliases) say they are skipped — there is no prose — and
+write nothing; `--only export` is the outline export:
 
 1. The listed sources are the citekeys the outline assigns (section order, each
    once). The outline document — title, thesis, each section's heading with its

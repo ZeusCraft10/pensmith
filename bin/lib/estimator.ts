@@ -61,14 +61,14 @@ import { slugSpec } from './llm-models.js';
 import { costOf, resolvePrice, type ResolvedPrice } from './pricing.js';
 import { resolveRuntime, resolveSlug, type ResolvedRuntime } from './runtime.js';
 import { parseLlmRecords } from './replay.js';
-import { tryReadPaperConfigSync } from './config.js';
+import { readPaperModeSync, tryReadPaperConfigSync } from './config.js';
 import { resolveCostCap } from './budget.js';
 import { planAdapters, zoteroConfigured, estimatedResearchCandidates, evaluatorCallsFor, PLANNABLE_ADAPTERS } from './adapter-plan.js';
 import { MAX_QUERIES } from './query-expansion.js';
 import { resolveDiscipline } from './disciplines.js';
 import { readIntakeBrief } from './intake-brief.js';
 import { isResearchDone } from './research-sentinel.js';
-import { finalMdState } from './done-record.js';
+import { finalMdState, outlineDoneState } from './done-record.js';
 import { isHumanizerSkillPresent } from './ecosystem-presence.js';
 import { DEFAULT_CONTRADICTION_PAIRS } from './schemas/config.js';
 
@@ -488,7 +488,12 @@ function scopeRows(
     const at = scope.section !== undefined ? ` §${scope.section}` : '';
     return [price(`${scope.verb}${at} --research`, calls)];
   }
-  if (scope.verb === 'done') return [all.find((r) => r.step === 'done') ?? price('done', doneCalls)];
+  if (scope.verb === 'done') {
+    const found = all.find((r) => r.step === 'done');
+    if (found !== undefined) return [found];
+    // GRND-11: an outline-only paper's done makes no model call.
+    return [doneCalls.length > 0 ? price('done', doneCalls) : { step: 'done', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' }];
+  }
   if (scope.verb === 'compile' && compileCalls.length > 0) return [all.find((r) => r.step === 'compile' && r.calls.length > 0) ?? price('compile', compileCalls)];
   const slugs = scope.verb === 'research' ? research : scope.verb === 'verify' ? [] : STEP_SLUGS[scope.verb];
   if (!slugs) {
@@ -543,6 +548,14 @@ export async function projectEstimate(args: {
 
   const intakeDone = existsSync(path.join(pDir, 'INTAKE.md')) || stateOk;
   if (!intakeDone) rows.push(row(rt, root, 'new', [['intake-clarifier', 1]], stubbed));
+  // GRND-11 (D-21-25): an outline-only paper never plans, drafts, verifies,
+  // compiles or humanizes — its done is the outline export (no model call).
+  let outlineOnly = false;
+  try {
+    outlineOnly = readPaperModeSync(root) === 'outline';
+  } catch {
+    outlineOnly = false;
+  }
   const research = researchCalls(root);
   if (!isResearchDone(pDir)) {
     rows.push(row(rt, root, 'research', research, stubbed));
@@ -570,12 +583,12 @@ export async function projectEstimate(args: {
   };
   if (sections.length === 0) {
     rows.push(row(rt, root, 'outline', [['outline-author', 1]], stubbed));
-    for (let n = 1; n <= sectionCount; n += 1) {
+    for (let n = 1; n <= (outlineOnly ? 0 : sectionCount); n += 1) {
       rows.push(row(rt, root, `plan §${n}`, [['section-planner', 1]], stubbed));
       rows.push(row(rt, root, `write §${n}`, [['section-drafter', 1]], stubbed));
       rows.push(row(rt, root, `verify §${n}`, verifyCallsFor(plannedAdvisoryWork(defaultWords, 0, perParagraph)), stubbed));
     }
-  } else {
+  } else if (!outlineOnly) {
     for (const { n, suffix, slug } of sections) {
       const id = formatSectionId(sectionIdOf(n, suffix));
       const st = readSectionInfo(sectionPlan(n, slug, root));
@@ -604,16 +617,20 @@ export async function projectEstimate(args: {
         : sectionCount * plannedAdvisoryWork(defaultWords, 0, perParagraph).paragraphs;
   // D-21-27: compile smooths each boundary and judges the cross-section
   // claims; done humanizes each section (when the skill is installed).
-  const compileCalls = compileCallsFor(root, sectionCount);
-  const doneCalls: Array<[string, number]> = [...humanizerCallsFor(root, sectionCount), ['orphan-label', paperParagraphs]];
-  if (compiled === null) {
+  const compileCalls = outlineOnly ? [] : compileCallsFor(root, sectionCount);
+  const doneCalls: Array<[string, number]> = outlineOnly ? [] : [...humanizerCallsFor(root, sectionCount), ['orphan-label', paperParagraphs]];
+  if (outlineOnly) {
+    if (outlineDoneState(root).state !== 'current') {
+      rows.push({ step: 'done', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls (outline only)' });
+    }
+  } else if (compiled === null) {
     rows.push(
       compileCalls.length > 0
         ? row(rt, root, 'compile', compileCalls, stubbed)
         : { step: 'compile', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' },
     );
   }
-  const finalState = finalMdState(root);
+  const finalState = outlineOnly ? 'current' : finalMdState(root);
   if (finalState === 'absent' || finalState === 'stale') {
     rows.push(row(rt, root, 'done', doneCalls, stubbed));
   }

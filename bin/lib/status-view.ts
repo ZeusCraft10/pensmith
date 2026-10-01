@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadState } from './state.js';
 import { readSectionInfo, resolveNextAction, sectionDraftState, unverifiableSectionDetail, type RouterDecision } from './router.js';
-import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
+import { humanizerSkillPath, paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import { CURRENT_CONFIG_VERSION, effectiveConfigRows, paperConfigPath, readPaperModeSync, tryReadPaperConfigSync } from './config.js';
 import { parseIntakeMd } from './intake-parse.js';
@@ -348,6 +348,18 @@ function fmtValue(v: unknown): string {
 function cacheCell(provider: Parameters<typeof systemCacheReach>[0], model: string | null, slug: string): { column: string; detail: string } {
   if (model === null) return { column: 'n/a', detail: 'no model set' };
   let systemTokens: number;
+  if (!slugSpec(slug).template) {
+    // A model slug with no template (S-06): the `humanizer`'s system prompt is
+    // the user's installed skill (humanizer.ts), so its cache reach is that file's.
+    const skill = humanizerSkillPath();
+    if (skill === null) return { column: 'n/a', detail: 'no humanizer skill installed' };
+    try {
+      systemTokens = estimateTokens(readFileSync(skill, 'utf8').length);
+    } catch {
+      return { column: 'n/a', detail: 'no humanizer skill installed' };
+    }
+    return describeCacheReach(systemCacheReach(provider, model, systemTokens));
+  }
   try {
     systemTokens = estimateTokens(loadPrompt(slug).length);
   } catch {

@@ -1,7 +1,8 @@
 // bin/lib/doctor/probes/pandoc-presence.ts
 //
 // DOCT-02c: Pandoc binary on PATH probe.
-// D-15 severity: PASS when pandoc --version exits 0; WARN when missing.
+// D-15 severity: PASS when pandoc --version exits 0; WARN when missing (done
+// then uses its built-in docx / PDF / LaTeX writers — EXP-08, EXP-09).
 // D-19 read-only: spawns read-only binary query only.
 // Pitfall 8: NEVER exec() (shell-interpolation risk) — always execFileSync with argv array.
 
@@ -24,7 +25,7 @@ export const pandocPresenceProbe: Probe = {
     return {
       id: 'pandoc-presence',
       severity: 'WARN',
-      summary: 'pandoc not found on PATH — `pensmith done` cannot export .docx or .pdf (it falls back to Markdown).',
+      summary: 'pandoc not found on PATH — `pensmith done` makes .docx, .pdf and .tex with its built-in writers (a Markdown subset; never a Markdown fallback).',
       fix: 'Install pandoc: https://pandoc.org/installing.html',
     };
   },

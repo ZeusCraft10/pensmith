@@ -72,9 +72,8 @@ import { orderedOutlineSections, outlineSectionId, type OutlineDocument } from '
 import { out } from './output-sink.js';
 import { paperDir } from './paths.js';
 import { registeredSectionsSync, sectionRegistryProblem } from './section-registry.js';
-import { gateRefusals, loadBibliography, recheckKeys, recomputeGate, type LoadedBibliography } from './verify/gate.js';
-import { decidedRetractions, type DecidedRetraction } from './verify/freshness.js';
-import { runFreshnessForDraft } from './verify/pass1.js';
+import { gateRefusals, loadBibliography, recheckKeys, recomputeGate } from './verify/gate.js';
+import { recheckUnknownRetractions } from './done-gate.js';
 
 /** The formats an outline export can be written in (exporter.ts ExportFormat). */
 const OUTLINE_FORMATS: readonly ExportFormat[] = ['md', 'docx', 'pdf', 'latex'];
@@ -237,29 +236,6 @@ export async function annotatedBibliographyMarkdown(input: AnnotatedBibliography
     );
   }
   return lines.join('\n');
-}
-
-/** The re-check of `unknown` retraction statuses (done.ts recheckUnknownRetractions, VRFY-15): refusal lines and the decided statuses. */
-async function recheckUnknownRetractions(
-  paperRoot: string,
-  text: string,
-  bib: LoadedBibliography,
-): Promise<{ retracted: string[]; decided: Record<string, DecidedRetraction> }> {
-  const none = { retracted: [] as string[], decided: {} as Record<string, DecidedRetraction> };
-  if (networkMode().dryRun || !bib.exists || bib.problems.length > 0) return none;
-  let results;
-  try {
-    results = await runFreshnessForDraft(text, bib.path, { bibEntries: bib.entries, root: paperRoot, onlyRecheck: true, record: false });
-  } catch {
-    return none;
-  }
-  const retracted = results
-    .filter((r) => r.recheck?.status === 'retracted')
-    .map(
-      (r) =>
-        `citation [@${r.citekey}] is RETRACTED — ${r.recheck?.details ?? 'it appears in Retraction Watch'} (re-checked now: LIBRARY.json had its retraction status unknown) — replace the source`,
-    );
-  return { retracted, decided: decidedRetractions(results) };
 }
 
 /** A refusal: the lines on stdout, the exit code returned. */

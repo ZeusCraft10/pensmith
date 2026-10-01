@@ -196,6 +196,17 @@ test('CONF-01 / RUN-26: `pensmith status --config` prints values, runtime and pe
     // The effort shown is the one SENT: claude-haiku-4-5 takes no effort parameter;
     // its 4096-token cache minimum is above every judgment template.
     assert.match(out, /orphan-label\s+judgment\s+claude-haiku-4-5\s+effort n\/a\s+cache no\s+\(model: default; effort: not sent for this model; cache: system prompt ~\d+ tokens is below the 4096-token minimum for claude-haiku-4-5 \(marked, not cached\)\)/);
+    // S-06 / D-21-18: the template-free `humanizer` slug's system prompt is the
+    // user's skill — with none installed it says so, never "failed its hash check".
+    assert.match(out, /humanizer\s+generation\s+claude-sonnet-5\s+.*cache: no humanizer skill installed\)/);
+    assert.doesNotMatch(out, /failed its hash check/);
+    // With the skill installed, the row measures the skill's body.
+    const skillDir = path.join(sb.dataDir, '.claude', 'skills', 'humanizer');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), `---\nname: humanizer\n---\n${'Write plainly. '.repeat(400)}\n`);
+    const r2 = sb.runCli(['status', '--config', '--model', 'claude-sonnet-5'], { env: { ANTHROPIC_API_KEY: 'sk-test-config-0001' } });
+    assert.equal(r2.status, 0, r2.stderr);
+    assert.match(r2.stdout, /humanizer\s+generation\s+claude-sonnet-5\s+.*cache: system prompt ~\d+ tokens reaches the 1024-token minimum for claude-sonnet-5/);
   });
 });
 

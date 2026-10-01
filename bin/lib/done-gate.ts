@@ -34,6 +34,8 @@ import { tryReadPaperConfigSync } from './config.js';
 import { readQuoteAcceptances, sectionDirOfPlan } from './quote-acceptance.js';
 import { extractCitedKeysForVerification } from './citation-token.js';
 import { networkMode } from './http-mock.js';
+import { runFreshnessForDraft } from './verify/pass1.js';
+import { decidedRetractions, type DecidedRetraction } from './verify/freshness.js';
 import type { Pass2Result, Pass2Verdict } from './verify/pass2.js';
 
 // ---------------------------------------------------------------------------
@@ -592,6 +594,55 @@ export function readSectionAdvisory(paperRoot: string, sections: readonly DoneSe
     const pass2Rows = pass2 === 'judged' ? parseSectionPass2Rows(md, name, (v) => v !== 'SUPPORTED') : [];
     const p4 = parsePass4Orphans(md);
     out.push({ section: s.id, slug: s.identity.slug, pass2, pass2Rows, pass4: p4.state, orphans: p4.orphans });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// The live re-check of `unknown` retraction statuses (VRFY-15, D-20-13)
+// ---------------------------------------------------------------------------
+
+/** What done's re-check of `unknown` retraction statuses found (VRFY-15, D-20-13). */
+export interface RetractionRecheck {
+  /** One refusal line per cited source found retracted now. */
+  readonly retracted: string[];
+  /** The decided statuses (and an `unknown` that stays so for good, with its reason), recorded once done exports. */
+  readonly decided: Record<string, DecidedRetraction>;
+}
+
+/**
+ * Re-check, live, the retraction status of every source `text` cites whose
+ * LIBRARY.json status is `unknown` because a lookup failed (research or an
+ * earlier verify could not decide it) — never one whose agency publishes no
+ * retraction data (recorded; it stays unknown for good). The re-check sends no
+ * DOI HEAD, and a status it decides (or records for good) is never asked
+ * again, so a second done on an unchanged paper asks nothing (VRFY-26). Nothing is written
+ * here. Skipped under --dry-run and for a bibliography that does not parse;
+ * never throws (a failed re-check leaves the status unknown, as verify does —
+ * the gate core's Pass 1 still decides). Shared by draft-mode done and the
+ * outline-only export (outline-export.ts). `bib` defaults to the paper's.
+ */
+export async function recheckUnknownRetractions(
+  paperRoot: string,
+  text: string,
+  bib: LoadedBibliography = loadBibliography(paperRoot),
+): Promise<RetractionRecheck> {
+  const none: RetractionRecheck = { retracted: [], decided: {} };
+  if (networkMode().dryRun) return none;
+  if (!bib.exists || bib.problems.length > 0) return none;
+  let results;
+  try {
+    results = await runFreshnessForDraft(text, bib.path, { bibEntries: bib.entries, root: paperRoot, onlyRecheck: true, record: false });
+  } catch {
+    return none;
+  }
+  const out: RetractionRecheck = { retracted: [], decided: decidedRetractions(results) };
+  for (const r of results) {
+    if (r.recheck?.status === 'retracted') {
+      out.retracted.push(
+        `citation [@${r.citekey}] is RETRACTED — ${r.recheck.details ?? 'it appears in Retraction Watch'} (re-checked now: LIBRARY.json had its retraction status unknown) — replace the source`,
+      );
+    }
   }
   return out;
 }

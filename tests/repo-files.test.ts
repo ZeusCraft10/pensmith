@@ -217,8 +217,10 @@ test('plugin/references/doctor-output.md hash-pin (D-18)', () => {
   // variable, and the value must be a plain address; then in Phase 23a
   // (PLUG-02): the file moved to plugin/references/, and mcp-sdk-presence,
   // build-artifact-resolves and intake-outline-verify-wiring describe the
-  // plugin bundle plugin/dist/mcp/server.mjs and the plugin/workflows bodies.
-  const PINNED = 'a2308e6818c90c80506ec04e6f34c94c9a7cd659a86688a107bdcbd071f19633';
+  // plugin bundle plugin/dist/mcp/server.mjs and the plugin/workflows bodies;
+  // then at the Phase 21 integration: without pandoc, done makes the requested
+  // format with its built-in writers (EXP-08, EXP-09) — no Markdown fallback.
+  const PINNED = 'cd6e4f1f7c06e0902117c5537ce8111491eaf0d9ab00cca9b6b6b425b3c2caa0';
   assert.equal(hash, PINNED, `plugin/references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

@@ -154,9 +154,22 @@ test('EXP-14 / EXP-15 (built CLI, mock LLM): every humanizer outcome on one pape
   });
 });
 
-test('EXP-14: the Task-transport banner and seam are gone from done and the humanizer', () => {
-  for (const rel of ['../bin/cli/done.ts', '../bin/lib/humanizer.ts', '../bin/lib/honesty.ts']) {
-    const src = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
-    assert.doesNotMatch(src, /no Task transport|TaskRunner|__setTaskRunnerForTest/, rel);
-  }
+test('EXP-14: the Task-transport banner and seam are gone from bin, mcp, hooks and plugin (21-PLAN §7.3)', () => {
+  // The committed bundles under plugin/dist are built from these sources and
+  // drift-checked by `npm run bundle:check`, so they are not read here.
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  const skip = new Set([join(root, 'plugin', 'dist')]);
+  const files: string[] = [];
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (skip.has(full)) continue;
+      if (statSync(full).isDirectory()) walk(full);
+      else if (/\.(?:ts|mjs|cjs|js|md|json)$/.test(name)) files.push(full);
+    }
+  };
+  for (const top of ['bin', 'mcp', 'hooks', 'plugin']) walk(join(root, top));
+  assert.ok(files.length > 50, `scanned ${files.length} files`);
+  const hits = files.filter((f) => /no Task transport|TaskRunner|__setTaskRunnerForTest|runHumanizer\b/.test(readFileSync(f, 'utf8')));
+  assert.deepEqual(hits, []);
 });
