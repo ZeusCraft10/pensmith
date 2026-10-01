@@ -466,6 +466,12 @@ the outline export (`bin/lib/outline-export.ts` `runOutlineDone`) after step 0
 plagiarism` (and their aliases) say they are skipped — there is no prose — and
 write nothing; `--only export` is the outline export:
 
+0. An OUTLINE.md the stubbed model wrote (`pensmith outline` under
+   `PENSMITH_NO_LLM=1`, outside `--dry-run`, writes the line `<!-- stub outline
+   (no model configured) — not a real outline -->` after its title) is
+   placeholders, never a deliverable (VRFY-24): done refuses it (EXIT_BLOCKED)
+   and the router reports attention naming `pensmith outline --force` instead
+   of routing to done. Deleting the line makes the outline the user's own.
 1. The listed sources are the citekeys the outline assigns (section order, each
    once). The outline document — title, thesis, each section's heading with its
    role, word target, purpose and its sources as one citation — is checked by
@@ -477,11 +483,17 @@ write nothing; `--only export` is the outline export:
 2. The `export-confirm` gate (`--yolo` skips it; without a terminal it refuses
    with exit 3).
 3. `.paper/ANNOTATED-BIBLIOGRAPHY.md`: per source, its reference in the paper's
-   style, its tier, the abstract's leading sentences up to 60 words labelled
-   "Summary (abstract excerpt)" (no model call; "no abstract available" without
-   one), why it is relevant (the research evaluator's reason) and the sections
-   it supports. Every value read from the library is escaped: the file holds no
-   citation and no markup. A value that carries an attribution, a direct quote
+   style, its tier, the leading sentences (up to 60 words, cut from the text,
+   never rebuilt) of the abstract its REGISTRAR records — asked where Pass 1
+   asks it (a DOI at Crossref else the agency doi.org names, an arXiv id at
+   arXiv, a PMID at PubMed), labelled "Summary (abstract excerpt, from the
+   <registrar> record)"; never LIBRARY.json's `abstract`, a local value a
+   shared paper may carry with any text (no model call; "no abstract available
+   (<why>)" when the registrar records none, did not answer, or the source has
+   no identifier it answers for) — why it is relevant (the research
+   evaluator's reason; a stubbed evaluator's "no relevance judgment was made"
+   is "not recorded (no model judged it)") and the sections it supports.
+   Every value is escaped: the file holds no citation and no markup. A value that carries an attribution, a direct quote
    or an identifier no section verified (an abstract's `Smith et al. (2019)`, a
    `why_relevant` that names `[3]`) is left out of the file — "left out — it
    holds an attribution, a quotation or an identifier no section verified" —

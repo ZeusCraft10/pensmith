@@ -93,7 +93,7 @@ async function recordingFsPaths<T>(fn: () => Promise<T>): Promise<{ paths: strin
   } catch (e) {
     result = e;
   } finally {
-    for (const [n, orig] of saved) fsAny[n] = orig;
+    for (const [n, orig] of saved) fsAny[n] = orig as (...a: unknown[]) => unknown;
     syncBuiltinESMExports();
   }
   return { paths, result };

@@ -346,10 +346,34 @@ function cell(text: string): string {
 }
 
 /**
+ * The line `pensmith outline` writes after the H1 of an OUTLINE.md the model
+ * did not write — the outline-author ran stubbed (PENSMITH_NO_LLM=1, outside
+ * --dry-run): its thesis and purposes are placeholders. An outline-only
+ * paper's done refuses such an outline and the router names `pensmith outline
+ * --force` (VRFY-24 for outline mode; Phase 21 review round 3). Deleting the
+ * line makes the outline the user's own. The parser ignores it.
+ */
+export const STUB_OUTLINE_MARKER = '<!-- stub outline (no model configured) — not a real outline -->';
+
+/** True when an OUTLINE.md text carries the stub-outline marker on a line of its own. */
+export function hasStubOutlineMarker(text: string): boolean {
+  return text.split(/\r?\n/).some((l) => l.trim() === STUB_OUTLINE_MARKER);
+}
+
+/** Why an outline-only paper's stub outline is not exported (done's refusal, the router's attention). `folder` is `.paper` or `.paper-dry-run`. */
+export function stubOutlineReason(folder: string): string {
+  return (
+    `${folder}/OUTLINE.md was written without a model (PENSMITH_NO_LLM=1): its thesis and section purposes are placeholders, not an outline to hand in — ` +
+    'run `pensmith outline --force` with a model configured (or edit OUTLINE.md and delete its stub-outline line to make it your own)'
+  );
+}
+
+/**
  * Render the canonical OUTLINE.md: an H1 title, the thesis, the section table
  * in (n, suffix) order, then one detail line per section (role, purpose). The
  * detail lines never start with '|', so the table scan ignores them.
- * `marker` (the --dry-run offline marker line) goes after the H1 title.
+ * `marker` (the --dry-run offline marker line, or STUB_OUTLINE_MARKER) goes
+ * after the H1 title.
  */
 export function renderOutlineMd(outline: OutlineRenderInput, paperTitle: string, opts: { marker?: string | null } = {}): string {
   const lines: string[] = [`# ${cell(paperTitle) || 'Outline'}`, ''];

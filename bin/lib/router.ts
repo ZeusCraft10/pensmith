@@ -102,6 +102,7 @@ import { ACCEPTABLE_QUOTE_VERDICT } from './verify/verdicts.js';
 import { readCompileInputs, fileSha256 } from './compile-inputs.js';
 import { editedAnnotatedReason, editedFinalReason, finalMdState, humanizeRejectionReason, newerDoneRecordReason, outlineDoneState, readDoneRecordFile, unexportedFinalReason } from './done-record.js';
 import type { Handoff } from './schemas/handoff.js';
+import { hasStubOutlineMarker, stubOutlineReason } from './outline-parse.js';
 
 export type RouterDecision =
   | { verb: 'new' }
@@ -454,6 +455,17 @@ export function isOutlineOnlyDoneDetail(detail: string): boolean {
  */
 function outlineModeDecision(paperRoot: string): RouterDecision {
   const read = outlineDoneState(paperRoot);
+  // An outline the stubbed model wrote is never exported outside --dry-run
+  // (VRFY-24, review round 3): done would refuse it on every run.
+  if (read.state !== 'current' && read.state !== 'edited' && read.state !== 'newer' && !dryRunWorkspaceActive()) {
+    let outlineText = '';
+    try {
+      outlineText = readFileSync(join(paperDir(paperRoot), 'OUTLINE.md'), 'utf8');
+    } catch {
+      outlineText = '';
+    }
+    if (hasStubOutlineMarker(outlineText)) return { verb: 'status', reason: 'attention', detail: stubOutlineReason(basename(paperDir(paperRoot))) };
+  }
   switch (read.state) {
     case 'current':
       return { verb: 'status', reason: 'done', detail: outlineOnlyDoneDetail(read.record?.outline_exports ?? []) };

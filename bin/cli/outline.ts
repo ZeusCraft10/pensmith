@@ -44,9 +44,9 @@ import { atomicWriteFile } from '../lib/atomic-write.js';
 import { parseSectionDirName, projectRoot, sectionDraft, sectionPlan, sectionsDir } from '../lib/paths.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 import { EXIT_ERROR, EXIT_USAGE, PensmithError } from '../lib/exit-codes.js';
-import { complete, assertLlmConfigured, correctiveMessages, StructuredOutputError, type ChatMessage } from '../lib/anthropic.js';
+import { complete, assertLlmConfigured, correctiveMessages, isNoLlmMode, StructuredOutputError, type ChatMessage } from '../lib/anthropic.js';
 import { buildPromptRequest, requestHints, type PromptRequest } from '../lib/prompt-request.js';
-import { renderOutlineMd, type OutlineRow } from '../lib/outline-parse.js';
+import { renderOutlineMd, STUB_OUTLINE_MARKER, type OutlineRow } from '../lib/outline-parse.js';
 import { outlinePath, outlineRejectedPath, readOutlineChecked } from '../lib/outline.js';
 import { outlineProblem } from '../lib/section-registry.js';
 import { readPaperBrief, type PaperBrief } from '../lib/paper-brief.js';
@@ -508,7 +508,11 @@ export const outlineCommand = defineCommand({
     // ── 5. Approval gate (CLAUDE.md non-negotiable: default-ON, skip with --yolo) ──
     const title = brief.title || 'Outline';
     const thesis = accepted.thesis.trim() || brief.thesis;
-    const outlineMd = renderOutlineMd({ thesis, sections: accepted.numbered }, title, { marker });
+    // VRFY-24 (outline mode; review round 3): an outline the stubbed model
+    // wrote outside --dry-run is marked, so done never exports its
+    // placeholders as the deliverable (outline-export.ts, router.ts).
+    const outlineMarker = marker ?? (isNoLlmMode() ? STUB_OUTLINE_MARKER : null);
+    const outlineMd = renderOutlineMd({ thesis, sections: accepted.numbered }, title, { marker: outlineMarker });
     await runApprovalGate(outlineMd, yolo, withheld);
 
     // ── 6. Apply: archive dropped sections, register (stubs for new ones), write OUTLINE.md ──

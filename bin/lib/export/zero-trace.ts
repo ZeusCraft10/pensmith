@@ -63,6 +63,7 @@ import { EXIT_ERROR, PensmithError } from '../exit-codes.js';
 import { OFFLINE_MARKER_PREFIX } from '../http-mock.js';
 import { userHomeDir } from '../paths.js';
 import { STUB_DRAFT_MARKER } from '../verify/gate.js';
+import { STUB_OUTLINE_MARKER } from '../outline-parse.js';
 import { fenceMarkerCount } from '../untrusted-fence.js';
 
 /** The zip entries' date: the ZIP (DOS) epoch, 1980-01-01 — no authoring time in the archive. */
@@ -338,6 +339,11 @@ const MARKERS: ReadonlyArray<[RegExp, string]> = [
   [new RegExp(`(^|\\n)\\s*${escapeRe(OFFLINE_MARKER_PREFIX)}`), 'holds the offline marker line'],
   [new RegExp(escapeRe(STUB_DRAFT_MARKER)), 'holds the stub-draft marker'],
   [/LLM STUBBED \(/, 'holds the LLM-stubbed banner'],
+  // A stub model's own reasons (llm-stubs.ts: `LLM stubbed: kept for your
+  // review; …`, `LLM stubbed: no … judgment was made`) and the stub-outline
+  // line (review round 3).
+  [/\bLLM stubbed: (?:kept for your review|no [a-z-]+ judgment)/, 'holds a stubbed model\'s note'],
+  [new RegExp(escapeRe(STUB_OUTLINE_MARKER)), 'holds the stub-outline marker'],
   [/<!--\s*pensmith\b/i, 'holds a pensmith comment'],
 ];
 

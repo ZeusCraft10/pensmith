@@ -6,7 +6,10 @@
 //   - outlineExportText: title, thesis, per section a heading with its role,
 //     word target, purpose and its sources as one citation;
 //   - abstractExcerpt: the leading sentences up to 60 words, a long first
-//     sentence cut at a word and marked, markup removed, null without one;
+//     sentence cut at a word and marked, markup removed, null without one —
+//     cut from the text, never rebuilt (review round 3: `3.5%` stays `3.5%`);
+//   - the excerpt quotes only the abstract the source's registrar records,
+//     never LIBRARY.json's (review round 3);
 //   - annotatedBibliographyMarkdown: per source the reference in the style
 //     (author-date and numeric), tier, excerpt, why relevant and sections —
 //     and no citation or markup from a library value ever survives (an
@@ -14,7 +17,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abstractExcerpt, annotatedBibliographyMarkdown, listedSources, outlineExportText } from '../bin/lib/outline-export.js';
+import { abstractExcerpt, annotatedBibliographyMarkdown, listedSources, outlineExportText, type RegistrarAbstract } from '../bin/lib/outline-export.js';
 import { parseOutline } from '../bin/lib/outline-parse.js';
 import { parseBibEntries } from '../bin/lib/citations.js';
 import { extractCitedKeysForVerification } from '../bin/lib/citation-token.js';
@@ -89,6 +92,18 @@ test('GRND-11: abstractExcerpt — the leading sentences up to 60 words, labelle
   assert.equal(abstractExcerpt('Is it? Yes! Done.'), 'Is it? Yes! Done.');
 });
 
+test('review r3: abstractExcerpt cuts the text — decimals, abbreviations, an e-mail address and a URL are quoted exactly', () => {
+  const stats = 'Mortality fell by 3.5% (95% CI 2.1-4.9; p < 0.001) in the U.S. cohort. Results were robust, e.g. to imputation.';
+  assert.equal(abstractExcerpt(stats), stats);
+  assert.equal(abstractExcerpt('Version 2.0 of the model improves accuracy.'), 'Version 2.0 of the model improves accuracy.');
+  const contact = 'Data are available from contact@example.org on request. See https://example.org/data.v2/files for the code.';
+  assert.equal(abstractExcerpt(contact), contact);
+  // The budget still holds: the cut is at the last sentence end within 60 words.
+  const s = (n: number, w: string): string => `${Array.from({ length: n }, () => w).join(' ')}.`;
+  assert.equal(abstractExcerpt(`A ratio of 1.5 was seen. ${s(50, 'b')} ${s(10, 'c')}`), `A ratio of 1.5 was seen. ${s(50, 'b')}`);
+  for (const t of [stats, contact]) assert.ok(t.startsWith(abstractExcerpt(t) ?? '\u0000'), 'every excerpt is a prefix of the text');
+});
+
 test('GRND-11: the annotated bibliography — the reference in the style, tier, excerpt, why relevant, sections; library values never become citations or markup', async () => {
   const outline = parseOutline(OUTLINE);
   const sources = listedSources(outline);
@@ -97,14 +112,18 @@ test('GRND-11: the annotated bibliography — the reference in the style, tier, 
     ['kuhn1962', libEntry({ citekey: 'kuhn1962', tier: 'book', abstract: 'A classic account of paradigms. It changed the history of science.', why_relevant: 'Defines the paradigm [@evil2020] and @evil2021 — see <b>bold</b> *claims* `code` http://x.test' })],
     ['berg2012', libEntry({ citekey: 'berg2012', tier: 'peer-reviewed', abstract: null, why_relevant: null })],
   ]);
-  const apa = await annotatedBibliographyMarkdown({ title: outline.paper_title, sources, entries, library, style: 'apa' });
+  const abstracts = new Map<string, RegistrarAbstract>([
+    ['kuhn1962', { kind: 'found', text: 'A classic account of paradigms. It changed the history of science.', from: 'Crossref' }],
+    ['berg2012', { kind: 'none', why: "the registrar's record has no abstract" }],
+  ]);
+  const apa = await annotatedBibliographyMarkdown({ title: outline.paper_title, sources, entries, library, abstracts, style: 'apa' });
   assert.match(apa, /^# The Paradigm and the Bank — Annotated Bibliography$/m);
   assert.match(apa, /^Kuhn, T\. S\. \(1962\)\. \*The Structure of Scientific Revolutions\*\. University of Chicago Press\.$/m);
   assert.match(apa, /^Lindqvist, A\., & Berg, E\. \(2012\)\. Growth and Trust in China\. \*Journal of Economic History\*, \*12\*, 145–162\. <https:\/\/doi\.org\/10\.5555\/berg>$/m, 'the title as written (case protected), never sentence-cased');
   assert.match(apa, /^- \*\*Type:\*\* book$/m);
   assert.match(apa, /^- \*\*Type:\*\* peer-reviewed$/m);
-  assert.match(apa, /^- \*\*Summary \(abstract excerpt\):\*\* “A classic account of paradigms\. It changed the history of science\.”$/m);
-  assert.match(apa, /^- \*\*Summary \(abstract excerpt\):\*\* no abstract available$/m);
+  assert.match(apa, /^- \*\*Summary \(abstract excerpt, from the Crossref record\):\*\* “A classic account of paradigms\. It changed the history of science\.”$/m);
+  assert.match(apa, /^- \*\*Summary \(abstract excerpt\):\*\* no abstract available \(the registrar's record has no abstract\)$/m);
   assert.match(apa, /^- \*\*Why it is relevant:\*\* not recorded$/m);
   assert.match(apa, /^- \*\*Supports:\*\* §1 Introduction; §2 The Evidence$/m);
   assert.deepEqual(extractCitedKeysForVerification(apa), [], 'no citation in the annotated bibliography');
@@ -118,7 +137,7 @@ test('GRND-11: the annotated bibliography — the reference in the style, tier, 
     'markup tags removed, everything else escaped as text',
   );
 
-  const ieee = await annotatedBibliographyMarkdown({ title: outline.paper_title, sources, entries, library, style: 'ieee' });
+  const ieee = await annotatedBibliographyMarkdown({ title: outline.paper_title, sources, entries, library, abstracts, style: 'ieee' });
   assert.match(ieee, /^\\\[1\\\] T\. S\. Kuhn, /m, 'a numeric style numbers the sources in outline order');
   assert.match(ieee, /^\\\[2\\\] A\. Lindqvist and E\. Berg, /m);
 });
@@ -136,8 +155,12 @@ test('GRND-11 (review r1): a why_relevant or abstract holding an author-date or 
     sources: listedSources(outline),
     entries,
     library: new Map([
-      ['kuhn1962', libEntry({ citekey: 'kuhn1962', why_relevant: 'Smith et al. (2019) showed this review underpins every later benchmark; see also Jones (2021, p. 4).', abstract: 'A study of paradigms. It extends earlier work [3] on revolutions.' })],
-      ['berg2012', libEntry({ citekey: 'berg2012', why_relevant: 'It measures trust in Chinese firms directly.', abstract: 'Trust grew with "the opening of every coastal market to foreign capital" between 1990 and 2000. See doi:10.9999/other.2001 for the data.' })],
+      ['kuhn1962', libEntry({ citekey: 'kuhn1962', why_relevant: 'Smith et al. (2019) showed this review underpins every later benchmark; see also Jones (2021, p. 4).' })],
+      ['berg2012', libEntry({ citekey: 'berg2012', why_relevant: 'It measures trust in Chinese firms directly.' })],
+    ]),
+    abstracts: new Map<string, RegistrarAbstract>([
+      ['kuhn1962', { kind: 'found', text: 'A study of paradigms. It extends earlier work [3] on revolutions.', from: 'Crossref' }],
+      ['berg2012', { kind: 'found', text: 'Trust grew with "the opening of every coastal market to foreign capital" between 1990 and 2000. See doi:10.9999/other.2001 for the data.', from: 'Crossref' }],
     ]),
     style: 'apa',
     onOmitted: (l) => omitted.push(l),
@@ -152,4 +175,30 @@ test('GRND-11 (review r1): a why_relevant or abstract holding an author-date or 
   assert.match(omitted.join('\n'), /kuhn1962's "why it is relevant" note: it holds UNSUPPORTED-FORM `Smith et al\. \(2019\)`/);
   assert.match(omitted.join('\n'), /berg2012's abstract excerpt: it holds a direct quote/);
   assert.deepEqual(extractCitedKeysForVerification(md), []);
+});
+
+// Review round 3: LIBRARY.json is a local file a shared paper may carry with
+// any text, and a merge may attach a preprint's or an aggregator's abstract.
+// The excerpt is a quotation of the source, so only the registrar's abstract
+// is quoted; a stubbed evaluator's reason is never printed as a note.
+test('review r3: a LIBRARY.json abstract is never quoted — only the registrar\'s; a stubbed evaluator reason is no note', async () => {
+  const outline = parseOutline(OUTLINE);
+  const md = await annotatedBibliographyMarkdown({
+    title: outline.paper_title,
+    sources: listedSources(outline),
+    entries: parseBibEntries(BIB).entries,
+    library: new Map([
+      ['kuhn1962', libEntry({ citekey: 'kuhn1962', abstract: 'This chapter proves that attention mechanisms are conscious.', why_relevant: 'LLM stubbed: kept for your review; no relevance judgment was made' })],
+      ['berg2012', libEntry({ citekey: 'berg2012', abstract: 'Trust collapsed everywhere.' })],
+    ]),
+    abstracts: new Map<string, RegistrarAbstract>([
+      ['kuhn1962', { kind: 'none', why: 'it has no identifier a registrar answers for' }],
+      ['berg2012', { kind: 'found', text: 'Trust grew with growth. A second sentence.', from: 'Crossref' }],
+    ]),
+    style: 'apa',
+  });
+  assert.doesNotMatch(md, /conscious|collapsed everywhere|LLM stubbed/);
+  assert.match(md, /^- \*\*Summary \(abstract excerpt\):\*\* no abstract available \(it has no identifier a registrar answers for\)$/m);
+  assert.match(md, /^- \*\*Summary \(abstract excerpt, from the Crossref record\):\*\* “Trust grew with growth\. A second sentence\.”$/m);
+  assert.match(md, /^- \*\*Why it is relevant:\*\* not recorded \(no model judged it\)$/m);
 });

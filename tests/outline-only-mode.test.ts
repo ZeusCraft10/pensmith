@@ -79,7 +79,9 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   const annotated = readFileSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md'), 'utf8');
   assert.match(annotated, /^# .+ — Annotated Bibliography$/m);
   assert.match(annotated, /^- \*\*Type:\*\* /m);
-  assert.match(annotated, /^- \*\*Summary \(abstract excerpt\):\*\* (“.+”|no abstract available)$/m);
+  assert.match(annotated, /^- \*\*Summary \(abstract excerpt(?:, from the [A-Za-z.]+ record)?\):\*\* (“.+”|no abstract available \(.+\))$/m);
+  // Review round 3: the excerpt quotes the registrar's abstract, never LIBRARY.json's.
+  assert.doesNotMatch(annotated, /LLM stubbed/);
   assert.match(annotated, /^- \*\*Why it is relevant:\*\* /m);
   assert.match(annotated, /^- \*\*Supports:\*\* §1 /m);
   assert.doesNotMatch(annotated, /\[@|(^|\s)@[a-z]/m, 'no citation token in the annotated bibliography');
@@ -223,4 +225,49 @@ test('GRND-11 + EXP-03 (Phase 21 integration, built CLI): the outline export run
   assert.doesNotMatch(readFileSync(join(exportDir, 'OUTLINE.md'), 'utf8'), /^\*Sources:\* \([^()\d]+\)$/m, 'the Markdown outline is APA now too');
   assert.match(tex, /Sources:.*\(\D+, \d{4}[a-z]?[;)]/, 'APA cites author and year');
   assert.notEqual(readFileSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md'), 'utf8'), mlaAnnotated, 'the annotated bibliography follows the style');
+});
+
+// Review round 3 (VRFY-24 for outline mode): an outline the stubbed model
+// wrote (PENSMITH_NO_LLM=1, no --dry-run) is placeholders. Repeated bare runs
+// never export it: the router reports attention naming `pensmith outline
+// --force`, and an explicit done refuses (exit 4). Deleting the stub line
+// makes the outline the user's; the stubbed evaluator's reasons are never
+// printed, and a LIBRARY.json abstract is never quoted.
+test('review r3 (built CLI): PENSMITH_NO_LLM outline-only bare runs never export the stub outline; once the user owns it, nothing stubbed or local is quoted', async () => {
+  // Research runs on the recorded corpus (its queries are the mock model's);
+  // the outline is then written with the model stubbed.
+  const { sb, paper } = await outlinePaper('outline-stub', /next: outline/);
+  const env = { PENSMITH_NO_LLM: '1' };
+  const chain = await sb.loop(['--yolo'], { env, maxRuns: 6, until: (r) => /attention|ran done/.test(r.stderr) || r.status !== 0 });
+  const last = chain.at(-1);
+  assert.equal(last?.status, 0, `${last?.stdout}\n${last?.stderr}`);
+  assert.doesNotMatch(chain.map((r) => r.stderr).join('\n'), /ran done/, 'no routed done');
+  assert.match(readFileSync(join(paper, 'OUTLINE.md'), 'utf8'), /^<!-- stub outline \(no model configured\) — not a real outline -->$/m);
+  const st = await sb.run(['status'], { env });
+  assert.match(st.stdout, /current: needs attention/);
+  assert.match(st.stdout, /OUTLINE\.md was written without a model \(PENSMITH_NO_LLM=1\).*`pensmith outline --force`/);
+  const again = await sb.run(['--yolo'], { env });
+  assert.equal(again.status, 0, again.stderr);
+  const d = await sb.run(['done', '--yolo', '--format', 'md'], { env });
+  assert.equal(d.status, 4, `${d.stdout}\n${d.stderr}`);
+  assert.match(d.stdout, /BLOCKED — the outline export refused/);
+  assert.equal(existsSync(join(paper, 'export')), false, 'nothing exported');
+
+  // The user takes the outline as their own: the stub line goes, done exports.
+  const outlineFile = join(paper, 'OUTLINE.md');
+  writeFileSync(outlineFile, readFileSync(outlineFile, 'utf8').replace(/^<!-- stub outline .*\n\n?/m, ''));
+  // A LIBRARY.json abstract is a local value: never quoted as the source's.
+  const libFile = join(paper, 'LIBRARY.json');
+  const lib = JSON.parse(readFileSync(libFile, 'utf8')) as { entries: Array<Record<string, unknown>> };
+  for (const e of lib.entries) {
+    e['abstract'] = 'This chapter proves that attention mechanisms are conscious.';
+    e['why_relevant'] = 'LLM stubbed: kept for your review; no relevance judgment was made';
+  }
+  writeFileSync(libFile, `${JSON.stringify(lib, null, 2)}\n`);
+  const ok = await sb.run(['done', '--yolo', '--format', 'md'], { env });
+  assert.equal(ok.status, 0, `${ok.stdout}\n${ok.stderr}`);
+  const annotated = readFileSync(join(paper, 'export', 'ANNOTATED-BIBLIOGRAPHY.md'), 'utf8');
+  assert.doesNotMatch(annotated, /LLM stubbed|conscious/);
+  assert.match(annotated, /^- \*\*Why it is relevant:\*\* not recorded \(no model judged it\)$/m);
+  for (const name of ['OUTLINE.md', 'ANNOTATED-BIBLIOGRAPHY.md']) await assertScanClean(join(paper, 'export', name), sb.root);
 });

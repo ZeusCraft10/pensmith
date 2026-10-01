@@ -23,8 +23,11 @@
 //      EXIT_APPROVAL);
 //   4. writes the annotated bibliography — per source: the reference in the
 //      paper's style (the same citeproc engine as the export, D-21-03), its
-//      tier, a summary that is the abstract's leading sentences up to 60 words,
-//      labelled as an excerpt (no model call: D-12 adds no prompt slug for it),
+//      tier, a summary that is the leading sentences (up to 60 words) of the
+//      abstract its REGISTRAR records — asked where Pass 1 asks it, never
+//      LIBRARY.json's value (review round 3) — cut from the text and labelled
+//      as an excerpt naming the registrar (no model call: D-12 adds no prompt
+//      slug for it),
 //      why it is relevant (LIBRARY.json `why_relevant`) and the sections it
 //      supports — every free-text value escaped, so the file holds no citation
 //      and no markup the exporter would read as such;
@@ -49,9 +52,11 @@
 // The annotated bibliography is not prose the gate reads, and nothing in it
 // may carry an attribution no section verified (carry-over 4): the
 // references are the verified entries rendered by the export's engine, the
-// titles are the outline's (gated in step 2), and each free-text value from
-// LIBRARY.json — the abstract excerpt and `why_relevant` (the source
-// evaluator's model output; a shared paper's library may carry any text) — is
+// titles are the outline's (gated in step 2), the abstract excerpt is the
+// registrar's own text (review round 3), and each free-text value — the
+// excerpt and LIBRARY.json's `why_relevant` (the source evaluator's model
+// output; a shared paper's library may carry any text; a stubbed evaluator's
+// "no relevance judgment was made" reason is never printed) — is
 // read by the gate's text scanners, the quote reader and the identifier
 // reader first: a value holding an author-date or numbered attribution, a
 // direct quote or an identifier is omitted, and done says so.
@@ -85,7 +90,7 @@ import { networkMode } from './http-mock.js';
 import { LibraryNotFoundError, recordLastVerified, recordRetractionStatuses, tryLoadLibrary, type LibraryEntry } from './library.js';
 import { plainText } from './markup.js';
 import { outlinePath, readOutlineChecked } from './outline.js';
-import { orderedOutlineSections, outlineSectionId, type OutlineDocument } from './outline-parse.js';
+import { hasStubOutlineMarker, orderedOutlineSections, outlineSectionId, stubOutlineReason, type OutlineDocument } from './outline-parse.js';
 import { out } from './output-sink.js';
 import { paperDir } from './paths.js';
 import { registeredSectionsSync, sectionRegistryProblem } from './section-registry.js';
@@ -93,6 +98,9 @@ import { gateRefusals, loadBibliography, recheckKeys, recomputeGate, TEXT_SCANNE
 import { extractQuotes } from './quote-extractor.js';
 import { findBareIdentifiers } from './doi.js';
 import { recheckUnknownRetractions } from './done-gate.js';
+import { registrarLookup } from './source-input.js';
+import { sources as sourceAdapters } from './sources/index.js';
+import type { LookupResult } from './sources/lookup.js';
 
 /** The formats an outline export can be written in (exporter.ts ExportFormat). */
 const OUTLINE_FORMATS: readonly ExportFormat[] = ['md', 'docx', 'pdf', 'latex'];
@@ -172,24 +180,67 @@ export function outlineExportText(outline: OutlineDocument): string {
  * The abstract's leading sentences, up to `maxWords` words (a first sentence
  * longer than that is cut at a word and marked `…`), markup removed and white
  * space collapsed; null when there is no abstract. No model call.
+ *
+ * The excerpt is a quotation, so it is CUT from the text, never rebuilt
+ * (review round 3: rejoining pieces split at every period turned `3.5%` into
+ * `3. 5%`): a sentence ends only at `.`, `!` or `?` (and any closing quote or
+ * bracket) followed by white space or the end, so a decimal, an abbreviation
+ * inside a word (`e.g.`), an e-mail address or a URL never ends one.
  */
 export function abstractExcerpt(abstract: string | null | undefined, maxWords = 60): string | null {
   if (abstract === null || abstract === undefined) return null;
   const text = plainText(abstract).replace(/\s+/gu, ' ').trim();
   if (text === '') return null;
-  const sentences = text.match(/[^.!?]+(?:[.!?]+["'”’)\]]*|$)/gu) ?? [text];
-  const kept: string[] = [];
-  let words = 0;
-  for (const raw of sentences) {
-    const sentence = raw.trim();
-    if (sentence === '') continue;
-    const count = sentence.split(' ').length;
-    if (kept.length === 0 && count > maxWords) return `${sentence.split(' ').slice(0, maxWords).join(' ')} …`;
-    if (words + count > maxWords) break;
-    kept.push(sentence);
-    words += count;
+  const wordsIn = (t: string): number => t.split(' ').filter((w) => w !== '').length;
+  let cut = 0;
+  for (const m of text.matchAll(/[.!?]+["'”’)\]]*(?= |$)/gu)) {
+    const end = m.index + m[0].length;
+    if (wordsIn(text.slice(0, end)) > maxWords) break;
+    cut = end;
   }
-  return kept.join(' ');
+  if (cut > 0) return text.slice(0, cut);
+  // No sentence end within the budget: the first maxWords words, marked.
+  const words = text.split(' ');
+  return words.length <= maxWords ? text : `${words.slice(0, maxWords).join(' ')} …`;
+}
+
+/**
+ * A listed source's abstract as its registrar records it (review round 3: the
+ * annotated bibliography quotes only that — never LIBRARY.json's `abstract`,
+ * a local value a shared paper may carry with any text, which a merge may
+ * also have taken from a preprint or an aggregator), or why there is none.
+ */
+export type RegistrarAbstract =
+  | { readonly kind: 'found'; readonly text: string; readonly from: string }
+  | { readonly kind: 'none'; readonly why: string };
+
+const REGISTRAR_NAMES: Readonly<Record<string, string>> = { crossref: 'Crossref', datacite: 'DataCite', 'doi.org': 'doi.org', arxiv: 'arXiv', pubmed: 'PubMed' };
+
+/**
+ * The abstract the registrar of a listed source records — asked where Pass 1
+ * asks it (a DOI at Crossref, else the agency doi.org names; else an arXiv id
+ * at arXiv; else a PMID at PubMed) through the HTTP cache the gate's Pass-1
+ * re-verification just filled — or why there is none. Never throws.
+ */
+export async function registrarAbstract(lib: LibraryEntry | undefined, entry: Record<string, unknown> | undefined): Promise<RegistrarAbstract> {
+  if (networkMode().dryRun) return { kind: 'none', why: 'a dry run asks no registrar' };
+  const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+  const doi = str(lib?.doi) || str(entry?.['DOI']);
+  const arxiv = str(lib?.arxiv);
+  const pmid = str(lib?.pmid) || str(entry?.['PMID']);
+  let r: LookupResult;
+  try {
+    if (doi !== '') r = await registrarLookup(doi);
+    else if (arxiv !== '') r = await sourceAdapters.arxiv.lookupById(arxiv);
+    else if (pmid !== '') r = await sourceAdapters.pubmed.lookupById(pmid);
+    else return { kind: 'none', why: 'it has no identifier a registrar answers for' };
+  } catch {
+    return { kind: 'none', why: 'the registrar did not answer' };
+  }
+  if (r.kind !== 'found') return { kind: 'none', why: r.kind === 'not-found' ? 'the registrar has no record of it' : 'the registrar did not answer' };
+  const text = str(r.candidate.abstract);
+  if (text === '') return { kind: 'none', why: "the registrar's record has no abstract" };
+  return { kind: 'found', text, from: REGISTRAR_NAMES[r.candidate.source] ?? r.candidate.source };
 }
 
 /** A source's tier as the annotated bibliography names it. */
@@ -221,8 +272,10 @@ export interface AnnotatedBibliographyInput {
   readonly sources: readonly ListedSource[];
   /** The parsed bibliography entries (CSL-JSON) of the listed keys. */
   readonly entries: ReadonlyArray<Record<string, unknown>>;
-  /** LIBRARY.json's entries by citekey (tier, abstract, why_relevant). */
+  /** LIBRARY.json's entries by citekey (tier, why_relevant — never its abstract). */
   readonly library: ReadonlyMap<string, LibraryEntry>;
+  /** Each source's abstract as its registrar records it (registrarAbstract); a key absent here has none. */
+  readonly abstracts: ReadonlyMap<string, RegistrarAbstract>;
   readonly style: string;
   /** Called once per free-text value left out (uncheckedAttribution), with the line done prints. */
   readonly onOmitted?: (line: string) => void;
@@ -262,8 +315,13 @@ export async function annotatedBibliographyMarkdown(input: AnnotatedBibliography
     const lib = input.library.get(s.key);
     const bibEntry = input.entries.find((e) => String(e['id']) === s.key);
     lines.push(ref !== undefined ? bibEntryMarkdown(ref) : escapedLine(s.key), '');
-    const abstract = abstractExcerpt(lib?.abstract ?? (typeof bibEntry?.['abstract'] === 'string' ? bibEntry['abstract'] : null));
-    const why = lib?.why_relevant ?? null;
+    // The excerpt is a quotation of the source: only the registrar's abstract
+    // (review round 3), never LIBRARY.json's or the bib's, which nothing checks.
+    const registrar = input.abstracts.get(s.key) ?? { kind: 'none', why: 'the registrar was not asked' };
+    const abstract = registrar.kind === 'found' ? abstractExcerpt(registrar.text) : null;
+    // A stubbed evaluator's reason (no relevance judgment was made) is no note.
+    const stubbedWhy = typeof lib?.why_relevant === 'string' && /^LLM stubbed: /.test(lib.why_relevant);
+    const why = stubbedWhy ? null : (lib?.why_relevant ?? null);
     // Carry-over 4: a free-text value that carries an attribution, a quote or
     // an identifier no section verified is left out, and done says so.
     const checked = (label: string, value: string | null): { value: string | null; omitted: string | null } => {
@@ -276,10 +334,14 @@ export async function annotatedBibliographyMarkdown(input: AnnotatedBibliography
     };
     const a = checked('abstract excerpt', abstract);
     const w = checked('"why it is relevant" note', why);
+    const summary =
+      a.value !== null && registrar.kind === 'found'
+        ? `- **Summary (abstract excerpt, from the ${registrar.from} record):** “${escapeMarkdownText(a.value)}”`
+        : `- **Summary (abstract excerpt):** ${a.omitted ?? `no abstract available (${registrar.kind === 'none' ? registrar.why : "the registrar's record has no abstract"})`}`;
     lines.push(
       `- **Type:** ${tierLabel(lib?.tier)}`,
-      `- **Summary (abstract excerpt):** ${a.value !== null ? `“${escapeMarkdownText(a.value)}”` : (a.omitted ?? 'no abstract available')}`,
-      `- **Why it is relevant:** ${w.value !== null ? escapedLine(w.value) : (w.omitted ?? 'not recorded')}`,
+      summary,
+      `- **Why it is relevant:** ${w.value !== null ? escapedLine(w.value) : (w.omitted ?? (stubbedWhy ? 'not recorded (no model judged it)' : 'not recorded'))}`,
       `- **Supports:** ${s.sections.map((x) => `§${x.id} ${escapedLine(x.title)}`).join('; ')}`,
       '',
     );
@@ -332,6 +394,11 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
   const registry = sectionRegistryProblem(paperRoot);
   if (registry !== null) return refuse('BLOCKED — the outline export refused:', [registry], EXIT_BLOCKED);
   const outlineBytes = readFileSync(outlinePath(paperRoot));
+  // VRFY-24 for outline mode (review round 3): an outline the stubbed model
+  // wrote is placeholders — exported only as a --dry-run's labelled trial.
+  if (!networkMode().dryRun && hasStubOutlineMarker(outlineBytes.toString('utf8'))) {
+    return refuse('BLOCKED — the outline export refused:', [stubOutlineReason(folder)], EXIT_BLOCKED);
+  }
   const outline = read.doc;
   const sources = listedSources(outline);
   if (sources.length === 0) {
@@ -384,7 +451,9 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
   const wanted = new Set(keys);
   const entries = gate.bib.entries.filter((e) => wanted.has(String(e['id'])));
   const omitted: string[] = [];
-  const annotated = await annotatedBibliographyMarkdown({ title: outline.paper_title, sources, entries, library: libraryByKey, style: opts.style, onOmitted: (l) => omitted.push(l) });
+  const abstracts = new Map<string, RegistrarAbstract>();
+  for (const k of keys) abstracts.set(k, await registrarAbstract(libraryByKey.get(k), entries.find((e) => String(e['id']) === k)));
+  const annotated = await annotatedBibliographyMarkdown({ title: outline.paper_title, sources, entries, library: libraryByKey, abstracts, style: opts.style, onOmitted: (l) => omitted.push(l) });
   for (const l of omitted) out(`pensmith done: note — ${l}\n`);
   if (extractCitedKeysForVerification(annotated).length > 0) {
     throw new ExportFormatError('the annotated bibliography would hold a citation the gate did not read — nothing was exported');
