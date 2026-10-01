@@ -313,7 +313,6 @@ export async function annotatedBibliographyMarkdown(input: AnnotatedBibliography
   for (const s of input.sources) {
     const ref = refs.get(s.key);
     const lib = input.library.get(s.key);
-    const bibEntry = input.entries.find((e) => String(e['id']) === s.key);
     lines.push(ref !== undefined ? bibEntryMarkdown(ref) : escapedLine(s.key), '');
     // The excerpt is a quotation of the source: only the registrar's abstract
     // (review round 3), never LIBRARY.json's or the bib's, which nothing checks.
