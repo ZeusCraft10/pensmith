@@ -208,21 +208,22 @@ function oneLine(s: string): string {
   return t.length <= CLAIM_SENTENCE_MAX_CHARS ? t : `${t.slice(0, CLAIM_SENTENCE_MAX_CHARS - 1)}…`;
 }
 
-/** Jaccard overlap of two term lists. */
+/** How much of the shorter term list the other one holds (1 when it holds all of it). */
 function overlap(a: readonly string[], b: readonly string[]): number {
   const sa = new Set(a);
   const sb = new Set(b);
   const inter = [...sa].filter((t) => sb.has(t)).length;
-  const union = new Set([...sa, ...sb]).size;
-  return union === 0 ? 1 : inter / union;
+  const smaller = Math.min(sa.size, sb.size);
+  return smaller === 0 ? 1 : inter / smaller;
 }
 
 /**
  * Every claim sentence of every section: the draft's claim sentences (Pass
  * 4's lexicon), then the planned claims (PLAN.md `## Claims`) the draft does
  * not already state — a planned claim whose content terms nearly all appear in
- * one of the section's draft claims (Jaccard ≥ 0.8) is the same claim, and is
- * left out so one contradiction is never counted twice. Never throws.
+ * one of the section's draft claims (at least 80% of the shorter one's terms)
+ * is the same claim, and is left out so one contradiction is never counted
+ * twice. Never throws.
  */
 export function collectClaims(sections: readonly ClaimSource[]): ClaimSentence[] {
   const out: ClaimSentence[] = [];

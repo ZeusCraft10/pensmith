@@ -1,0 +1,29 @@
+{
+  "$comment": "EXP-11 fixture (Phase 21, D-21-15): a consistent paper — no two sections contradict each other, and no pair trips the negation or direction heuristic. Citations name recorded works (tests/helpers/gate-paper.ts RECORDED_BIB).",
+  "sections": [
+    {
+      "n": 1,
+      "slug": "learning",
+      "title": "Learning Representations",
+      "assigned": ["lecun2015"],
+      "draft": "Neural networks with many layers learn representations of raw data at several levels of abstraction [@lecun2015].\n\nThese layered models now set the pace for speech and image recognition across the field [@lecun2015].\n",
+      "claims": ["Deep networks learn layered representations of raw data."]
+    },
+    {
+      "n": 2,
+      "slug": "measurement",
+      "title": "Measurement in Physics",
+      "assigned": ["aspelmeyer2009"],
+      "draft": "Measurement in quantum physics shapes what an observer is able to record about a system [@aspelmeyer2009].\n\nCareful experimental design keeps that influence small enough to report honestly [@aspelmeyer2009].\n",
+      "claims": ["Quantum measurement shapes what an observer records."]
+    },
+    {
+      "n": 3,
+      "slug": "outbreak",
+      "title": "An Outbreak Case",
+      "assigned": ["zhu2020"],
+      "draft": "Genome sequencing identified a novel coronavirus in patients with pneumonia in Wuhan in late 2019 [@zhu2020].\n\nThe rapid sharing of that sequence let laboratories everywhere develop tests within weeks [@zhu2020].\n",
+      "claims": ["Sequencing identified a novel coronavirus in late 2019."]
+    }
+  ]
+}

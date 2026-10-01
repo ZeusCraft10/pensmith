@@ -91,15 +91,23 @@ test('RUN-24: unknown and local models get the conservative profile (never a cra
 });
 
 test('RUN-26: every called prompt slug has a spec; generation vs judgment tiers match D-17-24', () => {
-  const generation = ['intake-clarifier', 'outline-author', 'section-planner', 'section-drafter', 'smoother', 'revise-swap', 'tutorial-research-rationale', 'tutorial-section-provenance'];
-  const judgment = ['topic-disambiguator', 'source-evaluator', 'claim-support', 'orphan-label'];
+  const generation = ['intake-clarifier', 'outline-author', 'section-planner', 'section-drafter', 'smoother', 'revise-swap', 'tutorial-research-rationale', 'tutorial-section-provenance', 'humanizer'];
+  const judgment = ['topic-disambiguator', 'source-evaluator', 'claim-support', 'orphan-label', 'claim-consistency'];
   for (const s of generation) assert.equal(slugSpec(s).tier, 'generation', s);
   for (const s of judgment) assert.equal(slugSpec(s).tier, 'judgment', s);
+  assert.deepEqual([...generation, ...judgment].sort(), [...SLUG_NAMES].sort(), 'every slug is in one tier');
   assert.equal(slugSpec('section-drafter').effort, 'high', 'the drafter runs at high effort');
   for (const s of generation.filter((x) => x !== 'section-drafter')) assert.equal(slugSpec(s).effort, 'medium', s);
   for (const s of SLUG_NAMES) {
     const spec = SLUGS[s]!;
-    assert.ok(EXPECTED_PROMPT_HASHES[s], `${s} is a hash-pinned prompt slug`);
+    // S-06 (D-21-18): `humanizer` is a MODEL slug with no template — its system
+    // prompt is the user's installed humanizer skill, so it is the one slug
+    // with no hash-pinned prompt (template: false). Every other slug has one.
+    if (spec.template) assert.ok(EXPECTED_PROMPT_HASHES[s], `${s} is a hash-pinned prompt slug`);
+    else {
+      assert.equal(s, 'humanizer', 'only the humanizer has no template');
+      assert.equal(EXPECTED_PROMPT_HASHES[s], undefined, 'S-06: no templates/prompts slug for the humanizer');
+    }
     assert.ok(spec.p90Output <= spec.maxTokens, `${s}: shipped p90 fits under the max_tokens ceiling`);
     assert.equal(spec.retryMaxTokens, spec.maxTokens * 2, `${s}: the retry doubles max_tokens`);
   }
