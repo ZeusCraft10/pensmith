@@ -19469,6 +19469,27 @@ function pensmithSourceTextCacheDir() {
 function userHomeDir() {
   return os.homedir();
 }
+function humanizerSkillPath(env = process.env) {
+  const home = userHomeDir();
+  const testContext = Boolean(env.NODE_TEST_CONTEXT) || env.PENSMITH_TEST === "1";
+  if (testContext) {
+    const fold = /* @__PURE__ */ __name((p2) => process.platform === "win32" ? p2.toLowerCase() : p2, "fold");
+    const roots = /* @__PURE__ */ new Set([path2.resolve(os.tmpdir())]);
+    try {
+      roots.add(fs.realpathSync.native(os.tmpdir()));
+    } catch {
+    }
+    const forms = /* @__PURE__ */ new Set([path2.resolve(home), realpathNearest(home)]);
+    const inside = [...forms].some(
+      (f2) => [...roots].some((root) => {
+        const rel2 = path2.relative(fold(root), fold(f2));
+        return rel2 !== "" && rel2 !== ".." && !rel2.startsWith(`..${path2.sep}`) && !path2.isAbsolute(rel2);
+      })
+    );
+    if (!inside) return null;
+  }
+  return path2.join(home, ".claude", "skills", "humanizer", "SKILL.md");
+}
 function pensmithOwnSourceApprovalsPath(platform = process.platform, env = process.env) {
   return path2.join(pensmithDataDir(platform, env), "own-source-approvals.json");
 }
@@ -19715,6 +19736,7 @@ var init_paths = __esm({
     __name(pensmithHttpCacheDir, "pensmithHttpCacheDir");
     __name(pensmithSourceTextCacheDir, "pensmithSourceTextCacheDir");
     __name(userHomeDir, "userHomeDir");
+    __name(humanizerSkillPath, "humanizerSkillPath");
     __name(pensmithOwnSourceApprovalsPath, "pensmithOwnSourceApprovalsPath");
     PLUGIN_DIR_NAME = "plugin";
     PLUGIN_MANIFEST_REL = path2.join(".claude-plugin", "plugin.json");
@@ -76594,7 +76616,8 @@ function s(slug, verb, tier, effort, maxTokens, p90Output, inputEstimate, cacheS
     p90Output,
     inputEstimate,
     cacheSystem,
-    structured
+    structured,
+    template: true
   });
 }
 function canonicalSlug(name) {
@@ -76717,7 +76740,19 @@ var init_llm_models = __esm({
       // abstract (<= 4000 chars) plus a full-text passage (<= 2400) — and
       // orphan-label audits one paragraph (<= 4000 chars) and lists its claims.
       s("claim-support", "verify", "judgment", "low", 2e3, 350, 2200, true, true),
-      s("orphan-label", "verify", "judgment", "low", 2e3, 500, 1800, true, true)
+      s("orphan-label", "verify", "judgment", "low", 2e3, 500, 1800, true, true),
+      // Phase 21 (EXP-11, D-21-15; the D-12 amendment): one compile call judges up
+      // to [compile] contradiction_pairs (default 20) cross-section claim pairs —
+      // ~90 input tokens a pair plus the ~1100-token template, ~45 output tokens a
+      // verdict.
+      s("claim-consistency", "compile", "judgment", "low", 4e3, 1200, 3e3, true, true),
+      // Phase 21 (EXP-14, D-21-18): the Tier-2 humanizer, one call per `##`
+      // section of the compiled draft. A MODEL slug with no template (S-06): the
+      // system prompt is the user's humanizer SKILL.md (cached like every system
+      // prompt), the user message the pinned contract plus the masked section.
+      // Output ~ the section again (a 500-word section is ~700 tokens) plus
+      // adaptive thinking at medium effort.
+      { ...s("humanizer", "done", "generation", "medium", 16e3, 4e3, 4500, true, false), template: false }
     ];
     SLUGS = Object.freeze(
       Object.fromEntries(SLUG_LIST.map((x3) => [x3.slug, x3]))
@@ -78299,7 +78334,11 @@ function citationStyleKey(name) {
 function citationStyleAliases() {
   return Object.keys(CITATION_STYLE_KEYS).sort((a3, b3) => b3.length - a3.length || a3.localeCompare(b3));
 }
-var CURRENT_CONFIG_VERSION, DEFAULT_QUOTE_MIN_WORDS, DEFAULT_RECHECK_AFTER_DAYS, CITATION_STYLE_NAMES2, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HumanizerSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
+function isCslPathSpelling(v2) {
+  const t = v2.trim();
+  return t.length > 4 && /\.csl$/i.test(t) && !/[\0\r\n]/.test(t);
+}
+var CURRENT_CONFIG_VERSION, DEFAULT_CONTRADICTION_PAIRS, DEFAULT_PLAGIARISM_MAX_PHRASES, DEFAULT_QUOTE_MIN_WORDS, DEFAULT_RECHECK_AFTER_DAYS, CITATION_STYLE_NAMES2, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HONESTY_BACKENDS, HumanizerSchema, CompileSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
 var init_config = __esm({
   "bin/lib/schemas/config.ts"() {
     "use strict";
@@ -78307,7 +78346,9 @@ var init_config = __esm({
     init_tutorial();
     init_runtime_config();
     init_lookup_table();
-    CURRENT_CONFIG_VERSION = 3;
+    CURRENT_CONFIG_VERSION = 4;
+    DEFAULT_CONTRADICTION_PAIRS = 20;
+    DEFAULT_PLAGIARISM_MAX_PHRASES = 30;
     DEFAULT_QUOTE_MIN_WORDS = 5;
     DEFAULT_RECHECK_AFTER_DAYS = 30;
     CITATION_STYLE_NAMES2 = [
@@ -78356,8 +78397,9 @@ var init_config = __esm({
     __name(normalizeStyleName, "normalizeStyleName");
     __name(citationStyleKey, "citationStyleKey");
     __name(citationStyleAliases, "citationStyleAliases");
-    CitationStyleSchema = external_exports.string().refine((v2) => citationStyleKey(v2) !== null, {
-      message: `citation_style must be one of: ${CITATION_STYLE_NAMES2.join(", ")}`
+    __name(isCslPathSpelling, "isCslPathSpelling");
+    CitationStyleSchema = external_exports.string().refine((v2) => citationStyleKey(v2) !== null || isCslPathSpelling(v2), {
+      message: `citation_style must be one of: ${CITATION_STYLE_NAMES2.join(", ")} \u2014 or a path to a local .csl file`
     });
     PositiveInt = external_exports.number().int().positive();
     NonNegInt = external_exports.number().int().nonnegative();
@@ -78402,14 +78444,27 @@ var init_config = __esm({
       flag_threshold: external_exports.enum(["low", "medium", "high"]).optional(),
       recheck_after_days: NonNegInt.optional(),
       plagiarism_check: external_exports.boolean().optional(),
+      // EXP-19 (D-21-22): how many distinctive phrases done sends to the search (at least one per body paragraph, up to this).
+      plagiarism_max_phrases: PositiveInt.optional(),
       citation_density_min: NonNegNumber.optional(),
       citation_density_max: NonNegNumber.optional()
     });
+    HONESTY_BACKENDS = ["gptzero", "originality", "sapling"];
     HumanizerSchema = external_exports.object({
       enabled: external_exports.boolean().optional(),
       preserve_voice: external_exports.enum(["academic", "formal", "casual"]).optional(),
       honesty_score: external_exports.boolean().optional(),
-      honesty_backend: external_exports.enum(["gptzero", "originality", "sapling"]).optional()
+      honesty_backend: external_exports.enum(HONESTY_BACKENDS, {
+        errorMap: /* @__PURE__ */ __name(() => ({ message: `honesty_backend must be one of: ${HONESTY_BACKENDS.join(", ")}` }), "errorMap")
+      }).optional(),
+      // EXP-17 (D-21-20): the answer to the detector-consent question, asked once
+      // in a terminal and recorded here (true: send the paper to the detector;
+      // false: never). Unset means not asked yet; --yolo never answers it.
+      honesty_consent: external_exports.boolean().optional()
+    });
+    CompileSchema = external_exports.object({
+      smooth_transitions: external_exports.boolean().optional(),
+      contradiction_pairs: NonNegInt.optional()
     });
     StyleSchema = external_exports.object({
       match_past_writing: external_exports.boolean().optional(),
@@ -78448,6 +78503,7 @@ var init_config = __esm({
       sources: SourcesSchema.optional(),
       verification: VerificationSchema.optional(),
       humanizer: HumanizerSchema.optional(),
+      compile: CompileSchema.optional(),
       style: StyleSchema.optional(),
       runtime: PaperRuntimeSchema.optional(),
       budget: BudgetSchema.optional(),
@@ -78459,6 +78515,7 @@ var init_config = __esm({
       sources: SourcesSchema,
       verification: VerificationSchema,
       humanizer: HumanizerSchema,
+      compile: CompileSchema,
       style: StyleSchema,
       runtime: PaperRuntimeSchema,
       budget: BudgetSchema,
@@ -78532,6 +78589,22 @@ var init_v2_to_v33 = __esm({
   "bin/lib/migrations/config/v2_to_v3.ts"() {
     "use strict";
     __name(migrate11, "migrate");
+  }
+});
+
+// bin/lib/migrations/config/v3_to_v4.ts
+function migrate12(input2) {
+  const out2 = { schema_version: 4 };
+  for (const [k2, v2] of Object.entries(input2)) {
+    if (k2 === "schema_version") continue;
+    out2[k2] = v2;
+  }
+  return out2;
+}
+var init_v3_to_v4 = __esm({
+  "bin/lib/migrations/config/v3_to_v4.ts"() {
+    "use strict";
+    __name(migrate12, "migrate");
   }
 });
 
@@ -78997,6 +79070,7 @@ var init_config2 = __esm({
     init_v0_to_v13();
     init_v1_to_v25();
     init_v2_to_v33();
+    init_v3_to_v4();
     init_config_text();
     init_disciplines();
     init_config();
@@ -79012,7 +79086,8 @@ var init_config2 = __esm({
     MIGRATIONS = Object.freeze({
       0: migrate9,
       1: migrate10,
-      2: migrate11
+      2: migrate11,
+      3: migrate12
     });
     VERIFY_QUOTES_REFUSAL = "verify_quotes is not configurable: Pass 3 quote verification is a blocking pass (PRD \xA714) \u2014 turning it off would let a quote-NOT_FOUND citation reach the compiled paper. Remove it from [verification].";
     __name(paperConfigPath, "paperConfigPath");
@@ -79045,9 +79120,12 @@ var init_config2 = __esm({
       "verification.recheck_after_days": DEFAULT_RECHECK_AFTER_DAYS,
       "verification.send_byo_passages": false,
       "verification.plagiarism_check": true,
+      "verification.plagiarism_max_phrases": DEFAULT_PLAGIARISM_MAX_PHRASES,
       "humanizer.enabled": true,
       "humanizer.honesty_score": true,
       "humanizer.honesty_backend": "gptzero",
+      "compile.smooth_transitions": true,
+      "compile.contradiction_pairs": DEFAULT_CONTRADICTION_PAIRS,
       "style.match_past_writing": false,
       "budget.cost_cap_usd": 5,
       "network.contact_email_env": "PENSMITH_CONTACT_EMAIL",
@@ -79497,6 +79575,127 @@ var init_contact_email = __esm({
   }
 });
 
+// bin/lib/ecosystem-presence.ts
+import { execFileSync } from "node:child_process";
+import { existsSync as existsSync7, readFileSync as readFileSync9, statSync as statSync5 } from "node:fs";
+import { dirname as dirname6, join as join7, resolve as resolve2 } from "node:path";
+function isPandocPresent() {
+  try {
+    execFileSync("pandoc", ["--version"], {
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+      timeout: 5e3
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function claudeConfigHome(env) {
+  const dir = env["CLAUDE_CONFIG_DIR"]?.trim();
+  return dir ? resolve2(dir) : userHomeDir();
+}
+function readJson(file) {
+  if (!existsSync7(file)) return null;
+  try {
+    return JSON.parse(readFileSync9(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+function isZoteroServer(name, spec) {
+  if (/zotero/i.test(name)) return true;
+  if (typeof spec !== "object" || spec === null) return false;
+  const s2 = spec;
+  const parts = [s2.command, s2.url, ...Array.isArray(s2.args) ? s2.args : []].filter((p2) => typeof p2 === "string");
+  return parts.some((p2) => /zotero/i.test(p2));
+}
+function zoteroServersIn(servers, scope, file) {
+  if (typeof servers !== "object" || servers === null || Array.isArray(servers)) return [];
+  return Object.entries(servers).filter(([name, spec]) => isZoteroServer(name, spec)).map(([name]) => ({ name, scope, file }));
+}
+function projectDirs(dir) {
+  const out2 = [];
+  let cur = resolve2(dir);
+  for (let i = 0; i < 64; i += 1) {
+    out2.push(cur);
+    if (existsSync7(join7(cur, ".git"))) break;
+    const parent = dirname6(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  return out2;
+}
+function pathSpellings(p2) {
+  const fold = /* @__PURE__ */ __name((x3) => process.platform === "win32" ? x3.toLowerCase() : x3, "fold");
+  return [.../* @__PURE__ */ new Set([fold(resolve2(p2)), fold(realpathNearest(p2))])];
+}
+function detectZoteroMcpServers(root, env = process.env) {
+  const project = root ?? activePaperRoot() ?? servicePaperRoot(env);
+  const dirs = projectDirs(project);
+  const projectKeys = new Set([...dirs, ...projectDirs(realpathNearest(project))].flatMap(pathSpellings));
+  const servers = [];
+  const checked = [];
+  const claudeJson = join7(claudeConfigHome(env), ".claude.json");
+  checked.push(claudeJson);
+  const cfg = readJson(claudeJson);
+  if (cfg) {
+    servers.push(...zoteroServersIn(cfg.mcpServers, "user", claudeJson));
+    if (typeof cfg.projects === "object" && cfg.projects !== null) {
+      for (const [path29, entry] of Object.entries(cfg.projects)) {
+        if (!pathSpellings(path29).some((k2) => projectKeys.has(k2))) continue;
+        servers.push(...zoteroServersIn(entry?.mcpServers, "local", claudeJson));
+      }
+    }
+  }
+  for (const d3 of dirs) {
+    const file = join7(d3, ".mcp.json");
+    checked.push(file);
+    servers.push(...zoteroServersIn(readJson(file)?.mcpServers, "project", file));
+  }
+  const home = userHomeDir();
+  const legacyFiles = [join7(home, ".claude", "mcp_servers.json"), join7(home, ".config", "claude", "mcp_servers.json")];
+  for (const file of legacyFiles) {
+    checked.push(file);
+    servers.push(...zoteroServersIn(readJson(file)?.mcpServers, "legacy", file));
+  }
+  return { servers, checked, claudeJson, projectDirs: dirs, legacyFiles };
+}
+function isZoteroMcpPresent() {
+  return detectZoteroMcpServers().servers.length > 0;
+}
+function isHumanizerSkillPresent() {
+  const skillFile = humanizerSkillPath();
+  if (skillFile === null) return false;
+  try {
+    return statSync5(skillFile).isFile();
+  } catch {
+    return false;
+  }
+}
+function detectSyncFolder() {
+  const dir = paperDir(activePaperRoot() ?? servicePaperRoot());
+  const detected = isInsideSyncFolder(dir);
+  return { detected, match: detected ? dir : null, dir };
+}
+var init_ecosystem_presence = __esm({
+  "bin/lib/ecosystem-presence.ts"() {
+    "use strict";
+    init_paths();
+    __name(isPandocPresent, "isPandocPresent");
+    __name(claudeConfigHome, "claudeConfigHome");
+    __name(readJson, "readJson");
+    __name(isZoteroServer, "isZoteroServer");
+    __name(zoteroServersIn, "zoteroServersIn");
+    __name(projectDirs, "projectDirs");
+    __name(pathSpellings, "pathSpellings");
+    __name(detectZoteroMcpServers, "detectZoteroMcpServers");
+    __name(isZoteroMcpPresent, "isZoteroMcpPresent");
+    __name(isHumanizerSkillPresent, "isHumanizerSkillPresent");
+    __name(detectSyncFolder, "detectSyncFolder");
+  }
+});
+
 // bin/lib/draft-hash.ts
 import { createHash as createHash5 } from "node:crypto";
 function computeDraftHash(draftBytes, assignedSources) {
@@ -79519,7 +79718,7 @@ var init_compile_inputs = __esm({
   "bin/lib/schemas/compile-inputs.ts"() {
     "use strict";
     init_zod();
-    COMPILE_INPUTS_SCHEMA_VERSION = 2;
+    COMPILE_INPUTS_SCHEMA_VERSION = 3;
     SHA256_OR_EMPTY = /^(?:[0-9a-f]{64})?$/;
     SHA256 = /^[0-9a-f]{64}$/;
     CompileInputsSectionSchema = external_exports.object({
@@ -79538,6 +79737,8 @@ var init_compile_inputs = __esm({
       compiled_at: external_exports.string().datetime(),
       /** sha256 of the `.paper/DRAFT.md` bytes compile wrote (null: recorded by a v1 compile — stale). */
       compiled_draft_sha256: external_exports.string().regex(SHA256).nullable(),
+      /** sha256 of the title and section titles compile wrote as headings (null: recorded before v3 — stale). */
+      headings_sha256: external_exports.string().regex(SHA256).nullable(),
       /** The compiled sections in (n, suffix) order. */
       sections: external_exports.array(CompileInputsSectionSchema)
     }).strict();
@@ -79545,7 +79746,7 @@ var init_compile_inputs = __esm({
 });
 
 // bin/lib/migrations/compile-inputs/v1_to_v2.ts
-function migrate12(input2) {
+function migrate13(input2) {
   const src = typeof input2 === "object" && input2 !== null && !Array.isArray(input2) ? input2 : {};
   const sections2 = Array.isArray(src["sections"]) ? src["sections"] : [];
   return {
@@ -79564,852 +79765,28 @@ function migrate12(input2) {
 var init_v1_to_v26 = __esm({
   "bin/lib/migrations/compile-inputs/v1_to_v2.ts"() {
     "use strict";
-    __name(migrate12, "migrate");
+    __name(migrate13, "migrate");
   }
 });
 
-// bin/lib/compile-inputs.ts
-import { createHash as createHash6 } from "node:crypto";
-import { readFileSync as readFileSync10 } from "node:fs";
-import { join as join8 } from "node:path";
-function compileInputsPath(paperRoot) {
-  return join8(paperDir(paperRoot), COMPILE_INPUTS_FILE);
-}
-function fileSha256(file) {
-  try {
-    return createHash6("sha256").update(readFileSync10(file)).digest("hex");
-  } catch {
-    return "";
-  }
-}
-function currentSectionInputs(paperRoot, s2) {
+// bin/lib/migrations/compile-inputs/v2_to_v3.ts
+function migrate14(input2) {
+  const src = typeof input2 === "object" && input2 !== null && !Array.isArray(input2) ? input2 : {};
   return {
-    id: formatSectionId(sectionIdOf(s2.n, s2.suffix)),
-    slug: s2.slug,
-    draft_sha256: fileSha256(sectionDraft(s2.n, s2.slug, paperRoot)),
-    verification_sha256: fileSha256(sectionVerification(s2.n, s2.slug, paperRoot))
+    ...src,
+    $schemaVersion: 3,
+    headings_sha256: typeof src["headings_sha256"] === "string" ? src["headings_sha256"] : null
   };
 }
-function readCompileInputs(paperRoot) {
-  try {
-    let value = JSON.parse(readFileSync10(compileInputsPath(paperRoot), "utf8"));
-    const version2 = typeof value === "object" && value !== null ? value["$schemaVersion"] : void 0;
-    if (version2 === 1) value = migrate12(value);
-    const parsed = CompileInputsSchema.safeParse(value);
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-function compiledInputsCurrent(paperRoot, registered) {
-  const record2 = readCompileInputs(paperRoot);
-  if (record2 === null) return null;
-  const now = sortBySectionId(registered.map((s2) => ({ ...sectionIdOf(s2.n, s2.suffix), slug: s2.slug })));
-  if (now.length !== record2.sections.length) return false;
-  for (let i = 0; i < now.length; i += 1) {
-    const was = record2.sections[i];
-    const is = currentSectionInputs(paperRoot, now[i]);
-    if (was.id !== is.id || was.slug !== is.slug || was.draft_sha256 !== is.draft_sha256 || was.verification_sha256 !== is.verification_sha256) {
-      return false;
-    }
-  }
-  return true;
-}
-var COMPILE_INPUTS_FILE;
-var init_compile_inputs2 = __esm({
-  "bin/lib/compile-inputs.ts"() {
+var init_v2_to_v34 = __esm({
+  "bin/lib/migrations/compile-inputs/v2_to_v3.ts"() {
     "use strict";
-    init_atomic_write();
-    init_paths();
-    init_section_id();
-    init_compile_inputs();
-    init_v1_to_v26();
-    COMPILE_INPUTS_FILE = "COMPILE-INPUTS.json";
-    __name(compileInputsPath, "compileInputsPath");
-    __name(fileSha256, "fileSha256");
-    __name(currentSectionInputs, "currentSectionInputs");
-    __name(readCompileInputs, "readCompileInputs");
-    __name(compiledInputsCurrent, "compiledInputsCurrent");
-  }
-});
-
-// bin/lib/section-registry.ts
-import { basename as basename2 } from "node:path";
-function identityLabel(s2) {
-  return formatSectionId(sectionIdOf(s2.n, s2.suffix));
-}
-function registeredSectionsSync(paperRoot) {
-  try {
-    const state = Schema.parse(migrateStateValue(JSON.parse(readStateTextSync(paperRoot))));
-    return sortBySectionId((state.sections ?? []).map((s2) => s2.suffix !== void 0 ? { n: s2.n, suffix: s2.suffix, slug: s2.slug } : { n: s2.n, slug: s2.slug }));
-  } catch {
-    return null;
-  }
-}
-function outlineIdentitiesSync(paperRoot) {
-  const doc = readOutlineSync(paperRoot);
-  if (doc === null) return null;
-  return doc.sections.map((s2) => s2.suffix !== void 0 ? { n: s2.n, suffix: s2.suffix, slug: s2.slug } : { n: s2.n, slug: s2.slug });
-}
-function sectionRegistryDivergence(registered, outline) {
-  const out2 = [];
-  const regBySlug = new Map(registered.map((s2) => [s2.slug, s2]));
-  const regById = new Map(registered.map((s2) => [identityLabel(s2), s2]));
-  const rowSlugs = new Set(outline.map((s2) => s2.slug));
-  const claimedIds = /* @__PURE__ */ new Set();
-  for (const row2 of outline) {
-    const id = identityLabel(row2);
-    const reg = regBySlug.get(row2.slug);
-    if (reg !== void 0) {
-      if (identityLabel(reg) !== id) {
-        out2.push(`OUTLINE.md numbers "${row2.slug}" \xA7${id}, but STATE.json registers it as \xA7${identityLabel(reg)}`);
-      }
-      continue;
-    }
-    const holder = regById.get(id);
-    if (holder !== void 0 && !rowSlugs.has(holder.slug)) {
-      claimedIds.add(id);
-      out2.push(`OUTLINE.md lists \xA7${id} as "${row2.slug}", but STATE.json registers \xA7${id} as "${holder.slug}"`);
-    } else {
-      out2.push(`OUTLINE.md lists \xA7${id} "${row2.slug}", which STATE.json does not register`);
-    }
-  }
-  for (const reg of registered) {
-    if (rowSlugs.has(reg.slug) || claimedIds.has(identityLabel(reg))) continue;
-    out2.push(`STATE.json registers \xA7${identityLabel(reg)} "${reg.slug}", which OUTLINE.md does not list`);
-  }
-  return out2;
-}
-function outlineProblem(paperRoot) {
-  const read = readOutlineChecked(paperRoot);
-  const file = `${basename2(paperDir(paperRoot))}/OUTLINE.md`;
-  if (read.kind === "invalid") {
-    return `${file} cannot be read (${read.error}) \u2014 fix that row (\`pensmith outline\` then applies the edited outline), or re-outline it with \`pensmith outline --force\``;
-  }
-  if (read.kind === "absent") {
-    const registered = registeredSectionsSync(paperRoot);
-    if (registered !== null && registered.length > 0) {
-      const ids = registered.map((s2) => `\xA7${identityLabel(s2)}`).join(", ");
-      return `${file} is missing, but STATE.json registers ${ids} \u2014 restore it (e.g. from your backup or version control), or re-outline with \`pensmith outline --force\` (kept sections stay untouched)`;
-    }
-  }
-  return null;
-}
-function sectionRegistryProblem(paperRoot) {
-  const registered = registeredSectionsSync(paperRoot);
-  if (registered === null || registered.length === 0) return null;
-  const outline = outlineProblem(paperRoot);
-  if (outline !== null) return outline;
-  const rows = outlineIdentitiesSync(paperRoot);
-  if (rows === null) return null;
-  const problems = sectionRegistryDivergence(registered, rows);
-  if (problems.length === 0) return null;
-  return `OUTLINE.md and STATE.json disagree: ${problems.join("; ")} \u2014 ${RECONCILE_HINT}`;
-}
-var RECONCILE_HINT;
-var init_section_registry = __esm({
-  "bin/lib/section-registry.ts"() {
-    "use strict";
-    init_state2();
-    init_state();
-    init_outline();
-    init_paths();
-    init_section_id();
-    __name(identityLabel, "identityLabel");
-    __name(registeredSectionsSync, "registeredSectionsSync");
-    __name(outlineIdentitiesSync, "outlineIdentitiesSync");
-    __name(sectionRegistryDivergence, "sectionRegistryDivergence");
-    RECONCILE_HINT = "run `pensmith outline` to apply the edited OUTLINE.md (a registered section it no longer lists moves to sections/_archive/), or restore the row(s) in OUTLINE.md";
-    __name(outlineProblem, "outlineProblem");
-    __name(sectionRegistryProblem, "sectionRegistryProblem");
-  }
-});
-
-// bin/lib/verify/verdicts.ts
-import { createHash as createHash7 } from "node:crypto";
-function blocksCompile(verdict, accepted = false) {
-  if (PASSING_VERDICTS.has(verdict) || LEGACY_UNAVAILABLE_VERDICTS.has(verdict)) return false;
-  return !(accepted && verdict === ACCEPTABLE_QUOTE_VERDICT);
-}
-function sectionOutcome(rows) {
-  let failed = false;
-  let unverifiable = false;
-  let blocked = false;
-  for (const r2 of rows) {
-    if (PASSING_VERDICTS.has(r2.verdict)) continue;
-    if (r2.accepted === true && r2.verdict === ACCEPTABLE_QUOTE_VERDICT) continue;
-    if (LEGACY_UNAVAILABLE_VERDICTS.has(r2.verdict)) {
-      unverifiable = true;
-      continue;
-    }
-    if (UNVERIFIABLE_VERDICTS.has(r2.verdict)) {
-      unverifiable = true;
-      blocked = true;
-      continue;
-    }
-    failed = true;
-    blocked = true;
-  }
-  return { status: failed ? "failed" : unverifiable ? "unverifiable" : "verified", blocked };
-}
-function quoteTextSha256(text4) {
-  return createHash7("sha256").update(text4.normalize("NFKC").replace(/\s+/gu, " ").trim(), "utf8").digest("hex");
-}
-function textRowKey(line) {
-  return `(L${line})`;
-}
-function textRowLine(key2) {
-  const m3 = /^\(L([1-9]\d*)\)$/.exec(key2);
-  return m3 === null ? null : Number(m3[1]);
-}
-function quoteId(index) {
-  return `q${index + 1}`;
-}
-var PASS1_VERDICTS, PASS3_VERDICTS, DRAFT_VERDICTS, PASSING_VERDICTS, FAILING_VERDICTS, UNVERIFIABLE_VERDICTS, BLOCKING_VERDICTS, ACCEPTABLE_QUOTE_VERDICT, RETRY_ONLINE_VERDICTS, LEGACY_UNAVAILABLE_VERDICTS, UNATTRIBUTED_CITEKEY, DRAFT_ROW_KEY, QUOTE_ID_RE, PASS2_TABLE_HEADER;
-var init_verdicts = __esm({
-  "bin/lib/verify/verdicts.ts"() {
-    "use strict";
-    PASS1_VERDICTS = [
-      "OK",
-      "OK-BYO",
-      "FABRICATED",
-      "MIS-CITED",
-      "RETRACTED",
-      "UNASSIGNED",
-      "UNPARSEABLE",
-      "UNSUPPORTED-FORM",
-      "UNRESOLVABLE",
-      "UNVERIFIABLE-NETWORK",
-      "UNVERIFIABLE"
-    ];
-    PASS3_VERDICTS = ["PASS", "FUZZY", "NOT_FOUND", "UNVERIFIABLE-QUOTE", "UNVERIFIABLE-NETWORK", "UNATTRIBUTED"];
-    DRAFT_VERDICTS = ["PLACEHOLDER", "NO-CITATIONS"];
-    PASSING_VERDICTS = /* @__PURE__ */ new Set(["OK", "OK-BYO", "PASS", "FUZZY"]);
-    FAILING_VERDICTS = /* @__PURE__ */ new Set([
-      "FABRICATED",
-      "MIS-CITED",
-      "RETRACTED",
-      "UNASSIGNED",
-      "UNPARSEABLE",
-      "UNSUPPORTED-FORM",
-      "UNRESOLVABLE",
-      "NOT_FOUND",
-      "UNATTRIBUTED",
-      "NO-CITATIONS"
-    ]);
-    UNVERIFIABLE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK", "UNVERIFIABLE", "UNVERIFIABLE-QUOTE", "PLACEHOLDER"]);
-    BLOCKING_VERDICTS = /* @__PURE__ */ new Set([...FAILING_VERDICTS, ...UNVERIFIABLE_VERDICTS]);
-    ACCEPTABLE_QUOTE_VERDICT = "UNVERIFIABLE-QUOTE";
-    RETRY_ONLINE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK"]);
-    LEGACY_UNAVAILABLE_VERDICTS = /* @__PURE__ */ new Set(["PDF_UNAVAILABLE", "TEXT_UNAVAILABLE"]);
-    UNATTRIBUTED_CITEKEY = "(unattributed)";
-    DRAFT_ROW_KEY = "draft";
-    __name(blocksCompile, "blocksCompile");
-    __name(sectionOutcome, "sectionOutcome");
-    __name(quoteTextSha256, "quoteTextSha256");
-    __name(textRowKey, "textRowKey");
-    __name(textRowLine, "textRowLine");
-    __name(quoteId, "quoteId");
-    QUOTE_ID_RE = /^q[1-9]\d*$/;
-    PASS2_TABLE_HEADER = "| Citekey | Claim Sentence | Verdict | Rationale | Evidence |";
-  }
-});
-
-// bin/lib/verify/verdict-rows.ts
-function verdictRowOf(line) {
-  const m3 = /^\s*-\s*(\S+?)(?:\s+\[q[1-9]\d*\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line) ?? /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line);
-  if (!m3 || m3[1] === void 0 || m3[2] === void 0) return null;
-  return { citekey: m3[1], verdict: m3[2], rest: m3[3] ?? "" };
-}
-function isTextRowKey(key2) {
-  if (key2 === DRAFT_ROW_KEY || key2 === UNATTRIBUTED_CITEKEY) return true;
-  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key2)) return true;
-  return textRowLine(key2) !== null;
-}
-function revisableRows(verificationMd) {
-  const citations = [];
-  const textRows = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const line of verificationMd.split(/\r?\n/)) {
-    const row2 = verdictRowOf(line);
-    if (row2 === null || seen.has(row2.citekey)) continue;
-    const text4 = isTextRowKey(row2.citekey);
-    if (text4 ? !FAILING_VERDICTS.has(row2.verdict) : !REVISABLE_VERDICTS.includes(row2.verdict)) continue;
-    seen.add(row2.citekey);
-    const f2 = { citekey: row2.citekey, reason: `${row2.verdict}: ${row2.rest.replace(/^—\s*/, "").trim()}` };
-    (text4 ? textRows : citations).push(f2);
-  }
-  return { citations, textRows };
-}
-function reviseCanRepair(verificationMd) {
-  return revisableRows(verificationMd).citations.length > 0;
-}
-function rowReason(afterVerdict) {
-  const m3 = /^\s*—\s*(?:titleJW=\S+,\s*authorJW=\S+\s*—\s*|lev=\S+\s*—\s*)?(.*)$/u.exec(afterVerdict);
-  const reason = m3?.[1]?.replace(/ — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/, "").trim();
-  return reason !== void 0 && reason.length > 0 ? reason : void 0;
-}
-function renderPass1VerdictRow(citekey, verdict, titleJW, authorJW, reason) {
-  const score = /* @__PURE__ */ __name((x3) => Number.isFinite(x3) ? x3.toFixed(2) : "n/a", "score");
-  return `- ${citekey}: **${verdict}** \u2014 titleJW=${score(titleJW)}, authorJW=${score(authorJW)} \u2014 ${reason}`;
-}
-function parseBlockingVerdictRows(verificationMd) {
-  const out2 = [];
-  for (const line of verificationMd.split(/\r?\n/)) {
-    const pass3 = /^\s*-\s*(\S+?)(?:\s+\[(q[1-9]\d*)\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
-    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
-    const any = pass3 || pass1 ? null : /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
-    const verdict = pass3?.[3] ?? pass1?.[2] ?? any?.[1];
-    const matched = pass3 ?? pass1 ?? any;
-    if (verdict === void 0 || !BLOCKING_VERDICTS.has(verdict)) continue;
-    if (verdict === ACCEPTABLE_QUOTE_VERDICT && / — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/.test(line)) continue;
-    const citekey = pass3?.[1] ?? pass1?.[1];
-    const retraction = /\bcited work is retracted\b/.test(line);
-    const quoteId2 = pass3?.[2];
-    const reason = matched !== null ? rowReason(line.slice(matched.index + matched[0].length)) : void 0;
-    out2.push({
-      citekey: citekey ?? UNREADABLE_CITEKEY,
-      verdict,
-      ...retraction ? { retraction: true } : {},
-      ...quoteId2 !== void 0 ? { quoteId: quoteId2 } : {},
-      ...reason !== void 0 ? { reason } : {}
-    });
-  }
-  return out2;
-}
-function sectionVerificationReasons(verificationMd, dryRunNow) {
-  const status = /^Status:\s*(\S+)/m.exec(verificationMd)?.[1];
-  if (status === void 0) {
-    return ["no verifiable VERIFICATION.md (no Status line: the section was never verified, or the verifier output is unreadable)"];
-  }
-  const dryRun = dryRunVerificationReason(verificationMd, dryRunNow);
-  if (dryRun !== null) return [dryRun];
-  const reasons = [];
-  if (status.toLowerCase() === "failed") reasons.push("VERIFICATION.md Status is 'failed'");
-  for (const row2 of parseBlockingVerdictRows(verificationMd)) reasons.push(verdictRowReason(row2));
-  return reasons;
-}
-function verdictRowReason(row2) {
-  if (row2.citekey === "draft" && DRAFT_VERDICTS.includes(row2.verdict)) {
-    return row2.verdict === "PLACEHOLDER" ? "the draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model configured (`pensmith write <N>`)" : "the draft cites none of its assigned sources (NO-CITATIONS) \u2014 re-draft it (`pensmith write <N>`)";
-  }
-  const line = textRowLine(row2.citekey);
-  if (line !== null && (row2.verdict === "UNPARSEABLE" || row2.verdict === "UNSUPPORTED-FORM")) {
-    return `line ${line} of the draft holds a citation the verifier cannot check (${row2.verdict})`;
-  }
-  if (row2.quoteId !== void 0 && row2.verdict === ACCEPTABLE_QUOTE_VERDICT) {
-    return blockingRowReason(row2).replace("--accept-quote <id>", `--accept-quote ${row2.quoteId}`);
-  }
-  return blockingRowReason(row2);
-}
-function blockingRowReason(row2) {
-  const cite = row2.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row2.citekey}]`;
-  if (RETRY_ONLINE_VERDICTS.has(row2.verdict)) {
-    return `${cite} is ${row2.verdict} (its source could not be checked: offline, --dry-run or a failed lookup) \u2014 re-run online`;
-  }
-  if (row2.verdict === "UNVERIFIABLE") {
-    return `${cite} is UNVERIFIABLE \u2014 ${row2.reason ?? "its registrar's answer cannot be compared with the entry"}`;
-  }
-  if (row2.verdict === "RETRACTED") {
-    return `${cite} is RETRACTED \u2014 ${row2.reason ?? "the cited work is retracted"}`;
-  }
-  if (row2.verdict === ACCEPTABLE_QUOTE_VERDICT) {
-    return `${cite} has a quote no source text could be checked against (${row2.verdict}) \u2014 add the source's PDF (pensmith add <pdf>), paraphrase the quote (re-draft with pensmith write <N>, or edit the section's DRAFT.md and run pensmith verify <N>), or accept that one quote (pensmith verify <N> --accept-quote <id>)`;
-  }
-  return `${cite} has a blocking verdict (${row2.verdict}${row2.retraction === true ? ": the cited work is retracted" : ""})`;
-}
-function dryRunVerificationReason(verificationMd, dryRunNow) {
-  if (dryRunNow) return null;
-  const first2 = verificationMd.split(/\r?\n/).find((l2) => l2.trim().length > 0) ?? "";
-  return first2.startsWith(DRY_RUN_VERIFICATION_MARKER) ? "verified under --dry-run against synthetic sources \u2014 re-run `pensmith verify` without --dry-run" : null;
-}
-var REVISABLE_VERDICTS, UNREADABLE_CITEKEY, DRY_RUN_VERIFICATION_MARKER;
-var init_verdict_rows = __esm({
-  "bin/lib/verify/verdict-rows.ts"() {
-    "use strict";
-    init_verdicts();
-    init_verdicts();
-    REVISABLE_VERDICTS = ["FABRICATED", "MIS-CITED", "RETRACTED", "UNASSIGNED", "UNPARSEABLE", "UNRESOLVABLE", "NOT_FOUND"];
-    __name(verdictRowOf, "verdictRowOf");
-    __name(isTextRowKey, "isTextRowKey");
-    __name(revisableRows, "revisableRows");
-    __name(reviseCanRepair, "reviseCanRepair");
-    __name(rowReason, "rowReason");
-    __name(renderPass1VerdictRow, "renderPass1VerdictRow");
-    __name(parseBlockingVerdictRows, "parseBlockingVerdictRows");
-    UNREADABLE_CITEKEY = "(unreadable verdict row)";
-    __name(sectionVerificationReasons, "sectionVerificationReasons");
-    __name(verdictRowReason, "verdictRowReason");
-    __name(blockingRowReason, "blockingRowReason");
-    DRY_RUN_VERIFICATION_MARKER = "> OFFLINE MODE (--dry-run)";
-    __name(dryRunVerificationReason, "dryRunVerificationReason");
-  }
-});
-
-// bin/lib/research-sentinel.ts
-import { existsSync as existsSync8, readFileSync as readFileSync11 } from "node:fs";
-import { join as join9 } from "node:path";
-function isOwnOnly(entry) {
-  const tags = entry?.provenance;
-  if (!Array.isArray(tags) || tags.length === 0) return false;
-  return tags.every((t) => typeof t === "string" && OWN_SOURCE_PROVENANCE.has(t.split(":")[0] ?? ""));
-}
-function libraryState(pDir) {
-  const file = join9(pDir, "LIBRARY.json");
-  if (!existsSync8(file)) return "absent";
-  try {
-    const parsed = JSON.parse(readFileSync11(file, "utf8"));
-    if (!Array.isArray(parsed.entries)) return "unreadable";
-    if (parsed.entries.length === 0) return "empty";
-    return parsed.entries.every(isOwnOnly) ? "own-only" : "researched";
-  } catch {
-    return "unreadable";
-  }
-}
-function isSourcesViewOnly(text4) {
-  let head = text4;
-  const logEnd = lineStartIndex(head, LOG_END);
-  if (logEnd < 0) return false;
-  head = head.slice(0, logEnd);
-  const start = lineStartIndex(head, SOURCES_START);
-  if (start >= 0) {
-    const end = lineStartIndex(head, SOURCES_END, start);
-    if (end < 0) return false;
-    head = head.slice(0, start) + head.slice(end + SOURCES_END.length);
-  }
-  return head.replace(/^#\s+Research\s*$/m, "").trim().length === 0;
-}
-function lineStartIndex(text4, prefix, from = 0) {
-  let at = text4.indexOf(prefix, from);
-  while (at >= 0) {
-    if (at === 0 || text4[at - 1] === "\n") return at;
-    at = text4.indexOf(prefix, at + 1);
-  }
-  return -1;
-}
-function isFailedResearchLog(text4) {
-  if (!/^# Research log\s*$/m.test(text4)) return false;
-  const m3 = /^Result:\s*(.*)$/m.exec(text4);
-  if (m3 === null) return false;
-  const result = (m3[1] ?? "").trim().toLowerCase();
-  return FAILED_RESEARCH_RESULTS.some((r2) => result.startsWith(r2));
-}
-function readText(file) {
-  try {
-    return existsSync8(file) ? readFileSync11(file, "utf8") : null;
-  } catch {
-    return null;
-  }
-}
-function isResearchDone(pDir) {
-  try {
-    if (existsSync8(join9(pDir, "OUTLINE.md"))) return true;
-    const lib = libraryState(pDir);
-    const log4 = readText(join9(pDir, "RESEARCH.md"));
-    if (log4 !== null && isFailedResearchLog(log4)) {
-      return lib === "own-only" || lib === "researched" || lib === "unreadable";
-    }
-    if (log4 !== null && (/^# Research log\s*$/m.test(log4) || !isSourcesViewOnly(log4))) return true;
-    return lib === "researched" || lib === "unreadable" || lib === "empty";
-  } catch {
-    return false;
-  }
-}
-var FAILED_RESEARCH_RESULTS, OWN_SOURCE_PROVENANCE, SOURCES_START, SOURCES_END, LOG_END;
-var init_research_sentinel = __esm({
-  "bin/lib/research-sentinel.ts"() {
-    "use strict";
-    FAILED_RESEARCH_RESULTS = Object.freeze([
-      "no sources found",
-      "no usable sources",
-      "no relevant sources",
-      "no sources kept"
-    ]);
-    OWN_SOURCE_PROVENANCE = /* @__PURE__ */ new Set(["byo", "zotero", "add"]);
-    __name(isOwnOnly, "isOwnOnly");
-    __name(libraryState, "libraryState");
-    SOURCES_START = "<!-- pensmith:sources:start";
-    SOURCES_END = "<!-- pensmith:sources:end -->";
-    LOG_END = "<!-- end of the research log:";
-    __name(isSourcesViewOnly, "isSourcesViewOnly");
-    __name(lineStartIndex, "lineStartIndex");
-    __name(isFailedResearchLog, "isFailedResearchLog");
-    __name(readText, "readText");
-    __name(isResearchDone, "isResearchDone");
-  }
-});
-
-// bin/lib/schemas/done-record.ts
-var DONE_RECORD_SCHEMA_VERSION, SHA2562, DoneRecordSchema;
-var init_done_record = __esm({
-  "bin/lib/schemas/done-record.ts"() {
-    "use strict";
-    init_zod();
-    DONE_RECORD_SCHEMA_VERSION = 1;
-    SHA2562 = /^[0-9a-f]{64}$/;
-    DoneRecordSchema = external_exports.object({
-      $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
-      done_at: external_exports.string().datetime(),
-      /** sha256 of the `.paper/DRAFT.md` bytes done's gate judged. */
-      compiled_draft_sha256: external_exports.string().regex(SHA2562),
-      /** sha256 of the `.paper/FINAL.md` done left: the text it exported. */
-      final_sha256: external_exports.string().regex(SHA2562),
-      /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
-      humanized: external_exports.boolean()
-    }).strict();
-  }
-});
-
-// bin/lib/done-record.ts
-import { existsSync as existsSync9, readFileSync as readFileSync12 } from "node:fs";
-import { basename as basename3, join as join10 } from "node:path";
-function doneRecordPath(paperRoot) {
-  return join10(paperDir(paperRoot), DONE_RECORD_FILE);
-}
-function readDoneRecord(paperRoot) {
-  try {
-    const parsed = DoneRecordSchema.safeParse(JSON.parse(readFileSync12(doneRecordPath(paperRoot), "utf8")));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-function verificationCheckedSha256(paperRoot) {
-  try {
-    const md = readFileSync12(join10(paperDir(paperRoot), "VERIFICATION.md"), "utf8");
-    return /^Text checked: .+ \(sha256 ([0-9a-f]{64})\)\s*$/mu.exec(md)?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
-function finalMdState(paperRoot) {
-  const dir = paperDir(paperRoot);
-  const finalPath = join10(dir, "FINAL.md");
-  if (!existsSync9(finalPath)) return "absent";
-  const finalSha = fileSha256(finalPath);
-  if (finalSha === "") return "edited";
-  const draftSha = fileSha256(join10(dir, "DRAFT.md"));
-  const record2 = readDoneRecord(paperRoot);
-  if (record2 !== null && record2.final_sha256 === finalSha) return record2.compiled_draft_sha256 === draftSha ? "current" : "stale";
-  if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? "current" : "stale";
-  return finalSha === draftSha ? "stale" : "edited";
-}
-function editedFinalReason(paperRoot) {
-  const dir = basename3(paperDir(paperRoot));
-  return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
-}
-var DONE_RECORD_FILE;
-var init_done_record2 = __esm({
-  "bin/lib/done-record.ts"() {
-    "use strict";
-    init_atomic_write();
-    init_compile_inputs2();
-    init_paths();
-    init_done_record();
-    DONE_RECORD_FILE = "DONE-RECORD.json";
-    __name(doneRecordPath, "doneRecordPath");
-    __name(readDoneRecord, "readDoneRecord");
-    __name(verificationCheckedSha256, "verificationCheckedSha256");
-    __name(finalMdState, "finalMdState");
-    __name(editedFinalReason, "editedFinalReason");
-  }
-});
-
-// bin/lib/router.ts
-import { existsSync as existsSync10, readFileSync as readFileSync13, statSync as statSync6 } from "node:fs";
-import { basename as basename4, join as join11 } from "node:path";
-function readSectionInfo(planPath) {
-  const none = { stub: false, failureReason: null, verifiedHash: null, assignedSources: [] };
-  if (!existsSync10(planPath)) {
-    return { status: "planned", corrupt: false, absent: true, ...none };
-  }
-  try {
-    const { frontmatter } = loadFrontmatterDocSync("plan", planPath);
-    const fm = frontmatter;
-    return {
-      status: typeof fm.status === "string" ? fm.status : "planned",
-      corrupt: false,
-      absent: false,
-      stub: fm.stub === true,
-      failureReason: typeof fm.failure_reason === "string" && fm.failure_reason.trim() ? fm.failure_reason.trim() : null,
-      verifiedHash: typeof fm.verified_against_draft_hash === "string" ? fm.verified_against_draft_hash : null,
-      assignedSources: Array.isArray(fm.assigned_sources) ? fm.assigned_sources.map(String) : []
-    };
-  } catch (e2) {
-    process.stderr.write(
-      `[pensmith] PLAN.md at ${planPath} is unreadable/corrupt: ${e2.message}
-`
-    );
-    return { status: "planned", corrupt: true, absent: false, ...none };
-  }
-}
-function draftHashOf(draftPath, assignedSources) {
-  try {
-    return computeDraftHash(readFileSync13(draftPath), [...assignedSources]);
-  } catch {
-    return null;
-  }
-}
-function sectionDraftState(draftPath, info) {
-  if (!existsSync10(draftPath)) return "missing";
-  if (info.status !== "verified") return "current";
-  return info.verifiedHash === null || draftHashOf(draftPath, info.assignedSources) === info.verifiedHash ? "current" : "changed";
-}
-function verificationBlockers(verificationPath) {
-  let md;
-  try {
-    md = readFileSync13(verificationPath, "utf8");
-  } catch {
-    return ["its VERIFICATION.md is missing or unreadable"];
-  }
-  const reasons = sectionVerificationReasons(md, dryRunWorkspaceActive());
-  const unverifiable = parseBlockingVerdictRows(md).filter((r2) => r2.verdict === "UNVERIFIABLE" || RETRY_ONLINE_VERDICTS.has(r2.verdict));
-  if (reasons.length > 1 && unverifiable.length === reasons.length) {
-    const keys = unverifiable.map((r2) => `[@${r2.citekey}]`);
-    const list3 = `${keys.slice(0, -1).join(", ")} and ${keys[keys.length - 1]}`;
-    return [`${list3} are UNVERIFIABLE (their sources could not be checked: offline, --dry-run or a failed lookup)`];
-  }
-  return reasons;
-}
-function recordHasPlaceholder(verificationPath) {
-  try {
-    return parseBlockingVerdictRows(readFileSync13(verificationPath, "utf8")).some((r2) => r2.verdict === "PLACEHOLDER");
-  } catch {
-    return false;
-  }
-}
-function recordRevisable(verificationPath) {
-  try {
-    return reviseCanRepair(readFileSync13(verificationPath, "utf8"));
-  } catch {
-    return true;
-  }
-}
-function unverifiableSectionDetail(verificationPath, label) {
-  let md;
-  try {
-    md = readFileSync13(verificationPath, "utf8");
-  } catch {
-    return `section ${label} could not be verified: its VERIFICATION.md is missing or unreadable \u2014 run \`pensmith verify ${label}\``;
-  }
-  const rows = parseBlockingVerdictRows(md);
-  if (rows.length === 0) return null;
-  const parts = [];
-  const quotes = rows.filter((r2) => r2.verdict === ACCEPTABLE_QUOTE_VERDICT);
-  if (quotes.length > 0) {
-    const ids = [...new Set(quotes.map((q3) => q3.quoteId ?? "?"))];
-    parts.push(
-      `${ids.length} quote(s) (${ids.join(", ")}) could not be checked against any source text \u2014 add the source's PDF (\`pensmith add <pdf>\`), paraphrase (re-draft with \`pensmith write ${label}\`, or edit its DRAFT.md and run \`pensmith verify ${label}\`), or accept a quote (\`pensmith verify ${label} --accept-quote ${ids[0]}\`)`
-    );
-  }
-  if (rows.some((r2) => r2.verdict === "PLACEHOLDER")) {
-    parts.push(`its draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model: \`pensmith write ${label}\``);
-  }
-  const network = rows.filter((r2) => RETRY_ONLINE_VERDICTS.has(r2.verdict));
-  if (network.length > 0) {
-    parts.push(`${network.map((r2) => `[@${r2.citekey}]`).join(", ")} could not be checked (offline or a failed lookup) \u2014 re-run \`pensmith verify ${label}\` online`);
-  }
-  for (const r2 of rows.filter((x3) => x3.verdict === "UNVERIFIABLE")) {
-    parts.push(`[@${r2.citekey}] cannot be checked by its registrar${r2.reason !== void 0 ? ` \u2014 ${r2.reason}` : ""}`);
-  }
-  if (parts.length === 0) parts.push(verificationBlockers(verificationPath).join("; "));
-  return `section ${label} could not be verified: ${parts.join("; ")}`;
-}
-function mtimeOf(p2) {
-  try {
-    return statSync6(p2).mtimeMs;
-  } catch {
-    return null;
-  }
-}
-function compiledSectionCount(pDir) {
-  try {
-    const m3 = /^sections_count:\s*(\d+)\s*$/m.exec(readFileSync13(join11(pDir, "COMPILE-REPORT.md"), "utf8"));
-    return m3 ? Number(m3[1]) : null;
-  } catch {
-    return null;
-  }
-}
-function compiledDraftStale(pDir, sections2, paperRoot) {
-  const compiledAt = mtimeOf(join11(pDir, "DRAFT.md"));
-  if (compiledAt === null) return true;
-  const record2 = readCompileInputs(paperRoot);
-  if (record2 !== null && (record2.compiled_draft_sha256 === null || record2.sections.some((s2) => s2.verified_against_draft_hash === null))) return true;
-  const current = compiledInputsCurrent(paperRoot, sections2);
-  if (current !== null) return !current;
-  for (const { n: n2, slug } of sections2) {
-    for (const file of [sectionDraft(n2, slug, paperRoot), sectionVerification(n2, slug, paperRoot)]) {
-      const at = mtimeOf(file);
-      if (at !== null && at > compiledAt) return true;
-    }
-  }
-  const count = compiledSectionCount(pDir);
-  return count !== null && count !== sections2.length;
-}
-async function resolveNextAction(paperRoot, opts = {}) {
-  try {
-    let state;
-    try {
-      state = await loadState(paperRoot);
-    } catch (e2) {
-      if (e2 instanceof StateNotFoundError) return { verb: "new" };
-      process.stderr.write(
-        `[pensmith] STATE.json at ${paperRoot} is unreadable/corrupt: ${e2.message}
-`
-      );
-      return { verb: "status", reason: "attention" };
-    }
-    const pDir = paperDir(paperRoot);
-    const researchDone = isResearchDone(pDir);
-    if (!researchDone) return { verb: "research" };
-    if (opts.stopAfterResearch && researchDone) {
-      return { verb: "status", reason: "done" };
-    }
-    const sections2 = state.sections ?? [];
-    if (sections2.length === 0 && existsSync10(join11(pDir, "OUTLINE.rejected.md"))) {
-      return {
-        verb: "status",
-        reason: "attention",
-        detail: "the last outline was rejected (the replies are in .paper/OUTLINE.rejected.md) \u2014 fix the problem it names, then run `pensmith outline`"
-      };
-    }
-    const outlineIssue = outlineProblem(paperRoot);
-    if (outlineIssue !== null) return { verb: "status", reason: "attention", detail: outlineIssue };
-    if (!existsSync10(join11(pDir, "OUTLINE.md"))) return { verb: "outline" };
-    if (sections2.length === 0) return { verb: "outline" };
-    const registry2 = sectionRegistryProblem(paperRoot);
-    if (registry2 !== null) return { verb: "status", reason: "attention", detail: registry2 };
-    if (opts.stopAfterOutline) return { verb: "status", reason: "done", detail: OUTLINE_ONLY_DONE };
-    const unverifiablePast = [];
-    for (const { n: n2, slug, suffix } of sortBySectionId(sections2)) {
-      const id = suffix !== void 0 ? { n: n2, slug, suffix } : { n: n2, slug };
-      const label = formatSectionId(sectionIdOf(n2, suffix));
-      const r2 = readSectionInfo(sectionPlan(n2, slug, paperRoot));
-      if (r2.absent) return { verb: "plan", ...id };
-      if (r2.corrupt) {
-        return {
-          verb: "status",
-          reason: "attention",
-          section: id,
-          detail: `section ${label}'s PLAN.md is unreadable \u2014 fix it, or re-plan with \`pensmith plan ${label}\``
-        };
-      }
-      switch (r2.status) {
-        case "verified":
-          if (!existsSync10(sectionDraft(n2, slug, paperRoot))) return { verb: "write", ...id };
-          continue;
-        case "planned":
-          return r2.stub ? { verb: "plan", ...id } : { verb: "write", ...id };
-        case "writing":
-          return { verb: "write", ...id };
-        case "failed":
-          if (r2.failureReason !== null || !existsSync10(sectionDraft(n2, slug, paperRoot))) {
-            return {
-              verb: "status",
-              reason: "attention",
-              section: id,
-              detail: `section ${label} failed${r2.failureReason ? `: ${r2.failureReason}` : ""} \u2014 adjust its plan or sources if needed, then run \`pensmith write ${label}\``
-            };
-          }
-          if (r2.verifiedHash !== null && draftHashOf(sectionDraft(n2, slug, paperRoot), r2.assignedSources) === r2.verifiedHash) {
-            return {
-              verb: "status",
-              reason: "attention",
-              section: id,
-              detail: recordRevisable(sectionVerification(n2, slug, paperRoot)) ? `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 repair the flagged citations with \`pensmith plan ${label} --revise\` (one per run; then \`pensmith\` re-verifies the section), or re-draft with \`pensmith write ${label}\` (\`pensmith verify ${label}\` re-checks it as it is)` : `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 the flagged text is not a citation \`--revise\` can swap: edit it in the section's DRAFT.md (a citation written as [@citekey]) and run \`pensmith verify ${label}\`, or re-draft with \`pensmith write ${label}\``
-            };
-          }
-          return { verb: "verify", ...id };
-        // the draft changed: re-attempt verification — NOT continue
-        case "unverifiable": {
-          if (!existsSync10(sectionDraft(n2, slug, paperRoot))) return { verb: "write", ...id };
-          if (r2.verifiedHash === null || draftHashOf(sectionDraft(n2, slug, paperRoot), r2.assignedSources) !== r2.verifiedHash) {
-            return { verb: "verify", ...id };
-          }
-          unverifiablePast.push({ id, label, verificationPath: sectionVerification(n2, slug, paperRoot) });
-          continue;
-        }
-        case "written":
-        case "verifying":
-          if (!existsSync10(sectionDraft(n2, slug, paperRoot))) return { verb: "write", ...id };
-          return { verb: "verify", ...id };
-        default:
-          return {
-            verb: "status",
-            reason: "attention",
-            section: id,
-            detail: `section ${label}'s PLAN.md has an unknown status "${r2.status}"`
-          };
-      }
-    }
-    if (!dryRunWorkspaceActive()) {
-      const stub = unverifiablePast.filter((u) => recordHasPlaceholder(u.verificationPath));
-      if (stub.length > 0) {
-        return {
-          verb: "status",
-          reason: "attention",
-          section: stub[0].id,
-          detail: stub.map((u) => unverifiableSectionDetail(u.verificationPath, u.label) ?? `section ${u.label}'s draft is stub text \u2014 \`pensmith write ${u.label}\``).join("; ")
-        };
-      }
-    }
-    const record2 = readCompileInputs(paperRoot);
-    if (record2 !== null && record2.compiled_draft_sha256 !== null && existsSync10(join11(pDir, "DRAFT.md")) && fileSha256(join11(pDir, "DRAFT.md")) !== record2.compiled_draft_sha256) {
-      return {
-        verb: "status",
-        reason: "attention",
-        detail: `${basename4(pDir)}/DRAFT.md was edited after compile \u2014 make the edit in the section drafts (then \`pensmith\` re-verifies them) and run \`pensmith compile\`, which replaces the edited file`
-      };
-    }
-    if (compiledDraftStale(pDir, sections2, paperRoot)) return { verb: "compile" };
-    const finalState = finalMdState(paperRoot);
-    if (finalState === "edited") return { verb: "status", reason: "attention", detail: editedFinalReason(paperRoot) };
-    if (finalState !== "current") {
-      return record2 === null ? { verb: "compile" } : { verb: "done" };
-    }
-    return { verb: "status", reason: "done" };
-  } catch (e2) {
-    process.stderr.write(
-      `[pensmith] router resolveNextAction hit an unexpected error: ${e2.message}
-`
-    );
-    return { verb: "status", reason: "attention" };
-  }
-}
-var OUTLINE_ONLY_DONE;
-var init_router = __esm({
-  "bin/lib/router.ts"() {
-    "use strict";
-    init_state2();
-    init_paths();
-    init_frontmatter();
-    init_section_id();
-    init_draft_hash();
-    init_compile_inputs2();
-    init_section_registry();
-    init_verdict_rows();
-    init_verdicts();
-    init_research_sentinel();
-    init_verdicts();
-    init_compile_inputs2();
-    init_done_record2();
-    __name(readSectionInfo, "readSectionInfo");
-    __name(draftHashOf, "draftHashOf");
-    __name(sectionDraftState, "sectionDraftState");
-    __name(verificationBlockers, "verificationBlockers");
-    __name(recordHasPlaceholder, "recordHasPlaceholder");
-    __name(recordRevisable, "recordRevisable");
-    __name(unverifiableSectionDetail, "unverifiableSectionDetail");
-    __name(mtimeOf, "mtimeOf");
-    __name(compiledSectionCount, "compiledSectionCount");
-    __name(compiledDraftStale, "compiledDraftStale");
-    OUTLINE_ONLY_DONE = 'outline only: the approved outline is .paper/OUTLINE.md (its sources in .paper/LIBRARY.json and CITATIONS.bib) \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
-    __name(resolveNextAction, "resolveNextAction");
+    __name(migrate14, "migrate");
   }
 });
 
 // bin/lib/intake-brief.ts
-import { existsSync as existsSync11 } from "node:fs";
+import { existsSync as existsSync8 } from "node:fs";
 import path10 from "node:path";
 function intakePath(root = projectRoot()) {
   return path10.join(paperDir(root), "INTAKE.md");
@@ -80435,7 +79812,7 @@ function parseIntakeFrontmatter(frontmatter, body, file, diskVersion) {
 }
 function readIntakeBrief(root = projectRoot()) {
   const file = intakePath(root);
-  if (!existsSync11(file)) return null;
+  if (!existsSync8(file)) return null;
   const doc = loadFrontmatterDocSync("intake", file);
   return parseIntakeFrontmatter(doc.frontmatter, doc.body, file, doc.diskVersion);
 }
@@ -80519,301 +79896,296 @@ var init_intake_brief = __esm({
   }
 });
 
-// bin/lib/intake-overrides.ts
+// bin/lib/verify/draft-text.ts
+function lines(md) {
+  const out2 = [];
+  let start = 0;
+  for (; ; ) {
+    const nl = md.indexOf("\n", start);
+    const rawEnd = nl === -1 ? md.length : nl;
+    const end = rawEnd > start && md[rawEnd - 1] === "\r" ? rawEnd - 1 : rawEnd;
+    out2.push({ start, end, text: md.slice(start, end) });
+    if (nl === -1) return out2;
+    start = nl + 1;
+  }
+}
+function proseParagraphs(md) {
+  const out2 = [];
+  let first2 = null;
+  let last = null;
+  let fence = null;
+  const flush = /* @__PURE__ */ __name(() => {
+    if (first2 !== null && last !== null) {
+      const text4 = md.slice(first2.start, last.end);
+      if (text4.trim().length > 0) out2.push({ index: out2.length + 1, start: first2.start, end: last.end, text: text4 });
+    }
+    first2 = null;
+    last = null;
+  }, "flush");
+  const all = lines(md);
+  for (let i = 0; i < all.length; i += 1) {
+    const line = all[i];
+    const f2 = FENCE_RE.exec(line.text);
+    if (fence !== null) {
+      if (f2 !== null && f2[0].trim()[0] === fence) fence = null;
+      continue;
+    }
+    if (f2 !== null) {
+      flush();
+      fence = f2[0].trim()[0];
+      continue;
+    }
+    const next = all[i + 1];
+    const setextTitle = next !== void 0 && /^ {0,3}(?:=+|-+)[ \t]*$/.test(next.text) && line.text.trim() !== "";
+    if (line.text.trim() === "" || NON_PROSE_LINE_RE.test(line.text) || setextTitle) {
+      flush();
+      if (setextTitle) i += 1;
+      continue;
+    }
+    if (first2 === null) first2 = line;
+    last = line;
+  }
+  flush();
+  return out2;
+}
 function oneLine3(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
-function escapeRe(s2) {
-  return s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function prose(text4) {
+  return oneLine3(replaceCitations(text4, () => " "));
 }
-function clausesOf(text4) {
-  return text4.replace(/\r\n?/g, "\n").split(/(?<=[.!?;])\s+|\n+/).map((c2) => c2.trim()).filter((c2) => c2.length > 0);
-}
-function styleMentions(text4) {
-  const taken = [];
+function draftSentences(md) {
+  const citations = findCitations(md);
   const out2 = [];
-  for (const alias of citationStyleAliases()) {
-    const pattern = alias.split(" ").map(escapeRe).join("[\\s()\\-\u2013\u2014/]+(?:and\\s+)?");
-    const re = new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, "giu");
-    for (const m3 of text4.matchAll(re)) {
-      const at = m3.index ?? 0;
-      const end = at + m3[0].length;
-      if (taken.some(([a3, b3]) => at < b3 && end > a3)) continue;
-      const style = citationStyleKey(alias);
-      if (style === null) continue;
-      taken.push([at, end]);
-      out2.push({ at, end, alias, style });
+  for (const p2 of proseParagraphs(md)) {
+    const inside = citations.filter((c2) => c2.start >= p2.start && c2.start < p2.end);
+    const cuts = [];
+    for (const m3 of p2.text.matchAll(BOUNDARY_RE)) {
+      const at = p2.start + m3.index;
+      if (inside.some((c2) => at >= c2.start && at < c2.end)) continue;
+      cuts.push(p2.start + m3.index + m3[0].length);
+    }
+    const pieces = [];
+    let from = p2.start;
+    for (const cut of [...cuts, p2.end]) {
+      if (cut <= from) continue;
+      const raw = md.slice(from, cut);
+      const lead = raw.length - raw.trimStart().length;
+      if (raw.trim().length > 0) pieces.push({ start: from + lead, end: cut });
+      from = cut;
+    }
+    const merged = [];
+    for (const piece of pieces) {
+      const onlyCitations = prose(md.slice(piece.start, piece.end)).replace(/[\p{P}\s]/gu, "") === "";
+      const prev = merged[merged.length - 1];
+      if (onlyCitations && prev !== void 0) prev.end = piece.end;
+      else merged.push({ ...piece });
+    }
+    for (const s2 of merged) {
+      const text4 = md.slice(s2.start, s2.end);
+      out2.push({
+        paragraph: p2.index,
+        start: s2.start,
+        end: s2.end,
+        text: oneLine3(text4),
+        citations: inside.filter((c2) => c2.start >= s2.start && c2.start < s2.end)
+      });
     }
   }
-  return out2.sort((a3, b3) => a3.at - b3.at);
+  return out2;
 }
-function styleOverrideFrom(text4) {
-  let found = null;
-  for (const clause of clausesOf(text4)) {
-    for (const m3 of styleMentions(clause)) {
-      const before = clause.slice(Math.max(0, m3.at - 60), m3.at);
-      const after = clause.slice(m3.end, m3.end + 40);
-      if (BEFORE_NEGATION.test(before)) continue;
-      const ambiguous = AMBIGUOUS_STYLE_ALIASES.has(m3.alias);
-      const afterCue = AFTER_CUE.test(after) || !ambiguous && AFTER_EDITION.test(after);
-      const strong = BEFORE_STRONG.test(before) || afterCue;
-      const weak = !ambiguous && BEFORE_WEAK.test(before);
-      if (strong || weak) found = { style: m3.style, evidence: oneLine3(clause).slice(0, 200) };
-    }
-  }
-  return found;
-}
-function sectioningNotesFrom(text4) {
+function claimPairs(draftMd) {
+  const seen = /* @__PURE__ */ new Set();
   const out2 = [];
-  for (const raw of clausesOf(text4)) {
-    const clause = oneLine3(raw).replace(/^[-*•\d.)\s]+/, "");
-    if (clause.length < 6 || clause.length > 300) continue;
-    if (!SECTION_WORDS.test(clause) && !SECTION_NOUN.test(clause)) continue;
-    const ordered = SECTION_WORDS.test(clause) && ORDER_CUE.test(clause);
-    const asked2 = SECTION_NOUN.test(clause) && NEED_CUE.test(clause);
-    const noSection = /^(?:no|without|omit|skip|drop)\b/i.test(clause) && SECTION_WORDS.test(clause);
-    if (!ordered && !asked2 && !noSection) continue;
-    const note = clause.replace(/[.;]+$/, "");
-    if (!out2.some((n2) => n2.toLowerCase() === note.toLowerCase())) out2.push(note);
-  }
-  return out2.slice(0, 10);
-}
-function toInt(s2) {
-  return Number(s2.replace(/[,\s]/g, ""));
-}
-function plausible(n2) {
-  return Number.isInteger(n2) && n2 >= MIN_WORDS && n2 <= MAX_WORDS ? n2 : null;
-}
-function statedLengthWords(text4) {
-  const t = text4.replace(/\r\n?/g, "\n");
-  const NUM = String.raw`(\d{1,3}(?:,\d{3})+|\d{2,6})`;
-  const range = new RegExp(`${NUM}\\s*(?:-|\u2013|\u2014|to)\\s*${NUM}[\\s-]*words?\\b`, "i").exec(t);
-  if (range) {
-    const lo = toInt(range[1] ?? "");
-    const hi = toInt(range[2] ?? "");
-    if (lo > 0 && hi >= lo) {
-      const mid = plausible(Math.round((lo + hi) / 2 / 50) * 50);
-      if (mid !== null) return mid;
-    }
-  }
-  const words4 = new RegExp(`${NUM}[\\s-]*(?:words?|wds?)\\b`, "i").exec(t);
-  if (words4) {
-    const n2 = plausible(toInt(words4[1] ?? ""));
-    if (n2 !== null) return n2;
-  }
-  const pageRange = /(\d{1,2})\s*(?:-|–|—|to)\s*(\d{1,2})[\s-]*pages?\b/i.exec(t);
-  if (pageRange) {
-    const lo = Number(pageRange[1]);
-    const hi = Number(pageRange[2]);
-    if (lo > 0 && hi >= lo) return plausible(Math.round((lo + hi) / 2 * WORDS_PER_PAGE));
-  }
-  const pages = /(\d{1,2})[\s-]*pages?\b/i.exec(t);
-  if (pages) return plausible(Number(pages[1]) * WORDS_PER_PAGE);
-  return null;
-}
-function paperTypeFrom(text4) {
-  const body = clausesOf(text4).filter((c2) => sectioningNotesFrom(c2).length === 0).join("\n");
-  for (const [type, re] of PAPER_TYPE_CUES) if (re.test(body)) return type;
-  return "other";
-}
-function normalizePaperType(raw) {
-  const t = raw.trim().toLowerCase().replace(/[\s_]+/g, "-");
-  if (PAPER_TYPES.includes(t)) return t;
-  return paperTypeFrom(raw);
-}
-function isRequirementPart(part) {
-  const p2 = part.trim().replace(/[.)]+$/, "");
-  return p2.length === 0 || citationStyleKey(p2) !== null || REQUIREMENT_PARTS.some((re) => re.test(p2));
-}
-function stripRequirementParts(s2) {
-  const parts = s2.split(/(?:,|;)\s+/);
-  const kept = parts.filter((p2) => !isRequirementPart(p2));
-  return kept.join(", ").replace(/,\s+(?=(?:on|about|regarding|concerning|of|into|that|whether)\s)/gi, " ").trim();
-}
-function unlabelled(clause) {
-  const m3 = /^([^:]{1,40}):\s+(.+)$/.exec(clause);
-  if (!m3) return clause;
-  const rest = (m3[2] ?? "").trim();
-  return TASK_VERB.test(rest) ? rest : null;
-}
-function taskTopicPhrase(t, taskVerbOnly = false) {
-  const clauses = clausesOf(t).filter((c2) => !/^thesis\s+seed\s*:/i.test(c2)).map(unlabelled).filter((c2) => c2 !== null && !INSTRUCTION_ONLY.test(c2) && sectioningNotesFrom(c2).length === 0 && stripRequirementParts(oneLine3(c2).replace(/[.!?]+$/, "")).length > 0);
-  const sentence = clauses.find((c2) => TASK_VERB.test(c2)) ?? (taskVerbOnly ? "" : clauses[0] ?? "");
-  let s2 = stripRequirementParts(oneLine3(sentence).replace(/[.!?]+$/, ""));
-  s2 = s2.replace(TASK_VERB, "").replace(/^\s*(?:an?|one|your)\s+/i, "").replace(/^\s*(?:(?:short|brief|detailed|critical|formal|well[\s-]researched|original|thoughtful|clear)\s+)*/i, "").replace(new RegExp(String.raw`^\s*${NUMBER_WORDS}(?:\s*(?:-|–|—|to)\s*${NUMBER_WORDS})?[\s-]*(?:word|page)s?\s+`, "i"), "").replace(/^\s*(?:(?:argumentative|persuasive|analytical|expository|research|critical|reflective|comparative|academic|short|term|informative|explanatory)\s+)*/i, "").replace(/^\s*(?:literature\s+review|lit(?:erature)?\s+survey|review|paper|essay|report|study|analysis|article|proposal|memo|primer|summary|brief|piece|assignment|lab\s+report|research\s+paper)s?\s*/i, "").replace(/^\s*in\s+(?:english|plain\s+language|the\s+(?:first|third)\s+person)\s+/i, "").replace(/^\s*(?:on|about|of|regarding|concerning|examining|exploring|discussing|covering|addressing|investigating|into|that\s+(?:examines|explores|discusses|analy[sz]es|argues))\s+/i, "").replace(COURSE_TAIL, "").replace(/[,;:]+$/, "").trim();
-  return s2.length >= 3 && !isRequirementPart(s2) ? s2.slice(0, 200) : "";
-}
-function labelledLine(t, labels) {
-  const re = new RegExp(String.raw`^\s*(?:paper\s+)?(?:${labels.source})\s*[:–—-]\s*(.+?)\s*$`, "im");
-  const v2 = re.exec(t)?.[1];
-  return v2 && oneLine3(v2).length >= 3 ? oneLine3(v2).replace(/[.]+$/, "").slice(0, 200) : "";
-}
-function topicFromAssignment(text4) {
-  const t = text4.replace(/\r\n?/g, "\n");
-  const candidates = [labelledLine(t, TOPIC_LABELS), taskTopicPhrase(t), labelledLine(t, TITLE_LABELS)].filter((c2) => c2.length > 0);
-  return candidates.find((c2) => !REDACTION_TAG.test(c2)) ?? candidates[0] ?? "";
-}
-function disciplineMentionFrom(text4) {
-  const presets = Object.values(loadDisciplinePresets());
-  const t = text4.replace(/\r\n?/g, "\n").replace(/\bliterature\s+(?:review|survey|search)\b/gi, " ");
-  const names = /* @__PURE__ */ __name((p2) => [p2.slug.replace(/-/g, " "), p2.name, ...p2.aliases].flatMap((n2) => n2.split("/")).map((n2) => n2.trim()).filter((n2) => n2.length >= 2), "names");
-  const labelled = /^\s*(?:discipline|subject(?:\s+area)?|field(?:\s+of\s+study)?|course|class|department|major)\s*[:–—-]\s*(.+?)\s*$/gim;
-  for (const m3 of t.matchAll(labelled)) {
-    const value = (m3[1] ?? "").toLowerCase();
-    for (const p2 of presets) {
-      if (p2.slug === FALLBACK_DISCIPLINE) continue;
-      if (names(p2).some((n2) => new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(n2.toLowerCase()).replace(/\\ /g, "\\s+")}(?![\\p{L}\\p{N}])`, "u").test(value))) return p2.slug;
-    }
-  }
-  let best = null;
-  for (const p2 of presets) {
-    if (p2.slug === FALLBACK_DISCIPLINE) continue;
-    for (const n2 of names(p2)) {
-      const body = escapeRe(n2).replace(/\\ /g, "\\s+").replace(/ /g, "\\s+");
-      const res = [
-        new RegExp(`(?<![\\p{L}\\p{N}])${body}\\s+${COURSE_NOUNS}\\b`, "iu"),
-        new RegExp(`\\b(?:in|of|for)\\s+(?:the\\s+)?(?:field\\s+of\\s+)?${body}(?:\\s+${COURSE_NOUNS})?(?![\\p{L}\\p{N}])(?=\\s*(?:[.,;:)]|$|\\s+${COURSE_NOUNS}))`, "iu")
-      ];
-      for (const re of res) {
-        const m3 = re.exec(t);
-        if (m3 && (best === null || (m3.index ?? 0) < best.at)) best = { slug: p2.slug, at: m3.index ?? 0 };
+  for (const s2 of draftSentences(draftMd)) {
+    for (const c2 of s2.citations) {
+      for (const item of citationItems(c2)) {
+        const id = `${item.key}\0${s2.text}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out2.push({ citekey: item.key, claimSentence: s2.text });
       }
     }
   }
-  return best?.slug ?? null;
+  return out2;
 }
-function thesisSeedFrom(text4) {
-  const m3 = new RegExp(`^\\s*${escapeRe(THESIS_SEED_LABEL)}\\s*(.+)$`, "im").exec(text4.replace(/\r\n?/g, "\n"));
-  return m3 ? oneLine3(m3[1] ?? "") : "";
-}
-function parseIntakeOverrides(assignment, answers = []) {
-  let style = styleOverrideFrom(assignment);
-  const notes = [...sectioningNotesFrom(assignment)];
-  for (const a3 of answers) {
-    const s2 = styleOverrideFrom(a3);
-    if (s2 !== null) style = s2;
-    for (const n2 of sectioningNotesFrom(a3)) if (!notes.some((x3) => x3.toLowerCase() === n2.toLowerCase())) notes.push(n2);
-  }
-  return { citationStyle: style, sectioningNotes: notes.slice(0, 10), lengthWords: statedLengthWords(assignment) };
-}
-var WORDS_PER_PAGE, MIN_WORDS, MAX_WORDS, AMBIGUOUS_STYLE_ALIASES, AFTER_CUE, AFTER_EDITION, BEFORE_STRONG, BEFORE_WEAK, BEFORE_NEGATION, SECTION_WORDS, SECTION_NOUN, ORDER_CUE, NEED_CUE, PAPER_TYPE_CUES, TASK_VERB, INSTRUCTION_ONLY, NUMBER_WORDS, REQUIREMENT_PARTS, COURSE_TAIL, TOPIC_LABELS, TITLE_LABELS, REDACTION_TAG, COURSE_NOUNS, THESIS_SEED_LABEL;
-var init_intake_overrides = __esm({
-  "bin/lib/intake-overrides.ts"() {
+var FENCE_RE, NON_PROSE_LINE_RE, BOUNDARY_RE;
+var init_draft_text = __esm({
+  "bin/lib/verify/draft-text.ts"() {
     "use strict";
-    init_config();
-    init_disciplines();
-    init_intake_brief();
-    WORDS_PER_PAGE = 300;
-    MIN_WORDS = 100;
-    MAX_WORDS = 5e4;
+    init_citation_token();
+    FENCE_RE = /^ {0,3}(?:`{3,}|~{3,})/;
+    NON_PROSE_LINE_RE = /^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*_][ \t]*){3,}$|=+[ \t]*$|\||<!--.*-->[ \t]*$)/;
+    __name(lines, "lines");
+    __name(proseParagraphs, "proseParagraphs");
+    BOUNDARY_RE = /[.!?]+["'”’»)\]]*(?=\s|$)/g;
     __name(oneLine3, "oneLine");
-    __name(escapeRe, "escapeRe");
-    __name(clausesOf, "clausesOf");
-    AMBIGUOUS_STYLE_ALIASES = /* @__PURE__ */ new Set(["chicago", "harvard", "vancouver", "turabian", "author date", "notes bibliography", "ama"]);
-    AFTER_CUE = /^[\s-]*(?:\(?\s*(?:\d{1,2}(?:st|nd|rd|th)?\s*(?:ed(?:ition)?\.?)?\s*\)?\s*)?)(?:style|format|formatting|formatted|citations?|citing|referencing|references?|reference\s+list|bibliography|in-text|edition|guidelines?|conventions?|rules)\b/i;
-    AFTER_EDITION = /^\s*\(?\d{1,2}(?:st|nd|rd|th)?\)?(?![\d.])/;
-    BEFORE_STRONG = /(?:\b(?:use|using|uses|follow|follows|following|per|cite|cited|citing|cites|format|formatted|formatting|reference|referenced|document|documented|according to)\b(?:\s+(?:the|a|an|in|with|using|to|sources|references|citations|them|your|all))*\s*|\b(?:style|format|citations?|referencing)\s*[:=-]\s*)$/i;
-    BEFORE_WEAK = /\b(?:in|with|to)\s+(?:the\s+)?$/i;
-    BEFORE_NEGATION = /\b(?:instead\s+of|rather\s+than|not|no|never|without|avoid|avoiding|except|than|over|but\s+not|replace|replacing|switch\s+from|change\s+from|don['’]t|do\s+not|never)\s+(?:the\s+)?(?:(?:use|using|follow|following|cite\s+in|format\s+in|in)\s+)?(?:the\s+)?$/i;
-    __name(styleMentions, "styleMentions");
-    __name(styleOverrideFrom, "styleOverrideFrom");
-    SECTION_WORDS = /\b(?:abstract|introduction|intro|background|literature\s+review|lit(?:erature)?\s+survey|related\s+work|methods?|methodology|materials(?:\s+and\s+methods)?|results|findings|discussion|analysis|conclusions?|limitations|future\s+work|counterarguments?|rebuttal|objections?|recommendations?|appendix|appendices|case\s+stud(?:y|ies)|executive\s+summary|references|bibliography|annotated\s+bibliography)\b/i;
-    SECTION_NOUN = /\b(?:sections?|headings?|subsections?|chapters?|parts?)\b/i;
-    ORDER_CUE = /\b(?:before|after|between|following|precede[sd]?|then|first|last|start(?:ing)?\s+with|begin(?:ning)?\s+with|end(?:ing)?\s+with|open(?:ing)?\s+with|close\s+with|followed\s+by)\b/i;
-    NEED_CUE = /\b(?:need|needs|include|includes|including|add|must|should|require[sd]?|requiring|want|have|has|contain|omit|skip|drop|exclude|without|no|separate|dedicated|own)\b/i;
-    __name(sectioningNotesFrom, "sectioningNotesFrom");
-    __name(toInt, "toInt");
-    __name(plausible, "plausible");
-    __name(statedLengthWords, "statedLengthWords");
-    PAPER_TYPE_CUES = [
-      ["literature-review", /\b(?:literature\s+review|lit(?:erature)?\s+survey|review\s+of\s+(?:the\s+)?(?:literature|research|evidence)|systematic\s+review|scoping\s+review)\b/i],
-      ["lab-report", /\blab(?:oratory)?\s+report\b/i],
-      ["research-report", /\bresearch\s+(?:report|paper|proposal)\b/i],
-      ["primer", /\bprimer\b/i],
-      ["summary", /\b(?:summary|summari[sz]e|summari[sz]ing|synopsis|abstract\s+of)\b/i],
-      ["persuasive", /\bpersuasive\b|\bpersuade\b|\bconvince\b/i],
-      ["argumentative", /\bargumentative\b|\bargue\b|\bargument\s+(?:essay|paper)\b|\bposition\s+paper\b|\btake\s+a\s+(?:clear\s+)?(?:position|stance|side)\b|\bdefend\s+(?:a|the|your)\s+(?:thesis|claim|position)\b/i],
-      ["analytical", /\banalytical\b|\banaly[sz]e\b|\banalysis\b|\bcritically\s+(?:assess|evaluate|examine)\b/i],
-      ["expository", /\bexpository\b|\bexplain\b|\bexplanatory\b|\binformative\b|\bdescribe\b/i]
-    ];
-    __name(paperTypeFrom, "paperTypeFrom");
-    __name(normalizePaperType, "normalizePaperType");
-    TASK_VERB = /^(?:please\s+)?(?:write|compose|draft|prepare|produce|create|discuss|analy[sz]e|argue|examine|explore|describe|explain|review|evaluate|compare|contrast|investigate|research|assess|consider|summari[sz]e|critique|reflect|develop|present)\b/i;
-    INSTRUCTION_ONLY = /^(?:please\s+)?(?:use|follow|cite|include|add|submit|format|double[\s-]space|no|omit|skip|avoid|make\s+sure|remember|note|ensure)\b/i;
-    NUMBER_WORDS = String.raw`(?:\d[\d,]*|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen|twenty)`;
-    REQUIREMENT_PARTS = [
-      new RegExp(String.raw`^\(?\s*(?:about\s+|around\s+|at\s+least\s+|no\s+more\s+than\s+|max(?:imum)?\s+|min(?:imum)?\s+)?${NUMBER_WORDS}(?:\s*(?:-|–|—|to)\s*${NUMBER_WORDS})?[\s-]*(?:words?|pages?)\b`, "i"),
-      /\b(?:style|format|formatting|formatted|referencing|edition|double[\s-]spaced|single[\s-]spaced)\s*\)?\s*$/i,
-      new RegExp(String.raw`^(?:citing|cite|using|use|with|including|include|drawing\s+on)\s+(?:at\s+least\s+|a\s+minimum\s+of\s+)?${NUMBER_WORDS}\s+(?:(?:peer[\s-]reviewed|scholarly|academic|credible|primary|secondary)\s+)*(?:sources|references|citations|articles|papers|studies)\b`, "i"),
-      /^(?:due|deadline|submit|submitted)\b/i
-    ];
-    COURSE_TAIL = /\s+(?:for\s+(?:my|our|the|this|your)|in\s+(?:my|our|your))\s+(?:[\p{L}\p{N}&.'’-]+\s+){0,4}(?:class|course|seminar|module|unit|lecture|tutorial|section)\s*$/iu;
-    __name(isRequirementPart, "isRequirementPart");
-    __name(stripRequirementParts, "stripRequirementParts");
-    __name(unlabelled, "unlabelled");
-    __name(taskTopicPhrase, "taskTopicPhrase");
-    __name(labelledLine, "labelledLine");
-    TOPIC_LABELS = /topic|research\s+question|prompt/;
-    TITLE_LABELS = /title|subject/;
-    REDACTION_TAG = /\[REDACTED:[A-Z]+\]/;
-    __name(topicFromAssignment, "topicFromAssignment");
-    COURSE_NOUNS = String.raw`(?:class|course|seminar|module|program(?:me)?|department|major|minor|unit|assignment|homework|paper|essay|lab|project|coursework|exam)`;
-    __name(disciplineMentionFrom, "disciplineMentionFrom");
-    THESIS_SEED_LABEL = "Thesis seed:";
-    __name(thesisSeedFrom, "thesisSeedFrom");
-    __name(parseIntakeOverrides, "parseIntakeOverrides");
+    __name(prose, "prose");
+    __name(draftSentences, "draftSentences");
+    __name(claimPairs, "claimPairs");
   }
 });
 
-// bin/lib/intake-parse.ts
-function fromBrief(text4) {
-  try {
-    const doc = migrateFrontmatterText("intake", text4.replace(/^﻿/, ""), "INTAKE.md");
-    const parsed = parseIntakeFrontmatter(doc.frontmatter, doc.body, "INTAKE.md", doc.diskVersion);
-    return {
-      topic: parsed.brief.topic,
-      discipline: parsed.brief.discipline,
-      assignment: parsed.assignment,
-      brief: parsed.brief
-    };
-  } catch {
-    return null;
-  }
+// bin/lib/pricing.ts
+function p(inputPerMtok, outputPerMtok, cacheReadPerMtok) {
+  return cacheReadPerMtok === void 0 ? { inputPerMtok, outputPerMtok, currency: "USD" } : { inputPerMtok, outputPerMtok, cacheReadPerMtok, currency: "USD" };
 }
-function fromRawText(text4) {
-  const section = assignmentFromBody(text4);
-  const assignment = section || text4.trim();
-  const topic = legacyTopic(text4) || topicFromAssignment(assignment) || assignment.replace(/\s+/g, " ").trim().slice(0, 80);
-  const discipline = /^\s*discipline\s*:/im.test(text4) ? legacyDiscipline(text4) : disciplineMentionFrom(text4) ?? FALLBACK_DISCIPLINE;
-  return { topic, discipline, assignment, brief: null };
-}
-function parseIntakeMd(text4) {
-  if (typeof text4 !== "string" || text4.trim().length === 0) {
-    return { topic: "", discipline: FALLBACK_DISCIPLINE, assignment: "", brief: null };
+function maxProviderPrice(provider) {
+  const table = MODEL_PRICES[provider];
+  if (!table) return null;
+  let inputPerMtok = 0;
+  let outputPerMtok = 0;
+  for (const price of Object.values(table)) {
+    inputPerMtok = Math.max(inputPerMtok, price.inputPerMtok);
+    outputPerMtok = Math.max(outputPerMtok, price.outputPerMtok);
   }
-  try {
-    if (FRONTMATTER_START.test(text4)) {
-      const brief = fromBrief(text4);
-      if (brief !== null) return brief;
-    }
-    return fromRawText(text4);
-  } catch {
-    return { topic: text4.trim().slice(0, 80), discipline: FALLBACK_DISCIPLINE, assignment: text4.trim(), brief: null };
-  }
+  return { inputPerMtok, outputPerMtok };
 }
-var FRONTMATTER_START;
-var init_intake_parse = __esm({
-  "bin/lib/intake-parse.ts"() {
+function withCache(provider, inputPerMtok, outputPerMtok, cacheReadPerMtok, source) {
+  const writeMult = provider === "anthropic" ? CACHE_WRITE_MULTIPLIER : 1;
+  return {
+    inputPerMtok,
+    outputPerMtok,
+    cacheWritePerMtok: inputPerMtok * writeMult,
+    cacheReadPerMtok: cacheReadPerMtok ?? inputPerMtok * CACHE_READ_MULTIPLIER,
+    source
+  };
+}
+function resolvePrice(provider, model, override2 = {}, warn = (line) => process.stderr.write(line + "\n")) {
+  const hasIn = typeof override2.inputPerMtok === "number" && Number.isFinite(override2.inputPerMtok);
+  const hasOut = typeof override2.outputPerMtok === "number" && Number.isFinite(override2.outputPerMtok);
+  const fromOverride = /* @__PURE__ */ __name(() => withCache(provider, hasIn ? override2.inputPerMtok : 0, hasOut ? override2.outputPerMtok : 0, void 0, "config"), "fromOverride");
+  if (isProviderName(provider) && LOCAL_PROVIDERS.has(provider)) {
+    if (hasIn || hasOut) return fromOverride();
+    return { inputPerMtok: 0, outputPerMtok: 0, cacheWritePerMtok: 0, cacheReadPerMtok: 0, source: "local" };
+  }
+  const table = MODEL_PRICES[provider]?.[model];
+  if (table) return withCache(provider, table.inputPerMtok, table.outputPerMtok, table.cacheReadPerMtok, "table");
+  if (hasIn || hasOut) return fromOverride();
+  const fallback = maxProviderPrice(provider) ?? maxProviderPrice("anthropic");
+  const key2 = `${provider}/${model}`;
+  if (!warnedFallback.has(key2)) {
+    warnedFallback.add(key2);
+    warn(
+      `pensmith: no price is known for ${key2}; using the most expensive ${provider} price ($${fallback.inputPerMtok.toFixed(2)} in / $${fallback.outputPerMtok.toFixed(2)} out per MTok). Set [runtime] price_in_per_mtok and price_out_per_mtok to override.`
+    );
+  }
+  return withCache(provider, fallback.inputPerMtok, fallback.outputPerMtok, void 0, "fallback");
+}
+function costOf(price, usage) {
+  const cw = usage.cacheWriteTokens ?? 0;
+  const cr = usage.cacheReadTokens ?? 0;
+  if (usage.inputTokens < 0 || usage.outputTokens < 0 || cw < 0 || cr < 0) {
+    throw new RangeError(
+      `token counts must be >= 0 (got input=${usage.inputTokens}, output=${usage.outputTokens}, cache_write=${cw}, cache_read=${cr})`
+    );
+  }
+  return usage.inputTokens / 1e6 * price.inputPerMtok + usage.outputTokens / 1e6 * price.outputPerMtok + cw / 1e6 * price.cacheWritePerMtok + cr / 1e6 * price.cacheReadPerMtok;
+}
+var RAW, MODEL_PRICES, CACHE_WRITE_MULTIPLIER, CACHE_READ_MULTIPLIER, warnedFallback;
+var init_pricing = __esm({
+  "bin/lib/pricing.ts"() {
     "use strict";
-    init_frontmatter();
-    init_intake_brief();
-    init_v0_to_v12();
-    init_disciplines();
-    init_intake_overrides();
-    FRONTMATTER_START = /^﻿?---\r?\n/;
-    __name(fromBrief, "fromBrief");
-    __name(fromRawText, "fromRawText");
-    __name(parseIntakeMd, "parseIntakeMd");
+    init_llm_models();
+    __name(p, "p");
+    RAW = {
+      anthropic: {
+        "claude-fable-5-1": p(10, 50, 0.25),
+        "claude-fable-5": p(10, 50),
+        "claude-opus-5-5": p(4, 20, 0.2),
+        "claude-opus-5": p(5, 25),
+        "claude-opus-4-8": p(5, 25),
+        "claude-opus-4-7": p(5, 25),
+        "claude-opus-4-6": p(5, 25),
+        "claude-sonnet-5": p(2, 10),
+        "claude-sonnet-4-6": p(3, 15),
+        "claude-haiku-4-5": p(1, 5)
+      },
+      openai: {
+        "gpt-6-astra": p(10, 50, 1),
+        "gpt-6-sol": p(2, 10, 0.2),
+        "gpt-6-luna": p(0.1, 0.5, 0.01),
+        "gpt-5.6-sol": p(4, 20, 0.4),
+        "gpt-5.6-terra": p(2, 12, 0.2),
+        "gpt-5.6-luna": p(0.2, 1.2, 0.02),
+        "gpt-5.5": p(5, 30, 0.5),
+        "gpt-5.4": p(2.5, 15, 0.25),
+        "gpt-5.4-mini": p(0.75, 4.5, 0.075),
+        "gpt-5.4-nano": p(0.2, 1.25, 0.02),
+        "gpt-5": p(1.25, 10, 0.125),
+        "gpt-5-mini": p(0.25, 2, 0.025),
+        "gpt-5-nano": p(0.05, 0.4, 5e-3),
+        "gpt-4.1": p(2, 8, 0.5),
+        "gpt-4.1-mini": p(0.4, 1.6, 0.1),
+        "gpt-4o": p(2.5, 10, 1.25),
+        "gpt-4o-mini": p(0.15, 0.6, 0.075)
+      }
+    };
+    for (const provider of Object.keys(RAW)) {
+      const providerRecord = RAW[provider];
+      for (const model of Object.keys(providerRecord)) Object.freeze(providerRecord[model]);
+      Object.freeze(providerRecord);
+    }
+    Object.freeze(RAW);
+    MODEL_PRICES = RAW;
+    CACHE_WRITE_MULTIPLIER = 1.25;
+    CACHE_READ_MULTIPLIER = 0.1;
+    warnedFallback = /* @__PURE__ */ new Set();
+    __name(maxProviderPrice, "maxProviderPrice");
+    __name(withCache, "withCache");
+    __name(resolvePrice, "resolvePrice");
+    __name(costOf, "costOf");
+  }
+});
+
+// bin/lib/replay.ts
+import { existsSync as existsSync9, readFileSync as readFileSync10 } from "node:fs";
+import path11 from "node:path";
+function parseLlmRecords(text4, spillBase) {
+  const out2 = [];
+  for (const line of text4.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let rec;
+    try {
+      rec = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (rec["kind"] !== "llm" || typeof rec["id"] !== "string" || typeof rec["slug"] !== "string") continue;
+    if (rec["truncated"] === true && typeof rec["spilled_to"] === "string" && spillBase) {
+      const spill = path11.join(spillBase, ...String(rec["spilled_to"]).split("/"));
+      try {
+        rec = JSON.parse(readFileSync10(spill, "utf8"));
+      } catch {
+      }
+    }
+    out2.push(rec);
+  }
+  return out2;
+}
+function key(slug, sha) {
+  return `${slug}\0${sha}`;
+}
+function isReplayActive() {
+  return store !== null;
+}
+function replayLookup(slug, requestSha256) {
+  if (!store) return null;
+  const list3 = store.get(key(slug, requestSha256));
+  if (!list3 || list3.length === 0) return null;
+  return list3.length > 1 ? list3.shift() : list3[0];
+}
+var store;
+var init_replay = __esm({
+  "bin/lib/replay.ts"() {
+    "use strict";
+    init_paths();
+    init_exit_codes();
+    __name(parseLlmRecords, "parseLlmRecords");
+    store = null;
+    __name(key, "key");
+    __name(isReplayActive, "isReplayActive");
+    __name(replayLookup, "replayLookup");
   }
 });
 
@@ -82065,7 +81437,8 @@ var init_gates = __esm({
       { id: "revise-swap", label: "Apply this citation swap to the section?", yolo: "skip", yoloChoice: "apply the proposed swap", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "PRD \xA77.5", summary: "the revise swap" },
       { id: "cost-cap", label: "This call would exceed your cost cap. Continue?", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_COST_CAP, declineExit: EXIT_COST_CAP, requirement: "RUN-18", summary: "the cost cap" },
       { id: "estimate-proceed", label: "Proceed?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "RUN-20", summary: "the estimate confirmation" },
-      { id: "detector-consent", label: "Send the full paper text to GPTZero for an AI-detection score?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "EXP-17", summary: "detector consent" },
+      // EXP-17 (D-21-20): backend-neutral — the disclosure line before it names the detector and its host; the answer is recorded in config.toml ([humanizer] honesty_consent).
+      { id: "detector-consent", label: "Send the full paper text to the configured AI detector for a score (your answer is saved)?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "EXP-17", summary: "detector consent" },
       { id: "paper-pointer", label: "Continue the active paper, or start a new paper here?", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_USAGE, declineExit: EXIT_USAGE, requirement: "RUN-14", summary: "the active-paper choice" },
       { id: "sketch-confirm", label: "Proceed to intake with this thesis?", yolo: "skip", yoloChoice: "proceed to intake", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "ERGO-05", summary: "the `sketch` confirmation" },
       { id: "assignment-pickup", label: "Use the assignment file in this folder?", yolo: "skip", yoloChoice: "use the file", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "GRND-01", summary: "the assignment-file pickup" },
@@ -82101,10 +81474,10 @@ var init_gates = __esm({
 });
 
 // bin/lib/budget.ts
-import path11 from "node:path";
+import path12 from "node:path";
 import * as fsp6 from "node:fs/promises";
 function costsPath(root = projectRoot()) {
-  return path11.join(paperDir(root), "COSTS.jsonl");
+  return path12.join(paperDir(root), "COSTS.jsonl");
 }
 async function readRecords(root) {
   let raw;
@@ -82293,865 +81666,6 @@ var init_budget = __esm({
         }
       }
     };
-  }
-});
-
-// bin/lib/dry-run-paper.ts
-import { createHash as createHash8 } from "node:crypto";
-import { existsSync as existsSync12, lstatSync, readdirSync as readdirSync4, readFileSync as readFileSync14, rmSync as rmSync3, statSync as statSync7, utimesSync } from "node:fs";
-import path12 from "node:path";
-function dryRunMarkerPath(root) {
-  return path12.join(dryRunPaperDir(root), DRY_RUN_MARKER);
-}
-function legacyDryRunMarkerPath(root) {
-  return path12.join(realPaperDir(root), DRY_RUN_MARKER);
-}
-function isDryRunPaper(root) {
-  return existsSync12(legacyDryRunMarkerPath(root));
-}
-function hasPaperFiles(root) {
-  let names;
-  try {
-    names = readdirSync4(realPaperDir(root));
-  } catch {
-    return false;
-  }
-  return names.some((n2) => PAPER_ARTIFACTS.has(n2));
-}
-function sha256(buf) {
-  return createHash8("sha256").update(buf).digest("hex");
-}
-function listSeedFiles(dir) {
-  const out2 = [];
-  const walk = /* @__PURE__ */ __name((abs, rel2) => {
-    let names;
-    try {
-      names = readdirSync4(abs);
-    } catch {
-      return;
-    }
-    for (const name of names.sort()) {
-      if (rel2 === "" && SEED_EXCLUDED.has(name)) continue;
-      const childAbs = path12.join(abs, name);
-      const childRel = rel2 === "" ? name : `${rel2}/${name}`;
-      let st;
-      try {
-        st = lstatSync(childAbs);
-      } catch {
-        continue;
-      }
-      if (st.isDirectory()) walk(childAbs, childRel);
-      else if (st.isFile()) out2.push(childRel);
-    }
-  }, "walk");
-  walk(dir, "");
-  return out2;
-}
-function fingerprintPaper(root) {
-  const dir = realPaperDir(root);
-  let isDir = false;
-  try {
-    isDir = lstatSync(dir).isDirectory();
-  } catch {
-    isDir = false;
-  }
-  if (!isDir) return { digest: null, files: [] };
-  const files = [];
-  for (const rel2 of listSeedFiles(dir)) {
-    let bytes;
-    try {
-      bytes = readFileSync14(path12.join(dir, ...rel2.split("/")));
-    } catch {
-      continue;
-    }
-    files.push({ path: rel2, size: bytes.length, sha256: sha256(bytes) });
-  }
-  const digest = sha256(files.map((f2) => `${f2.path}\0${f2.size}\0${f2.sha256}
-`).join(""));
-  return { digest, files };
-}
-function readSeedRecord(root) {
-  try {
-    const parsed = SeedRecordSchema.safeParse(JSON.parse(readFileSync14(path12.join(dryRunPaperDir(root), SEED_FILE), "utf8")));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-async function prepareDryRunWorkspace(root) {
-  const ws = dryRunPaperDir(root);
-  const fp = fingerprintPaper(root);
-  const prior = existsSync12(ws) ? readSeedRecord(root) : null;
-  if (prior !== null && prior.digest === fp.digest) {
-    if (!existsSync12(dryRunMarkerPath(root))) await atomicWriteFile(dryRunMarkerPath(root), WORKSPACE_MARKER_TEXT);
-    return { action: "kept", dir: ws, copied: 0, note: null };
-  }
-  const existed = existsSync12(ws);
-  if (existed) {
-    await closeSessionLog();
-    rmSync3(ws, { recursive: true, force: true });
-  }
-  const src = realPaperDir(root);
-  for (const f2 of fp.files) {
-    const parts = f2.path.split("/");
-    const from = path12.join(src, ...parts);
-    const to = path12.join(ws, ...parts);
-    await atomicWriteFile(to, readFileSync14(from));
-    try {
-      const st = statSync7(from);
-      utimesSync(to, st.atimeMs / 1e3, st.mtimeMs / 1e3);
-    } catch {
-    }
-  }
-  await atomicWriteFile(dryRunMarkerPath(root), WORKSPACE_MARKER_TEXT);
-  const record2 = {
-    $schemaVersion: 1,
-    seededAt: (/* @__PURE__ */ new Date()).toISOString(),
-    source: PAPER_DIR_NAME,
-    digest: fp.digest,
-    files: fp.files.map((f2) => ({ path: f2.path, size: f2.size, sha256: f2.sha256 }))
-  };
-  await atomicWriteFile(path12.join(ws, SEED_FILE), JSON.stringify(record2, null, 2) + "\n");
-  const action = fp.digest === null ? existed ? "re-seeded" : "created" : existed ? "re-seeded" : "seeded";
-  let note = null;
-  if (fp.digest !== null) {
-    note = `pensmith: ${action === "seeded" ? "seeded" : "re-seeded"} the dry-run workspace ${ws} from ${src} (${fp.files.length} file${fp.files.length === 1 ? "" : "s"}); the dry run never writes ${PAPER_DIR_NAME}/`;
-  } else if (existed) {
-    note = `pensmith: reset the dry-run workspace ${ws} (the paper it was copied from is gone)`;
-  }
-  return { action, dir: ws, copied: fp.files.length, note };
-}
-async function enforceDryRunBoundary(root, dryRun) {
-  if (dryRun) return prepareDryRunWorkspace(root);
-  if (!isDryRunPaper(root)) return null;
-  if (!hasPaperFiles(root)) {
-    rmSync3(legacyDryRunMarkerPath(root), { force: true });
-    return null;
-  }
-  throw new PensmithError(
-    `the paper at ${root} was made by --dry-run (synthetic sources, stub text) and cannot become a real paper \u2014 delete ${realPaperDir(root)} or use another folder, then run pensmith new (dry runs now work in ${DRY_RUN_PAPER_DIR_NAME}/ and never touch ${PAPER_DIR_NAME}/)`,
-    EXIT_ERROR
-  );
-}
-var DRY_RUN_MARKER, SEED_FILE, SEED_EXCLUDED, WORKSPACE_MARKER_TEXT, PAPER_ARTIFACTS, SeedRecordSchema;
-var init_dry_run_paper = __esm({
-  "bin/lib/dry-run-paper.ts"() {
-    "use strict";
-    init_zod();
-    init_atomic_write();
-    init_paths();
-    init_exit_codes();
-    init_session_log();
-    DRY_RUN_MARKER = "DRY-RUN.md";
-    SEED_FILE = "SEED.json";
-    SEED_EXCLUDED = /* @__PURE__ */ new Set(["export", "SESSION.log", "COSTS.jsonl", "INTAKE.raw.local", "HANDOFF.json"]);
-    WORKSPACE_MARKER_TEXT = [
-      "# pensmith dry-run workspace",
-      "",
-      "This folder is where `pensmith --dry-run` works. The real paper in `.paper/` is never written by a dry run:",
-      "when one exists, this workspace is a copy of it (see `SEED.json`), kept across dry runs and re-copied when `.paper/` changes.",
-      "",
-      "Sources a dry run adds are synthetic (`10.0000/pensmith-dryrun.*`) and its model replies are deterministic stubs.",
-      "Its exports are written to `export/` here, named `*.dry-run.*`. Delete this folder at any time.",
-      ""
-    ].join("\n");
-    __name(dryRunMarkerPath, "dryRunMarkerPath");
-    __name(legacyDryRunMarkerPath, "legacyDryRunMarkerPath");
-    __name(isDryRunPaper, "isDryRunPaper");
-    PAPER_ARTIFACTS = /* @__PURE__ */ new Set([
-      path12.basename(paperStateFile(".")),
-      "INTAKE.md",
-      "INTAKE.raw.local",
-      "LIBRARY.json",
-      "CITATIONS.bib",
-      "CITATIONS.ris",
-      "RESEARCH.md",
-      "OUTLINE.md",
-      "STYLE.json",
-      "TUTORIAL.md",
-      "DRAFT.md",
-      "COMPILE-REPORT.md",
-      "COMPILE-INPUTS.json",
-      "VERIFICATION.md",
-      "FINAL.md",
-      "DONE-RECORD.json",
-      "HANDOFF.json",
-      "sections",
-      "export"
-    ]);
-    __name(hasPaperFiles, "hasPaperFiles");
-    SeedRecordSchema = external_exports.object({
-      $schemaVersion: external_exports.literal(1),
-      seededAt: external_exports.string(),
-      source: external_exports.literal(PAPER_DIR_NAME),
-      digest: external_exports.string().nullable(),
-      files: external_exports.array(external_exports.object({ path: external_exports.string(), size: external_exports.number().int().min(0), sha256: external_exports.string() }))
-    });
-    __name(sha256, "sha256");
-    __name(listSeedFiles, "listSeedFiles");
-    __name(fingerprintPaper, "fingerprintPaper");
-    __name(readSeedRecord, "readSeedRecord");
-    __name(prepareDryRunWorkspace, "prepareDryRunWorkspace");
-    __name(enforceDryRunBoundary, "enforceDryRunBoundary");
-  }
-});
-
-// bin/lib/session-lock.ts
-import * as fs7 from "node:fs";
-import * as fsp7 from "node:fs/promises";
-import os3 from "node:os";
-import path13 from "node:path";
-function claudeSessionIdFromEnv() {
-  const v2 = process.env["CLAUDE_CODE_SESSION_ID"];
-  return typeof v2 === "string" && v2.length > 0 ? v2 : null;
-}
-function canonicalRoot(root) {
-  const r2 = realpathNearest(asProjectRoot(root));
-  return process.platform === "win32" ? r2.toLowerCase() : r2;
-}
-function sessionLockFile(root) {
-  return path13.join(pensmithLockDir(), `session-${projectHash(canonicalRoot(root))}.json`);
-}
-function isOwner(v2) {
-  if (!v2 || typeof v2 !== "object") return false;
-  const o2 = v2;
-  return typeof o2["hostname"] === "string" && typeof o2["pid"] === "number" && Number.isInteger(o2["pid"]) && typeof o2["sessionId"] === "string" && (o2["kind"] === "cli" || o2["kind"] === "mcp") && typeof o2["startedAt"] === "string";
-}
-function readOwner2(file) {
-  let text4;
-  let ageMs = 0;
-  try {
-    ageMs = Date.now() - fs7.statSync(file).mtimeMs;
-    text4 = fs7.readFileSync(file, "utf8");
-  } catch (e2) {
-    if (e2.code === "ENOENT") return { kind: "gone" };
-    return { kind: "unreadable", ageMs };
-  }
-  try {
-    const parsed = JSON.parse(text4);
-    return isOwner(parsed) ? { kind: "owner", owner: parsed } : { kind: "unreadable", ageMs };
-  } catch {
-    return { kind: "unreadable", ageMs };
-  }
-}
-function isPidAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e2) {
-    return e2.code === "EPERM";
-  }
-}
-function staleReason(owner, now = Date.now()) {
-  const started = Date.parse(owner.startedAt);
-  if (Number.isFinite(started) && now - started > STALE_SESSION_MS) return "older than 6 h";
-  if (owner.hostname === os3.hostname() && !isPidAlive(owner.pid)) return "process not running";
-  return null;
-}
-function removeIfSame(file, owner) {
-  const cur = readOwner2(file);
-  if (cur.kind === "gone") return false;
-  if (owner !== null && (cur.kind !== "owner" || cur.owner.sessionId !== owner.sessionId || cur.owner.pid !== owner.pid)) {
-    return false;
-  }
-  try {
-    fs7.rmSync(file, { force: true });
-    return true;
-  } catch {
-    return false;
-  }
-}
-function releaseAllSync() {
-  for (const [file, held2] of HELD) {
-    removeIfSame(file, held2.owner);
-  }
-  HELD.clear();
-}
-function installExitHooks() {
-  if (exitHooksInstalled) return;
-  exitHooksInstalled = true;
-  process.on("exit", releaseAllSync);
-  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
-    process.on(signal, () => {
-      releaseAllSync();
-      process.exit(code);
-    });
-  }
-}
-function handleFor(file, held2) {
-  let released = false;
-  return {
-    file,
-    owner: held2.owner,
-    release: /* @__PURE__ */ __name(async () => {
-      if (released) return;
-      released = true;
-      held2.depth -= 1;
-      if (held2.depth > 0) return;
-      HELD.delete(file);
-      removeIfSame(file, held2.owner);
-      await Promise.resolve();
-    }, "release")
-  };
-}
-async function acquireSessionLock(root, opts) {
-  const file = sessionLockFile(root);
-  for (; ; ) {
-    const mine = HELD.get(file);
-    if (mine) {
-      mine.depth += 1;
-      return handleFor(file, mine);
-    }
-    const pending = PENDING.get(file);
-    if (!pending) break;
-    await pending.catch(() => void 0);
-  }
-  const attempt = acquireFresh(file, root, opts);
-  PENDING.set(file, attempt);
-  try {
-    return handleFor(file, await attempt);
-  } finally {
-    if (PENDING.get(file) === attempt) PENDING.delete(file);
-  }
-}
-function hold(file, owner) {
-  const existing = HELD.get(file);
-  if (existing) {
-    existing.depth += 1;
-    return existing;
-  }
-  const held2 = { depth: 1, owner };
-  HELD.set(file, held2);
-  installExitHooks();
-  return held2;
-}
-async function acquireFresh(file, root, opts) {
-  await fsp7.mkdir(path13.dirname(file), { recursive: true });
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const owner = {
-      hostname: os3.hostname(),
-      pid: process.pid,
-      sessionId: currentSessionId(),
-      kind: opts.kind,
-      verb: opts.verb,
-      startedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      claudeSessionId: opts.claudeSessionId ?? null,
-      root: path13.resolve(root)
-    };
-    try {
-      const fh = await fsp7.open(file, "wx");
-      try {
-        await fh.write(JSON.stringify(owner, null, 2) + "\n");
-      } finally {
-        await fh.close();
-      }
-      return hold(file, owner);
-    } catch (e2) {
-      if (e2.code !== "EEXIST") throw e2;
-    }
-    const cur = readOwner2(file);
-    if (cur.kind === "gone") continue;
-    if (cur.kind === "unreadable") {
-      if (cur.ageMs > PARTIAL_RECORD_GRACE_MS) removeIfSame(file, null);
-      else await new Promise((r2) => setTimeout(r2, 25));
-      continue;
-    }
-    const holder = cur.owner;
-    if (holder.pid === process.pid && holder.hostname === os3.hostname()) {
-      return hold(file, holder);
-    }
-    const why = staleReason(holder);
-    if (why !== null) {
-      if (removeIfSame(file, holder)) {
-        process.stderr.write(`pensmith: cleared stale lock (pid ${holder.pid}, started ${holder.startedAt}) \u2014 ${why}.
-`);
-      }
-      continue;
-    }
-    throw new SessionLockedError(holder);
-  }
-  const last = readOwner2(file);
-  if (last.kind === "owner") throw new SessionLockedError(last.owner);
-  throw new PensmithError(`could not take the pensmith session lock at ${file}; re-run`, EXIT_ERROR);
-}
-function readSessionLock(root) {
-  const cur = readOwner2(sessionLockFile(root));
-  return cur.kind === "owner" ? cur.owner : null;
-}
-function sectionLockResource(root, n2) {
-  return path13.join(paperDir(asProjectRoot(root)), "sections", `${String(n2).padStart(2, "0")}.section-lock`);
-}
-async function withPaperSession(root, opts, fn) {
-  const handle = await acquireSessionLock(root, {
-    kind: "mcp",
-    verb: opts.verb,
-    claudeSessionId: claudeSessionIdFromEnv()
-  });
-  try {
-    const dryRun = networkMode().dryRun;
-    await enforceDryRunBoundary(root, dryRun);
-    if (!dryRun) await migratePaperConfigFile(root);
-    if (opts.section === void 0) return await fn();
-    return await withLock(sectionLockResource(root, opts.section), fn, { timeoutMs: SECTION_WAIT_MS });
-  } finally {
-    await handle.release();
-  }
-}
-var STALE_SESSION_MS, SECTION_WAIT_MS, PARTIAL_RECORD_GRACE_MS, SessionLockedError, HELD, exitHooksInstalled, PENDING;
-var init_session_lock = __esm({
-  "bin/lib/session-lock.ts"() {
-    "use strict";
-    init_paths();
-    init_session_log();
-    init_config2();
-    init_dry_run_paper();
-    init_http_mock();
-    init_lock();
-    init_exit_codes();
-    STALE_SESSION_MS = 6 * 60 * 60 * 1e3;
-    SECTION_WAIT_MS = 30 * 60 * 1e3;
-    PARTIAL_RECORD_GRACE_MS = 2e3;
-    __name(claudeSessionIdFromEnv, "claudeSessionIdFromEnv");
-    __name(canonicalRoot, "canonicalRoot");
-    __name(sessionLockFile, "sessionLockFile");
-    SessionLockedError = class extends PensmithError {
-      static {
-        __name(this, "SessionLockedError");
-      }
-      owner;
-      constructor(owner) {
-        super(
-          `another pensmith session (pid ${owner.pid}, started ${owner.startedAt}) is working on this paper; run pensmith resume once it ends`,
-          EXIT_ERROR
-        );
-        this.name = "SessionLockedError";
-        this.owner = owner;
-      }
-    };
-    __name(isOwner, "isOwner");
-    __name(readOwner2, "readOwner");
-    __name(isPidAlive, "isPidAlive");
-    __name(staleReason, "staleReason");
-    __name(removeIfSame, "removeIfSame");
-    HELD = /* @__PURE__ */ new Map();
-    exitHooksInstalled = false;
-    __name(releaseAllSync, "releaseAllSync");
-    __name(installExitHooks, "installExitHooks");
-    __name(handleFor, "handleFor");
-    PENDING = /* @__PURE__ */ new Map();
-    __name(acquireSessionLock, "acquireSessionLock");
-    __name(hold, "hold");
-    __name(acquireFresh, "acquireFresh");
-    __name(readSessionLock, "readSessionLock");
-    __name(sectionLockResource, "sectionLockResource");
-    __name(withPaperSession, "withPaperSession");
-  }
-});
-
-// bin/lib/prompt-loader.ts
-import { readFileSync as readFileSync16 } from "node:fs";
-import { createHash as createHash9 } from "node:crypto";
-function stripFrontmatter(text4) {
-  if (!text4.startsWith("---")) return text4;
-  const parts = text4.split(/^---\s*$/m);
-  if (parts.length < 3) return text4;
-  return parts.slice(2).join("---").trimStart();
-}
-function loadPrompt(name) {
-  const expected = EXPECTED_PROMPT_HASHES[name];
-  if (!expected) {
-    throw new Error(
-      `loadPrompt: unknown prompt "${name}" \u2014 no entry in EXPECTED_PROMPT_HASHES. If this is a new slug, add it to bin/lib/prompt-loader.ts (D-12 LOCKED).`
-    );
-  }
-  const promptPath = pluginTemplatePath("prompts", `${name}.md`);
-  const bytes = readFileSync16(promptPath);
-  const actual = createHash9("sha256").update(bytes).digest("hex");
-  const text4 = bytes.toString("utf8");
-  if (expected.startsWith("__PENDING_HASH_")) {
-    if (process.env["PENSMITH_ALLOW_PENDING_PROMPT_HASHES"] !== "1") {
-      throw new Error(
-        `loadPrompt: prompt "${name}" hash is a __PENDING_HASH_${name}__ sentinel. Set PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1 to bypass (Wave 1-7 only); Plan 03-09 will replace all sentinels with real SHA-256 values.`
-      );
-    }
-    return stripFrontmatter(text4);
-  }
-  if (actual !== expected) {
-    throw new Error(
-      `loadPrompt: prompt "${name}" drifted at runtime. Expected SHA-256 ${expected}, got ${actual}. Update EXPECTED_PROMPT_HASHES in bin/lib/prompt-loader.ts (single source of truth \u2014 tests/repo-files.test.ts imports this map per WN-3) together (D-12). Note: pass1-fuzzy-judge + pass3-quote-checker are D-13 DORMANT in Phase 3 \u2014 if you are seeing this error for one of those slugs at runtime in Phase 3, the workflow body is incorrectly invoking a dormant prompt.`
-    );
-  }
-  return stripFrontmatter(text4);
-}
-var EXPECTED_PROMPT_HASHES;
-var init_prompt_loader = __esm({
-  "bin/lib/prompt-loader.ts"() {
-    "use strict";
-    init_paths();
-    EXPECTED_PROMPT_HASHES = {
-      // WN-3 sentinel-replacement (Plan 03-09 Task 9.3.5) — these 8 SHA-256
-      // values replace the per-slug __PENDING_HASH_<slug>__ sentinels in a single
-      // atomic commit (sentinel-replacement). The same commit updates the matching
-      // pins in tests/repo-files.test.ts PENDING_HASH_PINS — drift between the two
-      // surfaces is structurally impossible because both files re-pin together.
-      "intake-clarifier": "7700947abfc9a94d2785996fd7b26e8f812a5b01c77ab24ee1563314b7eb9a53",
-      // D-12 LOCKED (re-pinned Phase 18 GRND-02/RUN-26 — suggestions-only contract v2, fixed instructions first, data last in fenced blocks; WN-3 lockstep with repo-files pin)
-      "topic-disambiguator": "34587e4f81be0e16848f7aa19bd176f050da2381cba31a1ea6b36c54816b1378",
-      // D-12 LOCKED (research split #1; re-pinned Phase 19 SRC-08: ambiguous flag, scope descriptions, 5-10 queries)
-      "source-evaluator": "b10cd38425ab01dd5572592dc01f11b646006dbd86b13be311f8b0eb9ca0eed4",
-      // D-12 LOCKED (research split #2; re-pinned Phase 19 SRC-09: relevance, tier, reasons)
-      "outline-author": "914bdd23f6182ac47b5679b45144a10ada702ab8e6eb3415db879063f7419c2a",
-      // D-12 LOCKED (re-pinned Phase 18 GRND-07/RUN-26: fixed instructions, data blocks brief/existing_sections/sources)
-      "section-planner": "d10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c",
-      // D-12 LOCKED (re-pinned Phase 18 GRND-13/RUN-26: fixed instructions, data blocks brief/section/upstream/sources)
-      "section-drafter": "0600aed58e85b9182a5c3ea0e7e45a691d41a8e21797ed00559e7b56b08999cc",
-      // D-12 LOCKED (re-pinned Phase 18 FEED-02/RUN-26: fixed instructions, data blocks brief/section/voice/style_profile/plan/sources)
-      "pass1-fuzzy-judge": "80011728b81766a6bad092a6fae2868cd7e75515344c5e8ecb38b3cfac14498d",
-      // D-12 LOCKED + D-13 DORMANT in Phase 3
-      "pass3-quote-checker": "19ef3929f85b0f20c4b0f12cea535cbb7c2e28a342c883f9af6737fd7e896421",
-      // D-12 LOCKED + D-13 DORMANT in Phase 3
-      // Phase 4 04-CONTEXT.md D-05 — hash-pinned revise-swap prompt. Re-pinned to
-      // the real SHA-256 in Plan 04-04 Task 3 (the prompt body is byte-stable). The
-      // matching pin in tests/repo-files.test.ts PENDING_HASH_PINS carries the same
-      // value (WN-3 lockstep — both surfaces agree). loadPrompt('revise-swap') now
-      // succeeds WITHOUT PENSMITH_ALLOW_PENDING_PROMPT_HASHES.
-      "revise-swap": "2c604b215eaafcb49f4bd138ad64772b0e2f74e7255a5e2ea22e65719e54ff8d",
-      // Phase 4 D-05
-      // Phase 4 04-CONTEXT.md D-12 — hash-pinned smoother prompt (Plan 04-05). Lands
-      // here as a __PENDING_HASH_smoother__ sentinel at Task 1a (WN-3); Plan 04-05
-      // Task 4 re-pins it to the SAME real SHA-256 the tests/repo-files.test.ts pin
-      // already carries (the prompt body is byte-stable on creation — both surfaces
-      // then agree and loadPrompt('smoother') succeeds WITHOUT the pending bypass).
-      "smoother": "37aa691f174c5fa75f9569c3c08bdc1a33eb64f503d04834e94d27d5938d9330",
-      // Phase 4 D-12 (re-pinned real at Plan 04-05 Task 4 — WN-3 lockstep with repo-files pin)
-      // Phase 5 05-CONTEXT.md D-12 — hash-pinned claim-support + orphan-label prompts
-      // (Plans 05-02/05-03). These are the ACTIVE Phase-5 advisory prompts: claim-support
-      // is invoked from bin/lib/verify/pass2.ts (Pass 2 claim-support) and orphan-label
-      // from bin/lib/verify/pass4.ts (Pass 4 Step-3 edge-case label) — NOT from
-      // bin/cli/verify.ts (the D-13 chokepoint file is unaffected; verify.ts never loads
-      // a prompt). pass1-fuzzy-judge + pass3-quote-checker remain D-13 DORMANT.
-      // WN-3: they landed here as __PENDING_HASH_<slug>__ sentinels in Wave 0 (Plan 05-01)
-      // BEFORE the pass modules existed, so the loader could resolve the slugs the moment
-      // Plans 05-02/05-03 wired the LLM seams. Plan 05-05 Task 1 now re-pins them
-      // ATOMICALLY to the SAME real SHA-256 the tests/repo-files.test.ts byte-pins have
-      // carried since creation (single source of truth — both surfaces now agree and
-      // loadPrompt('claim-support') / loadPrompt('orphan-label') succeed WITHOUT
-      // PENSMITH_ALLOW_PENDING_PROMPT_HASHES; runtime drift detection is restored).
-      // Mirrors the Phase-4 smoother re-pin precedent exactly (Plan 04-05 Task 4).
-      "claim-support": "44727c65d9ffec142d9d0a8419c4caad551ea0a243efd655b9bc48c069275bf4",
-      // Phase 5 D-12 (re-pinned Phase 20 D-20-30: judged against the source text — abstract + full-text passages, input <source_text>; WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts)
-      "orphan-label": "c1d45a9f9c7d74889a5f476a2f1b2e847e4edfae96ddf6604479da5334979dc0",
-      // Phase 5 D-12 (re-pinned Phase 20 D-20-29/30: the per-paragraph orphan audit, input <paragraph>, output {claims}; WN-3 lockstep with repo-files pin; ACTIVE Pass 4 via pass4.ts)
-      // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts (Plan 09-02 wires the
-      // TutorialSubscriber render seam). RE-PINNED to the real SHA-256 in Plan 09-03 Task 3
-      // (the prompt bodies are byte-stable since 09-00 — see the byte-identical guard in
-      // tests/repo-files.test.ts PENDING_HASH_PINS, which re-pins the SAME hashes in this
-      // SAME commit; WN-3 lockstep — drift between the two surfaces is structurally
-      // impossible). After this re-pin loadPrompt('tutorial-section-provenance') /
-      // loadPrompt('tutorial-research-rationale') resolve WITHOUT
-      // PENSMITH_ALLOW_PENDING_PROMPT_HASHES — runtime drift detection is restored.
-      // Mirrors the Phase-4 smoother + Phase-5 claim-support/orphan-label re-pin precedent.
-      "tutorial-section-provenance": "ce1d8c4876e1096d02239e55283e55decd2df8b0358b0d697d14d5005baab380",
-      // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
-      "tutorial-research-rationale": "d4d305f2a1e8bebe87849b358f9e4fb9199b78a493bc867a306a63b6e51523e7"
-      // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
-    };
-    __name(stripFrontmatter, "stripFrontmatter");
-    __name(loadPrompt, "loadPrompt");
-  }
-});
-
-// bin/lib/verify/draft-text.ts
-function lines(md) {
-  const out2 = [];
-  let start = 0;
-  for (; ; ) {
-    const nl = md.indexOf("\n", start);
-    const rawEnd = nl === -1 ? md.length : nl;
-    const end = rawEnd > start && md[rawEnd - 1] === "\r" ? rawEnd - 1 : rawEnd;
-    out2.push({ start, end, text: md.slice(start, end) });
-    if (nl === -1) return out2;
-    start = nl + 1;
-  }
-}
-function proseParagraphs(md) {
-  const out2 = [];
-  let first2 = null;
-  let last = null;
-  let fence = null;
-  const flush = /* @__PURE__ */ __name(() => {
-    if (first2 !== null && last !== null) {
-      const text4 = md.slice(first2.start, last.end);
-      if (text4.trim().length > 0) out2.push({ index: out2.length + 1, start: first2.start, end: last.end, text: text4 });
-    }
-    first2 = null;
-    last = null;
-  }, "flush");
-  const all = lines(md);
-  for (let i = 0; i < all.length; i += 1) {
-    const line = all[i];
-    const f2 = FENCE_RE.exec(line.text);
-    if (fence !== null) {
-      if (f2 !== null && f2[0].trim()[0] === fence) fence = null;
-      continue;
-    }
-    if (f2 !== null) {
-      flush();
-      fence = f2[0].trim()[0];
-      continue;
-    }
-    const next = all[i + 1];
-    const setextTitle = next !== void 0 && /^ {0,3}(?:=+|-+)[ \t]*$/.test(next.text) && line.text.trim() !== "";
-    if (line.text.trim() === "" || NON_PROSE_LINE_RE.test(line.text) || setextTitle) {
-      flush();
-      if (setextTitle) i += 1;
-      continue;
-    }
-    if (first2 === null) first2 = line;
-    last = line;
-  }
-  flush();
-  return out2;
-}
-function oneLine4(s2) {
-  return s2.replace(/\s+/g, " ").trim();
-}
-function prose(text4) {
-  return oneLine4(replaceCitations(text4, () => " "));
-}
-function draftSentences(md) {
-  const citations = findCitations(md);
-  const out2 = [];
-  for (const p2 of proseParagraphs(md)) {
-    const inside = citations.filter((c2) => c2.start >= p2.start && c2.start < p2.end);
-    const cuts = [];
-    for (const m3 of p2.text.matchAll(BOUNDARY_RE)) {
-      const at = p2.start + m3.index;
-      if (inside.some((c2) => at >= c2.start && at < c2.end)) continue;
-      cuts.push(p2.start + m3.index + m3[0].length);
-    }
-    const pieces = [];
-    let from = p2.start;
-    for (const cut of [...cuts, p2.end]) {
-      if (cut <= from) continue;
-      const raw = md.slice(from, cut);
-      const lead = raw.length - raw.trimStart().length;
-      if (raw.trim().length > 0) pieces.push({ start: from + lead, end: cut });
-      from = cut;
-    }
-    const merged = [];
-    for (const piece of pieces) {
-      const onlyCitations = prose(md.slice(piece.start, piece.end)).replace(/[\p{P}\s]/gu, "") === "";
-      const prev = merged[merged.length - 1];
-      if (onlyCitations && prev !== void 0) prev.end = piece.end;
-      else merged.push({ ...piece });
-    }
-    for (const s2 of merged) {
-      const text4 = md.slice(s2.start, s2.end);
-      out2.push({
-        paragraph: p2.index,
-        start: s2.start,
-        end: s2.end,
-        text: oneLine4(text4),
-        citations: inside.filter((c2) => c2.start >= s2.start && c2.start < s2.end)
-      });
-    }
-  }
-  return out2;
-}
-function claimPairs(draftMd) {
-  const seen = /* @__PURE__ */ new Set();
-  const out2 = [];
-  for (const s2 of draftSentences(draftMd)) {
-    for (const c2 of s2.citations) {
-      for (const item of citationItems(c2)) {
-        const id = `${item.key}\0${s2.text}`;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        out2.push({ citekey: item.key, claimSentence: s2.text });
-      }
-    }
-  }
-  return out2;
-}
-var FENCE_RE, NON_PROSE_LINE_RE, BOUNDARY_RE;
-var init_draft_text = __esm({
-  "bin/lib/verify/draft-text.ts"() {
-    "use strict";
-    init_citation_token();
-    FENCE_RE = /^ {0,3}(?:`{3,}|~{3,})/;
-    NON_PROSE_LINE_RE = /^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*_][ \t]*){3,}$|=+[ \t]*$|\||<!--.*-->[ \t]*$)/;
-    __name(lines, "lines");
-    __name(proseParagraphs, "proseParagraphs");
-    BOUNDARY_RE = /[.!?]+["'”’»)\]]*(?=\s|$)/g;
-    __name(oneLine4, "oneLine");
-    __name(prose, "prose");
-    __name(draftSentences, "draftSentences");
-    __name(claimPairs, "claimPairs");
-  }
-});
-
-// bin/lib/pricing.ts
-function p(inputPerMtok, outputPerMtok, cacheReadPerMtok) {
-  return cacheReadPerMtok === void 0 ? { inputPerMtok, outputPerMtok, currency: "USD" } : { inputPerMtok, outputPerMtok, cacheReadPerMtok, currency: "USD" };
-}
-function maxProviderPrice(provider) {
-  const table = MODEL_PRICES[provider];
-  if (!table) return null;
-  let inputPerMtok = 0;
-  let outputPerMtok = 0;
-  for (const price of Object.values(table)) {
-    inputPerMtok = Math.max(inputPerMtok, price.inputPerMtok);
-    outputPerMtok = Math.max(outputPerMtok, price.outputPerMtok);
-  }
-  return { inputPerMtok, outputPerMtok };
-}
-function withCache(provider, inputPerMtok, outputPerMtok, cacheReadPerMtok, source) {
-  const writeMult = provider === "anthropic" ? CACHE_WRITE_MULTIPLIER : 1;
-  return {
-    inputPerMtok,
-    outputPerMtok,
-    cacheWritePerMtok: inputPerMtok * writeMult,
-    cacheReadPerMtok: cacheReadPerMtok ?? inputPerMtok * CACHE_READ_MULTIPLIER,
-    source
-  };
-}
-function resolvePrice(provider, model, override2 = {}, warn = (line) => process.stderr.write(line + "\n")) {
-  const hasIn = typeof override2.inputPerMtok === "number" && Number.isFinite(override2.inputPerMtok);
-  const hasOut = typeof override2.outputPerMtok === "number" && Number.isFinite(override2.outputPerMtok);
-  const fromOverride = /* @__PURE__ */ __name(() => withCache(provider, hasIn ? override2.inputPerMtok : 0, hasOut ? override2.outputPerMtok : 0, void 0, "config"), "fromOverride");
-  if (isProviderName(provider) && LOCAL_PROVIDERS.has(provider)) {
-    if (hasIn || hasOut) return fromOverride();
-    return { inputPerMtok: 0, outputPerMtok: 0, cacheWritePerMtok: 0, cacheReadPerMtok: 0, source: "local" };
-  }
-  const table = MODEL_PRICES[provider]?.[model];
-  if (table) return withCache(provider, table.inputPerMtok, table.outputPerMtok, table.cacheReadPerMtok, "table");
-  if (hasIn || hasOut) return fromOverride();
-  const fallback = maxProviderPrice(provider) ?? maxProviderPrice("anthropic");
-  const key2 = `${provider}/${model}`;
-  if (!warnedFallback.has(key2)) {
-    warnedFallback.add(key2);
-    warn(
-      `pensmith: no price is known for ${key2}; using the most expensive ${provider} price ($${fallback.inputPerMtok.toFixed(2)} in / $${fallback.outputPerMtok.toFixed(2)} out per MTok). Set [runtime] price_in_per_mtok and price_out_per_mtok to override.`
-    );
-  }
-  return withCache(provider, fallback.inputPerMtok, fallback.outputPerMtok, void 0, "fallback");
-}
-function costOf(price, usage) {
-  const cw = usage.cacheWriteTokens ?? 0;
-  const cr = usage.cacheReadTokens ?? 0;
-  if (usage.inputTokens < 0 || usage.outputTokens < 0 || cw < 0 || cr < 0) {
-    throw new RangeError(
-      `token counts must be >= 0 (got input=${usage.inputTokens}, output=${usage.outputTokens}, cache_write=${cw}, cache_read=${cr})`
-    );
-  }
-  return usage.inputTokens / 1e6 * price.inputPerMtok + usage.outputTokens / 1e6 * price.outputPerMtok + cw / 1e6 * price.cacheWritePerMtok + cr / 1e6 * price.cacheReadPerMtok;
-}
-var RAW, MODEL_PRICES, CACHE_WRITE_MULTIPLIER, CACHE_READ_MULTIPLIER, warnedFallback;
-var init_pricing = __esm({
-  "bin/lib/pricing.ts"() {
-    "use strict";
-    init_llm_models();
-    __name(p, "p");
-    RAW = {
-      anthropic: {
-        "claude-fable-5-1": p(10, 50, 0.25),
-        "claude-fable-5": p(10, 50),
-        "claude-opus-5-5": p(4, 20, 0.2),
-        "claude-opus-5": p(5, 25),
-        "claude-opus-4-8": p(5, 25),
-        "claude-opus-4-7": p(5, 25),
-        "claude-opus-4-6": p(5, 25),
-        "claude-sonnet-5": p(2, 10),
-        "claude-sonnet-4-6": p(3, 15),
-        "claude-haiku-4-5": p(1, 5)
-      },
-      openai: {
-        "gpt-6-astra": p(10, 50, 1),
-        "gpt-6-sol": p(2, 10, 0.2),
-        "gpt-6-luna": p(0.1, 0.5, 0.01),
-        "gpt-5.6-sol": p(4, 20, 0.4),
-        "gpt-5.6-terra": p(2, 12, 0.2),
-        "gpt-5.6-luna": p(0.2, 1.2, 0.02),
-        "gpt-5.5": p(5, 30, 0.5),
-        "gpt-5.4": p(2.5, 15, 0.25),
-        "gpt-5.4-mini": p(0.75, 4.5, 0.075),
-        "gpt-5.4-nano": p(0.2, 1.25, 0.02),
-        "gpt-5": p(1.25, 10, 0.125),
-        "gpt-5-mini": p(0.25, 2, 0.025),
-        "gpt-5-nano": p(0.05, 0.4, 5e-3),
-        "gpt-4.1": p(2, 8, 0.5),
-        "gpt-4.1-mini": p(0.4, 1.6, 0.1),
-        "gpt-4o": p(2.5, 10, 1.25),
-        "gpt-4o-mini": p(0.15, 0.6, 0.075)
-      }
-    };
-    for (const provider of Object.keys(RAW)) {
-      const providerRecord = RAW[provider];
-      for (const model of Object.keys(providerRecord)) Object.freeze(providerRecord[model]);
-      Object.freeze(providerRecord);
-    }
-    Object.freeze(RAW);
-    MODEL_PRICES = RAW;
-    CACHE_WRITE_MULTIPLIER = 1.25;
-    CACHE_READ_MULTIPLIER = 0.1;
-    warnedFallback = /* @__PURE__ */ new Set();
-    __name(maxProviderPrice, "maxProviderPrice");
-    __name(withCache, "withCache");
-    __name(resolvePrice, "resolvePrice");
-    __name(costOf, "costOf");
-  }
-});
-
-// bin/lib/replay.ts
-import { existsSync as existsSync13, readFileSync as readFileSync17 } from "node:fs";
-import path14 from "node:path";
-function parseLlmRecords(text4, spillBase) {
-  const out2 = [];
-  for (const line of text4.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    let rec;
-    try {
-      rec = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (rec["kind"] !== "llm" || typeof rec["id"] !== "string" || typeof rec["slug"] !== "string") continue;
-    if (rec["truncated"] === true && typeof rec["spilled_to"] === "string" && spillBase) {
-      const spill = path14.join(spillBase, ...String(rec["spilled_to"]).split("/"));
-      try {
-        rec = JSON.parse(readFileSync17(spill, "utf8"));
-      } catch {
-      }
-    }
-    out2.push(rec);
-  }
-  return out2;
-}
-function key(slug, sha) {
-  return `${slug}\0${sha}`;
-}
-function isReplayActive() {
-  return store !== null;
-}
-function replayLookup(slug, requestSha256) {
-  if (!store) return null;
-  const list3 = store.get(key(slug, requestSha256));
-  if (!list3 || list3.length === 0) return null;
-  return list3.length > 1 ? list3.shift() : list3[0];
-}
-var store;
-var init_replay = __esm({
-  "bin/lib/replay.ts"() {
-    "use strict";
-    init_paths();
-    init_exit_codes();
-    __name(parseLlmRecords, "parseLlmRecords");
-    store = null;
-    __name(key, "key");
-    __name(isReplayActive, "isReplayActive");
-    __name(replayLookup, "replayLookup");
   }
 });
 
@@ -83598,9 +82112,178 @@ var init_query_expansion = __esm({
   }
 });
 
+// bin/lib/research-sentinel.ts
+import { existsSync as existsSync10, readFileSync as readFileSync11 } from "node:fs";
+import { join as join8 } from "node:path";
+function isOwnOnly(entry) {
+  const tags = entry?.provenance;
+  if (!Array.isArray(tags) || tags.length === 0) return false;
+  return tags.every((t) => typeof t === "string" && OWN_SOURCE_PROVENANCE.has(t.split(":")[0] ?? ""));
+}
+function libraryState(pDir) {
+  const file = join8(pDir, "LIBRARY.json");
+  if (!existsSync10(file)) return "absent";
+  try {
+    const parsed = JSON.parse(readFileSync11(file, "utf8"));
+    if (!Array.isArray(parsed.entries)) return "unreadable";
+    if (parsed.entries.length === 0) return "empty";
+    return parsed.entries.every(isOwnOnly) ? "own-only" : "researched";
+  } catch {
+    return "unreadable";
+  }
+}
+function isSourcesViewOnly(text4) {
+  let head = text4;
+  const logEnd = lineStartIndex(head, LOG_END);
+  if (logEnd < 0) return false;
+  head = head.slice(0, logEnd);
+  const start = lineStartIndex(head, SOURCES_START);
+  if (start >= 0) {
+    const end = lineStartIndex(head, SOURCES_END, start);
+    if (end < 0) return false;
+    head = head.slice(0, start) + head.slice(end + SOURCES_END.length);
+  }
+  return head.replace(/^#\s+Research\s*$/m, "").trim().length === 0;
+}
+function lineStartIndex(text4, prefix, from = 0) {
+  let at = text4.indexOf(prefix, from);
+  while (at >= 0) {
+    if (at === 0 || text4[at - 1] === "\n") return at;
+    at = text4.indexOf(prefix, at + 1);
+  }
+  return -1;
+}
+function isFailedResearchLog(text4) {
+  if (!/^# Research log\s*$/m.test(text4)) return false;
+  const m3 = /^Result:\s*(.*)$/m.exec(text4);
+  if (m3 === null) return false;
+  const result = (m3[1] ?? "").trim().toLowerCase();
+  return FAILED_RESEARCH_RESULTS.some((r2) => result.startsWith(r2));
+}
+function readText(file) {
+  try {
+    return existsSync10(file) ? readFileSync11(file, "utf8") : null;
+  } catch {
+    return null;
+  }
+}
+function isResearchDone(pDir) {
+  try {
+    if (existsSync10(join8(pDir, "OUTLINE.md"))) return true;
+    const lib = libraryState(pDir);
+    const log4 = readText(join8(pDir, "RESEARCH.md"));
+    if (log4 !== null && isFailedResearchLog(log4)) {
+      return lib === "own-only" || lib === "researched" || lib === "unreadable";
+    }
+    if (log4 !== null && (/^# Research log\s*$/m.test(log4) || !isSourcesViewOnly(log4))) return true;
+    return lib === "researched" || lib === "unreadable" || lib === "empty";
+  } catch {
+    return false;
+  }
+}
+var FAILED_RESEARCH_RESULTS, OWN_SOURCE_PROVENANCE, SOURCES_START, SOURCES_END, LOG_END;
+var init_research_sentinel = __esm({
+  "bin/lib/research-sentinel.ts"() {
+    "use strict";
+    FAILED_RESEARCH_RESULTS = Object.freeze([
+      "no sources found",
+      "no usable sources",
+      "no relevant sources",
+      "no sources kept"
+    ]);
+    OWN_SOURCE_PROVENANCE = /* @__PURE__ */ new Set(["byo", "zotero", "add"]);
+    __name(isOwnOnly, "isOwnOnly");
+    __name(libraryState, "libraryState");
+    SOURCES_START = "<!-- pensmith:sources:start";
+    SOURCES_END = "<!-- pensmith:sources:end -->";
+    LOG_END = "<!-- end of the research log:";
+    __name(isSourcesViewOnly, "isSourcesViewOnly");
+    __name(lineStartIndex, "lineStartIndex");
+    __name(isFailedResearchLog, "isFailedResearchLog");
+    __name(readText, "readText");
+    __name(isResearchDone, "isResearchDone");
+  }
+});
+
+// bin/lib/schemas/done-record.ts
+var DONE_RECORD_SCHEMA_VERSION, SHA2562, DoneRecordSchema;
+var init_done_record = __esm({
+  "bin/lib/schemas/done-record.ts"() {
+    "use strict";
+    init_zod();
+    DONE_RECORD_SCHEMA_VERSION = 1;
+    SHA2562 = /^[0-9a-f]{64}$/;
+    DoneRecordSchema = external_exports.object({
+      $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
+      done_at: external_exports.string().datetime(),
+      /** sha256 of the `.paper/DRAFT.md` bytes done's gate judged. */
+      compiled_draft_sha256: external_exports.string().regex(SHA2562),
+      /** sha256 of the `.paper/FINAL.md` done left: the text it exported. */
+      final_sha256: external_exports.string().regex(SHA2562),
+      /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
+      humanized: external_exports.boolean()
+    }).strict();
+  }
+});
+
+// bin/lib/done-record.ts
+import { existsSync as existsSync11, readFileSync as readFileSync12 } from "node:fs";
+import { basename as basename2, join as join9 } from "node:path";
+function doneRecordPath(paperRoot) {
+  return join9(paperDir(paperRoot), DONE_RECORD_FILE);
+}
+function readDoneRecord(paperRoot) {
+  try {
+    const parsed = DoneRecordSchema.safeParse(JSON.parse(readFileSync12(doneRecordPath(paperRoot), "utf8")));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+function verificationCheckedSha256(paperRoot) {
+  try {
+    const md = readFileSync12(join9(paperDir(paperRoot), "VERIFICATION.md"), "utf8");
+    return /^Text checked: .+ \(sha256 ([0-9a-f]{64})\)\s*$/mu.exec(md)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+function finalMdState(paperRoot) {
+  const dir = paperDir(paperRoot);
+  const finalPath = join9(dir, "FINAL.md");
+  if (!existsSync11(finalPath)) return "absent";
+  const finalSha = fileSha256(finalPath);
+  if (finalSha === "") return "edited";
+  const draftSha = fileSha256(join9(dir, "DRAFT.md"));
+  const record2 = readDoneRecord(paperRoot);
+  if (record2 !== null && record2.final_sha256 === finalSha) return record2.compiled_draft_sha256 === draftSha ? "current" : "stale";
+  if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? "current" : "stale";
+  return finalSha === draftSha ? "stale" : "edited";
+}
+function editedFinalReason(paperRoot) {
+  const dir = basename2(paperDir(paperRoot));
+  return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
+}
+var DONE_RECORD_FILE;
+var init_done_record2 = __esm({
+  "bin/lib/done-record.ts"() {
+    "use strict";
+    init_atomic_write();
+    init_compile_inputs2();
+    init_paths();
+    init_done_record();
+    DONE_RECORD_FILE = "DONE-RECORD.json";
+    __name(doneRecordPath, "doneRecordPath");
+    __name(readDoneRecord, "readDoneRecord");
+    __name(verificationCheckedSha256, "verificationCheckedSha256");
+    __name(finalMdState, "finalMdState");
+    __name(editedFinalReason, "editedFinalReason");
+  }
+});
+
 // bin/lib/estimator.ts
-import { existsSync as existsSync14, readdirSync as readdirSync5, readFileSync as readFileSync18 } from "node:fs";
-import path15 from "node:path";
+import { existsSync as existsSync12, readdirSync as readdirSync3, readFileSync as readFileSync13 } from "node:fs";
+import path13 from "node:path";
 function p90(samples) {
   if (samples.length === 0) return null;
   const sorted = [...samples].sort((a3, b3) => a3 - b3);
@@ -83608,13 +82291,13 @@ function p90(samples) {
   return sorted[Math.min(sorted.length, Math.max(1, rank)) - 1] ?? null;
 }
 function samplesFor(root) {
-  const logFile = path15.join(paperDir(root), "SESSION.log");
+  const logFile = path13.join(paperDir(root), "SESSION.log");
   let bySlug = recorded.get(logFile);
   if (bySlug) return bySlug;
   bySlug = /* @__PURE__ */ new Map();
-  if (existsSync14(logFile)) {
+  if (existsSync12(logFile)) {
     try {
-      for (const r2 of parseLlmRecords(readFileSync18(logFile, "utf8"))) {
+      for (const r2 of parseLlmRecords(readFileSync13(logFile, "utf8"))) {
         if (typeof r2.output_tokens !== "number" || r2.stop_reason === "max_tokens") continue;
         const list3 = bySlug.get(r2.slug) ?? [];
         list3.push(r2.output_tokens);
@@ -83683,6 +82366,8 @@ var init_estimator = __esm({
     init_intake_brief();
     init_research_sentinel();
     init_done_record2();
+    init_ecosystem_presence();
+    init_config();
     MIN_P90_SAMPLES = 5;
     __name(p90, "p90");
     recorded = /* @__PURE__ */ new Map();
@@ -83698,6 +82383,1623 @@ var init_estimator = __esm({
       plan: [["section-planner", 1]],
       write: [["section-drafter", 1]]
     });
+  }
+});
+
+// bin/lib/paper-brief.ts
+function readPaperBrief(root) {
+  const doc = readIntakeBrief(root);
+  const config2 = tryReadPaperConfigSync(root);
+  const project = config2?.project;
+  const brief = doc?.brief;
+  const assignment = doc?.assignment ?? "";
+  const topic = (brief?.topic ?? "").trim() || (project?.title ?? "").trim();
+  const briefThesis = (brief?.thesis ?? "").trim();
+  const outlineThesis = readOutlineSync(root)?.thesis.trim() ?? "";
+  const discipline = resolveDiscipline({
+    discipline: { intake: brief?.discipline, config: project?.discipline_preset }
+  });
+  const lengthTarget = project?.length_target_words ?? brief?.length_target_words ?? (assignment ? parseLengthWords(assignment) : null) ?? DEFAULT_LENGTH_TARGET_WORDS;
+  return {
+    doc,
+    topic,
+    briefThesis,
+    thesis: outlineThesis || briefThesis,
+    title: (project?.title ?? "").trim() || topic,
+    discipline,
+    paperType: brief?.paper_type ?? "other",
+    counterargument: brief?.counterargument ?? "auto",
+    configCounterargument: project?.counterargument_required,
+    lengthTarget,
+    sectioningNotes: brief?.sectioning_notes ?? [],
+    assignment
+  };
+}
+var DEFAULT_LENGTH_TARGET_WORDS;
+var init_paper_brief = __esm({
+  "bin/lib/paper-brief.ts"() {
+    "use strict";
+    init_intake_brief();
+    init_config2();
+    init_disciplines();
+    init_estimator();
+    init_outline();
+    DEFAULT_LENGTH_TARGET_WORDS = 1500;
+    __name(readPaperBrief, "readPaperBrief");
+  }
+});
+
+// bin/lib/compile-inputs.ts
+import { createHash as createHash6 } from "node:crypto";
+import { readFileSync as readFileSync14 } from "node:fs";
+import { join as join10 } from "node:path";
+function compileInputsPath(paperRoot) {
+  return join10(paperDir(paperRoot), COMPILE_INPUTS_FILE);
+}
+function fileSha256(file) {
+  try {
+    return createHash6("sha256").update(readFileSync14(file)).digest("hex");
+  } catch {
+    return "";
+  }
+}
+function currentSectionInputs(paperRoot, s2) {
+  return {
+    id: formatSectionId(sectionIdOf(s2.n, s2.suffix)),
+    slug: s2.slug,
+    draft_sha256: fileSha256(sectionDraft(s2.n, s2.slug, paperRoot)),
+    verification_sha256: fileSha256(sectionVerification(s2.n, s2.slug, paperRoot))
+  };
+}
+function headingsSha256(h2) {
+  return createHash6("sha256").update([h2.title, ...h2.sections.map((s2) => s2.title)].join("\n"), "utf8").digest("hex");
+}
+function compilePaperTitle(paperRoot, outlineTitle) {
+  const h1 = outlineTitle.trim();
+  if (h1.length > 0) return h1;
+  try {
+    return readPaperBrief(paperRoot).title.trim();
+  } catch {
+    return "";
+  }
+}
+function currentHeadings(paperRoot) {
+  const outline = readOutlineSync(paperRoot);
+  if (outline === null) return { title: "", sections: [] };
+  return {
+    title: compilePaperTitle(paperRoot, outline.paper_title),
+    sections: orderedOutlineSections(outline).map((s2) => ({ id: outlineSectionId(s2), title: s2.title.trim() }))
+  };
+}
+function readCompileInputs(paperRoot) {
+  try {
+    let value = JSON.parse(readFileSync14(compileInputsPath(paperRoot), "utf8"));
+    const version2 = /* @__PURE__ */ __name(() => typeof value === "object" && value !== null ? value["$schemaVersion"] : void 0, "version");
+    if (version2() === 1) value = migrate13(value);
+    if (version2() === 2) value = migrate14(value);
+    const parsed = CompileInputsSchema.safeParse(value);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+function headingsCurrent(paperRoot, record2) {
+  return record2.headings_sha256 !== null && headingsSha256(currentHeadings(paperRoot)) === record2.headings_sha256;
+}
+function compiledInputsCurrent(paperRoot, registered) {
+  const record2 = readCompileInputs(paperRoot);
+  if (record2 === null) return null;
+  if (!headingsCurrent(paperRoot, record2)) return false;
+  const now = sortBySectionId(registered.map((s2) => ({ ...sectionIdOf(s2.n, s2.suffix), slug: s2.slug })));
+  if (now.length !== record2.sections.length) return false;
+  for (let i = 0; i < now.length; i += 1) {
+    const was = record2.sections[i];
+    const is = currentSectionInputs(paperRoot, now[i]);
+    if (was.id !== is.id || was.slug !== is.slug || was.draft_sha256 !== is.draft_sha256 || was.verification_sha256 !== is.verification_sha256) {
+      return false;
+    }
+  }
+  return true;
+}
+var COMPILE_INPUTS_FILE;
+var init_compile_inputs2 = __esm({
+  "bin/lib/compile-inputs.ts"() {
+    "use strict";
+    init_atomic_write();
+    init_paths();
+    init_section_id();
+    init_compile_inputs();
+    init_v1_to_v26();
+    init_v2_to_v34();
+    init_outline();
+    init_outline_parse();
+    init_paper_brief();
+    COMPILE_INPUTS_FILE = "COMPILE-INPUTS.json";
+    __name(compileInputsPath, "compileInputsPath");
+    __name(fileSha256, "fileSha256");
+    __name(currentSectionInputs, "currentSectionInputs");
+    __name(headingsSha256, "headingsSha256");
+    __name(compilePaperTitle, "compilePaperTitle");
+    __name(currentHeadings, "currentHeadings");
+    __name(readCompileInputs, "readCompileInputs");
+    __name(headingsCurrent, "headingsCurrent");
+    __name(compiledInputsCurrent, "compiledInputsCurrent");
+  }
+});
+
+// bin/lib/section-registry.ts
+import { basename as basename3 } from "node:path";
+function identityLabel(s2) {
+  return formatSectionId(sectionIdOf(s2.n, s2.suffix));
+}
+function registeredSectionsSync(paperRoot) {
+  try {
+    const state = Schema.parse(migrateStateValue(JSON.parse(readStateTextSync(paperRoot))));
+    return sortBySectionId((state.sections ?? []).map((s2) => s2.suffix !== void 0 ? { n: s2.n, suffix: s2.suffix, slug: s2.slug } : { n: s2.n, slug: s2.slug }));
+  } catch {
+    return null;
+  }
+}
+function outlineIdentitiesSync(paperRoot) {
+  const doc = readOutlineSync(paperRoot);
+  if (doc === null) return null;
+  return doc.sections.map((s2) => s2.suffix !== void 0 ? { n: s2.n, suffix: s2.suffix, slug: s2.slug } : { n: s2.n, slug: s2.slug });
+}
+function sectionRegistryDivergence(registered, outline) {
+  const out2 = [];
+  const regBySlug = new Map(registered.map((s2) => [s2.slug, s2]));
+  const regById = new Map(registered.map((s2) => [identityLabel(s2), s2]));
+  const rowSlugs = new Set(outline.map((s2) => s2.slug));
+  const claimedIds = /* @__PURE__ */ new Set();
+  for (const row2 of outline) {
+    const id = identityLabel(row2);
+    const reg = regBySlug.get(row2.slug);
+    if (reg !== void 0) {
+      if (identityLabel(reg) !== id) {
+        out2.push(`OUTLINE.md numbers "${row2.slug}" \xA7${id}, but STATE.json registers it as \xA7${identityLabel(reg)}`);
+      }
+      continue;
+    }
+    const holder = regById.get(id);
+    if (holder !== void 0 && !rowSlugs.has(holder.slug)) {
+      claimedIds.add(id);
+      out2.push(`OUTLINE.md lists \xA7${id} as "${row2.slug}", but STATE.json registers \xA7${id} as "${holder.slug}"`);
+    } else {
+      out2.push(`OUTLINE.md lists \xA7${id} "${row2.slug}", which STATE.json does not register`);
+    }
+  }
+  for (const reg of registered) {
+    if (rowSlugs.has(reg.slug) || claimedIds.has(identityLabel(reg))) continue;
+    out2.push(`STATE.json registers \xA7${identityLabel(reg)} "${reg.slug}", which OUTLINE.md does not list`);
+  }
+  return out2;
+}
+function outlineProblem(paperRoot) {
+  const read = readOutlineChecked(paperRoot);
+  const file = `${basename3(paperDir(paperRoot))}/OUTLINE.md`;
+  if (read.kind === "invalid") {
+    return `${file} cannot be read (${read.error}) \u2014 fix that row (\`pensmith outline\` then applies the edited outline), or re-outline it with \`pensmith outline --force\``;
+  }
+  if (read.kind === "absent") {
+    const registered = registeredSectionsSync(paperRoot);
+    if (registered !== null && registered.length > 0) {
+      const ids = registered.map((s2) => `\xA7${identityLabel(s2)}`).join(", ");
+      return `${file} is missing, but STATE.json registers ${ids} \u2014 restore it (e.g. from your backup or version control), or re-outline with \`pensmith outline --force\` (kept sections stay untouched)`;
+    }
+  }
+  return null;
+}
+function sectionRegistryProblem(paperRoot) {
+  const registered = registeredSectionsSync(paperRoot);
+  if (registered === null || registered.length === 0) return null;
+  const outline = outlineProblem(paperRoot);
+  if (outline !== null) return outline;
+  const rows = outlineIdentitiesSync(paperRoot);
+  if (rows === null) return null;
+  const problems = sectionRegistryDivergence(registered, rows);
+  if (problems.length === 0) return null;
+  return `OUTLINE.md and STATE.json disagree: ${problems.join("; ")} \u2014 ${RECONCILE_HINT}`;
+}
+var RECONCILE_HINT;
+var init_section_registry = __esm({
+  "bin/lib/section-registry.ts"() {
+    "use strict";
+    init_state2();
+    init_state();
+    init_outline();
+    init_paths();
+    init_section_id();
+    __name(identityLabel, "identityLabel");
+    __name(registeredSectionsSync, "registeredSectionsSync");
+    __name(outlineIdentitiesSync, "outlineIdentitiesSync");
+    __name(sectionRegistryDivergence, "sectionRegistryDivergence");
+    RECONCILE_HINT = "run `pensmith outline` to apply the edited OUTLINE.md (a registered section it no longer lists moves to sections/_archive/), or restore the row(s) in OUTLINE.md";
+    __name(outlineProblem, "outlineProblem");
+    __name(sectionRegistryProblem, "sectionRegistryProblem");
+  }
+});
+
+// bin/lib/verify/verdicts.ts
+import { createHash as createHash7 } from "node:crypto";
+function blocksCompile(verdict, accepted = false) {
+  if (PASSING_VERDICTS.has(verdict) || LEGACY_UNAVAILABLE_VERDICTS.has(verdict)) return false;
+  return !(accepted && verdict === ACCEPTABLE_QUOTE_VERDICT);
+}
+function sectionOutcome(rows) {
+  let failed = false;
+  let unverifiable = false;
+  let blocked = false;
+  for (const r2 of rows) {
+    if (PASSING_VERDICTS.has(r2.verdict)) continue;
+    if (r2.accepted === true && r2.verdict === ACCEPTABLE_QUOTE_VERDICT) continue;
+    if (LEGACY_UNAVAILABLE_VERDICTS.has(r2.verdict)) {
+      unverifiable = true;
+      continue;
+    }
+    if (UNVERIFIABLE_VERDICTS.has(r2.verdict)) {
+      unverifiable = true;
+      blocked = true;
+      continue;
+    }
+    failed = true;
+    blocked = true;
+  }
+  return { status: failed ? "failed" : unverifiable ? "unverifiable" : "verified", blocked };
+}
+function quoteTextSha256(text4) {
+  return createHash7("sha256").update(text4.normalize("NFKC").replace(/\s+/gu, " ").trim(), "utf8").digest("hex");
+}
+function textRowKey(line) {
+  return `(L${line})`;
+}
+function textRowLine(key2) {
+  const m3 = /^\(L([1-9]\d*)\)$/.exec(key2);
+  return m3 === null ? null : Number(m3[1]);
+}
+function quoteId(index) {
+  return `q${index + 1}`;
+}
+var PASS1_VERDICTS, PASS3_VERDICTS, DRAFT_VERDICTS, PASSING_VERDICTS, FAILING_VERDICTS, UNVERIFIABLE_VERDICTS, BLOCKING_VERDICTS, ACCEPTABLE_QUOTE_VERDICT, RETRY_ONLINE_VERDICTS, LEGACY_UNAVAILABLE_VERDICTS, UNATTRIBUTED_CITEKEY, DRAFT_ROW_KEY, QUOTE_ID_RE, PASS2_TABLE_HEADER;
+var init_verdicts = __esm({
+  "bin/lib/verify/verdicts.ts"() {
+    "use strict";
+    PASS1_VERDICTS = [
+      "OK",
+      "OK-BYO",
+      "FABRICATED",
+      "MIS-CITED",
+      "RETRACTED",
+      "UNASSIGNED",
+      "UNPARSEABLE",
+      "UNSUPPORTED-FORM",
+      "UNRESOLVABLE",
+      "UNVERIFIABLE-NETWORK",
+      "UNVERIFIABLE"
+    ];
+    PASS3_VERDICTS = ["PASS", "FUZZY", "NOT_FOUND", "UNVERIFIABLE-QUOTE", "UNVERIFIABLE-NETWORK", "UNATTRIBUTED"];
+    DRAFT_VERDICTS = ["PLACEHOLDER", "NO-CITATIONS"];
+    PASSING_VERDICTS = /* @__PURE__ */ new Set(["OK", "OK-BYO", "PASS", "FUZZY"]);
+    FAILING_VERDICTS = /* @__PURE__ */ new Set([
+      "FABRICATED",
+      "MIS-CITED",
+      "RETRACTED",
+      "UNASSIGNED",
+      "UNPARSEABLE",
+      "UNSUPPORTED-FORM",
+      "UNRESOLVABLE",
+      "NOT_FOUND",
+      "UNATTRIBUTED",
+      "NO-CITATIONS"
+    ]);
+    UNVERIFIABLE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK", "UNVERIFIABLE", "UNVERIFIABLE-QUOTE", "PLACEHOLDER"]);
+    BLOCKING_VERDICTS = /* @__PURE__ */ new Set([...FAILING_VERDICTS, ...UNVERIFIABLE_VERDICTS]);
+    ACCEPTABLE_QUOTE_VERDICT = "UNVERIFIABLE-QUOTE";
+    RETRY_ONLINE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK"]);
+    LEGACY_UNAVAILABLE_VERDICTS = /* @__PURE__ */ new Set(["PDF_UNAVAILABLE", "TEXT_UNAVAILABLE"]);
+    UNATTRIBUTED_CITEKEY = "(unattributed)";
+    DRAFT_ROW_KEY = "draft";
+    __name(blocksCompile, "blocksCompile");
+    __name(sectionOutcome, "sectionOutcome");
+    __name(quoteTextSha256, "quoteTextSha256");
+    __name(textRowKey, "textRowKey");
+    __name(textRowLine, "textRowLine");
+    __name(quoteId, "quoteId");
+    QUOTE_ID_RE = /^q[1-9]\d*$/;
+    PASS2_TABLE_HEADER = "| Citekey | Claim Sentence | Verdict | Rationale | Evidence |";
+  }
+});
+
+// bin/lib/verify/verdict-rows.ts
+function verdictRowOf(line) {
+  const m3 = /^\s*-\s*(\S+?)(?:\s+\[q[1-9]\d*\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line) ?? /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line);
+  if (!m3 || m3[1] === void 0 || m3[2] === void 0) return null;
+  return { citekey: m3[1], verdict: m3[2], rest: m3[3] ?? "" };
+}
+function isTextRowKey(key2) {
+  if (key2 === DRAFT_ROW_KEY || key2 === UNATTRIBUTED_CITEKEY) return true;
+  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key2)) return true;
+  return textRowLine(key2) !== null;
+}
+function revisableRows(verificationMd) {
+  const citations = [];
+  const textRows = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const line of verificationMd.split(/\r?\n/)) {
+    const row2 = verdictRowOf(line);
+    if (row2 === null || seen.has(row2.citekey)) continue;
+    const text4 = isTextRowKey(row2.citekey);
+    if (text4 ? !FAILING_VERDICTS.has(row2.verdict) : !REVISABLE_VERDICTS.includes(row2.verdict)) continue;
+    seen.add(row2.citekey);
+    const f2 = { citekey: row2.citekey, reason: `${row2.verdict}: ${row2.rest.replace(/^—\s*/, "").trim()}` };
+    (text4 ? textRows : citations).push(f2);
+  }
+  return { citations, textRows };
+}
+function reviseCanRepair(verificationMd) {
+  return revisableRows(verificationMd).citations.length > 0;
+}
+function rowReason(afterVerdict) {
+  const m3 = /^\s*—\s*(?:titleJW=\S+,\s*authorJW=\S+\s*—\s*|lev=\S+\s*—\s*)?(.*)$/u.exec(afterVerdict);
+  const reason = m3?.[1]?.replace(/ — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/, "").trim();
+  return reason !== void 0 && reason.length > 0 ? reason : void 0;
+}
+function renderPass1VerdictRow(citekey, verdict, titleJW, authorJW, reason) {
+  const score = /* @__PURE__ */ __name((x3) => Number.isFinite(x3) ? x3.toFixed(2) : "n/a", "score");
+  return `- ${citekey}: **${verdict}** \u2014 titleJW=${score(titleJW)}, authorJW=${score(authorJW)} \u2014 ${reason}`;
+}
+function parseBlockingVerdictRows(verificationMd) {
+  const out2 = [];
+  for (const line of verificationMd.split(/\r?\n/)) {
+    const pass3 = /^\s*-\s*(\S+?)(?:\s+\[(q[1-9]\d*)\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
+    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
+    const any = pass3 || pass1 ? null : /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
+    const verdict = pass3?.[3] ?? pass1?.[2] ?? any?.[1];
+    const matched = pass3 ?? pass1 ?? any;
+    if (verdict === void 0 || !BLOCKING_VERDICTS.has(verdict)) continue;
+    if (verdict === ACCEPTABLE_QUOTE_VERDICT && / — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/.test(line)) continue;
+    const citekey = pass3?.[1] ?? pass1?.[1];
+    const retraction = /\bcited work is retracted\b/.test(line);
+    const quoteId2 = pass3?.[2];
+    const reason = matched !== null ? rowReason(line.slice(matched.index + matched[0].length)) : void 0;
+    out2.push({
+      citekey: citekey ?? UNREADABLE_CITEKEY,
+      verdict,
+      ...retraction ? { retraction: true } : {},
+      ...quoteId2 !== void 0 ? { quoteId: quoteId2 } : {},
+      ...reason !== void 0 ? { reason } : {}
+    });
+  }
+  return out2;
+}
+function sectionVerificationReasons(verificationMd, dryRunNow) {
+  const status = /^Status:\s*(\S+)/m.exec(verificationMd)?.[1];
+  if (status === void 0) {
+    return ["no verifiable VERIFICATION.md (no Status line: the section was never verified, or the verifier output is unreadable)"];
+  }
+  const dryRun = dryRunVerificationReason(verificationMd, dryRunNow);
+  if (dryRun !== null) return [dryRun];
+  const reasons = [];
+  if (status.toLowerCase() === "failed") reasons.push("VERIFICATION.md Status is 'failed'");
+  for (const row2 of parseBlockingVerdictRows(verificationMd)) reasons.push(verdictRowReason(row2));
+  return reasons;
+}
+function verdictRowReason(row2) {
+  if (row2.citekey === "draft" && DRAFT_VERDICTS.includes(row2.verdict)) {
+    return row2.verdict === "PLACEHOLDER" ? "the draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model configured (`pensmith write <N>`)" : "the draft cites none of its assigned sources (NO-CITATIONS) \u2014 re-draft it (`pensmith write <N>`)";
+  }
+  const line = textRowLine(row2.citekey);
+  if (line !== null && (row2.verdict === "UNPARSEABLE" || row2.verdict === "UNSUPPORTED-FORM")) {
+    return `line ${line} of the draft holds a citation the verifier cannot check (${row2.verdict})`;
+  }
+  if (row2.quoteId !== void 0 && row2.verdict === ACCEPTABLE_QUOTE_VERDICT) {
+    return blockingRowReason(row2).replace("--accept-quote <id>", `--accept-quote ${row2.quoteId}`);
+  }
+  return blockingRowReason(row2);
+}
+function blockingRowReason(row2) {
+  const cite = row2.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row2.citekey}]`;
+  if (RETRY_ONLINE_VERDICTS.has(row2.verdict)) {
+    return `${cite} is ${row2.verdict} (its source could not be checked: offline, --dry-run or a failed lookup) \u2014 re-run online`;
+  }
+  if (row2.verdict === "UNVERIFIABLE") {
+    return `${cite} is UNVERIFIABLE \u2014 ${row2.reason ?? "its registrar's answer cannot be compared with the entry"}`;
+  }
+  if (row2.verdict === "RETRACTED") {
+    return `${cite} is RETRACTED \u2014 ${row2.reason ?? "the cited work is retracted"}`;
+  }
+  if (row2.verdict === ACCEPTABLE_QUOTE_VERDICT) {
+    return `${cite} has a quote no source text could be checked against (${row2.verdict}) \u2014 add the source's PDF (pensmith add <pdf>), paraphrase the quote (re-draft with pensmith write <N>, or edit the section's DRAFT.md and run pensmith verify <N>), or accept that one quote (pensmith verify <N> --accept-quote <id>)`;
+  }
+  return `${cite} has a blocking verdict (${row2.verdict}${row2.retraction === true ? ": the cited work is retracted" : ""})`;
+}
+function dryRunVerificationReason(verificationMd, dryRunNow) {
+  if (dryRunNow) return null;
+  const first2 = verificationMd.split(/\r?\n/).find((l2) => l2.trim().length > 0) ?? "";
+  return first2.startsWith(DRY_RUN_VERIFICATION_MARKER) ? "verified under --dry-run against synthetic sources \u2014 re-run `pensmith verify` without --dry-run" : null;
+}
+var REVISABLE_VERDICTS, UNREADABLE_CITEKEY, DRY_RUN_VERIFICATION_MARKER;
+var init_verdict_rows = __esm({
+  "bin/lib/verify/verdict-rows.ts"() {
+    "use strict";
+    init_verdicts();
+    init_verdicts();
+    REVISABLE_VERDICTS = ["FABRICATED", "MIS-CITED", "RETRACTED", "UNASSIGNED", "UNPARSEABLE", "UNRESOLVABLE", "NOT_FOUND"];
+    __name(verdictRowOf, "verdictRowOf");
+    __name(isTextRowKey, "isTextRowKey");
+    __name(revisableRows, "revisableRows");
+    __name(reviseCanRepair, "reviseCanRepair");
+    __name(rowReason, "rowReason");
+    __name(renderPass1VerdictRow, "renderPass1VerdictRow");
+    __name(parseBlockingVerdictRows, "parseBlockingVerdictRows");
+    UNREADABLE_CITEKEY = "(unreadable verdict row)";
+    __name(sectionVerificationReasons, "sectionVerificationReasons");
+    __name(verdictRowReason, "verdictRowReason");
+    __name(blockingRowReason, "blockingRowReason");
+    DRY_RUN_VERIFICATION_MARKER = "> OFFLINE MODE (--dry-run)";
+    __name(dryRunVerificationReason, "dryRunVerificationReason");
+  }
+});
+
+// bin/lib/router.ts
+import { existsSync as existsSync13, readFileSync as readFileSync15, statSync as statSync6 } from "node:fs";
+import { basename as basename4, join as join11 } from "node:path";
+function readSectionInfo(planPath) {
+  const none = { stub: false, failureReason: null, verifiedHash: null, assignedSources: [] };
+  if (!existsSync13(planPath)) {
+    return { status: "planned", corrupt: false, absent: true, ...none };
+  }
+  try {
+    const { frontmatter } = loadFrontmatterDocSync("plan", planPath);
+    const fm = frontmatter;
+    return {
+      status: typeof fm.status === "string" ? fm.status : "planned",
+      corrupt: false,
+      absent: false,
+      stub: fm.stub === true,
+      failureReason: typeof fm.failure_reason === "string" && fm.failure_reason.trim() ? fm.failure_reason.trim() : null,
+      verifiedHash: typeof fm.verified_against_draft_hash === "string" ? fm.verified_against_draft_hash : null,
+      assignedSources: Array.isArray(fm.assigned_sources) ? fm.assigned_sources.map(String) : []
+    };
+  } catch (e2) {
+    process.stderr.write(
+      `[pensmith] PLAN.md at ${planPath} is unreadable/corrupt: ${e2.message}
+`
+    );
+    return { status: "planned", corrupt: true, absent: false, ...none };
+  }
+}
+function draftHashOf(draftPath, assignedSources) {
+  try {
+    return computeDraftHash(readFileSync15(draftPath), [...assignedSources]);
+  } catch {
+    return null;
+  }
+}
+function sectionDraftState(draftPath, info) {
+  if (!existsSync13(draftPath)) return "missing";
+  if (info.status !== "verified") return "current";
+  return info.verifiedHash === null || draftHashOf(draftPath, info.assignedSources) === info.verifiedHash ? "current" : "changed";
+}
+function verificationBlockers(verificationPath) {
+  let md;
+  try {
+    md = readFileSync15(verificationPath, "utf8");
+  } catch {
+    return ["its VERIFICATION.md is missing or unreadable"];
+  }
+  const reasons = sectionVerificationReasons(md, dryRunWorkspaceActive());
+  const unverifiable = parseBlockingVerdictRows(md).filter((r2) => r2.verdict === "UNVERIFIABLE" || RETRY_ONLINE_VERDICTS.has(r2.verdict));
+  if (reasons.length > 1 && unverifiable.length === reasons.length) {
+    const keys = unverifiable.map((r2) => `[@${r2.citekey}]`);
+    const list3 = `${keys.slice(0, -1).join(", ")} and ${keys[keys.length - 1]}`;
+    return [`${list3} are UNVERIFIABLE (their sources could not be checked: offline, --dry-run or a failed lookup)`];
+  }
+  return reasons;
+}
+function recordHasPlaceholder(verificationPath) {
+  try {
+    return parseBlockingVerdictRows(readFileSync15(verificationPath, "utf8")).some((r2) => r2.verdict === "PLACEHOLDER");
+  } catch {
+    return false;
+  }
+}
+function recordRevisable(verificationPath) {
+  try {
+    return reviseCanRepair(readFileSync15(verificationPath, "utf8"));
+  } catch {
+    return true;
+  }
+}
+function unverifiableSectionDetail(verificationPath, label) {
+  let md;
+  try {
+    md = readFileSync15(verificationPath, "utf8");
+  } catch {
+    return `section ${label} could not be verified: its VERIFICATION.md is missing or unreadable \u2014 run \`pensmith verify ${label}\``;
+  }
+  const rows = parseBlockingVerdictRows(md);
+  if (rows.length === 0) return null;
+  const parts = [];
+  const quotes = rows.filter((r2) => r2.verdict === ACCEPTABLE_QUOTE_VERDICT);
+  if (quotes.length > 0) {
+    const ids = [...new Set(quotes.map((q3) => q3.quoteId ?? "?"))];
+    parts.push(
+      `${ids.length} quote(s) (${ids.join(", ")}) could not be checked against any source text \u2014 add the source's PDF (\`pensmith add <pdf>\`), paraphrase (re-draft with \`pensmith write ${label}\`, or edit its DRAFT.md and run \`pensmith verify ${label}\`), or accept a quote (\`pensmith verify ${label} --accept-quote ${ids[0]}\`)`
+    );
+  }
+  if (rows.some((r2) => r2.verdict === "PLACEHOLDER")) {
+    parts.push(`its draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model: \`pensmith write ${label}\``);
+  }
+  const network = rows.filter((r2) => RETRY_ONLINE_VERDICTS.has(r2.verdict));
+  if (network.length > 0) {
+    parts.push(`${network.map((r2) => `[@${r2.citekey}]`).join(", ")} could not be checked (offline or a failed lookup) \u2014 re-run \`pensmith verify ${label}\` online`);
+  }
+  for (const r2 of rows.filter((x3) => x3.verdict === "UNVERIFIABLE")) {
+    parts.push(`[@${r2.citekey}] cannot be checked by its registrar${r2.reason !== void 0 ? ` \u2014 ${r2.reason}` : ""}`);
+  }
+  if (parts.length === 0) parts.push(verificationBlockers(verificationPath).join("; "));
+  return `section ${label} could not be verified: ${parts.join("; ")}`;
+}
+function mtimeOf(p2) {
+  try {
+    return statSync6(p2).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+function compiledSectionCount(pDir) {
+  try {
+    const m3 = /^sections_count:\s*(\d+)\s*$/m.exec(readFileSync15(join11(pDir, "COMPILE-REPORT.md"), "utf8"));
+    return m3 ? Number(m3[1]) : null;
+  } catch {
+    return null;
+  }
+}
+function compiledDraftStale(pDir, sections2, paperRoot) {
+  const compiledAt = mtimeOf(join11(pDir, "DRAFT.md"));
+  if (compiledAt === null) return true;
+  const record2 = readCompileInputs(paperRoot);
+  if (record2 !== null && (record2.compiled_draft_sha256 === null || record2.sections.some((s2) => s2.verified_against_draft_hash === null))) return true;
+  const current = compiledInputsCurrent(paperRoot, sections2);
+  if (current !== null) return !current;
+  for (const { n: n2, slug } of sections2) {
+    for (const file of [sectionDraft(n2, slug, paperRoot), sectionVerification(n2, slug, paperRoot)]) {
+      const at = mtimeOf(file);
+      if (at !== null && at > compiledAt) return true;
+    }
+  }
+  const count = compiledSectionCount(pDir);
+  return count !== null && count !== sections2.length;
+}
+async function resolveNextAction(paperRoot, opts = {}) {
+  try {
+    let state;
+    try {
+      state = await loadState(paperRoot);
+    } catch (e2) {
+      if (e2 instanceof StateNotFoundError) return { verb: "new" };
+      process.stderr.write(
+        `[pensmith] STATE.json at ${paperRoot} is unreadable/corrupt: ${e2.message}
+`
+      );
+      return { verb: "status", reason: "attention" };
+    }
+    const pDir = paperDir(paperRoot);
+    const researchDone = isResearchDone(pDir);
+    if (!researchDone) return { verb: "research" };
+    if (opts.stopAfterResearch && researchDone) {
+      return { verb: "status", reason: "done" };
+    }
+    const sections2 = state.sections ?? [];
+    if (sections2.length === 0 && existsSync13(join11(pDir, "OUTLINE.rejected.md"))) {
+      return {
+        verb: "status",
+        reason: "attention",
+        detail: "the last outline was rejected (the replies are in .paper/OUTLINE.rejected.md) \u2014 fix the problem it names, then run `pensmith outline`"
+      };
+    }
+    const outlineIssue = outlineProblem(paperRoot);
+    if (outlineIssue !== null) return { verb: "status", reason: "attention", detail: outlineIssue };
+    if (!existsSync13(join11(pDir, "OUTLINE.md"))) return { verb: "outline" };
+    if (sections2.length === 0) return { verb: "outline" };
+    const registry2 = sectionRegistryProblem(paperRoot);
+    if (registry2 !== null) return { verb: "status", reason: "attention", detail: registry2 };
+    if (opts.stopAfterOutline) return { verb: "status", reason: "done", detail: OUTLINE_ONLY_DONE };
+    const unverifiablePast = [];
+    for (const { n: n2, slug, suffix } of sortBySectionId(sections2)) {
+      const id = suffix !== void 0 ? { n: n2, slug, suffix } : { n: n2, slug };
+      const label = formatSectionId(sectionIdOf(n2, suffix));
+      const r2 = readSectionInfo(sectionPlan(n2, slug, paperRoot));
+      if (r2.absent) return { verb: "plan", ...id };
+      if (r2.corrupt) {
+        return {
+          verb: "status",
+          reason: "attention",
+          section: id,
+          detail: `section ${label}'s PLAN.md is unreadable \u2014 fix it, or re-plan with \`pensmith plan ${label}\``
+        };
+      }
+      switch (r2.status) {
+        case "verified":
+          if (!existsSync13(sectionDraft(n2, slug, paperRoot))) return { verb: "write", ...id };
+          continue;
+        case "planned":
+          return r2.stub ? { verb: "plan", ...id } : { verb: "write", ...id };
+        case "writing":
+          return { verb: "write", ...id };
+        case "failed":
+          if (r2.failureReason !== null || !existsSync13(sectionDraft(n2, slug, paperRoot))) {
+            return {
+              verb: "status",
+              reason: "attention",
+              section: id,
+              detail: `section ${label} failed${r2.failureReason ? `: ${r2.failureReason}` : ""} \u2014 adjust its plan or sources if needed, then run \`pensmith write ${label}\``
+            };
+          }
+          if (r2.verifiedHash !== null && draftHashOf(sectionDraft(n2, slug, paperRoot), r2.assignedSources) === r2.verifiedHash) {
+            return {
+              verb: "status",
+              reason: "attention",
+              section: id,
+              detail: recordRevisable(sectionVerification(n2, slug, paperRoot)) ? `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 repair the flagged citations with \`pensmith plan ${label} --revise\` (one per run; then \`pensmith\` re-verifies the section), or re-draft with \`pensmith write ${label}\` (\`pensmith verify ${label}\` re-checks it as it is)` : `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 the flagged text is not a citation \`--revise\` can swap: edit it in the section's DRAFT.md (a citation written as [@citekey]) and run \`pensmith verify ${label}\`, or re-draft with \`pensmith write ${label}\``
+            };
+          }
+          return { verb: "verify", ...id };
+        // the draft changed: re-attempt verification — NOT continue
+        case "unverifiable": {
+          if (!existsSync13(sectionDraft(n2, slug, paperRoot))) return { verb: "write", ...id };
+          if (r2.verifiedHash === null || draftHashOf(sectionDraft(n2, slug, paperRoot), r2.assignedSources) !== r2.verifiedHash) {
+            return { verb: "verify", ...id };
+          }
+          unverifiablePast.push({ id, label, verificationPath: sectionVerification(n2, slug, paperRoot) });
+          continue;
+        }
+        case "written":
+        case "verifying":
+          if (!existsSync13(sectionDraft(n2, slug, paperRoot))) return { verb: "write", ...id };
+          return { verb: "verify", ...id };
+        default:
+          return {
+            verb: "status",
+            reason: "attention",
+            section: id,
+            detail: `section ${label}'s PLAN.md has an unknown status "${r2.status}"`
+          };
+      }
+    }
+    if (!dryRunWorkspaceActive()) {
+      const stub = unverifiablePast.filter((u) => recordHasPlaceholder(u.verificationPath));
+      if (stub.length > 0) {
+        return {
+          verb: "status",
+          reason: "attention",
+          section: stub[0].id,
+          detail: stub.map((u) => unverifiableSectionDetail(u.verificationPath, u.label) ?? `section ${u.label}'s draft is stub text \u2014 \`pensmith write ${u.label}\``).join("; ")
+        };
+      }
+    }
+    const record2 = readCompileInputs(paperRoot);
+    if (record2 !== null && record2.compiled_draft_sha256 !== null && existsSync13(join11(pDir, "DRAFT.md")) && fileSha256(join11(pDir, "DRAFT.md")) !== record2.compiled_draft_sha256) {
+      return {
+        verb: "status",
+        reason: "attention",
+        detail: `${basename4(pDir)}/DRAFT.md was edited after compile \u2014 make the edit in the section drafts (then \`pensmith\` re-verifies them) and run \`pensmith compile\`, which replaces the edited file`
+      };
+    }
+    if (compiledDraftStale(pDir, sections2, paperRoot)) return { verb: "compile" };
+    const finalState = finalMdState(paperRoot);
+    if (finalState === "edited") return { verb: "status", reason: "attention", detail: editedFinalReason(paperRoot) };
+    if (finalState !== "current") {
+      return record2 === null ? { verb: "compile" } : { verb: "done" };
+    }
+    return { verb: "status", reason: "done" };
+  } catch (e2) {
+    process.stderr.write(
+      `[pensmith] router resolveNextAction hit an unexpected error: ${e2.message}
+`
+    );
+    return { verb: "status", reason: "attention" };
+  }
+}
+var OUTLINE_ONLY_DONE;
+var init_router = __esm({
+  "bin/lib/router.ts"() {
+    "use strict";
+    init_state2();
+    init_paths();
+    init_frontmatter();
+    init_section_id();
+    init_draft_hash();
+    init_compile_inputs2();
+    init_section_registry();
+    init_verdict_rows();
+    init_verdicts();
+    init_research_sentinel();
+    init_verdicts();
+    init_compile_inputs2();
+    init_done_record2();
+    __name(readSectionInfo, "readSectionInfo");
+    __name(draftHashOf, "draftHashOf");
+    __name(sectionDraftState, "sectionDraftState");
+    __name(verificationBlockers, "verificationBlockers");
+    __name(recordHasPlaceholder, "recordHasPlaceholder");
+    __name(recordRevisable, "recordRevisable");
+    __name(unverifiableSectionDetail, "unverifiableSectionDetail");
+    __name(mtimeOf, "mtimeOf");
+    __name(compiledSectionCount, "compiledSectionCount");
+    __name(compiledDraftStale, "compiledDraftStale");
+    OUTLINE_ONLY_DONE = 'outline only: the approved outline is .paper/OUTLINE.md (its sources in .paper/LIBRARY.json and CITATIONS.bib) \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
+    __name(resolveNextAction, "resolveNextAction");
+  }
+});
+
+// bin/lib/intake-overrides.ts
+function oneLine4(s2) {
+  return s2.replace(/\s+/g, " ").trim();
+}
+function escapeRe(s2) {
+  return s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function clausesOf(text4) {
+  return text4.replace(/\r\n?/g, "\n").split(/(?<=[.!?;])\s+|\n+/).map((c2) => c2.trim()).filter((c2) => c2.length > 0);
+}
+function styleMentions(text4) {
+  const taken = [];
+  const out2 = [];
+  for (const alias of citationStyleAliases()) {
+    const pattern = alias.split(" ").map(escapeRe).join("[\\s()\\-\u2013\u2014/]+(?:and\\s+)?");
+    const re = new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, "giu");
+    for (const m3 of text4.matchAll(re)) {
+      const at = m3.index ?? 0;
+      const end = at + m3[0].length;
+      if (taken.some(([a3, b3]) => at < b3 && end > a3)) continue;
+      const style = citationStyleKey(alias);
+      if (style === null) continue;
+      taken.push([at, end]);
+      out2.push({ at, end, alias, style });
+    }
+  }
+  return out2.sort((a3, b3) => a3.at - b3.at);
+}
+function styleOverrideFrom(text4) {
+  let found = null;
+  for (const clause of clausesOf(text4)) {
+    for (const m3 of styleMentions(clause)) {
+      const before = clause.slice(Math.max(0, m3.at - 60), m3.at);
+      const after = clause.slice(m3.end, m3.end + 40);
+      if (BEFORE_NEGATION.test(before)) continue;
+      const ambiguous = AMBIGUOUS_STYLE_ALIASES.has(m3.alias);
+      const afterCue = AFTER_CUE.test(after) || !ambiguous && AFTER_EDITION.test(after);
+      const strong = BEFORE_STRONG.test(before) || afterCue;
+      const weak = !ambiguous && BEFORE_WEAK.test(before);
+      if (strong || weak) found = { style: m3.style, evidence: oneLine4(clause).slice(0, 200) };
+    }
+  }
+  return found;
+}
+function sectioningNotesFrom(text4) {
+  const out2 = [];
+  for (const raw of clausesOf(text4)) {
+    const clause = oneLine4(raw).replace(/^[-*•\d.)\s]+/, "");
+    if (clause.length < 6 || clause.length > 300) continue;
+    if (!SECTION_WORDS.test(clause) && !SECTION_NOUN.test(clause)) continue;
+    const ordered = SECTION_WORDS.test(clause) && ORDER_CUE.test(clause);
+    const asked2 = SECTION_NOUN.test(clause) && NEED_CUE.test(clause);
+    const noSection = /^(?:no|without|omit|skip|drop)\b/i.test(clause) && SECTION_WORDS.test(clause);
+    if (!ordered && !asked2 && !noSection) continue;
+    const note = clause.replace(/[.;]+$/, "");
+    if (!out2.some((n2) => n2.toLowerCase() === note.toLowerCase())) out2.push(note);
+  }
+  return out2.slice(0, 10);
+}
+function toInt(s2) {
+  return Number(s2.replace(/[,\s]/g, ""));
+}
+function plausible(n2) {
+  return Number.isInteger(n2) && n2 >= MIN_WORDS && n2 <= MAX_WORDS ? n2 : null;
+}
+function statedLengthWords(text4) {
+  const t = text4.replace(/\r\n?/g, "\n");
+  const NUM = String.raw`(\d{1,3}(?:,\d{3})+|\d{2,6})`;
+  const range = new RegExp(`${NUM}\\s*(?:-|\u2013|\u2014|to)\\s*${NUM}[\\s-]*words?\\b`, "i").exec(t);
+  if (range) {
+    const lo = toInt(range[1] ?? "");
+    const hi = toInt(range[2] ?? "");
+    if (lo > 0 && hi >= lo) {
+      const mid = plausible(Math.round((lo + hi) / 2 / 50) * 50);
+      if (mid !== null) return mid;
+    }
+  }
+  const words4 = new RegExp(`${NUM}[\\s-]*(?:words?|wds?)\\b`, "i").exec(t);
+  if (words4) {
+    const n2 = plausible(toInt(words4[1] ?? ""));
+    if (n2 !== null) return n2;
+  }
+  const pageRange = /(\d{1,2})\s*(?:-|–|—|to)\s*(\d{1,2})[\s-]*pages?\b/i.exec(t);
+  if (pageRange) {
+    const lo = Number(pageRange[1]);
+    const hi = Number(pageRange[2]);
+    if (lo > 0 && hi >= lo) return plausible(Math.round((lo + hi) / 2 * WORDS_PER_PAGE));
+  }
+  const pages = /(\d{1,2})[\s-]*pages?\b/i.exec(t);
+  if (pages) return plausible(Number(pages[1]) * WORDS_PER_PAGE);
+  return null;
+}
+function paperTypeFrom(text4) {
+  const body = clausesOf(text4).filter((c2) => sectioningNotesFrom(c2).length === 0).join("\n");
+  for (const [type, re] of PAPER_TYPE_CUES) if (re.test(body)) return type;
+  return "other";
+}
+function normalizePaperType(raw) {
+  const t = raw.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  if (PAPER_TYPES.includes(t)) return t;
+  return paperTypeFrom(raw);
+}
+function isRequirementPart(part) {
+  const p2 = part.trim().replace(/[.)]+$/, "");
+  return p2.length === 0 || citationStyleKey(p2) !== null || REQUIREMENT_PARTS.some((re) => re.test(p2));
+}
+function stripRequirementParts(s2) {
+  const parts = s2.split(/(?:,|;)\s+/);
+  const kept = parts.filter((p2) => !isRequirementPart(p2));
+  return kept.join(", ").replace(/,\s+(?=(?:on|about|regarding|concerning|of|into|that|whether)\s)/gi, " ").trim();
+}
+function unlabelled(clause) {
+  const m3 = /^([^:]{1,40}):\s+(.+)$/.exec(clause);
+  if (!m3) return clause;
+  const rest = (m3[2] ?? "").trim();
+  return TASK_VERB.test(rest) ? rest : null;
+}
+function taskTopicPhrase(t, taskVerbOnly = false) {
+  const clauses = clausesOf(t).filter((c2) => !/^thesis\s+seed\s*:/i.test(c2)).map(unlabelled).filter((c2) => c2 !== null && !INSTRUCTION_ONLY.test(c2) && sectioningNotesFrom(c2).length === 0 && stripRequirementParts(oneLine4(c2).replace(/[.!?]+$/, "")).length > 0);
+  const sentence = clauses.find((c2) => TASK_VERB.test(c2)) ?? (taskVerbOnly ? "" : clauses[0] ?? "");
+  let s2 = stripRequirementParts(oneLine4(sentence).replace(/[.!?]+$/, ""));
+  s2 = s2.replace(TASK_VERB, "").replace(/^\s*(?:an?|one|your)\s+/i, "").replace(/^\s*(?:(?:short|brief|detailed|critical|formal|well[\s-]researched|original|thoughtful|clear)\s+)*/i, "").replace(new RegExp(String.raw`^\s*${NUMBER_WORDS}(?:\s*(?:-|–|—|to)\s*${NUMBER_WORDS})?[\s-]*(?:word|page)s?\s+`, "i"), "").replace(/^\s*(?:(?:argumentative|persuasive|analytical|expository|research|critical|reflective|comparative|academic|short|term|informative|explanatory)\s+)*/i, "").replace(/^\s*(?:literature\s+review|lit(?:erature)?\s+survey|review|paper|essay|report|study|analysis|article|proposal|memo|primer|summary|brief|piece|assignment|lab\s+report|research\s+paper)s?\s*/i, "").replace(/^\s*in\s+(?:english|plain\s+language|the\s+(?:first|third)\s+person)\s+/i, "").replace(/^\s*(?:on|about|of|regarding|concerning|examining|exploring|discussing|covering|addressing|investigating|into|that\s+(?:examines|explores|discusses|analy[sz]es|argues))\s+/i, "").replace(COURSE_TAIL, "").replace(/[,;:]+$/, "").trim();
+  return s2.length >= 3 && !isRequirementPart(s2) ? s2.slice(0, 200) : "";
+}
+function labelledLine(t, labels) {
+  const re = new RegExp(String.raw`^\s*(?:paper\s+)?(?:${labels.source})\s*[:–—-]\s*(.+?)\s*$`, "im");
+  const v2 = re.exec(t)?.[1];
+  return v2 && oneLine4(v2).length >= 3 ? oneLine4(v2).replace(/[.]+$/, "").slice(0, 200) : "";
+}
+function topicFromAssignment(text4) {
+  const t = text4.replace(/\r\n?/g, "\n");
+  const candidates = [labelledLine(t, TOPIC_LABELS), taskTopicPhrase(t), labelledLine(t, TITLE_LABELS)].filter((c2) => c2.length > 0);
+  return candidates.find((c2) => !REDACTION_TAG.test(c2)) ?? candidates[0] ?? "";
+}
+function disciplineMentionFrom(text4) {
+  const presets = Object.values(loadDisciplinePresets());
+  const t = text4.replace(/\r\n?/g, "\n").replace(/\bliterature\s+(?:review|survey|search)\b/gi, " ");
+  const names = /* @__PURE__ */ __name((p2) => [p2.slug.replace(/-/g, " "), p2.name, ...p2.aliases].flatMap((n2) => n2.split("/")).map((n2) => n2.trim()).filter((n2) => n2.length >= 2), "names");
+  const labelled = /^\s*(?:discipline|subject(?:\s+area)?|field(?:\s+of\s+study)?|course|class|department|major)\s*[:–—-]\s*(.+?)\s*$/gim;
+  for (const m3 of t.matchAll(labelled)) {
+    const value = (m3[1] ?? "").toLowerCase();
+    for (const p2 of presets) {
+      if (p2.slug === FALLBACK_DISCIPLINE) continue;
+      if (names(p2).some((n2) => new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(n2.toLowerCase()).replace(/\\ /g, "\\s+")}(?![\\p{L}\\p{N}])`, "u").test(value))) return p2.slug;
+    }
+  }
+  let best = null;
+  for (const p2 of presets) {
+    if (p2.slug === FALLBACK_DISCIPLINE) continue;
+    for (const n2 of names(p2)) {
+      const body = escapeRe(n2).replace(/\\ /g, "\\s+").replace(/ /g, "\\s+");
+      const res = [
+        new RegExp(`(?<![\\p{L}\\p{N}])${body}\\s+${COURSE_NOUNS}\\b`, "iu"),
+        new RegExp(`\\b(?:in|of|for)\\s+(?:the\\s+)?(?:field\\s+of\\s+)?${body}(?:\\s+${COURSE_NOUNS})?(?![\\p{L}\\p{N}])(?=\\s*(?:[.,;:)]|$|\\s+${COURSE_NOUNS}))`, "iu")
+      ];
+      for (const re of res) {
+        const m3 = re.exec(t);
+        if (m3 && (best === null || (m3.index ?? 0) < best.at)) best = { slug: p2.slug, at: m3.index ?? 0 };
+      }
+    }
+  }
+  return best?.slug ?? null;
+}
+function thesisSeedFrom(text4) {
+  const m3 = new RegExp(`^\\s*${escapeRe(THESIS_SEED_LABEL)}\\s*(.+)$`, "im").exec(text4.replace(/\r\n?/g, "\n"));
+  return m3 ? oneLine4(m3[1] ?? "") : "";
+}
+function parseIntakeOverrides(assignment, answers = []) {
+  let style = styleOverrideFrom(assignment);
+  const notes = [...sectioningNotesFrom(assignment)];
+  for (const a3 of answers) {
+    const s2 = styleOverrideFrom(a3);
+    if (s2 !== null) style = s2;
+    for (const n2 of sectioningNotesFrom(a3)) if (!notes.some((x3) => x3.toLowerCase() === n2.toLowerCase())) notes.push(n2);
+  }
+  return { citationStyle: style, sectioningNotes: notes.slice(0, 10), lengthWords: statedLengthWords(assignment) };
+}
+var WORDS_PER_PAGE, MIN_WORDS, MAX_WORDS, AMBIGUOUS_STYLE_ALIASES, AFTER_CUE, AFTER_EDITION, BEFORE_STRONG, BEFORE_WEAK, BEFORE_NEGATION, SECTION_WORDS, SECTION_NOUN, ORDER_CUE, NEED_CUE, PAPER_TYPE_CUES, TASK_VERB, INSTRUCTION_ONLY, NUMBER_WORDS, REQUIREMENT_PARTS, COURSE_TAIL, TOPIC_LABELS, TITLE_LABELS, REDACTION_TAG, COURSE_NOUNS, THESIS_SEED_LABEL;
+var init_intake_overrides = __esm({
+  "bin/lib/intake-overrides.ts"() {
+    "use strict";
+    init_config();
+    init_disciplines();
+    init_intake_brief();
+    WORDS_PER_PAGE = 300;
+    MIN_WORDS = 100;
+    MAX_WORDS = 5e4;
+    __name(oneLine4, "oneLine");
+    __name(escapeRe, "escapeRe");
+    __name(clausesOf, "clausesOf");
+    AMBIGUOUS_STYLE_ALIASES = /* @__PURE__ */ new Set(["chicago", "harvard", "vancouver", "turabian", "author date", "notes bibliography", "ama"]);
+    AFTER_CUE = /^[\s-]*(?:\(?\s*(?:\d{1,2}(?:st|nd|rd|th)?\s*(?:ed(?:ition)?\.?)?\s*\)?\s*)?)(?:style|format|formatting|formatted|citations?|citing|referencing|references?|reference\s+list|bibliography|in-text|edition|guidelines?|conventions?|rules)\b/i;
+    AFTER_EDITION = /^\s*\(?\d{1,2}(?:st|nd|rd|th)?\)?(?![\d.])/;
+    BEFORE_STRONG = /(?:\b(?:use|using|uses|follow|follows|following|per|cite|cited|citing|cites|format|formatted|formatting|reference|referenced|document|documented|according to)\b(?:\s+(?:the|a|an|in|with|using|to|sources|references|citations|them|your|all))*\s*|\b(?:style|format|citations?|referencing)\s*[:=-]\s*)$/i;
+    BEFORE_WEAK = /\b(?:in|with|to)\s+(?:the\s+)?$/i;
+    BEFORE_NEGATION = /\b(?:instead\s+of|rather\s+than|not|no|never|without|avoid|avoiding|except|than|over|but\s+not|replace|replacing|switch\s+from|change\s+from|don['’]t|do\s+not|never)\s+(?:the\s+)?(?:(?:use|using|follow|following|cite\s+in|format\s+in|in)\s+)?(?:the\s+)?$/i;
+    __name(styleMentions, "styleMentions");
+    __name(styleOverrideFrom, "styleOverrideFrom");
+    SECTION_WORDS = /\b(?:abstract|introduction|intro|background|literature\s+review|lit(?:erature)?\s+survey|related\s+work|methods?|methodology|materials(?:\s+and\s+methods)?|results|findings|discussion|analysis|conclusions?|limitations|future\s+work|counterarguments?|rebuttal|objections?|recommendations?|appendix|appendices|case\s+stud(?:y|ies)|executive\s+summary|references|bibliography|annotated\s+bibliography)\b/i;
+    SECTION_NOUN = /\b(?:sections?|headings?|subsections?|chapters?|parts?)\b/i;
+    ORDER_CUE = /\b(?:before|after|between|following|precede[sd]?|then|first|last|start(?:ing)?\s+with|begin(?:ning)?\s+with|end(?:ing)?\s+with|open(?:ing)?\s+with|close\s+with|followed\s+by)\b/i;
+    NEED_CUE = /\b(?:need|needs|include|includes|including|add|must|should|require[sd]?|requiring|want|have|has|contain|omit|skip|drop|exclude|without|no|separate|dedicated|own)\b/i;
+    __name(sectioningNotesFrom, "sectioningNotesFrom");
+    __name(toInt, "toInt");
+    __name(plausible, "plausible");
+    __name(statedLengthWords, "statedLengthWords");
+    PAPER_TYPE_CUES = [
+      ["literature-review", /\b(?:literature\s+review|lit(?:erature)?\s+survey|review\s+of\s+(?:the\s+)?(?:literature|research|evidence)|systematic\s+review|scoping\s+review)\b/i],
+      ["lab-report", /\blab(?:oratory)?\s+report\b/i],
+      ["research-report", /\bresearch\s+(?:report|paper|proposal)\b/i],
+      ["primer", /\bprimer\b/i],
+      ["summary", /\b(?:summary|summari[sz]e|summari[sz]ing|synopsis|abstract\s+of)\b/i],
+      ["persuasive", /\bpersuasive\b|\bpersuade\b|\bconvince\b/i],
+      ["argumentative", /\bargumentative\b|\bargue\b|\bargument\s+(?:essay|paper)\b|\bposition\s+paper\b|\btake\s+a\s+(?:clear\s+)?(?:position|stance|side)\b|\bdefend\s+(?:a|the|your)\s+(?:thesis|claim|position)\b/i],
+      ["analytical", /\banalytical\b|\banaly[sz]e\b|\banalysis\b|\bcritically\s+(?:assess|evaluate|examine)\b/i],
+      ["expository", /\bexpository\b|\bexplain\b|\bexplanatory\b|\binformative\b|\bdescribe\b/i]
+    ];
+    __name(paperTypeFrom, "paperTypeFrom");
+    __name(normalizePaperType, "normalizePaperType");
+    TASK_VERB = /^(?:please\s+)?(?:write|compose|draft|prepare|produce|create|discuss|analy[sz]e|argue|examine|explore|describe|explain|review|evaluate|compare|contrast|investigate|research|assess|consider|summari[sz]e|critique|reflect|develop|present)\b/i;
+    INSTRUCTION_ONLY = /^(?:please\s+)?(?:use|follow|cite|include|add|submit|format|double[\s-]space|no|omit|skip|avoid|make\s+sure|remember|note|ensure)\b/i;
+    NUMBER_WORDS = String.raw`(?:\d[\d,]*|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen|twenty)`;
+    REQUIREMENT_PARTS = [
+      new RegExp(String.raw`^\(?\s*(?:about\s+|around\s+|at\s+least\s+|no\s+more\s+than\s+|max(?:imum)?\s+|min(?:imum)?\s+)?${NUMBER_WORDS}(?:\s*(?:-|–|—|to)\s*${NUMBER_WORDS})?[\s-]*(?:words?|pages?)\b`, "i"),
+      /\b(?:style|format|formatting|formatted|referencing|edition|double[\s-]spaced|single[\s-]spaced)\s*\)?\s*$/i,
+      new RegExp(String.raw`^(?:citing|cite|using|use|with|including|include|drawing\s+on)\s+(?:at\s+least\s+|a\s+minimum\s+of\s+)?${NUMBER_WORDS}\s+(?:(?:peer[\s-]reviewed|scholarly|academic|credible|primary|secondary)\s+)*(?:sources|references|citations|articles|papers|studies)\b`, "i"),
+      /^(?:due|deadline|submit|submitted)\b/i
+    ];
+    COURSE_TAIL = /\s+(?:for\s+(?:my|our|the|this|your)|in\s+(?:my|our|your))\s+(?:[\p{L}\p{N}&.'’-]+\s+){0,4}(?:class|course|seminar|module|unit|lecture|tutorial|section)\s*$/iu;
+    __name(isRequirementPart, "isRequirementPart");
+    __name(stripRequirementParts, "stripRequirementParts");
+    __name(unlabelled, "unlabelled");
+    __name(taskTopicPhrase, "taskTopicPhrase");
+    __name(labelledLine, "labelledLine");
+    TOPIC_LABELS = /topic|research\s+question|prompt/;
+    TITLE_LABELS = /title|subject/;
+    REDACTION_TAG = /\[REDACTED:[A-Z]+\]/;
+    __name(topicFromAssignment, "topicFromAssignment");
+    COURSE_NOUNS = String.raw`(?:class|course|seminar|module|program(?:me)?|department|major|minor|unit|assignment|homework|paper|essay|lab|project|coursework|exam)`;
+    __name(disciplineMentionFrom, "disciplineMentionFrom");
+    THESIS_SEED_LABEL = "Thesis seed:";
+    __name(thesisSeedFrom, "thesisSeedFrom");
+    __name(parseIntakeOverrides, "parseIntakeOverrides");
+  }
+});
+
+// bin/lib/intake-parse.ts
+function fromBrief(text4) {
+  try {
+    const doc = migrateFrontmatterText("intake", text4.replace(/^﻿/, ""), "INTAKE.md");
+    const parsed = parseIntakeFrontmatter(doc.frontmatter, doc.body, "INTAKE.md", doc.diskVersion);
+    return {
+      topic: parsed.brief.topic,
+      discipline: parsed.brief.discipline,
+      assignment: parsed.assignment,
+      brief: parsed.brief
+    };
+  } catch {
+    return null;
+  }
+}
+function fromRawText(text4) {
+  const section = assignmentFromBody(text4);
+  const assignment = section || text4.trim();
+  const topic = legacyTopic(text4) || topicFromAssignment(assignment) || assignment.replace(/\s+/g, " ").trim().slice(0, 80);
+  const discipline = /^\s*discipline\s*:/im.test(text4) ? legacyDiscipline(text4) : disciplineMentionFrom(text4) ?? FALLBACK_DISCIPLINE;
+  return { topic, discipline, assignment, brief: null };
+}
+function parseIntakeMd(text4) {
+  if (typeof text4 !== "string" || text4.trim().length === 0) {
+    return { topic: "", discipline: FALLBACK_DISCIPLINE, assignment: "", brief: null };
+  }
+  try {
+    if (FRONTMATTER_START.test(text4)) {
+      const brief = fromBrief(text4);
+      if (brief !== null) return brief;
+    }
+    return fromRawText(text4);
+  } catch {
+    return { topic: text4.trim().slice(0, 80), discipline: FALLBACK_DISCIPLINE, assignment: text4.trim(), brief: null };
+  }
+}
+var FRONTMATTER_START;
+var init_intake_parse = __esm({
+  "bin/lib/intake-parse.ts"() {
+    "use strict";
+    init_frontmatter();
+    init_intake_brief();
+    init_v0_to_v12();
+    init_disciplines();
+    init_intake_overrides();
+    FRONTMATTER_START = /^﻿?---\r?\n/;
+    __name(fromBrief, "fromBrief");
+    __name(fromRawText, "fromRawText");
+    __name(parseIntakeMd, "parseIntakeMd");
+  }
+});
+
+// bin/lib/dry-run-paper.ts
+import { createHash as createHash8 } from "node:crypto";
+import { existsSync as existsSync14, lstatSync, readdirSync as readdirSync4, readFileSync as readFileSync16, rmSync as rmSync3, statSync as statSync7, utimesSync } from "node:fs";
+import path14 from "node:path";
+function dryRunMarkerPath(root) {
+  return path14.join(dryRunPaperDir(root), DRY_RUN_MARKER);
+}
+function legacyDryRunMarkerPath(root) {
+  return path14.join(realPaperDir(root), DRY_RUN_MARKER);
+}
+function isDryRunPaper(root) {
+  return existsSync14(legacyDryRunMarkerPath(root));
+}
+function hasPaperFiles(root) {
+  let names;
+  try {
+    names = readdirSync4(realPaperDir(root));
+  } catch {
+    return false;
+  }
+  return names.some((n2) => PAPER_ARTIFACTS.has(n2));
+}
+function sha256(buf) {
+  return createHash8("sha256").update(buf).digest("hex");
+}
+function listSeedFiles(dir) {
+  const out2 = [];
+  const walk = /* @__PURE__ */ __name((abs, rel2) => {
+    let names;
+    try {
+      names = readdirSync4(abs);
+    } catch {
+      return;
+    }
+    for (const name of names.sort()) {
+      if (rel2 === "" && SEED_EXCLUDED.has(name)) continue;
+      const childAbs = path14.join(abs, name);
+      const childRel = rel2 === "" ? name : `${rel2}/${name}`;
+      let st;
+      try {
+        st = lstatSync(childAbs);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) walk(childAbs, childRel);
+      else if (st.isFile()) out2.push(childRel);
+    }
+  }, "walk");
+  walk(dir, "");
+  return out2;
+}
+function fingerprintPaper(root) {
+  const dir = realPaperDir(root);
+  let isDir = false;
+  try {
+    isDir = lstatSync(dir).isDirectory();
+  } catch {
+    isDir = false;
+  }
+  if (!isDir) return { digest: null, files: [] };
+  const files = [];
+  for (const rel2 of listSeedFiles(dir)) {
+    let bytes;
+    try {
+      bytes = readFileSync16(path14.join(dir, ...rel2.split("/")));
+    } catch {
+      continue;
+    }
+    files.push({ path: rel2, size: bytes.length, sha256: sha256(bytes) });
+  }
+  const digest = sha256(files.map((f2) => `${f2.path}\0${f2.size}\0${f2.sha256}
+`).join(""));
+  return { digest, files };
+}
+function readSeedRecord(root) {
+  try {
+    const parsed = SeedRecordSchema.safeParse(JSON.parse(readFileSync16(path14.join(dryRunPaperDir(root), SEED_FILE), "utf8")));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+async function prepareDryRunWorkspace(root) {
+  const ws = dryRunPaperDir(root);
+  const fp = fingerprintPaper(root);
+  const prior = existsSync14(ws) ? readSeedRecord(root) : null;
+  if (prior !== null && prior.digest === fp.digest) {
+    if (!existsSync14(dryRunMarkerPath(root))) await atomicWriteFile(dryRunMarkerPath(root), WORKSPACE_MARKER_TEXT);
+    return { action: "kept", dir: ws, copied: 0, note: null };
+  }
+  const existed = existsSync14(ws);
+  if (existed) {
+    await closeSessionLog();
+    rmSync3(ws, { recursive: true, force: true });
+  }
+  const src = realPaperDir(root);
+  for (const f2 of fp.files) {
+    const parts = f2.path.split("/");
+    const from = path14.join(src, ...parts);
+    const to = path14.join(ws, ...parts);
+    await atomicWriteFile(to, readFileSync16(from));
+    try {
+      const st = statSync7(from);
+      utimesSync(to, st.atimeMs / 1e3, st.mtimeMs / 1e3);
+    } catch {
+    }
+  }
+  await atomicWriteFile(dryRunMarkerPath(root), WORKSPACE_MARKER_TEXT);
+  const record2 = {
+    $schemaVersion: 1,
+    seededAt: (/* @__PURE__ */ new Date()).toISOString(),
+    source: PAPER_DIR_NAME,
+    digest: fp.digest,
+    files: fp.files.map((f2) => ({ path: f2.path, size: f2.size, sha256: f2.sha256 }))
+  };
+  await atomicWriteFile(path14.join(ws, SEED_FILE), JSON.stringify(record2, null, 2) + "\n");
+  const action = fp.digest === null ? existed ? "re-seeded" : "created" : existed ? "re-seeded" : "seeded";
+  let note = null;
+  if (fp.digest !== null) {
+    note = `pensmith: ${action === "seeded" ? "seeded" : "re-seeded"} the dry-run workspace ${ws} from ${src} (${fp.files.length} file${fp.files.length === 1 ? "" : "s"}); the dry run never writes ${PAPER_DIR_NAME}/`;
+  } else if (existed) {
+    note = `pensmith: reset the dry-run workspace ${ws} (the paper it was copied from is gone)`;
+  }
+  return { action, dir: ws, copied: fp.files.length, note };
+}
+async function enforceDryRunBoundary(root, dryRun) {
+  if (dryRun) return prepareDryRunWorkspace(root);
+  if (!isDryRunPaper(root)) return null;
+  if (!hasPaperFiles(root)) {
+    rmSync3(legacyDryRunMarkerPath(root), { force: true });
+    return null;
+  }
+  throw new PensmithError(
+    `the paper at ${root} was made by --dry-run (synthetic sources, stub text) and cannot become a real paper \u2014 delete ${realPaperDir(root)} or use another folder, then run pensmith new (dry runs now work in ${DRY_RUN_PAPER_DIR_NAME}/ and never touch ${PAPER_DIR_NAME}/)`,
+    EXIT_ERROR
+  );
+}
+var DRY_RUN_MARKER, SEED_FILE, SEED_EXCLUDED, WORKSPACE_MARKER_TEXT, PAPER_ARTIFACTS, SeedRecordSchema;
+var init_dry_run_paper = __esm({
+  "bin/lib/dry-run-paper.ts"() {
+    "use strict";
+    init_zod();
+    init_atomic_write();
+    init_paths();
+    init_exit_codes();
+    init_session_log();
+    DRY_RUN_MARKER = "DRY-RUN.md";
+    SEED_FILE = "SEED.json";
+    SEED_EXCLUDED = /* @__PURE__ */ new Set(["export", "SESSION.log", "COSTS.jsonl", "INTAKE.raw.local", "HANDOFF.json"]);
+    WORKSPACE_MARKER_TEXT = [
+      "# pensmith dry-run workspace",
+      "",
+      "This folder is where `pensmith --dry-run` works. The real paper in `.paper/` is never written by a dry run:",
+      "when one exists, this workspace is a copy of it (see `SEED.json`), kept across dry runs and re-copied when `.paper/` changes.",
+      "",
+      "Sources a dry run adds are synthetic (`10.0000/pensmith-dryrun.*`) and its model replies are deterministic stubs.",
+      "Its exports are written to `export/` here, named `*.dry-run.*`. Delete this folder at any time.",
+      ""
+    ].join("\n");
+    __name(dryRunMarkerPath, "dryRunMarkerPath");
+    __name(legacyDryRunMarkerPath, "legacyDryRunMarkerPath");
+    __name(isDryRunPaper, "isDryRunPaper");
+    PAPER_ARTIFACTS = /* @__PURE__ */ new Set([
+      path14.basename(paperStateFile(".")),
+      "INTAKE.md",
+      "INTAKE.raw.local",
+      "LIBRARY.json",
+      "CITATIONS.bib",
+      "CITATIONS.ris",
+      "RESEARCH.md",
+      "OUTLINE.md",
+      "STYLE.json",
+      "TUTORIAL.md",
+      "DRAFT.md",
+      "COMPILE-REPORT.md",
+      "COMPILE-INPUTS.json",
+      "VERIFICATION.md",
+      "FINAL.md",
+      "DONE-RECORD.json",
+      "HANDOFF.json",
+      "sections",
+      "export"
+    ]);
+    __name(hasPaperFiles, "hasPaperFiles");
+    SeedRecordSchema = external_exports.object({
+      $schemaVersion: external_exports.literal(1),
+      seededAt: external_exports.string(),
+      source: external_exports.literal(PAPER_DIR_NAME),
+      digest: external_exports.string().nullable(),
+      files: external_exports.array(external_exports.object({ path: external_exports.string(), size: external_exports.number().int().min(0), sha256: external_exports.string() }))
+    });
+    __name(sha256, "sha256");
+    __name(listSeedFiles, "listSeedFiles");
+    __name(fingerprintPaper, "fingerprintPaper");
+    __name(readSeedRecord, "readSeedRecord");
+    __name(prepareDryRunWorkspace, "prepareDryRunWorkspace");
+    __name(enforceDryRunBoundary, "enforceDryRunBoundary");
+  }
+});
+
+// bin/lib/session-lock.ts
+import * as fs7 from "node:fs";
+import * as fsp7 from "node:fs/promises";
+import os3 from "node:os";
+import path15 from "node:path";
+function claudeSessionIdFromEnv() {
+  const v2 = process.env["CLAUDE_CODE_SESSION_ID"];
+  return typeof v2 === "string" && v2.length > 0 ? v2 : null;
+}
+function canonicalRoot(root) {
+  const r2 = realpathNearest(asProjectRoot(root));
+  return process.platform === "win32" ? r2.toLowerCase() : r2;
+}
+function sessionLockFile(root) {
+  return path15.join(pensmithLockDir(), `session-${projectHash(canonicalRoot(root))}.json`);
+}
+function isOwner(v2) {
+  if (!v2 || typeof v2 !== "object") return false;
+  const o2 = v2;
+  return typeof o2["hostname"] === "string" && typeof o2["pid"] === "number" && Number.isInteger(o2["pid"]) && typeof o2["sessionId"] === "string" && (o2["kind"] === "cli" || o2["kind"] === "mcp") && typeof o2["startedAt"] === "string";
+}
+function readOwner2(file) {
+  let text4;
+  let ageMs = 0;
+  try {
+    ageMs = Date.now() - fs7.statSync(file).mtimeMs;
+    text4 = fs7.readFileSync(file, "utf8");
+  } catch (e2) {
+    if (e2.code === "ENOENT") return { kind: "gone" };
+    return { kind: "unreadable", ageMs };
+  }
+  try {
+    const parsed = JSON.parse(text4);
+    return isOwner(parsed) ? { kind: "owner", owner: parsed } : { kind: "unreadable", ageMs };
+  } catch {
+    return { kind: "unreadable", ageMs };
+  }
+}
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e2) {
+    return e2.code === "EPERM";
+  }
+}
+function staleReason(owner, now = Date.now()) {
+  const started = Date.parse(owner.startedAt);
+  if (Number.isFinite(started) && now - started > STALE_SESSION_MS) return "older than 6 h";
+  if (owner.hostname === os3.hostname() && !isPidAlive(owner.pid)) return "process not running";
+  return null;
+}
+function removeIfSame(file, owner) {
+  const cur = readOwner2(file);
+  if (cur.kind === "gone") return false;
+  if (owner !== null && (cur.kind !== "owner" || cur.owner.sessionId !== owner.sessionId || cur.owner.pid !== owner.pid)) {
+    return false;
+  }
+  try {
+    fs7.rmSync(file, { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function releaseAllSync() {
+  for (const [file, held2] of HELD) {
+    removeIfSame(file, held2.owner);
+  }
+  HELD.clear();
+}
+function installExitHooks() {
+  if (exitHooksInstalled) return;
+  exitHooksInstalled = true;
+  process.on("exit", releaseAllSync);
+  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    process.on(signal, () => {
+      releaseAllSync();
+      process.exit(code);
+    });
+  }
+}
+function handleFor(file, held2) {
+  let released = false;
+  return {
+    file,
+    owner: held2.owner,
+    release: /* @__PURE__ */ __name(async () => {
+      if (released) return;
+      released = true;
+      held2.depth -= 1;
+      if (held2.depth > 0) return;
+      HELD.delete(file);
+      removeIfSame(file, held2.owner);
+      await Promise.resolve();
+    }, "release")
+  };
+}
+async function acquireSessionLock(root, opts) {
+  const file = sessionLockFile(root);
+  for (; ; ) {
+    const mine = HELD.get(file);
+    if (mine) {
+      mine.depth += 1;
+      return handleFor(file, mine);
+    }
+    const pending = PENDING.get(file);
+    if (!pending) break;
+    await pending.catch(() => void 0);
+  }
+  const attempt = acquireFresh(file, root, opts);
+  PENDING.set(file, attempt);
+  try {
+    return handleFor(file, await attempt);
+  } finally {
+    if (PENDING.get(file) === attempt) PENDING.delete(file);
+  }
+}
+function hold(file, owner) {
+  const existing = HELD.get(file);
+  if (existing) {
+    existing.depth += 1;
+    return existing;
+  }
+  const held2 = { depth: 1, owner };
+  HELD.set(file, held2);
+  installExitHooks();
+  return held2;
+}
+async function acquireFresh(file, root, opts) {
+  await fsp7.mkdir(path15.dirname(file), { recursive: true });
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const owner = {
+      hostname: os3.hostname(),
+      pid: process.pid,
+      sessionId: currentSessionId(),
+      kind: opts.kind,
+      verb: opts.verb,
+      startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      claudeSessionId: opts.claudeSessionId ?? null,
+      root: path15.resolve(root)
+    };
+    try {
+      const fh = await fsp7.open(file, "wx");
+      try {
+        await fh.write(JSON.stringify(owner, null, 2) + "\n");
+      } finally {
+        await fh.close();
+      }
+      return hold(file, owner);
+    } catch (e2) {
+      if (e2.code !== "EEXIST") throw e2;
+    }
+    const cur = readOwner2(file);
+    if (cur.kind === "gone") continue;
+    if (cur.kind === "unreadable") {
+      if (cur.ageMs > PARTIAL_RECORD_GRACE_MS) removeIfSame(file, null);
+      else await new Promise((r2) => setTimeout(r2, 25));
+      continue;
+    }
+    const holder = cur.owner;
+    if (holder.pid === process.pid && holder.hostname === os3.hostname()) {
+      return hold(file, holder);
+    }
+    const why = staleReason(holder);
+    if (why !== null) {
+      if (removeIfSame(file, holder)) {
+        process.stderr.write(`pensmith: cleared stale lock (pid ${holder.pid}, started ${holder.startedAt}) \u2014 ${why}.
+`);
+      }
+      continue;
+    }
+    throw new SessionLockedError(holder);
+  }
+  const last = readOwner2(file);
+  if (last.kind === "owner") throw new SessionLockedError(last.owner);
+  throw new PensmithError(`could not take the pensmith session lock at ${file}; re-run`, EXIT_ERROR);
+}
+function readSessionLock(root) {
+  const cur = readOwner2(sessionLockFile(root));
+  return cur.kind === "owner" ? cur.owner : null;
+}
+function sectionLockResource(root, n2) {
+  return path15.join(paperDir(asProjectRoot(root)), "sections", `${String(n2).padStart(2, "0")}.section-lock`);
+}
+async function withPaperSession(root, opts, fn) {
+  const handle = await acquireSessionLock(root, {
+    kind: "mcp",
+    verb: opts.verb,
+    claudeSessionId: claudeSessionIdFromEnv()
+  });
+  try {
+    const dryRun = networkMode().dryRun;
+    await enforceDryRunBoundary(root, dryRun);
+    if (!dryRun) await migratePaperConfigFile(root);
+    if (opts.section === void 0) return await fn();
+    return await withLock(sectionLockResource(root, opts.section), fn, { timeoutMs: SECTION_WAIT_MS });
+  } finally {
+    await handle.release();
+  }
+}
+var STALE_SESSION_MS, SECTION_WAIT_MS, PARTIAL_RECORD_GRACE_MS, SessionLockedError, HELD, exitHooksInstalled, PENDING;
+var init_session_lock = __esm({
+  "bin/lib/session-lock.ts"() {
+    "use strict";
+    init_paths();
+    init_session_log();
+    init_config2();
+    init_dry_run_paper();
+    init_http_mock();
+    init_lock();
+    init_exit_codes();
+    STALE_SESSION_MS = 6 * 60 * 60 * 1e3;
+    SECTION_WAIT_MS = 30 * 60 * 1e3;
+    PARTIAL_RECORD_GRACE_MS = 2e3;
+    __name(claudeSessionIdFromEnv, "claudeSessionIdFromEnv");
+    __name(canonicalRoot, "canonicalRoot");
+    __name(sessionLockFile, "sessionLockFile");
+    SessionLockedError = class extends PensmithError {
+      static {
+        __name(this, "SessionLockedError");
+      }
+      owner;
+      constructor(owner) {
+        super(
+          `another pensmith session (pid ${owner.pid}, started ${owner.startedAt}) is working on this paper; run pensmith resume once it ends`,
+          EXIT_ERROR
+        );
+        this.name = "SessionLockedError";
+        this.owner = owner;
+      }
+    };
+    __name(isOwner, "isOwner");
+    __name(readOwner2, "readOwner");
+    __name(isPidAlive, "isPidAlive");
+    __name(staleReason, "staleReason");
+    __name(removeIfSame, "removeIfSame");
+    HELD = /* @__PURE__ */ new Map();
+    exitHooksInstalled = false;
+    __name(releaseAllSync, "releaseAllSync");
+    __name(installExitHooks, "installExitHooks");
+    __name(handleFor, "handleFor");
+    PENDING = /* @__PURE__ */ new Map();
+    __name(acquireSessionLock, "acquireSessionLock");
+    __name(hold, "hold");
+    __name(acquireFresh, "acquireFresh");
+    __name(readSessionLock, "readSessionLock");
+    __name(sectionLockResource, "sectionLockResource");
+    __name(withPaperSession, "withPaperSession");
+  }
+});
+
+// bin/lib/prompt-loader.ts
+import { readFileSync as readFileSync18 } from "node:fs";
+import { createHash as createHash9 } from "node:crypto";
+function stripFrontmatter(text4) {
+  if (!text4.startsWith("---")) return text4;
+  const parts = text4.split(/^---\s*$/m);
+  if (parts.length < 3) return text4;
+  return parts.slice(2).join("---").trimStart();
+}
+function loadPrompt(name) {
+  const expected = EXPECTED_PROMPT_HASHES[name];
+  if (!expected) {
+    throw new Error(
+      `loadPrompt: unknown prompt "${name}" \u2014 no entry in EXPECTED_PROMPT_HASHES. If this is a new slug, add it to bin/lib/prompt-loader.ts (D-12 LOCKED).`
+    );
+  }
+  const promptPath = pluginTemplatePath("prompts", `${name}.md`);
+  const bytes = readFileSync18(promptPath);
+  const actual = createHash9("sha256").update(bytes).digest("hex");
+  const text4 = bytes.toString("utf8");
+  if (expected.startsWith("__PENDING_HASH_")) {
+    if (process.env["PENSMITH_ALLOW_PENDING_PROMPT_HASHES"] !== "1") {
+      throw new Error(
+        `loadPrompt: prompt "${name}" hash is a __PENDING_HASH_${name}__ sentinel. Set PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1 to bypass (Wave 1-7 only); Plan 03-09 will replace all sentinels with real SHA-256 values.`
+      );
+    }
+    return stripFrontmatter(text4);
+  }
+  if (actual !== expected) {
+    throw new Error(
+      `loadPrompt: prompt "${name}" drifted at runtime. Expected SHA-256 ${expected}, got ${actual}. Update EXPECTED_PROMPT_HASHES in bin/lib/prompt-loader.ts (single source of truth \u2014 tests/repo-files.test.ts imports this map per WN-3) together (D-12). Note: pass1-fuzzy-judge + pass3-quote-checker are D-13 DORMANT in Phase 3 \u2014 if you are seeing this error for one of those slugs at runtime in Phase 3, the workflow body is incorrectly invoking a dormant prompt.`
+    );
+  }
+  return stripFrontmatter(text4);
+}
+var EXPECTED_PROMPT_HASHES;
+var init_prompt_loader = __esm({
+  "bin/lib/prompt-loader.ts"() {
+    "use strict";
+    init_paths();
+    EXPECTED_PROMPT_HASHES = {
+      // WN-3 sentinel-replacement (Plan 03-09 Task 9.3.5) — these 8 SHA-256
+      // values replace the per-slug __PENDING_HASH_<slug>__ sentinels in a single
+      // atomic commit (sentinel-replacement). The same commit updates the matching
+      // pins in tests/repo-files.test.ts PENDING_HASH_PINS — drift between the two
+      // surfaces is structurally impossible because both files re-pin together.
+      "intake-clarifier": "7700947abfc9a94d2785996fd7b26e8f812a5b01c77ab24ee1563314b7eb9a53",
+      // D-12 LOCKED (re-pinned Phase 18 GRND-02/RUN-26 — suggestions-only contract v2, fixed instructions first, data last in fenced blocks; WN-3 lockstep with repo-files pin)
+      "topic-disambiguator": "34587e4f81be0e16848f7aa19bd176f050da2381cba31a1ea6b36c54816b1378",
+      // D-12 LOCKED (research split #1; re-pinned Phase 19 SRC-08: ambiguous flag, scope descriptions, 5-10 queries)
+      "source-evaluator": "b10cd38425ab01dd5572592dc01f11b646006dbd86b13be311f8b0eb9ca0eed4",
+      // D-12 LOCKED (research split #2; re-pinned Phase 19 SRC-09: relevance, tier, reasons)
+      "outline-author": "914bdd23f6182ac47b5679b45144a10ada702ab8e6eb3415db879063f7419c2a",
+      // D-12 LOCKED (re-pinned Phase 18 GRND-07/RUN-26: fixed instructions, data blocks brief/existing_sections/sources)
+      "section-planner": "d10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c",
+      // D-12 LOCKED (re-pinned Phase 18 GRND-13/RUN-26: fixed instructions, data blocks brief/section/upstream/sources)
+      "section-drafter": "0600aed58e85b9182a5c3ea0e7e45a691d41a8e21797ed00559e7b56b08999cc",
+      // D-12 LOCKED (re-pinned Phase 18 FEED-02/RUN-26: fixed instructions, data blocks brief/section/voice/style_profile/plan/sources)
+      "pass1-fuzzy-judge": "80011728b81766a6bad092a6fae2868cd7e75515344c5e8ecb38b3cfac14498d",
+      // D-12 LOCKED + D-13 DORMANT in Phase 3
+      "pass3-quote-checker": "19ef3929f85b0f20c4b0f12cea535cbb7c2e28a342c883f9af6737fd7e896421",
+      // D-12 LOCKED + D-13 DORMANT in Phase 3
+      // Phase 4 04-CONTEXT.md D-05 — hash-pinned revise-swap prompt. Re-pinned to
+      // the real SHA-256 in Plan 04-04 Task 3 (the prompt body is byte-stable). The
+      // matching pin in tests/repo-files.test.ts PENDING_HASH_PINS carries the same
+      // value (WN-3 lockstep — both surfaces agree). loadPrompt('revise-swap') now
+      // succeeds WITHOUT PENSMITH_ALLOW_PENDING_PROMPT_HASHES.
+      "revise-swap": "2c604b215eaafcb49f4bd138ad64772b0e2f74e7255a5e2ea22e65719e54ff8d",
+      // Phase 4 D-05
+      // Phase 4 04-CONTEXT.md D-12 — hash-pinned smoother prompt (Plan 04-05). Lands
+      // here as a __PENDING_HASH_smoother__ sentinel at Task 1a (WN-3); Plan 04-05
+      // Task 4 re-pins it to the SAME real SHA-256 the tests/repo-files.test.ts pin
+      // already carries (the prompt body is byte-stable on creation — both surfaces
+      // then agree and loadPrompt('smoother') succeeds WITHOUT the pending bypass).
+      "smoother": "37aa691f174c5fa75f9569c3c08bdc1a33eb64f503d04834e94d27d5938d9330",
+      // Phase 4 D-12 (re-pinned real at Plan 04-05 Task 4 — WN-3 lockstep with repo-files pin)
+      // Phase 5 05-CONTEXT.md D-12 — hash-pinned claim-support + orphan-label prompts
+      // (Plans 05-02/05-03). These are the ACTIVE Phase-5 advisory prompts: claim-support
+      // is invoked from bin/lib/verify/pass2.ts (Pass 2 claim-support) and orphan-label
+      // from bin/lib/verify/pass4.ts (Pass 4 Step-3 edge-case label) — NOT from
+      // bin/cli/verify.ts (the D-13 chokepoint file is unaffected; verify.ts never loads
+      // a prompt). pass1-fuzzy-judge + pass3-quote-checker remain D-13 DORMANT.
+      // WN-3: they landed here as __PENDING_HASH_<slug>__ sentinels in Wave 0 (Plan 05-01)
+      // BEFORE the pass modules existed, so the loader could resolve the slugs the moment
+      // Plans 05-02/05-03 wired the LLM seams. Plan 05-05 Task 1 now re-pins them
+      // ATOMICALLY to the SAME real SHA-256 the tests/repo-files.test.ts byte-pins have
+      // carried since creation (single source of truth — both surfaces now agree and
+      // loadPrompt('claim-support') / loadPrompt('orphan-label') succeed WITHOUT
+      // PENSMITH_ALLOW_PENDING_PROMPT_HASHES; runtime drift detection is restored).
+      // Mirrors the Phase-4 smoother re-pin precedent exactly (Plan 04-05 Task 4).
+      "claim-support": "44727c65d9ffec142d9d0a8419c4caad551ea0a243efd655b9bc48c069275bf4",
+      // Phase 5 D-12 (re-pinned Phase 20 D-20-30: judged against the source text — abstract + full-text passages, input <source_text>; WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts)
+      "orphan-label": "c1d45a9f9c7d74889a5f476a2f1b2e847e4edfae96ddf6604479da5334979dc0",
+      // Phase 5 D-12 (re-pinned Phase 20 D-20-29/30: the per-paragraph orphan audit, input <paragraph>, output {claims}; WN-3 lockstep with repo-files pin; ACTIVE Pass 4 via pass4.ts)
+      // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts (Plan 09-02 wires the
+      // TutorialSubscriber render seam). RE-PINNED to the real SHA-256 in Plan 09-03 Task 3
+      // (the prompt bodies are byte-stable since 09-00 — see the byte-identical guard in
+      // tests/repo-files.test.ts PENDING_HASH_PINS, which re-pins the SAME hashes in this
+      // SAME commit; WN-3 lockstep — drift between the two surfaces is structurally
+      // impossible). After this re-pin loadPrompt('tutorial-section-provenance') /
+      // loadPrompt('tutorial-research-rationale') resolve WITHOUT
+      // PENSMITH_ALLOW_PENDING_PROMPT_HASHES — runtime drift detection is restored.
+      // Mirrors the Phase-4 smoother + Phase-5 claim-support/orphan-label re-pin precedent.
+      "tutorial-section-provenance": "ce1d8c4876e1096d02239e55283e55decd2df8b0358b0d697d14d5005baab380",
+      // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
+      "tutorial-research-rationale": "d4d305f2a1e8bebe87849b358f9e4fb9199b78a493bc867a306a63b6e51523e7",
+      // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
+      // Phase 21 21-CONTEXT.md D-21-15 — the D-12 amendment (REQUIREMENTS.md S-06):
+      // the cross-section contradiction judge, invoked from bin/lib/claim-consistency.ts
+      // at compile (EXP-11). Pinned here and in tests/repo-files.test.ts PENDING_HASH_PINS
+      // in the same commit (WN-3 lockstep).
+      "claim-consistency": "0b62ae208e9d0cddc4f6cdaae1a37f5ac47982c6b2a2f6f960eddf8929374231"
+      // Phase 21 D-21-15 (D-12 amendment; input <pairs>, output {pairs:[{id,verdict,rationale}]}; ACTIVE at compile via claim-consistency.ts)
+    };
+    __name(stripFrontmatter, "stripFrontmatter");
+    __name(loadPrompt, "loadPrompt");
   }
 });
 
@@ -116967,6 +117269,9 @@ function coerceEvaluation(v2) {
   });
   return { ...obj, verdicts };
 }
+function coerceConsistency(v2) {
+  return Array.isArray(v2) && v2.length > 0 && v2.every(isRecord) ? { pairs: v2 } : v2;
+}
 function coerceOrphanAudit(v2) {
   return Array.isArray(v2) && v2.length > 0 && v2.every(isRecord) ? { claims: v2 } : v2;
 }
@@ -117235,7 +117540,7 @@ function correctiveInstruction(slug, error2) {
   return `Your previous reply did not match the required output schema (${error2}). Reply again with ONLY one JSON value that matches this JSON Schema \u2014 no prose, no code fence:
 ` + JSON.stringify(jsonSchemaForSlug(slug, "standard"));
 }
-var import_yaml3, SLUG_RE3, TopicDisambiguatorSchema, EVALUATOR_REASON_MAX, SourceEvaluatorSchema, IntakeClarifierSchema, OUTLINE_ROLES, OutlineSchema, SectionPlannerSchema, ClaimSupportSchema, OrphanLabelSchema, TIER_SYNONYMS, CONTRACTS;
+var import_yaml3, SLUG_RE3, TopicDisambiguatorSchema, EVALUATOR_REASON_MAX, SourceEvaluatorSchema, IntakeClarifierSchema, OUTLINE_ROLES, OutlineSchema, SectionPlannerSchema, ClaimSupportSchema, OrphanLabelSchema, ClaimConsistencySchema, TIER_SYNONYMS, CONTRACTS;
 var init_llm_contracts = __esm({
   "bin/lib/llm-contracts.ts"() {
     "use strict";
@@ -117355,6 +117660,13 @@ var init_llm_contracts = __esm({
         supported_by: external_exports.array(external_exports.string()).default([]).describe("keys of the citations in the paragraph that support it ([] when none)")
       })).describe("every sentence of the paragraph that makes a claim ([] when none)")
     });
+    ClaimConsistencySchema = external_exports.object({
+      pairs: external_exports.array(external_exports.object({
+        id: external_exports.string().min(1).describe("the pair id, copied from the input"),
+        verdict: external_exports.enum(["CONTRADICTS", "CONSISTENT", "UNCLEAR"]),
+        rationale: external_exports.string().describe("at most 200 characters, no markdown")
+      })).describe("one entry per input pair, in input order")
+    });
     __name(wrapArray, "wrapArray");
     __name(coerceOutline, "coerceOutline");
     __name(isRecord, "isRecord");
@@ -117375,6 +117687,7 @@ var init_llm_contracts = __esm({
       other: "other"
     });
     __name(coerceEvaluation, "coerceEvaluation");
+    __name(coerceConsistency, "coerceConsistency");
     __name(coerceOrphanAudit, "coerceOrphanAudit");
     __name(plannerFromText, "plannerFromText");
     __name(intakeFromText, "intakeFromText");
@@ -117385,7 +117698,8 @@ var init_llm_contracts = __esm({
       "outline-author": { slug: "outline-author", schema: OutlineSchema, coerce: coerceOutline },
       "section-planner": { slug: "section-planner", schema: SectionPlannerSchema, fromText: plannerFromText },
       "claim-support": { slug: "claim-support", schema: ClaimSupportSchema },
-      "orphan-label": { slug: "orphan-label", schema: OrphanLabelSchema, coerce: coerceOrphanAudit }
+      "orphan-label": { slug: "orphan-label", schema: OrphanLabelSchema, coerce: coerceOrphanAudit },
+      "claim-consistency": { slug: "claim-consistency", schema: ClaimConsistencySchema, coerce: coerceConsistency }
     });
     __name(contractFor, "contractFor");
     __name(defOf, "defOf");
@@ -117522,6 +117836,8 @@ var init_prompt_request = __esm({
       "claim-support": [input("citation", true, true), input("claim", true, true), input("source_text", true, true)],
       "orphan-label": [input("paragraph", true, true)],
       "smoother": [input("boundary", true, false), input("tail", true, true), input("head", true, true)],
+      // Phase 21 (EXP-11, D-21-15): the cross-section claim pairs (sentences from the drafts: fenced).
+      "claim-consistency": [input("pairs", true, true)],
       "revise-swap": [input("flag", true, false), input("voice", true, false), input("available_sources", true, true), input("claim", true, true)],
       "pass1-fuzzy-judge": [input("comparison", true, true)],
       "pass3-quote-checker": [input("match", true, false), input("quote", true, true), input("pdf_context", true, true)],
@@ -117713,12 +118029,44 @@ function researchRationaleStub(hints) {
 ${prose2.coverage}
 `;
 }
+function escapeRe2(s2) {
+  return s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function replaceWord(text4, from, to) {
+  return text4.replace(new RegExp(`\\b${escapeRe2(from)}\\b`, "gi"), (hit) => /^[A-Z]/.test(hit) ? to.charAt(0).toUpperCase() + to.slice(1) : to);
+}
+function humanizerStub(hints) {
+  const source = typeof hints["text"] === "string" ? hints["text"].trim() : "";
+  const prose2 = loadTextStubs().humanizer;
+  const paras = source.split(/\n[ \t]*\n/);
+  let changed = false;
+  const out2 = paras.map((p2) => {
+    if (/^\s{0,3}(?:#{1,6}\s|>|[-*+]\s|\d+[.)]\s|\||```|~~~)/.test(p2)) return p2;
+    const tokens = [];
+    let t = p2.replace(GUARD_PLACEHOLDER_RE, (ph) => {
+      tokens.push(ph);
+      return `\0${tokens.length - 1}\0`;
+    });
+    for (const [from, to] of prose2.replacements) t = replaceWord(t, from, to);
+    const back = t.replace(/\u0000(\d+)\u0000/g, (_m, i) => tokens[Number(i)] ?? "");
+    if (back !== p2) changed = true;
+    return back;
+  });
+  if (!changed) {
+    const last = out2.findIndex((p2) => !/^\s{0,3}(?:#{1,6}\s|>|[-*+]\s|\d+[.)]\s|\||```|~~~)/.test(p2) && /^[A-Za-z]/.test(p2.trim()));
+    if (last !== -1) {
+      const p2 = out2[last];
+      out2[last] = `${prose2.fallback_prefix} ${p2}`;
+    }
+  }
+  return out2.join("\n\n");
+}
 function textStub(slug, messages, hint) {
   const make = TEXT_STUBS[slug];
   if (!make) throw new Error(`llm-text-stubs: no text stub for slug "${slug}"`);
   return make({ ...hintsFromMessages(messages), ...hint ?? {} });
 }
-var EMPTY_PAYLOAD, Sentence, TextStubsFileSchema, cache2, TEXT_STUBS;
+var EMPTY_PAYLOAD, Sentence, TextStubsFileSchema, cache2, GUARD_PLACEHOLDER_RE, TEXT_STUBS;
 var init_llm_text_stubs = __esm({
   "bin/lib/llm-text-stubs.ts"() {
     "use strict";
@@ -117751,6 +118099,11 @@ var init_llm_text_stubs = __esm({
         per_source: Sentence,
         coverage: Sentence,
         none: Sentence
+      }).strict(),
+      humanizer: external_exports.object({
+        $comment: external_exports.string().optional(),
+        replacements: external_exports.array(external_exports.tuple([Sentence, Sentence])).min(1),
+        fallback_prefix: Sentence
       }).strict()
     }).strict();
     cache2 = null;
@@ -117768,9 +118121,14 @@ var init_llm_text_stubs = __esm({
     __name(reviseSwapStub, "reviseSwapStub");
     __name(sectionProvenanceStub, "sectionProvenanceStub");
     __name(researchRationaleStub, "researchRationaleStub");
+    GUARD_PLACEHOLDER_RE = /\{\{(?:cite|quote)_\d+_\d+\}\}/g;
+    __name(escapeRe2, "escapeRe");
+    __name(replaceWord, "replaceWord");
+    __name(humanizerStub, "humanizerStub");
     TEXT_STUBS = Object.freeze({
       "section-drafter": drafterStub,
       smoother: smootherStub,
+      humanizer: humanizerStub,
       "revise-swap": reviseSwapStub,
       "tutorial-section-provenance": sectionProvenanceStub,
       "tutorial-research-rationale": researchRationaleStub
@@ -117951,6 +118309,11 @@ function sourceEvaluatorStub(hint) {
     })
   };
 }
+function stubPairIds(hint) {
+  const pairs = hint?.["pairs"];
+  if (!Array.isArray(pairs)) return [];
+  return pairs.flatMap((p2) => typeof p2 === "object" && p2 !== null && typeof p2["id"] === "string" ? [p2["id"]] : []);
+}
 function hasStructuredStub(slug) {
   return slug in STUBS;
 }
@@ -117997,8 +118360,14 @@ var init_llm_stubs = __esm({
       "claim-support": /* @__PURE__ */ __name(() => ({ verdict: "UNCLEAR", rationale: "LLM stubbed: no claim-support judgment was made.", evidence: "" }), "claim-support"),
       // The per-paragraph orphan audit (D-20-29) can only ADD orphans, so the
       // conservative stub names no claim: the deterministic floor stands alone.
-      "orphan-label": /* @__PURE__ */ __name(() => ({ claims: [] }), "orphan-label")
+      "orphan-label": /* @__PURE__ */ __name(() => ({ claims: [] }), "orphan-label"),
+      // The contradiction judge (EXP-11): every pair UNCLEAR — the stub makes no
+      // judgment, so the deterministic heuristic's flags stand unjudged.
+      "claim-consistency": /* @__PURE__ */ __name((hint) => ({
+        pairs: stubPairIds(hint).map((id) => ({ id, verdict: "UNCLEAR", rationale: "LLM stubbed: no consistency judgment was made." }))
+      }), "claim-consistency")
     });
+    __name(stubPairIds, "stubPairIds");
     __name(hasStructuredStub, "hasStructuredStub");
     __name(structuredStub, "structuredStub");
   }
@@ -120647,49 +121016,6 @@ var init_section_slug = __esm({
     __name(outlineDisagreement, "outlineDisagreement");
     __name(describeSections, "describeSections");
     __name(resolveSectionArg, "resolveSectionArg");
-  }
-});
-
-// bin/lib/paper-brief.ts
-function readPaperBrief(root) {
-  const doc = readIntakeBrief(root);
-  const config2 = tryReadPaperConfigSync(root);
-  const project = config2?.project;
-  const brief = doc?.brief;
-  const assignment = doc?.assignment ?? "";
-  const topic = (brief?.topic ?? "").trim() || (project?.title ?? "").trim();
-  const briefThesis = (brief?.thesis ?? "").trim();
-  const outlineThesis = readOutlineSync(root)?.thesis.trim() ?? "";
-  const discipline = resolveDiscipline({
-    discipline: { intake: brief?.discipline, config: project?.discipline_preset }
-  });
-  const lengthTarget = project?.length_target_words ?? brief?.length_target_words ?? (assignment ? parseLengthWords(assignment) : null) ?? DEFAULT_LENGTH_TARGET_WORDS;
-  return {
-    doc,
-    topic,
-    briefThesis,
-    thesis: outlineThesis || briefThesis,
-    title: (project?.title ?? "").trim() || topic,
-    discipline,
-    paperType: brief?.paper_type ?? "other",
-    counterargument: brief?.counterargument ?? "auto",
-    configCounterargument: project?.counterargument_required,
-    lengthTarget,
-    sectioningNotes: brief?.sectioning_notes ?? [],
-    assignment
-  };
-}
-var DEFAULT_LENGTH_TARGET_WORDS;
-var init_paper_brief = __esm({
-  "bin/lib/paper-brief.ts"() {
-    "use strict";
-    init_intake_brief();
-    init_config2();
-    init_disciplines();
-    init_estimator();
-    init_outline();
-    DEFAULT_LENGTH_TARGET_WORDS = 1500;
-    __name(readPaperBrief, "readPaperBrief");
   }
 });
 
@@ -147285,126 +147611,7 @@ init_section_id();
 // bin/lib/capabilities.ts
 init_runtime();
 init_contact_email();
-
-// bin/lib/ecosystem-presence.ts
-init_paths();
-import { execFileSync } from "node:child_process";
-import { existsSync as existsSync7, readFileSync as readFileSync9, readdirSync as readdirSync3, statSync as statSync5 } from "node:fs";
-import { dirname as dirname6, join as join7, resolve as resolve2 } from "node:path";
-function isPandocPresent() {
-  try {
-    execFileSync("pandoc", ["--version"], {
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf8",
-      timeout: 5e3
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-__name(isPandocPresent, "isPandocPresent");
-function claudeConfigHome(env) {
-  const dir = env["CLAUDE_CONFIG_DIR"]?.trim();
-  return dir ? resolve2(dir) : userHomeDir();
-}
-__name(claudeConfigHome, "claudeConfigHome");
-function readJson(file) {
-  if (!existsSync7(file)) return null;
-  try {
-    return JSON.parse(readFileSync9(file, "utf8"));
-  } catch {
-    return null;
-  }
-}
-__name(readJson, "readJson");
-function isZoteroServer(name, spec) {
-  if (/zotero/i.test(name)) return true;
-  if (typeof spec !== "object" || spec === null) return false;
-  const s2 = spec;
-  const parts = [s2.command, s2.url, ...Array.isArray(s2.args) ? s2.args : []].filter((p2) => typeof p2 === "string");
-  return parts.some((p2) => /zotero/i.test(p2));
-}
-__name(isZoteroServer, "isZoteroServer");
-function zoteroServersIn(servers, scope, file) {
-  if (typeof servers !== "object" || servers === null || Array.isArray(servers)) return [];
-  return Object.entries(servers).filter(([name, spec]) => isZoteroServer(name, spec)).map(([name]) => ({ name, scope, file }));
-}
-__name(zoteroServersIn, "zoteroServersIn");
-function projectDirs(dir) {
-  const out2 = [];
-  let cur = resolve2(dir);
-  for (let i = 0; i < 64; i += 1) {
-    out2.push(cur);
-    if (existsSync7(join7(cur, ".git"))) break;
-    const parent = dirname6(cur);
-    if (parent === cur) break;
-    cur = parent;
-  }
-  return out2;
-}
-__name(projectDirs, "projectDirs");
-function pathSpellings(p2) {
-  const fold = /* @__PURE__ */ __name((x3) => process.platform === "win32" ? x3.toLowerCase() : x3, "fold");
-  return [.../* @__PURE__ */ new Set([fold(resolve2(p2)), fold(realpathNearest(p2))])];
-}
-__name(pathSpellings, "pathSpellings");
-function detectZoteroMcpServers(root, env = process.env) {
-  const project = root ?? activePaperRoot() ?? servicePaperRoot(env);
-  const dirs = projectDirs(project);
-  const projectKeys = new Set([...dirs, ...projectDirs(realpathNearest(project))].flatMap(pathSpellings));
-  const servers = [];
-  const checked = [];
-  const claudeJson = join7(claudeConfigHome(env), ".claude.json");
-  checked.push(claudeJson);
-  const cfg = readJson(claudeJson);
-  if (cfg) {
-    servers.push(...zoteroServersIn(cfg.mcpServers, "user", claudeJson));
-    if (typeof cfg.projects === "object" && cfg.projects !== null) {
-      for (const [path29, entry] of Object.entries(cfg.projects)) {
-        if (!pathSpellings(path29).some((k2) => projectKeys.has(k2))) continue;
-        servers.push(...zoteroServersIn(entry?.mcpServers, "local", claudeJson));
-      }
-    }
-  }
-  for (const d3 of dirs) {
-    const file = join7(d3, ".mcp.json");
-    checked.push(file);
-    servers.push(...zoteroServersIn(readJson(file)?.mcpServers, "project", file));
-  }
-  const home = userHomeDir();
-  const legacyFiles = [join7(home, ".claude", "mcp_servers.json"), join7(home, ".config", "claude", "mcp_servers.json")];
-  for (const file of legacyFiles) {
-    checked.push(file);
-    servers.push(...zoteroServersIn(readJson(file)?.mcpServers, "legacy", file));
-  }
-  return { servers, checked, claudeJson, projectDirs: dirs, legacyFiles };
-}
-__name(detectZoteroMcpServers, "detectZoteroMcpServers");
-function isZoteroMcpPresent() {
-  return detectZoteroMcpServers().servers.length > 0;
-}
-__name(isZoteroMcpPresent, "isZoteroMcpPresent");
-function isHumanizerSkillPresent() {
-  const skillPath = join7(userHomeDir(), ".claude", "skills", "humanizer");
-  if (!existsSync7(skillPath)) return false;
-  try {
-    const stat3 = statSync5(skillPath);
-    if (!stat3.isDirectory()) return false;
-    return readdirSync3(skillPath).length > 0;
-  } catch {
-    return false;
-  }
-}
-__name(isHumanizerSkillPresent, "isHumanizerSkillPresent");
-function detectSyncFolder() {
-  const dir = paperDir(activePaperRoot() ?? servicePaperRoot());
-  const detected = isInsideSyncFolder(dir);
-  return { detected, match: detected ? dir : null, dir };
-}
-__name(detectSyncFolder, "detectSyncFolder");
-
-// bin/lib/capabilities.ts
+init_ecosystem_presence();
 function envPresent2(name) {
   const v2 = process.env[name];
   return typeof v2 === "string" && v2.length > 0;

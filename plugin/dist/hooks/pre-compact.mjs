@@ -149,7 +149,7 @@ function localDataDir(platform = process.platform, env = process.env) {
       }
       return [...roots];
     })();
-    const fold = /* @__PURE__ */ __name((p) => platform === "win32" ? p.toLowerCase() : p, "fold");
+    const fold = /* @__PURE__ */ __name((p2) => platform === "win32" ? p2.toLowerCase() : p2, "fold");
     const insideTmp = /* @__PURE__ */ __name((candidate) => {
       const forms = /* @__PURE__ */ new Set([path3.resolve(candidate), realpathNearest(candidate)]);
       return [...forms].some(
@@ -195,9 +195,9 @@ function pensmithGlobalLibraryIndexPath(platform = process.platform, env = proce
 function pensmithActivePointerPath(platform = process.platform, env = process.env) {
   return path3.join(pensmithDataDir(platform, env), "active.json");
 }
-function isRegularFile(p) {
+function isRegularFile(p2) {
   try {
-    return fs3.statSync(p).isFile();
+    return fs3.statSync(p2).isFile();
   } catch {
     return false;
   }
@@ -286,9 +286,9 @@ function isLegacyPensmithState(root) {
     return false;
   }
 }
-function isDirectory(p) {
+function isDirectory(p2) {
   try {
-    return fs3.statSync(p).isDirectory();
+    return fs3.statSync(p2).isDirectory();
   } catch {
     return false;
   }
@@ -307,9 +307,9 @@ function hasCurrentLayoutPaper(root) {
 }
 function findAssignmentFile(root) {
   for (const name of ASSIGNMENT_FILE_NAMES) {
-    const p = path3.join(path3.resolve(root), name);
+    const p2 = path3.join(path3.resolve(root), name);
     try {
-      if (fs3.statSync(p).isFile()) return p;
+      if (fs3.statSync(p2).isFile()) return p2;
     } catch {
     }
   }
@@ -372,8 +372,8 @@ function resolvePaperFlag(value, cwd = process.cwd()) {
     EXIT_USAGE
   );
 }
-function realpathNearest(p) {
-  const resolved = path3.resolve(p);
+function realpathNearest(p2) {
+  const resolved = path3.resolve(p2);
   const tail = [];
   let probe = resolved;
   for (; ; ) {
@@ -387,8 +387,8 @@ function realpathNearest(p) {
     }
   }
 }
-function asProjectRoot(p) {
-  const r = path3.resolve(p);
+function asProjectRoot(p2) {
+  const r = path3.resolve(p2);
   let cur = r;
   for (; ; ) {
     if (isPaperDirName(path3.basename(cur))) {
@@ -1014,8 +1014,8 @@ var init_parseUtil = __esm({
     init_errors();
     init_en();
     makeIssue = /* @__PURE__ */ __name((params) => {
-      const { data, path: path11, errorMaps, issueData } = params;
-      const fullPath = [...path11, ...issueData.path || []];
+      const { data, path: path12, errorMaps, issueData } = params;
+      const fullPath = [...path12, ...issueData.path || []];
       const fullIssue = {
         ...issueData,
         path: fullPath
@@ -1292,9 +1292,9 @@ function createZodEnum(values, params) {
   });
 }
 function cleanParams(params, data) {
-  const p = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
-  const p2 = typeof p === "string" ? { message: p } : p;
-  return p2;
+  const p2 = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
+  const p22 = typeof p2 === "string" ? { message: p2 } : p2;
+  return p22;
 }
 function custom(check2, _params = {}, fatal) {
   if (check2)
@@ -1330,11 +1330,11 @@ var init_types = __esm({
       static {
         __name(this, "ParseInputLazyPath");
       }
-      constructor(parent, value, path11, key) {
+      constructor(parent, value, path12, key) {
         this._cachedPath = [];
         this.parent = parent;
         this.data = value;
-        this._path = path11;
+        this._path = path12;
         this._key = key;
       }
       get path() {
@@ -5014,7 +5014,7 @@ function sectionIdFromPlanPath(planPath) {
   return `${Number(m2[1])}${m2[2] ?? ""}`;
 }
 function migrate(v1) {
-  const pointer = v1.current_section === null ? void 0 : v1.section_pointers.find((p) => p.slug === v1.current_section);
+  const pointer = v1.current_section === null ? void 0 : v1.section_pointers.find((p2) => p2.slug === v1.current_section);
   const section = pointer ? sectionIdFromPlanPath(pointer.plan_path) : null;
   const step = SECTION_STEPS.has(v1.phase) ? v1.phase : null;
   return {
@@ -5186,14 +5186,14 @@ var require_polyfills = __commonJS({
       fs8.fstatSync = statFixSync(fs8.fstatSync);
       fs8.lstatSync = statFixSync(fs8.lstatSync);
       if (fs8.chmod && !fs8.lchmod) {
-        fs8.lchmod = function(path11, mode, cb) {
+        fs8.lchmod = function(path12, mode, cb) {
           if (cb) process.nextTick(cb);
         };
         fs8.lchmodSync = function() {
         };
       }
       if (fs8.chown && !fs8.lchown) {
-        fs8.lchown = function(path11, uid, gid, cb) {
+        fs8.lchown = function(path12, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
         fs8.lchownSync = function() {
@@ -5262,9 +5262,9 @@ var require_polyfills = __commonJS({
         };
       })(fs8.readSync);
       function patchLchmod(fs9) {
-        fs9.lchmod = function(path11, mode, callback) {
+        fs9.lchmod = function(path12, mode, callback) {
           fs9.open(
-            path11,
+            path12,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -5280,8 +5280,8 @@ var require_polyfills = __commonJS({
             }
           );
         };
-        fs9.lchmodSync = function(path11, mode) {
-          var fd = fs9.openSync(path11, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs9.lchmodSync = function(path12, mode) {
+          var fd = fs9.openSync(path12, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -5303,8 +5303,8 @@ var require_polyfills = __commonJS({
       __name(patchLchmod, "patchLchmod");
       function patchLutimes(fs9) {
         if (constants.hasOwnProperty("O_SYMLINK") && fs9.futimes) {
-          fs9.lutimes = function(path11, at, mt, cb) {
-            fs9.open(path11, constants.O_SYMLINK, function(er, fd) {
+          fs9.lutimes = function(path12, at, mt, cb) {
+            fs9.open(path12, constants.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
@@ -5316,8 +5316,8 @@ var require_polyfills = __commonJS({
               });
             });
           };
-          fs9.lutimesSync = function(path11, at, mt) {
-            var fd = fs9.openSync(path11, constants.O_SYMLINK);
+          fs9.lutimesSync = function(path12, at, mt) {
+            var fd = fs9.openSync(path12, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -5445,11 +5445,11 @@ var require_legacy_streams = __commonJS({
         ReadStream,
         WriteStream
       };
-      function ReadStream(path11, options) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path11, options);
+      function ReadStream(path12, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path12, options);
         Stream.call(this);
         var self = this;
-        this.path = path11;
+        this.path = path12;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -5495,10 +5495,10 @@ var require_legacy_streams = __commonJS({
         });
       }
       __name(ReadStream, "ReadStream");
-      function WriteStream(path11, options) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path11, options);
+      function WriteStream(path12, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path12, options);
         Stream.call(this);
-        this.path = path11;
+        this.path = path12;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -5648,14 +5648,14 @@ var require_graceful_fs = __commonJS({
       fs9.createWriteStream = createWriteStream;
       var fs$readFile = fs9.readFile;
       fs9.readFile = readFile3;
-      function readFile3(path11, options, cb) {
+      function readFile3(path12, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$readFile(path11, options, cb);
-        function go$readFile(path12, options2, cb2, startTime) {
-          return fs$readFile(path12, options2, function(err) {
+        return go$readFile(path12, options, cb);
+        function go$readFile(path13, options2, cb2, startTime) {
+          return fs$readFile(path13, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue2([go$readFile, [path12, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue2([go$readFile, [path13, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -5667,14 +5667,14 @@ var require_graceful_fs = __commonJS({
       __name(readFile3, "readFile");
       var fs$writeFile = fs9.writeFile;
       fs9.writeFile = writeFile;
-      function writeFile(path11, data, options, cb) {
+      function writeFile(path12, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$writeFile(path11, data, options, cb);
-        function go$writeFile(path12, data2, options2, cb2, startTime) {
-          return fs$writeFile(path12, data2, options2, function(err) {
+        return go$writeFile(path12, data, options, cb);
+        function go$writeFile(path13, data2, options2, cb2, startTime) {
+          return fs$writeFile(path13, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue2([go$writeFile, [path12, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue2([go$writeFile, [path13, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -5687,14 +5687,14 @@ var require_graceful_fs = __commonJS({
       var fs$appendFile = fs9.appendFile;
       if (fs$appendFile)
         fs9.appendFile = appendFile;
-      function appendFile(path11, data, options, cb) {
+      function appendFile(path12, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$appendFile(path11, data, options, cb);
-        function go$appendFile(path12, data2, options2, cb2, startTime) {
-          return fs$appendFile(path12, data2, options2, function(err) {
+        return go$appendFile(path12, data, options, cb);
+        function go$appendFile(path13, data2, options2, cb2, startTime) {
+          return fs$appendFile(path13, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue2([go$appendFile, [path12, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue2([go$appendFile, [path13, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -5729,31 +5729,31 @@ var require_graceful_fs = __commonJS({
       var fs$readdir = fs9.readdir;
       fs9.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir(path11, options, cb) {
+      function readdir(path12, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? /* @__PURE__ */ __name(function go$readdir2(path12, options2, cb2, startTime) {
-          return fs$readdir(path12, fs$readdirCallback(
-            path12,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? /* @__PURE__ */ __name(function go$readdir2(path13, options2, cb2, startTime) {
+          return fs$readdir(path13, fs$readdirCallback(
+            path13,
             options2,
             cb2,
             startTime
           ));
-        }, "go$readdir") : /* @__PURE__ */ __name(function go$readdir2(path12, options2, cb2, startTime) {
-          return fs$readdir(path12, options2, fs$readdirCallback(
-            path12,
+        }, "go$readdir") : /* @__PURE__ */ __name(function go$readdir2(path13, options2, cb2, startTime) {
+          return fs$readdir(path13, options2, fs$readdirCallback(
+            path13,
             options2,
             cb2,
             startTime
           ));
         }, "go$readdir");
-        return go$readdir(path11, options, cb);
-        function fs$readdirCallback(path12, options2, cb2, startTime) {
+        return go$readdir(path12, options, cb);
+        function fs$readdirCallback(path13, options2, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue2([
                 go$readdir,
-                [path12, options2, cb2],
+                [path13, options2, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -5826,7 +5826,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path11, options) {
+      function ReadStream(path12, options) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -5848,7 +5848,7 @@ var require_graceful_fs = __commonJS({
         });
       }
       __name(ReadStream$open, "ReadStream$open");
-      function WriteStream(path11, options) {
+      function WriteStream(path12, options) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -5868,24 +5868,24 @@ var require_graceful_fs = __commonJS({
         });
       }
       __name(WriteStream$open, "WriteStream$open");
-      function createReadStream(path11, options) {
-        return new fs9.ReadStream(path11, options);
+      function createReadStream(path12, options) {
+        return new fs9.ReadStream(path12, options);
       }
       __name(createReadStream, "createReadStream");
-      function createWriteStream(path11, options) {
-        return new fs9.WriteStream(path11, options);
+      function createWriteStream(path12, options) {
+        return new fs9.WriteStream(path12, options);
       }
       __name(createWriteStream, "createWriteStream");
       var fs$open = fs9.open;
       fs9.open = open3;
-      function open3(path11, flags, mode, cb) {
+      function open3(path12, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path11, flags, mode, cb);
-        function go$open(path12, flags2, mode2, cb2, startTime) {
-          return fs$open(path12, flags2, mode2, function(err, fd) {
+        return go$open(path12, flags, mode, cb);
+        function go$open(path13, flags2, mode2, cb2, startTime) {
+          return fs$open(path13, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue2([go$open, [path12, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue2([go$open, [path13, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -6423,7 +6423,7 @@ var require_mtime_precision = __commonJS({
 var require_lockfile = __commonJS({
   "node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
     "use strict";
-    var path11 = __require("path");
+    var path12 = __require("path");
     var fs8 = require_graceful_fs();
     var retry = require_retry2();
     var onExit = require_signal_exit();
@@ -6435,7 +6435,7 @@ var require_lockfile = __commonJS({
     __name(getLockFile, "getLockFile");
     function resolveCanonicalPath(file, options, callback) {
       if (!options.realpath) {
-        return callback(null, path11.resolve(file));
+        return callback(null, path12.resolve(file));
       }
       options.fs.realpath(file, callback);
     }
@@ -8817,16 +8817,16 @@ function openSessionLog(opts = {}) {
     }
     __name(emit, "emit");
     return {
-      prompt: /* @__PURE__ */ __name((p) => emit("prompt", p), "prompt"),
-      response: /* @__PURE__ */ __name((p) => emit("response", p), "response"),
-      toolCall: /* @__PURE__ */ __name((p) => emit("tool_call", p), "toolCall"),
-      toolResult: /* @__PURE__ */ __name((p) => emit("tool_result", p), "toolResult"),
-      cost: /* @__PURE__ */ __name((p) => emit("cost", p), "cost"),
-      event: /* @__PURE__ */ __name((p) => emit("event", p), "event"),
-      warn: /* @__PURE__ */ __name((p) => emit("warn", p), "warn"),
-      error: /* @__PURE__ */ __name((p) => emit("error", p), "error"),
-      llm: /* @__PURE__ */ __name((p) => emit("llm", p), "llm"),
-      http: /* @__PURE__ */ __name((p) => emit("http", p), "http"),
+      prompt: /* @__PURE__ */ __name((p2) => emit("prompt", p2), "prompt"),
+      response: /* @__PURE__ */ __name((p2) => emit("response", p2), "response"),
+      toolCall: /* @__PURE__ */ __name((p2) => emit("tool_call", p2), "toolCall"),
+      toolResult: /* @__PURE__ */ __name((p2) => emit("tool_result", p2), "toolResult"),
+      cost: /* @__PURE__ */ __name((p2) => emit("cost", p2), "cost"),
+      event: /* @__PURE__ */ __name((p2) => emit("event", p2), "event"),
+      warn: /* @__PURE__ */ __name((p2) => emit("warn", p2), "warn"),
+      error: /* @__PURE__ */ __name((p2) => emit("error", p2), "error"),
+      llm: /* @__PURE__ */ __name((p2) => emit("llm", p2), "llm"),
+      http: /* @__PURE__ */ __name((p2) => emit("http", p2), "http"),
       child: /* @__PURE__ */ __name((b) => makeLogger({
         ...bindings,
         ...redactKeys(b)
@@ -9099,17 +9099,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path11) {
-      const ctrl = callVisitor(key, node, visitor, path11);
+    function visit_(key, node, visitor, path12) {
+      const ctrl = callVisitor(key, node, visitor, path12);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path11, ctrl);
-        return visit_(key, ctrl, visitor, path11);
+        replaceNode(key, path12, ctrl);
+        return visit_(key, ctrl, visitor, path12);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path11 = Object.freeze(path11.concat(node));
+          path12 = Object.freeze(path12.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = visit_(i, node.items[i], visitor, path11);
+            const ci = visit_(i, node.items[i], visitor, path12);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -9120,13 +9120,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path11 = Object.freeze(path11.concat(node));
-          const ck = visit_("key", node.key, visitor, path11);
+          path12 = Object.freeze(path12.concat(node));
+          const ck = visit_("key", node.key, visitor, path12);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path11);
+          const cv = visit_("value", node.value, visitor, path12);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -9149,17 +9149,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path11) {
-      const ctrl = await callVisitor(key, node, visitor, path11);
+    async function visitAsync_(key, node, visitor, path12) {
+      const ctrl = await callVisitor(key, node, visitor, path12);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path11, ctrl);
-        return visitAsync_(key, ctrl, visitor, path11);
+        replaceNode(key, path12, ctrl);
+        return visitAsync_(key, ctrl, visitor, path12);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path11 = Object.freeze(path11.concat(node));
+          path12 = Object.freeze(path12.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = await visitAsync_(i, node.items[i], visitor, path11);
+            const ci = await visitAsync_(i, node.items[i], visitor, path12);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -9170,13 +9170,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path11 = Object.freeze(path11.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path11);
+          path12 = Object.freeze(path12.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path12);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path11);
+          const cv = await visitAsync_("value", node.value, visitor, path12);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -9205,24 +9205,24 @@ var require_visit = __commonJS({
       return visitor;
     }
     __name(initVisitor, "initVisitor");
-    function callVisitor(key, node, visitor, path11) {
+    function callVisitor(key, node, visitor, path12) {
       if (typeof visitor === "function")
-        return visitor(key, node, path11);
+        return visitor(key, node, path12);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path11);
+        return visitor.Map?.(key, node, path12);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path11);
+        return visitor.Seq?.(key, node, path12);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path11);
+        return visitor.Pair?.(key, node, path12);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path11);
+        return visitor.Scalar?.(key, node, path12);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path11);
+        return visitor.Alias?.(key, node, path12);
       return void 0;
     }
     __name(callVisitor, "callVisitor");
-    function replaceNode(key, path11, node) {
-      const parent = path11[path11.length - 1];
+    function replaceNode(key, path12, node) {
+      const parent = path12[path12.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -9854,10 +9854,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path11, value) {
+    function collectionFromPath(schema, path12, value) {
       let v = value;
-      for (let i = path11.length - 1; i >= 0; --i) {
-        const k = path11[i];
+      for (let i = path12.length - 1; i >= 0; --i) {
+        const k = path12[i];
         if (typeof k === "number" && Number.isInteger(k) && k >= 0) {
           const a = [];
           a[k] = v;
@@ -9877,7 +9877,7 @@ var require_Collection = __commonJS({
       });
     }
     __name(collectionFromPath, "collectionFromPath");
-    var isEmptyPath = /* @__PURE__ */ __name((path11) => path11 == null || typeof path11 === "object" && !!path11[Symbol.iterator]().next().done, "isEmptyPath");
+    var isEmptyPath = /* @__PURE__ */ __name((path12) => path12 == null || typeof path12 === "object" && !!path12[Symbol.iterator]().next().done, "isEmptyPath");
     var Collection = class extends Node.NodeBase {
       static {
         __name(this, "Collection");
@@ -9910,11 +9910,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path11, value) {
-        if (isEmptyPath(path11))
+      addIn(path12, value) {
+        if (isEmptyPath(path12))
           this.add(value);
         else {
-          const [key, ...rest] = path11;
+          const [key, ...rest] = path12;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -9928,8 +9928,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path11) {
-        const [key, ...rest] = path11;
+      deleteIn(path12) {
+        const [key, ...rest] = path12;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -9943,8 +9943,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path11, keepScalar) {
-        const [key, ...rest] = path11;
+      getIn(path12, keepScalar) {
+        const [key, ...rest] = path12;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -9962,8 +9962,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path11) {
-        const [key, ...rest] = path11;
+      hasIn(path12) {
+        const [key, ...rest] = path12;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -9973,8 +9973,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path11, value) {
-        const [key, ...rest] = path11;
+      setIn(path12, value) {
+        const [key, ...rest] = path12;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -12134,7 +12134,7 @@ var require_timestamp = __commonJS({
       const sign = str[0];
       const parts = sign === "-" || sign === "+" ? str.substring(1) : str;
       const num = /* @__PURE__ */ __name((n) => asBigInt ? BigInt(n) : Number(n), "num");
-      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num(60) + num(p), num(0));
+      const res = parts.replace(/_/g, "").split(":").reduce((res2, p2) => res2 * num(60) + num(p2), num(0));
       return sign === "-" ? num(-1) * res : res;
     }
     __name(parseSexagesimal, "parseSexagesimal");
@@ -12551,9 +12551,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path11, value) {
+      addIn(path12, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path11, value);
+          this.contents.addIn(path12, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -12628,14 +12628,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path11) {
-        if (Collection.isEmptyPath(path11)) {
+      deleteIn(path12) {
+        if (Collection.isEmptyPath(path12)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path11) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path12) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -12650,10 +12650,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path11, keepScalar) {
-        if (Collection.isEmptyPath(path11))
+      getIn(path12, keepScalar) {
+        if (Collection.isEmptyPath(path12))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path11, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path12, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -12664,10 +12664,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path11) {
-        if (Collection.isEmptyPath(path11))
+      hasIn(path12) {
+        if (Collection.isEmptyPath(path12))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path11) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path12) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -12684,13 +12684,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path11, value) {
-        if (Collection.isEmptyPath(path11)) {
+      setIn(path12, value) {
+        if (Collection.isEmptyPath(path12)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path11), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path12), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path11, value);
+          this.contents.setIn(path12, value);
         }
       }
       /**
@@ -14702,9 +14702,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path11) => {
+    visit.itemAtPath = (cst, path12) => {
       let item = cst;
-      for (const [field, index] of path11) {
+      for (const [field, index] of path12) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -14713,23 +14713,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path11) => {
-      const parent = visit.itemAtPath(cst, path11.slice(0, -1));
-      const field = path11[path11.length - 1][0];
+    visit.parentCollection = (cst, path12) => {
+      const parent = visit.itemAtPath(cst, path12.slice(0, -1));
+      const field = path12[path12.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path11, item, visitor) {
-      let ctrl = visitor(item, path11);
+    function _visit(path12, item, visitor) {
+      let ctrl = visitor(item, path12);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i = 0; i < token.items.length; ++i) {
-            const ci = _visit(Object.freeze(path11.concat([[field, i]])), token.items[i], visitor);
+            const ci = _visit(Object.freeze(path12.concat([[field, i]])), token.items[i], visitor);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -14740,10 +14740,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path11);
+            ctrl = ctrl(item, path12);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path11) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path12) : ctrl;
     }
     __name(_visit, "_visit");
     exports.visit = visit;
@@ -16579,7 +16579,7 @@ var init_plan_frontmatter = __esm({
       // strip it on the next loadState round-trip.
       was_current_at_migration: external_exports.boolean().optional()
     }).refine(
-      (p) => !p.depends_on.includes(p.slug),
+      (p2) => !p2.depends_on.includes(p2.slug),
       { message: "depends_on must not contain own slug (D-04 no-self-ref)" }
     );
   }
@@ -16617,18 +16617,18 @@ function disciplinesPath() {
 function parsePresetFile(raw) {
   const file = PresetsFileSchema.parse(raw);
   const out2 = {};
-  for (const [slug, p] of Object.entries(file.presets)) {
+  for (const [slug, p2] of Object.entries(file.presets)) {
     out2[slug] = Object.freeze({
       slug,
-      name: p.name,
-      aliases: Object.freeze([...p.aliases]),
-      defaultTone: p.defaultTone,
-      defaultCitationStyle: p.defaultCitationStyle,
-      alternateCitationStyles: Object.freeze([...p.alternateCitationStyles]),
-      sourcePreference: Object.freeze([...p.sourcePreference]),
-      sectioningConvention: Object.freeze([...p.sectioningConvention]),
-      counterargDefault: p.counterargDefault,
-      densityPerParagraph: Object.freeze({ min: p.densityPerParagraph.min, max: p.densityPerParagraph.max })
+      name: p2.name,
+      aliases: Object.freeze([...p2.aliases]),
+      defaultTone: p2.defaultTone,
+      defaultCitationStyle: p2.defaultCitationStyle,
+      alternateCitationStyles: Object.freeze([...p2.alternateCitationStyles]),
+      sourcePreference: Object.freeze([...p2.sourcePreference]),
+      sectioningConvention: Object.freeze([...p2.sectioningConvention]),
+      counterargDefault: p2.counterargDefault,
+      densityPerParagraph: Object.freeze({ min: p2.densityPerParagraph.min, max: p2.densityPerParagraph.max })
     });
   }
   return Object.freeze(out2);
@@ -16637,6 +16637,11 @@ function loadDisciplinePresets() {
   if (cache === null) cache = parsePresetFile(JSON.parse(readFileSync3(disciplinesPath(), "utf8")));
   return cache;
 }
+function presetFor(slug) {
+  const presets = loadDisciplinePresets();
+  const hit = Object.prototype.hasOwnProperty.call(presets, slug) ? presets[slug] : void 0;
+  return hit ?? presets[FALLBACK_DISCIPLINE];
+}
 function normalizeText(raw) {
   return raw.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -16644,18 +16649,58 @@ function normalizeDisciplineSlug(raw) {
   const text = normalizeText(raw);
   if (text.length === 0) return FALLBACK_DISCIPLINE;
   const presets = Object.values(loadDisciplinePresets());
-  const names = /* @__PURE__ */ __name((p) => [p.slug, p.name, ...p.aliases].map(normalizeText).filter((s2) => s2.length > 0), "names");
-  for (const p of presets) if (names(p).includes(text)) return p.slug;
+  const names = /* @__PURE__ */ __name((p2) => [p2.slug, p2.name, ...p2.aliases].map(normalizeText).filter((s2) => s2.length > 0), "names");
+  for (const p2 of presets) if (names(p2).includes(text)) return p2.slug;
   const padded = ` ${text} `;
   let best = null;
-  for (const p of presets) {
-    for (const n of names(p)) {
+  for (const p2 of presets) {
+    for (const n of names(p2)) {
       const at = padded.indexOf(` ${n} `);
       if (at < 0) continue;
-      if (best === null || at < best.at || at === best.at && n.length > best.len) best = { slug: p.slug, at, len: n.length };
+      if (best === null || at < best.at || at === best.at && n.length > best.len) best = { slug: p2.slug, at, len: n.length };
     }
   }
   return best?.slug ?? FALLBACK_DISCIPLINE;
+}
+function resolveLayered(layers) {
+  if (layers.flag !== void 0) return { value: layers.flag, source: "flag" };
+  if (layers.config !== void 0) return { value: layers.config, source: "config" };
+  if (layers.intake !== void 0) return { value: layers.intake, source: "intake" };
+  return { value: layers.preset, source: "preset" };
+}
+function norm(v) {
+  return v === void 0 || v.trim().length === 0 ? void 0 : normalizeDisciplineSlug(v);
+}
+function resolveDiscipline(input) {
+  const slug = resolveLayered({
+    preset: FALLBACK_DISCIPLINE,
+    intake: norm(input.discipline.intake),
+    config: norm(input.discipline.config),
+    flag: norm(input.discipline.flag)
+  });
+  const preset = presetFor(slug.value);
+  const citationStyle = resolveLayered({
+    preset: preset.defaultCitationStyle,
+    intake: input.intake?.citationStyle,
+    config: input.config?.citationStyle,
+    flag: input.flag?.citationStyle
+  });
+  const counterargument = resolveLayered({
+    preset: preset.counterargDefault,
+    intake: input.intake?.counterargument,
+    config: input.config?.counterargument,
+    flag: input.flag?.counterargument
+  });
+  return {
+    slug,
+    preset,
+    citationStyle,
+    counterargument,
+    sourcePreference: preset.sourcePreference,
+    sectioningConvention: preset.sectioningConvention,
+    densityPerParagraph: preset.densityPerParagraph,
+    tone: preset.defaultTone
+  };
 }
 var SOURCE_PREFERENCE_IDS, CSL_STYLE_KEYS, COUNTERARGUMENT_DEFAULTS, FALLBACK_DISCIPLINE, SLUG_RE2, DensityBandSchema, PresetSchema, PresetsFileSchema, cache;
 var init_disciplines = __esm({
@@ -16708,8 +16753,12 @@ var init_disciplines = __esm({
     cache = null;
     __name(parsePresetFile, "parsePresetFile");
     __name(loadDisciplinePresets, "loadDisciplinePresets");
+    __name(presetFor, "presetFor");
     __name(normalizeText, "normalizeText");
     __name(normalizeDisciplineSlug, "normalizeDisciplineSlug");
+    __name(resolveLayered, "resolveLayered");
+    __name(norm, "norm");
+    __name(resolveDiscipline, "resolveDiscipline");
   }
 });
 
@@ -16866,7 +16915,7 @@ var init_compile_inputs = __esm({
   "bin/lib/schemas/compile-inputs.ts"() {
     "use strict";
     init_zod();
-    COMPILE_INPUTS_SCHEMA_VERSION = 2;
+    COMPILE_INPUTS_SCHEMA_VERSION = 3;
     SHA256_OR_EMPTY = /^(?:[0-9a-f]{64})?$/;
     SHA256 = /^[0-9a-f]{64}$/;
     CompileInputsSectionSchema = external_exports.object({
@@ -16885,6 +16934,8 @@ var init_compile_inputs = __esm({
       compiled_at: external_exports.string().datetime(),
       /** sha256 of the `.paper/DRAFT.md` bytes compile wrote (null: recorded by a v1 compile — stale). */
       compiled_draft_sha256: external_exports.string().regex(SHA256).nullable(),
+      /** sha256 of the title and section titles compile wrote as headings (null: recorded before v3 — stale). */
+      headings_sha256: external_exports.string().regex(SHA256).nullable(),
       /** The compiled sections in (n, suffix) order. */
       sections: external_exports.array(CompileInputsSectionSchema)
     }).strict();
@@ -16915,68 +16966,19 @@ var init_v1_to_v24 = __esm({
   }
 });
 
-// bin/lib/compile-inputs.ts
-import { createHash as createHash4 } from "node:crypto";
-import { readFileSync as readFileSync5 } from "node:fs";
-import { join as join2 } from "node:path";
-function compileInputsPath(paperRoot) {
-  return join2(paperDir(paperRoot), COMPILE_INPUTS_FILE);
-}
-function fileSha256(file) {
-  try {
-    return createHash4("sha256").update(readFileSync5(file)).digest("hex");
-  } catch {
-    return "";
-  }
-}
-function currentSectionInputs(paperRoot, s2) {
+// bin/lib/migrations/compile-inputs/v2_to_v3.ts
+function migrate8(input) {
+  const src = typeof input === "object" && input !== null && !Array.isArray(input) ? input : {};
   return {
-    id: formatSectionId(sectionIdOf(s2.n, s2.suffix)),
-    slug: s2.slug,
-    draft_sha256: fileSha256(sectionDraft(s2.n, s2.slug, paperRoot)),
-    verification_sha256: fileSha256(sectionVerification(s2.n, s2.slug, paperRoot))
+    ...src,
+    $schemaVersion: 3,
+    headings_sha256: typeof src["headings_sha256"] === "string" ? src["headings_sha256"] : null
   };
 }
-function readCompileInputs(paperRoot) {
-  try {
-    let value = JSON.parse(readFileSync5(compileInputsPath(paperRoot), "utf8"));
-    const version = typeof value === "object" && value !== null ? value["$schemaVersion"] : void 0;
-    if (version === 1) value = migrate7(value);
-    const parsed = CompileInputsSchema.safeParse(value);
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-function compiledInputsCurrent(paperRoot, registered) {
-  const record = readCompileInputs(paperRoot);
-  if (record === null) return null;
-  const now = sortBySectionId(registered.map((s2) => ({ ...sectionIdOf(s2.n, s2.suffix), slug: s2.slug })));
-  if (now.length !== record.sections.length) return false;
-  for (let i = 0; i < now.length; i += 1) {
-    const was = record.sections[i];
-    const is = currentSectionInputs(paperRoot, now[i]);
-    if (was.id !== is.id || was.slug !== is.slug || was.draft_sha256 !== is.draft_sha256 || was.verification_sha256 !== is.verification_sha256) {
-      return false;
-    }
-  }
-  return true;
-}
-var COMPILE_INPUTS_FILE;
-var init_compile_inputs2 = __esm({
-  "bin/lib/compile-inputs.ts"() {
+var init_v2_to_v32 = __esm({
+  "bin/lib/migrations/compile-inputs/v2_to_v3.ts"() {
     "use strict";
-    init_atomic_write();
-    init_paths();
-    init_section_id();
-    init_compile_inputs();
-    init_v1_to_v24();
-    COMPILE_INPUTS_FILE = "COMPILE-INPUTS.json";
-    __name(compileInputsPath, "compileInputsPath");
-    __name(fileSha256, "fileSha256");
-    __name(currentSectionInputs, "currentSectionInputs");
-    __name(readCompileInputs, "readCompileInputs");
-    __name(compiledInputsCurrent, "compiledInputsCurrent");
+    __name(migrate8, "migrate");
   }
 });
 
@@ -17134,6 +17136,12 @@ function parseOutline(raw) {
   }
   return { paper_title: paperTitle, thesis, format, sections };
 }
+function outlineSectionId(s2) {
+  return formatSectionId(sectionIdOf(s2.n, s2.suffix));
+}
+function orderedOutlineSections(outline) {
+  return [...outline.sections].sort((a, b) => compareSectionIds(sectionIdOf(a.n, a.suffix), sectionIdOf(b.n, b.suffix)));
+}
 var OUTLINE_HEADER, LEGACY_OUTLINE_HEADER, ROLE_SET, DETAIL_RE;
 var init_outline_parse = __esm({
   "bin/lib/outline-parse.ts"() {
@@ -17150,14 +17158,16 @@ var init_outline_parse = __esm({
     __name(list, "list");
     DETAIL_RE = /^-\s+§(\d{1,2}[a-z]?)\s.*?\s—\s+role:\s*([a-z-]+)(?:;\s*purpose:\s*(.*?))?(?:;\s*voice:\s*.*)?\s*$/;
     __name(parseOutline, "parseOutline");
+    __name(outlineSectionId, "outlineSectionId");
+    __name(orderedOutlineSections, "orderedOutlineSections");
   }
 });
 
 // bin/lib/outline.ts
-import { existsSync as existsSync2, readFileSync as readFileSync6 } from "node:fs";
-import { join as join3 } from "node:path";
+import { existsSync as existsSync2, readFileSync as readFileSync5 } from "node:fs";
+import { join as join2 } from "node:path";
 function outlinePath(paperRoot) {
-  return join3(paperDir(paperRoot), "OUTLINE.md");
+  return join2(paperDir(paperRoot), "OUTLINE.md");
 }
 function readOutlineSync(paperRoot) {
   const read = readOutlineChecked(paperRoot);
@@ -17167,7 +17177,7 @@ function readOutlineChecked(paperRoot) {
   const file = outlinePath(paperRoot);
   if (!existsSync2(file)) return { kind: "absent" };
   try {
-    return { kind: "ok", doc: parseOutline(readFileSync6(file, "utf8")) };
+    return { kind: "ok", doc: parseOutline(readFileSync5(file, "utf8")) };
   } catch (e) {
     const error = e.message.replace(/^outline-parse:\s*/, "");
     return /^no section table found/.test(error) ? { kind: "no-table" } : { kind: "invalid", error };
@@ -17184,979 +17194,163 @@ var init_outline = __esm({
   }
 });
 
-// bin/lib/section-registry.ts
-import { basename } from "node:path";
-function identityLabel(s2) {
-  return formatSectionId(sectionIdOf(s2.n, s2.suffix));
-}
-function registeredSectionsSync(paperRoot) {
-  try {
-    const state = Schema.parse(migrateStateValue(JSON.parse(readStateTextSync(paperRoot))));
-    return sortBySectionId((state.sections ?? []).map((s2) => s2.suffix !== void 0 ? { n: s2.n, suffix: s2.suffix, slug: s2.slug } : { n: s2.n, slug: s2.slug }));
-  } catch {
-    return null;
-  }
-}
-function outlineIdentitiesSync(paperRoot) {
-  const doc = readOutlineSync(paperRoot);
-  if (doc === null) return null;
-  return doc.sections.map((s2) => s2.suffix !== void 0 ? { n: s2.n, suffix: s2.suffix, slug: s2.slug } : { n: s2.n, slug: s2.slug });
-}
-function sectionRegistryDivergence(registered, outline) {
-  const out2 = [];
-  const regBySlug = new Map(registered.map((s2) => [s2.slug, s2]));
-  const regById = new Map(registered.map((s2) => [identityLabel(s2), s2]));
-  const rowSlugs = new Set(outline.map((s2) => s2.slug));
-  const claimedIds = /* @__PURE__ */ new Set();
-  for (const row of outline) {
-    const id = identityLabel(row);
-    const reg = regBySlug.get(row.slug);
-    if (reg !== void 0) {
-      if (identityLabel(reg) !== id) {
-        out2.push(`OUTLINE.md numbers "${row.slug}" \xA7${id}, but STATE.json registers it as \xA7${identityLabel(reg)}`);
-      }
-      continue;
-    }
-    const holder = regById.get(id);
-    if (holder !== void 0 && !rowSlugs.has(holder.slug)) {
-      claimedIds.add(id);
-      out2.push(`OUTLINE.md lists \xA7${id} as "${row.slug}", but STATE.json registers \xA7${id} as "${holder.slug}"`);
-    } else {
-      out2.push(`OUTLINE.md lists \xA7${id} "${row.slug}", which STATE.json does not register`);
-    }
-  }
-  for (const reg of registered) {
-    if (rowSlugs.has(reg.slug) || claimedIds.has(identityLabel(reg))) continue;
-    out2.push(`STATE.json registers \xA7${identityLabel(reg)} "${reg.slug}", which OUTLINE.md does not list`);
-  }
-  return out2;
-}
-function outlineProblem(paperRoot) {
-  const read = readOutlineChecked(paperRoot);
-  const file = `${basename(paperDir(paperRoot))}/OUTLINE.md`;
-  if (read.kind === "invalid") {
-    return `${file} cannot be read (${read.error}) \u2014 fix that row (\`pensmith outline\` then applies the edited outline), or re-outline it with \`pensmith outline --force\``;
-  }
-  if (read.kind === "absent") {
-    const registered = registeredSectionsSync(paperRoot);
-    if (registered !== null && registered.length > 0) {
-      const ids = registered.map((s2) => `\xA7${identityLabel(s2)}`).join(", ");
-      return `${file} is missing, but STATE.json registers ${ids} \u2014 restore it (e.g. from your backup or version control), or re-outline with \`pensmith outline --force\` (kept sections stay untouched)`;
-    }
-  }
-  return null;
-}
-function sectionRegistryProblem(paperRoot) {
-  const registered = registeredSectionsSync(paperRoot);
-  if (registered === null || registered.length === 0) return null;
-  const outline = outlineProblem(paperRoot);
-  if (outline !== null) return outline;
-  const rows = outlineIdentitiesSync(paperRoot);
-  if (rows === null) return null;
-  const problems = sectionRegistryDivergence(registered, rows);
-  if (problems.length === 0) return null;
-  return `OUTLINE.md and STATE.json disagree: ${problems.join("; ")} \u2014 ${RECONCILE_HINT}`;
-}
-var RECONCILE_HINT;
-var init_section_registry = __esm({
-  "bin/lib/section-registry.ts"() {
-    "use strict";
-    init_state2();
-    init_state();
-    init_outline();
-    init_paths();
-    init_section_id();
-    __name(identityLabel, "identityLabel");
-    __name(registeredSectionsSync, "registeredSectionsSync");
-    __name(outlineIdentitiesSync, "outlineIdentitiesSync");
-    __name(sectionRegistryDivergence, "sectionRegistryDivergence");
-    RECONCILE_HINT = "run `pensmith outline` to apply the edited OUTLINE.md (a registered section it no longer lists moves to sections/_archive/), or restore the row(s) in OUTLINE.md";
-    __name(outlineProblem, "outlineProblem");
-    __name(sectionRegistryProblem, "sectionRegistryProblem");
-  }
-});
-
-// bin/lib/verify/verdicts.ts
-function textRowLine(key) {
-  const m2 = /^\(L([1-9]\d*)\)$/.exec(key);
-  return m2 === null ? null : Number(m2[1]);
-}
-var DRAFT_VERDICTS, FAILING_VERDICTS, UNVERIFIABLE_VERDICTS, BLOCKING_VERDICTS, ACCEPTABLE_QUOTE_VERDICT, RETRY_ONLINE_VERDICTS, UNATTRIBUTED_CITEKEY, DRAFT_ROW_KEY;
-var init_verdicts = __esm({
-  "bin/lib/verify/verdicts.ts"() {
-    "use strict";
-    DRAFT_VERDICTS = ["PLACEHOLDER", "NO-CITATIONS"];
-    FAILING_VERDICTS = /* @__PURE__ */ new Set([
-      "FABRICATED",
-      "MIS-CITED",
-      "RETRACTED",
-      "UNASSIGNED",
-      "UNPARSEABLE",
-      "UNSUPPORTED-FORM",
-      "UNRESOLVABLE",
-      "NOT_FOUND",
-      "UNATTRIBUTED",
-      "NO-CITATIONS"
-    ]);
-    UNVERIFIABLE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK", "UNVERIFIABLE", "UNVERIFIABLE-QUOTE", "PLACEHOLDER"]);
-    BLOCKING_VERDICTS = /* @__PURE__ */ new Set([...FAILING_VERDICTS, ...UNVERIFIABLE_VERDICTS]);
-    ACCEPTABLE_QUOTE_VERDICT = "UNVERIFIABLE-QUOTE";
-    RETRY_ONLINE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK"]);
-    UNATTRIBUTED_CITEKEY = "(unattributed)";
-    DRAFT_ROW_KEY = "draft";
-    __name(textRowLine, "textRowLine");
-  }
-});
-
-// bin/lib/verify/verdict-rows.ts
-function verdictRowOf(line) {
-  const m2 = /^\s*-\s*(\S+?)(?:\s+\[q[1-9]\d*\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line) ?? /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line);
-  if (!m2 || m2[1] === void 0 || m2[2] === void 0) return null;
-  return { citekey: m2[1], verdict: m2[2], rest: m2[3] ?? "" };
-}
-function isTextRowKey(key) {
-  if (key === DRAFT_ROW_KEY || key === UNATTRIBUTED_CITEKEY) return true;
-  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key)) return true;
-  return textRowLine(key) !== null;
-}
-function revisableRows(verificationMd) {
-  const citations = [];
-  const textRows = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const line of verificationMd.split(/\r?\n/)) {
-    const row = verdictRowOf(line);
-    if (row === null || seen.has(row.citekey)) continue;
-    const text = isTextRowKey(row.citekey);
-    if (text ? !FAILING_VERDICTS.has(row.verdict) : !REVISABLE_VERDICTS.includes(row.verdict)) continue;
-    seen.add(row.citekey);
-    const f = { citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, "").trim()}` };
-    (text ? textRows : citations).push(f);
-  }
-  return { citations, textRows };
-}
-function reviseCanRepair(verificationMd) {
-  return revisableRows(verificationMd).citations.length > 0;
-}
-function rowReason(afterVerdict) {
-  const m2 = /^\s*—\s*(?:titleJW=\S+,\s*authorJW=\S+\s*—\s*|lev=\S+\s*—\s*)?(.*)$/u.exec(afterVerdict);
-  const reason = m2?.[1]?.replace(/ — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/, "").trim();
-  return reason !== void 0 && reason.length > 0 ? reason : void 0;
-}
-function parseBlockingVerdictRows(verificationMd) {
-  const out2 = [];
-  for (const line of verificationMd.split(/\r?\n/)) {
-    const pass3 = /^\s*-\s*(\S+?)(?:\s+\[(q[1-9]\d*)\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
-    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
-    const any = pass3 || pass1 ? null : /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
-    const verdict = pass3?.[3] ?? pass1?.[2] ?? any?.[1];
-    const matched = pass3 ?? pass1 ?? any;
-    if (verdict === void 0 || !BLOCKING_VERDICTS.has(verdict)) continue;
-    if (verdict === ACCEPTABLE_QUOTE_VERDICT && / — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/.test(line)) continue;
-    const citekey = pass3?.[1] ?? pass1?.[1];
-    const retraction = /\bcited work is retracted\b/.test(line);
-    const quoteId = pass3?.[2];
-    const reason = matched !== null ? rowReason(line.slice(matched.index + matched[0].length)) : void 0;
-    out2.push({
-      citekey: citekey ?? UNREADABLE_CITEKEY,
-      verdict,
-      ...retraction ? { retraction: true } : {},
-      ...quoteId !== void 0 ? { quoteId } : {},
-      ...reason !== void 0 ? { reason } : {}
-    });
-  }
-  return out2;
-}
-function sectionVerificationReasons(verificationMd, dryRunNow) {
-  const status = /^Status:\s*(\S+)/m.exec(verificationMd)?.[1];
-  if (status === void 0) {
-    return ["no verifiable VERIFICATION.md (no Status line: the section was never verified, or the verifier output is unreadable)"];
-  }
-  const dryRun = dryRunVerificationReason(verificationMd, dryRunNow);
-  if (dryRun !== null) return [dryRun];
-  const reasons = [];
-  if (status.toLowerCase() === "failed") reasons.push("VERIFICATION.md Status is 'failed'");
-  for (const row of parseBlockingVerdictRows(verificationMd)) reasons.push(verdictRowReason(row));
-  return reasons;
-}
-function verdictRowReason(row) {
-  if (row.citekey === "draft" && DRAFT_VERDICTS.includes(row.verdict)) {
-    return row.verdict === "PLACEHOLDER" ? "the draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model configured (`pensmith write <N>`)" : "the draft cites none of its assigned sources (NO-CITATIONS) \u2014 re-draft it (`pensmith write <N>`)";
-  }
-  const line = textRowLine(row.citekey);
-  if (line !== null && (row.verdict === "UNPARSEABLE" || row.verdict === "UNSUPPORTED-FORM")) {
-    return `line ${line} of the draft holds a citation the verifier cannot check (${row.verdict})`;
-  }
-  if (row.quoteId !== void 0 && row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
-    return blockingRowReason(row).replace("--accept-quote <id>", `--accept-quote ${row.quoteId}`);
-  }
-  return blockingRowReason(row);
-}
-function blockingRowReason(row) {
-  const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
-  if (RETRY_ONLINE_VERDICTS.has(row.verdict)) {
-    return `${cite} is ${row.verdict} (its source could not be checked: offline, --dry-run or a failed lookup) \u2014 re-run online`;
-  }
-  if (row.verdict === "UNVERIFIABLE") {
-    return `${cite} is UNVERIFIABLE \u2014 ${row.reason ?? "its registrar's answer cannot be compared with the entry"}`;
-  }
-  if (row.verdict === "RETRACTED") {
-    return `${cite} is RETRACTED \u2014 ${row.reason ?? "the cited work is retracted"}`;
-  }
-  if (row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
-    return `${cite} has a quote no source text could be checked against (${row.verdict}) \u2014 add the source's PDF (pensmith add <pdf>), paraphrase the quote (re-draft with pensmith write <N>, or edit the section's DRAFT.md and run pensmith verify <N>), or accept that one quote (pensmith verify <N> --accept-quote <id>)`;
-  }
-  return `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ": the cited work is retracted" : ""})`;
-}
-function dryRunVerificationReason(verificationMd, dryRunNow) {
-  if (dryRunNow) return null;
-  const first = verificationMd.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
-  return first.startsWith(DRY_RUN_VERIFICATION_MARKER) ? "verified under --dry-run against synthetic sources \u2014 re-run `pensmith verify` without --dry-run" : null;
-}
-var REVISABLE_VERDICTS, UNREADABLE_CITEKEY, DRY_RUN_VERIFICATION_MARKER;
-var init_verdict_rows = __esm({
-  "bin/lib/verify/verdict-rows.ts"() {
-    "use strict";
-    init_verdicts();
-    init_verdicts();
-    REVISABLE_VERDICTS = ["FABRICATED", "MIS-CITED", "RETRACTED", "UNASSIGNED", "UNPARSEABLE", "UNRESOLVABLE", "NOT_FOUND"];
-    __name(verdictRowOf, "verdictRowOf");
-    __name(isTextRowKey, "isTextRowKey");
-    __name(revisableRows, "revisableRows");
-    __name(reviseCanRepair, "reviseCanRepair");
-    __name(rowReason, "rowReason");
-    __name(parseBlockingVerdictRows, "parseBlockingVerdictRows");
-    UNREADABLE_CITEKEY = "(unreadable verdict row)";
-    __name(sectionVerificationReasons, "sectionVerificationReasons");
-    __name(verdictRowReason, "verdictRowReason");
-    __name(blockingRowReason, "blockingRowReason");
-    DRY_RUN_VERIFICATION_MARKER = "> OFFLINE MODE (--dry-run)";
-    __name(dryRunVerificationReason, "dryRunVerificationReason");
-  }
-});
-
-// bin/lib/research-sentinel.ts
-import { existsSync as existsSync3, readFileSync as readFileSync7 } from "node:fs";
-import { join as join4 } from "node:path";
-function isOwnOnly(entry) {
-  const tags = entry?.provenance;
-  if (!Array.isArray(tags) || tags.length === 0) return false;
-  return tags.every((t) => typeof t === "string" && OWN_SOURCE_PROVENANCE.has(t.split(":")[0] ?? ""));
-}
-function libraryState(pDir) {
-  const file = join4(pDir, "LIBRARY.json");
-  if (!existsSync3(file)) return "absent";
-  try {
-    const parsed = JSON.parse(readFileSync7(file, "utf8"));
-    if (!Array.isArray(parsed.entries)) return "unreadable";
-    if (parsed.entries.length === 0) return "empty";
-    return parsed.entries.every(isOwnOnly) ? "own-only" : "researched";
-  } catch {
-    return "unreadable";
-  }
-}
-function isSourcesViewOnly(text) {
-  let head = text;
-  const logEnd = lineStartIndex(head, LOG_END);
-  if (logEnd < 0) return false;
-  head = head.slice(0, logEnd);
-  const start = lineStartIndex(head, SOURCES_START);
-  if (start >= 0) {
-    const end = lineStartIndex(head, SOURCES_END, start);
-    if (end < 0) return false;
-    head = head.slice(0, start) + head.slice(end + SOURCES_END.length);
-  }
-  return head.replace(/^#\s+Research\s*$/m, "").trim().length === 0;
-}
-function lineStartIndex(text, prefix, from = 0) {
-  let at = text.indexOf(prefix, from);
-  while (at >= 0) {
-    if (at === 0 || text[at - 1] === "\n") return at;
-    at = text.indexOf(prefix, at + 1);
-  }
-  return -1;
-}
-function isFailedResearchLog(text) {
-  if (!/^# Research log\s*$/m.test(text)) return false;
-  const m2 = /^Result:\s*(.*)$/m.exec(text);
-  if (m2 === null) return false;
-  const result = (m2[1] ?? "").trim().toLowerCase();
-  return FAILED_RESEARCH_RESULTS.some((r) => result.startsWith(r));
-}
-function readText(file) {
-  try {
-    return existsSync3(file) ? readFileSync7(file, "utf8") : null;
-  } catch {
-    return null;
-  }
-}
-function isResearchDone(pDir) {
-  try {
-    if (existsSync3(join4(pDir, "OUTLINE.md"))) return true;
-    const lib = libraryState(pDir);
-    const log2 = readText(join4(pDir, "RESEARCH.md"));
-    if (log2 !== null && isFailedResearchLog(log2)) {
-      return lib === "own-only" || lib === "researched" || lib === "unreadable";
-    }
-    if (log2 !== null && (/^# Research log\s*$/m.test(log2) || !isSourcesViewOnly(log2))) return true;
-    return lib === "researched" || lib === "unreadable" || lib === "empty";
-  } catch {
-    return false;
-  }
-}
-var FAILED_RESEARCH_RESULTS, OWN_SOURCE_PROVENANCE, SOURCES_START, SOURCES_END, LOG_END;
-var init_research_sentinel = __esm({
-  "bin/lib/research-sentinel.ts"() {
-    "use strict";
-    FAILED_RESEARCH_RESULTS = Object.freeze([
-      "no sources found",
-      "no usable sources",
-      "no relevant sources",
-      "no sources kept"
-    ]);
-    OWN_SOURCE_PROVENANCE = /* @__PURE__ */ new Set(["byo", "zotero", "add"]);
-    __name(isOwnOnly, "isOwnOnly");
-    __name(libraryState, "libraryState");
-    SOURCES_START = "<!-- pensmith:sources:start";
-    SOURCES_END = "<!-- pensmith:sources:end -->";
-    LOG_END = "<!-- end of the research log:";
-    __name(isSourcesViewOnly, "isSourcesViewOnly");
-    __name(lineStartIndex, "lineStartIndex");
-    __name(isFailedResearchLog, "isFailedResearchLog");
-    __name(readText, "readText");
-    __name(isResearchDone, "isResearchDone");
-  }
-});
-
-// bin/lib/schemas/done-record.ts
-var DONE_RECORD_SCHEMA_VERSION, SHA2562, DoneRecordSchema;
-var init_done_record = __esm({
-  "bin/lib/schemas/done-record.ts"() {
+// bin/lib/tutorial.ts
+var GOAL_VALUES, PROJECT_CONFIG_FRAGMENT, PROJECT_CONFIG_FRAGMENT_DEFAULTS, GOAL_SYNONYMS, TUTORIAL_INTAKE_QUESTION;
+var init_tutorial = __esm({
+  "bin/lib/tutorial.ts"() {
     "use strict";
     init_zod();
-    DONE_RECORD_SCHEMA_VERSION = 1;
-    SHA2562 = /^[0-9a-f]{64}$/;
-    DoneRecordSchema = external_exports.object({
-      $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
-      done_at: external_exports.string().datetime(),
-      /** sha256 of the `.paper/DRAFT.md` bytes done's gate judged. */
-      compiled_draft_sha256: external_exports.string().regex(SHA2562),
-      /** sha256 of the `.paper/FINAL.md` done left: the text it exported. */
-      final_sha256: external_exports.string().regex(SHA2562),
-      /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
-      humanized: external_exports.boolean()
-    }).strict();
-  }
-});
-
-// bin/lib/done-record.ts
-import { existsSync as existsSync4, readFileSync as readFileSync8 } from "node:fs";
-import { basename as basename2, join as join5 } from "node:path";
-function doneRecordPath(paperRoot) {
-  return join5(paperDir(paperRoot), DONE_RECORD_FILE);
-}
-function readDoneRecord(paperRoot) {
-  try {
-    const parsed = DoneRecordSchema.safeParse(JSON.parse(readFileSync8(doneRecordPath(paperRoot), "utf8")));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-function verificationCheckedSha256(paperRoot) {
-  try {
-    const md = readFileSync8(join5(paperDir(paperRoot), "VERIFICATION.md"), "utf8");
-    return /^Text checked: .+ \(sha256 ([0-9a-f]{64})\)\s*$/mu.exec(md)?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
-function finalMdState(paperRoot) {
-  const dir = paperDir(paperRoot);
-  const finalPath = join5(dir, "FINAL.md");
-  if (!existsSync4(finalPath)) return "absent";
-  const finalSha = fileSha256(finalPath);
-  if (finalSha === "") return "edited";
-  const draftSha = fileSha256(join5(dir, "DRAFT.md"));
-  const record = readDoneRecord(paperRoot);
-  if (record !== null && record.final_sha256 === finalSha) return record.compiled_draft_sha256 === draftSha ? "current" : "stale";
-  if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? "current" : "stale";
-  return finalSha === draftSha ? "stale" : "edited";
-}
-function editedFinalReason(paperRoot) {
-  const dir = basename2(paperDir(paperRoot));
-  return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
-}
-var DONE_RECORD_FILE;
-var init_done_record2 = __esm({
-  "bin/lib/done-record.ts"() {
-    "use strict";
     init_atomic_write();
-    init_compile_inputs2();
-    init_paths();
-    init_done_record();
-    DONE_RECORD_FILE = "DONE-RECORD.json";
-    __name(doneRecordPath, "doneRecordPath");
-    __name(readDoneRecord, "readDoneRecord");
-    __name(verificationCheckedSha256, "verificationCheckedSha256");
-    __name(finalMdState, "finalMdState");
-    __name(editedFinalReason, "editedFinalReason");
-  }
-});
-
-// bin/lib/router.ts
-import { existsSync as existsSync5, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
-import { basename as basename3, join as join6 } from "node:path";
-function readSectionInfo(planPath) {
-  const none = { stub: false, failureReason: null, verifiedHash: null, assignedSources: [] };
-  if (!existsSync5(planPath)) {
-    return { status: "planned", corrupt: false, absent: true, ...none };
-  }
-  try {
-    const { frontmatter } = loadFrontmatterDocSync("plan", planPath);
-    const fm = frontmatter;
-    return {
-      status: typeof fm.status === "string" ? fm.status : "planned",
-      corrupt: false,
-      absent: false,
-      stub: fm.stub === true,
-      failureReason: typeof fm.failure_reason === "string" && fm.failure_reason.trim() ? fm.failure_reason.trim() : null,
-      verifiedHash: typeof fm.verified_against_draft_hash === "string" ? fm.verified_against_draft_hash : null,
-      assignedSources: Array.isArray(fm.assigned_sources) ? fm.assigned_sources.map(String) : []
-    };
-  } catch (e) {
-    process.stderr.write(
-      `[pensmith] PLAN.md at ${planPath} is unreadable/corrupt: ${e.message}
-`
-    );
-    return { status: "planned", corrupt: true, absent: false, ...none };
-  }
-}
-function draftHashOf(draftPath, assignedSources) {
-  try {
-    return computeDraftHash(readFileSync9(draftPath), [...assignedSources]);
-  } catch {
-    return null;
-  }
-}
-function verificationBlockers(verificationPath) {
-  let md;
-  try {
-    md = readFileSync9(verificationPath, "utf8");
-  } catch {
-    return ["its VERIFICATION.md is missing or unreadable"];
-  }
-  const reasons = sectionVerificationReasons(md, dryRunWorkspaceActive());
-  const unverifiable = parseBlockingVerdictRows(md).filter((r) => r.verdict === "UNVERIFIABLE" || RETRY_ONLINE_VERDICTS.has(r.verdict));
-  if (reasons.length > 1 && unverifiable.length === reasons.length) {
-    const keys = unverifiable.map((r) => `[@${r.citekey}]`);
-    const list2 = `${keys.slice(0, -1).join(", ")} and ${keys[keys.length - 1]}`;
-    return [`${list2} are UNVERIFIABLE (their sources could not be checked: offline, --dry-run or a failed lookup)`];
-  }
-  return reasons;
-}
-function recordHasPlaceholder(verificationPath) {
-  try {
-    return parseBlockingVerdictRows(readFileSync9(verificationPath, "utf8")).some((r) => r.verdict === "PLACEHOLDER");
-  } catch {
-    return false;
-  }
-}
-function recordRevisable(verificationPath) {
-  try {
-    return reviseCanRepair(readFileSync9(verificationPath, "utf8"));
-  } catch {
-    return true;
-  }
-}
-function unverifiableSectionDetail(verificationPath, label) {
-  let md;
-  try {
-    md = readFileSync9(verificationPath, "utf8");
-  } catch {
-    return `section ${label} could not be verified: its VERIFICATION.md is missing or unreadable \u2014 run \`pensmith verify ${label}\``;
-  }
-  const rows = parseBlockingVerdictRows(md);
-  if (rows.length === 0) return null;
-  const parts = [];
-  const quotes = rows.filter((r) => r.verdict === ACCEPTABLE_QUOTE_VERDICT);
-  if (quotes.length > 0) {
-    const ids = [...new Set(quotes.map((q) => q.quoteId ?? "?"))];
-    parts.push(
-      `${ids.length} quote(s) (${ids.join(", ")}) could not be checked against any source text \u2014 add the source's PDF (\`pensmith add <pdf>\`), paraphrase (re-draft with \`pensmith write ${label}\`, or edit its DRAFT.md and run \`pensmith verify ${label}\`), or accept a quote (\`pensmith verify ${label} --accept-quote ${ids[0]}\`)`
-    );
-  }
-  if (rows.some((r) => r.verdict === "PLACEHOLDER")) {
-    parts.push(`its draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model: \`pensmith write ${label}\``);
-  }
-  const network = rows.filter((r) => RETRY_ONLINE_VERDICTS.has(r.verdict));
-  if (network.length > 0) {
-    parts.push(`${network.map((r) => `[@${r.citekey}]`).join(", ")} could not be checked (offline or a failed lookup) \u2014 re-run \`pensmith verify ${label}\` online`);
-  }
-  for (const r of rows.filter((x) => x.verdict === "UNVERIFIABLE")) {
-    parts.push(`[@${r.citekey}] cannot be checked by its registrar${r.reason !== void 0 ? ` \u2014 ${r.reason}` : ""}`);
-  }
-  if (parts.length === 0) parts.push(verificationBlockers(verificationPath).join("; "));
-  return `section ${label} could not be verified: ${parts.join("; ")}`;
-}
-function mtimeOf(p) {
-  try {
-    return statSync3(p).mtimeMs;
-  } catch {
-    return null;
-  }
-}
-function compiledSectionCount(pDir) {
-  try {
-    const m2 = /^sections_count:\s*(\d+)\s*$/m.exec(readFileSync9(join6(pDir, "COMPILE-REPORT.md"), "utf8"));
-    return m2 ? Number(m2[1]) : null;
-  } catch {
-    return null;
-  }
-}
-function compiledDraftStale(pDir, sections, paperRoot) {
-  const compiledAt = mtimeOf(join6(pDir, "DRAFT.md"));
-  if (compiledAt === null) return true;
-  const record = readCompileInputs(paperRoot);
-  if (record !== null && (record.compiled_draft_sha256 === null || record.sections.some((s2) => s2.verified_against_draft_hash === null))) return true;
-  const current = compiledInputsCurrent(paperRoot, sections);
-  if (current !== null) return !current;
-  for (const { n, slug } of sections) {
-    for (const file of [sectionDraft(n, slug, paperRoot), sectionVerification(n, slug, paperRoot)]) {
-      const at = mtimeOf(file);
-      if (at !== null && at > compiledAt) return true;
-    }
-  }
-  const count = compiledSectionCount(pDir);
-  return count !== null && count !== sections.length;
-}
-async function resolveNextAction(paperRoot, opts = {}) {
-  try {
-    let state;
-    try {
-      state = await loadState(paperRoot);
-    } catch (e) {
-      if (e instanceof StateNotFoundError) return { verb: "new" };
-      process.stderr.write(
-        `[pensmith] STATE.json at ${paperRoot} is unreadable/corrupt: ${e.message}
-`
-      );
-      return { verb: "status", reason: "attention" };
-    }
-    const pDir = paperDir(paperRoot);
-    const researchDone = isResearchDone(pDir);
-    if (!researchDone) return { verb: "research" };
-    if (opts.stopAfterResearch && researchDone) {
-      return { verb: "status", reason: "done" };
-    }
-    const sections = state.sections ?? [];
-    if (sections.length === 0 && existsSync5(join6(pDir, "OUTLINE.rejected.md"))) {
-      return {
-        verb: "status",
-        reason: "attention",
-        detail: "the last outline was rejected (the replies are in .paper/OUTLINE.rejected.md) \u2014 fix the problem it names, then run `pensmith outline`"
-      };
-    }
-    const outlineIssue = outlineProblem(paperRoot);
-    if (outlineIssue !== null) return { verb: "status", reason: "attention", detail: outlineIssue };
-    if (!existsSync5(join6(pDir, "OUTLINE.md"))) return { verb: "outline" };
-    if (sections.length === 0) return { verb: "outline" };
-    const registry = sectionRegistryProblem(paperRoot);
-    if (registry !== null) return { verb: "status", reason: "attention", detail: registry };
-    if (opts.stopAfterOutline) return { verb: "status", reason: "done", detail: OUTLINE_ONLY_DONE };
-    const unverifiablePast = [];
-    for (const { n, slug, suffix } of sortBySectionId(sections)) {
-      const id = suffix !== void 0 ? { n, slug, suffix } : { n, slug };
-      const label = formatSectionId(sectionIdOf(n, suffix));
-      const r = readSectionInfo(sectionPlan(n, slug, paperRoot));
-      if (r.absent) return { verb: "plan", ...id };
-      if (r.corrupt) {
-        return {
-          verb: "status",
-          reason: "attention",
-          section: id,
-          detail: `section ${label}'s PLAN.md is unreadable \u2014 fix it, or re-plan with \`pensmith plan ${label}\``
-        };
-      }
-      switch (r.status) {
-        case "verified":
-          if (!existsSync5(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
-          continue;
-        case "planned":
-          return r.stub ? { verb: "plan", ...id } : { verb: "write", ...id };
-        case "writing":
-          return { verb: "write", ...id };
-        case "failed":
-          if (r.failureReason !== null || !existsSync5(sectionDraft(n, slug, paperRoot))) {
-            return {
-              verb: "status",
-              reason: "attention",
-              section: id,
-              detail: `section ${label} failed${r.failureReason ? `: ${r.failureReason}` : ""} \u2014 adjust its plan or sources if needed, then run \`pensmith write ${label}\``
-            };
-          }
-          if (r.verifiedHash !== null && draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) === r.verifiedHash) {
-            return {
-              verb: "status",
-              reason: "attention",
-              section: id,
-              detail: recordRevisable(sectionVerification(n, slug, paperRoot)) ? `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 repair the flagged citations with \`pensmith plan ${label} --revise\` (one per run; then \`pensmith\` re-verifies the section), or re-draft with \`pensmith write ${label}\` (\`pensmith verify ${label}\` re-checks it as it is)` : `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 the flagged text is not a citation \`--revise\` can swap: edit it in the section's DRAFT.md (a citation written as [@citekey]) and run \`pensmith verify ${label}\`, or re-draft with \`pensmith write ${label}\``
-            };
-          }
-          return { verb: "verify", ...id };
-        // the draft changed: re-attempt verification — NOT continue
-        case "unverifiable": {
-          if (!existsSync5(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
-          if (r.verifiedHash === null || draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) !== r.verifiedHash) {
-            return { verb: "verify", ...id };
-          }
-          unverifiablePast.push({ id, label, verificationPath: sectionVerification(n, slug, paperRoot) });
-          continue;
-        }
-        case "written":
-        case "verifying":
-          if (!existsSync5(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
-          return { verb: "verify", ...id };
-        default:
-          return {
-            verb: "status",
-            reason: "attention",
-            section: id,
-            detail: `section ${label}'s PLAN.md has an unknown status "${r.status}"`
-          };
-      }
-    }
-    if (!dryRunWorkspaceActive()) {
-      const stub = unverifiablePast.filter((u) => recordHasPlaceholder(u.verificationPath));
-      if (stub.length > 0) {
-        return {
-          verb: "status",
-          reason: "attention",
-          section: stub[0].id,
-          detail: stub.map((u) => unverifiableSectionDetail(u.verificationPath, u.label) ?? `section ${u.label}'s draft is stub text \u2014 \`pensmith write ${u.label}\``).join("; ")
-        };
-      }
-    }
-    const record = readCompileInputs(paperRoot);
-    if (record !== null && record.compiled_draft_sha256 !== null && existsSync5(join6(pDir, "DRAFT.md")) && fileSha256(join6(pDir, "DRAFT.md")) !== record.compiled_draft_sha256) {
-      return {
-        verb: "status",
-        reason: "attention",
-        detail: `${basename3(pDir)}/DRAFT.md was edited after compile \u2014 make the edit in the section drafts (then \`pensmith\` re-verifies them) and run \`pensmith compile\`, which replaces the edited file`
-      };
-    }
-    if (compiledDraftStale(pDir, sections, paperRoot)) return { verb: "compile" };
-    const finalState = finalMdState(paperRoot);
-    if (finalState === "edited") return { verb: "status", reason: "attention", detail: editedFinalReason(paperRoot) };
-    if (finalState !== "current") {
-      return record === null ? { verb: "compile" } : { verb: "done" };
-    }
-    return { verb: "status", reason: "done" };
-  } catch (e) {
-    process.stderr.write(
-      `[pensmith] router resolveNextAction hit an unexpected error: ${e.message}
-`
-    );
-    return { verb: "status", reason: "attention" };
-  }
-}
-var OUTLINE_ONLY_DONE;
-var init_router = __esm({
-  "bin/lib/router.ts"() {
-    "use strict";
-    init_state2();
-    init_paths();
-    init_frontmatter();
-    init_section_id();
-    init_draft_hash();
-    init_compile_inputs2();
-    init_section_registry();
-    init_verdict_rows();
-    init_verdicts();
-    init_research_sentinel();
-    init_verdicts();
-    init_compile_inputs2();
-    init_done_record2();
-    __name(readSectionInfo, "readSectionInfo");
-    __name(draftHashOf, "draftHashOf");
-    __name(verificationBlockers, "verificationBlockers");
-    __name(recordHasPlaceholder, "recordHasPlaceholder");
-    __name(recordRevisable, "recordRevisable");
-    __name(unverifiableSectionDetail, "unverifiableSectionDetail");
-    __name(mtimeOf, "mtimeOf");
-    __name(compiledSectionCount, "compiledSectionCount");
-    __name(compiledDraftStale, "compiledDraftStale");
-    OUTLINE_ONLY_DONE = 'outline only: the approved outline is .paper/OUTLINE.md (its sources in .paper/LIBRARY.json and CITATIONS.bib) \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
-    __name(resolveNextAction, "resolveNextAction");
-  }
-});
-
-// bin/lib/handoff.ts
-import { existsSync as existsSync6, readFileSync as readFileSync10 } from "node:fs";
-import path8 from "node:path";
-function sectionOf(d) {
-  return { id: formatSectionId(sectionIdOf(d.n, d.suffix)), slug: d.slug };
-}
-function handoffPositionOf(decision) {
-  switch (decision.verb) {
-    case "new":
-      return { phase: "intake", section: null, position: null, current_section: null };
-    case "research":
-    case "outline":
-    case "compile":
-      return { phase: decision.verb, section: null, position: null, current_section: null };
-    case "plan":
-    case "write":
-    case "verify": {
-      const s2 = sectionOf(decision);
-      return { phase: "sectioning", section: s2.id, position: decision.verb, current_section: s2.slug };
-    }
-    case "done":
-      return { phase: "export", section: null, position: null, current_section: null };
-    case "status": {
-      const s2 = decision.section ? sectionOf(decision.section) : null;
-      return {
-        phase: decision.reason === "done" ? "done" : "attention",
-        section: s2?.id ?? null,
-        position: null,
-        current_section: s2?.slug ?? null
-      };
-    }
-    default:
-      return { phase: "attention", section: null, position: null, current_section: null };
-  }
-}
-function nextActionOf(decision, opts = {}) {
-  const quoteDetail = opts.quoteDetail ?? true;
-  const run = /* @__PURE__ */ __name((cmd) => `run /pensmith (or \`pensmith ${cmd}\`)`, "run");
-  let text;
-  switch (decision.verb) {
-    case "new":
-      text = `Start the paper from the assignment: ${run("new")}.`;
-      break;
-    case "research":
-      text = `Find and evaluate sources: ${run("research")}.`;
-      break;
-    case "outline":
-      text = `Outline the paper and approve it: ${run("outline")}.`;
-      break;
-    case "plan":
-    case "write":
-    case "verify": {
-      const id = formatSectionId(sectionIdOf(decision.n, decision.suffix));
-      const what = { plan: "Plan", write: "Draft", verify: "Verify the citations of" }[decision.verb];
-      text = `${what} section ${sectionLabel(sectionIdOf(decision.n, decision.suffix))} (${decision.slug}): ${run(`${decision.verb} ${id}`)}.`;
-      break;
-    }
-    case "compile":
-      text = `Compile the verified sections into DRAFT.md: ${run("compile")}.`;
-      break;
-    case "done":
-      text = `Export the paper: ${run("done")}.`;
-      break;
-    case "status": {
-      const detail = decision.detail !== void 0 && (quoteDetail || decision.detail === OUTLINE_ONLY_DONE) ? decision.detail : null;
-      if (decision.reason === "done") {
-        text = decision.detail !== void 0 ? `Nothing more is routed: ${detail ?? "run /pensmith status to see why."}` : "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it).";
-      } else if (detail !== null) {
-        text = `Needs attention: ${detail}`;
-      } else {
-        const at = decision.section ? ` at section ${sectionLabel(sectionIdOf(decision.section.n, decision.section.suffix))} (${decision.section.slug})` : "";
-        text = `Needs attention${at}: run /pensmith status to see what and the command that fixes it.`;
-      }
-      break;
-    }
-    default:
-      text = "Run /pensmith status to see where the paper stands.";
-  }
-  return text.length > 200 ? `${text.slice(0, 199)}\u2026` : text;
-}
-function serializedSize(h) {
-  return Buffer.byteLength(JSON.stringify(h, null, 2), "utf8") + 1;
-}
-function fitPointers(base, pointers) {
-  let kept = pointers.filter((p) => SectionPointerSchema.safeParse(p).success);
-  const fits = /* @__PURE__ */ __name(() => serializedSize({ ...base, section_pointers: kept }) <= HANDOFF_MAX_BYTES, "fits");
-  if (fits()) return kept;
-  kept = kept.filter((p) => p.state !== "verified");
-  while (kept.length > 0 && !fits()) {
-    const at = kept.findIndex((p) => p.slug === base.current_section);
-    if (at < 0 || kept.length - 1 - at >= at) kept.pop();
-    else kept.shift();
-  }
-  return kept;
-}
-function assembleHandoff(input) {
-  const pos = handoffPositionOf(input.decision);
-  const base = {
-    schema_version: CURRENT_HANDOFF_VERSION,
-    last_updated: (input.now ?? /* @__PURE__ */ new Date()).toISOString(),
-    phase: pos.phase,
-    section: pos.section,
-    position: pos.position,
-    // A slug longer than the schema allows is recorded as null (the section
-    // id still says where the paper is).
-    current_section: pos.current_section !== null && pos.current_section.length <= HANDOFF_SLUG_MAX ? pos.current_section : null,
-    next_action: nextActionOf(input.decision)
-  };
-  return HandoffSchema.parse({ ...base, section_pointers: fitPointers(base, input.sectionPointers) });
-}
-async function writeHandoff(handoff, paperDir2 = paperDir()) {
-  HandoffSchema.parse(handoff);
-  const content = JSON.stringify(handoff, null, 2) + "\n";
-  const size = Buffer.byteLength(content, "utf8");
-  if (size > HANDOFF_MAX_BYTES) {
-    throw new Error(
-      `HANDOFF serialized size ${size} exceeds ${HANDOFF_MAX_BYTES} bytes (D-17)`
-    );
-  }
-  const targetPath = path8.join(paperDir2, HANDOFF_FILENAME);
-  return withLock(
-    targetPath,
-    async () => {
-      const existing = readHandoff(paperDir2);
-      if (existing.kind === "newer") return { written: false, newerVersion: existing.version };
-      await atomicWriteFile(targetPath, content);
-      return { written: true };
-    },
-    { timeoutMs: WRITE_LOCK_TIMEOUT_MS }
-  );
-}
-function readHandoff(paperDir2) {
-  const file = path8.join(paperDir2, HANDOFF_FILENAME);
-  if (!existsSync6(file)) return { kind: "absent" };
-  let raw;
-  try {
-    raw = JSON.parse(readFileSync10(file, "utf8"));
-  } catch {
-    return { kind: "invalid" };
-  }
-  const version = raw !== null && typeof raw === "object" ? raw.schema_version : void 0;
-  if (typeof version === "number" && Number.isInteger(version) && version > CURRENT_HANDOFF_VERSION) {
-    return { kind: "newer", version };
-  }
-  if (version === 1) {
-    const v1 = HandoffV1Schema.safeParse(raw);
-    if (!v1.success) return { kind: "invalid" };
-    const v22 = HandoffSchema.safeParse(migrate(v1.data));
-    return v22.success ? { kind: "ok", handoff: v22.data, migratedFrom: 1 } : { kind: "invalid" };
-  }
-  const v2 = HandoffSchema.safeParse(raw);
-  return v2.success ? { kind: "ok", handoff: v2.data, migratedFrom: null } : { kind: "invalid" };
-}
-var HANDOFF_FILENAME, HANDOFF_PATH, WRITE_LOCK_TIMEOUT_MS;
-var init_handoff2 = __esm({
-  "bin/lib/handoff.ts"() {
-    "use strict";
-    init_handoff();
-    init_v1_to_v2();
-    init_atomic_write();
-    init_lock();
-    init_paths();
-    init_section_id();
-    init_router();
-    HANDOFF_FILENAME = "HANDOFF.json";
-    HANDOFF_PATH = `.paper/${HANDOFF_FILENAME}`;
-    WRITE_LOCK_TIMEOUT_MS = 5e3;
-    __name(sectionOf, "sectionOf");
-    __name(handoffPositionOf, "handoffPositionOf");
-    __name(nextActionOf, "nextActionOf");
-    __name(serializedSize, "serializedSize");
-    __name(fitPointers, "fitPointers");
-    __name(assembleHandoff, "assembleHandoff");
-    __name(writeHandoff, "writeHandoff");
-    __name(readHandoff, "readHandoff");
-  }
-});
-
-// bin/lib/hooks/pre-compact.ts
-var pre_compact_exports = {};
-__export(pre_compact_exports, {
-  PRECOMPACT_DEADLINE_MS: () => PRECOMPACT_DEADLINE_MS,
-  collectSectionPointers: () => collectSectionPointers,
-  writePreCompactHandoff: () => writePreCompactHandoff
-});
-import { existsSync as existsSync7 } from "node:fs";
-import path9 from "node:path";
-function rel(root, abs) {
-  return path9.relative(root, abs).split(path9.sep).join("/");
-}
-async function collectSectionPointers(root) {
-  let sections;
-  try {
-    sections = sortBySectionId((await loadState(root)).sections ?? []);
-  } catch {
-    return [];
-  }
-  const out2 = [];
-  for (const { n, slug } of sections) {
-    try {
-      const plan = sectionPlan(n, slug, root);
-      const draft = sectionDraft(n, slug, root);
-      const verification = sectionVerification(n, slug, root);
-      const info = readSectionInfo(plan);
-      const state = SectionStateSchema.safeParse(info.status);
-      out2.push({
-        slug,
-        plan_path: rel(root, plan),
-        draft_path: existsSync7(draft) ? rel(root, draft) : null,
-        verification_path: existsSync7(verification) ? rel(root, verification) : null,
-        state: !info.absent && !info.corrupt && state.success ? state.data : "planned"
-      });
-    } catch {
-    }
-  }
-  return out2;
-}
-async function writePreCompactHandoff(root, opts = {}) {
-  const deadlineMs = opts.deadlineMs ?? PRECOMPACT_DEADLINE_MS;
-  let timer;
-  const work = (async () => {
-    const decision = await resolveNextAction(root, opts.routeOptions ?? {});
-    const pDir = paperDir(root);
-    const handoff = assembleHandoff({
-      decision,
-      sectionPointers: await collectSectionPointers(root),
-      ...opts.now ? { now: opts.now } : {}
+    GOAL_VALUES = ["draft", "learning", "both"];
+    PROJECT_CONFIG_FRAGMENT = Object.freeze({
+      goal: external_exports.enum(GOAL_VALUES, {
+        errorMap: /* @__PURE__ */ __name(() => ({ message: `goal must be one of: ${GOAL_VALUES.join(", ")}` }), "errorMap")
+      }).optional()
     });
-    const file = path9.join(pDir, "HANDOFF.json");
-    const w = await writeHandoff(handoff, pDir);
-    if (!w.written) {
-      return {
-        written: false,
-        error: `${file} was written by a newer pensmith (schema_version ${w.newerVersion}); left in place, never downgraded`
-      };
-    }
-    return { written: true, handoff, file };
-  })();
-  const deadline = new Promise((resolve) => {
-    timer = setTimeout(
-      () => resolve({ written: false, error: `the HANDOFF.json write did not finish within ${deadlineMs / 1e3}s` }),
-      deadlineMs
-    );
-  });
-  try {
-    return await Promise.race([
-      work.catch((e) => ({ written: false, error: e instanceof Error ? e.message : String(e) })),
-      deadline
-    ]);
-  } finally {
-    if (timer !== void 0) clearTimeout(timer);
+    PROJECT_CONFIG_FRAGMENT_DEFAULTS = Object.freeze({
+      goal: "draft"
+    });
+    GOAL_SYNONYMS = Object.freeze({
+      draft: "draft",
+      "a draft": "draft",
+      "produce a draft": "draft",
+      "producing a draft": "draft",
+      learning: "learning",
+      learn: "learning",
+      "learn the topic": "learning",
+      "learning the topic": "learning",
+      tutorial: "learning",
+      both: "both"
+    });
+    TUTORIAL_INTAKE_QUESTION = Object.freeze({
+      id: "goal",
+      key: "goal",
+      flag: "goal",
+      flagDescription: "What the paper is for: draft (default), learning (tutorial notes; stops after research) or both.",
+      label: "What is this paper for?",
+      options: Object.freeze([
+        Object.freeze({ value: "draft", label: "Producing a draft", hint: "the full paper, through export" }),
+        Object.freeze({ value: "learning", label: "Learning the topic", hint: "tutorial notes on why each source was chosen; stops after research" }),
+        Object.freeze({ value: "both", label: "Both", hint: "the draft plus tutorial notes" })
+      ]),
+      defaultValue: "draft",
+      parse(raw) {
+        if (typeof raw !== "string") return null;
+        const v = raw.trim().toLowerCase().replace(/\s+/g, " ");
+        return Object.prototype.hasOwnProperty.call(GOAL_SYNONYMS, v) ? GOAL_SYNONYMS[v] : null;
+      }
+    });
   }
+});
+
+// bin/lib/intake-brief.ts
+import { existsSync as existsSync3 } from "node:fs";
+import path8 from "node:path";
+function intakePath(root = projectRoot()) {
+  return path8.join(paperDir(root), "INTAKE.md");
 }
-var PRECOMPACT_DEADLINE_MS;
-var init_pre_compact = __esm({
-  "bin/lib/hooks/pre-compact.ts"() {
+function assignmentFromBody(body) {
+  const text = body.replace(/\r\n/g, "\n");
+  const start = text.indexOf(ASSIGNMENT_START);
+  const end = text.indexOf(ASSIGNMENT_END);
+  if (start >= 0 && end > start) {
+    return text.slice(start + ASSIGNMENT_START.length, end).replace(/^\n+|\n+$/g, "");
+  }
+  const m2 = /(?:^|\n)## Assignment[ \t]*\n([\s\S]*?)(?=\n## |$)/.exec(text);
+  return m2 ? (m2[1] ?? "").replace(/^\n+|\n+$/g, "") : "";
+}
+function parseIntakeFrontmatter(frontmatter, body, file, diskVersion) {
+  const r = IntakeBriefSchema.safeParse(frontmatter);
+  if (!r.success) {
+    const issue = r.error.issues[0];
+    const where = issue && issue.path.length > 0 ? issue.path.join(".") : "frontmatter";
+    throw new IntakeBriefError(`${file}: invalid intake field "${where}": ${issue?.message ?? "invalid"} \u2014 fix it or re-run pensmith new`);
+  }
+  return { file, brief: r.data, assignment: assignmentFromBody(body), diskVersion };
+}
+function readIntakeBrief(root = projectRoot()) {
+  const file = intakePath(root);
+  if (!existsSync3(file)) return null;
+  const doc = loadFrontmatterDocSync("intake", file);
+  return parseIntakeFrontmatter(doc.frontmatter, doc.body, file, doc.diskVersion);
+}
+var CURRENT_INTAKE_FRONTMATTER_VERSION, PAPER_TYPES, ARGUMENTATIVE_PAPER_TYPES, NON_ARGUMENTATIVE_PAPER_TYPES, PAPER_MODES, COUNTERARGUMENT_ANSWERS, ASSIGNMENT_SOURCE_KINDS, FollowUpSchema, AssignmentSourceSchema, IntakeBriefSchema, IntakeBriefError, ASSIGNMENT_START, ASSIGNMENT_END;
+var init_intake_brief = __esm({
+  "bin/lib/intake-brief.ts"() {
     "use strict";
-    init_handoff2();
-    init_state();
-    init_state2();
+    init_zod();
+    init_frontmatter();
     init_paths();
-    init_router();
-    init_section_id();
-    PRECOMPACT_DEADLINE_MS = 8e3;
-    __name(rel, "rel");
-    __name(collectSectionPointers, "collectSectionPointers");
-    __name(writePreCompactHandoff, "writePreCompactHandoff");
+    init_tutorial();
+    init_disciplines();
+    init_exit_codes();
+    CURRENT_INTAKE_FRONTMATTER_VERSION = INTAKE_FRONTMATTER_VERSION;
+    PAPER_TYPES = [
+      "argumentative",
+      "persuasive",
+      "analytical",
+      "expository",
+      "literature-review",
+      "research-report",
+      "lab-report",
+      "summary",
+      "primer",
+      "other"
+    ];
+    ARGUMENTATIVE_PAPER_TYPES = Object.freeze(["argumentative", "persuasive"]);
+    NON_ARGUMENTATIVE_PAPER_TYPES = Object.freeze(["lab-report", "summary", "primer"]);
+    PAPER_MODES = ["draft", "outline"];
+    COUNTERARGUMENT_ANSWERS = ["yes", "no", "auto"];
+    ASSIGNMENT_SOURCE_KINDS = ["file", "at-file", "stdin", "cwd", "paste", "thesis-seed", "none"];
+    FollowUpSchema = external_exports.object({
+      id: external_exports.string().min(1),
+      question: external_exports.string().min(1),
+      answer: external_exports.string()
+    }).strict();
+    AssignmentSourceSchema = external_exports.object({
+      kind: external_exports.enum(ASSIGNMENT_SOURCE_KINDS),
+      /** The file name (never a full path) for file sources; '' otherwise. */
+      name: external_exports.string().default("")
+    }).strict();
+    IntakeBriefSchema = external_exports.object({
+      schema_version: external_exports.literal(CURRENT_INTAKE_FRONTMATTER_VERSION).default(CURRENT_INTAKE_FRONTMATTER_VERSION),
+      /** The paper topic in one short phrase (research seeds its queries from it). */
+      topic: external_exports.string().default(""),
+      /** The working thesis ('' until one is known; the approved outline's thesis wins downstream). */
+      thesis: external_exports.string().default(""),
+      /** The discipline preset slug (bin/lib/disciplines.ts). */
+      discipline: external_exports.string().min(1).default(FALLBACK_DISCIPLINE),
+      paper_type: external_exports.enum(PAPER_TYPES).default("other"),
+      mode: external_exports.enum(PAPER_MODES).default("draft"),
+      ...PROJECT_CONFIG_FRAGMENT,
+      class: external_exports.string().min(1).default("Unfiled"),
+      counterargument: external_exports.enum(COUNTERARGUMENT_ANSWERS).default("auto"),
+      length_target_words: external_exports.number().int().positive().nullable().default(null),
+      /** The CSL style key the user asked for ('' = the discipline preset's default). */
+      citation_style: external_exports.union([external_exports.literal(""), external_exports.enum(CSL_STYLE_KEYS)]).default(""),
+      /** Plain-English sectioning overrides ("a literature review before methods"), passed to the outline. */
+      sectioning_notes: external_exports.array(external_exports.string().min(1)).default([]),
+      pii_redaction: external_exports.boolean().default(false),
+      style_match: external_exports.boolean().default(false),
+      assignment_source: AssignmentSourceSchema.default({ kind: "none", name: "" }),
+      /** The clarifier's assignment-specific follow-ups and the user's answers (at most 3, GRND-02). */
+      follow_ups: external_exports.array(FollowUpSchema).max(3).default([])
+    });
+    IntakeBriefError = class extends PensmithError {
+      static {
+        __name(this, "IntakeBriefError");
+      }
+      constructor(message) {
+        super(message, EXIT_ERROR);
+        this.name = "IntakeBriefError";
+      }
+    };
+    __name(intakePath, "intakePath");
+    ASSIGNMENT_START = "<!-- pensmith:assignment:start -->";
+    ASSIGNMENT_END = "<!-- pensmith:assignment:end -->";
+    __name(assignmentFromBody, "assignmentFromBody");
+    __name(parseIntakeFrontmatter, "parseIntakeFrontmatter");
+    __name(readIntakeBrief, "readIntakeBrief");
   }
 });
 
@@ -19026,39 +18220,39 @@ function parse(toml, { maxDepth = 1e3, integersAsBigInt } = {}) {
         }
         k[1]++;
       }
-      let p = peekTable(
+      let p2 = peekTable(
         k[0],
         res,
         meta,
         isTableArray ? 2 : 1
         /* Type.EXPLICIT */
       );
-      if (!p) {
+      if (!p2) {
         throw new TomlError("trying to redefine an already defined table or value", {
           toml,
           ptr
         });
       }
-      m2 = p[2];
-      tbl = p[1];
+      m2 = p2[2];
+      tbl = p2[1];
       ptr = k[1];
     } else {
       let k = parseKey(toml, ptr);
-      let p = peekTable(
+      let p2 = peekTable(
         k[0],
         tbl,
         m2,
         0
         /* Type.DOTTED */
       );
-      if (!p) {
+      if (!p2) {
         throw new TomlError("trying to redefine an already defined table or value", {
           toml,
           ptr
         });
       }
       let v = extractValue(toml, k[1], void 0, maxDepth, integersAsBigInt);
-      p[1][p[0]] = v[0];
+      p2[1][p2[0]] = v[0];
       ptr = v[1];
     }
     ptr = skipVoid(toml, ptr, true);
@@ -19195,7 +18389,8 @@ function s(slug, verb, tier, effort, maxTokens, p90Output, inputEstimate, cacheS
     p90Output,
     inputEstimate,
     cacheSystem,
-    structured
+    structured,
+    template: true
   });
 }
 function canonicalSlug(name) {
@@ -19294,7 +18489,19 @@ var init_llm_models = __esm({
       // abstract (<= 4000 chars) plus a full-text passage (<= 2400) — and
       // orphan-label audits one paragraph (<= 4000 chars) and lists its claims.
       s("claim-support", "verify", "judgment", "low", 2e3, 350, 2200, true, true),
-      s("orphan-label", "verify", "judgment", "low", 2e3, 500, 1800, true, true)
+      s("orphan-label", "verify", "judgment", "low", 2e3, 500, 1800, true, true),
+      // Phase 21 (EXP-11, D-21-15; the D-12 amendment): one compile call judges up
+      // to [compile] contradiction_pairs (default 20) cross-section claim pairs —
+      // ~90 input tokens a pair plus the ~1100-token template, ~45 output tokens a
+      // verdict.
+      s("claim-consistency", "compile", "judgment", "low", 4e3, 1200, 3e3, true, true),
+      // Phase 21 (EXP-14, D-21-18): the Tier-2 humanizer, one call per `##`
+      // section of the compiled draft. A MODEL slug with no template (S-06): the
+      // system prompt is the user's humanizer SKILL.md (cached like every system
+      // prompt), the user message the pinned contract plus the masked section.
+      // Output ~ the section again (a 500-word section is ~700 tokens) plus
+      // adaptive thinking at medium effort.
+      { ...s("humanizer", "done", "generation", "medium", 16e3, 4e3, 4500, true, false), template: false }
     ];
     SLUGS = Object.freeze(
       Object.fromEntries(SLUG_LIST.map((x) => [x.slug, x]))
@@ -19307,55 +18514,6 @@ var init_llm_models = __esm({
       queries: "topic-disambiguator"
     });
     __name(canonicalSlug, "canonicalSlug");
-  }
-});
-
-// bin/lib/tutorial.ts
-var GOAL_VALUES, PROJECT_CONFIG_FRAGMENT, PROJECT_CONFIG_FRAGMENT_DEFAULTS, GOAL_SYNONYMS, TUTORIAL_INTAKE_QUESTION;
-var init_tutorial = __esm({
-  "bin/lib/tutorial.ts"() {
-    "use strict";
-    init_zod();
-    init_atomic_write();
-    GOAL_VALUES = ["draft", "learning", "both"];
-    PROJECT_CONFIG_FRAGMENT = Object.freeze({
-      goal: external_exports.enum(GOAL_VALUES, {
-        errorMap: /* @__PURE__ */ __name(() => ({ message: `goal must be one of: ${GOAL_VALUES.join(", ")}` }), "errorMap")
-      }).optional()
-    });
-    PROJECT_CONFIG_FRAGMENT_DEFAULTS = Object.freeze({
-      goal: "draft"
-    });
-    GOAL_SYNONYMS = Object.freeze({
-      draft: "draft",
-      "a draft": "draft",
-      "produce a draft": "draft",
-      "producing a draft": "draft",
-      learning: "learning",
-      learn: "learning",
-      "learn the topic": "learning",
-      "learning the topic": "learning",
-      tutorial: "learning",
-      both: "both"
-    });
-    TUTORIAL_INTAKE_QUESTION = Object.freeze({
-      id: "goal",
-      key: "goal",
-      flag: "goal",
-      flagDescription: "What the paper is for: draft (default), learning (tutorial notes; stops after research) or both.",
-      label: "What is this paper for?",
-      options: Object.freeze([
-        Object.freeze({ value: "draft", label: "Producing a draft", hint: "the full paper, through export" }),
-        Object.freeze({ value: "learning", label: "Learning the topic", hint: "tutorial notes on why each source was chosen; stops after research" }),
-        Object.freeze({ value: "both", label: "Both", hint: "the draft plus tutorial notes" })
-      ]),
-      defaultValue: "draft",
-      parse(raw) {
-        if (typeof raw !== "string") return null;
-        const v = raw.trim().toLowerCase().replace(/\s+/g, " ");
-        return Object.prototype.hasOwnProperty.call(GOAL_SYNONYMS, v) ? GOAL_SYNONYMS[v] : null;
-      }
-    });
   }
 });
 
@@ -19462,7 +18620,11 @@ function citationStyleKey(name) {
   if (t.length === 0) return null;
   return Object.prototype.hasOwnProperty.call(CITATION_STYLE_KEYS, t) ? CITATION_STYLE_KEYS[t] : null;
 }
-var CURRENT_CONFIG_VERSION, DEFAULT_QUOTE_MIN_WORDS, DEFAULT_RECHECK_AFTER_DAYS, CITATION_STYLE_NAMES2, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HumanizerSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
+function isCslPathSpelling(v) {
+  const t = v.trim();
+  return t.length > 4 && /\.csl$/i.test(t) && !/[\0\r\n]/.test(t);
+}
+var CURRENT_CONFIG_VERSION, DEFAULT_CONTRADICTION_PAIRS, DEFAULT_PLAGIARISM_MAX_PHRASES, DEFAULT_QUOTE_MIN_WORDS, DEFAULT_RECHECK_AFTER_DAYS, CITATION_STYLE_NAMES2, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HONESTY_BACKENDS, HumanizerSchema, CompileSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
 var init_config = __esm({
   "bin/lib/schemas/config.ts"() {
     "use strict";
@@ -19470,7 +18632,9 @@ var init_config = __esm({
     init_tutorial();
     init_runtime_config();
     init_lookup_table();
-    CURRENT_CONFIG_VERSION = 3;
+    CURRENT_CONFIG_VERSION = 4;
+    DEFAULT_CONTRADICTION_PAIRS = 20;
+    DEFAULT_PLAGIARISM_MAX_PHRASES = 30;
     DEFAULT_QUOTE_MIN_WORDS = 5;
     DEFAULT_RECHECK_AFTER_DAYS = 30;
     CITATION_STYLE_NAMES2 = [
@@ -19518,8 +18682,9 @@ var init_config = __esm({
     });
     __name(normalizeStyleName, "normalizeStyleName");
     __name(citationStyleKey, "citationStyleKey");
-    CitationStyleSchema = external_exports.string().refine((v) => citationStyleKey(v) !== null, {
-      message: `citation_style must be one of: ${CITATION_STYLE_NAMES2.join(", ")}`
+    __name(isCslPathSpelling, "isCslPathSpelling");
+    CitationStyleSchema = external_exports.string().refine((v) => citationStyleKey(v) !== null || isCslPathSpelling(v), {
+      message: `citation_style must be one of: ${CITATION_STYLE_NAMES2.join(", ")} \u2014 or a path to a local .csl file`
     });
     PositiveInt = external_exports.number().int().positive();
     NonNegInt = external_exports.number().int().nonnegative();
@@ -19564,14 +18729,27 @@ var init_config = __esm({
       flag_threshold: external_exports.enum(["low", "medium", "high"]).optional(),
       recheck_after_days: NonNegInt.optional(),
       plagiarism_check: external_exports.boolean().optional(),
+      // EXP-19 (D-21-22): how many distinctive phrases done sends to the search (at least one per body paragraph, up to this).
+      plagiarism_max_phrases: PositiveInt.optional(),
       citation_density_min: NonNegNumber.optional(),
       citation_density_max: NonNegNumber.optional()
     });
+    HONESTY_BACKENDS = ["gptzero", "originality", "sapling"];
     HumanizerSchema = external_exports.object({
       enabled: external_exports.boolean().optional(),
       preserve_voice: external_exports.enum(["academic", "formal", "casual"]).optional(),
       honesty_score: external_exports.boolean().optional(),
-      honesty_backend: external_exports.enum(["gptzero", "originality", "sapling"]).optional()
+      honesty_backend: external_exports.enum(HONESTY_BACKENDS, {
+        errorMap: /* @__PURE__ */ __name(() => ({ message: `honesty_backend must be one of: ${HONESTY_BACKENDS.join(", ")}` }), "errorMap")
+      }).optional(),
+      // EXP-17 (D-21-20): the answer to the detector-consent question, asked once
+      // in a terminal and recorded here (true: send the paper to the detector;
+      // false: never). Unset means not asked yet; --yolo never answers it.
+      honesty_consent: external_exports.boolean().optional()
+    });
+    CompileSchema = external_exports.object({
+      smooth_transitions: external_exports.boolean().optional(),
+      contradiction_pairs: NonNegInt.optional()
     });
     StyleSchema = external_exports.object({
       match_past_writing: external_exports.boolean().optional(),
@@ -19610,6 +18788,7 @@ var init_config = __esm({
       sources: SourcesSchema.optional(),
       verification: VerificationSchema.optional(),
       humanizer: HumanizerSchema.optional(),
+      compile: CompileSchema.optional(),
       style: StyleSchema.optional(),
       runtime: PaperRuntimeSchema.optional(),
       budget: BudgetSchema.optional(),
@@ -19621,6 +18800,7 @@ var init_config = __esm({
       sources: SourcesSchema,
       verification: VerificationSchema,
       humanizer: HumanizerSchema,
+      compile: CompileSchema,
       style: StyleSchema,
       runtime: PaperRuntimeSchema,
       budget: BudgetSchema,
@@ -19631,7 +18811,7 @@ var init_config = __esm({
 });
 
 // bin/lib/migrations/config/v0_to_v1.ts
-function migrate8(input) {
+function migrate9(input) {
   const out2 = { schema_version: 1 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
@@ -19661,12 +18841,12 @@ var init_v0_to_v13 = __esm({
       anthropic: "ANTHROPIC_API_KEY",
       openai: "OPENAI_API_KEY"
     });
-    __name(migrate8, "migrate");
+    __name(migrate9, "migrate");
   }
 });
 
 // bin/lib/migrations/config/v1_to_v2.ts
-function migrate9(input) {
+function migrate10(input) {
   const out2 = { schema_version: 2 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
@@ -19677,12 +18857,12 @@ function migrate9(input) {
 var init_v1_to_v25 = __esm({
   "bin/lib/migrations/config/v1_to_v2.ts"() {
     "use strict";
-    __name(migrate9, "migrate");
+    __name(migrate10, "migrate");
   }
 });
 
 // bin/lib/migrations/config/v2_to_v3.ts
-function migrate10(input) {
+function migrate11(input) {
   const out2 = { schema_version: 3 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
@@ -19690,10 +18870,26 @@ function migrate10(input) {
   }
   return out2;
 }
-var init_v2_to_v32 = __esm({
+var init_v2_to_v33 = __esm({
   "bin/lib/migrations/config/v2_to_v3.ts"() {
     "use strict";
-    __name(migrate10, "migrate");
+    __name(migrate11, "migrate");
+  }
+});
+
+// bin/lib/migrations/config/v3_to_v4.ts
+function migrate12(input) {
+  const out2 = { schema_version: 4 };
+  for (const [k, v] of Object.entries(input)) {
+    if (k === "schema_version") continue;
+    out2[k] = v;
+  }
+  return out2;
+}
+var init_v3_to_v4 = __esm({
+  "bin/lib/migrations/config/v3_to_v4.ts"() {
+    "use strict";
+    __name(migrate12, "migrate");
   }
 });
 
@@ -19705,17 +18901,17 @@ var init_config_text = __esm({
 });
 
 // bin/lib/config.ts
-import { existsSync as existsSync8, readFileSync as readFileSync11 } from "node:fs";
-import path10 from "node:path";
+import { existsSync as existsSync4, readFileSync as readFileSync6 } from "node:fs";
+import path9 from "node:path";
 function paperConfigPath(root = projectRoot()) {
-  return path10.join(paperDir(root), "config.toml");
+  return path9.join(paperDir(root), "config.toml");
 }
 function globalRuntimePath() {
-  return path10.join(pensmithDataDir(), "runtime.json");
+  return path9.join(pensmithDataDir(), "runtime.json");
 }
 function relName(root, file) {
-  const rel2 = path10.relative(root, file);
-  return rel2 && !rel2.startsWith("..") ? rel2.split(path10.sep).join("/") : file;
+  const rel2 = path9.relative(root, file);
+  return rel2 && !rel2.startsWith("..") ? rel2.split(path9.sep).join("/") : file;
 }
 function warnOnce(line) {
   if (warned.has(line)) return;
@@ -19848,9 +19044,9 @@ function emitWarnings(fileLabel, warnings) {
 }
 function readPaperConfigSync(root = projectRoot()) {
   const file = paperConfigPath(root);
-  if (!existsSync8(file)) return { config: EMPTY_CONFIG, exists: false, path: file, migratedFrom: null };
+  if (!existsSync4(file)) return { config: EMPTY_CONFIG, exists: false, path: file, migratedFrom: null };
   const label = relName(root, file);
-  const parsed = parseAndValidate(readFileSync11(file, "utf8"), label);
+  const parsed = parseAndValidate(readFileSync6(file, "utf8"), label);
   emitWarnings(label, parsed.warnings);
   return { config: parsed.config, exists: true, path: file, migratedFrom: parsed.migratedFrom };
 }
@@ -19879,7 +19075,8 @@ var init_config2 = __esm({
     init_tutorial();
     init_v0_to_v13();
     init_v1_to_v25();
-    init_v2_to_v32();
+    init_v2_to_v33();
+    init_v3_to_v4();
     init_config_text();
     init_disciplines();
     init_config();
@@ -19893,9 +19090,10 @@ var init_config2 = __esm({
       }
     };
     MIGRATIONS = Object.freeze({
-      0: migrate8,
-      1: migrate9,
-      2: migrate10
+      0: migrate9,
+      1: migrate10,
+      2: migrate11,
+      3: migrate12
     });
     VERIFY_QUOTES_REFUSAL = "verify_quotes is not configurable: Pass 3 quote verification is a blocking pass (PRD \xA714) \u2014 turning it off would let a quote-NOT_FOUND citation reach the compiled paper. Remove it from [verification].";
     __name(paperConfigPath, "paperConfigPath");
@@ -19923,9 +19121,12 @@ var init_config2 = __esm({
       "verification.recheck_after_days": DEFAULT_RECHECK_AFTER_DAYS,
       "verification.send_byo_passages": false,
       "verification.plagiarism_check": true,
+      "verification.plagiarism_max_phrases": DEFAULT_PLAGIARISM_MAX_PHRASES,
       "humanizer.enabled": true,
       "humanizer.honesty_score": true,
       "humanizer.honesty_backend": "gptzero",
+      "compile.smooth_transitions": true,
+      "compile.contradiction_pairs": DEFAULT_CONTRADICTION_PAIRS,
       "style.match_past_writing": false,
       "budget.cost_cap_usd": 5,
       "network.contact_email_env": "PENSMITH_CONTACT_EMAIL",
@@ -19945,6 +19146,1433 @@ var init_config2 = __esm({
       "chicago-author-date": "Chicago (Author-Date)",
       "chicago-notes-bib": "Chicago (Notes-Bibliography)"
     });
+  }
+});
+
+// bin/lib/citation-token.ts
+var CLUSTER_RE_SOURCE, UNMODELLED_RE, FENCE_ATTRS_RE;
+var init_citation_token = __esm({
+  "bin/lib/citation-token.ts"() {
+    "use strict";
+    CLUSTER_RE_SOURCE = String.raw`\[([^[\]]*@[^[\]]*)\]`;
+    UNMODELLED_RE = new RegExp("<[\\p{L}!?/]|\\\\\\p{L}|\\uFEFF|\\r(?!\\n)|^\\.\\.\\.[ \\t]*\\r?$", "mu");
+    FENCE_ATTRS_RE = new RegExp(`^\\{(?:=[\\p{L}\\p{N}_-]+|[ \\t]*(?:(?:[#.]\\p{L}[\\p{L}\\p{N}_:.-]*|\\p{L}[\\p{L}\\p{N}_:.-]*=(?:"[^"\\\\]*"|'[^'\\\\]*'|[^\\s"'}\\\\]*))(?:[ \\t]+|(?=\\})))*)\\}$`, "u");
+  }
+});
+
+// bin/lib/verify/draft-text.ts
+var init_draft_text = __esm({
+  "bin/lib/verify/draft-text.ts"() {
+    "use strict";
+    init_citation_token();
+  }
+});
+
+// bin/lib/pricing.ts
+function p(inputPerMtok, outputPerMtok, cacheReadPerMtok) {
+  return cacheReadPerMtok === void 0 ? { inputPerMtok, outputPerMtok, currency: "USD" } : { inputPerMtok, outputPerMtok, cacheReadPerMtok, currency: "USD" };
+}
+var RAW;
+var init_pricing = __esm({
+  "bin/lib/pricing.ts"() {
+    "use strict";
+    init_llm_models();
+    __name(p, "p");
+    RAW = {
+      anthropic: {
+        "claude-fable-5-1": p(10, 50, 0.25),
+        "claude-fable-5": p(10, 50),
+        "claude-opus-5-5": p(4, 20, 0.2),
+        "claude-opus-5": p(5, 25),
+        "claude-opus-4-8": p(5, 25),
+        "claude-opus-4-7": p(5, 25),
+        "claude-opus-4-6": p(5, 25),
+        "claude-sonnet-5": p(2, 10),
+        "claude-sonnet-4-6": p(3, 15),
+        "claude-haiku-4-5": p(1, 5)
+      },
+      openai: {
+        "gpt-6-astra": p(10, 50, 1),
+        "gpt-6-sol": p(2, 10, 0.2),
+        "gpt-6-luna": p(0.1, 0.5, 0.01),
+        "gpt-5.6-sol": p(4, 20, 0.4),
+        "gpt-5.6-terra": p(2, 12, 0.2),
+        "gpt-5.6-luna": p(0.2, 1.2, 0.02),
+        "gpt-5.5": p(5, 30, 0.5),
+        "gpt-5.4": p(2.5, 15, 0.25),
+        "gpt-5.4-mini": p(0.75, 4.5, 0.075),
+        "gpt-5.4-nano": p(0.2, 1.25, 0.02),
+        "gpt-5": p(1.25, 10, 0.125),
+        "gpt-5-mini": p(0.25, 2, 0.025),
+        "gpt-5-nano": p(0.05, 0.4, 5e-3),
+        "gpt-4.1": p(2, 8, 0.5),
+        "gpt-4.1-mini": p(0.4, 1.6, 0.1),
+        "gpt-4o": p(2.5, 10, 1.25),
+        "gpt-4o-mini": p(0.15, 0.6, 0.075)
+      }
+    };
+    for (const provider of Object.keys(RAW)) {
+      const providerRecord = RAW[provider];
+      for (const model of Object.keys(providerRecord)) Object.freeze(providerRecord[model]);
+      Object.freeze(providerRecord);
+    }
+    Object.freeze(RAW);
+  }
+});
+
+// bin/lib/migrations/runtime-config/v1_to_v2.ts
+var init_v1_to_v26 = __esm({
+  "bin/lib/migrations/runtime-config/v1_to_v2.ts"() {
+    "use strict";
+    init_llm_models();
+  }
+});
+
+// bin/lib/runtime.ts
+var init_runtime = __esm({
+  "bin/lib/runtime.ts"() {
+    "use strict";
+    init_atomic_write();
+    init_lock();
+    init_loader();
+    init_runtime_config();
+    init_v1_to_v26();
+    init_paths();
+    init_session_log();
+    init_exit_codes();
+    init_llm_models();
+    init_config2();
+  }
+});
+
+// bin/lib/replay.ts
+var init_replay = __esm({
+  "bin/lib/replay.ts"() {
+    "use strict";
+    init_paths();
+    init_exit_codes();
+  }
+});
+
+// bin/lib/prompts/schema.ts
+var SelectQuestionSchema, MultiSelectQuestionSchema, TextQuestionSchema, ConfirmQuestionSchema, MultilineQuestionSchema, PromptQuestionSchema;
+var init_schema = __esm({
+  "bin/lib/prompts/schema.ts"() {
+    "use strict";
+    init_zod();
+    SelectQuestionSchema = external_exports.object({
+      id: external_exports.string().min(1),
+      // stable identifier (used in answer log)
+      kind: external_exports.literal("select"),
+      label: external_exports.string().min(1),
+      // human-readable prompt text
+      options: external_exports.array(
+        external_exports.object({
+          value: external_exports.string().min(1),
+          // canonical machine value
+          label: external_exports.string().min(1),
+          // human-readable rendition
+          hint: external_exports.string().optional()
+        })
+      ).min(1),
+      default: external_exports.string().optional()
+      // option.value of the default
+    });
+    MultiSelectQuestionSchema = SelectQuestionSchema.extend({
+      kind: external_exports.literal("multiselect"),
+      default: external_exports.array(external_exports.string()).optional()
+    });
+    TextQuestionSchema = external_exports.object({
+      id: external_exports.string().min(1),
+      kind: external_exports.literal("text"),
+      label: external_exports.string().min(1),
+      default: external_exports.string().optional(),
+      placeholder: external_exports.string().optional(),
+      // An optional follow-up line (e.g. research's "add a source you know"): when
+      // scripted numbered answers run out before it, it takes its default instead
+      // of aborting the run.
+      optional: external_exports.boolean().optional()
+    });
+    ConfirmQuestionSchema = external_exports.object({
+      id: external_exports.string().min(1),
+      kind: external_exports.literal("confirm"),
+      label: external_exports.string().min(1),
+      default: external_exports.boolean().optional()
+      // true → [Y/n]; false or absent → [y/N]
+    });
+    MultilineQuestionSchema = external_exports.object({
+      id: external_exports.string().min(1),
+      kind: external_exports.literal("multiline"),
+      label: external_exports.string().min(1),
+      placeholder: external_exports.string().optional()
+    });
+    PromptQuestionSchema = external_exports.discriminatedUnion("kind", [
+      SelectQuestionSchema,
+      MultiSelectQuestionSchema,
+      TextQuestionSchema,
+      ConfirmQuestionSchema,
+      MultilineQuestionSchema
+    ]);
+  }
+});
+
+// bin/lib/prompts/numbered.ts
+var DEFAULT_TIMEOUT_MS;
+var init_numbered = __esm({
+  "bin/lib/prompts/numbered.ts"() {
+    "use strict";
+    init_prompts();
+    init_schema();
+    DEFAULT_TIMEOUT_MS = 5 * 60 * 1e3;
+  }
+});
+
+// bin/lib/prompts.ts
+var init_prompts = __esm({
+  "bin/lib/prompts.ts"() {
+    "use strict";
+    init_numbered();
+    init_schema();
+  }
+});
+
+// bin/lib/gates.ts
+var GATES;
+var init_gates = __esm({
+  "bin/lib/gates.ts"() {
+    "use strict";
+    init_prompts();
+    init_exit_codes();
+    GATES = Object.freeze([
+      { id: "outline-approval", label: "Approve this outline and register its sections?", yolo: "skip", yoloChoice: "approve the outline", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "PRD \xA77.20", summary: "outline approval" },
+      { id: "export-confirm", label: "Export the paper now?", yolo: "skip", yoloChoice: "export", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "PRD \xA77.20", summary: "export confirmation" },
+      { id: "research-scope", label: "Which research scope should I use?", yolo: "skip", yoloChoice: "use the first proposed scope", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "SRC-08", summary: "research scope" },
+      { id: "research-prune", label: "Select the candidate sources to keep", yolo: "skip", yoloChoice: "keep the evaluator's picks", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "SRC-09", summary: "research pruning" },
+      { id: "add-remap", label: "Map this source to a section now?", yolo: "skip", yoloChoice: "skip the remap", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "SRC-14", summary: "the `add` remap" },
+      { id: "revise-swap", label: "Apply this citation swap to the section?", yolo: "skip", yoloChoice: "apply the proposed swap", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "PRD \xA77.5", summary: "the revise swap" },
+      { id: "cost-cap", label: "This call would exceed your cost cap. Continue?", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_COST_CAP, declineExit: EXIT_COST_CAP, requirement: "RUN-18", summary: "the cost cap" },
+      { id: "estimate-proceed", label: "Proceed?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "RUN-20", summary: "the estimate confirmation" },
+      // EXP-17 (D-21-20): backend-neutral — the disclosure line before it names the detector and its host; the answer is recorded in config.toml ([humanizer] honesty_consent).
+      { id: "detector-consent", label: "Send the full paper text to the configured AI detector for a score (your answer is saved)?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "EXP-17", summary: "detector consent" },
+      { id: "paper-pointer", label: "Continue the active paper, or start a new paper here?", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_USAGE, declineExit: EXIT_USAGE, requirement: "RUN-14", summary: "the active-paper choice" },
+      { id: "sketch-confirm", label: "Proceed to intake with this thesis?", yolo: "skip", yoloChoice: "proceed to intake", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "ERGO-05", summary: "the `sketch` confirmation" },
+      { id: "assignment-pickup", label: "Use the assignment file in this folder?", yolo: "skip", yoloChoice: "use the file", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "GRND-01", summary: "the assignment-file pickup" },
+      { id: "intake-defaults", label: "Accept the intake defaults?", yolo: "skip", yoloChoice: "accept the defaults", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "GRND-02", summary: "the intake defaults" },
+      { id: "reoutline", label: "Re-outline a paper that already has drafts?", yolo: "skip", yoloChoice: "re-outline (a model re-outline also needs --force)", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "GRND-09", summary: "the re-outline confirmation (a model re-outline also needs `--force`)" },
+      { id: "plan-research", label: "Add these research hits to the section?", yolo: "skip", yoloChoice: "add the hits the evaluator kept to the section", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "GRND-17", summary: "the `plan N --research` hits" },
+      { id: "byo-folder", label: "Read the PDFs in this folder outside the paper and copy them into it?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "SRC-15", summary: "reading a PDF folder outside the paper" },
+      { id: "zotero-collection", label: "Pull this Zotero collection from your library into the paper?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "SRC-16", summary: "pulling a Zotero collection a paper's config names" },
+      { id: "pdf-attach-unmatched", label: "Attach this PDF although its first page does not show the work's title and first author?", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "SRC-13", summary: "attaching a PDF whose first page does not show the work" },
+      // VRFY-20 / S-04: a verification decision — --yolo never accepts a quote; without a terminal the section stays unverifiable (verify's own exit, 4).
+      { id: "quote-accept", label: "Accept these quotes whose source text cannot be checked?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "VRFY-20", summary: "accepting a quote whose source text cannot be checked" },
+      // VRFY-22: done's confirmation when Pass 2 judged claims UNSUPPORTED; the decision is recorded in .paper/VERIFICATION.md.
+      { id: "unsupported-claims", label: "Export the paper with these UNSUPPORTED claims?", yolo: "skip", yoloChoice: "export and record them as auto-accepted", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "VRFY-22", summary: "the UNSUPPORTED-claims confirmation" }
+    ]);
+  }
+});
+
+// bin/lib/budget.ts
+var capMutex;
+var init_budget = __esm({
+  "bin/lib/budget.ts"() {
+    "use strict";
+    init_paths();
+    init_atomic_write();
+    init_session_log();
+    init_gates();
+    init_config2();
+    capMutex = Promise.resolve();
+  }
+});
+
+// bin/lib/adapter-plan.ts
+var DEFAULT_DATABASES, PLANNABLE_ADAPTERS;
+var init_adapter_plan = __esm({
+  "bin/lib/adapter-plan.ts"() {
+    "use strict";
+    DEFAULT_DATABASES = ["openalex", "semanticscholar", "crossref", "arxiv", "pubmed"];
+    PLANNABLE_ADAPTERS = Object.freeze([...DEFAULT_DATABASES, "books", "zotero"]);
+  }
+});
+
+// bin/lib/query-expansion.ts
+var init_query_expansion = __esm({
+  "bin/lib/query-expansion.ts"() {
+    "use strict";
+    init_disciplines();
+  }
+});
+
+// bin/lib/research-sentinel.ts
+import { existsSync as existsSync5, readFileSync as readFileSync7 } from "node:fs";
+import { join as join3 } from "node:path";
+function isOwnOnly(entry) {
+  const tags = entry?.provenance;
+  if (!Array.isArray(tags) || tags.length === 0) return false;
+  return tags.every((t) => typeof t === "string" && OWN_SOURCE_PROVENANCE.has(t.split(":")[0] ?? ""));
+}
+function libraryState(pDir) {
+  const file = join3(pDir, "LIBRARY.json");
+  if (!existsSync5(file)) return "absent";
+  try {
+    const parsed = JSON.parse(readFileSync7(file, "utf8"));
+    if (!Array.isArray(parsed.entries)) return "unreadable";
+    if (parsed.entries.length === 0) return "empty";
+    return parsed.entries.every(isOwnOnly) ? "own-only" : "researched";
+  } catch {
+    return "unreadable";
+  }
+}
+function isSourcesViewOnly(text) {
+  let head = text;
+  const logEnd = lineStartIndex(head, LOG_END);
+  if (logEnd < 0) return false;
+  head = head.slice(0, logEnd);
+  const start = lineStartIndex(head, SOURCES_START);
+  if (start >= 0) {
+    const end = lineStartIndex(head, SOURCES_END, start);
+    if (end < 0) return false;
+    head = head.slice(0, start) + head.slice(end + SOURCES_END.length);
+  }
+  return head.replace(/^#\s+Research\s*$/m, "").trim().length === 0;
+}
+function lineStartIndex(text, prefix, from = 0) {
+  let at = text.indexOf(prefix, from);
+  while (at >= 0) {
+    if (at === 0 || text[at - 1] === "\n") return at;
+    at = text.indexOf(prefix, at + 1);
+  }
+  return -1;
+}
+function isFailedResearchLog(text) {
+  if (!/^# Research log\s*$/m.test(text)) return false;
+  const m2 = /^Result:\s*(.*)$/m.exec(text);
+  if (m2 === null) return false;
+  const result = (m2[1] ?? "").trim().toLowerCase();
+  return FAILED_RESEARCH_RESULTS.some((r) => result.startsWith(r));
+}
+function readText(file) {
+  try {
+    return existsSync5(file) ? readFileSync7(file, "utf8") : null;
+  } catch {
+    return null;
+  }
+}
+function isResearchDone(pDir) {
+  try {
+    if (existsSync5(join3(pDir, "OUTLINE.md"))) return true;
+    const lib = libraryState(pDir);
+    const log2 = readText(join3(pDir, "RESEARCH.md"));
+    if (log2 !== null && isFailedResearchLog(log2)) {
+      return lib === "own-only" || lib === "researched" || lib === "unreadable";
+    }
+    if (log2 !== null && (/^# Research log\s*$/m.test(log2) || !isSourcesViewOnly(log2))) return true;
+    return lib === "researched" || lib === "unreadable" || lib === "empty";
+  } catch {
+    return false;
+  }
+}
+var FAILED_RESEARCH_RESULTS, OWN_SOURCE_PROVENANCE, SOURCES_START, SOURCES_END, LOG_END;
+var init_research_sentinel = __esm({
+  "bin/lib/research-sentinel.ts"() {
+    "use strict";
+    FAILED_RESEARCH_RESULTS = Object.freeze([
+      "no sources found",
+      "no usable sources",
+      "no relevant sources",
+      "no sources kept"
+    ]);
+    OWN_SOURCE_PROVENANCE = /* @__PURE__ */ new Set(["byo", "zotero", "add"]);
+    __name(isOwnOnly, "isOwnOnly");
+    __name(libraryState, "libraryState");
+    SOURCES_START = "<!-- pensmith:sources:start";
+    SOURCES_END = "<!-- pensmith:sources:end -->";
+    LOG_END = "<!-- end of the research log:";
+    __name(isSourcesViewOnly, "isSourcesViewOnly");
+    __name(lineStartIndex, "lineStartIndex");
+    __name(isFailedResearchLog, "isFailedResearchLog");
+    __name(readText, "readText");
+    __name(isResearchDone, "isResearchDone");
+  }
+});
+
+// bin/lib/schemas/done-record.ts
+var DONE_RECORD_SCHEMA_VERSION, SHA2562, DoneRecordSchema;
+var init_done_record = __esm({
+  "bin/lib/schemas/done-record.ts"() {
+    "use strict";
+    init_zod();
+    DONE_RECORD_SCHEMA_VERSION = 1;
+    SHA2562 = /^[0-9a-f]{64}$/;
+    DoneRecordSchema = external_exports.object({
+      $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
+      done_at: external_exports.string().datetime(),
+      /** sha256 of the `.paper/DRAFT.md` bytes done's gate judged. */
+      compiled_draft_sha256: external_exports.string().regex(SHA2562),
+      /** sha256 of the `.paper/FINAL.md` done left: the text it exported. */
+      final_sha256: external_exports.string().regex(SHA2562),
+      /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
+      humanized: external_exports.boolean()
+    }).strict();
+  }
+});
+
+// bin/lib/done-record.ts
+import { existsSync as existsSync6, readFileSync as readFileSync8 } from "node:fs";
+import { basename, join as join4 } from "node:path";
+function doneRecordPath(paperRoot) {
+  return join4(paperDir(paperRoot), DONE_RECORD_FILE);
+}
+function readDoneRecord(paperRoot) {
+  try {
+    const parsed = DoneRecordSchema.safeParse(JSON.parse(readFileSync8(doneRecordPath(paperRoot), "utf8")));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+function verificationCheckedSha256(paperRoot) {
+  try {
+    const md = readFileSync8(join4(paperDir(paperRoot), "VERIFICATION.md"), "utf8");
+    return /^Text checked: .+ \(sha256 ([0-9a-f]{64})\)\s*$/mu.exec(md)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+function finalMdState(paperRoot) {
+  const dir = paperDir(paperRoot);
+  const finalPath = join4(dir, "FINAL.md");
+  if (!existsSync6(finalPath)) return "absent";
+  const finalSha = fileSha256(finalPath);
+  if (finalSha === "") return "edited";
+  const draftSha = fileSha256(join4(dir, "DRAFT.md"));
+  const record = readDoneRecord(paperRoot);
+  if (record !== null && record.final_sha256 === finalSha) return record.compiled_draft_sha256 === draftSha ? "current" : "stale";
+  if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? "current" : "stale";
+  return finalSha === draftSha ? "stale" : "edited";
+}
+function editedFinalReason(paperRoot) {
+  const dir = basename(paperDir(paperRoot));
+  return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
+}
+var DONE_RECORD_FILE;
+var init_done_record2 = __esm({
+  "bin/lib/done-record.ts"() {
+    "use strict";
+    init_atomic_write();
+    init_compile_inputs2();
+    init_paths();
+    init_done_record();
+    DONE_RECORD_FILE = "DONE-RECORD.json";
+    __name(doneRecordPath, "doneRecordPath");
+    __name(readDoneRecord, "readDoneRecord");
+    __name(verificationCheckedSha256, "verificationCheckedSha256");
+    __name(finalMdState, "finalMdState");
+    __name(editedFinalReason, "editedFinalReason");
+  }
+});
+
+// bin/lib/ecosystem-presence.ts
+var init_ecosystem_presence = __esm({
+  "bin/lib/ecosystem-presence.ts"() {
+    "use strict";
+    init_paths();
+  }
+});
+
+// bin/lib/estimator.ts
+function parseLengthWords(text) {
+  const words = /(\d{1,3}(?:,\d{3})+|\d{2,6})\s*(?:-|\s)?\s*words?\b/i.exec(text);
+  if (words?.[1]) {
+    const n = Number(words[1].replace(/,/g, ""));
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const pages = /(\d{1,3})\s*(?:-|\s)?\s*pages?\b/i.exec(text);
+  if (pages?.[1]) {
+    const n = Number(pages[1]);
+    if (Number.isFinite(n) && n > 0) return n * 275;
+  }
+  return null;
+}
+var STEP_SLUGS;
+var init_estimator = __esm({
+  "bin/lib/estimator.ts"() {
+    "use strict";
+    init_state2();
+    init_router();
+    init_paths();
+    init_frontmatter();
+    init_draft_text();
+    init_section_id();
+    init_llm_models();
+    init_pricing();
+    init_runtime();
+    init_replay();
+    init_config2();
+    init_budget();
+    init_adapter_plan();
+    init_query_expansion();
+    init_disciplines();
+    init_intake_brief();
+    init_research_sentinel();
+    init_done_record2();
+    init_ecosystem_presence();
+    init_config();
+    __name(parseLengthWords, "parseLengthWords");
+    STEP_SLUGS = Object.freeze({
+      new: [["intake-clarifier", 1]],
+      outline: [["outline-author", 1]],
+      plan: [["section-planner", 1]],
+      write: [["section-drafter", 1]]
+    });
+  }
+});
+
+// bin/lib/paper-brief.ts
+function readPaperBrief(root) {
+  const doc = readIntakeBrief(root);
+  const config = tryReadPaperConfigSync(root);
+  const project = config?.project;
+  const brief = doc?.brief;
+  const assignment = doc?.assignment ?? "";
+  const topic = (brief?.topic ?? "").trim() || (project?.title ?? "").trim();
+  const briefThesis = (brief?.thesis ?? "").trim();
+  const outlineThesis = readOutlineSync(root)?.thesis.trim() ?? "";
+  const discipline = resolveDiscipline({
+    discipline: { intake: brief?.discipline, config: project?.discipline_preset }
+  });
+  const lengthTarget = project?.length_target_words ?? brief?.length_target_words ?? (assignment ? parseLengthWords(assignment) : null) ?? DEFAULT_LENGTH_TARGET_WORDS;
+  return {
+    doc,
+    topic,
+    briefThesis,
+    thesis: outlineThesis || briefThesis,
+    title: (project?.title ?? "").trim() || topic,
+    discipline,
+    paperType: brief?.paper_type ?? "other",
+    counterargument: brief?.counterargument ?? "auto",
+    configCounterargument: project?.counterargument_required,
+    lengthTarget,
+    sectioningNotes: brief?.sectioning_notes ?? [],
+    assignment
+  };
+}
+var DEFAULT_LENGTH_TARGET_WORDS;
+var init_paper_brief = __esm({
+  "bin/lib/paper-brief.ts"() {
+    "use strict";
+    init_intake_brief();
+    init_config2();
+    init_disciplines();
+    init_estimator();
+    init_outline();
+    DEFAULT_LENGTH_TARGET_WORDS = 1500;
+    __name(readPaperBrief, "readPaperBrief");
+  }
+});
+
+// bin/lib/compile-inputs.ts
+import { createHash as createHash4 } from "node:crypto";
+import { readFileSync as readFileSync9 } from "node:fs";
+import { join as join5 } from "node:path";
+function compileInputsPath(paperRoot) {
+  return join5(paperDir(paperRoot), COMPILE_INPUTS_FILE);
+}
+function fileSha256(file) {
+  try {
+    return createHash4("sha256").update(readFileSync9(file)).digest("hex");
+  } catch {
+    return "";
+  }
+}
+function currentSectionInputs(paperRoot, s2) {
+  return {
+    id: formatSectionId(sectionIdOf(s2.n, s2.suffix)),
+    slug: s2.slug,
+    draft_sha256: fileSha256(sectionDraft(s2.n, s2.slug, paperRoot)),
+    verification_sha256: fileSha256(sectionVerification(s2.n, s2.slug, paperRoot))
+  };
+}
+function headingsSha256(h) {
+  return createHash4("sha256").update([h.title, ...h.sections.map((s2) => s2.title)].join("\n"), "utf8").digest("hex");
+}
+function compilePaperTitle(paperRoot, outlineTitle) {
+  const h1 = outlineTitle.trim();
+  if (h1.length > 0) return h1;
+  try {
+    return readPaperBrief(paperRoot).title.trim();
+  } catch {
+    return "";
+  }
+}
+function currentHeadings(paperRoot) {
+  const outline = readOutlineSync(paperRoot);
+  if (outline === null) return { title: "", sections: [] };
+  return {
+    title: compilePaperTitle(paperRoot, outline.paper_title),
+    sections: orderedOutlineSections(outline).map((s2) => ({ id: outlineSectionId(s2), title: s2.title.trim() }))
+  };
+}
+function readCompileInputs(paperRoot) {
+  try {
+    let value = JSON.parse(readFileSync9(compileInputsPath(paperRoot), "utf8"));
+    const version = /* @__PURE__ */ __name(() => typeof value === "object" && value !== null ? value["$schemaVersion"] : void 0, "version");
+    if (version() === 1) value = migrate7(value);
+    if (version() === 2) value = migrate8(value);
+    const parsed = CompileInputsSchema.safeParse(value);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+function headingsCurrent(paperRoot, record) {
+  return record.headings_sha256 !== null && headingsSha256(currentHeadings(paperRoot)) === record.headings_sha256;
+}
+function compiledInputsCurrent(paperRoot, registered) {
+  const record = readCompileInputs(paperRoot);
+  if (record === null) return null;
+  if (!headingsCurrent(paperRoot, record)) return false;
+  const now = sortBySectionId(registered.map((s2) => ({ ...sectionIdOf(s2.n, s2.suffix), slug: s2.slug })));
+  if (now.length !== record.sections.length) return false;
+  for (let i = 0; i < now.length; i += 1) {
+    const was = record.sections[i];
+    const is = currentSectionInputs(paperRoot, now[i]);
+    if (was.id !== is.id || was.slug !== is.slug || was.draft_sha256 !== is.draft_sha256 || was.verification_sha256 !== is.verification_sha256) {
+      return false;
+    }
+  }
+  return true;
+}
+var COMPILE_INPUTS_FILE;
+var init_compile_inputs2 = __esm({
+  "bin/lib/compile-inputs.ts"() {
+    "use strict";
+    init_atomic_write();
+    init_paths();
+    init_section_id();
+    init_compile_inputs();
+    init_v1_to_v24();
+    init_v2_to_v32();
+    init_outline();
+    init_outline_parse();
+    init_paper_brief();
+    COMPILE_INPUTS_FILE = "COMPILE-INPUTS.json";
+    __name(compileInputsPath, "compileInputsPath");
+    __name(fileSha256, "fileSha256");
+    __name(currentSectionInputs, "currentSectionInputs");
+    __name(headingsSha256, "headingsSha256");
+    __name(compilePaperTitle, "compilePaperTitle");
+    __name(currentHeadings, "currentHeadings");
+    __name(readCompileInputs, "readCompileInputs");
+    __name(headingsCurrent, "headingsCurrent");
+    __name(compiledInputsCurrent, "compiledInputsCurrent");
+  }
+});
+
+// bin/lib/section-registry.ts
+import { basename as basename2 } from "node:path";
+function identityLabel(s2) {
+  return formatSectionId(sectionIdOf(s2.n, s2.suffix));
+}
+function registeredSectionsSync(paperRoot) {
+  try {
+    const state = Schema.parse(migrateStateValue(JSON.parse(readStateTextSync(paperRoot))));
+    return sortBySectionId((state.sections ?? []).map((s2) => s2.suffix !== void 0 ? { n: s2.n, suffix: s2.suffix, slug: s2.slug } : { n: s2.n, slug: s2.slug }));
+  } catch {
+    return null;
+  }
+}
+function outlineIdentitiesSync(paperRoot) {
+  const doc = readOutlineSync(paperRoot);
+  if (doc === null) return null;
+  return doc.sections.map((s2) => s2.suffix !== void 0 ? { n: s2.n, suffix: s2.suffix, slug: s2.slug } : { n: s2.n, slug: s2.slug });
+}
+function sectionRegistryDivergence(registered, outline) {
+  const out2 = [];
+  const regBySlug = new Map(registered.map((s2) => [s2.slug, s2]));
+  const regById = new Map(registered.map((s2) => [identityLabel(s2), s2]));
+  const rowSlugs = new Set(outline.map((s2) => s2.slug));
+  const claimedIds = /* @__PURE__ */ new Set();
+  for (const row of outline) {
+    const id = identityLabel(row);
+    const reg = regBySlug.get(row.slug);
+    if (reg !== void 0) {
+      if (identityLabel(reg) !== id) {
+        out2.push(`OUTLINE.md numbers "${row.slug}" \xA7${id}, but STATE.json registers it as \xA7${identityLabel(reg)}`);
+      }
+      continue;
+    }
+    const holder = regById.get(id);
+    if (holder !== void 0 && !rowSlugs.has(holder.slug)) {
+      claimedIds.add(id);
+      out2.push(`OUTLINE.md lists \xA7${id} as "${row.slug}", but STATE.json registers \xA7${id} as "${holder.slug}"`);
+    } else {
+      out2.push(`OUTLINE.md lists \xA7${id} "${row.slug}", which STATE.json does not register`);
+    }
+  }
+  for (const reg of registered) {
+    if (rowSlugs.has(reg.slug) || claimedIds.has(identityLabel(reg))) continue;
+    out2.push(`STATE.json registers \xA7${identityLabel(reg)} "${reg.slug}", which OUTLINE.md does not list`);
+  }
+  return out2;
+}
+function outlineProblem(paperRoot) {
+  const read = readOutlineChecked(paperRoot);
+  const file = `${basename2(paperDir(paperRoot))}/OUTLINE.md`;
+  if (read.kind === "invalid") {
+    return `${file} cannot be read (${read.error}) \u2014 fix that row (\`pensmith outline\` then applies the edited outline), or re-outline it with \`pensmith outline --force\``;
+  }
+  if (read.kind === "absent") {
+    const registered = registeredSectionsSync(paperRoot);
+    if (registered !== null && registered.length > 0) {
+      const ids = registered.map((s2) => `\xA7${identityLabel(s2)}`).join(", ");
+      return `${file} is missing, but STATE.json registers ${ids} \u2014 restore it (e.g. from your backup or version control), or re-outline with \`pensmith outline --force\` (kept sections stay untouched)`;
+    }
+  }
+  return null;
+}
+function sectionRegistryProblem(paperRoot) {
+  const registered = registeredSectionsSync(paperRoot);
+  if (registered === null || registered.length === 0) return null;
+  const outline = outlineProblem(paperRoot);
+  if (outline !== null) return outline;
+  const rows = outlineIdentitiesSync(paperRoot);
+  if (rows === null) return null;
+  const problems = sectionRegistryDivergence(registered, rows);
+  if (problems.length === 0) return null;
+  return `OUTLINE.md and STATE.json disagree: ${problems.join("; ")} \u2014 ${RECONCILE_HINT}`;
+}
+var RECONCILE_HINT;
+var init_section_registry = __esm({
+  "bin/lib/section-registry.ts"() {
+    "use strict";
+    init_state2();
+    init_state();
+    init_outline();
+    init_paths();
+    init_section_id();
+    __name(identityLabel, "identityLabel");
+    __name(registeredSectionsSync, "registeredSectionsSync");
+    __name(outlineIdentitiesSync, "outlineIdentitiesSync");
+    __name(sectionRegistryDivergence, "sectionRegistryDivergence");
+    RECONCILE_HINT = "run `pensmith outline` to apply the edited OUTLINE.md (a registered section it no longer lists moves to sections/_archive/), or restore the row(s) in OUTLINE.md";
+    __name(outlineProblem, "outlineProblem");
+    __name(sectionRegistryProblem, "sectionRegistryProblem");
+  }
+});
+
+// bin/lib/verify/verdicts.ts
+function textRowLine(key) {
+  const m2 = /^\(L([1-9]\d*)\)$/.exec(key);
+  return m2 === null ? null : Number(m2[1]);
+}
+var DRAFT_VERDICTS, FAILING_VERDICTS, UNVERIFIABLE_VERDICTS, BLOCKING_VERDICTS, ACCEPTABLE_QUOTE_VERDICT, RETRY_ONLINE_VERDICTS, UNATTRIBUTED_CITEKEY, DRAFT_ROW_KEY;
+var init_verdicts = __esm({
+  "bin/lib/verify/verdicts.ts"() {
+    "use strict";
+    DRAFT_VERDICTS = ["PLACEHOLDER", "NO-CITATIONS"];
+    FAILING_VERDICTS = /* @__PURE__ */ new Set([
+      "FABRICATED",
+      "MIS-CITED",
+      "RETRACTED",
+      "UNASSIGNED",
+      "UNPARSEABLE",
+      "UNSUPPORTED-FORM",
+      "UNRESOLVABLE",
+      "NOT_FOUND",
+      "UNATTRIBUTED",
+      "NO-CITATIONS"
+    ]);
+    UNVERIFIABLE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK", "UNVERIFIABLE", "UNVERIFIABLE-QUOTE", "PLACEHOLDER"]);
+    BLOCKING_VERDICTS = /* @__PURE__ */ new Set([...FAILING_VERDICTS, ...UNVERIFIABLE_VERDICTS]);
+    ACCEPTABLE_QUOTE_VERDICT = "UNVERIFIABLE-QUOTE";
+    RETRY_ONLINE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK"]);
+    UNATTRIBUTED_CITEKEY = "(unattributed)";
+    DRAFT_ROW_KEY = "draft";
+    __name(textRowLine, "textRowLine");
+  }
+});
+
+// bin/lib/verify/verdict-rows.ts
+function verdictRowOf(line) {
+  const m2 = /^\s*-\s*(\S+?)(?:\s+\[q[1-9]\d*\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line) ?? /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line);
+  if (!m2 || m2[1] === void 0 || m2[2] === void 0) return null;
+  return { citekey: m2[1], verdict: m2[2], rest: m2[3] ?? "" };
+}
+function isTextRowKey(key) {
+  if (key === DRAFT_ROW_KEY || key === UNATTRIBUTED_CITEKEY) return true;
+  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key)) return true;
+  return textRowLine(key) !== null;
+}
+function revisableRows(verificationMd) {
+  const citations = [];
+  const textRows = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const line of verificationMd.split(/\r?\n/)) {
+    const row = verdictRowOf(line);
+    if (row === null || seen.has(row.citekey)) continue;
+    const text = isTextRowKey(row.citekey);
+    if (text ? !FAILING_VERDICTS.has(row.verdict) : !REVISABLE_VERDICTS.includes(row.verdict)) continue;
+    seen.add(row.citekey);
+    const f = { citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, "").trim()}` };
+    (text ? textRows : citations).push(f);
+  }
+  return { citations, textRows };
+}
+function reviseCanRepair(verificationMd) {
+  return revisableRows(verificationMd).citations.length > 0;
+}
+function rowReason(afterVerdict) {
+  const m2 = /^\s*—\s*(?:titleJW=\S+,\s*authorJW=\S+\s*—\s*|lev=\S+\s*—\s*)?(.*)$/u.exec(afterVerdict);
+  const reason = m2?.[1]?.replace(/ — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/, "").trim();
+  return reason !== void 0 && reason.length > 0 ? reason : void 0;
+}
+function parseBlockingVerdictRows(verificationMd) {
+  const out2 = [];
+  for (const line of verificationMd.split(/\r?\n/)) {
+    const pass3 = /^\s*-\s*(\S+?)(?:\s+\[(q[1-9]\d*)\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
+    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
+    const any = pass3 || pass1 ? null : /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
+    const verdict = pass3?.[3] ?? pass1?.[2] ?? any?.[1];
+    const matched = pass3 ?? pass1 ?? any;
+    if (verdict === void 0 || !BLOCKING_VERDICTS.has(verdict)) continue;
+    if (verdict === ACCEPTABLE_QUOTE_VERDICT && / — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/.test(line)) continue;
+    const citekey = pass3?.[1] ?? pass1?.[1];
+    const retraction = /\bcited work is retracted\b/.test(line);
+    const quoteId = pass3?.[2];
+    const reason = matched !== null ? rowReason(line.slice(matched.index + matched[0].length)) : void 0;
+    out2.push({
+      citekey: citekey ?? UNREADABLE_CITEKEY,
+      verdict,
+      ...retraction ? { retraction: true } : {},
+      ...quoteId !== void 0 ? { quoteId } : {},
+      ...reason !== void 0 ? { reason } : {}
+    });
+  }
+  return out2;
+}
+function sectionVerificationReasons(verificationMd, dryRunNow) {
+  const status = /^Status:\s*(\S+)/m.exec(verificationMd)?.[1];
+  if (status === void 0) {
+    return ["no verifiable VERIFICATION.md (no Status line: the section was never verified, or the verifier output is unreadable)"];
+  }
+  const dryRun = dryRunVerificationReason(verificationMd, dryRunNow);
+  if (dryRun !== null) return [dryRun];
+  const reasons = [];
+  if (status.toLowerCase() === "failed") reasons.push("VERIFICATION.md Status is 'failed'");
+  for (const row of parseBlockingVerdictRows(verificationMd)) reasons.push(verdictRowReason(row));
+  return reasons;
+}
+function verdictRowReason(row) {
+  if (row.citekey === "draft" && DRAFT_VERDICTS.includes(row.verdict)) {
+    return row.verdict === "PLACEHOLDER" ? "the draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model configured (`pensmith write <N>`)" : "the draft cites none of its assigned sources (NO-CITATIONS) \u2014 re-draft it (`pensmith write <N>`)";
+  }
+  const line = textRowLine(row.citekey);
+  if (line !== null && (row.verdict === "UNPARSEABLE" || row.verdict === "UNSUPPORTED-FORM")) {
+    return `line ${line} of the draft holds a citation the verifier cannot check (${row.verdict})`;
+  }
+  if (row.quoteId !== void 0 && row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
+    return blockingRowReason(row).replace("--accept-quote <id>", `--accept-quote ${row.quoteId}`);
+  }
+  return blockingRowReason(row);
+}
+function blockingRowReason(row) {
+  const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
+  if (RETRY_ONLINE_VERDICTS.has(row.verdict)) {
+    return `${cite} is ${row.verdict} (its source could not be checked: offline, --dry-run or a failed lookup) \u2014 re-run online`;
+  }
+  if (row.verdict === "UNVERIFIABLE") {
+    return `${cite} is UNVERIFIABLE \u2014 ${row.reason ?? "its registrar's answer cannot be compared with the entry"}`;
+  }
+  if (row.verdict === "RETRACTED") {
+    return `${cite} is RETRACTED \u2014 ${row.reason ?? "the cited work is retracted"}`;
+  }
+  if (row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
+    return `${cite} has a quote no source text could be checked against (${row.verdict}) \u2014 add the source's PDF (pensmith add <pdf>), paraphrase the quote (re-draft with pensmith write <N>, or edit the section's DRAFT.md and run pensmith verify <N>), or accept that one quote (pensmith verify <N> --accept-quote <id>)`;
+  }
+  return `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ": the cited work is retracted" : ""})`;
+}
+function dryRunVerificationReason(verificationMd, dryRunNow) {
+  if (dryRunNow) return null;
+  const first = verificationMd.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
+  return first.startsWith(DRY_RUN_VERIFICATION_MARKER) ? "verified under --dry-run against synthetic sources \u2014 re-run `pensmith verify` without --dry-run" : null;
+}
+var REVISABLE_VERDICTS, UNREADABLE_CITEKEY, DRY_RUN_VERIFICATION_MARKER;
+var init_verdict_rows = __esm({
+  "bin/lib/verify/verdict-rows.ts"() {
+    "use strict";
+    init_verdicts();
+    init_verdicts();
+    REVISABLE_VERDICTS = ["FABRICATED", "MIS-CITED", "RETRACTED", "UNASSIGNED", "UNPARSEABLE", "UNRESOLVABLE", "NOT_FOUND"];
+    __name(verdictRowOf, "verdictRowOf");
+    __name(isTextRowKey, "isTextRowKey");
+    __name(revisableRows, "revisableRows");
+    __name(reviseCanRepair, "reviseCanRepair");
+    __name(rowReason, "rowReason");
+    __name(parseBlockingVerdictRows, "parseBlockingVerdictRows");
+    UNREADABLE_CITEKEY = "(unreadable verdict row)";
+    __name(sectionVerificationReasons, "sectionVerificationReasons");
+    __name(verdictRowReason, "verdictRowReason");
+    __name(blockingRowReason, "blockingRowReason");
+    DRY_RUN_VERIFICATION_MARKER = "> OFFLINE MODE (--dry-run)";
+    __name(dryRunVerificationReason, "dryRunVerificationReason");
+  }
+});
+
+// bin/lib/router.ts
+import { existsSync as existsSync7, readFileSync as readFileSync10, statSync as statSync3 } from "node:fs";
+import { basename as basename3, join as join6 } from "node:path";
+function readSectionInfo(planPath) {
+  const none = { stub: false, failureReason: null, verifiedHash: null, assignedSources: [] };
+  if (!existsSync7(planPath)) {
+    return { status: "planned", corrupt: false, absent: true, ...none };
+  }
+  try {
+    const { frontmatter } = loadFrontmatterDocSync("plan", planPath);
+    const fm = frontmatter;
+    return {
+      status: typeof fm.status === "string" ? fm.status : "planned",
+      corrupt: false,
+      absent: false,
+      stub: fm.stub === true,
+      failureReason: typeof fm.failure_reason === "string" && fm.failure_reason.trim() ? fm.failure_reason.trim() : null,
+      verifiedHash: typeof fm.verified_against_draft_hash === "string" ? fm.verified_against_draft_hash : null,
+      assignedSources: Array.isArray(fm.assigned_sources) ? fm.assigned_sources.map(String) : []
+    };
+  } catch (e) {
+    process.stderr.write(
+      `[pensmith] PLAN.md at ${planPath} is unreadable/corrupt: ${e.message}
+`
+    );
+    return { status: "planned", corrupt: true, absent: false, ...none };
+  }
+}
+function draftHashOf(draftPath, assignedSources) {
+  try {
+    return computeDraftHash(readFileSync10(draftPath), [...assignedSources]);
+  } catch {
+    return null;
+  }
+}
+function verificationBlockers(verificationPath) {
+  let md;
+  try {
+    md = readFileSync10(verificationPath, "utf8");
+  } catch {
+    return ["its VERIFICATION.md is missing or unreadable"];
+  }
+  const reasons = sectionVerificationReasons(md, dryRunWorkspaceActive());
+  const unverifiable = parseBlockingVerdictRows(md).filter((r) => r.verdict === "UNVERIFIABLE" || RETRY_ONLINE_VERDICTS.has(r.verdict));
+  if (reasons.length > 1 && unverifiable.length === reasons.length) {
+    const keys = unverifiable.map((r) => `[@${r.citekey}]`);
+    const list2 = `${keys.slice(0, -1).join(", ")} and ${keys[keys.length - 1]}`;
+    return [`${list2} are UNVERIFIABLE (their sources could not be checked: offline, --dry-run or a failed lookup)`];
+  }
+  return reasons;
+}
+function recordHasPlaceholder(verificationPath) {
+  try {
+    return parseBlockingVerdictRows(readFileSync10(verificationPath, "utf8")).some((r) => r.verdict === "PLACEHOLDER");
+  } catch {
+    return false;
+  }
+}
+function recordRevisable(verificationPath) {
+  try {
+    return reviseCanRepair(readFileSync10(verificationPath, "utf8"));
+  } catch {
+    return true;
+  }
+}
+function unverifiableSectionDetail(verificationPath, label) {
+  let md;
+  try {
+    md = readFileSync10(verificationPath, "utf8");
+  } catch {
+    return `section ${label} could not be verified: its VERIFICATION.md is missing or unreadable \u2014 run \`pensmith verify ${label}\``;
+  }
+  const rows = parseBlockingVerdictRows(md);
+  if (rows.length === 0) return null;
+  const parts = [];
+  const quotes = rows.filter((r) => r.verdict === ACCEPTABLE_QUOTE_VERDICT);
+  if (quotes.length > 0) {
+    const ids = [...new Set(quotes.map((q) => q.quoteId ?? "?"))];
+    parts.push(
+      `${ids.length} quote(s) (${ids.join(", ")}) could not be checked against any source text \u2014 add the source's PDF (\`pensmith add <pdf>\`), paraphrase (re-draft with \`pensmith write ${label}\`, or edit its DRAFT.md and run \`pensmith verify ${label}\`), or accept a quote (\`pensmith verify ${label} --accept-quote ${ids[0]}\`)`
+    );
+  }
+  if (rows.some((r) => r.verdict === "PLACEHOLDER")) {
+    parts.push(`its draft is stub text written with no model configured (PLACEHOLDER) \u2014 re-draft it with a model: \`pensmith write ${label}\``);
+  }
+  const network = rows.filter((r) => RETRY_ONLINE_VERDICTS.has(r.verdict));
+  if (network.length > 0) {
+    parts.push(`${network.map((r) => `[@${r.citekey}]`).join(", ")} could not be checked (offline or a failed lookup) \u2014 re-run \`pensmith verify ${label}\` online`);
+  }
+  for (const r of rows.filter((x) => x.verdict === "UNVERIFIABLE")) {
+    parts.push(`[@${r.citekey}] cannot be checked by its registrar${r.reason !== void 0 ? ` \u2014 ${r.reason}` : ""}`);
+  }
+  if (parts.length === 0) parts.push(verificationBlockers(verificationPath).join("; "));
+  return `section ${label} could not be verified: ${parts.join("; ")}`;
+}
+function mtimeOf(p2) {
+  try {
+    return statSync3(p2).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+function compiledSectionCount(pDir) {
+  try {
+    const m2 = /^sections_count:\s*(\d+)\s*$/m.exec(readFileSync10(join6(pDir, "COMPILE-REPORT.md"), "utf8"));
+    return m2 ? Number(m2[1]) : null;
+  } catch {
+    return null;
+  }
+}
+function compiledDraftStale(pDir, sections, paperRoot) {
+  const compiledAt = mtimeOf(join6(pDir, "DRAFT.md"));
+  if (compiledAt === null) return true;
+  const record = readCompileInputs(paperRoot);
+  if (record !== null && (record.compiled_draft_sha256 === null || record.sections.some((s2) => s2.verified_against_draft_hash === null))) return true;
+  const current = compiledInputsCurrent(paperRoot, sections);
+  if (current !== null) return !current;
+  for (const { n, slug } of sections) {
+    for (const file of [sectionDraft(n, slug, paperRoot), sectionVerification(n, slug, paperRoot)]) {
+      const at = mtimeOf(file);
+      if (at !== null && at > compiledAt) return true;
+    }
+  }
+  const count = compiledSectionCount(pDir);
+  return count !== null && count !== sections.length;
+}
+async function resolveNextAction(paperRoot, opts = {}) {
+  try {
+    let state;
+    try {
+      state = await loadState(paperRoot);
+    } catch (e) {
+      if (e instanceof StateNotFoundError) return { verb: "new" };
+      process.stderr.write(
+        `[pensmith] STATE.json at ${paperRoot} is unreadable/corrupt: ${e.message}
+`
+      );
+      return { verb: "status", reason: "attention" };
+    }
+    const pDir = paperDir(paperRoot);
+    const researchDone = isResearchDone(pDir);
+    if (!researchDone) return { verb: "research" };
+    if (opts.stopAfterResearch && researchDone) {
+      return { verb: "status", reason: "done" };
+    }
+    const sections = state.sections ?? [];
+    if (sections.length === 0 && existsSync7(join6(pDir, "OUTLINE.rejected.md"))) {
+      return {
+        verb: "status",
+        reason: "attention",
+        detail: "the last outline was rejected (the replies are in .paper/OUTLINE.rejected.md) \u2014 fix the problem it names, then run `pensmith outline`"
+      };
+    }
+    const outlineIssue = outlineProblem(paperRoot);
+    if (outlineIssue !== null) return { verb: "status", reason: "attention", detail: outlineIssue };
+    if (!existsSync7(join6(pDir, "OUTLINE.md"))) return { verb: "outline" };
+    if (sections.length === 0) return { verb: "outline" };
+    const registry = sectionRegistryProblem(paperRoot);
+    if (registry !== null) return { verb: "status", reason: "attention", detail: registry };
+    if (opts.stopAfterOutline) return { verb: "status", reason: "done", detail: OUTLINE_ONLY_DONE };
+    const unverifiablePast = [];
+    for (const { n, slug, suffix } of sortBySectionId(sections)) {
+      const id = suffix !== void 0 ? { n, slug, suffix } : { n, slug };
+      const label = formatSectionId(sectionIdOf(n, suffix));
+      const r = readSectionInfo(sectionPlan(n, slug, paperRoot));
+      if (r.absent) return { verb: "plan", ...id };
+      if (r.corrupt) {
+        return {
+          verb: "status",
+          reason: "attention",
+          section: id,
+          detail: `section ${label}'s PLAN.md is unreadable \u2014 fix it, or re-plan with \`pensmith plan ${label}\``
+        };
+      }
+      switch (r.status) {
+        case "verified":
+          if (!existsSync7(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
+          continue;
+        case "planned":
+          return r.stub ? { verb: "plan", ...id } : { verb: "write", ...id };
+        case "writing":
+          return { verb: "write", ...id };
+        case "failed":
+          if (r.failureReason !== null || !existsSync7(sectionDraft(n, slug, paperRoot))) {
+            return {
+              verb: "status",
+              reason: "attention",
+              section: id,
+              detail: `section ${label} failed${r.failureReason ? `: ${r.failureReason}` : ""} \u2014 adjust its plan or sources if needed, then run \`pensmith write ${label}\``
+            };
+          }
+          if (r.verifiedHash !== null && draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) === r.verifiedHash) {
+            return {
+              verb: "status",
+              reason: "attention",
+              section: id,
+              detail: recordRevisable(sectionVerification(n, slug, paperRoot)) ? `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 repair the flagged citations with \`pensmith plan ${label} --revise\` (one per run; then \`pensmith\` re-verifies the section), or re-draft with \`pensmith write ${label}\` (\`pensmith verify ${label}\` re-checks it as it is)` : `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 the flagged text is not a citation \`--revise\` can swap: edit it in the section's DRAFT.md (a citation written as [@citekey]) and run \`pensmith verify ${label}\`, or re-draft with \`pensmith write ${label}\``
+            };
+          }
+          return { verb: "verify", ...id };
+        // the draft changed: re-attempt verification — NOT continue
+        case "unverifiable": {
+          if (!existsSync7(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
+          if (r.verifiedHash === null || draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) !== r.verifiedHash) {
+            return { verb: "verify", ...id };
+          }
+          unverifiablePast.push({ id, label, verificationPath: sectionVerification(n, slug, paperRoot) });
+          continue;
+        }
+        case "written":
+        case "verifying":
+          if (!existsSync7(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
+          return { verb: "verify", ...id };
+        default:
+          return {
+            verb: "status",
+            reason: "attention",
+            section: id,
+            detail: `section ${label}'s PLAN.md has an unknown status "${r.status}"`
+          };
+      }
+    }
+    if (!dryRunWorkspaceActive()) {
+      const stub = unverifiablePast.filter((u) => recordHasPlaceholder(u.verificationPath));
+      if (stub.length > 0) {
+        return {
+          verb: "status",
+          reason: "attention",
+          section: stub[0].id,
+          detail: stub.map((u) => unverifiableSectionDetail(u.verificationPath, u.label) ?? `section ${u.label}'s draft is stub text \u2014 \`pensmith write ${u.label}\``).join("; ")
+        };
+      }
+    }
+    const record = readCompileInputs(paperRoot);
+    if (record !== null && record.compiled_draft_sha256 !== null && existsSync7(join6(pDir, "DRAFT.md")) && fileSha256(join6(pDir, "DRAFT.md")) !== record.compiled_draft_sha256) {
+      return {
+        verb: "status",
+        reason: "attention",
+        detail: `${basename3(pDir)}/DRAFT.md was edited after compile \u2014 make the edit in the section drafts (then \`pensmith\` re-verifies them) and run \`pensmith compile\`, which replaces the edited file`
+      };
+    }
+    if (compiledDraftStale(pDir, sections, paperRoot)) return { verb: "compile" };
+    const finalState = finalMdState(paperRoot);
+    if (finalState === "edited") return { verb: "status", reason: "attention", detail: editedFinalReason(paperRoot) };
+    if (finalState !== "current") {
+      return record === null ? { verb: "compile" } : { verb: "done" };
+    }
+    return { verb: "status", reason: "done" };
+  } catch (e) {
+    process.stderr.write(
+      `[pensmith] router resolveNextAction hit an unexpected error: ${e.message}
+`
+    );
+    return { verb: "status", reason: "attention" };
+  }
+}
+var OUTLINE_ONLY_DONE;
+var init_router = __esm({
+  "bin/lib/router.ts"() {
+    "use strict";
+    init_state2();
+    init_paths();
+    init_frontmatter();
+    init_section_id();
+    init_draft_hash();
+    init_compile_inputs2();
+    init_section_registry();
+    init_verdict_rows();
+    init_verdicts();
+    init_research_sentinel();
+    init_verdicts();
+    init_compile_inputs2();
+    init_done_record2();
+    __name(readSectionInfo, "readSectionInfo");
+    __name(draftHashOf, "draftHashOf");
+    __name(verificationBlockers, "verificationBlockers");
+    __name(recordHasPlaceholder, "recordHasPlaceholder");
+    __name(recordRevisable, "recordRevisable");
+    __name(unverifiableSectionDetail, "unverifiableSectionDetail");
+    __name(mtimeOf, "mtimeOf");
+    __name(compiledSectionCount, "compiledSectionCount");
+    __name(compiledDraftStale, "compiledDraftStale");
+    OUTLINE_ONLY_DONE = 'outline only: the approved outline is .paper/OUTLINE.md (its sources in .paper/LIBRARY.json and CITATIONS.bib) \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
+    __name(resolveNextAction, "resolveNextAction");
+  }
+});
+
+// bin/lib/handoff.ts
+import { existsSync as existsSync8, readFileSync as readFileSync11 } from "node:fs";
+import path10 from "node:path";
+function sectionOf(d) {
+  return { id: formatSectionId(sectionIdOf(d.n, d.suffix)), slug: d.slug };
+}
+function handoffPositionOf(decision) {
+  switch (decision.verb) {
+    case "new":
+      return { phase: "intake", section: null, position: null, current_section: null };
+    case "research":
+    case "outline":
+    case "compile":
+      return { phase: decision.verb, section: null, position: null, current_section: null };
+    case "plan":
+    case "write":
+    case "verify": {
+      const s2 = sectionOf(decision);
+      return { phase: "sectioning", section: s2.id, position: decision.verb, current_section: s2.slug };
+    }
+    case "done":
+      return { phase: "export", section: null, position: null, current_section: null };
+    case "status": {
+      const s2 = decision.section ? sectionOf(decision.section) : null;
+      return {
+        phase: decision.reason === "done" ? "done" : "attention",
+        section: s2?.id ?? null,
+        position: null,
+        current_section: s2?.slug ?? null
+      };
+    }
+    default:
+      return { phase: "attention", section: null, position: null, current_section: null };
+  }
+}
+function nextActionOf(decision, opts = {}) {
+  const quoteDetail = opts.quoteDetail ?? true;
+  const run = /* @__PURE__ */ __name((cmd) => `run /pensmith (or \`pensmith ${cmd}\`)`, "run");
+  let text;
+  switch (decision.verb) {
+    case "new":
+      text = `Start the paper from the assignment: ${run("new")}.`;
+      break;
+    case "research":
+      text = `Find and evaluate sources: ${run("research")}.`;
+      break;
+    case "outline":
+      text = `Outline the paper and approve it: ${run("outline")}.`;
+      break;
+    case "plan":
+    case "write":
+    case "verify": {
+      const id = formatSectionId(sectionIdOf(decision.n, decision.suffix));
+      const what = { plan: "Plan", write: "Draft", verify: "Verify the citations of" }[decision.verb];
+      text = `${what} section ${sectionLabel(sectionIdOf(decision.n, decision.suffix))} (${decision.slug}): ${run(`${decision.verb} ${id}`)}.`;
+      break;
+    }
+    case "compile":
+      text = `Compile the verified sections into DRAFT.md: ${run("compile")}.`;
+      break;
+    case "done":
+      text = `Export the paper: ${run("done")}.`;
+      break;
+    case "status": {
+      const detail = decision.detail !== void 0 && (quoteDetail || decision.detail === OUTLINE_ONLY_DONE) ? decision.detail : null;
+      if (decision.reason === "done") {
+        text = decision.detail !== void 0 ? `Nothing more is routed: ${detail ?? "run /pensmith status to see why."}` : "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it).";
+      } else if (detail !== null) {
+        text = `Needs attention: ${detail}`;
+      } else {
+        const at = decision.section ? ` at section ${sectionLabel(sectionIdOf(decision.section.n, decision.section.suffix))} (${decision.section.slug})` : "";
+        text = `Needs attention${at}: run /pensmith status to see what and the command that fixes it.`;
+      }
+      break;
+    }
+    default:
+      text = "Run /pensmith status to see where the paper stands.";
+  }
+  return text.length > 200 ? `${text.slice(0, 199)}\u2026` : text;
+}
+function serializedSize(h) {
+  return Buffer.byteLength(JSON.stringify(h, null, 2), "utf8") + 1;
+}
+function fitPointers(base, pointers) {
+  let kept = pointers.filter((p2) => SectionPointerSchema.safeParse(p2).success);
+  const fits = /* @__PURE__ */ __name(() => serializedSize({ ...base, section_pointers: kept }) <= HANDOFF_MAX_BYTES, "fits");
+  if (fits()) return kept;
+  kept = kept.filter((p2) => p2.state !== "verified");
+  while (kept.length > 0 && !fits()) {
+    const at = kept.findIndex((p2) => p2.slug === base.current_section);
+    if (at < 0 || kept.length - 1 - at >= at) kept.pop();
+    else kept.shift();
+  }
+  return kept;
+}
+function assembleHandoff(input) {
+  const pos = handoffPositionOf(input.decision);
+  const base = {
+    schema_version: CURRENT_HANDOFF_VERSION,
+    last_updated: (input.now ?? /* @__PURE__ */ new Date()).toISOString(),
+    phase: pos.phase,
+    section: pos.section,
+    position: pos.position,
+    // A slug longer than the schema allows is recorded as null (the section
+    // id still says where the paper is).
+    current_section: pos.current_section !== null && pos.current_section.length <= HANDOFF_SLUG_MAX ? pos.current_section : null,
+    next_action: nextActionOf(input.decision)
+  };
+  return HandoffSchema.parse({ ...base, section_pointers: fitPointers(base, input.sectionPointers) });
+}
+async function writeHandoff(handoff, paperDir2 = paperDir()) {
+  HandoffSchema.parse(handoff);
+  const content = JSON.stringify(handoff, null, 2) + "\n";
+  const size = Buffer.byteLength(content, "utf8");
+  if (size > HANDOFF_MAX_BYTES) {
+    throw new Error(
+      `HANDOFF serialized size ${size} exceeds ${HANDOFF_MAX_BYTES} bytes (D-17)`
+    );
+  }
+  const targetPath = path10.join(paperDir2, HANDOFF_FILENAME);
+  return withLock(
+    targetPath,
+    async () => {
+      const existing = readHandoff(paperDir2);
+      if (existing.kind === "newer") return { written: false, newerVersion: existing.version };
+      await atomicWriteFile(targetPath, content);
+      return { written: true };
+    },
+    { timeoutMs: WRITE_LOCK_TIMEOUT_MS }
+  );
+}
+function readHandoff(paperDir2) {
+  const file = path10.join(paperDir2, HANDOFF_FILENAME);
+  if (!existsSync8(file)) return { kind: "absent" };
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync11(file, "utf8"));
+  } catch {
+    return { kind: "invalid" };
+  }
+  const version = raw !== null && typeof raw === "object" ? raw.schema_version : void 0;
+  if (typeof version === "number" && Number.isInteger(version) && version > CURRENT_HANDOFF_VERSION) {
+    return { kind: "newer", version };
+  }
+  if (version === 1) {
+    const v1 = HandoffV1Schema.safeParse(raw);
+    if (!v1.success) return { kind: "invalid" };
+    const v22 = HandoffSchema.safeParse(migrate(v1.data));
+    return v22.success ? { kind: "ok", handoff: v22.data, migratedFrom: 1 } : { kind: "invalid" };
+  }
+  const v2 = HandoffSchema.safeParse(raw);
+  return v2.success ? { kind: "ok", handoff: v2.data, migratedFrom: null } : { kind: "invalid" };
+}
+var HANDOFF_FILENAME, HANDOFF_PATH, WRITE_LOCK_TIMEOUT_MS;
+var init_handoff2 = __esm({
+  "bin/lib/handoff.ts"() {
+    "use strict";
+    init_handoff();
+    init_v1_to_v2();
+    init_atomic_write();
+    init_lock();
+    init_paths();
+    init_section_id();
+    init_router();
+    HANDOFF_FILENAME = "HANDOFF.json";
+    HANDOFF_PATH = `.paper/${HANDOFF_FILENAME}`;
+    WRITE_LOCK_TIMEOUT_MS = 5e3;
+    __name(sectionOf, "sectionOf");
+    __name(handoffPositionOf, "handoffPositionOf");
+    __name(nextActionOf, "nextActionOf");
+    __name(serializedSize, "serializedSize");
+    __name(fitPointers, "fitPointers");
+    __name(assembleHandoff, "assembleHandoff");
+    __name(writeHandoff, "writeHandoff");
+    __name(readHandoff, "readHandoff");
+  }
+});
+
+// bin/lib/hooks/pre-compact.ts
+var pre_compact_exports = {};
+__export(pre_compact_exports, {
+  PRECOMPACT_DEADLINE_MS: () => PRECOMPACT_DEADLINE_MS,
+  collectSectionPointers: () => collectSectionPointers,
+  writePreCompactHandoff: () => writePreCompactHandoff
+});
+import { existsSync as existsSync9 } from "node:fs";
+import path11 from "node:path";
+function rel(root, abs) {
+  return path11.relative(root, abs).split(path11.sep).join("/");
+}
+async function collectSectionPointers(root) {
+  let sections;
+  try {
+    sections = sortBySectionId((await loadState(root)).sections ?? []);
+  } catch {
+    return [];
+  }
+  const out2 = [];
+  for (const { n, slug } of sections) {
+    try {
+      const plan = sectionPlan(n, slug, root);
+      const draft = sectionDraft(n, slug, root);
+      const verification = sectionVerification(n, slug, root);
+      const info = readSectionInfo(plan);
+      const state = SectionStateSchema.safeParse(info.status);
+      out2.push({
+        slug,
+        plan_path: rel(root, plan),
+        draft_path: existsSync9(draft) ? rel(root, draft) : null,
+        verification_path: existsSync9(verification) ? rel(root, verification) : null,
+        state: !info.absent && !info.corrupt && state.success ? state.data : "planned"
+      });
+    } catch {
+    }
+  }
+  return out2;
+}
+async function writePreCompactHandoff(root, opts = {}) {
+  const deadlineMs = opts.deadlineMs ?? PRECOMPACT_DEADLINE_MS;
+  let timer;
+  const work = (async () => {
+    const decision = await resolveNextAction(root, opts.routeOptions ?? {});
+    const pDir = paperDir(root);
+    const handoff = assembleHandoff({
+      decision,
+      sectionPointers: await collectSectionPointers(root),
+      ...opts.now ? { now: opts.now } : {}
+    });
+    const file = path11.join(pDir, "HANDOFF.json");
+    const w = await writeHandoff(handoff, pDir);
+    if (!w.written) {
+      return {
+        written: false,
+        error: `${file} was written by a newer pensmith (schema_version ${w.newerVersion}); left in place, never downgraded`
+      };
+    }
+    return { written: true, handoff, file };
+  })();
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(
+      () => resolve({ written: false, error: `the HANDOFF.json write did not finish within ${deadlineMs / 1e3}s` }),
+      deadlineMs
+    );
+  });
+  try {
+    return await Promise.race([
+      work.catch((e) => ({ written: false, error: e instanceof Error ? e.message : String(e) })),
+      deadline
+    ]);
+  } finally {
+    if (timer !== void 0) clearTimeout(timer);
+  }
+}
+var PRECOMPACT_DEADLINE_MS;
+var init_pre_compact = __esm({
+  "bin/lib/hooks/pre-compact.ts"() {
+    "use strict";
+    init_handoff2();
+    init_state();
+    init_state2();
+    init_paths();
+    init_router();
+    init_section_id();
+    PRECOMPACT_DEADLINE_MS = 8e3;
+    __name(rel, "rel");
+    __name(collectSectionPointers, "collectSectionPointers");
+    __name(writePreCompactHandoff, "writePreCompactHandoff");
   }
 });
 
@@ -19992,8 +20620,8 @@ var init_route_options = __esm({
 import * as fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-function canonicalPath(p) {
-  const resolved = path.resolve(p);
+function canonicalPath(p2) {
+  const resolved = path.resolve(p2);
   let real;
   try {
     real = fs.realpathSync.native(resolved);
@@ -20111,10 +20739,14 @@ if (isMainModule(import.meta.url)) {
 }
 
 // Bundled npm packages (name@version — license; their license comments are kept inline above):
+//   @clack/core@0.3.5 — MIT
+//   @clack/prompts@0.7.0 — MIT
 //   graceful-fs@4.2.11 — ISC
+//   picocolors@1.1.1 — ISC
 //   proper-lockfile@4.1.2 — MIT
 //   retry@0.12.0 — MIT
 //   signal-exit@3.0.7 — ISC
+//   sisteransi@1.0.5 — MIT
 //   smol-toml@1.6.1 — BSD-3-Clause
 //   yaml@2.9.0 — ISC
 //   zod@3.25.76 — MIT
