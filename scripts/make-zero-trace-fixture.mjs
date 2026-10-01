@@ -46,6 +46,7 @@ const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
   <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+  <Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/>
 </Types>
 `;
 
@@ -57,6 +58,7 @@ const RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
   <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
   <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+  <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties" Target="docProps/custom.xml"/>
 </Relationships>
 `;
 
@@ -90,6 +92,17 @@ const APP = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </Properties>
 `;
 
+// --- docProps/custom.xml — what pandoc writes for --citeproc --csl --bibliography
+// (Phase 21, EXP-06/EXP-07): ABSOLUTE LOCAL PATHS of the export bibliography
+// and of the installed CSL file. Neither names pensmith, so only removing the
+// part (or blanking every property) cleans it; the zero-trace scanner flags it.
+const CUSTOM = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="bibliography"><vt:lpwstr>/tmp/x/Users/bob/School/essay/.paper/export/CITATIONS.bib</vt:lpwstr></property>
+  <property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="3" name="csl"><vt:lpwstr>/Users/bob/.claude/plugins/cache/plugin/templates/citation-styles/apa.csl</vt:lpwstr></property>
+</Properties>
+`;
+
 // --- word/document.xml — trivial well-formed body; NO 'pensmith'.
 const DOCUMENT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -101,11 +114,12 @@ const DOCUMENT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 async function main() {
   const zip = new JSZip();
-  zip.file('[Content_Types].xml', CONTENT_TYPES, { date: EPOCH });
-  zip.file('_rels/.rels', RELS, { date: EPOCH });
-  zip.file('docProps/core.xml', CORE, { date: EPOCH });
-  zip.file('docProps/app.xml', APP, { date: EPOCH });
-  zip.file('word/document.xml', DOCUMENT, { date: EPOCH });
+  zip.file('[Content_Types].xml', CONTENT_TYPES, { date: EPOCH, createFolders: false });
+  zip.file('_rels/.rels', RELS, { date: EPOCH, createFolders: false });
+  zip.file('docProps/core.xml', CORE, { date: EPOCH, createFolders: false });
+  zip.file('docProps/app.xml', APP, { date: EPOCH, createFolders: false });
+  zip.file('docProps/custom.xml', CUSTOM, { date: EPOCH, createFolders: false });
+  zip.file('word/document.xml', DOCUMENT, { date: EPOCH, createFolders: false });
 
   const buf = await zip.generateAsync({
     type: 'nodebuffer',

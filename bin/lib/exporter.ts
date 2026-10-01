@@ -280,6 +280,23 @@ async function builtIn(format: ExportFormat, prep: PreparedText, withBibliograph
   return { bytes: await writePdf(doc), literal: doc.literal };
 }
 
+/** The zero-trace scrub of a written document (docx: zeroTracePatch; PDF: zeroTracePdf). */
+async function scrub(file: string, format: ExportFormat): Promise<void> {
+  if (format === 'docx') await zeroTracePatch(file);
+  else if (format === 'pdf') await zeroTracePdf(file);
+}
+
+let scrubOverride: ((file: string, format: ExportFormat) => Promise<void>) | null = null;
+
+/**
+ * Test-only seam: replace the scrub step (a failing scrub must leave nothing
+ * in export/, D-21-08). Pass null to restore it. Double-underscore marks it
+ * test-only (the __setTaskRunnerForTest pattern).
+ */
+export function __setScrubForTest(fn: ((file: string, format: ExportFormat) => Promise<void>) | null): void {
+  scrubOverride = fn;
+}
+
 /** One line of an error, for a note. */
 function firstLine(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
@@ -385,8 +402,10 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     throw e;
   }
   try {
-    if (writer === 'pandoc' && format === 'docx') await zeroTracePatch(outputPath);
-    if (writer === 'pandoc' && format === 'pdf') await zeroTracePdf(outputPath);
+    // The scrub is the mandatory last step of every docx and PDF, whichever
+    // writer made it (the built-in writers' output is already clean; the scrub
+    // is then a no-op that proves it).
+    await (scrubOverride ?? scrub)(outputPath, format);
   } catch (e) {
     await removeWritten();
     throw new ZeroTraceError([{ file: basename(outputPath), where: 'scrub', finding: `could not be scrubbed (${firstLine(e)})` }], written);

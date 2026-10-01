@@ -6,7 +6,20 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  caseProtectTitle,
+  isNoteStyle,
+  parseBibEntries,
+  renderDocumentCitations,
+  runsText,
+  type DocumentCitation,
+} from '../bin/lib/citations.js';
+import { exportDraft } from '../bin/lib/exporter.js';
+import { withCapturedOutput } from '../bin/lib/output-sink.js';
 
 const citationsPath = new URL('../bin/lib/citations.ts', import.meta.url);
 const apaCslPath = new URL('../plugin/templates/citation-styles/apa.csl', import.meta.url);
@@ -277,3 +290,119 @@ test('citation-render: renderInText throws TypeError on non-array input (REND-01
     );
   },
 );
+
+// ====================================================================
+//   Phase 21 — the whole-document renderer (D-21-03, D-21-04, D-21-06, D-21-07)
+// ====================================================================
+// renderDocumentCitations runs ONE citeproc engine over every citation of a
+// document in order: numbering, note forms (first / subsequent / ibid) and
+// the bibliography are the engine's, as in pandoc (the goldens,
+// tests/citation-goldens.test.ts, compare whole documents with pandoc 3.9).
+
+const GOLD_BIB = fileURLToPath(new URL('./fixtures/citation-goldens/fixture.bib', import.meta.url));
+const DOC_ENTRIES = parseBibEntries(readFileSync(GOLD_BIB, 'utf8')).entries;
+const A = 'lindqvist2012';
+const B = 'kuhn1962';
+const C = 'okafor2019';
+const cite = (...ids: string[]): DocumentCitation => ({ items: ids.map((id) => ({ id })) });
+
+test('D-21-03: a numeric style numbers sources in first-citation order across every citation (IEEE B, A, B, [A; C])', async () => {
+  const r = await renderDocumentCitations(DOC_ENTRIES, 'ieee', [cite(B), cite(A), cite(B), cite(A, C)]);
+  assert.deepEqual(r.citations.map((c) => runsText(c.inline)), ['[1]', '[2]', '[1]', '[2], [3]']);
+  assert.deepEqual(r.bibliography.map((e) => [e.id, runsText(e.label ?? [])]), [[B, '[1]'], [A, '[2]'], [C, '[3]']]);
+  assert.equal(r.noteStyle, false);
+});
+
+test('D-21-03: Vancouver numbers in parentheses and AMA prints superscript runs', async () => {
+  const v = await renderDocumentCitations(DOC_ENTRIES, 'vancouver', [cite(B), cite(A, C)]);
+  assert.deepEqual(v.citations.map((c) => runsText(c.inline)), ['(1)', '(2,3)']);
+  const ama = await renderDocumentCitations(DOC_ENTRIES, 'ama', [cite(B), cite(A), cite(B)]);
+  assert.deepEqual(ama.citations.map((c) => runsText(c.inline)), ['1', '2', '1']);
+  assert.ok(ama.citations.every((c) => c.inline.every((r) => r.sup === true)), 'AMA citations are superscript runs');
+});
+
+test('D-21-03: locators, clusters, narrative and -@k forms render as pandoc renders them (APA)', async () => {
+  const r = await renderDocumentCitations(DOC_ENTRIES, 'apa', [
+    { items: [{ id: C, locator: '40', label: 'page' }] },
+    cite(C, A),
+    { items: [{ id: A }], narrative: true },
+    { items: [{ id: A, suppressAuthor: true }] },
+    { items: [{ id: B, locator: '2', label: 'chapter' }] },
+  ]);
+  assert.deepEqual(r.citations.map((c) => runsText(c.inline)), [
+    '(Okafor, 2019, p. 40)',
+    '(Lindqvist & Berg, 2012; Okafor, 2019)',
+    'Lindqvist & Berg (2012)',
+    '(2012)',
+    '(Kuhn, 1962, Chapter 2)',
+  ]);
+  const ieee = await renderDocumentCitations(DOC_ENTRIES, 'ieee', [cite(B), { items: [{ id: A }], narrative: true }]);
+  assert.equal(runsText(ieee.citations[1]?.inline ?? []), '[2]', 'a numeric narrative citation prints its number, as pandoc does');
+});
+
+test('D-21-03 / EXP-04: a note style makes footnotes — first full, subsequent short, the same source again short with its locator — and narrative authors in the text', async () => {
+  const r = await renderDocumentCitations(DOC_ENTRIES, 'chicago-notes-bib', [
+    cite(B),
+    cite(A),
+    cite(B),
+    { items: [{ id: C, locator: '40', label: 'page' }] },
+    { items: [{ id: C, locator: '41', label: 'page' }] },
+    { items: [{ id: A }], narrative: true },
+  ]);
+  assert.equal(r.noteStyle, true);
+  assert.equal(isNoteStyle('chicago-notes-bib'), true);
+  const notes = r.citations.map((c) => runsText(c.note ?? []));
+  assert.equal(notes[0], 'Thomas S. Kuhn, The Structure of Scientific Revolutions (Chicago: University of Chicago Press, 1962).');
+  assert.equal(notes[2], 'Kuhn, The Structure of Scientific Revolutions.', 'a subsequent note is the short form');
+  assert.equal(notes[3], 'Chidi Okafor, “Measuring Trust in NGO Networks,” in Handbook of Civil Society Research, ed. Miriam Hart and Ravi Patel (London: Routledge, 2019), 40.');
+  assert.equal(notes[4], 'Okafor, 41.', 'the same source again: the short form with its locator');
+  assert.ok(!notes.some((n) => n.includes('..')), 'no doubled period anywhere (carry-over 2)');
+  assert.deepEqual(r.citations.slice(0, 5).map((c) => c.inline.length), [0, 0, 0, 0, 0], 'a bracketed citation leaves nothing in the text');
+  assert.equal(runsText(r.citations[5]?.inline ?? []), 'Lindqvist and Berg', 'a narrative citation keeps its author in the text');
+  assert.equal(notes[5], '“Economic Growth in China and the World Bank’s Lending Policy.”');
+  assert.ok(r.citations[0]?.note?.some((run) => run.italic === true && run.text.includes('Structure')), 'the note keeps its italics as runs');
+});
+
+test('D-21-04: notes go after punctuation and superscripts drop the space before them (the md export)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-placement-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  copyFileSync(GOLD_BIB, join(root, '.paper', 'CITATIONS.bib'));
+  const inputPath = join(root, '.paper', 'DRAFT.md');
+  writeFileSync(inputPath, '# T\n\nA claim [@kuhn1962]. Another [@lindqvist2012], then more. Already punctuated. [@okafor2019]\n');
+  const notes = await withCapturedOutput(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style: 'chicago-notes-bib' }));
+  const md = readFileSync(notes.result.outputPath, 'utf8');
+  assert.ok(md.includes('A claim.[^1] Another,[^2] then more. Already punctuated.[^3]'), md);
+  assert.ok(/\n## Bibliography\n/.test(md), 'a note style\'s list is a Bibliography');
+  const sup = await withCapturedOutput(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style: 'ama' }));
+  const ama = readFileSync(sup.result.outputPath, 'utf8');
+  assert.ok(ama.includes('A claim^1^. Another^2^, then more. Already punctuated.^3^'), ama);
+});
+
+test('D-21-06: case protection — acronyms and mixed case always, capitalised words after the first in a non-Title-Case title, a Title Case title whole', () => {
+  assert.equal(
+    caseProtectTitle("Economic growth in China and the World Bank's lending policy"),
+    'Economic growth in <span class="nocase">China</span> and the <span class="nocase">World</span> <span class="nocase">Bank\'s</span> lending policy',
+  );
+  assert.equal(caseProtectTitle('Measuring trust in NGO networks'), 'Measuring trust in <span class="nocase">NGO</span> networks');
+  assert.equal(caseProtectTitle('The Structure of Scientific Revolutions'), '<span class="nocase">The Structure of Scientific Revolutions</span>');
+  assert.equal(caseProtectTitle('iPhone usage and sleep'), '<span class="nocase">iPhone</span> usage and sleep');
+  assert.equal(caseProtectTitle('a study of <i>Drosophila</i> wings'), 'a study of <i><span class="nocase">Drosophila</span></i> wings');
+});
+
+test('D-21-06: neither path lowercases "China" — the APA export keeps the proper noun the source capitalised', async () => {
+  const r = await renderDocumentCitations(DOC_ENTRIES, 'apa', [cite(A)]);
+  assert.ok(runsText(r.bibliography[0]?.runs ?? []).includes('Economic growth in China and the World Bank’s lending policy'), runsText(r.bibliography[0]?.runs ?? []));
+});
+
+test('D-21-07: a .csl file is registered by its content — two files with one name never collide, and an edited file is read afresh', async () => {
+  const csl = readFileSync(fileURLToPath(new URL('./fixtures/export/custom-style.csl', import.meta.url)), 'utf8');
+  const d1 = mkdtempSync(join(tmpdir(), 'pensmith-csl-a-'));
+  const d2 = mkdtempSync(join(tmpdir(), 'pensmith-csl-b-'));
+  writeFileSync(join(d1, 'style.csl'), csl);
+  writeFileSync(join(d2, 'style.csl'), csl.replace('prefix="&lt;&lt;"', 'prefix="{{"').replace('suffix="&gt;&gt;"', 'suffix="}}"'));
+  const a = await renderDocumentCitations(DOC_ENTRIES, join(d1, 'style.csl'), [cite(B)]);
+  const b = await renderDocumentCitations(DOC_ENTRIES, join(d2, 'style.csl'), [cite(B)]);
+  assert.equal(runsText(a.citations[0]?.inline ?? []), '<<Kuhn 1962>>');
+  assert.equal(runsText(b.citations[0]?.inline ?? []), '{{Kuhn 1962}}');
+  assert.equal(isNoteStyle(join(d1, 'style.csl')), false);
+});

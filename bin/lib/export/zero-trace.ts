@@ -10,9 +10,9 @@
 //      docProps/app.xml (Application, AppVersion, Company, Manager, Template),
 //      removes docProps/custom.xml (pandoc's home for the absolute
 //      bibliography / CSL paths) with its relationship and content-type
-//      override, and sweeps every non-binary structural part for the literal
-//      "pensmith" — never the author's content parts (audit #18: a paper may
-//      say "pensmith").
+//      override, and removes XML comments from — and sweeps the literal
+//      "pensmith" out of — every non-binary structural part, never the
+//      author's content parts (audit #18: a paper may say "pensmith").
 //    - zeroTracePdf(pdf) empties /Info (and deletes every key that is not a
 //      standard one — pdfTeX's /PTEX.Fullbanner and the like), epochs the
 //      dates, and deletes the XMP stream OBJECT (pdf-lib serialises every
@@ -151,7 +151,10 @@ export async function zeroTracePatch(docxPath: string): Promise<void> {
       continue;
     }
     if (isBinaryDocxEntry(name, text)) continue;
-    if (/pensmith/i.test(text)) zip.file(name, text.replace(/pensmith/gi, ''), { date: ZIP_EPOCH });
+    // Comments in a structural part are tool notes, never content: removed;
+    // then the literal 'pensmith' is swept from what is left.
+    const swept = text.replace(/<!--[\s\S]*?-->/g, '').replace(/pensmith/gi, '');
+    if (swept !== text) zip.file(name, swept, { date: ZIP_EPOCH });
   }
   // Every entry carries the epoch date (no authoring time in the archive).
   for (const [name, file] of Object.entries(zip.files)) {

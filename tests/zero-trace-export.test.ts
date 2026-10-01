@@ -452,3 +452,57 @@ test('zero-trace Test I (VRFY-28, D-20-15): export/CITATIONS.bib and .ris carry 
   assert.ok(!ris.toLowerCase().includes('pensmith'));
   assert.match(ris, /^DO {2}- 10\.1038\/nphys1170/m);
 });
+
+// =====================================================================
+//   Test J (Phase 21: EXP-06, EXP-07) — the REAL pandoc path
+// =====================================================================
+// With the paper under <tmp>/x/Users/bob/School/essay, pandoc's docx, LaTeX
+// and (when a PDF engine is installed) PDF exports hold no part with the
+// paper's path, the home folder, the user name, pensmith, .paper,
+// citation-styles, a .csl or .bib path or .claude/plugins; custom.xml is
+// absent; core.xml and app.xml are blank; there is no footer reference.
+// Required with CI=true (ci.yml installs pandoc 3.x; HARDEN-04 makes it
+// required on every runner).
+
+import { requirePandoc } from './helpers/pandoc-oracle.js';
+import { detectPdfEngine } from '../bin/lib/export/pandoc.js';
+import { withCapturedOutput } from '../bin/lib/output-sink.js';
+
+test('zero-trace Test J (EXP-06, EXP-07): pandoc docx / LaTeX / PDF of a paper under …/Users/bob/School/essay carry no path, no user, no tool', async (t) => {
+  if (!requirePandoc(t, 'zero-trace Test J')) return;
+  const mod = await import(exporterModUrl.href) as {
+    exportDraft: (opts: { inputPath: string; format: string; paperRoot: string; pandocPresent?: boolean; style?: string; pdfEngine?: string | null }) => Promise<{ outputPath: string; writer: string }>;
+    scanExportFile: (file: string, ctx: { paperRoot: string; username?: string }) => Promise<unknown[]>;
+  };
+  const root = join(mkdtempSync(join(tmpdir(), 'pensmith-ztj-')), 'x', 'Users', 'bob', 'School', 'essay');
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '@article{x2020, author = {Xu, Wei}, title = {Growth in China}, journal = {J}, year = {2020}, doi = {10.1/x}}\n');
+  const inputPath = join(root, '.paper', 'DRAFT.md');
+  writeFileSync(inputPath, '# A Paper\n\n## One\n\nA claim [@x2020, p. 4].\n');
+  const needles = [root, 'Users/bob', 'pensmith', '.paper', 'citation-styles', '.csl', 'CITATIONS.bib', '.claude/plugins', 'references.json', 'input.md'];
+  const formats: Array<'docx' | 'latex' | 'pdf'> = ['docx', 'latex'];
+  if (detectPdfEngine() !== null) formats.push('pdf');
+  for (const format of formats) {
+    const { result: res } = await withCapturedOutput(() => mod.exportDraft({ inputPath, format, paperRoot: root, pandocPresent: true, style: 'apa' }));
+    assert.equal(res.writer, 'pandoc', `${format} went through pandoc`);
+    assert.deepEqual(await mod.scanExportFile(res.outputPath, { paperRoot: root, username: 'bob' }), [], `${format} passes the scanner`);
+    if (format === 'docx') {
+      const zip = await JSZip.loadAsync(readFileSync(res.outputPath));
+      assert.equal(zip.file('docProps/custom.xml'), null, 'no custom.xml');
+      for (const [name, file] of Object.entries(zip.files)) {
+        if (file.dir || /^word\/media\//.test(name)) continue;
+        const text = await file.async('string');
+        for (const n of needles) assert.ok(!text.includes(n) || (n === 'pensmith' && /^word\/document\.xml$/.test(name)), `${name} holds ${n}`);
+      }
+      assert.doesNotMatch(await zip.file('word/document.xml')!.async('string'), /footerReference/, 'no footer');
+      const core = await zip.file('docProps/core.xml')!.async('string');
+      assert.doesNotMatch(core, /<dc:creator>[^<]+</);
+      const app = await zip.file('docProps/app.xml')!.async('string');
+      assert.doesNotMatch(app, /<Application>[^<]+</);
+      assert.doesNotMatch(app, /<AppVersion>[^<]+</);
+    } else {
+      const text = readFileSync(res.outputPath).toString('latin1');
+      for (const n of needles.filter((x) => x !== 'pensmith')) assert.ok(!text.includes(n), `${format} holds ${n}`);
+    }
+  }
+});
