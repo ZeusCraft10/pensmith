@@ -167,6 +167,7 @@ export function cslStyleText(style: string): string {
  * and an edited file is registered afresh (D-21-07).
  */
 function ensureStyleTemplate(style: string): string {
+  registerShippedLocales();
   if (isCslFileStyle(style)) {
     const cslString = cslStyleText(style);
     const name = `pensmith-csl-${createHash('sha256').update(cslString).digest('hex').slice(0, 24)}`;
@@ -1107,10 +1108,41 @@ function citeprocItem(i: CitationItemInput, flag?: 'suppress-author' | 'author-o
     id: i.id,
     ...(i.prefix ? { prefix: i.prefix } : {}),
     ...(i.suffix ? { suffix: i.suffix } : {}),
-    ...(i.locator ? { locator: i.locator, label: i.label ?? 'page' } : {}),
+    ...(i.locator ? { locator: citeprocLocator(i.locator, i.label ?? 'page').locator, label: i.label ?? 'page' } : {}),
     ...(i.suppressAuthor || flag === 'suppress-author' ? { 'suppress-author': true } : {}),
     ...(flag === 'author-only' ? { 'author-only': true } : {}),
   };
+}
+
+/**
+ * A locator as citeproc-js must receive it to print what pandoc's citeproc
+ * prints (the locator differential, tests/locator-oracle.test.ts):
+ *   - a locator with no digit (a roman numeral, `xii`) is not numeric to
+ *     pandoc (CSL `is-numeric`: numbers only), while citeproc-js reads roman
+ *     numerals as numbers — so it is marked text (`nocase`, which prints
+ *     nothing of its own): APA then prints `xii`, not `Chapter xii`;
+ *   - a list written without a space after its comma (`33,35`) is a list
+ *     to pandoc (a plural label: `pp.`, `vols.`) but one number to
+ *     citeproc-js — so it is given with the space; a page list prints with
+ *     it, as pandoc's page formatting does (`pp. 33, 35`), and any other
+ *     label's list is printed as written (`vols. 97,100`): `restore` maps
+ *     the text citeproc prints back to it.
+ */
+function citeprocLocator(locator: string, label: string): { locator: string; restore: [string, string] | null } {
+  if (!/\p{N}/u.test(locator)) return { locator: `<span class="nocase">${locator}</span>`, restore: null };
+  if (!/\d,\d/.test(locator)) return { locator, restore: null };
+  const spaced = locator.replace(/(\d),(?=\d)/g, '$1, ');
+  return { locator: spaced, restore: label === 'page' ? null : [spaced, locator] };
+}
+
+/** Runs with the first occurrence of `from` (inside one run) replaced by `to`. */
+function replaceInRuns(runs: readonly RichRun[], from: string, to: string): RichRun[] {
+  let done = false;
+  return runs.map((r) => {
+    if (done || !r.text.includes(from)) return r;
+    done = true;
+    return { ...r, text: r.text.replace(from, to) };
+  });
 }
 
 /** The citeproc engine (citation-js's CSL plugin) for `template`, over `items`, emitting HTML. */
@@ -1121,8 +1153,26 @@ interface CiteprocEngine {
   opt: { development_extensions: Record<string, unknown> };
 }
 
-/** The locales a style may ask for by `default-locale` that the plugin ships (citation-js bundles en-US and a few others). */
-const SHIPPED_LOCALES = new Set(['en-GB']);
+/**
+ * The CSL locales the plugin ships (templates/csl-locales/, CC BY-SA 3.0, from
+ * the CSL locales repository): en-US — the current release, which replaces
+ * citation-js's bundled 2015 en-US so the built-in renderer prints the terms
+ * pandoc's citeproc prints (`Issue 3`, not `Number 3`) — and en-GB, the
+ * default locale of Cite Them Right Harvard.
+ */
+const SHIPPED_LOCALES = ['en-US', 'en-GB'] as const;
+let shippedLocalesRegistered = false;
+
+/** Register the shipped locales with citation-js once per process (before any engine is made). */
+function registerShippedLocales(): void {
+  if (shippedLocalesRegistered) return;
+  shippedLocalesRegistered = true;
+  const locales = (plugins.config.get('@csl') as unknown as { locales: { add(k: string, v: string): void } }).locales;
+  for (const lang of SHIPPED_LOCALES) {
+    const file = pluginTemplatePath('csl-locales', `locales-${lang}.xml`);
+    if (existsSync(file)) locales.add(lang, readFileSync(file, 'utf8'));
+  }
+}
 
 /**
  * The locale a style renders in, as pandoc picks it: the style's
@@ -1133,16 +1183,10 @@ const SHIPPED_LOCALES = new Set(['en-GB']);
  */
 export function styleLocale(style: string): { locale: string; fallback: string | null } {
   const wanted = /<style\b[^>]*\bdefault-locale="([A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*)"/.exec(cslStyleText(style))?.[1] ?? 'en-US';
-  const locales = (plugins.config.get('@csl') as unknown as { locales: { has(k: string): boolean; add(k: string, v: string): void } }).locales;
+  registerShippedLocales();
+  const locales = (plugins.config.get('@csl') as unknown as { locales: { has(k: string): boolean } }).locales;
   if (locales.has(wanted)) return { locale: wanted, fallback: null };
-  if (SHIPPED_LOCALES.has(wanted)) {
-    const file = pluginTemplatePath('csl-locales', `locales-${wanted}.xml`);
-    if (existsSync(file)) {
-      locales.add(wanted, readFileSync(file, 'utf8'));
-      return { locale: wanted, fallback: null };
-    }
-  }
-  return { locale: 'en-US', fallback: wanted === 'en-US' ? null : wanted };
+  return { locale: 'en-US', fallback: wanted };
 }
 
 function citeprocEngine(items: ReadonlyArray<Record<string, unknown>>, template: string, locale = 'en-US'): CiteprocEngine {
@@ -1259,7 +1303,11 @@ export async function renderDocumentCitations(
   const engine = citeprocEngine(items, template, locale);
   const passA = engine.rebuildProcessorState(build('suppress-author'), 'html', []);
   const rendered: RenderedCitation[] = citations.map((c, n) => {
-    const rest = printedRuns(passA[n]?.[2] ?? '');
+    const restores = c.items
+      .map((i) => (i.locator ? citeprocLocator(i.locator, i.label ?? 'page').restore : null))
+      .filter((r): r is [string, string] => r !== null);
+    let rest = printedRuns(passA[n]?.[2] ?? '');
+    for (const [from, to] of restores) rest = replaceInRuns(rest, from, to);
     if (c.narrative !== true) return noteStyle ? { inline: [], note: rest.length > 0 ? rest : null } : { inline: rest, note: null };
     const author = printedRuns(authors[n] ?? '');
     if (noteStyle) return { inline: author, note: rest.length > 0 ? rest : null };
