@@ -12,7 +12,9 @@
 //      bibliography / CSL paths) with its relationship and content-type
 //      override, and removes XML comments from — and sweeps the literal
 //      "pensmith" out of — every non-binary structural part, never the
-//      author's content parts (audit #18: a paper may say "pensmith").
+//      author's content parts (audit #18: a paper may say "pensmith") nor an
+//      external relationship's target (a hyperlink the body or a reference
+//      shows — rewriting it would point the link somewhere its text does not).
 //    - zeroTracePdf(pdf) empties /Info (and deletes every key that is not a
 //      standard one — pdfTeX's /PTEX.Fullbanner and the like), epochs the
 //      dates, and deletes the XMP stream OBJECT (pdf-lib serialises every
@@ -25,16 +27,20 @@
 //      the LaTeX preamble, the text of a bib outside its entries) may hold no
 //      absolute path, no home folder, no OS user name as a path segment or a
 //      field value, no `.paper`, `citation-styles`, `.csl` or `.bib` path, no
-//      `.claude/plugins`, no offline / stub / dry-run marker and no
-//      "pensmith"; docx Application / AppVersion and PDF Producer / Creator
+//      `.claude/plugins`, no home-folder path of any user, no file:// URL,
+//      no offline / stub / dry-run marker and no "pensmith"; docx Application / AppVersion and PDF Producer / Creator
 //      must be empty; docx creator / last-modified-by and PDF Author must be
 //      empty; pdfTeX keys (/PTEX.*) and an XMP packet are findings; a
 //      docProps/custom.xml part is a finding;
 //    - author content (the body, notes, the rendered references, the bib and
-//      RIS entries) is checked only for path patterns — the paper's own folder,
-//      the home folder, home-folder paths (/Users/x/, /home/x/, C:\Users\x\),
-//      file:// URLs, `.paper/` and `.claude/plugins` paths — the markers and a
-//      generator comment; NEVER for a bare word (audit #18);
+//      RIS entries, a docx's external link targets) is checked only for THIS
+//      machine's paths — the paper's own folder, the home folder, a home-folder
+//      path naming the OS user (/Users/<user>/, /home/<user>/,
+//      C:\Users\<user>\), `.paper/` and `.claude/plugins` paths — outside
+//      http(s) URLs (a source's web address may hold /home/x/; review round 1),
+//      and for the markers (an untrusted-data fence marker included) and a
+//      generator comment; NEVER for a bare word (audit #18) nor for someone
+//      else's example path (a systems paper may print /home/alice/data/);
 //    - media (word/media/*, PDF image streams) are flagged for EXIF, XMP and
 //      PNG tEXt / iTXt / zTXt chunks (stripping them on embed is BRDTH-02).
 //    exporter.ts deletes every file the export wrote on any finding, or when a
@@ -51,6 +57,7 @@ import { EXIT_ERROR, PensmithError } from '../exit-codes.js';
 import { OFFLINE_MARKER_PREFIX } from '../http-mock.js';
 import { userHomeDir } from '../paths.js';
 import { STUB_DRAFT_MARKER } from '../verify/gate.js';
+import { fenceMarkerCount } from '../untrusted-fence.js';
 
 /** The zip entries' date: the ZIP (DOS) epoch, 1980-01-01 — no authoring time in the archive. */
 const ZIP_EPOCH = new Date(Date.UTC(1980, 0, 1));
@@ -109,6 +116,20 @@ function isBinaryDocxEntry(name: string, text: string): boolean {
   return text.includes('\x00');
 }
 
+/** An external relationship element (a hyperlink target: author content). */
+const EXTERNAL_RELATIONSHIP_RE = /<Relationship\b[^>]*\bTargetMode="External"[^>]*>/g;
+
+/** Sweep "pensmith" out of a structural part, leaving every external relationship element as written. */
+function sweepStructural(xml: string): string {
+  let out = '';
+  let at = 0;
+  for (const m of xml.matchAll(EXTERNAL_RELATIONSHIP_RE)) {
+    out += xml.slice(at, m.index).replace(/pensmith/gi, '') + m[0];
+    at = m.index + m[0].length;
+  }
+  return out + xml.slice(at).replace(/pensmith/gi, '');
+}
+
 /**
  * zeroTracePatch — the MANDATORY last step of every pandoc .docx (DONE-07):
  * see the module header. Idempotent; a missing core.xml / app.xml is skipped.
@@ -152,8 +173,9 @@ export async function zeroTracePatch(docxPath: string): Promise<void> {
     }
     if (isBinaryDocxEntry(name, text)) continue;
     // Comments in a structural part are tool notes, never content: removed;
-    // then the literal 'pensmith' is swept from what is left.
-    const swept = text.replace(/<!--[\s\S]*?-->/g, '').replace(/pensmith/gi, '');
+    // then the literal 'pensmith' is swept from what is left — except an
+    // external relationship (a hyperlink's target is the author's content).
+    const swept = sweepStructural(text.replace(/<!--[\s\S]*?-->/g, ''));
     if (swept !== text) zip.file(name, swept, { date: ZIP_EPOCH, createFolders: false });
   }
   // The package is rebuilt from its parts alone, in their order: a folder
@@ -306,25 +328,39 @@ const MARKERS: ReadonlyArray<[RegExp, string]> = [
 
 const HOME_PATH_RE = /(?:\/Users\/[^/\s"'<>]+\/|\/home\/[^/\s"'<>]+\/|[A-Za-z]:[\\/]Users[\\/][^\\/\s"'<>]+[\\/])/;
 
-/** Author-content findings: path patterns and markers only, never a bare word (audit #18). */
+/** A web address: its path is a site's, never this machine's (review round 1). */
+const WEB_URL_RE = /https?:\/\/[^\s"'<>]*/gi;
+
+/**
+ * Author-content findings: THIS machine's paths (outside web addresses) and
+ * the markers only — never a bare word (audit #18), never another user's
+ * example path (see the header).
+ */
 function authorFindings(text: string, r: Rules): string[] {
   const out: string[] = [];
-  for (const root of r.paperRoots) if (text.includes(root)) out.push(`holds the paper's folder path (${root})`);
-  if (r.home !== null && (text.includes(`${r.home}/`) || text.includes(`${r.home}\\`))) out.push('holds a path in the home folder');
-  const home = HOME_PATH_RE.exec(text);
-  if (home !== null) out.push(`holds a home-folder path (${home[0]})`);
-  if (/file:\/\//i.test(text)) out.push('holds a file:// URL');
-  if (/(?:^|[\\/\s"'(])\.paper(?:-dry-run)?[\\/]/.test(text)) out.push('holds a .paper path');
-  if (/\.claude[\\/]plugins/i.test(text)) out.push('holds a .claude/plugins path');
+  const local = text.replace(WEB_URL_RE, ' ');
+  for (const root of r.paperRoots) if (local.includes(root)) out.push(`holds the paper's folder path (${root})`);
+  if (r.home !== null && (local.includes(`${r.home}/`) || local.includes(`${r.home}\\`))) out.push('holds a path in the home folder');
+  if (r.username !== null) {
+    const u = escapeRe(r.username);
+    const own = new RegExp(`(?:\\/Users\\/|\\/home\\/|[A-Za-z]:[\\\\/]Users[\\\\/])${u}(?:[\\\\/]|$)`, 'im').exec(local);
+    if (own !== null) out.push(`holds a home-folder path of the OS user (${own[0]})`);
+  }
+  if (/(?:^|[\\/\s"'(])\.paper(?:-dry-run)?[\\/]/.test(local)) out.push('holds a .paper path');
+  if (/\.claude[\\/]plugins/i.test(local)) out.push('holds a .claude/plugins path');
   for (const [re, what] of MARKERS) if (re.test(text)) out.push(what);
+  if (fenceMarkerCount(text) > 0) out.push('holds an untrusted-data fence marker (a model artifact)');
   return out;
 }
 
-/** Metadata findings: everything authorFindings checks, plus any absolute path, the tool names and the user name. */
+/** Metadata findings: everything authorFindings checks, plus any absolute path, any home-folder path, file:// URLs, the tool names and the user name. */
 function metadataFindings(text: string, r: Rules): string[] {
   const out = authorFindings(text, r);
   // http(s) URLs (namespaces, schemas) are not local paths.
-  const local = text.replace(/https?:\/\/[^\s"'<>]*/gi, '');
+  const local = text.replace(WEB_URL_RE, '');
+  const home = HOME_PATH_RE.exec(local);
+  if (home !== null) out.push(`holds a home-folder path (${home[0]})`);
+  if (/file:\/\//i.test(local)) out.push('holds a file:// URL');
   const abs = /(?<![\w:/.])\/(?:[^\s/"'<>{}()]+\/)+[^\s/"'<>{}()]*|(?<![\w])[A-Za-z]:[\\/][^\s"'<>]*|\\\\[A-Za-z0-9._-]+\\[^\s"'<>]+/.exec(local);
   if (abs !== null) out.push(`holds an absolute path (${abs[0]})`);
   if (/pensmith/i.test(text)) out.push('names pensmith');
@@ -362,14 +398,29 @@ function mediaFindings(bytes: Uint8Array): string[] {
   return [...new Set(out)];
 }
 
-/** XML with the parts that are not data removed: namespace and schema URIs, relationship types, package-internal part names. */
+/**
+ * XML with the parts that are not data removed: namespace and schema URIs,
+ * relationship types, package-internal part names, and every relationship
+ * target — an internal one names a part, an external one is a hyperlink the
+ * body or a reference shows (author content, checked by externalTargets).
+ */
 function xmlData(xml: string): string {
   return xml
     .replace(/\sxmlns(?::[\w-]+)?="[^"]*"/g, '')
     .replace(/\s(?:xsi:schemaLocation|mc:Ignorable|Type|ContentType)="[^"]*"/g, '')
     .replace(/\sPartName="\/[^"]*"/g, '')
-    .replace(/<Relationship\b(?![^>]*TargetMode="External")([^>]*?)\sTarget="[^"]*"/g, '<Relationship$1')
+    .replace(/<Relationship\b([^>]*?)\sTarget="[^"]*"/g, '<Relationship$1')
     .replace(/<\?xml[^>]*\?>/g, '');
+}
+
+/** The targets of a part's external relationships (hyperlinks), one per line, XML entities decoded. */
+function externalTargets(xml: string): string {
+  const out: string[] = [];
+  for (const m of xml.matchAll(EXTERNAL_RELATIONSHIP_RE)) {
+    const t = /\sTarget="([^"]*)"/.exec(m[0])?.[1];
+    if (t !== undefined) out.push(t.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
+  }
+  return out.join('\n');
 }
 
 /** The text content of one XML element (first match), or null. */
@@ -410,6 +461,7 @@ async function scanDocx(file: string, bytes: Buffer, r: Rules): Promise<ZeroTrac
         if (v !== null && v !== '') add(`sets ${tag} ("${v.slice(0, 60)}") — it must be empty`);
       }
     }
+    for (const f of authorFindings(externalTargets(text), r)) add(f);
     for (const f of metadataFindings(xmlData(text), r)) add(f);
   }
   return dedupe(out);

@@ -134,8 +134,43 @@ test('EXP-07: a path under <tmp>/x/Users/bob/School/essay is flagged in metadata
   writeFileSync(md, '# Title\n\nThe user asked pensmith-like tools about a .bib file and the Bob family; the /usr/bin/env idiom is common.\n');
   assert.deepEqual(await scanExportFile(md, CTX(root)), [], 'author prose with bare words passes');
   const home = join(root, '.paper', 'export', 'home.md');
-  writeFileSync(home, 'A path /Users/alice/Desktop/notes leaked.\n');
-  assert.ok((await scanExportFile(home, CTX(root))).some((f) => /home-folder path/.test(f.finding)));
+  writeFileSync(home, 'A path /Users/bob/Desktop/notes leaked.\n');
+  assert.ok((await scanExportFile(home, CTX(root))).some((f) => /home-folder path of the OS user/.test(f.finding)), 'the OS user\'s home-folder path');
+  writeFileSync(home, 'A path /home/nobody-zt/notes.txt leaked.\n');
+  assert.ok((await scanExportFile(home, CTX(root))).some((f) => /path in the home folder/.test(f.finding)), 'a path in $HOME');
+});
+
+// Review round 1: a source's web address, or another user's example path in
+// the prose, is not this machine's path — the export is not refused (it was
+// refused, and deleted, on every run). Metadata still may hold none of them.
+test('EXP-07 (review r1): web URLs holding /home/x/ or /Users/x/ and example paths in prose pass; the same path in metadata is flagged', async () => {
+  const root = bobPaper();
+  const dir = join(root, '.paper', 'export');
+  const md = join(dir, 'a.md');
+  writeFileSync(md, 'See <https://www.example.org/home/research/report.pdf> and https://www.example.edu/Users/smith/notes.pdf.\n\nThe tool keeps its data under /home/alice/data/ and C:\\Users\\carol\\AppData\\ by default.\n\nSmith, J. (2020). Notes. https://www.example.edu/home/smith/notes.pdf\n');
+  assert.deepEqual(await scanExportFile(md, CTX(root)), []);
+  const bib = join(dir, 'a.bib');
+  writeFileSync(bib, '@misc{a, title = {Report}, url = {https://www.example.org/home/research/report.pdf}, abstract = {Files under /home/user/ are cached.}, year = {2020}}\n');
+  assert.deepEqual(await scanExportFile(bib, CTX(root)), []);
+  const ris = join(dir, 'a.ris');
+  writeFileSync(ris, 'TY  - GEN\nTI  - Report\nUR  - https://www.example.org/home/research/report.pdf\nER  - \n');
+  assert.deepEqual(await scanExportFile(ris, CTX(root)), []);
+  // The OS user's home inside a web URL is a site's path too.
+  writeFileSync(md, 'See https://www.example.edu/home/bob/notes.pdf for details.\n');
+  assert.deepEqual(await scanExportFile(md, CTX(root)), []);
+  // Metadata (a bib comment) may hold no home-folder path of anyone, and no file:// URL.
+  writeFileSync(bib, '% from /home/alice/papers\n@misc{a, title = {Report}, year = {2020}}\n');
+  assert.ok((await scanExportFile(bib, CTX(root))).some((f) => f.where === 'outside the entries' && /home-folder path/.test(f.finding)));
+  writeFileSync(bib, '% from file:///srv/papers\n@misc{a, title = {Report}, year = {2020}}\n');
+  assert.ok((await scanExportFile(bib, CTX(root))).some((f) => /file:\/\/ URL/.test(f.finding)));
+});
+
+test('EXP-07 (review r1): an untrusted-data fence marker in author content is flagged (a model artifact)', async () => {
+  const { FENCE_OPEN } = await import('../bin/lib/untrusted-fence.js');
+  const root = bobPaper();
+  const md = join(root, '.paper', 'export', 'fence.md');
+  writeFileSync(md, `# Title\n\n${FENCE_OPEN}\nA paragraph.\n`);
+  assert.ok((await scanExportFile(md, CTX(root))).some((f) => /fence marker/.test(f.finding)));
 });
 
 test('EXP-07: a pandoc LaTeX preamble naming its generator is flagged, and the LaTeX scrub cleans it', async () => {
@@ -207,4 +242,35 @@ test('D-21-08 / EXP-07: an injected scrub failure leaves no .docx in export/ and
   const left = readdirSync(join(root, '.paper', 'export'));
   assert.ok(!left.some((f) => f.endsWith('.docx') || f.endsWith('.md')), `no docx, no Markdown stand-in: ${left.join(', ')}`);
   assert.ok(!existsSync(join(root, '.paper', 'export', 'CITATIONS.bib')));
+});
+
+// Review round 1: an external relationship's target is the hyperlink the body
+// or a reference shows (author content). The scrub never rewrites it (it did:
+// every dry-run DOI link lost "pensmith" while its text kept it), and the scan
+// checks it as author content — a web address passes, a local path does not.
+test('EXP-06 (review r1): zeroTracePatch keeps an external hyperlink target as written; the scan checks it as author content', async () => {
+  const root = bobPaper();
+  const rels = (target: string): string =>
+    '<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+    `<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${target}" TargetMode="External"/>` +
+    '<!-- written by pensmith --></Relationships>';
+  const build = async (target: string): Promise<string> => {
+    const zip = new JSZip();
+    zip.file('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>');
+    zip.file('word/document.xml', '<w:document><w:body><w:p><w:r><w:t>doi.org/10.0000/pensmith-dryrun.bbe3ccd6</w:t></w:r></w:p></w:body></w:document>');
+    zip.file('word/_rels/document.xml.rels', rels(target));
+    const file = join(root, '.paper', 'export', `links-${Math.random().toString(36).slice(2)}.docx`);
+    writeFileSync(file, await zip.generateAsync({ type: 'nodebuffer' }));
+    return file;
+  };
+  const file = await build('https://doi.org/10.0000/pensmith-dryrun.bbe3ccd6');
+  await zeroTracePatch(file);
+  const out = await (await JSZip.loadAsync(readFileSync(file))).file('word/_rels/document.xml.rels')!.async('string');
+  assert.match(out, /Target="https:\/\/doi\.org\/10\.0000\/pensmith-dryrun\.bbe3ccd6"/, 'the link target still matches its text');
+  assert.doesNotMatch(out, /<!--/, 'the structural comment is removed');
+  assert.deepEqual(await scanExportFile(file, CTX(root)), [], 'a web address in a link target is author content');
+  const local = await build(`file://${root}/notes.pdf`);
+  await zeroTracePatch(local);
+  assert.ok((await scanExportFile(local, CTX(root))).some((f) => f.where === 'word/_rels/document.xml.rels' && /paper's folder path/.test(f.finding)));
 });
