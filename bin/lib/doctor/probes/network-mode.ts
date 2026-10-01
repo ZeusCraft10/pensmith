@@ -41,7 +41,7 @@ export const networkModeProbe: Probe = {
     }
     const what = mode.dryRun
       ? 'Sources are labelled synthetic dry-run sources; no network or model call is made.'
-      : 'Sources, verification, detector and plagiarism results are recorded fixtures, not live.';
+      : 'Sources and verification are recorded fixtures, not live; the AI-detector score and the plagiarism check send nothing and say so.';
     return {
       id: 'network-mode',
       severity: 'WARN',
