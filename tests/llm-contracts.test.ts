@@ -263,7 +263,8 @@ test('RUN-25: OUTLINE.md is rendered from the validated object (not model text) 
     sb.mock!.script('outline-author', { text: `Here is the outline.\n\n\`\`\`json\n${JSON.stringify(OUTLINE_OBJECT)}\n\`\`\`\nHope this helps!` });
     await (outlineCommand.run as Run)({ args: { yolo: true, force: true } });
     const md = fs.readFileSync(path.join(sb.paper, 'OUTLINE.md'), 'utf8');
-    assert.equal(md, renderOutlineMd(OutlineSchema.parse(OUTLINE_OBJECT), 'tidal energy'));
+    // The title is the topic in title case (paper-brief.ts titleFromTopic; review round 3).
+    assert.equal(md, renderOutlineMd(OutlineSchema.parse(OUTLINE_OBJECT), 'Tidal Energy'));
     assert.ok(!md.includes('Hope this helps'), 'no model prose reaches OUTLINE.md');
     const parsed = parseOutline(md);
     assert.deepEqual(parsed.sections.map((s) => [s.n, s.slug, s.depends_on]), [
