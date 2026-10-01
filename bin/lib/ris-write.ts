@@ -45,10 +45,13 @@ const RIS_TYPES: Readonly<Record<string, string>> = lookupTable({
   entry: 'CTLG', 'entry-dictionary': 'DICT', 'entry-encyclopedia': 'ENCYC', event: 'GEN', figure: 'FIGURE', graphic: 'ART',
   hearing: 'HEAR', interview: 'GEN', legal_case: 'CASE', legislation: 'LEGAL', manuscript: 'MANSCPT', map: 'MAP',
   motion_picture: 'MPCT', musical_score: 'MUSIC', pamphlet: 'PAMP', 'paper-conference': 'CONF', patent: 'PAT',
-  performance: 'GEN', periodical: 'SER', personal_communication: 'PCOMM', 'post-weblog': 'BLOG', post: 'ICOMM',
+  performance: 'GEN', periodical: 'SER', preprint: 'GEN', personal_communication: 'PCOMM', 'post-weblog': 'BLOG', post: 'ICOMM',
   regulation: 'LEGAL', report: 'RPRT', 'review-book': 'BOOK', review: 'JOUR', software: 'COMP', song: 'SOUND',
   speech: 'SOUND', standard: 'STAND', thesis: 'THES', treaty: 'GEN', webpage: 'ELEC',
 });
+
+/** An arXiv identifier, new style (`1706.03762`) or old (`hep-th/9901001`), optionally versioned. */
+const ARXIV_ID_RE = /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?$/i;
 
 /** RIS types whose `A2` is the book's (or proceedings') editors. */
 const EDITED_CONTAINER_TYPES = new Set(['CHAP', 'CONF', 'CPAPER', 'BOOK', 'EDBOOK', 'ENCYC', 'DICT']);
@@ -157,7 +160,9 @@ function risRecord(item: Record<string, unknown>, opts: RisOptions): string {
   tag('CY', item['publisher-place']);
   tag('SN', item['ISBN'] ?? item['ISSN']);
   tag('DO', item['DOI']);
-  const arxiv = oneLine(item['eprint'] ?? (type === 'JOUR' && /^\d{4}\.\d{4,5}(v\d+)?$/.test(oneLine(item['number'])) ? item['number'] : undefined));
+  // An arXiv preprint: the bib's eprint, or the arXiv id toCsl puts in `number` (CSL preprint / article).
+  const numberIsArxiv = (item['type'] === 'preprint' || type === 'JOUR') && ARXIV_ID_RE.test(oneLine(item['number']));
+  const arxiv = oneLine(item['eprint'] ?? (numberIsArxiv ? item['number'] : undefined));
   tag('UR', item['URL'] ?? (arxiv !== '' ? `https://arxiv.org/abs/${arxiv}` : undefined));
   tag('AB', item['abstract']);
   tag('LA', item['language']);

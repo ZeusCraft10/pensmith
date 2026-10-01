@@ -503,6 +503,8 @@ export interface CslEntry {
   PMCID?: string;
   /** The arXiv id of a preprint (CSL `number`, as citation-js's RIS mapping expects). */
   number?: string;
+  /** The abstract (the RIS writer's AB, D-21-11: the library RIS says what the bib says). */
+  abstract?: string;
   // A retracted source surfaces as CSL `note = "RETRACTED"` (D-15).
   note?: string;
 }
@@ -539,6 +541,8 @@ export function toCsl(c: BibSource): CslEntry | null {
   if (ids.pmid) entry.PMID = ids.pmid;
   if (ids.pmcid) entry.PMCID = ids.pmcid;
   if (ids.arxiv) entry.number = ids.arxiv;
+  const abstract = plain(c.abstract);
+  if (abstract) entry.abstract = abstract;
   if (c.retracted === true) entry.note = 'RETRACTED';
   return entry;
 }

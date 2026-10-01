@@ -24,6 +24,8 @@
 //           Hungarian article whose PubMed title is the bracketed English
 //           translation — stores the title Crossref (its DOI's registrar)
 //           holds, so `verify` passes it instead of blocking it as MIS-CITED.
+//   EXP-02 / D-21-11 (Phase 21): each `add` re-renders .paper/CITATIONS.ris
+//           beside the bib — a strict RIS reader re-imports both works.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,6 +35,7 @@ import { join } from 'node:path';
 import { sandbox, writeState, CLI_BIN, STACK_LINE, type Sandbox } from './helpers/paper-cli-harness.js';
 import { seedGatePaper } from './helpers/gate-paper.js';
 import { startHttpServer } from './helpers/local-servers/transport.js';
+import { parseRisStrict, risAll, risById, risFirst } from './helpers/ris-strict.js';
 
 interface Run {
   status: number | null;
@@ -233,4 +236,31 @@ test('SRC-01 (built CLI): a loopback URL is refused with the SSRF reason, exit 1
   } finally {
     await server.close();
   }
+});
+
+test('EXP-02 / D-21-11 (built CLI): each `add` updates .paper/CITATIONS.ris — strict records with the bib keys, a book and a preprint', async () => {
+  const sb = sandbox('add-cli-ris');
+  const root = freshPaper(sb, 'ris');
+  const risPath = join(root, '.paper', 'CITATIONS.ris');
+  const one = await add(sb, root, ['isbn:9780226458083', '--yolo']);
+  assert.equal(one.status, 0, `${one.stdout}\n${one.stderr}`);
+  const afterOne = risById(parseRisStrict(readFileSync(risPath, 'utf8')));
+  assert.deepEqual([...afterOne.keys()], ['kuhn1996']);
+  const kuhn = afterOne.get('kuhn1996')!;
+  assert.equal(kuhn.type, 'BOOK');
+  assert.equal(risFirst(kuhn, 'TI'), 'The Structure of Scientific Revolutions');
+  assert.equal(risFirst(kuhn, 'PB'), 'University of Chicago Press');
+  assert.equal(risFirst(kuhn, 'SN'), '9780226458083');
+  assert.match(risFirst(kuhn, 'AU') ?? '', /^Kuhn, Thomas/);
+  const two = await add(sb, root, ['arXiv:1706.03762', '--yolo']);
+  assert.equal(two.status, 0, `${two.stdout}\n${two.stderr}`);
+  const afterTwo = risById(parseRisStrict(readFileSync(risPath, 'utf8')));
+  assert.deepEqual([...afterTwo.keys()].sort(), ['kuhn1996', 'vaswani2017'], 'the second add re-rendered the file');
+  const vaswani = afterTwo.get('vaswani2017')!;
+  assert.equal(risFirst(vaswani, 'TI'), 'Attention Is All You Need');
+  assert.equal(risAll(vaswani, 'AU')[0], 'Vaswani, Ashish');
+  assert.ok(risAll(vaswani, 'AU').length >= 8, 'every author, one AU line each');
+  assert.equal(risFirst(vaswani, 'UR'), 'https://arxiv.org/abs/1706.03762');
+  // The bib beside it holds the same keys.
+  assert.deepEqual([...bib(root).matchAll(/^@\w+\{([^,]+),$/gm)].map((m) => m[1]).sort(), ['kuhn1996', 'vaswani2017']);
 });
