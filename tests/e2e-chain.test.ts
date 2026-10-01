@@ -161,8 +161,9 @@ test('GRND-18: bare `pensmith --yolo` from a folder with only assignment.txt rea
     for (const key of cited) assert.ok(assigned.includes(key), `${dir} cites only its assigned sources (${key})`);
   }
 
-  // compile measured citation density against the paper's own preset (GRND-06).
-  assert.match(readFileSync(join(paper, 'COMPILE-REPORT.md'), 'utf8'), new RegExp(`^Discipline: ${manifest.discipline} · band `, 'm'));
+  // compile measured citation density against the paper's own preset (GRND-06),
+  // naming where the discipline came from (Phase 21, EXP-12).
+  assert.match(readFileSync(join(paper, 'COMPILE-REPORT.md'), 'utf8'), new RegExp(`^Discipline: ${manifest.discipline} \\(from [^)]+\\) · band `, 'm'));
 
   // The stale pointer's paper was never touched.
   assert.deepEqual(snapshot(join(other, '.paper')), otherBefore, 'the pointed paper is byte- and mtime-identical');

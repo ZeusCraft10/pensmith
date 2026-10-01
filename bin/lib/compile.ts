@@ -583,6 +583,11 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         transitions.push({ boundary, status: 'rejected', reason, before_chars: beforeChars, after_chars: beforeChars, before: window });
         continue;
       }
+      if (verdict.text === window) {
+        // An accepted reply that changes nothing is not a smoothed boundary.
+        transitions.push({ boundary, status: 'unchanged', reason: 'the model returned the boundary text as it was', before_chars: beforeChars, after_chars: beforeChars, before: window });
+        continue;
+      }
       const [newTail = tailRaw, newHead = headRaw] = verdict.text.split(/\n[ \t]*\n/);
       left[li] = newTail;
       right[ri] = newHead;

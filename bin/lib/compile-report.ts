@@ -6,7 +6,7 @@
 // a CompileReportSchema-validated object (its `title` is the paper title —
 // COMPILE-REPORT.md is never exported); the body is the 5 D-14 LOCKED
 // sections in FIXED ORDER:
-//   1. ## Transitions Changed       (each boundary: smoothed / rejected (why) /
+//   1. ## Transitions Changed       (each boundary: smoothed / unchanged / rejected (why) /
 //                                    skipped (why), with the before and after text)
 //   2. ## Cross-Section Consistency Flags
 //   3. ## Citation Density          (the discipline and the band, each with where
@@ -43,8 +43,8 @@ import type { ContradictionReport } from './claim-consistency.js';
 /** One boundary entry for the Transitions Changed section. */
 export interface TransitionEntry {
   boundary: string; // e.g. '1→2'
-  status: 'smoothed' | 'rejected' | 'skipped';
-  /** Why a boundary was rejected or skipped (e.g. `citation set changed`, `no LLM`); absent when smoothed. */
+  status: 'smoothed' | 'unchanged' | 'rejected' | 'skipped';
+  /** Why a boundary was unchanged, rejected or skipped (e.g. `citation set changed`, `no LLM`); absent when smoothed. */
   reason?: string;
   before_chars: number;
   after_chars: number;

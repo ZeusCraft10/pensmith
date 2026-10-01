@@ -54,5 +54,9 @@ test('review round 3 (built CLI): compile strips each section\'s leading byte-or
   assert.equal(c.status, EXIT_OK, `${c.stdout}\n${c.stderr}`);
   const compiled = readFileSync(join(p.root, '.paper', 'DRAFT.md'), 'utf8');
   assert.ok(!compiled.includes(BOM), 'no byte-order mark in the compiled draft');
-  assert.match(compiled, /^# Mirrors$/m, 'section 2 opens with its heading');
+  // Phase 21 (EXP-05, D-21-13): compile writes `## <section title>` itself and
+  // drops a draft's leading heading that repeats it — which it can only see
+  // once the byte-order mark is stripped. Section 2 opens with its heading.
+  assert.match(compiled, /^## mirrors\n\nMeasurement was reviewed at length \[@aspelmeyer2009\]\.$/m, 'section 2 opens with its heading');
+  assert.doesNotMatch(compiled, /^﻿?# Mirrors$/m, 'the BOM-prefixed duplicate heading was recognised and dropped');
 });

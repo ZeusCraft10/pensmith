@@ -137,8 +137,11 @@ test('EXP-10 (built CLI, mock LLM): a smoother that drops a citation is rejected
     const r = await p.cli(['compile', '--yolo']);
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
     assert.match(r.stdout, /boundary 1→2: rejected \(citation set changed\)/);
+    // Boundary 2→3 gets the mock's default reply, the window as it was: accepted, but not "smoothed".
+    assert.match(r.stdout, /boundary 2→3: unchanged \(the model returned the boundary text as it was\)/);
     const md = report(p.root);
     assert.match(md, /^- boundary 1→2: rejected \(citation set changed\) /m);
+    assert.match(md, /^- boundary 2→3: unchanged \(the model returned the boundary text as it was\) /m);
     const draft = readFileSync(join(p.root, '.paper', 'DRAFT.md'), 'utf8');
     assert.ok(draft.includes(THREE_SECTIONS[1]!.draft.split('\n\n')[0]!), 'the raw head of §2 is kept');
     assert.match(draft, /\[@aspelmeyer2009\]/);
