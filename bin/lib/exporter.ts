@@ -25,11 +25,13 @@
 //      (`built-in docx writer — pandoc not found`). Only a format that truly
 //      cannot be produced is an ExportFormatError (EXIT_ERROR).
 //   4. Write, scrub, scan (export/zero-trace.ts, D-21-08): the bib, the RIS
-//      and the document are written, a pandoc docx / PDF / LaTeX is scrubbed,
-//      and EVERY file written is scanned. On any finding, or when a scrub
-//      throws, every file this call wrote is deleted and ZeroTraceError
-//      (EXIT_ERROR) is thrown — no Markdown fallback, nothing unscrubbed left
-//      in export/.
+//      and the document are written to a staging folder inside export/, a
+//      pandoc docx / PDF / LaTeX is scrubbed, and EVERY file written is
+//      scanned; only then does the clean set replace the files in export/. On
+//      any finding, or when a scrub throws, the staged files are deleted and
+//      ZeroTraceError (EXIT_ERROR) is thrown — no Markdown fallback, nothing
+//      unscrubbed in export/, and the previous export set untouched (review
+//      round 2).
 //
 // Nothing the exporter adds can carry an unverified citation (D-21-12,
 // carry-over 4): it adds only the rendered form of each citation the gate
@@ -162,6 +164,20 @@ export interface ExportResult {
 
 const FORMAT_LABEL: Readonly<Record<ExportFormat, string>> = { md: 'Markdown', docx: 'docx', pdf: 'PDF', latex: 'LaTeX' };
 const FORMAT_EXT: Readonly<Record<ExportFormat, string>> = { md: 'md', docx: 'docx', pdf: 'pdf', latex: 'tex' };
+
+/** The file an export of `inputPath` in `format` is written to, in `exportDir`. */
+export function exportPathFor(exportDir: string, inputPath: string, format: ExportFormat): string {
+  return join(exportDir, `${exportStem(inputPath)}.${FORMAT_EXT[format]}`);
+}
+
+/**
+ * The formats `inputPath` was already exported in, in `exportDir` (their
+ * files exist): done rebuilds each from the new text, so no export of an
+ * older text stays beside the new one (EXP-15, review round 2).
+ */
+export function exportedFormats(exportDir: string, inputPath: string): ExportFormat[] {
+  return FORMATS.filter((f) => existsSync(exportPathFor(exportDir, inputPath, f)));
+}
 
 /**
  * D-21-12: nothing rendered that the gate did not read, a bibliography of
@@ -377,45 +393,47 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     notes.push(...made.glyphs);
   }
 
-  // 4. Write, scrub, scan — on any failure, delete everything this call wrote.
+  // 4. Write, scrub, scan — in a staging folder inside export/ (review round
+  // 2): only a scanned, clean set replaces the files in export/, so a refused
+  // or failed export leaves the previous export set exactly as it was (it used
+  // to delete the new CITATIONS.* and leave an older document without them).
   await fsp.mkdir(exportDir, { recursive: true });
   const outputPath = join(exportDir, `${stem}.${FORMAT_EXT[format]}`);
-  const written: string[] = [];
-  const removeWritten = async (): Promise<void> => {
-    for (const f of written) await fsp.rm(f, { force: true });
-  };
+  const staging = await fsp.mkdtemp(join(exportDir, '.staging-'));
+  const staged: string[] = [];
   let bibPath: string | null = null;
   let risPath: string | null = null;
   try {
     if (withBibliography) {
-      const w = await writeExportCitations(plan, exportDir, bibStem);
-      bibPath = w.bibPath;
-      risPath = w.risPath;
-      if (bibPath !== null) written.push(bibPath);
-      if (risPath !== null) written.push(risPath);
+      const w = await writeExportCitations(plan, staging, bibStem);
+      if (w.bibPath !== null) staged.push(w.bibPath);
+      if (w.risPath !== null) staged.push(w.risPath);
+      bibPath = w.bibPath !== null ? join(exportDir, basename(w.bibPath)) : null;
+      risPath = w.risPath !== null ? join(exportDir, basename(w.risPath)) : null;
     }
-    await atomicWriteFile(outputPath, bytes);
-    written.push(outputPath);
-  } catch (e) {
-    await removeWritten();
-    throw e;
-  }
-  try {
-    // The scrub is the mandatory last step of every docx and PDF, whichever
-    // writer made it (the built-in writers' output is already clean; the scrub
-    // is then a no-op that proves it).
-    await (scrubOverride ?? scrub)(outputPath, format);
-  } catch (e) {
-    await removeWritten();
-    throw new ZeroTraceError([{ file: basename(outputPath), where: 'scrub', finding: `could not be scrubbed (${firstLine(e)})` }], written);
-  }
-  const findings: ZeroTraceFinding[] = [];
-  for (const f of written) {
-    for (const finding of await scanExportFile(f, { paperRoot: root })) findings.push({ ...finding, file: basename(f) });
-  }
-  if (findings.length > 0) {
-    await removeWritten();
-    throw new ZeroTraceError(findings, written);
+    const stagedOutput = join(staging, basename(outputPath));
+    await atomicWriteFile(stagedOutput, bytes);
+    staged.push(stagedOutput);
+    try {
+      // The scrub is the mandatory last step of every docx and PDF, whichever
+      // writer made it (the built-in writers' output is already clean; the
+      // scrub is then a no-op that proves it).
+      await (scrubOverride ?? scrub)(stagedOutput, format);
+    } catch (e) {
+      throw new ZeroTraceError([{ file: basename(outputPath), where: 'scrub', finding: `could not be scrubbed (${firstLine(e)})` }], staged);
+    }
+    const findings: ZeroTraceFinding[] = [];
+    for (const f of staged) {
+      for (const finding of await scanExportFile(f, { paperRoot: root })) findings.push({ ...finding, file: basename(f) });
+    }
+    if (findings.length > 0) throw new ZeroTraceError(findings, staged);
+    // The clean set replaces the export's files (each written atomically); a
+    // text that cites nothing leaves no bibliography of an earlier export.
+    for (const f of staged) await atomicWriteFile(join(exportDir, basename(f)), await fsp.readFile(f));
+    if (withBibliography && bibPath === null) await fsp.rm(join(exportDir, `${bibStem}.bib`), { force: true });
+    if (withBibliography && risPath === null) await fsp.rm(join(exportDir, `${bibStem}.ris`), { force: true });
+  } finally {
+    await fsp.rm(staging, { recursive: true, force: true });
   }
 
   const how = writer === 'pandoc' ? `pandoc ${FORMAT_LABEL[format]} writer` : (notes.find((n) => n.startsWith('built-in ')) ?? `built-in ${FORMAT_LABEL[format]} writer`);

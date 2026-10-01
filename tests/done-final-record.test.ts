@@ -240,3 +240,22 @@ test('Phase 21 integration (built CLI): a DONE-RECORD.json a newer pensmith wrot
   assert.match(score.stdout, /Pensmith honesty check: /);
   assert.equal(readFileSync(recordFile, 'utf8'), newer);
 });
+
+// Review round 2 (EXP-15): every export format already in export/ is rebuilt
+// from the text done exports now — a Markdown export made earlier in APA
+// does not stay beside the new IEEE .docx.
+test('EXP-15 (review r2, built CLI): done rebuilds every export format on disk from the new text', () => {
+  const p = finishedPaper('done-stale-formats');
+  const md = p.cli(['done', '--yolo', '--format', 'md', '--style', 'apa'], ENV);
+  assert.equal(md.status, EXIT_OK, `${md.stdout}\n${md.stderr}`);
+  const exportMd = join(p.root, '.paper', 'export', 'DRAFT.md');
+  assert.match(readFileSync(exportMd, 'utf8'), /\(LeCun et al\., 2015\)/);
+  const docx = p.cli(['done', '--yolo', '--format', 'docx', '--style', 'ieee'], ENV);
+  assert.equal(docx.status, EXIT_OK, `${docx.stdout}\n${docx.stderr}`);
+  assert.match(docx.stdout, /pensmith export: DRAFT\.md — built-in Markdown writer/, 'the Markdown export was rebuilt');
+  const rebuilt = readFileSync(exportMd, 'utf8');
+  assert.doesNotMatch(rebuilt, /\(LeCun et al\., 2015\)/, 'no APA left');
+  assert.match(rebuilt, /\\\[1\\\]/, 'IEEE numbers');
+  assert.ok(existsSync(join(p.root, '.paper', 'export', 'DRAFT.docx')));
+  assert.deepEqual(readdirSync(join(p.root, '.paper', 'export')).filter((f) => f.startsWith('.staging')), [], 'no staging folder left');
+});

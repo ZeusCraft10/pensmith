@@ -309,7 +309,15 @@ decision for it.
    The writer is pandoc or the built-in writer of the format (md: always
    built-in); docx → `zeroTracePatch`; pdf → `zeroTracePdf`; then every written
    file is scanned (a finding deletes what the export wrote and exits 1,
-   `ZeroTraceError`). The cited-only `.paper/export/CITATIONS.bib` / `.ris`
+   `ZeroTraceError`). The files are written, scrubbed and scanned in a staging
+   folder inside `export/` and only a clean set replaces the files there, so a
+   refused export leaves the previous export (document and bibliography)
+   exactly as it was. A PDF's page text is scanned before it is built (its
+   glyph codes cannot be read back). Every other format this paper was
+   exported in before (`export/DRAFT.<ext>` present) is then rebuilt from the
+   same text (EXP-15: no export of an older text stays beside the new one);
+   one that cannot be rebuilt now is removed with a `note —` line naming
+   `pensmith done --format <ext>`. The cited-only `.paper/export/CITATIONS.bib` / `.ris`
    (library.ts `planExportCitations`, planned and checked before anything is
    written — a citing text whose keys the bibliography lacks is an error that
    writes nothing — then `writeExportCitations`) carry the same keys. Then record
@@ -477,8 +485,11 @@ write nothing; `--only export` is the outline export:
 4. `export/OUTLINE.<ext>` (its citations rendered, a References list, and
    `export/CITATIONS.bib` / `.ris` of the listed sources) and
    `export/ANNOTATED-BIBLIOGRAPHY.<ext>`, through the same writers, scrub and
-   scan. A routed done (bare `/pensmith`) exports Markdown; `pensmith done
-   --format docx` adds the `.docx` pair.
+   scan. Every outline done writes the Markdown pair and the `--format` pair
+   (default docx), so a routed done (bare `/pensmith`) and `pensmith done
+   --yolo` both export `.md` and `.docx`; `--format md` writes the Markdown
+   pair only, and a format exported earlier is written again from the same
+   inputs (one that cannot be rebuilt is removed and named).
 5. `DONE-RECORD.json` (v4) records the outline export — written before
    ANNOTATED-BIBLIOGRAPHY.md, naming the text it replaces, so a done stopped
    between the two leaves a paper done again, never an "edited" one: the sha256

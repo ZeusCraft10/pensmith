@@ -32,7 +32,10 @@
 //      `bibliography: 'none'`) and OUTLINE.<ext> (its citations rendered in the
 //      style, a References list and export/CITATIONS.bib/.ris of the listed
 //      sources) through exporter.ts exportDraft — the writers, the scrub and
-//      the zero-trace scan of every written file;
+//      the zero-trace scan of every written file — as Markdown always, in the
+//      requested format (default docx: `done --yolo` writes the .md and .docx
+//      pairs, GRND-11) and in every format exported before (rebuilt, so no
+//      export of older inputs stays beside these; review round 2);
 //   6. records the registrar answers as last_verified and the re-checked
 //      retraction statuses (the library writer), then writes the DONE-RECORD
 //      outline record (the sha256 of OUTLINE.md, CITATIONS.bib — as it stands
@@ -74,9 +77,9 @@ import {
   outlineDoneState,
   writeOutlineDoneRecord,
 } from './done-record.js';
-import { EXIT_BLOCKED, EXIT_ERROR } from './exit-codes.js';
+import { EXIT_BLOCKED, EXIT_ERROR, PensmithError } from './exit-codes.js';
 import { bibEntryMarkdown, escapeMarkdownText } from './export/md-writer.js';
-import { exportDraft, ExportFormatError, type ExportFormat } from './exporter.js';
+import { exportDraft, exportPathFor, ExportFormatError, type ExportFormat } from './exporter.js';
 import { canPrompt, declineGate, runGate } from './gates.js';
 import { networkMode } from './http-mock.js';
 import { LibraryNotFoundError, recordLastVerified, recordRetractionStatuses, tryLoadLibrary, type LibraryEntry } from './library.js';
@@ -387,22 +390,48 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
     throw new ExportFormatError('the annotated bibliography would hold a citation the gate did not read — nothing was exported');
   }
 
-  // 5. The exports: the annotated bibliography (its references are in it), then the outline.
+  // 5. The exports, each format a pair — the annotated bibliography (its
+  // references are in it), then the outline: the Markdown pair always, the
+  // requested format's pair (GRND-11: `done --yolo` writes .md and .docx), and
+  // again any format exported earlier, so no export of older inputs stays
+  // beside these (review round 2; one that cannot be rebuilt is removed and
+  // named). A failure of a required format removes what this run exported.
   const annotatedPath = annotatedBibliographyPath(paperRoot);
-  const annotatedExport = await exportDraft({ inputPath: annotatedPath, text: annotated, format, paperRoot, style: opts.style, bibliography: 'none' });
-  let outlineExport;
+  const exportDirPath = join(dir, 'export');
+  const required: ExportFormat[] = format === 'md' ? ['md'] : ['md', format];
+  const extra = OUTLINE_FORMATS.filter((f) => !required.includes(f) && (existsSync(exportPathFor(exportDirPath, outlinePath(paperRoot), f)) || existsSync(exportPathFor(exportDirPath, annotatedPath, f))));
+  const exportPair = async (f: ExportFormat): Promise<string[]> => {
+    const annotatedExport = await exportDraft({ inputPath: annotatedPath, text: annotated, format: f, paperRoot, style: opts.style, bibliography: 'none' });
+    try {
+      const outlineExport = await exportDraft({
+        inputPath: outlinePath(paperRoot),
+        text,
+        ...(gate.bib.text !== undefined ? { bibText: gate.bib.text } : {}),
+        format: f,
+        paperRoot,
+        style: opts.style,
+      });
+      return [outlineExport.outputPath, annotatedExport.outputPath];
+    } catch (e) {
+      rmSync(annotatedExport.outputPath, { force: true });
+      throw e;
+    }
+  };
+  const madePaths: string[] = [];
   try {
-    outlineExport = await exportDraft({
-      inputPath: outlinePath(paperRoot),
-      text,
-      ...(gate.bib.text !== undefined ? { bibText: gate.bib.text } : {}),
-      format,
-      paperRoot,
-      style: opts.style,
-    });
+    for (const f of required) madePaths.push(...(await exportPair(f)));
   } catch (e) {
-    rmSync(annotatedExport.outputPath, { force: true });
+    for (const m of madePaths) rmSync(m, { force: true });
     throw e;
+  }
+  for (const f of extra) {
+    try {
+      madePaths.push(...(await exportPair(f)));
+    } catch (e) {
+      if (!(e instanceof PensmithError)) throw e;
+      for (const stale of [exportPathFor(exportDirPath, outlinePath(paperRoot), f), exportPathFor(exportDirPath, annotatedPath, f)]) rmSync(stale, { force: true });
+      out(`pensmith done: note — the ${f} outline export held older inputs and could not be rebuilt (${(e.message.split('\n')[0] ?? '').replace(/^pensmith:\s*/, '')}); it was removed\n`);
+    }
   }
 
   // 6. The library's stamps and statuses, the annotated bibliography, the record.
@@ -420,8 +449,8 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
       if (!(e instanceof LibraryNotFoundError)) throw e;
     }
   }
-  const exportDir = join(dir, 'export');
-  const made = [outlineExport.outputPath, annotatedExport.outputPath].map((p) => `export/${basename(p)}`);
+  const exportDir = exportDirPath;
+  const made = madePaths.map((p) => `export/${basename(p)}`);
   const outlineSha = createHash('sha256').update(outlineBytes).digest('hex');
   const bibSha = fileSha256(join(dir, 'CITATIONS.bib'));
   const annotatedSha = sha256(annotated);
@@ -452,5 +481,5 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
   if (networkMode().dryRun) {
     out(`pensmith done: this is a dry-run export (synthetic sources) in ${exportDir}; the real paper was not touched\n`);
   }
-  return { ok: true, outputs: [annotatedPath, outlineExport.outputPath, annotatedExport.outputPath] };
+  return { ok: true, outputs: [annotatedPath, ...madePaths] };
 }

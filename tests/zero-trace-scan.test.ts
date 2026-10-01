@@ -377,3 +377,18 @@ test('EXP-07 (review r2): the PDF export of a text holding the paper\'s folder p
   );
   assert.deepEqual(readdirSync(join(root, '.paper', 'export')), [], 'nothing is left in export/');
 });
+
+// Review round 2: an export is staged inside export/ and only a scanned,
+// clean set replaces the files there — a refused export used to delete the
+// new CITATIONS.* and leave an older document without them.
+test('D-21-08 (review r2): a refused export leaves the previous export set (document and bibliography) exactly as it was', async () => {
+  const { root, inputPath } = paperWith('# A Paper\n\nA claim [@x2020].\n');
+  await withCapturedOutput(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style: 'apa' }));
+  const dir = join(root, '.paper', 'export');
+  const before = Object.fromEntries(readdirSync(dir).map((f) => [f, readFileSync(join(dir, f), 'utf8')]));
+  assert.deepEqual(Object.keys(before).sort(), ['CITATIONS.bib', 'CITATIONS.ris', 'DRAFT.md']);
+  writeFileSync(inputPath, `# A Paper\n\nMy notes are in ${root}/notes [@x2020].\n`);
+  await assert.rejects(withCapturedOutput(() => exportDraft({ inputPath, format: 'docx', paperRoot: root, pandocPresent: false, style: 'apa' })), ZeroTraceError);
+  const after = Object.fromEntries(readdirSync(dir).map((f) => [f, readFileSync(join(dir, f), 'utf8')]));
+  assert.deepEqual(after, before, 'no staging folder left, nothing replaced, nothing removed');
+});

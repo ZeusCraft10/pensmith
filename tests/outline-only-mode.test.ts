@@ -73,7 +73,9 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   assert.equal(existsSync(join(paper, 'DRAFT.md')), false, 'no compiled draft');
   assert.equal(existsSync(join(paper, 'FINAL.md')), false, 'no FINAL.md');
 
-  // The deliverables: the annotated bibliography in .paper/ and the Markdown exports.
+  // The deliverables: the annotated bibliography in .paper/ and the exports —
+  // the Markdown pair and the default format's (.docx) pair (GRND-11: one
+  // routed or explicit done writes both; review round 2).
   const annotated = readFileSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md'), 'utf8');
   assert.match(annotated, /^# .+ — Annotated Bibliography$/m);
   assert.match(annotated, /^- \*\*Type:\*\* /m);
@@ -81,7 +83,7 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   assert.match(annotated, /^- \*\*Why it is relevant:\*\* /m);
   assert.match(annotated, /^- \*\*Supports:\*\* §1 /m);
   assert.doesNotMatch(annotated, /\[@|(^|\s)@[a-z]/m, 'no citation token in the annotated bibliography');
-  for (const name of ['OUTLINE.md', 'ANNOTATED-BIBLIOGRAPHY.md', 'CITATIONS.bib', 'CITATIONS.ris']) await assertScanClean(join(exportDir, name), sb.root);
+  for (const name of ['OUTLINE.md', 'ANNOTATED-BIBLIOGRAPHY.md', 'OUTLINE.docx', 'ANNOTATED-BIBLIOGRAPHY.docx', 'CITATIONS.bib', 'CITATIONS.ris']) await assertScanClean(join(exportDir, name), sb.root);
   assert.equal(readFileSync(join(exportDir, 'ANNOTATED-BIBLIOGRAPHY.md'), 'utf8'), annotated, 'the Markdown export is the annotated bibliography as written');
   const outlineMd = readFileSync(join(exportDir, 'OUTLINE.md'), 'utf8');
   assert.match(outlineMd, /^## 1\. /m, 'each section is a heading');
@@ -91,7 +93,8 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   const record = JSON.parse(readFileSync(join(paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
   assert.equal(record['$schemaVersion'], 4);
   assert.equal(record['mode'], 'outline');
-  assert.deepEqual(record['outline_exports'], ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md']);
+  const FOUR = ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md', 'export/OUTLINE.docx', 'export/ANNOTATED-BIBLIOGRAPHY.docx'];
+  assert.deepEqual(record['outline_exports'], FOUR);
 
   // status: outline only, complete, the deliverables; a bare run bills nothing.
   const status = await sb.run(['status']);
@@ -99,21 +102,23 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   assert.match(status.stdout, /^ {2}mode: outline only$/m);
   assert.match(status.stdout, /^ {2}current: complete$/m);
   assert.match(status.stdout, /next: status \(done\)/);
-  assert.match(status.stdout, /note: outline only — complete: export\/OUTLINE\.md and export\/ANNOTATED-BIBLIOGRAPHY\.md — to draft the paper, set mode = "draft"/);
-  assert.match(status.stdout, /^ {2}deliverables:\n {4}\.paper\/ANNOTATED-BIBLIOGRAPHY\.md\n {4}\.paper\/export\/OUTLINE\.md\n {4}\.paper\/export\/ANNOTATED-BIBLIOGRAPHY\.md$/m);
+  assert.match(status.stdout, /note: outline only — complete: export\/OUTLINE\.md, export\/ANNOTATED-BIBLIOGRAPHY\.md, export\/OUTLINE\.docx and export\/ANNOTATED-BIBLIOGRAPHY\.docx — to draft the paper, set mode = "draft"/);
+  assert.match(status.stdout, /^ {2}deliverables:\n {4}\.paper\/ANNOTATED-BIBLIOGRAPHY\.md\n {4}\.paper\/export\/OUTLINE\.md\n {4}\.paper\/export\/ANNOTATED-BIBLIOGRAPHY\.md\n {4}\.paper\/export\/OUTLINE\.docx\n {4}\.paper\/export\/ANNOTATED-BIBLIOGRAPHY\.docx$/m);
   const before = sb.mock.requests.length;
   const again = await sb.run(['--yolo']);
   assert.equal(again.status, 0, again.stderr);
   assert.match(again.stderr, /^pensmith: ran status \(done: outline only — complete/m);
   assert.equal(sb.mock.requests.length, before, 'a finished outline-only paper makes no model call');
 
-  // A second run in another format adds the .docx pair; the record lists both.
-  const docx = await sb.run(['done', '--yolo', '--format', 'docx']);
+  // An explicit `pensmith done --yolo` (no --format) exports what the routed
+  // done exported — the .md and .docx pairs (review round 2: it exported only
+  // the .docx pair, the routed one only the .md pair).
+  const docx = await sb.run(['done', '--yolo']);
   assert.equal(docx.status, 0, `${docx.stdout}\n${docx.stderr}`);
   assert.equal(sb.mock.requests.length, before, 'done in outline mode makes no model call');
   for (const name of ['OUTLINE.docx', 'ANNOTATED-BIBLIOGRAPHY.docx']) await assertScanClean(join(exportDir, name), sb.root);
   const record2 = JSON.parse(readFileSync(join(paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
-  assert.deepEqual(record2['outline_exports'], ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md', 'export/OUTLINE.docx', 'export/ANNOTATED-BIBLIOGRAPHY.docx']);
+  assert.deepEqual(record2['outline_exports'], FOUR);
   assert.match((await sb.run(['status'])).stdout, /\.paper\/export\/OUTLINE\.docx/);
 
   // Review round 1: an earlier export removed since is not carried into the
@@ -125,7 +130,8 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   assert.equal(redo.status, 0, `${redo.stdout}\n${redo.stderr}`);
   assert.match(redo.stderr, /^pensmith: ran done; next: status \(done/m);
   const record3 = JSON.parse(readFileSync(join(paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
-  assert.deepEqual(record3['outline_exports'], ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md', 'export/ANNOTATED-BIBLIOGRAPHY.docx']);
+  assert.deepEqual(record3['outline_exports'], FOUR, 'the routed done writes the removed export again');
+  assert.ok(existsSync(join(exportDir, 'OUTLINE.docx')));
   assert.match((await sb.run(['status'])).stdout, /^ {2}current: complete$/m);
 
   // An edited annotated bibliography is attention; done refuses to replace it.
@@ -196,7 +202,7 @@ test('GRND-11 + EXP-03 (Phase 21 integration, built CLI): the outline export run
   }
   assert.equal(existsSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md')), false, 'the skipped steps wrote nothing');
 
-  // config.toml's style (MLA): a routed done exports Markdown.
+  // config.toml's style (MLA): a routed done exports the .md and .docx pairs.
   const mla = await sb.run(['--yolo']);
   assert.equal(mla.status, 0, `${mla.stdout}\n${mla.stderr}`);
   assert.match(mla.stdout, /pensmith done: style: mla \(from config\.toml \[project\] citation_style\)/);
@@ -211,6 +217,10 @@ test('GRND-11 + EXP-03 (Phase 21 integration, built CLI): the outline export run
   for (const name of ['OUTLINE.tex', 'ANNOTATED-BIBLIOGRAPHY.tex']) await assertScanClean(join(exportDir, name), sb.root);
   const tex = readFileSync(join(exportDir, 'OUTLINE.tex'), 'utf8');
   assert.match(tex, /\\documentclass/);
+  // Review round 2: every pair on disk was rebuilt in the new style — no
+  // MLA export stays beside the APA ones.
+  for (const name of ['OUTLINE.md', 'OUTLINE.docx']) assert.ok(existsSync(join(exportDir, name)), name);
+  assert.doesNotMatch(readFileSync(join(exportDir, 'OUTLINE.md'), 'utf8'), /^\*Sources:\* \([^()\d]+\)$/m, 'the Markdown outline is APA now too');
   assert.match(tex, /Sources:.*\(\D+, \d{4}[a-z]?[;)]/, 'APA cites author and year');
   assert.notEqual(readFileSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md'), 'utf8'), mlaAnnotated, 'the annotated bibliography follows the style');
 });

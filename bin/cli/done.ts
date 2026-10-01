@@ -47,6 +47,7 @@
 import { defineCommand } from 'citty';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { type Pass2Result } from '../lib/verify/pass2.js';
@@ -59,7 +60,7 @@ import {
   type HonestyOutcome,
   type HonestyNotApplicable,
 } from '../lib/honesty.js';
-import { exportDraft, type ExportFormat } from '../lib/exporter.js';
+import { exportDraft, exportedFormats, exportPathFor, type ExportFormat } from '../lib/exporter.js';
 import { paperDir, projectRoot } from '../lib/paths.js';
 import { resolveExportStyle, type ExportStyle } from '../lib/export-style.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
@@ -695,9 +696,10 @@ export const doneCommand = defineCommand({
     // for every done, `--only score` and `--only plagiarism` included.
     readPaperConfigSync(paperRoot);
     // GRND-11 (D-21-25): an outline-only paper ends in its outline export, after
-    // the flag checks and in the resolved style (a routed done passes no
-    // --format and exports Markdown). There is no prose to humanize, score or
-    // search, so those steps are named as skipped and write nothing.
+    // the flag checks and in the resolved style: the Markdown pair always and
+    // the --format pair (default docx) — a routed done and an explicit one
+    // export the same (review round 2). There is no prose to humanize, score
+    // or search, so those steps are named as skipped and write nothing.
     if (isOutlinePaper(paperRoot)) {
       if (only !== null && only !== 'export') {
         writeOut(`pensmith done: ${only} skipped (outline only — there is no prose; done exports the outline and the annotated bibliography)\n`);
@@ -706,8 +708,7 @@ export const doneCommand = defineCommand({
       const outlineStyle = resolveExportStyle(paperRoot, flags.style);
       writeOut(`pensmith done: style: ${outlineStyle.name} (from ${outlineStyle.from})\n`);
       await assertCslStyleApproved(paperRoot, outlineStyle, warnLine);
-      const outlineFormat = (args as Record<string, unknown>)['format'] === undefined ? 'md' : flags.format;
-      return runOutlineDone({ paperRoot, format: outlineFormat, style: outlineStyle.style, yolo: flags.yolo });
+      return runOutlineDone({ paperRoot, format: flags.format, style: outlineStyle.style, yolo: flags.yolo });
     }
     const exporting = only === null || only === 'export';
     const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
@@ -996,6 +997,31 @@ export const doneCommand = defineCommand({
       paperRoot,
       ...(style !== null ? { style: style.style } : {}),
     });
+    // EXP-15 (review round 2): an export done made earlier in another format
+    // is rebuilt from this text too — never left beside the new one holding
+    // an older text. One that cannot be rebuilt now (pandoc gone, a zero-trace
+    // finding) is removed and named.
+    const exportDir = join(paperDir(paperRoot), 'export');
+    for (const other of exportedFormats(exportDir, draftPath).filter((f) => f !== flags.format)) {
+      try {
+        await exportDraft({
+          inputPath: draftPath,
+          text: exportedText,
+          ...(bib.text !== undefined ? { bibText: bib.text } : {}),
+          format: other,
+          paperRoot,
+          ...(style !== null ? { style: style.style } : {}),
+        });
+      } catch (e) {
+        if (!(e instanceof PensmithError)) throw e;
+        const stale = exportPathFor(exportDir, draftPath, other);
+        await rm(stale, { force: true });
+        writeOut(
+          `pensmith done: note — export/${basename(stale)} held an older text and could not be rebuilt (${(e.message.split('\n')[0] ?? '').replace(/^pensmith:\s*/, '')}); ` +
+            `it was removed — \`pensmith done --format ${other}\` writes it again\n`,
+        );
+      }
+    }
     let onDisk: string | null = null;
     try {
       onDisk = readFileSync(draftPath, 'utf8');
