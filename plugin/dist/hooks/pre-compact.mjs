@@ -17142,7 +17142,13 @@ function outlineSectionId(s2) {
 function orderedOutlineSections(outline) {
   return [...outline.sections].sort((a, b) => compareSectionIds(sectionIdOf(a.n, a.suffix), sectionIdOf(b.n, b.suffix)));
 }
-var OUTLINE_HEADER, LEGACY_OUTLINE_HEADER, ROLE_SET, DETAIL_RE;
+function hasStubOutlineMarker(text) {
+  return text.split(/\r?\n/).some((l) => l.trim() === STUB_OUTLINE_MARKER);
+}
+function stubOutlineReason(folder) {
+  return `${folder}/OUTLINE.md was written without a model (PENSMITH_NO_LLM=1): its thesis and section purposes are placeholders, not an outline to hand in \u2014 run \`pensmith outline --force\` with a model configured (or edit OUTLINE.md and delete its stub-outline line to make it your own)`;
+}
+var OUTLINE_HEADER, LEGACY_OUTLINE_HEADER, ROLE_SET, DETAIL_RE, STUB_OUTLINE_MARKER;
 var init_outline_parse = __esm({
   "bin/lib/outline-parse.ts"() {
     "use strict";
@@ -17160,6 +17166,9 @@ var init_outline_parse = __esm({
     __name(parseOutline, "parseOutline");
     __name(outlineSectionId, "outlineSectionId");
     __name(orderedOutlineSections, "orderedOutlineSections");
+    STUB_OUTLINE_MARKER = "<!-- stub outline (no model configured) \u2014 not a real outline -->";
+    __name(hasStubOutlineMarker, "hasStubOutlineMarker");
+    __name(stubOutlineReason, "stubOutlineReason");
   }
 });
 
@@ -19662,6 +19671,21 @@ function humanizeRejectionReason(paperRoot) {
   const dir = basename(paperDir(paperRoot));
   return `the humanizer's rewrite of the compiled draft was rejected (the reasons are in ${dir}/${FINAL_REJECTED_FILE}) \u2014 \`pensmith done --raw\` exports the verified draft without the humanizer; \`pensmith done\` asks the humanizer again`;
 }
+function exportRefusedPath(paperRoot) {
+  return join4(paperDir(paperRoot), EXPORT_REFUSED_FILE);
+}
+function exportRefusalReason(paperRoot) {
+  let text;
+  try {
+    text = readFileSync8(exportRefusedPath(paperRoot), "utf8");
+  } catch {
+    return null;
+  }
+  const recorded = /^Compiled draft: sha256 ([0-9a-f]{64})\s*$/mu.exec(text)?.[1];
+  if (recorded === void 0 || recorded !== fileSha256(join4(paperDir(paperRoot), "DRAFT.md"))) return null;
+  const dir = basename(paperDir(paperRoot));
+  return `the compiled draft holds text no export may carry \u2014 a folder path or a pensmith marker (the reasons are in ${dir}/${EXPORT_REFUSED_FILE}) \u2014 remove it from the section draft, then \`pensmith verify N\` and \`pensmith compile\``;
+}
 function annotatedBibliographyPath(paperRoot) {
   return join4(paperDir(paperRoot), ANNOTATED_BIBLIOGRAPHY_FILE);
 }
@@ -19685,7 +19709,7 @@ function editedAnnotatedReason(paperRoot) {
   const dir = basename(paperDir(paperRoot));
   return `${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} is not the text \`pensmith done\` wrote (it was edited or written by hand) \u2014 done never replaces your file: move ${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} out of the paper folder (your copy keeps the edit) and run \`pensmith done\``;
 }
-var DONE_RECORD_FILE, FINAL_REJECTED_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
+var DONE_RECORD_FILE, FINAL_REJECTED_FILE, EXPORT_REFUSED_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
 var init_done_record2 = __esm({
   "bin/lib/done-record.ts"() {
     "use strict";
@@ -19709,6 +19733,9 @@ var init_done_record2 = __esm({
     FINAL_REJECTED_FILE = "FINAL.rejected.md";
     __name(finalRejectedPath, "finalRejectedPath");
     __name(humanizeRejectionReason, "humanizeRejectionReason");
+    EXPORT_REFUSED_FILE = "EXPORT.refused.md";
+    __name(exportRefusedPath, "exportRefusedPath");
+    __name(exportRefusalReason, "exportRefusalReason");
     ANNOTATED_BIBLIOGRAPHY_FILE = "ANNOTATED-BIBLIOGRAPHY.md";
     __name(annotatedBibliographyPath, "annotatedBibliographyPath");
     __name(outlineDoneState, "outlineDoneState");
@@ -19791,7 +19818,7 @@ function readPaperBrief(root) {
     topic,
     briefThesis,
     thesis: outlineThesis || briefThesis,
-    title: (project?.title ?? "").trim() || topic,
+    title: (project?.title ?? "").trim() || titleFromTopic(topic),
     discipline,
     paperType: brief?.paper_type ?? "other",
     counterargument: brief?.counterargument ?? "auto",
@@ -19801,7 +19828,23 @@ function readPaperBrief(root) {
     assignment
   };
 }
-var DEFAULT_LENGTH_TARGET_WORDS;
+function titleFromTopic(topic) {
+  const words = topic.trim().split(/(\s+)/u);
+  const real = words.map((w, i) => ({ w, i })).filter((x) => x.w.trim() !== "");
+  const firstIndex = real[0]?.i ?? -1;
+  const lastIndex = real[real.length - 1]?.i ?? -1;
+  let afterColon = false;
+  return words.map((w, i) => {
+    if (w.trim() === "") return w;
+    const opens = i === firstIndex || afterColon;
+    afterColon = /:$/u.test(w);
+    if (new RegExp("\\p{Lu}", "u").test(w)) return w;
+    const bare = w.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    if (!opens && i !== lastIndex && TITLE_SMALL_WORDS.has(bare)) return w;
+    return w.split("-").map((part) => part.replace(new RegExp("\\p{L}", "u"), (c) => c.toUpperCase())).join("-");
+  }).join("");
+}
+var DEFAULT_LENGTH_TARGET_WORDS, TITLE_SMALL_WORDS;
 var init_paper_brief = __esm({
   "bin/lib/paper-brief.ts"() {
     "use strict";
@@ -19812,6 +19855,10 @@ var init_paper_brief = __esm({
     init_outline();
     DEFAULT_LENGTH_TARGET_WORDS = 1500;
     __name(readPaperBrief, "readPaperBrief");
+    TITLE_SMALL_WORDS = new Set(
+      "a an and as at but by down for from in into nor of off on onto or over per so than the till to up upon via vs with yet".split(" ")
+    );
+    __name(titleFromTopic, "titleFromTopic");
   }
 });
 
@@ -20302,6 +20349,15 @@ function isOutlineOnlyDoneDetail(detail) {
 }
 function outlineModeDecision(paperRoot) {
   const read = outlineDoneState(paperRoot);
+  if (read.state !== "current" && read.state !== "edited" && read.state !== "newer" && !dryRunWorkspaceActive()) {
+    let outlineText = "";
+    try {
+      outlineText = readFileSync10(join6(paperDir(paperRoot), "OUTLINE.md"), "utf8");
+    } catch {
+      outlineText = "";
+    }
+    if (hasStubOutlineMarker(outlineText)) return { verb: "status", reason: "attention", detail: stubOutlineReason(basename3(paperDir(paperRoot))) };
+  }
   switch (read.state) {
     case "current":
       return { verb: "status", reason: "done", detail: outlineOnlyDoneDetail(read.record?.outline_exports ?? []) };
@@ -20438,6 +20494,8 @@ async function resolveNextAction(paperRoot, opts = {}) {
       if (record === null) return { verb: "compile" };
       const rejected = humanizeRejectionReason(paperRoot);
       if (rejected !== null) return { verb: "status", reason: "attention", detail: rejected };
+      const refused = exportRefusalReason(paperRoot);
+      if (refused !== null) return { verb: "status", reason: "attention", detail: refused };
       return { verb: "done" };
     }
     return { verb: "status", reason: "done" };
@@ -20466,6 +20524,7 @@ var init_router = __esm({
     init_verdicts();
     init_compile_inputs2();
     init_done_record2();
+    init_outline_parse();
     __name(readSectionInfo, "readSectionInfo");
     __name(draftHashOf, "draftHashOf");
     __name(verificationBlockers, "verificationBlockers");

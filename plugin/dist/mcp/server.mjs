@@ -19469,26 +19469,72 @@ function pensmithSourceTextCacheDir() {
 function userHomeDir() {
   return os.homedir();
 }
-function humanizerSkillPath(env = process.env) {
-  const home = userHomeDir();
+function insideTmpdir(p2) {
+  const fold = /* @__PURE__ */ __name((x3) => process.platform === "win32" ? x3.toLowerCase() : x3, "fold");
+  const roots = /* @__PURE__ */ new Set([path2.resolve(os.tmpdir())]);
+  try {
+    roots.add(fs.realpathSync.native(os.tmpdir()));
+  } catch {
+  }
+  const forms = /* @__PURE__ */ new Set([path2.resolve(p2), realpathNearest(p2)]);
+  return [...forms].some(
+    (f2) => [...roots].some((root) => {
+      const rel2 = path2.relative(fold(root), fold(f2));
+      return rel2 !== "" && rel2 !== ".." && !rel2.startsWith(`..${path2.sep}`) && !path2.isAbsolute(rel2);
+    })
+  );
+}
+function claudeSkillsRoot(env) {
+  const configured = env["CLAUDE_CONFIG_DIR"]?.trim();
+  const root = configured ? path2.resolve(configured) : path2.join(userHomeDir(), ".claude");
   const testContext = Boolean(env.NODE_TEST_CONTEXT) || env.PENSMITH_TEST === "1";
-  if (testContext) {
-    const fold = /* @__PURE__ */ __name((p2) => process.platform === "win32" ? p2.toLowerCase() : p2, "fold");
-    const roots = /* @__PURE__ */ new Set([path2.resolve(os.tmpdir())]);
+  if (testContext && !insideTmpdir(configured ? root : userHomeDir())) return null;
+  return root;
+}
+function installedPluginDirs(root, testContext) {
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(path2.join(root, "plugins", "installed_plugins.json"), "utf8"));
+  } catch {
+    return [];
+  }
+  const out2 = [];
+  const walk = /* @__PURE__ */ __name((v2, depth) => {
+    if (depth > 6 || typeof v2 !== "object" || v2 === null) return;
+    if (Array.isArray(v2)) {
+      for (const x3 of v2) walk(x3, depth + 1);
+      return;
+    }
+    const rec = v2;
+    const at = rec["installPath"];
+    if (typeof at === "string" && path2.isAbsolute(at) && (!testContext || insideTmpdir(at))) out2.push(at);
+    for (const x3 of Object.values(rec)) walk(x3, depth + 1);
+  }, "walk");
+  walk(data, 0);
+  return [...new Set(out2)];
+}
+function humanizerSkillCandidates(env = process.env) {
+  const root = claudeSkillsRoot(env);
+  if (root === null) return [];
+  const testContext = Boolean(env.NODE_TEST_CONTEXT) || env.PENSMITH_TEST === "1";
+  const out2 = [path2.join(root, "skills", "humanizer", "SKILL.md")];
+  try {
+    const synced = path2.join(root, "skills", "synced");
+    for (const bucket of fs.readdirSync(synced).sort()) out2.push(path2.join(synced, bucket, "humanizer", "SKILL.md"));
+  } catch {
+  }
+  for (const dir of installedPluginDirs(root, testContext)) out2.push(path2.join(dir, "skills", "humanizer", "SKILL.md"));
+  return out2;
+}
+function humanizerSkillPath(env = process.env) {
+  const candidates = humanizerSkillCandidates(env);
+  for (const c2 of candidates) {
     try {
-      roots.add(fs.realpathSync.native(os.tmpdir()));
+      if (fs.statSync(c2).isFile()) return c2;
     } catch {
     }
-    const forms = /* @__PURE__ */ new Set([path2.resolve(home), realpathNearest(home)]);
-    const inside = [...forms].some(
-      (f2) => [...roots].some((root) => {
-        const rel2 = path2.relative(fold(root), fold(f2));
-        return rel2 !== "" && rel2 !== ".." && !rel2.startsWith(`..${path2.sep}`) && !path2.isAbsolute(rel2);
-      })
-    );
-    if (!inside) return null;
   }
-  return path2.join(home, ".claude", "skills", "humanizer", "SKILL.md");
+  return candidates[0] ?? null;
 }
 function pensmithOwnSourceApprovalsPath(platform = process.platform, env = process.env) {
   return path2.join(pensmithDataDir(platform, env), "own-source-approvals.json");
@@ -19736,6 +19782,10 @@ var init_paths = __esm({
     __name(pensmithHttpCacheDir, "pensmithHttpCacheDir");
     __name(pensmithSourceTextCacheDir, "pensmithSourceTextCacheDir");
     __name(userHomeDir, "userHomeDir");
+    __name(insideTmpdir, "insideTmpdir");
+    __name(claudeSkillsRoot, "claudeSkillsRoot");
+    __name(installedPluginDirs, "installedPluginDirs");
+    __name(humanizerSkillCandidates, "humanizerSkillCandidates");
     __name(humanizerSkillPath, "humanizerSkillPath");
     __name(pensmithOwnSourceApprovalsPath, "pensmithOwnSourceApprovalsPath");
     PLUGIN_DIR_NAME = "plugin";
@@ -22273,6 +22323,9 @@ function decodeEntities(s2) {
     return XML_ENTITIES[ent.toLowerCase()] ?? whole;
   });
 }
+function stripMarkupTags(s2) {
+  return s2.replace(BREAK_TAG_RE, " ").replace(TAG_RE, "");
+}
 function plainText(s2) {
   const once = decodeEntities(s2);
   const stripped = once.replace(BREAK_TAG_RE, " ").replace(TAG_RE, "");
@@ -22329,6 +22382,7 @@ var init_markup = __esm({
     MARKUP_TAGS = "i|b|u|s|em|strong|sub|sup|scp|sc|small|big|tt|span|a|br|p|div|font|italic|bold|underline|monospace|sans-serif|roman|strike|named-content|inline-formula|disp-formula|tex-math|title|sec|list|list-item|math|mi|mo|mn|ms|mtext|mrow|msub|msup|msubsup|mfrac|msqrt|mroot|mover|munder|munderover|mstyle|mspace|mpadded|mphantom|menclose|mtable|mtr|mtd|semantics|annotation|annotation-xml";
     TAG_RE = new RegExp(`</?(?:[a-z][a-z0-9-]*:)?(?:${MARKUP_TAGS})(?:\\s[^<>]*)?/?>`, "gi");
     BREAK_TAG_RE = /<(?:br|\/?p|\/?div|\/?(?:[a-z][a-z0-9-]*:)?(?:sec|list-item|title))\b[^<>]*>/gi;
+    __name(stripMarkupTags, "stripMarkupTags");
     __name(plainText, "plainText");
     __name(plainTextOpt, "plainTextOpt");
     TEX_ACCENTS = lookupTable({
@@ -22953,7 +23007,7 @@ function splitLocator(suffix, terms = LOCATOR_TERMS) {
     const term2 = locatorTerm(inner, terms);
     const value = (term2 !== null ? inner.slice(term2.length) : inner).trim().replace(/\s+/gu, " ");
     if (value === "") return null;
-    return { locator: value, label: term2?.label ?? "page", rest: text4.slice(delimited.length) };
+    return { locator: value, label: term2?.label ?? IMPLICIT_LOCATOR_LABEL, rest: text4.slice(delimited.length) };
   }
   const term = locatorTerm(text4, terms);
   if (term !== null) {
@@ -23050,7 +23104,7 @@ function renameCitekey(md, from, to) {
   }
   return out2 + clustered.slice(at);
 }
-var MAX_SCRIPT_CHARS, ASCII_ENTITIES, CLUSTER_RE_SOURCE, ALNUM_RE, INTERNAL_PUNCT, EXAMPLE_LABEL_RE, TABLE_RULE_RE, BLANK_LINE_RE, UNMODELLED_RE, FENCE_LINE_RE, FENCE_ATTRS_RE, SPANS_LINES_RE, BACKTICK_TAKER_RE, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_CHARS, GLOBALLY_UNMODELLED_RE, UNPARSEABLE_REASONS, LOCATOR_TERMS, LOCATOR_VALUE_RE, ROMAN_RE;
+var MAX_SCRIPT_CHARS, ASCII_ENTITIES, CLUSTER_RE_SOURCE, ALNUM_RE, INTERNAL_PUNCT, EXAMPLE_LABEL_RE, TABLE_RULE_RE, BLANK_LINE_RE, UNMODELLED_RE, FENCE_LINE_RE, FENCE_ATTRS_RE, SPANS_LINES_RE, BACKTICK_TAKER_RE, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_CHARS, GLOBALLY_UNMODELLED_RE, UNPARSEABLE_REASONS, LOCATOR_TERMS, LOCATOR_VALUE_RE, IMPLICIT_LOCATOR_LABEL, ROMAN_RE;
 var init_citation_token = __esm({
   "bin/lib/citation-token.ts"() {
     "use strict";
@@ -23173,6 +23227,7 @@ var init_citation_token = __esm({
       [/^(?:s\.vv?\.|sub verbo\b|sub verbis\b)/i, "sub-verbo"]
     ];
     LOCATOR_VALUE_RE = /^[^\s.,;&\-–—]+(?:\.[^\s.,;&\-–—]+)*/u;
+    IMPLICIT_LOCATOR_LABEL = "none";
     ROMAN_RE = /^(?=[ivxlcdm])m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/i;
     __name(locatorTerm, "locatorTerm");
     __name(locatorWords, "locatorWords");
@@ -66495,6 +66550,7 @@ var init_citations = __esm({
     init_disciplines();
     import_citation_js = __toESM(require_citation_js(), 1);
     init_lookup_table();
+    init_markup();
     plugins = import_citation_js.default.plugins;
     STYLE_FILENAMES = lookupTable({
       "apa": "apa",
@@ -67255,8 +67311,7 @@ var init_v2_to_v32 = __esm({
 // bin/lib/ris-write.ts
 function oneLine2(value) {
   if (value === void 0 || value === null) return "";
-  const s2 = String(value).replace(/<[^>]*>/g, "").replace(/&#(\d+);/g, (_m, d3) => String.fromCodePoint(Number(d3))).replace(/&#x([0-9a-f]+);/gi, (_m, h2) => String.fromCodePoint(parseInt(h2, 16))).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
-  return s2.replace(/\s+/gu, " ").trim();
+  return decodeEntities(stripMarkupTags(String(value))).replace(/\s+/gu, " ").trim();
 }
 function risName(n2) {
   const literal2 = oneLine2(n2.literal);
@@ -67358,6 +67413,7 @@ var init_ris_write = __esm({
     "use strict";
     init_atomic_write();
     init_lookup_table();
+    init_markup();
     init_bibtex_write();
     RIS_TYPES = lookupTable({
       "article-journal": "JOUR",
@@ -68942,7 +68998,13 @@ function outlineSectionId(s2) {
 function orderedOutlineSections(outline) {
   return [...outline.sections].sort((a3, b3) => compareSectionIds(sectionIdOf(a3.n, a3.suffix), sectionIdOf(b3.n, b3.suffix)));
 }
-var OUTLINE_HEADER, LEGACY_OUTLINE_HEADER, ROLE_SET, DETAIL_RE;
+function hasStubOutlineMarker(text4) {
+  return text4.split(/\r?\n/).some((l2) => l2.trim() === STUB_OUTLINE_MARKER);
+}
+function stubOutlineReason(folder) {
+  return `${folder}/OUTLINE.md was written without a model (PENSMITH_NO_LLM=1): its thesis and section purposes are placeholders, not an outline to hand in \u2014 run \`pensmith outline --force\` with a model configured (or edit OUTLINE.md and delete its stub-outline line to make it your own)`;
+}
+var OUTLINE_HEADER, LEGACY_OUTLINE_HEADER, ROLE_SET, DETAIL_RE, STUB_OUTLINE_MARKER;
 var init_outline_parse = __esm({
   "bin/lib/outline-parse.ts"() {
     "use strict";
@@ -68960,6 +69022,9 @@ var init_outline_parse = __esm({
     __name(parseOutline, "parseOutline");
     __name(outlineSectionId, "outlineSectionId");
     __name(orderedOutlineSections, "orderedOutlineSections");
+    STUB_OUTLINE_MARKER = "<!-- stub outline (no model configured) \u2014 not a real outline -->";
+    __name(hasStubOutlineMarker, "hasStubOutlineMarker");
+    __name(stubOutlineReason, "stubOutlineReason");
   }
 });
 
@@ -82567,6 +82632,21 @@ function humanizeRejectionReason(paperRoot) {
   const dir = basename2(paperDir(paperRoot));
   return `the humanizer's rewrite of the compiled draft was rejected (the reasons are in ${dir}/${FINAL_REJECTED_FILE}) \u2014 \`pensmith done --raw\` exports the verified draft without the humanizer; \`pensmith done\` asks the humanizer again`;
 }
+function exportRefusedPath(paperRoot) {
+  return join9(paperDir(paperRoot), EXPORT_REFUSED_FILE);
+}
+function exportRefusalReason(paperRoot) {
+  let text4;
+  try {
+    text4 = readFileSync12(exportRefusedPath(paperRoot), "utf8");
+  } catch {
+    return null;
+  }
+  const recorded2 = /^Compiled draft: sha256 ([0-9a-f]{64})\s*$/mu.exec(text4)?.[1];
+  if (recorded2 === void 0 || recorded2 !== fileSha256(join9(paperDir(paperRoot), "DRAFT.md"))) return null;
+  const dir = basename2(paperDir(paperRoot));
+  return `the compiled draft holds text no export may carry \u2014 a folder path or a pensmith marker (the reasons are in ${dir}/${EXPORT_REFUSED_FILE}) \u2014 remove it from the section draft, then \`pensmith verify N\` and \`pensmith compile\``;
+}
 function annotatedBibliographyPath(paperRoot) {
   return join9(paperDir(paperRoot), ANNOTATED_BIBLIOGRAPHY_FILE);
 }
@@ -82590,7 +82670,7 @@ function editedAnnotatedReason(paperRoot) {
   const dir = basename2(paperDir(paperRoot));
   return `${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} is not the text \`pensmith done\` wrote (it was edited or written by hand) \u2014 done never replaces your file: move ${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} out of the paper folder (your copy keeps the edit) and run \`pensmith done\``;
 }
-var DONE_RECORD_FILE, FINAL_REJECTED_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
+var DONE_RECORD_FILE, FINAL_REJECTED_FILE, EXPORT_REFUSED_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
 var init_done_record2 = __esm({
   "bin/lib/done-record.ts"() {
     "use strict";
@@ -82614,6 +82694,9 @@ var init_done_record2 = __esm({
     FINAL_REJECTED_FILE = "FINAL.rejected.md";
     __name(finalRejectedPath, "finalRejectedPath");
     __name(humanizeRejectionReason, "humanizeRejectionReason");
+    EXPORT_REFUSED_FILE = "EXPORT.refused.md";
+    __name(exportRefusedPath, "exportRefusedPath");
+    __name(exportRefusalReason, "exportRefusalReason");
     ANNOTATED_BIBLIOGRAPHY_FILE = "ANNOTATED-BIBLIOGRAPHY.md";
     __name(annotatedBibliographyPath, "annotatedBibliographyPath");
     __name(outlineDoneState, "outlineDoneState");
@@ -82745,7 +82828,7 @@ function readPaperBrief(root) {
     topic,
     briefThesis,
     thesis: outlineThesis || briefThesis,
-    title: (project?.title ?? "").trim() || topic,
+    title: (project?.title ?? "").trim() || titleFromTopic(topic),
     discipline,
     paperType: brief?.paper_type ?? "other",
     counterargument: brief?.counterargument ?? "auto",
@@ -82755,7 +82838,23 @@ function readPaperBrief(root) {
     assignment
   };
 }
-var DEFAULT_LENGTH_TARGET_WORDS;
+function titleFromTopic(topic) {
+  const words4 = topic.trim().split(/(\s+)/u);
+  const real = words4.map((w3, i) => ({ w: w3, i })).filter((x3) => x3.w.trim() !== "");
+  const firstIndex = real[0]?.i ?? -1;
+  const lastIndex = real[real.length - 1]?.i ?? -1;
+  let afterColon = false;
+  return words4.map((w3, i) => {
+    if (w3.trim() === "") return w3;
+    const opens = i === firstIndex || afterColon;
+    afterColon = /:$/u.test(w3);
+    if (new RegExp("\\p{Lu}", "u").test(w3)) return w3;
+    const bare = w3.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    if (!opens && i !== lastIndex && TITLE_SMALL_WORDS.has(bare)) return w3;
+    return w3.split("-").map((part) => part.replace(new RegExp("\\p{L}", "u"), (c2) => c2.toUpperCase())).join("-");
+  }).join("");
+}
+var DEFAULT_LENGTH_TARGET_WORDS, TITLE_SMALL_WORDS;
 var init_paper_brief = __esm({
   "bin/lib/paper-brief.ts"() {
     "use strict";
@@ -82766,6 +82865,10 @@ var init_paper_brief = __esm({
     init_outline();
     DEFAULT_LENGTH_TARGET_WORDS = 1500;
     __name(readPaperBrief, "readPaperBrief");
+    TITLE_SMALL_WORDS = new Set(
+      "a an and as at but by down for from in into nor of off on onto or over per so than the till to up upon via vs with yet".split(" ")
+    );
+    __name(titleFromTopic, "titleFromTopic");
   }
 });
 
@@ -83319,6 +83422,15 @@ function outlineOnlyDoneDetail(exports) {
 }
 function outlineModeDecision(paperRoot) {
   const read = outlineDoneState(paperRoot);
+  if (read.state !== "current" && read.state !== "edited" && read.state !== "newer" && !dryRunWorkspaceActive()) {
+    let outlineText = "";
+    try {
+      outlineText = readFileSync15(join11(paperDir(paperRoot), "OUTLINE.md"), "utf8");
+    } catch {
+      outlineText = "";
+    }
+    if (hasStubOutlineMarker(outlineText)) return { verb: "status", reason: "attention", detail: stubOutlineReason(basename4(paperDir(paperRoot))) };
+  }
   switch (read.state) {
     case "current":
       return { verb: "status", reason: "done", detail: outlineOnlyDoneDetail(read.record?.outline_exports ?? []) };
@@ -83455,6 +83567,8 @@ async function resolveNextAction(paperRoot, opts = {}) {
       if (record2 === null) return { verb: "compile" };
       const rejected = humanizeRejectionReason(paperRoot);
       if (rejected !== null) return { verb: "status", reason: "attention", detail: rejected };
+      const refused = exportRefusalReason(paperRoot);
+      if (refused !== null) return { verb: "status", reason: "attention", detail: refused };
       return { verb: "done" };
     }
     return { verb: "status", reason: "done" };
@@ -83483,6 +83597,7 @@ var init_router = __esm({
     init_verdicts();
     init_compile_inputs2();
     init_done_record2();
+    init_outline_parse();
     __name(readSectionInfo, "readSectionInfo");
     __name(draftHashOf, "draftHashOf");
     __name(sectionDraftState, "sectionDraftState");
@@ -136071,7 +136186,7 @@ function fetchFullTextSetting(root) {
   }
 }
 async function runPass2(draftMd, bibByCitekey, opts) {
-  const pairs = collectClaimPairs(draftMd);
+  const pairs = collectClaimPairs(draftMd).filter((p2) => opts.only === void 0 || opts.only(p2));
   if (pairs.length === 0) return [];
   const useFullText = opts.fullText !== void 0 && (opts.fetchFullText ?? fetchFullTextSetting(opts.root));
   const texts = new SourceTexts(bibByCitekey, opts, useFullText);
