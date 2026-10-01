@@ -130,3 +130,11 @@ exported the same way, and its router terminus is a DONE-RECORD v2 outline recor
 - **`assertDoneRecordWritable`** before the draft-mode export (writeDoneRecord now throws after the export when a newer pensmith wrote the record).
 - **runHumanizer / TaskRunner / __setTaskRunnerForTest** deletion once done no longer imports them.
 - Cross-stream CLI checks in plan §7 item 4 (goldens through `done --format md --style <s>`, `--style ./custom.csl` end to end, the titled DRAFT.md through the writers).
+
+## Verification (this branch, Linux, Node 22)
+
+- `npm run prebuild && npm run lint && npm run typecheck && npm run build && npm run validate:manifests`: all exit 0.
+- `LANG=C.UTF-8 CI=true npm test` with pandoc 3.9 on PATH: 3024 tests, 3023 pass, 0 skipped; the one failure is the root-only `atomicWriteFile preserves OLD content on rename/write failure` (chmod 0o500 does not stop root; passes in CI).
+- `npm run test:tier-contract`: 63/63.
+- `PENSMITH_TEX_ENGINE=<scratchpad>/tools/tectonic PENSMITH_REQUIRE_TEX=1` `tests/latex-standalone.test.ts`: 3/3.
+- `npm run bundle` then `npm run bundle:check`: plugin/dist and the plugin version match what is committed.
