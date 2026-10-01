@@ -134,7 +134,8 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
   6. The plagiarism check sends quoted distinctive phrases from every section, counts only verbatim matches, shows real destination URLs and is labeled when offline
   7. done accepts `--no-verify`, `--no-score`, `--no-plagiarism-check` and `--style`, and the `export`, `humanize`, `score` and `plagiarism` aliases work while `UX02_VERBS` stays at 16
   8. Outline-only mode stops after the outline and exports a zero-trace annotated bibliography whose sources were re-verified by the gate
-**Plans**: TBD
+**Plans**: 1 plan, [21-PLAN.md](phases/21-export/21-PLAN.md), executed as two parallel streams (export, pipeline), then an integration pass and three review rounds (75 reported findings, several of them duplicates; every confirmed finding was fixed, and three suggestions inside round-2 findings were not adopted, each with its reason).
+**Status (2026-10-01):** closed with one requirement open. **21 of 22 requirements are Complete and all 8 success criteria are met** on the user path. EXP-09 stays Pending (partial): every local criterion is met, and both LaTeX paths compile with tectonic and pdflatex here, but its "compiles in the CI export job" criterion waits for HARDEN-04 (Phase 26) to put a TeX engine on the CI legs. The phase box therefore stays unticked. The closer re-ran the full gate (`CI=true npm test`: 3146 tests, 3145 pass, the one failure being the root-only atomic-write case; HARDEN-03 ran 1000 drafts against pandoc 3.9; tier-contract 63/63; `e2e-smoke` 17 PASS; `plugin:smoke` passed). The integration's user-path acceptance drivers were re-run on the final code, plus a driver for the review-round behaviour (@@ACCEPT_SCORE@@ checks pass). Caveats: no CI run has exercised this code (CI-06), and keyed live detector scores are maintainer items. See [21-SUMMARY.md](phases/21-export/21-SUMMARY.md) and [21-VERIFICATION.md](phases/21-export/21-VERIFICATION.md).
 
 ### Phase 22: Revision Loop and Inline Corrections (REVISE)
 **Goal**: Redoing, fixing, resizing, adding or dropping a section works through the user path and reaches compile and export without loops, and the secondary modes (library filters, learning mode, sketch) do what the PRD says.
@@ -223,7 +224,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 | 18. Grounded Generation (GROUND) | 1/1 | Complete: 21/21 requirements + RUN-26 carry-over | 2026-09-29 |
 | 19. Sources and Library (SOURCES) | 1/1 | In progress: 19/20 requirements Complete (GRND-14 closed at the Phase 18/19 merge); open: SRC-06 (keyed OpenAlex / Semantic Scholar live round trip, maintainer item) | - |
 | 20. Verifier Completeness (VERIFY) | 1/1 | Complete: 22/22 requirements, 7/7 success criteria | 2026-09-30 |
-| 21. Compile, Done and Export (EXPORT) | 0/TBD | Not started | - |
+| 21. Compile, Done and Export (EXPORT) | 1/1 | In progress: 21/22 requirements Complete, 8/8 success criteria met; open: EXP-09's "LaTeX compiles in the CI export job" criterion (HARDEN-04, Phase 26) | - |
 | 22. Revision Loop and Inline Corrections (REVISE) | 0/TBD | Not started | - |
 | 23. Tier-1 Claude Code Plugin (PLUGIN) | 1/2 (23a) | In progress: 23a closed on `v1/p23a`, integrated on Phase 20 in `v1/int-23a` and merged into the main branch after Phase 20 closed, 5/8 of its requirements Complete; open in 23a: PLUG-04 (acceptance amendment), CI-05 (first green CI run, required check) and PLUG-14's 3-OS CI leg (the first green `check` matrix), all maintainer items; 23b (PLUG-06..12, PLUG-15) not started | - |
 | 24. Security Review (SEC) | 0/TBD | Not started | - |
@@ -246,3 +247,4 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 *Phase 20 executed and verified: 2026-09-30 (22/22 Complete, 7/7 success criteria; phase box ticked)*
 *Phase 23a merged onto Phase 20 (`7eb0cbf`) in the integration branch `v1/int-23a`, with the CI run 68 fixes: 2026-09-30 (23a-SUMMARY §10)*
 *Phase 23a merged into the main branch after Phase 20 closed (`v1/int-23a`, with the CI run 68 fixes and the post-`7eb0cbf` Phase 20 commits ported to the `plugin/` layout): 2026-09-30 (23a-SUMMARY §13); Phase 20 stays Complete, Phase 23a stays 5/8 with PLUG-04, PLUG-14's CI leg and CI-05 pending*
+*Phase 21 executed and verified: 2026-10-01 (21/22 Complete, 8/8 success criteria; EXP-09's CI-compile criterion is open until HARDEN-04, so the phase box stays unticked)*

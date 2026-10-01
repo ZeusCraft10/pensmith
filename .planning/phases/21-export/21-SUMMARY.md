@@ -486,3 +486,25 @@ Every finding was reproduced or read in the code first; none was rejected as a f
 - `paper-brief.ts`: new `titleFromTopic(topic)`; `PaperBrief.title` is title-cased when `[project] title` is unset.
 - `exporter.ts`: staging moved to `os.tmpdir()` (signature unchanged).
 - Re-stamp plugin.json after the merge.
+
+## 9. Close-out (phase closer, 2026-10-01)
+
+No product code changed in the close-out; it re-ran the gate and the user path on the final code (`e800683`) and updated the planning files. Evidence: [21-VERIFICATION.md](21-VERIFICATION.md).
+
+**Gate (Linux, as root, Node 22.22.2, LANG=C.UTF-8, pandoc 3.9 on PATH):**
+- prebuild and build clean, with `git status --porcelain` empty after the build; lint, typecheck, `validate:manifests` and `bundle:check` (plugin version `0.1.0-dev+94ea9de82086`) all pass.
+- `test:tier-contract`: 63/63.
+- `CI=true npm test`: 3146 tests, 3145 pass, 0 skipped, 0 todo. The one failure is the root-only atomic-write case. HARDEN-03 ran 1000 drafts against pandoc 3.9, and the real-data-dir fingerprint was unchanged.
+- `e2e-smoke`: 17 PASS. `plugin:smoke` (Claude Code 2.1.286): all checks passed.
+
+**User path.** The integration pass's acceptance drivers (s1–s6) were re-run on the final code, together with a new `s7-rounds` driver for the review-round behaviour: @@ACCEPT_SCORE@@ checks pass (21-VERIFICATION §4). Where a review round deliberately changed the behaviour, the expectation was updated, and 21-VERIFICATION §4 names each change and the round that made it. These are consent recorded in the data dir, the non-breaking space after a locator label, the goldens normalisation and the "Works Cited" heading, the three-place skill search line, the service's own reason in an unavailable score, and tectonic `--only-cached`. @@DEFECTS@@
+
+**Requirements.** 21 of 22 are Complete and ticked in REQUIREMENTS.md, and the Coverage line now reads 125 Complete. EXP-09 stays Pending (partial), with its CI-compile bullet handed to HARDEN-04; that hand-off is also noted on HARDEN-04's acceptance. All 8 ROADMAP success criteria are met. The ROADMAP Phase 21 box stays unticked because EXP-09 is open; the progress row, the phase's Plans/Status lines and the footer are updated. STATE.md records the closed phase. The Phase 21 pending todos (the EXP-04 note style, the DONE-RECORD inheritance and the Phase 19 EXP-03 follow-ups) are closed, and the EXP-09 CI leg, the 23b merge and the keyed detector runs are added.
+
+**Follow-ups for later phases:**
+- **HARDEN-04 (Phase 26).** EXP-09's CI compile: a TeX engine on the three legs, a warmed tectonic bundle cache, and `PENSMITH_REQUIRE_TEX=1`.
+- **CI-06.** The first CI run of this code on macOS and Windows, with the pandoc-dependent suites.
+- **HARDEN-02 / maintainer.** Keyed GPTZero, Originality.ai (Enterprise) and Sapling scores.
+- **BRDTH-02 (Phase 25).** Stripping image metadata on embed. The scanner already refuses it.
+- **Phase 23b merge.** Follow §4 and the round 1–3 merge notes.
+- **Phase 22.** It rebuilds compile and export outputs after a revision. The router's staleness rules (COMPILE-INPUTS v3, DONE-RECORD v4, `FINAL.rejected.md`, `EXPORT.refused.md`) are the inputs it must keep current.
