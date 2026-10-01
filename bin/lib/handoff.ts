@@ -50,7 +50,7 @@ import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { paperDir as paperDirOf } from './paths.js';
 import { formatSectionId, sectionIdOf, sectionLabel } from './section-id.js';
-import { OUTLINE_ONLY_DONE, type RouterDecision } from './router.js';
+import { isOutlineOnlyDoneDetail, type RouterDecision } from './router.js';
 
 // Re-export the schema so tests + consumers can import a single module.
 export { HandoffSchema, HANDOFF_MAX_BYTES, HANDOFF_SLUG_MAX, CURRENT_HANDOFF_VERSION };
@@ -132,7 +132,9 @@ export interface NextActionOptions {
    * VERIFICATION.md rows, an OUTLINE.md problem — so text bound for the
    * model's context (the SessionStart hook) passes false: an attention step
    * then names the section and `/pensmith status` instead. The one `done`
-   * detail the router writes itself (OUTLINE_ONLY_DONE) is still quoted.
+   * detail the router writes itself — an outline-only paper's deliverables,
+   * fixed words around validated export names (isOutlineOnlyDoneDetail) — is
+   * still quoted.
    */
   readonly quoteDetail?: boolean;
 }
@@ -167,9 +169,9 @@ export function nextActionOf(decision: RouterDecision, opts: NextActionOptions =
       text = `Export the paper: ${run('done')}.`;
       break;
     case 'status': {
-      // A `done` with a detail is a mode's own end state (GRND-02 outline-only:
-      // OUTLINE_ONLY_DONE), not a finished paper.
-      const detail = decision.detail !== undefined && (quoteDetail || decision.detail === OUTLINE_ONLY_DONE)
+      // A `done` with a detail is a mode's own end state (GRND-11 outline-only:
+      // outlineOnlyDoneDetail), not a finished paper.
+      const detail = decision.detail !== undefined && (quoteDetail || isOutlineOnlyDoneDetail(decision.detail))
         ? decision.detail
         : null;
       if (decision.reason === 'done') {

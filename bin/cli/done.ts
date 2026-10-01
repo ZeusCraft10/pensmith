@@ -70,6 +70,7 @@ import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.j
 import { readQuoteAcceptances, sectionDirOfPlan } from '../lib/quote-acceptance.js';
 import { recordLastVerified, recordRetractionStatuses, LibraryNotFoundError } from '../lib/library.js';
 import { out as writeOut } from '../lib/output-sink.js';
+import { isOutlinePaper, runOutlineDone } from '../lib/outline-export.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -868,6 +869,14 @@ export const doneCommand = defineCommand({
   },
   async run({ args }) {
     const paperRoot = projectRoot();
+    // GRND-11 (D-21-25): an outline-only paper ends in its outline export (a routed done, with no --format, exports Markdown).
+    if (isOutlinePaper(paperRoot)) {
+      let discipline = '';
+      try {
+        discipline = parseIntakeMd(readFileSync(join(paperDir(paperRoot), 'INTAKE.md'), 'utf8')).discipline;
+      } catch { /* no INTAKE.md: the preset default style */ }
+      return runOutlineDone({ paperRoot, format: args.format === undefined ? 'md' : String(args.format), style: resolveStyleName(discipline), yolo: args.yolo === true });
+    }
     const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
 
     let draftMd: string;

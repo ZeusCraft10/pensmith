@@ -70,6 +70,13 @@
 // status/attention (done neither exports nor replaces it); done when FINAL.md
 // is absent or stale; status/done while FINAL.md and DRAFT.md hold the bytes
 // DONE-RECORD.json recorded.
+// Outline-only mode (`stopAfterOutline`, GRND-11, D-21-25 amending D-18-45):
+// once the outline is approved and registered, the paper routes to `done` —
+// never to plan, write, verify or compile — until DONE-RECORD.json's outline
+// record matches OUTLINE.md, CITATIONS.bib and ANNOTATED-BIBLIOGRAPHY.md and
+// its exports are there (done-record.ts outlineDoneState); then status/done
+// naming the deliverables. An annotated bibliography done did not write, or a
+// record a newer pensmith wrote, is attention.
 //
 // Imports: loadState/StateNotFoundError (state.ts), existsSync (node:fs), join
 // (node:path), paperDir/sectionPlan (paths.ts), loadFrontmatterDocSync
@@ -91,7 +98,7 @@ import { RETRY_ONLINE_VERDICTS } from './verify/verdicts.js';
 import { isResearchDone } from './research-sentinel.js';
 import { ACCEPTABLE_QUOTE_VERDICT } from './verify/verdicts.js';
 import { readCompileInputs, fileSha256 } from './compile-inputs.js';
-import { editedFinalReason, finalMdState } from './done-record.js';
+import { editedAnnotatedReason, editedFinalReason, finalMdState, newerDoneRecordReason, outlineDoneState } from './done-record.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -395,17 +402,70 @@ export interface ResolveOptions {
   stopAfterResearch?: boolean;
   /**
    * When true AND the outline is approved (OUTLINE.md lists the sections
-   * STATE.json registers), halt there with `{ verb:'status', reason:'done' }`
-   * instead of planning section 1 (GRND-02 outline-only mode, set by the CLI
-   * tier from `[project] mode`; review round 3). Explicit verbs still run.
+   * STATE.json registers), no section is ever routed: the paper goes to
+   * `done` (the outline export, GRND-11) until the outline record is current,
+   * then `{ verb:'status', reason:'done' }` naming the deliverables
+   * (outline-only mode, set by the CLI tier from `[project] mode`; D-21-25
+   * amends GRND-02's stop). Explicit verbs still run.
    */
   stopAfterOutline?: boolean;
 }
 
-/** What a paper routed with `stopAfterOutline` reports once its outline is approved. */
-export const OUTLINE_ONLY_DONE =
-  'outline only: the approved outline is .paper/OUTLINE.md (its sources in .paper/LIBRARY.json and CITATIONS.bib) — ' +
-  'to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
+/** How an outline-only paper's finished-state detail starts. */
+const OUTLINE_ONLY_PREFIX = 'outline only — complete: ';
+/** How it ends: how to go on to a full draft. */
+const OUTLINE_ONLY_SUFFIX =
+  ' — to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
+/** One export file of an outline-only paper (the record's validated names, schemas/done-record.ts OUTLINE_EXPORT_PATH). */
+const OUTLINE_EXPORT_NAME = 'export/(?:OUTLINE|ANNOTATED-BIBLIOGRAPHY)(?:[.]dry-run)?[.](?:md|docx|pdf|tex)';
+
+/** `a`, `a and b`, `a, b and c`. */
+function listed(items: readonly string[]): string {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1] as string}`;
+}
+
+/**
+ * What an outline-only paper reports once its outline export is current
+ * (GRND-11, D-21-25): the export files (paths relative to the paper folder,
+ * validated by the record's schema) and how to go on to a full draft.
+ */
+export function outlineOnlyDoneDetail(exports: readonly string[]): string {
+  return `${OUTLINE_ONLY_PREFIX}${listed(exports)}${OUTLINE_ONLY_SUFFIX}`;
+}
+
+/** The detail of an outline-only paper exported as Markdown (what a routed outline-mode done exports). */
+export const OUTLINE_ONLY_DONE = outlineOnlyDoneDetail(['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md']);
+
+/**
+ * True for a detail outlineOnlyDoneDetail built — its fixed words around
+ * validated export names only — so the SessionStart context may quote it
+ * (handoff.ts nextActionOf).
+ */
+export function isOutlineOnlyDoneDetail(detail: string): boolean {
+  if (!detail.startsWith(OUTLINE_ONLY_PREFIX) || !detail.endsWith(OUTLINE_ONLY_SUFFIX)) return false;
+  const names = detail.slice(OUTLINE_ONLY_PREFIX.length, detail.length - OUTLINE_ONLY_SUFFIX.length);
+  return new RegExp(`^${OUTLINE_EXPORT_NAME}(?:(?:, | and )${OUTLINE_EXPORT_NAME})*$`).test(names);
+}
+
+/**
+ * The outline-only route once the outline is approved (D-21-25): done until
+ * the outline record is current, then status/done naming the deliverables;
+ * attention for an annotated bibliography done did not write, or a record a
+ * newer pensmith wrote. Never throws (outlineDoneState never does).
+ */
+function outlineModeDecision(paperRoot: string): RouterDecision {
+  const read = outlineDoneState(paperRoot);
+  switch (read.state) {
+    case 'current':
+      return { verb: 'status', reason: 'done', detail: outlineOnlyDoneDetail(read.record?.outline_exports ?? []) };
+    case 'edited':
+      return { verb: 'status', reason: 'attention', detail: editedAnnotatedReason(paperRoot) };
+    case 'newer':
+      return { verb: 'status', reason: 'attention', detail: newerDoneRecordReason(paperRoot, read.newerVersion ?? 0) };
+    default:
+      return { verb: 'done' };
+  }
+}
 
 /**
  * Resolve the next WORK action for the active paper at `paperRoot`.
@@ -498,10 +558,11 @@ export async function resolveNextAction(
     const registry = sectionRegistryProblem(paperRoot);
     if (registry !== null) return { verb: 'status', reason: 'attention', detail: registry };
 
-    // DI HARD-STOP (GRND-02 outline-only mode): the outline is approved and
-    // registered — nothing more is routed, so no section is planned, drafted
-    // or verified (and billed) unless the user runs one explicitly.
-    if (opts.stopAfterOutline) return { verb: 'status', reason: 'done', detail: OUTLINE_ONLY_DONE };
+    // Outline-only mode (GRND-11, D-21-25): the outline is approved and
+    // registered — no section is planned, drafted or verified (and billed)
+    // unless the user runs one explicitly; done exports the outline and its
+    // annotated bibliography, and then the paper is complete.
+    if (opts.stopAfterOutline) return outlineModeDecision(paperRoot);
 
     // Walk sections in (n, suffix) order (GRND-09: 1 < 1a < 2); the FIRST
     // section still to do decides the verb (C3-HIGH-1: TOTAL over

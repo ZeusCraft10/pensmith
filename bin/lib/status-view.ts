@@ -34,6 +34,7 @@ import { isApiKeyPresent, resolveRuntime, resolveSlug } from './runtime.js';
 import { SLUG_NAMES, slugSpec, LOCAL_PROVIDERS, effectiveEffort, modelCapabilities, describeCacheReach, systemCacheReach } from './llm-models.js';
 import { loadPrompt } from './prompt-loader.js';
 import { estimateTokens } from './estimator.js';
+import { ANNOTATED_BIBLIOGRAPHY_FILE, outlineDoneState } from './done-record.js';
 
 /**
  * An unverifiable section's status text: `unverifiable` plus what it needs
@@ -110,6 +111,14 @@ export interface StatusView {
   note: string | null;
   /** Present when STATE.json is absent or unreadable. */
   problem: 'no-paper' | 'corrupt-state' | null;
+  /** `outline` for an outline-only paper (`[project] mode`, GRND-11), else `draft`. */
+  mode: 'draft' | 'outline';
+  /**
+   * An outline-only paper's finished files, once its outline export is
+   * current (the annotated bibliography and the recorded exports, paths
+   * from the project root); empty otherwise.
+   */
+  deliverables: string[];
 }
 
 /** The PLAN.md statuses that speak for a DRAFT.md the router requires (VRFY-16: without it, the section is re-drafted). */
@@ -221,17 +230,21 @@ export async function buildStatusView(
     return row;
   });
 
+  // GRND-02 / GRND-11 outline-only mode: read here when the caller did not
+  // pass it (the Tier-1 status resource), so both tiers route the same paper alike.
+  const outlineOnly = opts.stopAfterOutline ?? readPaperModeSync(root) === 'outline';
   let decision: RouterDecision;
   try {
-    decision = await resolveNextAction(root, {
-      stopAfterResearch: opts.stopAfterResearch === true,
-      // GRND-02 outline-only mode: read here when the caller did not pass it
-      // (the Tier-1 status resource), so both tiers route the same paper alike.
-      stopAfterOutline: opts.stopAfterOutline ?? readPaperModeSync(root) === 'outline',
-    });
+    decision = await resolveNextAction(root, { stopAfterResearch: opts.stopAfterResearch === true, stopAfterOutline: outlineOnly });
   } catch {
     decision = { verb: 'status', reason: 'attention' };
   }
+  // The outline-only deliverables (GRND-11, D-21-25): what done wrote and
+  // exported, once the record says it is current.
+  const outlineDone = outlineOnly && decision.verb === 'status' && decision.reason === 'done' ? outlineDoneState(root) : null;
+  const deliverables = outlineDone?.state === 'current' && outlineDone.record !== null
+    ? [ANNOTATED_BIBLIOGRAPHY_FILE, ...outlineDone.record.outline_exports].map((p) => path.join(path.basename(pDir), p).split(path.sep).join('/'))
+    : [];
   const current: StatusView['current'] = decision.verb === 'plan' || decision.verb === 'write' || decision.verb === 'verify'
     ? {
         n: decision.n,
@@ -282,6 +295,8 @@ export async function buildStatusView(
     attention: decision.verb === 'status' && decision.reason === 'attention' && decision.detail ? decision.detail : null,
     note: decision.verb === 'status' && decision.reason === 'done' && decision.detail ? decision.detail : null,
     problem,
+    mode: outlineOnly ? 'outline' : 'draft',
+    deliverables,
   };
 }
 
@@ -298,6 +313,7 @@ export function renderStatusView(view: StatusView): string {
   } else if (view.paperId) {
     lines.push(`  id: ${view.paperId}`);
   }
+  if (view.mode === 'outline') lines.push('  mode: outline only');
   lines.push(`  ${view.currentLine}`);
   lines.push('  sections:');
   if (view.sections.length === 0) lines.push('    (none yet)');
@@ -306,6 +322,10 @@ export function renderStatusView(view: StatusView): string {
   lines.push(`  ${view.nextLine}`);
   if (view.attention !== null) lines.push(`  attention: ${view.attention}`);
   if (view.note !== null) lines.push(`  note: ${view.note}`);
+  if (view.deliverables.length > 0) {
+    lines.push('  deliverables:');
+    for (const d of view.deliverables) lines.push(`    ${d}`);
+  }
   return lines.join('\n');
 }
 
