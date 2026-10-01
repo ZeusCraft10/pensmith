@@ -249,7 +249,7 @@ export function writeCompileRecord(root: string, sections: Array<{ n: number; sl
     compiled_at: '2026-01-01T00:00:00.000Z',
     compiled_draft_sha256: sha(join(root, '.paper', 'DRAFT.md')),
     // v3 (EXP-05): the title and section titles compile wrote as headings.
-    headings_sha256: headings === null ? null : headingsSha256(headings),
+    headings_sha256: headingsSha256(headings),
     sections: sections.map((s) => {
       const dir = sectionDirOf(root, s.n, s.slug);
       const hash = /^verified_against_draft_hash:\s*'?([0-9a-f]{64})'?\s*$/m.exec(readFileSync(join(dir, 'PLAN.md'), 'utf8'))?.[1] ?? null;

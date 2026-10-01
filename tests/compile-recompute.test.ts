@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EXIT_BLOCKED, EXIT_OK } from '../bin/lib/exit-codes.js';
-import { readCompileInputs } from '../bin/lib/compile-inputs.js';
+import { headingsSha256, readCompileInputs } from '../bin/lib/compile-inputs.js';
 import { summaryMismatches } from '../bin/lib/verify/verification-md.js';
 import { seedGatePaper, sectionDraftHash, mtimes, fileSha, RECORDED_BIB } from './helpers/gate-paper.js';
 import { STACK_LINE } from './helpers/paper-cli-harness.js';
@@ -30,7 +30,7 @@ const SECTIONS = [
 
 const planHash = (plan: string): string | null => /^verified_against_draft_hash:\s*'?([0-9a-f]{64})'?\s*$/m.exec(plan)?.[1] ?? null;
 
-test('VRFY-25 / D-08 (built CLI): a stale section is re-verified with the advisory passes off — only its VERIFICATION.md and PLAN.md change; COMPILE-INPUTS v2 records the compiled draft and every verified hash', () => {
+test('VRFY-25 / D-08 (built CLI): a stale section is re-verified with the advisory passes off — only its VERIFICATION.md and PLAN.md change; COMPILE-INPUTS v3 records the compiled draft, its headings and every verified hash', () => {
   const p = seedGatePaper('recompute-stale', SECTIONS, RECORDED_BIB);
   for (const s of SECTIONS) assert.equal(p.cli(['verify', String(s.n)]).status, EXIT_OK);
   const s2 = p.sectionDir(2, 'measurement');
@@ -62,7 +62,12 @@ test('VRFY-25 / D-08 (built CLI): a stale section is re-verified with the adviso
   assert.match(report, /2 \(measurement\)/);
 
   const record = readCompileInputs(p.root);
-  assert.equal(record?.$schemaVersion, 2);
+  assert.equal(record?.$schemaVersion, 3);
+  // EXP-05 (D-21-13): the compiled DRAFT.md carries the title and the section headings, recorded in v3.
+  const compiled = readFileSync(join(p.root, '.paper', 'DRAFT.md'), 'utf8');
+  assert.ok(compiled.startsWith('# Outline\n\n## intro\n\n'), compiled.slice(0, 80));
+  assert.match(compiled, /\n## measurement\n\n/);
+  assert.equal(record?.headings_sha256, headingsSha256({ title: 'Outline', sections: [{ id: '1', title: 'intro' }, { id: '2', title: 'measurement' }] }));
   assert.equal(record?.compiled_draft_sha256, createHash('sha256').update(readFileSync(join(p.root, '.paper', 'DRAFT.md'))).digest('hex'));
   assert.deepEqual(
     record?.sections.map((s) => [s.id, s.verified_against_draft_hash]),

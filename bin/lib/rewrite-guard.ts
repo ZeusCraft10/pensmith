@@ -37,6 +37,8 @@ import { TEXT_SCANNERS } from './verify/gate.js';
 import { extractQuotes } from './quote-extractor.js';
 import { findBareIdentifiers } from './doi.js';
 import { DEFAULT_QUOTE_MIN_WORDS } from './schemas/config.js';
+import { networkMode } from './http-mock.js';
+import { resolveRuntime } from './runtime.js';
 
 /** A masked text and how to put the original spans back. */
 export interface RewriteMask {
@@ -300,4 +302,38 @@ export function validateRewrite(input: ValidateRewriteInput): RewriteVerdict {
     return reject();
   }
   return { ok: true, text: restored, reasons: [] };
+}
+
+/** A loopback model endpoint (127.0.0.0/8, ::1, localhost): reachable while sources are offline (S-15). */
+function isLoopbackEndpoint(endpoint: string | null): boolean {
+  if (endpoint === null) return false;
+  let host: string;
+  try {
+    host = new URL(endpoint).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  } catch {
+    return false;
+  }
+  return host === 'localhost' || host === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+}
+
+/**
+ * Why a model step of compile or done (the smoother, the contradiction judge,
+ * the humanizer) cannot run in this invocation's mode, as the skip reason the
+ * report and the terminal name (S-15): `dry-run` (--dry-run: zero sockets),
+ * `no LLM` (PENSMITH_NO_LLM=1 — a stub would rewrite nothing real), `offline`
+ * (sources offline and the model endpoint is not loopback), or null when the
+ * step can run. Never throws (an unusable runtime config is left to the model
+ * call, which names it).
+ */
+export async function modelStepSkipReason(paperRoot: string): Promise<'dry-run' | 'no LLM' | 'offline' | null> {
+  const mode = networkMode();
+  if (mode.dryRun) return 'dry-run';
+  if (mode.llmStubbed) return 'no LLM';
+  if (!mode.sourcesOffline) return null;
+  try {
+    const rt = await resolveRuntime({ paperRoot });
+    return isLoopbackEndpoint(rt.endpoint) ? null : 'offline';
+  } catch {
+    return 'offline';
+  }
 }

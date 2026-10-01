@@ -110,7 +110,7 @@ test('GRND-06: COMPILE-REPORT.md shows the band, each section\'s citations per p
   assert.match(md, /^Discipline: history · band 0\.5–2 citations per paragraph · paper-wide 0\.5 per paragraph \(within\)$/m);
   assert.match(md, /^- 1 \(intro\): 1 citations\/paragraph over 2 paragraph\(s\) \(within 0\.5–2\); \d+(\.\d)? citations\/1000 words$/m);
   assert.match(md, /^- 2 \(body\): 0 citations\/paragraph over 2 paragraph\(s\) \(BELOW 0\.5–2\); 0 citations\/1000 words$/m);
-  assert.match(md, /^ {2}- paragraph 1 \(0 citations\): "Nothing cited here at all, just prose words\."$/m);
+  assert.match(md, /^ {2}- paragraph 1 \(0 citations, band 0\.5–2\): "Nothing cited here at all, just prose words\."$/m, 'EXP-12: each out-of-band paragraph names its count and the band');
 });
 
 test('VRFY-09: the density count and each paragraph\'s first words read every citation form through the one grammar', () => {

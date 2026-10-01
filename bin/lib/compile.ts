@@ -1,57 +1,58 @@
-// bin/lib/compile.ts — the Phase-4 compile pipeline (COMP-01..07, ARCH-20).
+// bin/lib/compile.ts — the compile pipeline (COMP-01..07, ARCH-20; Phase 21
+// EXP-05, EXP-10..13).
 //
-// Phase 4 Plan 04-05 — the phase keystone. runCompile composes the Phase 1-3
-// chokepoints into a single, lock-guarded, read-only-on-sections pipeline that
-// produces .paper/DRAFT.md + .paper/COMPILE-REPORT.md (it never rewrites
-// .paper/CITATIONS.bib — BRDTH-01). Every write routes through the D-07 atomicWriteFile
-// sole-writer chokepoint. The only section files compile writes are a stale or
-// unverifiable section's VERIFICATION.md and PLAN.md, through its re-verify
-// (D-08); never a DRAFT.md, never another section's files (ARCH-20).
+// runCompile composes the Phase 1-3 chokepoints into a single, lock-guarded,
+// read-only-on-sections pipeline that produces .paper/DRAFT.md +
+// .paper/COMPILE-REPORT.md + .paper/COMPILE-INPUTS.json (it never rewrites
+// .paper/CITATIONS.bib — BRDTH-01). Every write routes through the D-07
+// atomicWriteFile sole-writer chokepoint. The only section files compile writes
+// are a stale or unverifiable section's VERIFICATION.md and PLAN.md, through its
+// re-verify (D-08); never a DRAFT.md, never another section's files (ARCH-20).
 //
-// Pipeline (04-RESEARCH §F, with the CANONICAL COMP meanings from this plan):
-//   0. Acquire .paper/.compile.lock for the WHOLE run (§P-6 — no mid-pipeline
-//      race on the output files).
-//   1. parseOutline; for each section in OUTLINE order (sort by n — D-11):
-//        - read PLAN.md frontmatter (assigned_sources, verified_against_draft_hash,
-//          slug) + the section's DRAFT.md bytes + its VERIFICATION.md.
+// Pipeline:
+//   0. Acquire .paper/.compile.lock for the WHOLE run (§P-6).
+//   1. parseOutline; for each section in OUTLINE order ((n, suffix) — D-11):
 //        - LOCAL RECORDS ADD REFUSALS, NEVER REMOVE THEM (D-20-04): a missing
 //          PLAN.md / DRAFT.md / VERIFICATION.md, a missing or `failed` Status
 //          line, a PLAN.md write block (FEED-04) or `failed` status, a
 //          --dry-run verification outside --dry-run (RUN-27) refuse.
-//        - STALENESS (COMP-01 / D-08): if verified_against_draft_hash !=
-//          computeDraftHash(draftBytes, assigned_sources) → WARN + re-verify
-//          through the injected seam (production: verify.ts verifySection with
-//          the advisory passes off — it rewrites that section's VERIFICATION.md
-//          and PLAN.md, never a DRAFT.md). A re-verify failure refuses; an
-//          all-pass records a Compile-Staleness-Resolved event. A section
-//          whose record says `unverifiable` is re-verified the same way, so a
-//          section compile now passes is recorded `verified` (its verdict is
-//          left to the gate core below).
-//        - RECOMPUTE (VRFY-25, D-20-23): the ONE gate core (verify/gate.ts)
-//          over the section's EXACT draft bytes with its assigned_sources and
-//          quote acceptances — every blocking row refuses, whatever the local
-//          files say (a forged VERIFICATION.md or PLAN.md cannot pass it).
-//      If ANY refuse reason was collected, REFUSE: do NOT write .paper/DRAFT.md.
-//   2. Concatenate section drafts in OUTLINE order (COMP-02), each normalized to
-//      exactly one trailing '\n', joined with '\n\n'.
-//   3. N-1 per-boundary smoothing (COMP-03 / D-12 / D-13): substitute
-//      [@key] → {{cite_K_M}} BEFORE the smoother call (the model never sees raw
-//      tokens); after the call, require output placeholder-set == input set —
-//      any drift REJECTS that boundary (keep original prose) and records a
-//      Transitions-Changed rejection. Then run the consistency scan (COMP-04,
-//      flags only) and citation density (COMP-05, warn-only vs discipline target).
-//   4. atomicWriteFile DRAFT.md + COMPILE-REPORT.md (schema v1, D-14) +
-//      COMPILE-INPUTS.json v2 (the compiled sections' content and verified
-//      hashes, and the sha256 of the DRAFT.md written — the router and done
-//      read it, VRFY-27). compile never writes LIBRARY.json,
-//      .paper/CITATIONS.bib or last_verified: the bib stays the full library
-//      rendered from LIBRARY.json by bin/lib/library.ts (BRDTH-01 / D-17-43);
-//      citeproc renders cited keys only. Under --dry-run the stub-draft marker
-//      lines are removed from the compiled draft (VRFY-24).
+//        - STALENESS (COMP-01 / D-08): a draft changed since its verification is
+//          re-verified through the injected seam (production: verify.ts
+//          verifySection with the advisory passes off); an `unverifiable`
+//          section is re-verified the same way.
+//        - RECOMPUTE (VRFY-25, D-20-23): the ONE gate core (verify/gate.ts) over
+//          the section's EXACT draft bytes — every blocking row refuses.
+//   2. THE HEADINGS (EXP-05, D-21-13): `# <paper title>` (OUTLINE.md's H1, else
+//      the brief's title) and `## <section title>` per section. The text
+//      scanners (TEXT_SCANNERS), the citation grammar, the quote extractor and
+//      the bare-identifier reader run over every heading compile adds: a
+//      heading that holds anything the gate would judge refuses, naming the fix
+//      (retitle it in OUTLINE.md and run `pensmith outline`) — the headings are
+//      text no section gate judged. A section draft whose first line is a
+//      heading equal to its own title loses that line (it would print twice).
+//      If ANY refuse reason was collected, REFUSE: no DRAFT.md is written.
+//   3. N-1 per-boundary smoothing (COMP-03 / D-12 / D-13; EXP-10, D-21-14):
+//      only the last prose paragraph of section N and the first of N+1 go to
+//      the smoother, masked by the ONE rewrite guard (rewrite-guard.ts: every
+//      citation and every Pass-3 quote becomes a placeholder) and validated by
+//      it (placeholder multiset, headings, only the two paragraphs, the cited
+//      keys, the quotes, nothing new the gate would check). A rejected boundary
+//      keeps the raw text and the report says why; a skipped step names its
+//      mode (dry-run, no LLM, offline, --no-smooth, --raw, config).
+//   4. The surface consistency scan (COMP-04, flags only), the cross-section
+//      contradiction check (EXP-11, claim-consistency.ts: the heuristic floor
+//      always, one capped `claim-consistency` call when wired), and citation
+//      density against the discipline band with its sources (EXP-12).
+//   5. atomicWriteFile DRAFT.md + COMPILE-REPORT.md (fully populated, EXP-13) +
+//      COMPILE-INPUTS.json v3 (the compiled sections' content and verified
+//      hashes, the sha256 of the DRAFT.md written and of its headings — the
+//      router and done read it, VRFY-27, D-21-13). compile never writes
+//      LIBRARY.json, .paper/CITATIONS.bib or last_verified. Under --dry-run the
+//      stub-draft marker lines are removed from the compiled draft (VRFY-24).
 //
-// The smoother + re-verify transports are injectable seams so CI never touches a
-// live model. Production callers (bin/cli/compile.ts) wire verify.ts
-// verifySection as the re-verify; the gate core is not injectable.
+// The smoother, the contradiction judge and the re-verify are injectable seams
+// so CI never touches a live model (bin/cli/compile.ts wires the real ones);
+// the gate core and the rewrite guard are not injectable.
 
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
@@ -63,9 +64,9 @@ import { loadFrontmatterDoc } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { computeDraftHash } from './draft-hash.js';
-import { extractCitedKeysForVerification, replaceCitations, stripLeadingBom } from './citation-token.js';
+import { extractCitedKeysForVerification, findCitations, stripLeadingBom } from './citation-token.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
-import { computeCitationDensity } from './citation-density.js';
+import { computeCitationDensity, resolveDensityBand } from './citation-density.js';
 import {
   renderCompileReport,
   citationDensityForReport,
@@ -75,7 +76,7 @@ import {
 } from './compile-report.js';
 import { sectionWriteBlockReason } from './plan-status.js';
 import { networkMode } from './http-mock.js';
-import { writeCompileInputs } from './compile-inputs.js';
+import { compilePaperTitle, headingsSha256, writeCompileInputs, type CompileHeadings } from './compile-inputs.js';
 import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
 import { recomputeGate, gateRefusals, loadBibliography, stripStubMarker, TEXT_SCANNERS, type AcceptedQuote, type ByoQuote } from './verify/gate.js';
 import { extractQuotes } from './quote-extractor.js';
@@ -83,16 +84,31 @@ import { findBareIdentifiers } from './doi.js';
 import { tryReadPaperConfigSync } from './config.js';
 import { parseVerificationMd, verificationRecordReasons } from './verify/verification-md.js';
 import { readQuoteAcceptances, sectionDirOfPlan } from './quote-acceptance.js';
+import { maskForRewrite, validateRewrite } from './rewrite-guard.js';
+import {
+  applyConsistencyReply,
+  collectClaims,
+  consistencyCandidates,
+  type ConsistencyPair,
+  type ConsistencyVerdict,
+  type ContradictionReport,
+} from './claim-consistency.js';
+import { DEFAULT_CONTRADICTION_PAIRS } from './schemas/config.js';
+import { readPaperBrief } from './paper-brief.js';
+import { readSectionAdvisory, type DoneSection } from './done-gate.js';
+
+// The boundary helper moved to the one rewrite guard (D-21-14); re-exported for callers of compile.
+export { boundaryAdditions } from './rewrite-guard.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
   /** Title of the section that ENDS at this boundary. */
   sectionATitle: string;
-  /** Last paragraph of section A, with [@key] already → {{cite_K_M}} placeholders. */
+  /** Last prose paragraph of section A, masked: citations → {{cite_K_M}}, Pass-3 quotes → {{quote_K_M}}. */
   tail: string;
   /** Title of the section that STARTS at this boundary. */
   sectionBTitle: string;
-  /** First paragraph of section B, with [@key] already → {{cite_K_M}} placeholders. */
+  /** First prose paragraph of section B, masked the same way. */
   head: string;
 }
 
@@ -126,14 +142,36 @@ export interface RunCompileOpts {
   yolo?: boolean;
   /** Enable the opt-in heading-tense consistency heuristic (COMP-04). */
   lintHeadings?: boolean;
-  /** Discipline preset for the citation-density target (COMP-05). */
+  /**
+   * The `--discipline` flag (COMP-05, EXP-12): it overrides the paper's own
+   * discipline AND the config band. Omitted: the paper's discipline (GRND-06
+   * layers) and `[verification] citation_density_min/max`.
+   */
   discipline?: string;
   /**
-   * Boundary smoother seam. Returns the rewritten boundary text (rewritten
-   * tail, a blank line, rewritten head). The pipeline owns placeholder
-   * substitution + post-call token-set equality. Omit → no smoothing (raw concat).
+   * Boundary smoother seam. Receives the masked boundary window and returns
+   * the rewritten boundary text (rewritten tail, a blank line, rewritten
+   * head). The pipeline owns the masking and the validation (rewrite-guard.ts).
+   * Omitted → no smoothing (raw concat), reported with `smoothSkip`.
    */
   smoothBoundary?: (input: SmoothBoundaryInput) => Promise<string>;
+  /** Why smoothing does not run when `smoothBoundary` is omitted (e.g. `dry-run`, `no LLM`, `--no-smooth`); default `no smoother wired`. */
+  smoothSkip?: string;
+  /**
+   * The claim-consistency judge seam (EXP-11): judges the capped candidate
+   * pairs (one call). Omitted → the heuristic floor alone, reported with
+   * `consistencySkip`.
+   */
+  judgeConsistency?: (pairs: readonly ConsistencyPair[]) => Promise<readonly ConsistencyVerdict[]>;
+  /** Why the model contradiction check does not run when `judgeConsistency` is omitted; default `no judge wired`. */
+  consistencySkip?: string;
+  /**
+   * Which seam errors end the compile instead of being recorded (production:
+   * anthropic.ts isFatalLlmError — the never-skippable cost cap, a missing key
+   * or bad runtime config, a replay miss). Any other smoother or judge error
+   * keeps the raw text and is reported. Default: none.
+   */
+  isFatal?: (err: unknown) => boolean;
   /**
    * Staleness re-verify seam (Pass 1 + Pass 3 only — D-08). Omit → a stale
    * section is treated as a re-verify failure (fail-safe: never let a stale
@@ -152,6 +190,14 @@ export interface CompileResult {
   bibPath?: string;
   sectionsCount: number;
   staleResolvedCount: number;
+  /** The boundary outcomes (EXP-10). */
+  transitions?: TransitionEntry[];
+  /** Why smoothing did not run at all, when it did not. */
+  smoothingSkipped?: string;
+  /** The contradiction check (EXP-11). */
+  contradictions?: ContradictionReport;
+  /** The paper title compile wrote as `# <title>` (EXP-05). */
+  title?: string;
 }
 
 interface LoadedSection {
@@ -166,6 +212,8 @@ interface LoadedSection {
   planStatus: string | null;
   /** Set when the PLAN.md says the draft must not ship (a failed or unfinished write, FEED-04). */
   writeBlock: string | null;
+  /** The PLAN.md body (its `## Claims` feed the contradiction check). */
+  planBody: string;
 }
 
 /** Normalize a draft to end in exactly one '\n' (§F). */
@@ -178,68 +226,60 @@ function splitParagraphs(md: string): string[] {
   return md.split(/\n\s*\n/);
 }
 
-/** First non-empty paragraph index in a paragraph list. */
-function firstParaIdx(paras: string[]): number {
-  for (let i = 0; i < paras.length; i += 1) {
-    if ((paras[i] ?? '').trim().length > 0) return i;
-  }
+/** A prose paragraph: not blank, not a heading, list, table, block quote, code fence or rule. */
+function isProseParagraph(p: string): boolean {
+  if (p.trim().length === 0) return false;
+  return !/^\s{0,3}(?:#{1,6}(?:\s|$)|[-*+]\s|\d+[.)]\s|\||>|```|~~~|(?:-{3,}|\*{3,}|_{3,})\s*$)/.test(p);
+}
+
+/** First prose paragraph index in a paragraph list, or -1. */
+function firstProseIdx(paras: string[]): number {
+  for (let i = 0; i < paras.length; i += 1) if (isProseParagraph(paras[i] ?? '')) return i;
   return -1;
 }
 
-/** Last non-empty paragraph index in a paragraph list. */
-function lastParaIdx(paras: string[]): number {
-  for (let i = paras.length - 1; i >= 0; i -= 1) {
-    if ((paras[i] ?? '').trim().length > 0) return i;
-  }
+/** Last prose paragraph index in a paragraph list, or -1. */
+function lastProseIdx(paras: string[]): number {
+  for (let i = paras.length - 1; i >= 0; i -= 1) if (isProseParagraph(paras[i] ?? '')) return i;
   return -1;
 }
 
-/** The placeholder family is disjoint from CITATION_TOKEN_RE by construction. */
-function makePlaceholder(k: number, m: number): string {
-  return `{{cite_${k}_${m}}}`;
-}
-
-/** Extract the set of {{cite_K_M}} placeholder tokens from a string. */
-function placeholderSet(s: string): Set<string> {
-  const set = new Set<string>();
-  for (const m of s.matchAll(/\{\{cite_\d+_\d+\}\}/g)) set.add(m[0]);
-  return set;
-}
-
-function setsEqual(a: Set<string>, b: Set<string>): boolean {
-  if (a.size !== b.size) return false;
-  for (const x of a) if (!b.has(x)) return false;
-  return true;
+/** Normalised heading text for the duplicate-title check. */
+function headingKey(s: string): string {
+  return s.normalize('NFKC').toLowerCase().replace(/[*_`]/g, '').replace(/[\s.:;!?]+$/g, '').replace(/\s+/g, ' ').trim();
 }
 
 /**
- * Substitute every citation in `text` with a fresh {{cite_K_M}} placeholder.
- * Returns the substituted text and the placeholder→citation restore map.
- * Every citation is masked — a bare `[@key]`, but also a mixed-case key, a
- * locator, a multi-key cluster, `[-@k]`, `@{k}` and a narrative `@k`
- * (citation-token.ts replaceCitations over findCitations) — so the smoother
- * can never rewrite or drop a citation the placeholder-set check would not
- * see (fail closed; Phase 19 review round 2, D-18-40).
+ * The draft without a first heading line that repeats the section's own title
+ * (compile adds `## <title>`; the drafter writes no title, a hand-written or
+ * older draft may). Only that one line (and the blank lines after it) goes.
  */
-function substitutePlaceholders(text: string, k: number): { masked: string; restore: Map<string, string> } {
-  const restore = new Map<string, string>();
-  let m = 0;
-  const masked = replaceCitations(text, (cluster) => {
-    const ph = makePlaceholder(k, m);
-    m += 1;
-    restore.set(ph, cluster.text);
-    return ph;
-  });
-  return { masked, restore };
+export function dropDuplicateTitleHeading(draft: string, title: string): string {
+  const m = /^(?:[ \t]*\n)*[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t#]*\n(?:[ \t]*\n)*/.exec(draft);
+  if (m === null || headingKey(m[1] ?? '') !== headingKey(title)) return draft;
+  return draft.slice(m[0].length);
 }
 
-/** Restore every {{cite_K_M}} placeholder back to its [@key]. */
-function restorePlaceholders(text: string, restore: Map<string, string>): string {
-  let out = text;
-  for (const [ph, token] of restore) {
-    out = out.split(ph).join(token);
-  }
-  return out;
+/**
+ * What a heading compile adds would bring into the compiled text that no
+ * section gate judged (EXP-05, D-21-13): a citation of any form the grammar
+ * reads, a text finding (an unparseable or unsupported citation form), a
+ * direct quote, a bare identifier — or a heading that is empty or spans lines.
+ * One short phrase, or null when it is plain text.
+ */
+export function headingProblem(text: string, quoteMinWords?: number): string | null {
+  if (text.trim().length === 0) return 'is empty';
+  if (/[\r\n]/.test(text)) return 'spans more than one line';
+  const asLine = `${text}\n`;
+  const cited = extractCitedKeysForVerification(asLine);
+  if (cited.length > 0 || findCitations(asLine).length > 0) return `holds a citation (${cited.map((k) => `@${k}`).join(', ') || 'a citation form'})`;
+  const finding = TEXT_SCANNERS.flatMap((scan) => scan(asLine))[0];
+  if (finding !== undefined) return `holds ${finding.verdict} \`${finding.text}\``;
+  const quote = extractQuotes(asLine, quoteMinWords !== undefined ? { minWords: quoteMinWords } : {})[0];
+  if (quote !== undefined) return `holds a direct quote ("${quote.text.slice(0, 40)}")`;
+  const id = findBareIdentifiers(asLine)[0];
+  if (id !== undefined) return `holds an identifier (${id.text})`;
+  return null;
 }
 
 async function loadSection(
@@ -258,8 +298,9 @@ async function loadSection(
   // newer one is refused with "upgrade pensmith"). compile writes a section's
   // PLAN.md only through its staleness re-verify.
   let frontmatter: Record<string, unknown>;
+  let planBody: string;
   try {
-    ({ frontmatter } = await loadFrontmatterDoc('plan', planPath));
+    ({ frontmatter, body: planBody } = await loadFrontmatterDoc('plan', planPath));
   } catch (e) {
     return `PLAN.md cannot be read (${(e as Error).message.split('\n')[0] ?? ''}) — fix it, or re-plan with \`pensmith plan ${id}\``;
   }
@@ -281,35 +322,18 @@ async function loadSection(
     storedHash,
     planStatus: typeof frontmatter['status'] === 'string' ? frontmatter['status'] : null,
     writeBlock: sectionWriteBlockReason(frontmatter, id),
+    planBody,
   };
 }
 
-/**
- * What `after` (a smoothed boundary) adds to `before` (the section drafts'
- * text) that the gate core would check — a text finding (an unsupported or
- * unparseable citation form), a direct quote, a bare identifier — as a short
- * phrase for the WARN, or null when it adds none (VRFY-25).
- */
-export function boundaryAdditions(before: string, after: string, quoteMinWords?: number): string | null {
-  const findings = (t: string): string[] => TEXT_SCANNERS.flatMap((scan) => scan(t)).map((f) => `${f.verdict} \`${f.text}\``);
-  const was = findings(before);
-  for (const f of findings(after)) {
-    const at = was.indexOf(f);
-    if (at === -1) return f;
-    was.splice(at, 1);
-  }
-  const opts = quoteMinWords !== undefined ? { minWords: quoteMinWords } : {};
-  const quotes = new Set(extractQuotes(before, opts).map((q) => q.text));
-  const newQuote = extractQuotes(after, opts).find((q) => !quotes.has(q.text));
-  if (newQuote !== undefined) return `a direct quote ("${newQuote.text.slice(0, 40)}…")`;
-  const ids = new Set(findBareIdentifiers(before).map((b) => `${b.kind}:${b.id}`));
-  const newId = findBareIdentifiers(after).find((b) => !ids.has(`${b.kind}:${b.id}`));
-  if (newId !== undefined) return `an identifier written in the prose (${newId.text})`;
-  return null;
+/** One line of a seam error, for the report. */
+function oneLineError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (msg.split('\n')[0] ?? msg).slice(0, 200);
 }
 
 /**
- * Run the Phase-4 compile pipeline. See module header for the full contract.
+ * Run the compile pipeline. See module header for the full contract.
  */
 export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
   const warn = opts.onWarn ?? ((m: string) => process.stderr.write(`${m}\n`));
@@ -318,9 +342,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
   return withLock(lockResource, async (): Promise<CompileResult> => {
     // ---- Step 1: load sections in OUTLINE order + refuse-gate + staleness ----
     // Audit M2: a missing / section-less OUTLINE.md is a REFUSAL (the CLI prints
-    // refuseReasons), not a raw parseOutline stack trace. loadOutline returns ''
-    // for an absent file and parseOutline throws "no section table" on '' or a
-    // placeholder, so both degenerate cases land here gracefully.
+    // refuseReasons), not a raw parseOutline stack trace.
     const raw = await loadOutline(opts.paperRoot);
     let outline: ReturnType<typeof parseOutline>;
     try {
@@ -366,6 +388,8 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     const byoQuotes: ByoQuote[] = [];
     const verifiedHashes = new Map<string, string>();
     const dryRun = networkMode().dryRun;
+    const config = tryReadPaperConfigSync(opts.paperRoot);
+    const quoteMinWords = config?.verification?.quote_min_words;
     // The one bibliography every section's gate reads (entry by entry; an
     // unreadable or broken file is a REFUSED reason through the rows, never a stack).
     const bib = loadBibliography(opts.paperRoot);
@@ -412,10 +436,8 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       // A section whose own record says `unverifiable` (a source that could
       // not be reached, a quote with no checkable text): its verification is
       // re-run like a stale one, so when the gate core below now passes it
-      // (online again, the PDF added, the quote accepted) its VERIFICATION.md
-      // and PLAN.md say `verified` — never a compiled section whose record
-      // still says it could not be checked. Its verdict, pass or not, is left
-      // to the gate core (the refusal keeps the gate's wording and options).
+      // its VERIFICATION.md and PLAN.md say `verified`. Its verdict, pass or
+      // not, is left to the gate core.
       const recordStatus = verificationMd !== null ? (parseVerificationMd(verificationMd).status ?? '').toLowerCase() : '';
       const unverifiable = !stale && recordReasons.length === 0 && (sec.planStatus === 'unverifiable' || recordStatus === 'unverifiable');
       if (unverifiable) {
@@ -479,6 +501,22 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       verifiedHashes.set(id, freshHash);
     }
 
+    // ---- Step 2: the headings compile adds (EXP-05, D-21-13) ----------------
+    const title = compilePaperTitle(opts.paperRoot, outline.paper_title);
+    const retitle = 'retitle it in .paper/OUTLINE.md and run `pensmith outline`';
+    if (title.length === 0) {
+      refuseReasons.push(`the paper has no title — add it as the H1 line (\`# <title>\`) of .paper/OUTLINE.md and run \`pensmith outline\``);
+    } else {
+      const problem = headingProblem(title, quoteMinWords);
+      if (problem !== null) refuseReasons.push(`the paper title "${title}" ${problem} — compile writes it as the paper's \`# \` heading, which no section verified; ${retitle} (the H1 line)`);
+    }
+    for (const os of ordered) {
+      const problem = headingProblem(os.title.trim(), quoteMinWords);
+      if (problem !== null) {
+        refuseReasons.push(`section ${outlineSectionId(os)} (${os.slug}): its title "${os.title.trim()}" ${problem} — compile writes it as the section's \`## \` heading, which no section verified; ${retitle}`);
+      }
+    }
+
     // REFUSE: no DRAFT.md write, no bib regen (COMP-01 — bad citation never escapes).
     if (refuseReasons.length > 0) {
       for (const r of refuseReasons) warn(`REFUSE: ${r}`);
@@ -490,136 +528,148 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       };
     }
 
-    // ---- Step 2: concat in OUTLINE order (COMP-02) -------------------------
+    // ---- Step 3: the section texts in OUTLINE order (COMP-02) ---------------
     // VRFY-24: a --dry-run preview's stub drafts carry the stub-draft marker;
     // the compiled dry-run draft (and so every dry-run export) does not.
     if (dryRun) for (const s of loaded) s.draft = normalizeTrailingNewline(stripStubMarker(s.draft));
-    // Keep per-section draft strings so per-boundary smoothing can replace only
-    // the adjacent paragraphs without disturbing the rest of each section.
-    const drafts = loaded.map((s) => s.draft);
+    // A first heading that repeats the section's title would print twice under `## <title>`.
+    const drafts = loaded.map((s) => normalizeTrailingNewline(dropDuplicateTitleHeading(s.draft, s.outline.title)));
 
-    // ---- Step 3: N-1 per-boundary smoothing (COMP-03 / D-12 / D-13) --------
+    // ---- Step 4: N-1 per-boundary smoothing (EXP-10, D-21-14) ---------------
     const transitions: TransitionEntry[] = [];
-    const quoteMinWords = tryReadPaperConfigSync(opts.paperRoot)?.verification?.quote_min_words;
+    const smoothingSkipped = opts.smoothBoundary === undefined ? (opts.smoothSkip ?? 'no smoother wired') : undefined;
     for (let k = 0; k < drafts.length - 1; k += 1) {
       const left = splitParagraphs(drafts[k] ?? '');
       const right = splitParagraphs(drafts[k + 1] ?? '');
-      const li = lastParaIdx(left);
-      const ri = firstParaIdx(right);
-      if (li === -1 || ri === -1) continue; // empty section → nothing to smooth
-
-      const tailRaw = left[li] ?? '';
-      const headRaw = right[ri] ?? '';
-      const beforeChars = tailRaw.length + headRaw.length;
+      const li = lastProseIdx(left);
+      const ri = firstProseIdx(right);
       // The boundary between the two sections' ids (GRND-09: `1→1a`, `1a→2`).
       const leftSec = loaded[k] as LoadedSection;
       const rightSec = loaded[k + 1] as LoadedSection;
       const boundary = `${outlineSectionId(leftSec.outline)}→${outlineSectionId(rightSec.outline)}`;
+      if (li === -1 || ri === -1) {
+        transitions.push({ boundary, status: 'skipped', reason: 'no prose paragraph at the boundary', before_chars: 0, after_chars: 0 });
+        continue;
+      }
+      const tailRaw = (left[li] ?? '').trim();
+      const headRaw = (right[ri] ?? '').trim();
+      const window = `${tailRaw}\n\n${headRaw}`;
+      const beforeChars = tailRaw.length + headRaw.length;
 
-      if (!opts.smoothBoundary) {
-        transitions.push({ boundary, status: 'skipped', before_chars: beforeChars, after_chars: beforeChars });
+      if (opts.smoothBoundary === undefined) {
+        transitions.push({ boundary, status: 'skipped', reason: smoothingSkipped ?? 'no smoother wired', before_chars: beforeChars, after_chars: beforeChars, before: window });
         continue;
       }
 
-      // D-13: mask [@key] → {{cite_K_M}} BEFORE the model sees the window.
-      const tailMask = substitutePlaceholders(tailRaw, k);
-      const headMask = substitutePlaceholders(headRaw, k + 1);
-      const inputSet = new Set<string>([...placeholderSet(tailMask.masked), ...placeholderSet(headMask.masked)]);
-
+      // D-13 / D-21-14: the model never sees a citation or a Pass-3 quote.
+      const mask = maskForRewrite(window, { namespace: k, ...(quoteMinWords !== undefined ? { quoteMinWords } : {}) });
+      const [tailMasked = '', headMasked = ''] = mask.masked.split(/\n[ \t]*\n/);
       let smoothed: string;
       try {
-        smoothed = await opts.smoothBoundary({
-          sectionATitle: loaded[k]?.outline.title ?? '',
-          tail: tailMask.masked,
-          sectionBTitle: loaded[k + 1]?.outline.title ?? '',
-          head: headMask.masked,
-        });
+        smoothed = await opts.smoothBoundary({ sectionATitle: leftSec.outline.title, tail: tailMasked, sectionBTitle: rightSec.outline.title, head: headMasked });
       } catch (err) {
-        // Smoothing is best-effort prose — a seam error NEVER refuses compile.
-        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing threw (${err instanceof Error ? err.message : String(err)}) — keeping original prose`);
-        transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+        // A fatal error (the cost cap, an unusable config, a replay miss) ends
+        // the compile before anything is written; anything else keeps the raw prose.
+        if (opts.isFatal?.(err) === true) throw err;
+        const reason = `smoother failed: ${oneLineError(err)}`;
+        warn(`WARN: boundary ${boundary} smoothing ${reason} — keeping original prose`);
+        transitions.push({ boundary, status: 'rejected', reason, before_chars: beforeChars, after_chars: beforeChars, before: window });
         continue;
       }
-
-      // D-13: post-call token-set equality. ANY drift → reject (keep original).
-      const outputSet = placeholderSet(smoothed);
-      if (!setsEqual(inputSet, outputSet)) {
-        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — citation placeholder set drifted; keeping original prose`);
-        transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+      const verdict = validateRewrite({ original: window, mask, rewritten: smoothed, allowedParagraphs: [0, 1], ...(quoteMinWords !== undefined ? { quoteMinWords } : {}) });
+      if (!verdict.ok) {
+        const reason = verdict.reasons[0] ?? 'rewrite rejected';
+        warn(`WARN: boundary ${boundary} smoothing rejected (${reason}) — keeping original prose`);
+        transitions.push({ boundary, status: 'rejected', reason, before_chars: beforeChars, after_chars: beforeChars, before: window });
         continue;
       }
-
-      // Accepted: split the smoothed output back into rewritten tail + head and
-      // restore the real [@key] tokens (mask maps merged — placeholders are
-      // unique across the K / K+1 namespaces).
-      const restore = new Map<string, string>([...tailMask.restore, ...headMask.restore]);
-      const parts = smoothed.split(/\n\s*\n/);
-      const newTail = restorePlaceholders((parts[0] ?? smoothed), restore);
-      const newHead = restorePlaceholders(parts.length > 1 ? parts.slice(1).join('\n\n') : '', restore);
-
-      // D-18-40: the placeholders cover every citation the reader finds, but
-      // the model could still write a NEW one (or rebuild one from its prose)
-      // — a citation no section verified. The smoothed boundary must cite
-      // exactly the keys the original did (the one fail-closed grammar), else
-      // it is rejected like a drift.
-      const citedBefore = new Set(extractCitedKeysForVerification(`${tailRaw}\n\n${headRaw}`));
-      const citedAfter = new Set(extractCitedKeysForVerification(`${newTail}\n\n${newHead}`));
-      if (!setsEqual(citedBefore, citedAfter)) {
-        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — the smoothed text cites different sources; keeping original prose`);
-        transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
-        continue;
-      }
-      // VRFY-25: the gate core judged the section drafts, not the smoothed
-      // text — so the smoothed boundary may add nothing the gate would check:
-      // no citation form it refuses or cannot read, no direct quote (Pass 3)
-      // and no identifier written in the prose (Pass 1) the drafts did not hold.
-      const added = boundaryAdditions(`${tailRaw}\n\n${headRaw}`, `${newTail}\n\n${newHead}`, quoteMinWords);
-      if (added !== null) {
-        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — the smoothed text adds ${added}, which no section verified; keeping original prose`);
-        transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
-        continue;
-      }
+      const [newTail = tailRaw, newHead = headRaw] = verdict.text.split(/\n[ \t]*\n/);
       left[li] = newTail;
-      if (newHead.trim().length > 0) right[ri] = newHead;
-      drafts[k] = left.join('\n\n');
-      drafts[k + 1] = right.join('\n\n');
-      transitions.push({ boundary, status: 'smoothed', before_chars: beforeChars, after_chars: newTail.length + newHead.length });
+      right[ri] = newHead;
+      drafts[k] = normalizeTrailingNewline(left.join('\n\n'));
+      drafts[k + 1] = normalizeTrailingNewline(right.join('\n\n'));
+      transitions.push({ boundary, status: 'smoothed', before_chars: beforeChars, after_chars: newTail.length + newHead.length, before: window, after: verdict.text });
     }
 
-    // Build the compiled manuscript (outline order, one blank line between).
-    let cursor = 0;
+    // ---- Step 5: the compiled manuscript: `# title`, then `## section` + text ----
+    const headings: CompileHeadings = { title, sections: loaded.map((s) => ({ id: outlineSectionId(s.outline), title: s.outline.title.trim() })) };
+    const pieces: string[] = [`# ${title}\n\n`];
+    let cursor = pieces[0]!.length;
     const spans: SectionSpan[] = [];
-    const pieces: string[] = [];
     for (let i = 0; i < loaded.length; i += 1) {
-      const piece = normalizeTrailingNewline(drafts[i] ?? '');
+      const sec = loaded[i] as LoadedSection;
+      const body = normalizeTrailingNewline(drafts[i] ?? '');
+      const block = `## ${sec.outline.title.trim()}\n\n${body}${i < loaded.length - 1 ? '\n' : ''}`;
       const start = cursor;
-      const sep = i < loaded.length - 1 ? '\n' : '';
-      const block = piece + sep; // piece already ends with one '\n'; sep adds the blank line
       pieces.push(block);
       cursor += block.length;
-      spans.push({ n: loaded[i]!.outline.n, slug: loaded[i]!.slug, start, end: cursor });
+      spans.push({ n: sec.outline.n, slug: sec.slug, start, end: cursor });
     }
     const compiled = pieces.join('');
 
-    // Consistency scan (COMP-04, flags only) + citation density (COMP-05, warn).
+    // ---- Step 6: advisory checks (flags only, never refuse) -----------------
     const consistencyWarnings = runConsistencyScan(compiled, spans, { lintHeadings: opts.lintHeadings === true });
     const consistencyEntries: ConsistencyEntry[] = consistencyWarnings.map((w) => ({ detail: w.detail }));
 
+    // EXP-11: the cross-section contradiction check — the heuristic floor
+    // always, one capped claim-consistency call when the judge is wired.
+    const cap = config?.compile?.contradiction_pairs ?? DEFAULT_CONTRADICTION_PAIRS;
+    const claims = collectClaims(loaded.map((s, i) => ({ section: outlineSectionId(s.outline), slug: s.slug, title: s.outline.title.trim(), planBody: s.planBody, draft: drafts[i] ?? '' })));
+    const { pairs, sent } = consistencyCandidates(claims, { maxPairs: cap });
+    let verdicts: readonly ConsistencyVerdict[] | null = null;
+    let consistencySkipped = '';
+    if (opts.judgeConsistency === undefined) consistencySkipped = `skipped (${opts.consistencySkip ?? 'no judge wired'})`;
+    else if (cap === 0) consistencySkipped = 'skipped (config: contradiction_pairs = 0)';
+    else if (sent.length === 0) consistencySkipped = 'not needed (no cross-section claim pair shares content terms)';
+    else {
+      try {
+        verdicts = await opts.judgeConsistency(sent);
+      } catch (err) {
+        if (opts.isFatal?.(err) === true) throw err;
+        consistencySkipped = `failed (${oneLineError(err)})`;
+        warn(`WARN: the contradiction check's model call failed (${oneLineError(err)}) — the heuristic flags stand`);
+      }
+    }
+    const contradictions = applyConsistencyReply({ pairs, sent, verdicts, cap, skipped: consistencySkipped });
+    if (contradictions.flagged.length > 0) warn(`WARN: ${contradictions.flagged.length} cross-section contradiction(s) flagged — see COMPILE-REPORT.md ## Contradictions`);
+
+    // EXP-12: density against the discipline band, each with its source.
+    let paperDiscipline: { slug: string; source: 'preset' | 'intake' | 'config' | 'flag' } | undefined;
+    try {
+      const d = readPaperBrief(opts.paperRoot).discipline.slug;
+      paperDiscipline = { slug: d.value, source: d.source };
+    } catch {
+      paperDiscipline = undefined;
+    }
+    const density = resolveDensityBand({
+      flagDiscipline: opts.discipline,
+      paperDiscipline,
+      configMin: config?.verification?.citation_density_min,
+      configMax: config?.verification?.citation_density_max,
+    });
+    if (density.warning !== undefined) warn(`WARN: ${density.warning}`);
     const densityReport = computeCitationDensity(
-      loaded.map((s) => ({ n: s.outline.n, suffix: s.outline.suffix, slug: s.slug, text: s.draft })),
-      opts.discipline ?? 'default',
+      loaded.map((s, i) => ({ n: s.outline.n, suffix: s.outline.suffix, slug: s.slug, text: drafts[i] ?? '' })),
+      density.discipline,
+      { band: density.band },
     );
-    // GRND-06: citations per paragraph against the preset's band (PRD §8).
-    const density = citationDensityForReport(densityReport);
+    const densityForReport = citationDensityForReport(densityReport, { discipline: density.disciplineSource, band: density.bandSource });
     for (const w of densityReport.warnings) warn(`WARN: citation density — ${w.detail}`);
 
-    // ---- Step 4: emit DRAFT + REPORT (COMP-07) -------------------------------
-    // BRDTH-01 / D-17-43: compile never rewrites .paper/CITATIONS.bib. It is the
-    // full research library, rendered from LIBRARY.json by bin/lib/library.ts
-    // (the one writer); citeproc renders only the keys the draft cites. (The old
-    // cited-only regeneration pruned the library and once emptied it — EXP-01.)
-    const bibPath = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
+    // EXP-13: each section's advisory findings from its own record.
+    const advisorySections: DoneSection[] = loaded.map((s) => ({
+      identity: { n: s.outline.n, slug: s.slug, ...(s.outline.suffix !== undefined ? { suffix: s.outline.suffix } : {}) },
+      id: outlineSectionId(s.outline),
+      planPath: sectionPlan(s.outline.n, s.slug, opts.paperRoot),
+      assignedSources: s.assignedSources,
+      verifiedHash: s.storedHash,
+      currentDraftHash: null,
+    }));
+    const advisory = readSectionAdvisory(opts.paperRoot, advisorySections);
 
+    // ---- Step 7: emit DRAFT + REPORT + INPUTS (COMP-07) ----------------------
+    // BRDTH-01 / D-17-43: compile never rewrites .paper/CITATIONS.bib.
+    const bibPath = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
     const draftPath = join(paperDir(opts.paperRoot), 'DRAFT.md');
     await atomicWriteFile(draftPath, compiled);
 
@@ -630,24 +680,32 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       sections_count: loaded.length,
       stale_resolved_count: stalenessResolved.length,
       refuse_reasons: [],
+      title,
       transitions,
+      ...(smoothingSkipped !== undefined ? { smoothing_skipped: smoothingSkipped } : {}),
       consistency_flags: consistencyEntries,
-      citation_density: density.entries,
-      citation_density_summary: density.summary,
+      citation_density: densityForReport.entries,
+      citation_density_summary: densityForReport.summary,
       staleness_resolved: stalenessResolved,
+      advisory,
       accepted_quotes: acceptedQuotes.map((a) => ({ section: a.section ?? '', id: a.id, citekey: a.citekey, excerpt: a.excerpt, accepted_at: a.acceptedAt, via: a.via })),
       local_file_quotes: byoQuotes.map((q) => ({ id: q.id, citekey: q.citekey, excerpt: q.snippet, file: q.localFile })),
+      contradictions,
     });
     await atomicWriteFile(reportPath, report);
     // What this compile was made from (compile-inputs.ts): the router decides
     // whether DRAFT.md is current from these content hashes, never from mtimes;
-    // done checks the compiled DRAFT.md and every section's verified hash
-    // against them (VRFY-27).
+    // done checks the compiled DRAFT.md, its headings and every section's
+    // verified hash against them (VRFY-27, D-21-13).
     await writeCompileInputs(
       opts.paperRoot,
       loaded.map((s) => ({ n: s.outline.n, suffix: s.outline.suffix, slug: s.slug })),
       compiledAt,
-      { compiledDraftSha256: createHash('sha256').update(compiled, 'utf8').digest('hex'), verifiedHashes },
+      {
+        compiledDraftSha256: createHash('sha256').update(compiled, 'utf8').digest('hex'),
+        verifiedHashes,
+        headingsSha256: headingsSha256(headings),
+      },
     );
 
     return {
@@ -657,6 +715,10 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       bibPath,
       sectionsCount: loaded.length,
       staleResolvedCount: stalenessResolved.length,
+      transitions,
+      ...(smoothingSkipped !== undefined ? { smoothingSkipped } : {}),
+      contradictions,
+      title,
     };
   });
 }

@@ -114,10 +114,15 @@ export function compilePaperTitle(paperRoot: string, outlineTitle: string): stri
   }
 }
 
-/** The headings a compile of the paper's OUTLINE.md as it is now would write, or null without a parseable outline. Never throws. */
-export function currentHeadings(paperRoot: string): CompileHeadings | null {
+/**
+ * The headings a compile of the paper's OUTLINE.md as it is now would write.
+ * Without a parseable outline there are none (an empty title and no section):
+ * compile cannot run then, and a record written meanwhile compares equal only
+ * while the outline stays unparseable. Never throws.
+ */
+export function currentHeadings(paperRoot: string): CompileHeadings {
   const outline = readOutlineSync(paperRoot);
-  if (outline === null) return null;
+  if (outline === null) return { title: '', sections: [] };
   return {
     title: compilePaperTitle(paperRoot, outline.paper_title),
     sections: orderedOutlineSections(outline).map((s) => ({ id: outlineSectionId(s), title: s.title.trim() })),
@@ -131,10 +136,7 @@ export async function writeCompileInputs(
   compiledAt: string,
   v2: CompileInputsV2Fields,
 ): Promise<void> {
-  const headings = v2.headingsSha256 ?? (() => {
-    const h = currentHeadings(paperRoot);
-    return h === null ? null : headingsSha256(h);
-  })();
+  const headings = v2.headingsSha256 ?? headingsSha256(currentHeadings(paperRoot));
   const record: CompileInputs = CompileInputsSchema.parse({
     $schemaVersion: COMPILE_INPUTS_SCHEMA_VERSION,
     compiled_at: compiledAt,
@@ -164,9 +166,7 @@ export function readCompileInputs(paperRoot: string): CompileInputs | null {
 
 /** True when the record's headings are the ones a compile of the paper now would write. */
 function headingsCurrent(paperRoot: string, record: CompileInputs): boolean {
-  if (record.headings_sha256 === null) return false;
-  const now = currentHeadings(paperRoot);
-  return now !== null && headingsSha256(now) === record.headings_sha256;
+  return record.headings_sha256 !== null && headingsSha256(currentHeadings(paperRoot)) === record.headings_sha256;
 }
 
 /**

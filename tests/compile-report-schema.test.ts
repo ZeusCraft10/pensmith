@@ -16,7 +16,10 @@
 //   2. ## Cross-Section Consistency Flags
 //   3. ## Citation Density
 //   4. ## Compile-Staleness Resolved
-//   5. ## Advisory Findings  (Phase 4 writes the empty marker)
+//   5. ## Advisory Findings  (Phase 21, EXP-13: populated from each section's
+//      Pass-2 / Pass-4 record — the Phase-4 "will populate" marker is gone)
+// then the D-14 additive sections: Accepted Quotes, Quotes Verified Against
+// Your Files (Phase 20) and Contradictions (Phase 21, EXP-11).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,7 +37,7 @@ const VALID_FRONTMATTER = {
   abstract: '',
 };
 
-const ADVISORY_EMPTY_MARKER = '_No advisory passes ran — Phase 5 will populate._';
+const ADVISORY_NO_SECTIONS_MARKER = '_No sections to report._';
 
 const D14_BODY_ORDER = [
   '## Transitions Changed',
@@ -86,9 +89,9 @@ test('CompileReportSchema: Pandoc-reserved keys present even when empty', () => 
 
 // D-14 additive (Phase 20, VRFY-19 / VRFY-20): two quote sections after the
 // five locked ones, always present (an empty marker when there is nothing).
-const D14_ADDITIVE = ['## Accepted Quotes', '## Quotes Verified Against Your Files'];
+const D14_ADDITIVE = ['## Accepted Quotes', '## Quotes Verified Against Your Files', '## Contradictions'];
 
-test('renderCompileReport: emits the 5 D-14 body headers in fixed order, then the 2 additive quote sections', () => {
+test('renderCompileReport: emits the 5 D-14 body headers in fixed order, then the 3 additive sections (quotes, contradictions)', () => {
   const md = renderCompileReport({
     compiled_at: '2026-05-29T12:00:00.000Z',
     sections_count: 3,
@@ -113,7 +116,7 @@ test('renderCompileReport (VRFY-20, VRFY-19): accepted quotes with their timesta
   assert.match(md, /^- q2 \[@lecun2015\] "deep learning allows computational models…" — verified against your local file sources\/lecun2015\.pdf$/m);
 });
 
-test('renderCompileReport: Advisory Findings carries the explicit empty marker', () => {
+test('renderCompileReport (EXP-13): Advisory Findings with no section record says so, and the Phase-4 placeholder is gone', () => {
   const md = renderCompileReport({
     compiled_at: '2026-05-29T12:00:00.000Z',
     sections_count: 1,
@@ -122,10 +125,9 @@ test('renderCompileReport: Advisory Findings carries the explicit empty marker',
   });
   const advisoryIdx = md.indexOf('## Advisory Findings');
   assert.ok(advisoryIdx >= 0, 'Advisory Findings header must be present');
-  assert.ok(
-    md.slice(advisoryIdx).includes(ADVISORY_EMPTY_MARKER),
-    'Advisory Findings must include the Phase-4 empty marker',
-  );
+  assert.ok(md.slice(advisoryIdx).includes(ADVISORY_NO_SECTIONS_MARKER));
+  assert.doesNotMatch(md, /Phase 5 will populate/);
+  assert.match(md, /## Contradictions\n\nContradictions flagged: 0 \(target 0\)/);
 });
 
 test('renderCompileReport: frontmatter carries schema_version 1 and is schema-valid', () => {

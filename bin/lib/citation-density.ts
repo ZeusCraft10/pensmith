@@ -158,6 +158,71 @@ export function bandLabel(band: DensityBand): string {
   return `${fmt(band.min)}–${fmt(band.max)}`;
 }
 
+/** Where a paper's discipline came from (GRND-06 layers). */
+export type DisciplineLayer = 'preset' | 'intake' | 'config' | 'flag';
+
+/** The discipline and band compile measures density against, each with where it came from (EXP-12, D-21-16). */
+export interface DensityResolution {
+  /** The canonical discipline slug. */
+  readonly discipline: string;
+  /** `INTAKE.md`, `config.toml`, `--discipline` or `preset default`. */
+  readonly disciplineSource: string;
+  readonly band: DensityBand;
+  /** `<discipline> preset`, or `config.toml [verification] citation_density_min/max`. */
+  readonly bandSource: string;
+  /** A one-line note when a config value was ignored (min above max). */
+  readonly warning?: string;
+}
+
+const LAYER_LABEL: Readonly<Record<DisciplineLayer, string>> = Object.freeze({
+  intake: 'INTAKE.md',
+  config: 'config.toml [project] discipline_preset',
+  flag: '--discipline',
+  preset: 'preset default',
+});
+
+/**
+ * The density band with its sources (EXP-12, D-21-16): the discipline
+ * preset's per-paragraph band, overridden by `[verification]
+ * citation_density_min` / `citation_density_max`; `--discipline` overrides
+ * both (the flag's preset band, the config values ignored). A config min above
+ * its max is ignored with a warning. Pure; never throws.
+ */
+export function resolveDensityBand(input: {
+  /** The `--discipline` flag. */
+  readonly flagDiscipline?: string | undefined;
+  /** The paper's own discipline (readPaperBrief's layered slug). */
+  readonly paperDiscipline?: { readonly slug: string; readonly source: DisciplineLayer } | undefined;
+  readonly configMin?: number | undefined;
+  readonly configMax?: number | undefined;
+}): DensityResolution {
+  if (input.flagDiscipline !== undefined && input.flagDiscipline.trim().length > 0) {
+    const slug = normalizeDisciplineSlug(input.flagDiscipline);
+    const b = densityBandFor(slug);
+    return { discipline: slug, disciplineSource: LAYER_LABEL.flag, band: { min: b.min, max: b.max }, bandSource: `${slug} preset (--discipline)` };
+  }
+  const slug = normalizeDisciplineSlug(input.paperDiscipline?.slug ?? '');
+  const disciplineSource = LAYER_LABEL[input.paperDiscipline?.source ?? 'preset'];
+  const preset = densityBandFor(slug);
+  const min = input.configMin;
+  const max = input.configMax;
+  if (min === undefined && max === undefined) {
+    return { discipline: slug, disciplineSource, band: { min: preset.min, max: preset.max }, bandSource: `${slug} preset` };
+  }
+  const band = { min: min ?? preset.min, max: max ?? preset.max };
+  if (band.min > band.max) {
+    return {
+      discipline: slug,
+      disciplineSource,
+      band: { min: preset.min, max: preset.max },
+      bandSource: `${slug} preset`,
+      warning: `[verification] citation_density_min (${fmt(band.min)}) is above citation_density_max (${fmt(band.max)}) — ignored; the ${slug} preset band ${bandLabel(preset)} applies`,
+    };
+  }
+  const keys = [min !== undefined ? 'citation_density_min' : null, max !== undefined ? 'citation_density_max' : null].filter((k): k is string => k !== null);
+  return { discipline: slug, disciplineSource, band, bandSource: `config.toml [verification] ${keys.join(' and ')}` };
+}
+
 /**
  * Compute each section's citations per paragraph against the discipline's
  * band (plus the D-14 per-1000-words figures). WARN-only; NEVER throws.
@@ -165,13 +230,15 @@ export function bandLabel(band: DensityBand): string {
  * @param sections the compiled sections ({ n, suffix?, slug, text }).
  * @param discipline a preset slug, name or alias (anything unknown gets the
  *   fallback preset's band).
+ * @param opts.band the band to apply instead of the preset's (resolveDensityBand).
  */
 export function computeCitationDensity(
   sections: Array<{ n: number; suffix?: string | undefined; slug: string; text: string }>,
   discipline: string,
+  opts: { readonly band?: DensityBand } = {},
 ): CitationDensityReport {
   const slug = normalizeDisciplineSlug(discipline ?? '');
-  const preset = densityBandFor(slug);
+  const preset = opts.band ?? densityBandFor(slug);
   const band: DensityBand = { min: preset.min, max: preset.max };
   const warnings: CitationDensityWarning[] = [];
   let allParagraphs = 0;
