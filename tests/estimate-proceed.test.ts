@@ -106,7 +106,7 @@ test('D-21-27: the §15 paper with the humanizer skill installed — compile smo
     fs.writeFileSync(path.join(sb.root, 'assignment.txt'), ASSIGNMENT);
     const skillDir = path.join(sb.dataDir, '.claude', 'skills', 'humanizer');
     fs.mkdirSync(skillDir, { recursive: true });
-    fs.copyFileSync(new URL('./fixtures/humanizer-skill/SKILL.md', import.meta.url), path.join(skillDir, 'SKILL.md'));
+    fs.copyFileSync(new URL('./fixtures/humanizer-skill/humanizer-skill.md', import.meta.url), path.join(skillDir, 'SKILL.md'));
     const r = await sb.runTsx(null, ['--estimate'], { env: { USERPROFILE: sb.dataDir } });
     assert.equal(r.status, 0, r.stderr);
     // 3 sections: 2 smoother + 1 claim-consistency at compile; 3 humanizer + the Pass-4 audit at done.

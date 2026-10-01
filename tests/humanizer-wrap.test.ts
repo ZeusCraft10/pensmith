@@ -40,7 +40,7 @@ function maskedOf(content: string): string {
   return unfence(inner) ?? '';
 }
 
-const FIXTURE = fileURLToPath(new URL('./fixtures/humanizer-skill/SKILL.md', import.meta.url));
+const FIXTURE = fileURLToPath(new URL('./fixtures/humanizer-skill/humanizer-skill.md', import.meta.url));
 const CONTRACT_FILE = fileURLToPath(new URL('../plugin/references/humanizer-contract.md', import.meta.url));
 
 /** Run `fn` with HOME (and USERPROFILE) at a fresh temp home, the fixture skill installed when `install`. */

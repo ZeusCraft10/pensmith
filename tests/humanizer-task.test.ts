@@ -34,7 +34,7 @@ import { maskForRewrite } from '../bin/lib/rewrite-guard.js';
 import { findCitations } from '../bin/lib/citation-token.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 
-const SKILL_BODY = parseFrontmatter(readFileSync(fileURLToPath(new URL('./fixtures/humanizer-skill/SKILL.md', import.meta.url)), 'utf8')).body.trim();
+const SKILL_BODY = parseFrontmatter(readFileSync(fileURLToPath(new URL('./fixtures/humanizer-skill/humanizer-skill.md', import.meta.url)), 'utf8')).body.trim();
 
 function read(file: string): string | null {
   return existsSync(file) ? readFileSync(file, 'utf8') : null;

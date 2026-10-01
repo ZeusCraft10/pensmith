@@ -41,7 +41,7 @@ export interface PipelinePaper {
   /** `pensmith verify N` for every section; throws naming the first that fails. */
   verifyAll(): Promise<void>;
   /**
-   * Install the fixture humanizer skill (tests/fixtures/humanizer-skill/SKILL.md)
+   * Install the fixture humanizer skill (tests/fixtures/humanizer-skill/humanizer-skill.md)
    * at `<sandbox home>/.claude/skills/humanizer/SKILL.md` — the sandbox home
    * (HOME, and USERPROFILE for Windows) lies inside os.tmpdir(), the only home
    * paths.ts humanizerSkillPath accepts under a test context. Returns its path.
@@ -49,7 +49,7 @@ export interface PipelinePaper {
   installHumanizerSkill(): string;
 }
 
-export const HUMANIZER_SKILL_FIXTURE = fileURLToPath(new URL('../fixtures/humanizer-skill/SKILL.md', import.meta.url));
+export const HUMANIZER_SKILL_FIXTURE = fileURLToPath(new URL('../fixtures/humanizer-skill/humanizer-skill.md', import.meta.url));
 
 export interface PipelinePaperOptions {
   sections: PipelineSection[];

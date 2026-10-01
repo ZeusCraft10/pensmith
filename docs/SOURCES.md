@@ -32,7 +32,7 @@ Every request goes through one module, `bin/lib/http.ts`, so every rule below ap
 | GROBID | the loopback URL in `PENSMITH_GROBID_URL` (this computer) | reading a PDF's header (title, authors, DOI, arXiv id) before pensmith's own heuristic — bring-your-own folders, `add <file.pdf>`, a PDF `add` fetched | 5 requests/s | plain `pensmith/<version>` | none |
 | any other host | a URL you pass to `add`, an open-access PDF host | fetching that document | 5 requests/s per host | plain `pensmith/<version>` | none |
 
-JSTOR, APA PsycNET and PhilPapers have no free search API pensmith can use within their terms, so their content is reached through OpenAlex, Crossref and PubMed coverage (PRD §8). The checks on a finished paper, DuckDuckGo (plagiarism phrases) and GPTZero (the AI-likelihood score, only with `GPTZERO_API_KEY` and your consent), are described in [PRIVACY.md](../PRIVACY.md).
+JSTOR, APA PsycNET and PhilPapers have no free search API pensmith can use within their terms, so their content is reached through OpenAlex, Crossref and PubMed coverage (PRD §8). The checks on a finished paper, DuckDuckGo (plagiarism phrases) and the AI-likelihood score (GPTZero, Originality.ai or Sapling — only with that detector's key and your consent), are described in [PRIVACY.md](../PRIVACY.md).
 
 ## What each service receives
 
@@ -45,7 +45,7 @@ JSTOR, APA PsycNET and PhilPapers have no free search API pensmith can use withi
 
 ## Identifying pensmith: the contact email
 
-Crossref, OpenAlex and Unpaywall ask callers to say who they are; in return they answer from a "polite pool" with better limits. Pensmith sends `User-Agent: pensmith/<version> (mailto:<email>)` to those three services only, and never to a model provider, arXiv, PubMed, Semantic Scholar, the book services, Zotero, DuckDuckGo, GPTZero, a URL you gave `add`, or a PDF host. A redirect that leaves one of the three services' origins drops back to the plain User-Agent.
+Crossref, OpenAlex and Unpaywall ask callers to say who they are; in return they answer from a "polite pool" with better limits. Pensmith sends `User-Agent: pensmith/<version> (mailto:<email>)` to those three services only, and never to a model provider, arXiv, PubMed, Semantic Scholar, the book services, Zotero, DuckDuckGo, an AI detector, a URL you gave `add`, or a PDF host. A redirect that leaves one of the three services' origins drops back to the plain User-Agent.
 
 The address comes from `PENSMITH_CONTACT_EMAIL`, or from the variable the user's global runtime.json names in `contactEmailEnv` (a user-level setting in the pensmith data dir). A paper can name a different variable with `[network] contact_email_env` in `.paper/config.toml` (say, `PENSMITH_WORK_EMAIL`), but because a paper's config can travel with the paper, pensmith honours the name only when it is in pensmith's own namespace — an upper-case `PENSMITH_…` identifier that contains `EMAIL` or `MAILTO` and no secret word (`PASSWORD`, `SECRET`, `TOKEN`, `KEY`, `URL`, `URI`, `DSN`, `AUTH`, `CREDENTIAL`) — and sends the value only when it is a plain address (`name@domain.tld`, no `:` or `/`); otherwise it warns once and falls back to `PENSMITH_CONTACT_EMAIL`. A config file can therefore never point pensmith at a secret or at another personal variable such as `GIT_AUTHOR_EMAIL`. With no address set, the three services get `pensmith/<version> (no-contact)` and one warning; Unpaywall is skipped.
 
@@ -80,6 +80,8 @@ Quote checks (Pass 3) keep a second cache next to it: the text extracted from ea
 | `PENSMITH_S2_API_KEY` | Semantic Scholar | `x-api-key` header | the shared keyless pool, often rejected (HTTP 429) |
 | `ZOTERO_API_KEY` | Zotero Web API | `Zotero-API-Key` header | Zotero via the local API or a public group only |
 | `GPTZERO_API_KEY` | GPTZero | `x-api-key` header | no AI-likelihood score |
+| `ORIGINALITY_API_KEY` | Originality.ai (`[humanizer] honesty_backend = "originality"`) | `X-OAI-API-KEY` header | no AI-likelihood score |
+| `SAPLING_API_KEY` | Sapling (`[humanizer] honesty_backend = "sapling"`) | `Authorization: Bearer` header | no AI-likelihood score |
 
 Keys are read from the environment only. They are never printed (`--show-prompts` shows no headers and redacts key parameters), never written to `SESSION.log` (a key parameter appears as `api_key=REDACTED`), never part of an HTTP cache key or file, never recorded in a test fixture, and dropped on a redirect to another origin. `pensmith doctor` reports each as present or absent, never its value.
 
