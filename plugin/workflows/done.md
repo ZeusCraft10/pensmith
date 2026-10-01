@@ -120,8 +120,11 @@ decision for it.
 - `.paper/LIBRARY.json` — `last_verified` of the citations a registrar
   confirmed during done's gate, and the retraction statuses re-checked, through
   the one library writer (VRFY-28, VRFY-15).
-- `.paper/config.toml` `[humanizer] honesty_consent` — the detector-consent
-  answer, recorded the first time it is asked (EXP-17).
+- The detector-consent answer, recorded the first time it is asked (EXP-17) —
+  in the pensmith data dir for this paper and this detector
+  (`bin/lib/detector-consent.ts`), never in `.paper/`: config.toml travels with
+  a shared paper, so it can carry an opt-out (`[humanizer] honesty_consent =
+  false`) but never the reader's consent.
 - done never writes under `.paper/sections/`.
 - stdout: `pensmith done: style: <name> (from <source>)`, the step lines, the
   honesty lines and `pensmith done: exported <path>`.
@@ -213,10 +216,15 @@ decision for it.
    (GPTZero, Originality.ai or Sapling; each through the egress gate with its
    key in a header only). The backend's disclosure line (verbatim from
    `references/honesty-framing.md`) is printed before anything is sent.
-   Consent is `[humanizer] honesty_consent`: asked once in a terminal through
-   the `detector-consent` gate and the answer — yes or no — recorded; `--yolo`
-   never answers it; without a terminal and without a recorded answer nothing
-   is sent. A score is `<n>% AI-generated (<backend>, <ISO time>)`; an absent
+   Consent is the user's, per paper and per detector: asked once in a terminal
+   through the `detector-consent` gate and the answer — yes or no — recorded in
+   the pensmith data dir (`detector-consent.ts`), never in config.toml, which a
+   shared paper carries to its next reader; `[humanizer] honesty_consent =
+   false` in config.toml is an opt-out (never send) and `true` there grants
+   nothing; `--yolo` never answers it; without a terminal and without a
+   recorded answer nothing is sent. A config.toml this build cannot read
+   refuses every done (`score` and `plagiarism` included) with its one-line
+   error, before anything is sent. A score is `<n>% AI-generated (<backend>, <ISO time>)`; an absent
    one gives one exact reason (`skipped (no <KEY> set)`, `skipped (no consent
    recorded — …)`, `skipped (consent declined in config.toml)`, `skipped
    (--no-score)`, `skipped (config: honesty_score = false)`, `unavailable

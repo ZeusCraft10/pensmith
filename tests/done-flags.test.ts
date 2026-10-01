@@ -194,3 +194,26 @@ test('EXP-20 / EXP-16 / EXP-21 (built CLI): --no-plagiarism-check, --no-score, -
     assert.doesNotMatch(read(join(paper, 'SESSION.log')) ?? '', /duckduckgo|gptzero/i, 'no detector or search request was made');
   });
 });
+
+// Review round 1: `score` and `plagiarism` read config.toml as strictly as a
+// full done. One bad value (here a capitalised backend) used to discard the
+// whole file silently: `plagiarism_check = false` was ignored and the paper's
+// phrases went to DuckDuckGo, and an unknown backend became GPTZero.
+test('EXP-18 / EXP-20 (built CLI, review r1): an invalid config.toml refuses score, plagiarism, humanize and export alike — exit 1, the valid backends named, nothing sent', async () => {
+  await withPipelinePaper({ sections: THREE_SECTIONS }, async (p) => {
+    const paper = join(p.root, '.paper');
+    await compiled(p);
+    writeFileSync(
+      join(paper, 'config.toml'),
+      'schema_version = 4\n\n[verification]\nplagiarism_check = false\nplagiarism_max_phrases = 2\n\n[humanizer]\nhonesty_backend = "Sapling"\n',
+    );
+    const before = snapshot(paper);
+    for (const verb of [['score'], ['plagiarism'], ['humanize'], ['export', '--yolo', '--format', 'md']]) {
+      const r = await p.cli(verb, { GPTZERO_API_KEY: 'test-key-bad-config', SAPLING_API_KEY: 'test-key-bad-config-s' });
+      assert.equal(r.status, 1, `${verb.join(' ')}: ${r.stdout}\n${r.stderr}`);
+      assert.match(r.stderr, /^pensmith: \.paper\/config\.toml: humanizer\.honesty_backend: honesty_backend must be one of: gptzero, originality, sapling$/m, verb.join(' '));
+      assert.doesNotMatch(r.stdout, /plagiarism check:|Pensmith honesty check: \d|Disclosure:/, `${verb.join(' ')}: nothing was sent`);
+    }
+    assert.deepEqual(snapshot(paper), before, 'nothing written');
+  });
+});

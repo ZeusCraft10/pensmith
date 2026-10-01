@@ -50,7 +50,8 @@ export interface LoadOptions<TSchema extends z.ZodTypeAny> {
     | 'checkpoint'
     | 'session-log'
     | 'runtime-config'
-    | 'own-source-approvals';
+    | 'own-source-approvals'
+    | 'detector-consent';
   currentVersion: number;
   migrations?: Record<number, Migration>;
   writeBack?: boolean; // default false

@@ -14,11 +14,18 @@
 //   --dry-run                          → unavailable (dry-run)
 //   no key for the backend             → skipped (no <KEY> set)
 //   sources offline                    → unavailable (offline)
-//   consent (EXP-17, S-14)             → `[humanizer] honesty_consent` in
-//     config.toml: false → skipped (consent declined in config.toml); unset →
-//     asked once in a terminal through the backend-neutral `detector-consent`
-//     gate, the answer (yes or no) recorded through config.ts; without a
-//     terminal → skipped (no consent recorded — …). --yolo never answers it.
+//   consent (EXP-17, S-14)             → config.toml's `[humanizer]
+//     honesty_consent = false` is an opt-out a paper may carry: skipped
+//     (consent declined in config.toml). Consent itself is the USER's, never
+//     a paper file's (config.toml travels with a shared paper; review round
+//     1): the answer recorded in the pensmith data dir for this paper and
+//     this detector (detector-consent.ts) — no → skipped (consent declined),
+//     yes → sent; none → asked once in a terminal through the backend-neutral
+//     `detector-consent` gate and recorded there; without a terminal →
+//     skipped (no consent recorded — …). `honesty_consent = true` in
+//     config.toml grants nothing. --yolo never answers it.
+//   an invalid config.toml            → skipped (the config error): nothing is
+//     sent on a config this build cannot read (done refuses it first).
 //   the request                        → a 401/403 is `unavailable (<Backend>
 //     rejected the API key)`, a 429 `unavailable (rate limited)`, a transport
 //     error `unavailable (network: …)`, an answer that does not parse
@@ -52,8 +59,9 @@ import { networkMode } from './http-mock.js';
 import { out } from './output-sink.js';
 import { assertBudget, appendCost } from './budget.js';
 import { runGate, canPrompt } from './gates.js';
-import { tryReadPaperConfigSync, updatePaperConfig, rawTable } from './config.js';
+import { readPaperConfigSync, type PaperConfig } from './config.js';
 import { HONESTY_BACKENDS } from './schemas/config.js';
+import { recordDetectorConsent, recordedDetectorConsent } from './detector-consent.js';
 
 // ============================================================
 //   Public types
@@ -88,7 +96,7 @@ export interface HonestyBackend {
 }
 
 export interface HonestyOptions {
-  /** The paper root (config.toml: backend, honesty_score, honesty_consent; where consent is recorded). */
+  /** The paper root (config.toml: backend, honesty_score, the honesty_consent opt-out; the key of the consent recorded in the data dir). */
   readonly paperRoot?: string;
   /** Override the configured backend. */
   readonly backend?: HonestyBackendName;
@@ -98,8 +106,10 @@ export interface HonestyOptions {
   readonly noScore?: boolean;
   /**
    * An explicit consent decision for this call (a test seam; the Tier-1 tool
-   * after AskUserQuestion): true sends, false declines; undefined → the
-   * recorded config answer, else the gate.
+   * after AskUserQuestion, which records the answer with
+   * detector-consent.ts recordDetectorConsent): true sends, false declines;
+   * undefined → the answer recorded in the data dir, else the gate. A paper's
+   * `honesty_consent = false` opt-out still applies.
    */
   readonly consentGranted?: boolean;
 }
@@ -283,36 +293,48 @@ export function __truncateForGptzeroTest(text: string): string {
 // ============================================================
 
 /** The reason a run without a terminal and without a recorded answer sends nothing. */
-export const NO_CONSENT_REASON = 'no consent recorded — run pensmith done interactively once, or set honesty_consent = true';
+export const NO_CONSENT_REASON = 'no consent recorded — run pensmith score (or pensmith done) once in a terminal and answer the detector question';
+
+/** The same, when the paper's config.toml claims consent (a paper file cannot give it). */
+export const CONFIG_CONSENT_REASON =
+  "no consent recorded — config.toml's honesty_consent = true is not your consent (a paper file cannot give it); run pensmith score (or pensmith done) once in a terminal and answer the detector question";
 
 /**
- * Whether the paper may be sent to the detector now: the recorded answer, else
- * the `detector-consent` gate in a terminal (the answer recorded), else no.
- * Returns null when it may, or the skip reason. --yolo never answers.
+ * Whether the paper may be sent to the detector now (see the header): the
+ * paper's opt-out, then the user's answer recorded in the data dir for this
+ * paper and detector, else the `detector-consent` gate in a terminal (the
+ * answer recorded there), else no. Returns null when it may, or the skip
+ * reason. --yolo never answers.
  */
-async function consentReason(spec: BackendSpec, opts: HonestyOptions, recorded: boolean | undefined): Promise<string | null> {
+async function consentReason(spec: BackendSpec, opts: HonestyOptions, configConsent: boolean | undefined): Promise<string | null> {
+  if (configConsent === false) return 'consent declined in config.toml';
   if (opts.consentGranted === true) return null;
   if (opts.consentGranted === false) return 'consent declined';
+  const recorded = opts.paperRoot !== undefined ? recordedDetectorConsent(opts.paperRoot, spec.name) : undefined;
   if (recorded === true) return null;
-  if (recorded === false) return 'consent declined in config.toml';
-  if (!canPrompt()) return NO_CONSENT_REASON;
+  if (recorded === false) return 'consent declined — your recorded answer';
+  const none = configConsent === true ? CONFIG_CONSENT_REASON : NO_CONSENT_REASON;
+  if (!canPrompt()) return none;
   let yes: boolean;
   try {
     const outcome = await runGate('detector-consent', {
       yolo: opts.yolo === true,
-      question: { id: 'detector-consent', kind: 'confirm', label: `Send the full paper text to ${spec.label} for an AI-detection score? (your answer is saved in config.toml)`, default: false },
+      question: {
+        id: 'detector-consent',
+        kind: 'confirm',
+        label: `Send the full paper text to ${spec.label} for an AI-detection score? (your answer is saved for this paper on this computer)`,
+        default: false,
+      },
     });
-    if (outcome.kind !== 'answered') return NO_CONSENT_REASON;
+    if (outcome.kind !== 'answered') return none;
     yes = outcome.answer.kind === 'confirm' && outcome.answer.value === true;
   } catch {
-    return NO_CONSENT_REASON;
+    return none;
   }
   if (opts.paperRoot !== undefined) {
     try {
-      await updatePaperConfig(opts.paperRoot, (raw) => {
-        rawTable(raw, 'humanizer')['honesty_consent'] = yes;
-      });
-      out(`pensmith: recorded your answer in .paper/config.toml ([humanizer] honesty_consent = ${String(yes)}).\n`);
+      await recordDetectorConsent(opts.paperRoot, spec.name, yes);
+      out(`pensmith: recorded your answer for this paper and ${spec.label} (${yes ? 'yes' : 'no'}) in pensmith's data folder, not in the paper.\n`);
     } catch (e) {
       process.stderr.write(`pensmith: WARN — your detector-consent answer could not be recorded (${(e as Error).message.split('\n')[0] ?? ''}); it applies to this run only\n`);
     }
@@ -324,16 +346,28 @@ async function consentReason(spec: BackendSpec, opts: HonestyOptions, recorded: 
 //   Scoring
 // ============================================================
 
-/** The backend this paper uses: the option, else `[humanizer] honesty_backend`, else GPTZero. */
+/**
+ * The paper's config.toml, read strictly: the config (absent → null), or the
+ * one-line error of a file this build cannot read. Never throws.
+ */
+function paperConfigOrError(paperRoot: string | undefined): { config: PaperConfig | null; error: string | null } {
+  if (paperRoot === undefined) return { config: null, error: null };
+  try {
+    const r = readPaperConfigSync(paperRoot);
+    return { config: r.exists ? r.config : null, error: null };
+  } catch (e) {
+    return { config: null, error: ((e as Error).message.split('\n')[0] ?? 'config.toml cannot be read').replace(/^pensmith:\s*/, '') };
+  }
+}
+
+/**
+ * The backend this paper uses: the option, else `[humanizer] honesty_backend`,
+ * else GPTZero. A config.toml this build cannot read is never "GPTZero by
+ * default" for sending: measureHonesty refuses it (review round 1).
+ */
 export function configuredBackend(opts: HonestyOptions = {}): HonestyBackendName {
   if (opts.backend !== undefined) return opts.backend;
-  try {
-    const b = tryReadPaperConfigSync(opts.paperRoot)?.humanizer?.honesty_backend;
-    if (b !== undefined) return b;
-  } catch {
-    // an unreadable config.toml fails loudly elsewhere; scoring falls back to the default backend
-  }
-  return 'gptzero';
+  return paperConfigOrError(opts.paperRoot).config?.humanizer?.honesty_backend ?? 'gptzero';
 }
 
 /**
@@ -343,16 +377,15 @@ export function configuredBackend(opts: HonestyOptions = {}): HonestyBackendName
  * score is advisory); never invents or replays a score.
  */
 export async function measureHonesty(text: string, opts: HonestyOptions = {}): Promise<HonestyOutcome> {
-  const name = configuredBackend(opts);
+  const read = paperConfigOrError(opts.paperRoot);
+  const config = read.config;
+  const name = opts.backend ?? config?.humanizer?.honesty_backend ?? 'gptzero';
   const spec = BACKENDS[name];
   const none = (kind: 'skipped' | 'unavailable', reason: string): HonestyOutcome => ({ kind, reason, backend: name });
-  let config: ReturnType<typeof tryReadPaperConfigSync> = null;
-  try {
-    config = opts.paperRoot !== undefined ? tryReadPaperConfigSync(opts.paperRoot) : null;
-  } catch {
-    config = null;
-  }
   if (opts.noScore === true) return none('skipped', '--no-score');
+  // A config this build cannot read sends nothing (its honesty_backend or
+  // honesty_score may be the reason); done refuses such a file before this.
+  if (read.error !== null) return none('skipped', read.error);
   if (config?.humanizer?.honesty_score === false) return none('skipped', 'config: honesty_score = false');
   const mode = networkMode();
   if (mode.dryRun) return none('unavailable', 'dry-run');

@@ -301,6 +301,18 @@ export function pensmithOwnSourceApprovalsPath(
   return path.join(pensmithDataDir(platform, env), 'own-source-approvals.json');
 }
 
+/**
+ * `<data dir>/detector-consent.json` — the user's answers to "send the paper
+ * to the AI detector?", per paper and per detector (detector-consent.ts,
+ * EXP-17; never in `.paper/`, which travels with a shared paper).
+ */
+export function pensmithDetectorConsentPath(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return path.join(pensmithDataDir(platform, env), 'detector-consent.json');
+}
+
 // ---------------------------------------------------------------------------
 // The plugin asset root (PLUG-02, D-23a-03).
 //

@@ -236,9 +236,11 @@ export const HumanizerSchema = z.object({
   honesty_backend: z.enum(HONESTY_BACKENDS, {
     errorMap: () => ({ message: `honesty_backend must be one of: ${HONESTY_BACKENDS.join(', ')}` }),
   }).optional(),
-  // EXP-17 (D-21-20): the answer to the detector-consent question, asked once
-  // in a terminal and recorded here (true: send the paper to the detector;
-  // false: never). Unset means not asked yet; --yolo never answers it.
+  // EXP-17 (D-21-20, review round 1): an opt-out a paper may carry — false:
+  // never send this paper to a detector. It never GRANTS consent: config.toml
+  // travels with a shared paper, so the user's own answer to the
+  // detector-consent question is recorded in the pensmith data dir
+  // (detector-consent.ts); `true` here is not consent. --yolo never answers it.
   honesty_consent: z.boolean().optional(),
 });
 

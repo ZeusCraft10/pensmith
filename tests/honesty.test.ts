@@ -11,12 +11,14 @@
 // Covers: before/after lines with timestamps and the verbatim framing note
 // (61 % then 37 %); every absent-score reason (no key, offline, --no-score,
 // honesty_score = false, a rejected key, rate limited, consent declined, no
-// consent recorded); consent from config.toml (one request) and never from
-// --yolo (zero requests); the Originality.ai and Sapling request shapes and
+// consent recorded); consent recorded in the pensmith data dir for this paper
+// and detector (one request) — never from config.toml's honesty_consent =
+// true (a shared paper's file cannot consent for its reader; review round 1)
+// and never from --yolo (zero requests); the Originality.ai and Sapling request shapes and
 // score mappings; the GPTZero size cap; the disclosure line before anything
 // is sent and the key never printed. The Phase-6 skip guards and the
 // `notImplementedBackend` assertions are gone: every configured backend is a
-// real adapter. The terminal consent (asked once, recorded in config.toml) is
+// real adapter. The terminal consent (asked once, recorded in the data dir) is
 // covered by tests/honesty-consent.test.ts (a child process with numbered prompts).
 
 import { test } from 'node:test';
@@ -30,6 +32,7 @@ import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import {
   GPTZERO_MAX_BYTES,
   NO_CONSENT_REASON,
+  CONFIG_CONSENT_REASON,
   __truncateForGptzeroTest,
   disclosureLine,
   honestyFramingNote,
@@ -40,6 +43,7 @@ import {
   type HonestyOutcome,
 } from '../bin/lib/honesty.js';
 import { _resetBucketsForTest } from '../bin/lib/http.js';
+import { recordDetectorConsent, recordedDetectorConsent } from '../bin/lib/detector-consent.js';
 
 const framingPath = fileURLToPath(new URL('../plugin/references/honesty-framing.md', import.meta.url));
 const honestySrc = fileURLToPath(new URL('../bin/lib/honesty.ts', import.meta.url));
@@ -84,6 +88,13 @@ function paper(toml = ''): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-honesty-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
   writeFileSync(join(root, '.paper', 'config.toml'), `schema_version = 4\n${toml}`);
+  return root;
+}
+
+/** A temp paper whose user consented to `backend` (recorded in the pensmith data dir, as the detector-consent gate records it). */
+async function consented(toml = '', backend: 'gptzero' | 'originality' | 'sapling' = 'gptzero'): Promise<string> {
+  const root = paper(toml);
+  await recordDetectorConsent(root, backend, true);
   return root;
 }
 
@@ -158,7 +169,7 @@ test('honesty: the synthetic GPTZero cassette is still the documented response s
 });
 
 test('EXP-16: GPTZero 0.61 before and 0.37 after → "61% … (gptzero, <ISO>)" and "37% …", then the framing note verbatim', async () => {
-  const root = paper('[humanizer]\nhonesty_consent = true\n');
+  const root = await consented();
   await withDetectors({ gptzero: [gptzero(0.61), gptzero(0.37)] }, { GPTZERO_API_KEY: 'test-key-gptzero-1' }, async (captured) => {
     const { value: before, out } = await captureStdout(() => measureHonesty('The draft as compiled.', { paperRoot: root }));
     const { value: after } = await captureStdout(() => measureHonesty('The draft as improved.', { paperRoot: root, consentGranted: true }));
@@ -179,7 +190,7 @@ test('EXP-16: GPTZero 0.61 before and 0.37 after → "61% … (gptzero, <ISO>)" 
 });
 
 test('EXP-16: no key → skipped (no GPTZERO_API_KEY set); offline → unavailable (offline) — never a bare percentage, nothing sent', async () => {
-  const root = paper('[humanizer]\nhonesty_consent = true\n');
+  const root = await consented();
   await withDetectors({ gptzero: [gptzero(0.9)] }, {}, async (captured) => {
     const o = await measureHonesty('text', { paperRoot: root });
     assert.equal(honestyLine(o), 'skipped (no GPTZERO_API_KEY set)');
@@ -196,16 +207,16 @@ test('EXP-16: no key → skipped (no GPTZERO_API_KEY set); offline → unavailab
 
 test('EXP-16: --no-score and honesty_score = false send nothing and say so', async () => {
   await withDetectors({ gptzero: [gptzero(0.5)] }, { GPTZERO_API_KEY: 'test-key-noscore' }, async (captured) => {
-    const consented = paper('[humanizer]\nhonesty_consent = true\n');
-    assert.equal(honestyLine(await measureHonesty('text', { paperRoot: consented, noScore: true })), 'skipped (--no-score)');
-    const off = paper('[humanizer]\nhonesty_score = false\nhonesty_consent = true\n');
+    const yes = await consented();
+    assert.equal(honestyLine(await measureHonesty('text', { paperRoot: yes, noScore: true })), 'skipped (--no-score)');
+    const off = await consented('[humanizer]\nhonesty_score = false\n');
     assert.equal(honestyLine(await measureHonesty('text', { paperRoot: off })), 'skipped (config: honesty_score = false)');
     assert.equal(captured.length, 0, 'zero detector requests');
   });
 });
 
 test('EXP-16: a 401 → unavailable (GPTZero rejected the API key); a 429 → unavailable (rate limited)', async () => {
-  const root = paper('[humanizer]\nhonesty_consent = true\n');
+  const root = await consented();
   await withDetectors({ gptzero: [{ status: 401, body: { error: 'bad key' } }] }, { GPTZERO_API_KEY: 'test-key-rejected' }, async () => {
     assert.equal(honestyLine(await measureHonesty('text', { paperRoot: root })), 'unavailable (GPTZero rejected the API key)');
   });
@@ -214,12 +225,12 @@ test('EXP-16: a 401 → unavailable (GPTZero rejected the API key); a 429 → un
   });
 });
 
-test('EXP-17: without a terminal, recorded consent sends one request; no recorded consent sends none — --yolo never consents', async () => {
+test('EXP-17: without a terminal, the consent recorded in the data dir sends one request; no recorded consent sends none — --yolo never consents', async () => {
   await withDetectors({ gptzero: [gptzero(0.42)] }, { GPTZERO_API_KEY: 'test-key-consent' }, async (captured) => {
-    const yes = paper('[humanizer]\nhonesty_consent = true\n');
+    const yes = await consented();
     const scored = await measureHonesty('text', { paperRoot: yes, yolo: true });
     assert.equal(scored.kind, 'score');
-    assert.equal(captured.length, 1, 'one request with honesty_consent = true');
+    assert.equal(captured.length, 1, 'one request with the recorded consent');
 
     const unset = paper();
     for (const yolo of [false, true]) {
@@ -228,15 +239,41 @@ test('EXP-17: without a terminal, recorded consent sends one request; no recorde
       assert.match(out, /Disclosure: /, 'the disclosure is shown before the consent decision');
     }
     assert.equal(readFileSync(join(unset, '.paper', 'config.toml'), 'utf8'), 'schema_version = 4\n', 'nothing is recorded without an answer');
+    assert.equal(recordedDetectorConsent(unset, 'gptzero'), undefined);
 
-    const no = paper('[humanizer]\nhonesty_consent = false\n');
-    assert.equal(honestyLine(await measureHonesty('text', { paperRoot: no })), 'skipped (consent declined in config.toml)');
+    // A paper's opt-out holds even over the user's recorded yes.
+    const optOut = await consented('[humanizer]\nhonesty_consent = false\n');
+    assert.equal(honestyLine(await measureHonesty('text', { paperRoot: optOut })), 'skipped (consent declined in config.toml)');
+    // A recorded no.
+    const no = paper();
+    await recordDetectorConsent(no, 'gptzero', false);
+    assert.equal(honestyLine(await measureHonesty('text', { paperRoot: no })), 'skipped (consent declined — your recorded answer)');
     assert.equal(captured.length, 1, 'still only the one consented request');
   });
 });
 
+// Review round 1: config.toml travels with a paper (a co-author's copy, a
+// synced folder, a template), so it can NAME the detector but never consent
+// for the person running pensmith — the same rule as own-source-approvals.ts.
+test('EXP-17 (review r1): a copied paper whose config.toml says honesty_consent = true sends nothing to any detector without the reader\'s own recorded consent', async () => {
+  await withDetectors({ gptzero: [gptzero(0.42)], sapling: [{ status: 200, body: { score: 0.25 } }] }, { GPTZERO_API_KEY: 'test-key-copied', SAPLING_API_KEY: 'test-key-copied-s' }, async (captured) => {
+    const copied = paper('[humanizer]\nhonesty_consent = true\n');
+    for (const yolo of [false, true]) {
+      assert.equal(honestyLine(await measureHonesty('text', { paperRoot: copied, yolo })), `skipped (${CONFIG_CONSENT_REASON})`);
+    }
+    // A yes for GPTZero is not a yes for the detector a shared config names next.
+    const switched = await consented('[humanizer]\nhonesty_backend = "sapling"\n', 'gptzero');
+    assert.equal(honestyLine(await measureHonesty('text', { paperRoot: switched })), `skipped (${NO_CONSENT_REASON})`);
+    // The same paper folder copied elsewhere is another paper: its consent is not carried over.
+    const original = await consented();
+    const copy = paper(readFileSync(join(original, '.paper', 'config.toml'), 'utf8').replace(/^schema_version = 4\n/, ''));
+    assert.equal(recordedDetectorConsent(copy, 'gptzero'), undefined);
+    assert.equal(captured.length, 0, 'zero detector requests');
+  });
+});
+
 test('EXP-18: honesty_backend = "sapling" → POST api.sapling.ai/api/v1/aidetect, Bearer key, {text, sent_scores:false}; score → "25% … (sapling, <ISO>)"', async () => {
-  const root = paper('[humanizer]\nhonesty_backend = "sapling"\nhonesty_consent = true\n');
+  const root = await consented('[humanizer]\nhonesty_backend = "sapling"\n', 'sapling');
   await withDetectors({ sapling: [{ status: 200, body: { score: 0.25, sentence_scores: [] } }] }, { SAPLING_API_KEY: 'test-key-sapling' }, async (captured) => {
     const { value, out } = await captureStdout(() => measureHonesty('Sapling text.', { paperRoot: root }));
     assert.match(honestyLine(value), new RegExp(`^25% AI-generated \\(sapling, ${ISO.source}\\)$`));
@@ -251,7 +288,7 @@ test('EXP-18: honesty_backend = "sapling" → POST api.sapling.ai/api/v1/aidetec
 });
 
 test('EXP-18: honesty_backend = "originality" → POST api.originality.ai/api/v3/scan, X-OAI-API-KEY, AI scan only, not stored; results.ai.confidence.AI → "90% … (originality, <ISO>)"', async () => {
-  const root = paper('[humanizer]\nhonesty_backend = "originality"\nhonesty_consent = true\n');
+  const root = await consented('[humanizer]\nhonesty_backend = "originality"\n', 'originality');
   const reply = { status: 200, body: { results: { ai: { classification: { AI: 1, Original: 0 }, confidence: { AI: 0.9, Original: 0.1 } } } } };
   await withDetectors({ originality: [reply] }, { ORIGINALITY_API_KEY: 'test-key-originality' }, async (captured) => {
     const { value, out } = await captureStdout(() => measureHonesty('Originality text.', { paperRoot: root }));

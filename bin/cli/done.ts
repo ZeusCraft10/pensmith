@@ -74,7 +74,7 @@ import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.j
 import { recordLastVerified, recordRetractionStatuses, LibraryNotFoundError } from '../lib/library.js';
 import { out as writeOut } from '../lib/output-sink.js';
 import { isOutlinePaper, runOutlineDone } from '../lib/outline-export.js';
-import { tryReadPaperConfigSync } from '../lib/config.js';
+import { readPaperConfigSync, tryReadPaperConfigSync } from '../lib/config.js';
 import { readReportContradictions } from '../lib/compile-report.js';
 import { acceptHumanized, humanizeDraft, loadHumanizerSkill, HUMANIZER_SKILL_DISPLAY } from '../lib/humanizer.js';
 import { modelStepSkipReason } from '../lib/rewrite-guard.js';
@@ -588,7 +588,15 @@ export async function runHumanizeStep(input: {
 /** Why the plagiarism check sends nothing this run, or null when it runs. */
 export function plagiarismSkipReason(paperRoot: string, noPlagiarismCheck: boolean): string | null {
   if (noPlagiarismCheck) return '--no-plagiarism-check';
-  if (tryReadPaperConfigSync(paperRoot)?.verification?.plagiarism_check === false) return 'config';
+  // Strict: a config.toml this build cannot read sends nothing (its
+  // plagiarism_check = false may be the value it holds; done refuses the file first).
+  let check: boolean | undefined;
+  try {
+    check = readPaperConfigSync(paperRoot).config.verification?.plagiarism_check;
+  } catch {
+    return 'config.toml cannot be read';
+  }
+  if (check === false) return 'config';
   const mode = networkMode();
   if (mode.dryRun) return 'dry-run';
   if (mode.sourcesOffline) return 'offline';
@@ -676,6 +684,12 @@ export const doneCommand = defineCommand({
     const flags = checkDoneFlags(args as Record<string, unknown>);
     const paperRoot = projectRoot();
     const only = flags.only;
+    // The paper's config.toml, read STRICTLY before any step (review round 1):
+    // one bad value must never discard the whole file silently — the
+    // plagiarism opt-out, the phrase cap and the detector backend live in it —
+    // so a file this build cannot read is the one-line ConfigError (EXIT_ERROR)
+    // for every done, `--only score` and `--only plagiarism` included.
+    readPaperConfigSync(paperRoot);
     // GRND-11 (D-21-25): an outline-only paper ends in its outline export, after
     // the flag checks and in the resolved style (a routed done passes no
     // --format and exports Markdown). There is no prose to humanize, score or

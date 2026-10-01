@@ -43,7 +43,8 @@ without also updating the SHA-256 pin in tests/repo-files.test.ts.)
 text is sent to it, on every scoring run. It NEVER claims detection avoidance or
 undetectability. `bin/lib/honesty.ts` reads these sections at run time and
 prints the one for the configured backend to stdout before the consent question.
-Your answer to that question is recorded in `.paper/config.toml`
-(`[humanizer] honesty_consent`); `--yolo` never answers it. Do NOT weaken or
+Your answer to that question is recorded for this paper and this detector in
+pensmith's data folder, never in the paper (`.paper/config.toml` can only opt
+out: `[humanizer] honesty_consent = false`); `--yolo` never answers it. Do NOT weaken or
 remove the transparency-only constraint. Do NOT edit without updating the
 SHA-256 pin in tests/repo-files.test.ts.)

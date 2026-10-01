@@ -104,6 +104,11 @@ function paperKey(root: string): string {
   return pathKey(realPath(root));
 }
 
+/** The key a per-paper record in the data dir uses for the paper at `root`: its real path (case-folded where paths are case-insensitive). */
+export function paperApprovalKey(root: string): string {
+  return paperKey(root);
+}
+
 /** A approvals file this pensmith must not overwrite (newer, or damaged): nothing was changed. */
 export class OwnSourceApprovalsUnwritableError extends PensmithError {
   constructor(file: string, why: string) {

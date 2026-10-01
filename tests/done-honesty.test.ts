@@ -12,6 +12,7 @@
 // `61% AI-generated (gptzero, <ISO time>)` and `37% …` with the framing note.
 
 import { test } from 'node:test';
+import { recordDetectorConsent } from '../bin/lib/detector-consent.js';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -45,7 +46,10 @@ test('EXP-16 / EXP-14 / EXP-19 (in process, test lane): done scores before (61%)
     const c = await p.cli(['compile', '--yolo', '--no-smooth']);
     assert.equal(c.status, 0, c.stdout + c.stderr);
     p.installHumanizerSkill();
-    writeFileSync(join(paper, 'config.toml'), 'schema_version = 4\n\n[humanizer]\nhonesty_consent = true\n');
+    writeFileSync(join(paper, 'config.toml'), 'schema_version = 4\n');
+    // The user's consent, recorded where the detector-consent gate records it
+    // (the pensmith data dir — never the paper's config.toml; review round 1).
+    await recordDetectorConsent(p.root, 'gptzero', true);
 
     const saved: Record<string, string | undefined> = {};
     for (const k of ['PENSMITH_NETWORK_TESTS', 'GPTZERO_API_KEY', 'USERPROFILE', 'PENSMITH_OFFLINE']) saved[k] = process.env[k];

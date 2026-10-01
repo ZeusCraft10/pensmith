@@ -251,7 +251,8 @@ test('plugin/references/honesty-framing.md hash-pin (Phase 6 DONE-04 LOCKED)', (
   // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/references/honesty-framing.md')).digest('hex'))"
   // Re-pinned Phase 21 (EXP-16..18, D-21-20/21): the timestamped output format and the
   // Originality.ai and Sapling disclosures — still transparency-only (see the test below).
-  const PINNED = 'b64bb090016d0959c46169cf6c0811aa693e13d592842f5ed37eea3ae03fcb1c';
+  // Re-pinned in Phase 21 review round 1: the consent is recorded in the data dir, never config.toml.
+  const PINNED = '7c76e9c9dfb88523cb2181bff5d052d7528290c386cc4231dd6a5c4d10c5caa3';
   assert.equal(hash, PINNED, `plugin/references/honesty-framing.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional (and review the transparency-only constraint in CONTRIBUTING.md).`);
 });
 
