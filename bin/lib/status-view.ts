@@ -22,8 +22,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadState } from './state.js';
-import { readSectionInfo, resolveNextAction, unverifiableSectionDetail, type RouterDecision } from './router.js';
-import { paperDir, sectionPlan, sectionVerification } from './paths.js';
+import { readSectionInfo, resolveNextAction, sectionDraftState, unverifiableSectionDetail, type RouterDecision } from './router.js';
+import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import { CURRENT_CONFIG_VERSION, effectiveConfigRows, paperConfigPath, readPaperModeSync, tryReadPaperConfigSync } from './config.js';
 import { parseIntakeMd } from './intake-parse.js';
@@ -112,6 +112,9 @@ export interface StatusView {
   problem: 'no-paper' | 'corrupt-state' | null;
 }
 
+/** The PLAN.md statuses that speak for a DRAFT.md the router requires (VRFY-16: without it, the section is re-drafted). */
+const DRAFT_STATUSES: ReadonlySet<string> = new Set(['verified', 'written', 'verifying', 'unverifiable']);
+
 function phaseOf(status: string, absent: boolean, corrupt: boolean): SectionPhase {
   if (corrupt) return 'attention';
   if (absent) return 'pending';
@@ -191,19 +194,29 @@ export async function buildStatusView(
 
   const sections: StatusSectionRow[] = registered.map(({ n, suffix, slug }) => {
     const r = readSectionInfo(sectionPlan(n, slug, root));
+    const label = formatSectionId(sectionIdOf(n, suffix));
+    // Main-branch merge review, round 2: a section is labelled from the same
+    // facts the router reads — a draft that is gone (the router re-drafts it,
+    // VRFY-16) or a verified draft edited since (compile re-verifies it) is
+    // never listed as `verified`.
+    const draft = !r.absent && !r.corrupt && DRAFT_STATUSES.has(r.status) ? sectionDraftState(sectionDraft(n, slug, root), r) : 'current';
     const status = r.absent
       ? 'not planned'
       : r.corrupt
         ? `corrupt/unreadable PLAN.md ${marks.dash} needs attention`
-        : r.status === 'planned' && r.stub
-          ? 'outlined (not planned)'
-          : r.status === 'failed' && r.failureReason
-            ? `failed ${marks.dash} ${r.failureReason}`
-            : r.status === 'unverifiable'
-              ? unverifiableStatus(sectionVerification(n, slug, root), formatSectionId(sectionIdOf(n, suffix)), marks.dash)
-              : r.status;
-    const phase = phaseOf(r.status, r.absent || r.stub, r.corrupt);
-    const row: StatusSectionRow = { n, id: formatSectionId(sectionIdOf(n, suffix)), slug, title: titles.get(slug) ?? slug, status, phase, glyph: glyphs[phase] };
+        : draft === 'missing'
+          ? `${r.status}, DRAFT.md missing ${marks.dash} \`pensmith write ${label}\` re-drafts it`
+          : draft === 'changed'
+            ? `verified draft edited since ${marks.dash} compile re-verifies it`
+            : r.status === 'planned' && r.stub
+              ? 'outlined (not planned)'
+              : r.status === 'failed' && r.failureReason
+                ? `failed ${marks.dash} ${r.failureReason}`
+                : r.status === 'unverifiable'
+                  ? unverifiableStatus(sectionVerification(n, slug, root), label, marks.dash)
+                  : r.status;
+    const phase = draft === 'missing' ? 'attention' : draft === 'changed' ? 'in-progress' : phaseOf(r.status, r.absent || r.stub, r.corrupt);
+    const row: StatusSectionRow = { n, id: label, slug, title: titles.get(slug) ?? slug, status, phase, glyph: glyphs[phase] };
     if (suffix !== undefined) row.suffix = suffix;
     return row;
   });

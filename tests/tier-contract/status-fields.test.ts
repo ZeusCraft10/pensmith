@@ -163,3 +163,53 @@ test('D-17-33: pensmith_status addresses the server\'s paper — never the `pens
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Main-branch merge review, round 2: a section is labelled from the facts the
+// router reads, in both tiers alike. A verified section whose DRAFT.md is gone
+// routes to write (VRFY-16) — it is never listed `✓ verified` beside
+// `next: write`; one whose draft was edited since verification is listed as
+// such (compile re-verifies it).
+// ---------------------------------------------------------------------------
+
+test('review round 2: CLI `status`, paper://state and pensmith_status never list a section as verified while routing it back to write; an edited verified draft is named', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    await seedThreeSectionPaper(sb.root);
+    const intro = path.join(sb.root, '.paper', 'sections', '01-intro');
+    const env = stringEnv(sb.spawnEnv({ LANG: 'en_US.UTF-8', LC_ALL: undefined, LC_CTYPE: undefined, PENSMITH_PAPER_ROOT: undefined }));
+    const both = async (): Promise<{ cli: string; state: StatusFields }> => {
+      const cli = spawnSync(process.execPath, [CLI_BIN, 'status'], { cwd: sb.root, env, encoding: 'utf8' });
+      assert.equal(cli.status, 0, cli.stderr);
+      const tool = await callStatusTool({ ...env, PENSMITH_PAPER_ROOT: sb.root }, sb.root);
+      assert.equal(unfence(tool.texts[1] ?? ''), cli.stdout, 'pensmith_status is the CLI text');
+      const transport = new StdioClientTransport({ command: process.execPath, args: [MCP_BIN], env: { ...env, PENSMITH_PAPER_ROOT: sb.root }, cwd: sb.root });
+      const client = new Client({ name: 'tier-contract-status-draft', version: '0.0.0' }, { capabilities: {} });
+      await client.connect(transport);
+      try {
+        const res = await client.readResource({ uri: 'paper://state' });
+        const state = (JSON.parse((res.contents[0] as { text?: string }).text ?? '{}') as { status: StatusFields }).status;
+        for (const s of state.sections) assert.ok(cli.stdout.includes(`${s.glyph} §${s.n} ${s.slug}: ${s.status}\n`), `paper://state row ${s.n} is the CLI's`);
+        return { cli: cli.stdout, state };
+      } finally {
+        await client.close();
+      }
+    };
+
+    // The verified draft is gone: the router re-drafts §1.
+    fs.rmSync(path.join(intro, 'DRAFT.md'));
+    const gone = await both();
+    assert.match(gone.cli, /current: §1 \(write\)/);
+    assert.match(gone.cli, /next: write §1/);
+    assert.doesNotMatch(gone.cli, /✓ §1/);
+    assert.match(gone.cli, /\n {4}! §1 intro: verified, DRAFT\.md missing [-—] `pensmith write 1` re-drafts it\n/);
+    assert.equal(gone.state.sections[0]?.glyph, '!');
+
+    // A draft edited after it was verified (the recorded hash is another draft's).
+    fs.writeFileSync(path.join(intro, 'DRAFT.md'), '# Intro\n\nTidal power is predictable and, a hand edit says, cheap.\n');
+    const plan = path.join(intro, 'PLAN.md');
+    fs.writeFileSync(plan, fs.readFileSync(plan, 'utf8').replace('verified_against_draft_hash: null', `verified_against_draft_hash: '${'a'.repeat(64)}'`));
+    const edited = await both();
+    assert.match(edited.cli, /\n {4}⌛ §1 intro: verified draft edited since [-—] compile re-verifies it\n/);
+    assert.doesNotMatch(edited.cli, /✓ §1/);
+  });
+});

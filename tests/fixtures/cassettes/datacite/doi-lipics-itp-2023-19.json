@@ -1,0 +1,665 @@
+[
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.4230%2Flipics.itp.2023.19",
+    "status": 200,
+    "response": {
+      "data": {
+        "id": "10.4230/lipics.itp.2023.19",
+        "type": "dois",
+        "attributes": {
+          "doi": "10.4230/lipics.itp.2023.19",
+          "prefix": "10.4230",
+          "suffix": "lipics.itp.2023.19",
+          "identifiers": [
+            {
+              "identifier": "urn:nbn:de:0030-drops-183942",
+              "identifierType": "URN"
+            }
+          ],
+          "alternateIdentifiers": [
+            {
+              "alternateIdentifierType": "URN",
+              "alternateIdentifier": "urn:nbn:de:0030-drops-183942"
+            }
+          ],
+          "creators": [
+            {
+              "name": "Jakubův, Jan",
+              "nameType": "Personal",
+              "givenName": "Jan",
+              "familyName": "Jakubův",
+              "affiliation": [
+                "Czech Technical University in Prague, Czech Republic"
+              ],
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0002-8848-5537",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            },
+            {
+              "name": "Chvalovský, Karel",
+              "nameType": "Personal",
+              "givenName": "Karel",
+              "familyName": "Chvalovský",
+              "affiliation": [
+                "Czech Technical University in Prague, Czech Republic"
+              ],
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0002-0541-3889",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            },
+            {
+              "name": "Goertzel, Zarathustra",
+              "nameType": "Personal",
+              "givenName": "Zarathustra",
+              "familyName": "Goertzel",
+              "affiliation": [
+                "Czech Technical University in Prague, Czech Republic"
+              ],
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0002-8458-2786",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            },
+            {
+              "name": "Kaliszyk, Cezary",
+              "nameType": "Personal",
+              "givenName": "Cezary",
+              "familyName": "Kaliszyk",
+              "affiliation": [
+                "Universität Innsbruck, Austria",
+                " INDRC, Prague, Czech Republic"
+              ],
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0002-8273-6059",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            },
+            {
+              "name": "Olšák, Mirek",
+              "nameType": "Personal",
+              "givenName": "Mirek",
+              "familyName": "Olšák",
+              "affiliation": [
+                "Institut des Hautes Études Scientifiques, Paris, France"
+              ],
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0002-9361-1921",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            },
+            {
+              "name": "Piotrowski, Bartosz",
+              "nameType": "Personal",
+              "givenName": "Bartosz",
+              "familyName": "Piotrowski",
+              "affiliation": [
+                "Czech Technical University in Prague, Czech Republic"
+              ],
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0002-1699-018X",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            },
+            {
+              "name": "Schulz, Stephan",
+              "nameType": "Personal",
+              "givenName": "Stephan",
+              "familyName": "Schulz",
+              "affiliation": [
+                "DHBW Stuttgart, Germany"
+              ],
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0001-6262-8555",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            },
+            {
+              "name": "Suda, Martin",
+              "nameType": "Personal",
+              "givenName": "Martin",
+              "familyName": "Suda",
+              "affiliation": [
+                "Czech Technical University in Prague, Czech Republic"
+              ],
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0003-0989-5800",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            },
+            {
+              "name": "Urban, Josef",
+              "nameType": "Personal",
+              "givenName": "Josef",
+              "familyName": "Urban",
+              "affiliation": [
+                "Czech Technical University in Prague, Czech Republic"
+              ],
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0002-1384-1613",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            }
+          ],
+          "titles": [
+            {
+              "lang": "en",
+              "title": "MizAR 60 for Mizar 50"
+            }
+          ],
+          "publisher": "Schloss Dagstuhl – Leibniz-Zentrum für Informatik",
+          "container": {
+            "type": "Series",
+            "identifier": "10.4230/LIPIcs.ITP.2023",
+            "identifierType": "DOI",
+            "title": "LIPIcs, Volume 268, ITP 2023",
+            "volume": "268",
+            "number": "19",
+            "firstPage": "19:1",
+            "lastPage": "19:22"
+          },
+          "publicationYear": 2023,
+          "subjects": [
+            {
+              "lang": "en",
+              "subject": "Mizar"
+            },
+            {
+              "lang": "en",
+              "subject": "ENIGMA"
+            },
+            {
+              "lang": "en",
+              "subject": "Automated Reasoning"
+            },
+            {
+              "lang": "en",
+              "subject": "Machine Learning"
+            },
+            {
+              "lang": "en",
+              "subject": "Theory of computation → Automated reasoning",
+              "subjectScheme": "The 2012 ACM Computing Classification System"
+            }
+          ],
+          "contributors": [
+            {
+              "name": "Naumowicz, Adam",
+              "nameType": "Personal",
+              "givenName": "Adam",
+              "familyName": "Naumowicz",
+              "affiliation": [
+                "University of Bialystok, Poland"
+              ],
+              "contributorType": "Editor",
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0003-4224-9798",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            },
+            {
+              "name": "Thiemann, René",
+              "nameType": "Personal",
+              "givenName": "René",
+              "familyName": "Thiemann",
+              "affiliation": [
+                "University of Innsbruck, Austria"
+              ],
+              "contributorType": "Editor",
+              "nameIdentifiers": [
+                {
+                  "schemeUri": "https://orcid.org",
+                  "nameIdentifier": "https://orcid.org/0000-0002-0323-8829",
+                  "nameIdentifierScheme": "ORCID"
+                }
+              ]
+            }
+          ],
+          "dates": [
+            {
+              "date": "2023",
+              "dateType": "Issued"
+            },
+            {
+              "date": "2023-07-26",
+              "dateType": "Available"
+            },
+            {
+              "date": "2023-07-26",
+              "dateType": "Created"
+            },
+            {
+              "date": "2023-07-26",
+              "dateType": "Copyrighted"
+            }
+          ],
+          "language": "en",
+          "types": {
+            "ris": "CPAPER",
+            "bibtex": "inproceedings",
+            "citeproc": "",
+            "schemaOrg": "Article",
+            "resourceTypeGeneral": "ConferencePaper"
+          },
+          "relatedIdentifiers": [
+            {
+              "relationType": "IsVersionOf",
+              "relatedIdentifier": "10.48550/arXiv.2303.06686",
+              "resourceTypeGeneral": "Text",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "IsSupplementedBy",
+              "relatedIdentifier": "https://github.com/ai4reason/ATP_Proofs",
+              "resourceTypeGeneral": "Software",
+              "relatedIdentifierType": "URL"
+            },
+            {
+              "relationType": "IsPartOf",
+              "relatedIdentifier": "10.4230/LIPIcs.ITP.2023",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "IsPartOf",
+              "relatedIdentifier": "978-3-95977-284-6",
+              "relatedIdentifierType": "ISBN"
+            },
+            {
+              "relationType": "IsPartOf",
+              "relatedIdentifier": "1868-8969",
+              "relatedIdentifierType": "ISSN"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "https://www.tensorflow.org/",
+              "relatedIdentifierType": "URL"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/s10817-013-9286-5",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/s10817-017-9440-6",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-319-20615-8_17",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1023/A:1021966832558",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/s10817-016-9362-8",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.6092/issn.1972-5787/4593",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1145/2939672.2939785",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.3115/v1/d14-1179",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-030-86059-2_16",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-030-29436-6_12",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "https://openreview.net/forum?id=SkZxCk-0Z",
+              "relatedIdentifierType": "URL"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.29007/ntlb",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/s10817-020-09580-x",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.3233/AIC-180761",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1145/3018610.3018619",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-319-96812-4_11",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.4230/LIPIcs.ITP.2019.34",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/s10817-014-9303-3",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/s10817-015-9330-8",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-642-39799-8_1",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "https://openreview.net/forum?id=S1eZYeHFDS",
+              "relatedIdentifierType": "URL"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.3233/FAIA200244",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1613/jair.614",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-319-94205-6_37",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "https://www.sciencedirect.com/book/9780444508133/handbook-of-automated-reasoning",
+              "relatedIdentifierType": "URL"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "http://iospress.metapress.com/content/n908n94nmvk59v3c/",
+              "relatedIdentifierType": "URL"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-642-45221-5_49",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-030-79876-5_31",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-030-86205-3_11",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/s10817-004-6245-1",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/s10817-006-9032-3",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.29007/8n7m",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-030-53518-6_24",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-540-71070-7_37",
+              "relatedIdentifierType": "DOI"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "arXiv:1706.03762",
+              "relatedIdentifierType": "arXiv"
+            },
+            {
+              "relationType": "Cites",
+              "relatedIdentifier": "10.1007/978-3-319-96812-4_22",
+              "relatedIdentifierType": "DOI"
+            }
+          ],
+          "relatedItems": [
+            {
+              "number": "19",
+              "titles": [
+                {
+                  "title": "LIPIcs, Volume 268, ITP 2023"
+                },
+                {
+                  "title": "14th International Conference on Interactive Theorem Proving (ITP 2023)",
+                  "titleType": "Subtitle"
+                }
+              ],
+              "volume": "268",
+              "lastPage": "19:22",
+              "firstPage": "19:1",
+              "publisher": "Schloss Dagstuhl – Leibniz-Zentrum für Informatik",
+              "contributors": [
+                {
+                  "name": "Naumowicz, Adam",
+                  "nameType": "Personal",
+                  "givenName": "Adam",
+                  "familyName": "Naumowicz",
+                  "contributorType": "Editor"
+                },
+                {
+                  "name": "Thiemann, René",
+                  "nameType": "Personal",
+                  "givenName": "René",
+                  "familyName": "Thiemann",
+                  "contributorType": "Editor"
+                }
+              ],
+              "relationType": "IsPublishedIn",
+              "publicationYear": "2023",
+              "relatedItemType": "ConferenceProceeding",
+              "relatedItemIdentifier": {
+                "relatedItemIdentifier": "10.4230/LIPIcs.ITP.2023",
+                "relatedItemIdentifierType": "DOI"
+              }
+            },
+            {
+              "titles": [
+                {
+                  "title": "Leibniz International Proceedings in Informatics (LIPIcs)"
+                }
+              ],
+              "volume": "268",
+              "publisher": "Schloss Dagstuhl – Leibniz-Zentrum für Informatik",
+              "relationType": "IsPublishedIn",
+              "publicationYear": "2023",
+              "relatedItemType": "Collection",
+              "relatedItemIdentifier": {
+                "relatedItemIdentifier": "1868-8969",
+                "relatedItemIdentifierType": "ISSN"
+              }
+            }
+          ],
+          "sizes": [
+            "22 pages",
+            "958728 bytes"
+          ],
+          "formats": [
+            "application/pdf"
+          ],
+          "version": null,
+          "rightsList": [
+            {
+              "lang": "en",
+              "rights": "Creative Commons Attribution 4.0 International license",
+              "rightsUri": "https://creativecommons.org/licenses/by/4.0/legalcode",
+              "rightsIdentifier": "cc by 4.0"
+            },
+            {
+              "rights": "info:eu-repo/semantics/openAccess"
+            }
+          ],
+          "descriptions": [
+            {
+              "lang": "en",
+              "description": "As a present to Mizar on its 50th anniversary, we develop an AI/TP system that automatically proves about 60% of the Mizar theorems in the hammer setting. We also automatically prove 75% of the Mizar theorems when the automated provers are helped by using only the premises used in the human-written Mizar proofs. We describe the methods and large-scale experiments leading to these results. This includes in particular the E and Vampire provers, their ENIGMA and Deepire learning modifications, a number of learning-based premise selection methods, and the incremental loop that interleaves growing a corpus of millions of ATP proofs with training increasingly strong AI/TP systems on them. We also present a selection of Mizar problems that were proved automatically.",
+              "descriptionType": "Abstract"
+            },
+            {
+              "lang": "en",
+              "description": "LIPIcs, Vol. 268, 14th International Conference on Interactive Theorem Proving (ITP 2023), pages 19:1-19:22",
+              "descriptionType": "SeriesInformation"
+            }
+          ],
+          "geoLocations": [],
+          "fundingReferences": [],
+          "xml": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHJlc291cmNlIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2UiIHhtbG5zPSJodHRwOi8vZGF0YWNpdGUub3JnL3NjaGVtYS9rZXJuZWwtNCIgeHNpOnNjaGVtYUxvY2F0aW9uPSJodHRwOi8vZGF0YWNpdGUub3JnL3NjaGVtYS9rZXJuZWwtNCBodHRwOi8vc2NoZW1hLmRhdGFjaXRlLm9yZy9tZXRhL2tlcm5lbC00L21ldGFkYXRhLnhzZCI+CiAgPGlkZW50aWZpZXIgaWRlbnRpZmllclR5cGU9IkRPSSI+MTAuNDIzMC9MSVBJQ1MuSVRQLjIwMjMuMTk8L2lkZW50aWZpZXI+CiAgPGNyZWF0b3JzPgogICAgPGNyZWF0b3I+CiAgICAgIDxjcmVhdG9yTmFtZSBuYW1lVHlwZT0iUGVyc29uYWwiPkpha3Vixa92LCBKYW48L2NyZWF0b3JOYW1lPgogICAgICA8Z2l2ZW5OYW1lPkphbjwvZ2l2ZW5OYW1lPgogICAgICA8ZmFtaWx5TmFtZT5KYWt1YsWvdjwvZmFtaWx5TmFtZT4KICAgICAgPG5hbWVJZGVudGlmaWVyIG5hbWVJZGVudGlmaWVyU2NoZW1lPSJPUkNJRCIgc2NoZW1lVVJJPSJodHRwczovL29yY2lkLm9yZyI+aHR0cHM6Ly9vcmNpZC5vcmcvMDAwMC0wMDAyLTg4NDgtNTUzNzwvbmFtZUlkZW50aWZpZXI+CiAgICAgIDxhZmZpbGlhdGlvbj5DemVjaCBUZWNobmljYWwgVW5pdmVyc2l0eSBpbiBQcmFndWUsIEN6ZWNoIFJlcHVibGljPC9hZmZpbGlhdGlvbj4KICAgIDwvY3JlYXRvcj4KICAgIDxjcmVhdG9yPgogICAgICA8Y3JlYXRvck5hbWUgbmFtZVR5cGU9IlBlcnNvbmFsIj5DaHZhbG92c2vDvSwgS2FyZWw8L2NyZWF0b3JOYW1lPgogICAgICA8Z2l2ZW5OYW1lPkthcmVsPC9naXZlbk5hbWU+CiAgICAgIDxmYW1pbHlOYW1lPkNodmFsb3Zza8O9PC9mYW1pbHlOYW1lPgogICAgICA8bmFtZUlkZW50aWZpZXIgbmFtZUlkZW50aWZpZXJTY2hlbWU9Ik9SQ0lEIiBzY2hlbWVVUkk9Imh0dHBzOi8vb3JjaWQub3JnIj5odHRwczovL29yY2lkLm9yZy8wMDAwLTAwMDItMDU0MS0zODg5PC9uYW1lSWRlbnRpZmllcj4KICAgICAgPGFmZmlsaWF0aW9uPkN6ZWNoIFRlY2huaWNhbCBVbml2ZXJzaXR5IGluIFByYWd1ZSwgQ3plY2ggUmVwdWJsaWM8L2FmZmlsaWF0aW9uPgogICAgPC9jcmVhdG9yPgogICAgPGNyZWF0b3I+CiAgICAgIDxjcmVhdG9yTmFtZSBuYW1lVHlwZT0iUGVyc29uYWwiPkdvZXJ0emVsLCBaYXJhdGh1c3RyYTwvY3JlYXRvck5hbWU+CiAgICAgIDxnaXZlbk5hbWU+WmFyYXRodXN0cmE8L2dpdmVuTmFtZT4KICAgICAgPGZhbWlseU5hbWU+R29lcnR6ZWw8L2ZhbWlseU5hbWU+CiAgICAgIDxuYW1lSWRlbnRpZmllciBuYW1lSWRlbnRpZmllclNjaGVtZT0iT1JDSUQiIHNjaGVtZVVSST0iaHR0cHM6Ly9vcmNpZC5vcmciPmh0dHBzOi8vb3JjaWQub3JnLzAwMDAtMDAwMi04NDU4LTI3ODY8L25hbWVJZGVudGlmaWVyPgogICAgICA8YWZmaWxpYXRpb24+Q3plY2ggVGVjaG5pY2FsIFVuaXZlcnNpdHkgaW4gUHJhZ3VlLCBDemVjaCBSZXB1YmxpYzwvYWZmaWxpYXRpb24+CiAgICA8L2NyZWF0b3I+CiAgICA8Y3JlYXRvcj4KICAgICAgPGNyZWF0b3JOYW1lIG5hbWVUeXBlPSJQZXJzb25hbCI+S2FsaXN6eWssIENlemFyeTwvY3JlYXRvck5hbWU+CiAgICAgIDxnaXZlbk5hbWU+Q2V6YXJ5PC9naXZlbk5hbWU+CiAgICAgIDxmYW1pbHlOYW1lPkthbGlzenlrPC9mYW1pbHlOYW1lPgogICAgICA8bmFtZUlkZW50aWZpZXIgbmFtZUlkZW50aWZpZXJTY2hlbWU9Ik9SQ0lEIiBzY2hlbWVVUkk9Imh0dHBzOi8vb3JjaWQub3JnIj5odHRwczovL29yY2lkLm9yZy8wMDAwLTAwMDItODI3My02MDU5PC9uYW1lSWRlbnRpZmllcj4KICAgICAgPGFmZmlsaWF0aW9uPlVuaXZlcnNpdMOkdCBJbm5zYnJ1Y2ssIEF1c3RyaWE8L2FmZmlsaWF0aW9uPgogICAgICA8YWZmaWxpYXRpb24+IElORFJDLCBQcmFndWUsIEN6ZWNoIFJlcHVibGljPC9hZmZpbGlhdGlvbj4KICAgIDwvY3JlYXRvcj4KICAgIDxjcmVhdG9yPgogICAgICA8Y3JlYXRvck5hbWUgbmFtZVR5cGU9IlBlcnNvbmFsIj5PbMWhw6FrLCBNaXJlazwvY3JlYXRvck5hbWU+CiAgICAgIDxnaXZlbk5hbWU+TWlyZWs8L2dpdmVuTmFtZT4KICAgICAgPGZhbWlseU5hbWU+T2zFocOhazwvZmFtaWx5TmFtZT4KICAgICAgPG5hbWVJZGVudGlmaWVyIG5hbWVJZGVudGlmaWVyU2NoZW1lPSJPUkNJRCIgc2NoZW1lVVJJPSJodHRwczovL29yY2lkLm9yZyI+aHR0cHM6Ly9vcmNpZC5vcmcvMDAwMC0wMDAyLTkzNjEtMTkyMTwvbmFtZUlkZW50aWZpZXI+CiAgICAgIDxhZmZpbGlhdGlvbj5JbnN0aXR1dCBkZXMgSGF1dGVzIMOJdHVkZXMgU2NpZW50aWZpcXVlcywgUGFyaXMsIEZyYW5jZTwvYWZmaWxpYXRpb24+CiAgICA8L2NyZWF0b3I+CiAgICA8Y3JlYXRvcj4KICAgICAgPGNyZWF0b3JOYW1lIG5hbWVUeXBlPSJQZXJzb25hbCI+UGlvdHJvd3NraSwgQmFydG9zejwvY3JlYXRvck5hbWU+CiAgICAgIDxnaXZlbk5hbWU+QmFydG9zejwvZ2l2ZW5OYW1lPgogICAgICA8ZmFtaWx5TmFtZT5QaW90cm93c2tpPC9mYW1pbHlOYW1lPgogICAgICA8bmFtZUlkZW50aWZpZXIgbmFtZUlkZW50aWZpZXJTY2hlbWU9Ik9SQ0lEIiBzY2hlbWVVUkk9Imh0dHBzOi8vb3JjaWQub3JnIj5odHRwczovL29yY2lkLm9yZy8wMDAwLTAwMDItMTY5OS0wMThYPC9uYW1lSWRlbnRpZmllcj4KICAgICAgPGFmZmlsaWF0aW9uPkN6ZWNoIFRlY2huaWNhbCBVbml2ZXJzaXR5IGluIFByYWd1ZSwgQ3plY2ggUmVwdWJsaWM8L2FmZmlsaWF0aW9uPgogICAgPC9jcmVhdG9yPgogICAgPGNyZWF0b3I+CiAgICAgIDxjcmVhdG9yTmFtZSBuYW1lVHlwZT0iUGVyc29uYWwiPlNjaHVseiwgU3RlcGhhbjwvY3JlYXRvck5hbWU+CiAgICAgIDxnaXZlbk5hbWU+U3RlcGhhbjwvZ2l2ZW5OYW1lPgogICAgICA8ZmFtaWx5TmFtZT5TY2h1bHo8L2ZhbWlseU5hbWU+CiAgICAgIDxuYW1lSWRlbnRpZmllciBuYW1lSWRlbnRpZmllclNjaGVtZT0iT1JDSUQiIHNjaGVtZVVSST0iaHR0cHM6Ly9vcmNpZC5vcmciPmh0dHBzOi8vb3JjaWQub3JnLzAwMDAtMDAwMS02MjYyLTg1NTU8L25hbWVJZGVudGlmaWVyPgogICAgICA8YWZmaWxpYXRpb24+REhCVyBTdHV0dGdhcnQsIEdlcm1hbnk8L2FmZmlsaWF0aW9uPgogICAgPC9jcmVhdG9yPgogICAgPGNyZWF0b3I+CiAgICAgIDxjcmVhdG9yTmFtZSBuYW1lVHlwZT0iUGVyc29uYWwiPlN1ZGEsIE1hcnRpbjwvY3JlYXRvck5hbWU+CiAgICAgIDxnaXZlbk5hbWU+TWFydGluPC9naXZlbk5hbWU+CiAgICAgIDxmYW1pbHlOYW1lPlN1ZGE8L2ZhbWlseU5hbWU+CiAgICAgIDxuYW1lSWRlbnRpZmllciBuYW1lSWRlbnRpZmllclNjaGVtZT0iT1JDSUQiIHNjaGVtZVVSST0iaHR0cHM6Ly9vcmNpZC5vcmciPmh0dHBzOi8vb3JjaWQub3JnLzAwMDAtMDAwMy0wOTg5LTU4MDA8L25hbWVJZGVudGlmaWVyPgogICAgICA8YWZmaWxpYXRpb24+Q3plY2ggVGVjaG5pY2FsIFVuaXZlcnNpdHkgaW4gUHJhZ3VlLCBDemVjaCBSZXB1YmxpYzwvYWZmaWxpYXRpb24+CiAgICA8L2NyZWF0b3I+CiAgICA8Y3JlYXRvcj4KICAgICAgPGNyZWF0b3JOYW1lIG5hbWVUeXBlPSJQZXJzb25hbCI+VXJiYW4sIEpvc2VmPC9jcmVhdG9yTmFtZT4KICAgICAgPGdpdmVuTmFtZT5Kb3NlZjwvZ2l2ZW5OYW1lPgogICAgICA8ZmFtaWx5TmFtZT5VcmJhbjwvZmFtaWx5TmFtZT4KICAgICAgPG5hbWVJZGVudGlmaWVyIG5hbWVJZGVudGlmaWVyU2NoZW1lPSJPUkNJRCIgc2NoZW1lVVJJPSJodHRwczovL29yY2lkLm9yZyI+aHR0cHM6Ly9vcmNpZC5vcmcvMDAwMC0wMDAyLTEzODQtMTYxMzwvbmFtZUlkZW50aWZpZXI+CiAgICAgIDxhZmZpbGlhdGlvbj5DemVjaCBUZWNobmljYWwgVW5pdmVyc2l0eSBpbiBQcmFndWUsIEN6ZWNoIFJlcHVibGljPC9hZmZpbGlhdGlvbj4KICAgIDwvY3JlYXRvcj4KICA8L2NyZWF0b3JzPgogIDx0aXRsZXM+CiAgICA8dGl0bGUgeG1sOmxhbmc9ImVuIj5NaXpBUiA2MCBmb3IgTWl6YXIgNTA8L3RpdGxlPgogIDwvdGl0bGVzPgogIDxwdWJsaXNoZXI+U2NobG9zcyBEYWdzdHVobCDigJMgTGVpYm5pei1aZW50cnVtIGbDvHIgSW5mb3JtYXRpazwvcHVibGlzaGVyPgogIDxwdWJsaWNhdGlvblllYXI+MjAyMzwvcHVibGljYXRpb25ZZWFyPgogIDxyZXNvdXJjZVR5cGUgcmVzb3VyY2VUeXBlR2VuZXJhbD0iQ29uZmVyZW5jZVBhcGVyIi8+CiAgPHN1YmplY3RzPgogICAgPHN1YmplY3QgeG1sOmxhbmc9ImVuIj5NaXphcjwvc3ViamVjdD4KICAgIDxzdWJqZWN0IHhtbDpsYW5nPSJlbiI+RU5JR01BPC9zdWJqZWN0PgogICAgPHN1YmplY3QgeG1sOmxhbmc9ImVuIj5BdXRvbWF0ZWQgUmVhc29uaW5nPC9zdWJqZWN0PgogICAgPHN1YmplY3QgeG1sOmxhbmc9ImVuIj5NYWNoaW5lIExlYXJuaW5nPC9zdWJqZWN0PgogICAgPHN1YmplY3Qgc3ViamVjdFNjaGVtZT0iVGhlIDIwMTIgQUNNIENvbXB1dGluZyBDbGFzc2lmaWNhdGlvbiBTeXN0ZW0iIHhtbDpsYW5nPSJlbiI+VGhlb3J5IG9mIGNvbXB1dGF0aW9uIOKGkiBBdXRvbWF0ZWQgcmVhc29uaW5nPC9zdWJqZWN0PgogIDwvc3ViamVjdHM+CiAgPGNvbnRyaWJ1dG9ycz4KICAgIDxjb250cmlidXRvciBjb250cmlidXRvclR5cGU9IkVkaXRvciI+CiAgICAgIDxjb250cmlidXRvck5hbWUgbmFtZVR5cGU9IlBlcnNvbmFsIj5OYXVtb3dpY3osIEFkYW08L2NvbnRyaWJ1dG9yTmFtZT4KICAgICAgPGdpdmVuTmFtZT5BZGFtPC9naXZlbk5hbWU+CiAgICAgIDxmYW1pbHlOYW1lPk5hdW1vd2ljejwvZmFtaWx5TmFtZT4KICAgICAgPG5hbWVJZGVudGlmaWVyIG5hbWVJZGVudGlmaWVyU2NoZW1lPSJPUkNJRCIgc2NoZW1lVVJJPSJodHRwczovL29yY2lkLm9yZyI+aHR0cHM6Ly9vcmNpZC5vcmcvMDAwMC0wMDAzLTQyMjQtOTc5ODwvbmFtZUlkZW50aWZpZXI+CiAgICAgIDxhZmZpbGlhdGlvbj5Vbml2ZXJzaXR5IG9mIEJpYWx5c3RvaywgUG9sYW5kPC9hZmZpbGlhdGlvbj4KICAgIDwvY29udHJpYnV0b3I+CiAgICA8Y29udHJpYnV0b3IgY29udHJpYnV0b3JUeXBlPSJFZGl0b3IiPgogICAgICA8Y29udHJpYnV0b3JOYW1lIG5hbWVUeXBlPSJQZXJzb25hbCI+VGhpZW1hbm4sIFJlbsOpPC9jb250cmlidXRvck5hbWU+CiAgICAgIDxnaXZlbk5hbWU+UmVuw6k8L2dpdmVuTmFtZT4KICAgICAgPGZhbWlseU5hbWU+VGhpZW1hbm48L2ZhbWlseU5hbWU+CiAgICAgIDxuYW1lSWRlbnRpZmllciBuYW1lSWRlbnRpZmllclNjaGVtZT0iT1JDSUQiIHNjaGVtZVVSST0iaHR0cHM6Ly9vcmNpZC5vcmciPmh0dHBzOi8vb3JjaWQub3JnLzAwMDAtMDAwMi0wMzIzLTg4Mjk8L25hbWVJZGVudGlmaWVyPgogICAgICA8YWZmaWxpYXRpb24+VW5pdmVyc2l0eSBvZiBJbm5zYnJ1Y2ssIEF1c3RyaWE8L2FmZmlsaWF0aW9uPgogICAgPC9jb250cmlidXRvcj4KICA8L2NvbnRyaWJ1dG9ycz4KICA8ZGF0ZXM+CiAgICA8ZGF0ZSBkYXRlVHlwZT0iSXNzdWVkIj4yMDIzPC9kYXRlPgogICAgPGRhdGUgZGF0ZVR5cGU9IkF2YWlsYWJsZSI+MjAyMy0wNy0yNjwvZGF0ZT4KICAgIDxkYXRlIGRhdGVUeXBlPSJDcmVhdGVkIj4yMDIzLTA3LTI2PC9kYXRlPgogICAgPGRhdGUgZGF0ZVR5cGU9IkNvcHlyaWdodGVkIj4yMDIzLTA3LTI2PC9kYXRlPgogIDwvZGF0ZXM+CiAgPGxhbmd1YWdlPmVuPC9sYW5ndWFnZT4KICA8YWx0ZXJuYXRlSWRlbnRpZmllcnM+CiAgICA8YWx0ZXJuYXRlSWRlbnRpZmllciBhbHRlcm5hdGVJZGVudGlmaWVyVHlwZT0iVVJOIj51cm46bmJuOmRlOjAwMzAtZHJvcHMtMTgzOTQyPC9hbHRlcm5hdGVJZGVudGlmaWVyPgogIDwvYWx0ZXJuYXRlSWRlbnRpZmllcnM+CiAgPHJlbGF0ZWRJZGVudGlmaWVycz4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJJc1ZlcnNpb25PZiIgcmVzb3VyY2VUeXBlR2VuZXJhbD0iVGV4dCI+MTAuNDg1NTAvYXJYaXYuMjMwMy4wNjY4NjwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJVUkwiIHJlbGF0aW9uVHlwZT0iSXNTdXBwbGVtZW50ZWRCeSIgcmVzb3VyY2VUeXBlR2VuZXJhbD0iU29mdHdhcmUiPmh0dHBzOi8vZ2l0aHViLmNvbS9haTRyZWFzb24vQVRQX1Byb29mczwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iSXNQYXJ0T2YiPjEwLjQyMzAvTElQSWNzLklUUC4yMDIzPC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IklTQk4iIHJlbGF0aW9uVHlwZT0iSXNQYXJ0T2YiPjk3OC0zLTk1OTc3LTI4NC02PC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IklTU04iIHJlbGF0aW9uVHlwZT0iSXNQYXJ0T2YiPjE4NjgtODk2OTwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJVUkwiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPmh0dHBzOi8vd3d3LnRlbnNvcmZsb3cub3JnLzwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjEwMDcvczEwODE3LTAxMy05Mjg2LTU8L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC4xMDA3L3MxMDgxNy0wMTctOTQ0MC02PC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMTAwNy85NzgtMy0zMTktMjA2MTUtOF8xNzwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjEwMjMvQToxMDIxOTY2ODMyNTU4PC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMTAwNy9zMTA4MTctMDE2LTkzNjItODwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjYwOTIvaXNzbi4xOTcyLTU3ODcvNDU5MzwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjExNDUvMjkzOTY3Mi4yOTM5Nzg1PC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMzExNS92MS9kMTQtMTE3OTwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjEwMDcvOTc4LTMtMDMwLTg2MDU5LTJfMTY8L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC4xMDA3Lzk3OC0zLTAzMC0yOTQzNi02XzEyPC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IlVSTCIgcmVsYXRpb25UeXBlPSJDaXRlcyI+aHR0cHM6Ly9vcGVucmV2aWV3Lm5ldC9mb3J1bT9pZD1Ta1p4Q2stMFo8L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC4yOTAwNy9udGxiPC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMTAwNy9zMTA4MTctMDIwLTA5NTgwLXg8L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC4zMjMzL0FJQy0xODA3NjE8L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC4xMTQ1LzMwMTg2MTAuMzAxODYxOTwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjEwMDcvOTc4LTMtMzE5LTk2ODEyLTRfMTE8L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC40MjMwL0xJUEljcy5JVFAuMjAxOS4zNDwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjEwMDcvczEwODE3LTAxNC05MzAzLTM8L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC4xMDA3L3MxMDgxNy0wMTUtOTMzMC04PC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMTAwNy85NzgtMy02NDItMzk3OTktOF8xPC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IlVSTCIgcmVsYXRpb25UeXBlPSJDaXRlcyI+aHR0cHM6Ly9vcGVucmV2aWV3Lm5ldC9mb3J1bT9pZD1TMWVaWWVIRkRTPC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMzIzMy9GQUlBMjAwMjQ0PC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMTYxMy9qYWlyLjYxNDwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjEwMDcvOTc4LTMtMzE5LTk0MjA1LTZfMzc8L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iVVJMIiByZWxhdGlvblR5cGU9IkNpdGVzIj5odHRwczovL3d3dy5zY2llbmNlZGlyZWN0LmNvbS9ib29rLzk3ODA0NDQ1MDgxMzMvaGFuZGJvb2stb2YtYXV0b21hdGVkLXJlYXNvbmluZzwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJVUkwiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPmh0dHA6Ly9pb3NwcmVzcy5tZXRhcHJlc3MuY29tL2NvbnRlbnQvbjkwOG45NG5tdms1OXYzYy88L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC4xMDA3Lzk3OC0zLTY0Mi00NTIyMS01XzQ5PC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMTAwNy85NzgtMy0wMzAtNzk4NzYtNV8zMTwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjEwMDcvOTc4LTMtMDMwLTg2MjA1LTNfMTE8L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC4xMDA3L3MxMDgxNy0wMDQtNjI0NS0xPC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMTAwNy9zMTA4MTctMDA2LTkwMzItMzwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjI5MDA3LzhuN208L3JlbGF0ZWRJZGVudGlmaWVyPgogICAgPHJlbGF0ZWRJZGVudGlmaWVyIHJlbGF0ZWRJZGVudGlmaWVyVHlwZT0iRE9JIiByZWxhdGlvblR5cGU9IkNpdGVzIj4xMC4xMDA3Lzk3OC0zLTAzMC01MzUxOC02XzI0PC9yZWxhdGVkSWRlbnRpZmllcj4KICAgIDxyZWxhdGVkSWRlbnRpZmllciByZWxhdGVkSWRlbnRpZmllclR5cGU9IkRPSSIgcmVsYXRpb25UeXBlPSJDaXRlcyI+MTAuMTAwNy85NzgtMy01NDAtNzEwNzAtN18zNzwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJhclhpdiIgcmVsYXRpb25UeXBlPSJDaXRlcyI+YXJYaXY6MTcwNi4wMzc2MjwvcmVsYXRlZElkZW50aWZpZXI+CiAgICA8cmVsYXRlZElkZW50aWZpZXIgcmVsYXRlZElkZW50aWZpZXJUeXBlPSJET0kiIHJlbGF0aW9uVHlwZT0iQ2l0ZXMiPjEwLjEwMDcvOTc4LTMtMzE5LTk2ODEyLTRfMjI8L3JlbGF0ZWRJZGVudGlmaWVyPgogIDwvcmVsYXRlZElkZW50aWZpZXJzPgogIDxyZWxhdGVkSXRlbXM+CiAgICA8cmVsYXRlZEl0ZW0gcmVsYXRlZEl0ZW1UeXBlPSJDb25mZXJlbmNlUHJvY2VlZGluZyIgcmVsYXRpb25UeXBlPSJJc1B1Ymxpc2hlZEluIj4KICAgICAgPHJlbGF0ZWRJdGVtSWRlbnRpZmllciByZWxhdGVkSXRlbUlkZW50aWZpZXJUeXBlPSJET0kiPjEwLjQyMzAvTElQSWNzLklUUC4yMDIzPC9yZWxhdGVkSXRlbUlkZW50aWZpZXI+CiAgICAgIDx0aXRsZXM+CiAgICAgICAgPHRpdGxlPkxJUEljcywgVm9sdW1lIDI2OCwgSVRQIDIwMjM8L3RpdGxlPgogICAgICAgIDx0aXRsZSB0aXRsZVR5cGU9IlN1YnRpdGxlIj4xNHRoIEludGVybmF0aW9uYWwgQ29uZmVyZW5jZSBvbiBJbnRlcmFjdGl2ZSBUaGVvcmVtIFByb3ZpbmcgKElUUCAyMDIzKTwvdGl0bGU+CiAgICAgIDwvdGl0bGVzPgogICAgICA8cHVibGljYXRpb25ZZWFyPjIwMjM8L3B1YmxpY2F0aW9uWWVhcj4KICAgICAgPHZvbHVtZT4yNjg8L3ZvbHVtZT4KICAgICAgPG51bWJlcj4xOTwvbnVtYmVyPgogICAgICA8Zmlyc3RQYWdlPjE5OjE8L2ZpcnN0UGFnZT4KICAgICAgPGxhc3RQYWdlPjE5OjIyPC9sYXN0UGFnZT4KICAgICAgPHB1Ymxpc2hlcj5TY2hsb3NzIERhZ3N0dWhsIOKAkyBMZWlibml6LVplbnRydW0gZsO8ciBJbmZvcm1hdGlrPC9wdWJsaXNoZXI+CiAgICAgIDxjb250cmlidXRvcnM+CiAgICAgICAgPGNvbnRyaWJ1dG9yIGNvbnRyaWJ1dG9yVHlwZT0iRWRpdG9yIj4KICAgICAgICAgIDxjb250cmlidXRvck5hbWUgbmFtZVR5cGU9IlBlcnNvbmFsIj5OYXVtb3dpY3osIEFkYW08L2NvbnRyaWJ1dG9yTmFtZT4KICAgICAgICAgIDxnaXZlbk5hbWU+QWRhbTwvZ2l2ZW5OYW1lPgogICAgICAgICAgPGZhbWlseU5hbWU+TmF1bW93aWN6PC9mYW1pbHlOYW1lPgogICAgICAgIDwvY29udHJpYnV0b3I+CiAgICAgICAgPGNvbnRyaWJ1dG9yIGNvbnRyaWJ1dG9yVHlwZT0iRWRpdG9yIj4KICAgICAgICAgIDxjb250cmlidXRvck5hbWUgbmFtZVR5cGU9IlBlcnNvbmFsIj5UaGllbWFubiwgUmVuw6k8L2NvbnRyaWJ1dG9yTmFtZT4KICAgICAgICAgIDxnaXZlbk5hbWU+UmVuw6k8L2dpdmVuTmFtZT4KICAgICAgICAgIDxmYW1pbHlOYW1lPlRoaWVtYW5uPC9mYW1pbHlOYW1lPgogICAgICAgIDwvY29udHJpYnV0b3I+CiAgICAgIDwvY29udHJpYnV0b3JzPgogICAgPC9yZWxhdGVkSXRlbT4KICAgIDxyZWxhdGVkSXRlbSByZWxhdGVkSXRlbVR5cGU9IkNvbGxlY3Rpb24iIHJlbGF0aW9uVHlwZT0iSXNQdWJsaXNoZWRJbiI+CiAgICAgIDxyZWxhdGVkSXRlbUlkZW50aWZpZXIgcmVsYXRlZEl0ZW1JZGVudGlmaWVyVHlwZT0iSVNTTiI+MTg2OC04OTY5PC9yZWxhdGVkSXRlbUlkZW50aWZpZXI+CiAgICAgIDx0aXRsZXM+CiAgICAgICAgPHRpdGxlPkxlaWJuaXogSW50ZXJuYXRpb25hbCBQcm9jZWVkaW5ncyBpbiBJbmZvcm1hdGljcyAoTElQSWNzKTwvdGl0bGU+CiAgICAgIDwvdGl0bGVzPgogICAgICA8cHVibGljYXRpb25ZZWFyPjIwMjM8L3B1YmxpY2F0aW9uWWVhcj4KICAgICAgPHZvbHVtZT4yNjg8L3ZvbHVtZT4KICAgICAgPHB1Ymxpc2hlcj5TY2hsb3NzIERhZ3N0dWhsIOKAkyBMZWlibml6LVplbnRydW0gZsO8ciBJbmZvcm1hdGlrPC9wdWJsaXNoZXI+CiAgICA8L3JlbGF0ZWRJdGVtPgogIDwvcmVsYXRlZEl0ZW1zPgogIDxzaXplcz4KICAgIDxzaXplPjIyIHBhZ2VzPC9zaXplPgogICAgPHNpemU+OTU4NzI4IGJ5dGVzPC9zaXplPgogIDwvc2l6ZXM+CiAgPGZvcm1hdHM+CiAgICA8Zm9ybWF0PmFwcGxpY2F0aW9uL3BkZjwvZm9ybWF0PgogIDwvZm9ybWF0cz4KICA8dmVyc2lvbi8+CiAgPHJpZ2h0c0xpc3Q+CiAgICA8cmlnaHRzIHJpZ2h0c1VSST0iaHR0cHM6Ly9jcmVhdGl2ZWNvbW1vbnMub3JnL2xpY2Vuc2VzL2J5LzQuMC9sZWdhbGNvZGUiIHJpZ2h0c0lkZW50aWZpZXI9IkNDIEJZIDQuMCIgeG1sOmxhbmc9ImVuIj5DcmVhdGl2ZSBDb21tb25zIEF0dHJpYnV0aW9uIDQuMCBJbnRlcm5hdGlvbmFsIGxpY2Vuc2U8L3JpZ2h0cz4KICAgIDxyaWdodHM+aW5mbzpldS1yZXBvL3NlbWFudGljcy9vcGVuQWNjZXNzPC9yaWdodHM+CiAgPC9yaWdodHNMaXN0PgogIDxkZXNjcmlwdGlvbnM+CiAgICA8ZGVzY3JpcHRpb24geG1sOmxhbmc9ImVuIiBkZXNjcmlwdGlvblR5cGU9IkFic3RyYWN0Ij5BcyBhIHByZXNlbnQgdG8gTWl6YXIgb24gaXRzIDUwdGggYW5uaXZlcnNhcnksIHdlIGRldmVsb3AgYW4gQUkvVFAgc3lzdGVtIHRoYXQgYXV0b21hdGljYWxseSBwcm92ZXMgYWJvdXQgNjAlIG9mIHRoZSBNaXphciB0aGVvcmVtcyBpbiB0aGUgaGFtbWVyIHNldHRpbmcuIFdlIGFsc28gYXV0b21hdGljYWxseSBwcm92ZSA3NSUgb2YgdGhlIE1pemFyIHRoZW9yZW1zIHdoZW4gdGhlIGF1dG9tYXRlZCBwcm92ZXJzIGFyZSBoZWxwZWQgYnkgdXNpbmcgb25seSB0aGUgcHJlbWlzZXMgdXNlZCBpbiB0aGUgaHVtYW4td3JpdHRlbiBNaXphciBwcm9vZnMuIFdlIGRlc2NyaWJlIHRoZSBtZXRob2RzIGFuZCBsYXJnZS1zY2FsZSBleHBlcmltZW50cyBsZWFkaW5nIHRvIHRoZXNlIHJlc3VsdHMuIFRoaXMgaW5jbHVkZXMgaW4gcGFydGljdWxhciB0aGUgRSBhbmQgVmFtcGlyZSBwcm92ZXJzLCB0aGVpciBFTklHTUEgYW5kIERlZXBpcmUgbGVhcm5pbmcgbW9kaWZpY2F0aW9ucywgYSBudW1iZXIgb2YgbGVhcm5pbmctYmFzZWQgcHJlbWlzZSBzZWxlY3Rpb24gbWV0aG9kcywgYW5kIHRoZSBpbmNyZW1lbnRhbCBsb29wIHRoYXQgaW50ZXJsZWF2ZXMgZ3Jvd2luZyBhIGNvcnB1cyBvZiBtaWxsaW9ucyBvZiBBVFAgcHJvb2ZzIHdpdGggdHJhaW5pbmcgaW5jcmVhc2luZ2x5IHN0cm9uZyBBSS9UUCBzeXN0ZW1zIG9uIHRoZW0uIFdlIGFsc28gcHJlc2VudCBhIHNlbGVjdGlvbiBvZiBNaXphciBwcm9ibGVtcyB0aGF0IHdlcmUgcHJvdmVkIGF1dG9tYXRpY2FsbHkuPC9kZXNjcmlwdGlvbj4KICAgIDxkZXNjcmlwdGlvbiB4bWw6bGFuZz0iZW4iIGRlc2NyaXB0aW9uVHlwZT0iU2VyaWVzSW5mb3JtYXRpb24iPkxJUEljcywgVm9sLiAyNjgsIDE0dGggSW50ZXJuYXRpb25hbCBDb25mZXJlbmNlIG9uIEludGVyYWN0aXZlIFRoZW9yZW0gUHJvdmluZyAoSVRQIDIwMjMpLCBwYWdlcyAxOToxLTE5OjIyPC9kZXNjcmlwdGlvbj4KICA8L2Rlc2NyaXB0aW9ucz4KPC9yZXNvdXJjZT4K",
+          "url": "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ITP.2023.19",
+          "contentUrl": null,
+          "metadataVersion": 1,
+          "schemaVersion": "http://datacite.org/schema/kernel-4",
+          "source": "api",
+          "isActive": true,
+          "state": "findable",
+          "reason": null,
+          "viewCount": 0,
+          "viewsOverTime": [],
+          "downloadCount": 0,
+          "downloadsOverTime": [],
+          "referenceCount": 0,
+          "citationCount": 1,
+          "citationsOverTime": [
+            {
+              "year": "2026",
+              "total": 1
+            }
+          ],
+          "partCount": 0,
+          "partOfCount": 0,
+          "versionCount": 0,
+          "versionOfCount": 0,
+          "created": "2023-07-26T12:47:20.000Z",
+          "registered": "2023-07-26T12:47:20.000Z",
+          "published": "2023",
+          "updated": "2023-12-21T16:01:22.000Z"
+        },
+        "relationships": {
+          "client": {
+            "data": {
+              "id": "lzi.drops",
+              "type": "clients"
+            }
+          },
+          "provider": {
+            "data": {
+              "id": "lzi",
+              "type": "providers"
+            }
+          },
+          "media": {
+            "data": {
+              "id": "10.4230/lipics.itp.2023.19",
+              "type": "media"
+            }
+          },
+          "references": {
+            "data": []
+          },
+          "citations": {
+            "data": [
+              {
+                "id": "10.4230/lipics.itp.2026.31",
+                "type": "dois"
+              }
+            ]
+          },
+          "parts": {
+            "data": []
+          },
+          "partOf": {
+            "data": []
+          },
+          "versions": {
+            "data": []
+          },
+          "versionOf": {
+            "data": []
+          }
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-10-01T01:08:33.382Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "datacite"
+    }
+  }
+]

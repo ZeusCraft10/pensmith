@@ -1,0 +1,720 @@
+[
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.4230%2Flipics.itp.2023.19?select=id%2Cdoi%2Ctitle%2Cpublication_year%2Cauthorships%2Ctype%2Cprimary_location%2Cbiblio%2Cabstract_inverted_index%2Cids%2Cis_retracted",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W4385245566",
+      "doi": "https://doi.org/10.4230/lipics.itp.2023.19",
+      "title": "Exploiting Generative AI to Scale up Intelligent Tutoring Systems",
+      "publication_year": 2023,
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": null,
+            "display_name": "Jakubův, Jan",
+            "orcid": "https://orcid.org/0000-0002-8848-5537",
+            "observed_orcids": [
+              "https://orcid.org/0000-0002-8848-5537"
+            ]
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I44504214",
+              "display_name": "Czech Technical University in Prague",
+              "ror": "https://ror.org/03kqpb082",
+              "country_code": "CZ",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ],
+          "countries": [
+            "CZ"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Jakubův, Jan",
+          "raw_affiliation_strings": [
+            "Czech Technical University in Prague, Czech Republic"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-8848-5537",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Czech Technical University in Prague, Czech Republic",
+              "institution_ids": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": null,
+            "display_name": "Chvalovský, Karel",
+            "orcid": "https://orcid.org/0000-0002-0541-3889",
+            "observed_orcids": [
+              "https://orcid.org/0000-0002-0541-3889"
+            ]
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I44504214",
+              "display_name": "Czech Technical University in Prague",
+              "ror": "https://ror.org/03kqpb082",
+              "country_code": "CZ",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ],
+          "countries": [
+            "CZ"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Chvalovský, Karel",
+          "raw_affiliation_strings": [
+            "Czech Technical University in Prague, Czech Republic"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-0541-3889",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Czech Technical University in Prague, Czech Republic",
+              "institution_ids": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": null,
+            "display_name": "Goertzel, Zarathustra",
+            "orcid": "https://orcid.org/0000-0002-8458-2786",
+            "observed_orcids": [
+              "https://orcid.org/0000-0002-8458-2786"
+            ]
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I44504214",
+              "display_name": "Czech Technical University in Prague",
+              "ror": "https://ror.org/03kqpb082",
+              "country_code": "CZ",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ],
+          "countries": [
+            "CZ"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Goertzel, Zarathustra",
+          "raw_affiliation_strings": [
+            "Czech Technical University in Prague, Czech Republic"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-8458-2786",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Czech Technical University in Prague, Czech Republic",
+              "institution_ids": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": null,
+            "display_name": "Kaliszyk, Cezary",
+            "orcid": "https://orcid.org/0000-0002-8273-6059",
+            "observed_orcids": [
+              "https://orcid.org/0000-0002-8273-6059"
+            ]
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I190249584",
+              "display_name": "Universität Innsbruck",
+              "ror": "https://ror.org/054pv6659",
+              "country_code": "AT",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I190249584"
+              ]
+            }
+          ],
+          "countries": [
+            "AT"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Kaliszyk, Cezary",
+          "raw_affiliation_strings": [
+            "Universität Innsbruck, Austria",
+            "INDRC, Prague, Czech Republic"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-8273-6059",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Universität Innsbruck, Austria",
+              "institution_ids": [
+                "https://openalex.org/I190249584"
+              ]
+            },
+            {
+              "raw_affiliation_string": "INDRC, Prague, Czech Republic",
+              "institution_ids": []
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": null,
+            "display_name": "Olšák, Mirek",
+            "orcid": "https://orcid.org/0000-0002-9361-1921",
+            "observed_orcids": [
+              "https://orcid.org/0000-0002-9361-1921"
+            ]
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I84909340",
+              "display_name": "Institut des Hautes Études Scientifiques",
+              "ror": "https://ror.org/05d5m2r55",
+              "country_code": "FR",
+              "type": "facility",
+              "lineage": [
+                "https://openalex.org/I277688954",
+                "https://openalex.org/I84909340"
+              ]
+            }
+          ],
+          "countries": [
+            "FR"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Olšák, Mirek",
+          "raw_affiliation_strings": [
+            "Institut des Hautes Études Scientifiques, Paris, France"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-9361-1921",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Institut des Hautes Études Scientifiques, Paris, France",
+              "institution_ids": [
+                "https://openalex.org/I84909340"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": null,
+            "display_name": "Piotrowski, Bartosz",
+            "orcid": "https://orcid.org/0000-0002-1699-018X",
+            "observed_orcids": [
+              "https://orcid.org/0000-0002-1699-018X"
+            ]
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I44504214",
+              "display_name": "Czech Technical University in Prague",
+              "ror": "https://ror.org/03kqpb082",
+              "country_code": "CZ",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ],
+          "countries": [
+            "CZ"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Piotrowski, Bartosz",
+          "raw_affiliation_strings": [
+            "Czech Technical University in Prague, Czech Republic"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-1699-018X",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Czech Technical University in Prague, Czech Republic",
+              "institution_ids": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": null,
+            "display_name": "Schulz, Stephan",
+            "orcid": "https://orcid.org/0000-0001-6262-8555",
+            "observed_orcids": [
+              "https://orcid.org/0000-0001-6262-8555"
+            ]
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I108806672",
+              "display_name": "Baden-Wuerttemberg Cooperative State University",
+              "ror": "https://ror.org/02xdzy536",
+              "country_code": "DE",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I108806672"
+              ]
+            }
+          ],
+          "countries": [
+            "DE"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Schulz, Stephan",
+          "raw_affiliation_strings": [
+            "DHBW Stuttgart, Germany"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0001-6262-8555",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "DHBW Stuttgart, Germany",
+              "institution_ids": [
+                "https://openalex.org/I108806672"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": null,
+            "display_name": "Suda, Martin",
+            "orcid": "https://orcid.org/0000-0003-0989-5800",
+            "observed_orcids": [
+              "https://orcid.org/0000-0003-0989-5800"
+            ]
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I44504214",
+              "display_name": "Czech Technical University in Prague",
+              "ror": "https://ror.org/03kqpb082",
+              "country_code": "CZ",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ],
+          "countries": [
+            "CZ"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Suda, Martin",
+          "raw_affiliation_strings": [
+            "Czech Technical University in Prague, Czech Republic"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0003-0989-5800",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Czech Technical University in Prague, Czech Republic",
+              "institution_ids": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": null,
+            "display_name": "Urban, Josef",
+            "orcid": "https://orcid.org/0000-0002-1384-1613",
+            "observed_orcids": [
+              "https://orcid.org/0000-0002-1384-1613"
+            ]
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I44504214",
+              "display_name": "Czech Technical University in Prague",
+              "ror": "https://ror.org/03kqpb082",
+              "country_code": "CZ",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ],
+          "countries": [
+            "CZ"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Urban, Josef",
+          "raw_affiliation_strings": [
+            "Czech Technical University in Prague, Czech Republic"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-1384-1613",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Czech Technical University in Prague, Czech Republic",
+              "institution_ids": [
+                "https://openalex.org/I44504214"
+              ]
+            }
+          ]
+        }
+      ],
+      "type": "article",
+      "primary_location": {
+        "id": "pmh:oai:drops-oai.dagstuhl.de:18394",
+        "is_oa": true,
+        "landing_page_url": "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ITP.2023.19",
+        "pdf_url": "https://drops.dagstuhl.de/storage/00lipics/lipics-vol268-itp2023/LIPIcs.ITP.2023.19/LIPIcs.ITP.2023.19.pdf",
+        "source": {
+          "id": "https://openalex.org/S4377196569",
+          "display_name": "DROPS (Schloss Dagstuhl – Leibniz Center for Informatics)",
+          "issn_l": null,
+          "issn": null,
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": false,
+          "listed_in": [],
+          "host_organization": "https://openalex.org/I2799853480",
+          "host_organization_name": "Schloss Dagstuhl – Leibniz Center for Informatics",
+          "host_organization_lineage": [
+            "https://openalex.org/I2799853480"
+          ],
+          "host_organization_lineage_names": [],
+          "type": "repository"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "submittedVersion",
+        "is_accepted": false,
+        "is_published": false,
+        "raw_source_name": null,
+        "raw_type": "InProceedings"
+      },
+      "biblio": {
+        "volume": null,
+        "issue": null,
+        "first_page": null,
+        "last_page": null
+      },
+      "abstract_inverted_index": {
+        "As": [
+          0
+        ],
+        "a": [
+          1,
+          79,
+          93,
+          111
+        ],
+        "present": [
+          2,
+          110
+        ],
+        "to": [
+          3,
+          61
+        ],
+        "Mizar": [
+          4,
+          21,
+          34,
+          51,
+          114
+        ],
+        "on": [
+          5,
+          106
+        ],
+        "its": [
+          6
+        ],
+        "50th": [
+          7
+        ],
+        "anniversary,": [
+          8
+        ],
+        "we": [
+          9
+        ],
+        "develop": [
+          10
+        ],
+        "an": [
+          11
+        ],
+        "AI/TP": [
+          12,
+          104
+        ],
+        "system": [
+          13
+        ],
+        "that": [
+          14,
+          90,
+          116
+        ],
+        "automatically": [
+          15,
+          29
+        ],
+        "proves": [
+          16
+        ],
+        "about": [
+          17
+        ],
+        "60%": [
+          18
+        ],
+        "of": [
+          19,
+          32,
+          81,
+          95,
+          97,
+          113
+        ],
+        "the": [
+          20,
+          24,
+          33,
+          37,
+          45,
+          49,
+          55,
+          68,
+          87
+        ],
+        "theorems": [
+          22,
+          35
+        ],
+        "in": [
+          23,
+          48,
+          66
+        ],
+        "hammer": [
+          25
+        ],
+        "setting.": [
+          26
+        ],
+        "We": [
+          27,
+          53,
+          108
+        ],
+        "also": [
+          28,
+          109
+        ],
+        "prove": [
+          30
+        ],
+        "75%": [
+          31
+        ],
+        "when": [
+          36
+        ],
+        "automated": [
+          38
+        ],
+        "provers": [
+          39
+        ],
+        "are": [
+          40
+        ],
+        "helped": [
+          41
+        ],
+        "by": [
+          42
+        ],
+        "using": [
+          43
+        ],
+        "only": [
+          44
+        ],
+        "premises": [
+          46
+        ],
+        "used": [
+          47
+        ],
+        "human-written": [
+          50
+        ],
+        "proofs.": [
+          52
+        ],
+        "describe": [
+          54
+        ],
+        "methods": [
+          56
+        ],
+        "and": [
+          57,
+          70,
+          75,
+          86
+        ],
+        "large-scale": [
+          58
+        ],
+        "experiments": [
+          59
+        ],
+        "leading": [
+          60
+        ],
+        "these": [
+          62
+        ],
+        "results.": [
+          63
+        ],
+        "This": [
+          64
+        ],
+        "includes": [
+          65
+        ],
+        "particular": [
+          67
+        ],
+        "E": [
+          69
+        ],
+        "Vampire": [
+          71
+        ],
+        "provers,": [
+          72
+        ],
+        "their": [
+          73
+        ],
+        "ENIGMA": [
+          74
+        ],
+        "Deepire": [
+          76
+        ],
+        "learning": [
+          77
+        ],
+        "modifications,": [
+          78
+        ],
+        "number": [
+          80
+        ],
+        "learning-based": [
+          82
+        ],
+        "premise": [
+          83
+        ],
+        "selection": [
+          84,
+          112
+        ],
+        "methods,": [
+          85
+        ],
+        "incremental": [
+          88
+        ],
+        "loop": [
+          89
+        ],
+        "interleaves": [
+          91
+        ],
+        "growing": [
+          92
+        ],
+        "corpus": [
+          94
+        ],
+        "millions": [
+          96
+        ],
+        "ATP": [
+          98
+        ],
+        "proofs": [
+          99
+        ],
+        "with": [
+          100
+        ],
+        "training": [
+          101
+        ],
+        "increasingly": [
+          102
+        ],
+        "strong": [
+          103
+        ],
+        "systems": [
+          105
+        ],
+        "them.": [
+          107
+        ],
+        "problems": [
+          115
+        ],
+        "were": [
+          117
+        ],
+        "proved": [
+          118
+        ],
+        "automatically.": [
+          119
+        ]
+      },
+      "ids": {
+        "openalex": "https://openalex.org/W4385245566",
+        "doi": "https://doi.org/10.4230/lipics.itp.2023.19"
+      },
+      "is_retracted": false
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-10-01T01:08:35.939Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "openalex"
+    }
+  }
+]

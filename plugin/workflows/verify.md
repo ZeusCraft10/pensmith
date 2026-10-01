@@ -122,7 +122,7 @@ or after editing DRAFT.md by hand).
    ```text
    - ${citekey} [${id}] ("${quoteSnippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}
    ```
-   The rows go under `## Pass-3 (quote integrity, deterministic — levenshtein-substring)`.
+   A row whose quote was compared with no source text — `UNVERIFIABLE-QUOTE`, `UNVERIFIABLE-NETWORK`, `UNATTRIBUTED` — prints `lev=n/a`, never a score that reads as a 0% match. The rows go under `## Pass-3 (quote integrity, deterministic — levenshtein-substring)`.
 
 7a. **Accepting a quote no source text can check (VRFY-20)**: an `UNVERIFIABLE-QUOTE` row (no bring-your-own PDF and no open-access copy has the text) can be accepted by the user — `pensmith verify N --accept-quote q2` (repeatable), or, in a terminal, the `quote-accept` gate (a multi-select of those quotes plus "accept all"; `--yolo` never answers it; without a terminal it is skipped). Only an `UNVERIFIABLE-QUOTE` id is accepted: any other id exits 2 naming its verdict and records nothing, and an id the draft does not have (the ids are deterministic from the draft) exits 2 before any pass runs or any file is written. The verify `pensmith write N` chains asks the same gate (review round 3). An acceptance is recorded in the section's `QUOTE-ACCEPTANCES.json` (bound to the quote's text and the draft's hash — one changed byte of the draft voids it) and lifts the row only while the gate's recomputation still yields `UNVERIFIABLE-QUOTE` for that quote; the row then reads `… — accepted by you <time> (--accept-quote | at the prompt)` and the quote is listed under `## Accepted quotes`. A hand-written acceptance line in VERIFICATION.md means nothing. There is no blanket flag (`--accept-unverifiable-quotes` is an unknown flag, exit 2).
 

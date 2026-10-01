@@ -191,10 +191,17 @@ with `pensmith verify N`, and records no claim or decision for it.
    recompile sends the paper back to `done`, and the bare loop settles at
    `status (done)` instead of re-running `done`. A FINAL.md done did not leave
    — edited or written by hand — is refused in step 1 (exit 4, never exported,
-   never replaced; move it out of the paper folder or make the edit in the
-   section drafts) and is attention for the router, never "complete". When
-   GATE-04 refuses a humanized FINAL.md, the FINAL.md it replaced is put back
-   (or removed, when there was none).
+   never replaced; moving it out of the paper folder is what unblocks done —
+   the moved copy keeps the edit, and an edit meant for the paper itself is
+   made in the section drafts first) and is attention for the router, never
+   "complete". With no record (a paper an older pensmith finished, or a done
+   stopped after its export), a FINAL.md whose sha256 the paper-level
+   VERIFICATION.md names on its `Text checked:` line is done's own export —
+   replaced by the next done, never "edited". Whenever this done stops
+   between the humanizer writing FINAL.md and the paper-level VERIFICATION.md
+   naming the export — GATE-04, a declined confirmation, the cost cap, a
+   failed export or write — the FINAL.md it replaced is put back (or removed,
+   when there was none).
 
 8. **Shell fallback** (TIER-06 equivalence path): `pensmith done [--yolo]
    [--format docx|pdf|latex|md] [--raw]`.

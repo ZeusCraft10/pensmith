@@ -144,7 +144,7 @@ test('VRFY-20 / D-20-26: the quote-accept gate — picking one quote accepts onl
   assert.deepEqual(r.result, { status: 'unverifiable', blocked: true });
   assert.deepEqual(readQuoteAcceptances(p.sectionDir(1, 'intro')).map((a) => a.quote_id), ['q2']);
   const md = readFileSync(join(p.sectionDir(1, 'intro'), 'VERIFICATION.md'), 'utf8');
-  assert.match(md, /^- lecun2015 \[q1\] \("[^\n]*\*\*UNVERIFIABLE-QUOTE\*\* — lev=0\.000 — Unpaywall needs a contact email[^\n]*\)$/m);
+  assert.match(md, /^- lecun2015 \[q1\] \("[^\n]*\*\*UNVERIFIABLE-QUOTE\*\* — lev=n\/a — Unpaywall needs a contact email[^\n]*\)$/m);
   assert.match(md, /^- lecun2015 \[q2\] \("[^\n]*\*\*UNVERIFIABLE-QUOTE\*\* — [^\n]*— accepted by you \S+ \(at the prompt\)$/m);
 });
 

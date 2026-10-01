@@ -122,14 +122,14 @@ test('VRFY-20 (verify, in-process): --accept-quote on an UNVERIFIABLE-QUOTE row 
     const { verifySection } = await import('../bin/cli/verify.js');
     const before = await verifySection(1, 'intro', null, { gateDeps });
     assert.deepEqual([before.status, before.blocked], ['unverifiable', true]);
-    assert.match(readFileSync(join(d, 'VERIFICATION.md'), 'utf8'), /^- aggarwal2022 \[q1\] \("attention mechanisms are nothing more th…"\): \*\*UNVERIFIABLE-QUOTE\*\* — lev=0\.000 — no open-access copy$/m);
+    assert.match(readFileSync(join(d, 'VERIFICATION.md'), 'utf8'), /^- aggarwal2022 \[q1\] \("attention mechanisms are nothing more th…"\): \*\*UNVERIFIABLE-QUOTE\*\* — lev=n\/a — no open-access copy$/m);
     assert.ok(!existsSync(quoteAcceptancesPath(d)), 'without a terminal the quote-accept gate is skipped: nothing recorded');
 
     const accepted = await verifySection(1, 'intro', null, { gateDeps, acceptQuotes: ['q1'] });
     assert.deepEqual([accepted.status, accepted.blocked], ['verified', false]);
     const md = readFileSync(join(d, 'VERIFICATION.md'), 'utf8');
     assert.match(md, /^Status: verified$/m);
-    assert.match(md, /\*\*UNVERIFIABLE-QUOTE\*\* — lev=0\.000 — no open-access copy — accepted by you \S+ \(--accept-quote\)$/m);
+    assert.match(md, /\*\*UNVERIFIABLE-QUOTE\*\* — lev=n\/a — no open-access copy — accepted by you \S+ \(--accept-quote\)$/m);
     assert.match(md, /^## Accepted quotes$/m);
     assert.match(md, /^\| UNVERIFIABLE-QUOTE \(accepted\)|^\| Pass-3 \| UNVERIFIABLE-QUOTE \(accepted\) \| 1 \|$/m);
     assert.equal(readQuoteAcceptances(d).length, 1);

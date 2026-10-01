@@ -156,3 +156,17 @@ test('seam S-C: runPass1 reads pre-parsed bibliography entries (no file read); r
   assert.deepEqual(p3.map((r) => r.quoteSha256), [quoteTextSha256(q1), quoteTextSha256(q2)]);
   assert.ok(p3.every((r) => r.localFile === undefined));
 });
+
+test('main-branch merge review, round 2: a quote row compared with no source text prints lev=n/a, never a 0% score; a compared one keeps its score', () => {
+  const row = (verdict: string, levRatio: number): string =>
+    renderQuoteRow({ key: 'aggarwal2022', id: 'q1', snippet: 'attention mechanisms are nothing more t', verdict, levRatio, reason: 'why' });
+  for (const verdict of ['UNVERIFIABLE-QUOTE', 'UNVERIFIABLE-NETWORK', 'UNATTRIBUTED']) {
+    assert.match(row(verdict, 0), new RegExp(`\\*\\*${verdict}\\*\\* [-—] lev=n/a [-—] why$`), verdict);
+  }
+  assert.match(row('NOT_FOUND', 0.312), /\*\*NOT_FOUND\*\* [-—] lev=0\.312 [-—] why$/);
+  assert.match(row('NOT_FOUND', Number.NaN), /\*\*NOT_FOUND\*\* [-—] lev=n\/a [-—] why$/, 'nothing compared (a synthetic dry-run source)');
+  assert.match(row('FUZZY', 0.9), /lev=0\.900/);
+  assert.match(row('PASS', 1), /lev=1\.000/);
+  // The parser reads both forms (records written before keep lev=0.000).
+  assert.deepEqual(parseBlockingVerdictRows(`Status: failed\n${row('UNVERIFIABLE-QUOTE', 0)}`).map((r) => r.verdict), ['UNVERIFIABLE-QUOTE']);
+});

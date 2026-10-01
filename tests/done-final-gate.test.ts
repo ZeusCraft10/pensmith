@@ -6,11 +6,13 @@
 // footnote, a typed reference list, a metadata block that redefines a cited
 // key, a raw {=format} block or span — and done refuses: exit 4, nothing
 // exported, nothing under sections/ touched. A humanized FINAL.md that keeps
-// the citations exports. Sources offline (recorded fixtures), in process.
+// the citations exports, and a done that fails after the humanizer wrote
+// FINAL.md (main-branch merge review, round 2) puts the recorded FINAL.md
+// back. Sources offline (recorded fixtures), in process.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { withLlmSandbox } from './helpers/llm-sandbox.js';
@@ -19,6 +21,7 @@ import { mtimes } from './helpers/gate-paper.js';
 import { LECUN_BIB } from './helpers/gate-paper.js';
 import { __setTaskRunnerForTest } from '../bin/lib/exporter.js';
 import { EXIT_BLOCKED } from '../bin/lib/exit-codes.js';
+import { finalMdState } from '../bin/lib/done-record.js';
 
 /** Run `fn` with the verb's own stdout lines captured (the TAP stream passes through). */
 async function quiet<T>(fn: () => Promise<T>): Promise<{ result: T; out: string }> {
@@ -109,6 +112,26 @@ test('VRFY-26 (in process): a humanized FINAL.md is gated on its own bytes — e
       assert.equal(record['humanized'], true);
       assert.equal(record['final_sha256'], createHash('sha256').update(humanized, 'utf8').digest('hex'));
       assert.equal(record['compiled_draft_sha256'], createHash('sha256').update(compiled, 'utf8').digest('hex'));
+      assert.equal(finalMdState(sb.root), 'current');
+
+      // Main-branch merge review, round 2: every way out after the humanizer
+      // wrote FINAL.md and before the export is recorded puts the previous
+      // FINAL.md back — here the paper-level VERIFICATION.md cannot be
+      // written (a folder in its place), after the export itself. The FINAL.md
+      // done recorded stays the finished paper, never a "hand edit".
+      const verificationMd = join(sb.paper, 'VERIFICATION.md');
+      const savedVerification = readFileSync(verificationMd);
+      rmSync(verificationMd);
+      mkdirSync(verificationMd);
+      __setTaskRunnerForTest(async () => ({ output: compiled.replace('reshaped', 'remade') }));
+      try {
+        await assert.rejects(() => quiet(() => doneCommand.run!({ args: { yolo: true, raw: false, format: 'md' } } as never)));
+        assert.equal(readFileSync(join(sb.paper, 'FINAL.md'), 'utf8'), humanized, 'the FINAL.md done recorded is back');
+        assert.equal(finalMdState(sb.root), 'current', 'never read as a hand edit');
+      } finally {
+        rmSync(verificationMd, { recursive: true, force: true });
+        writeFileSync(verificationMd, savedVerification);
+      }
     } finally {
       __setTaskRunnerForTest(null);
     }

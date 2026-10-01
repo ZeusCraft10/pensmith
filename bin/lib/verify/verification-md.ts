@@ -114,6 +114,15 @@ function oneLine(s: string): string {
   return s.replace(/\s*[\r\n]+\s*/g, ' ').replace(/\*/g, '\\*').trim();
 }
 
+/**
+ * The Pass-3 verdicts reached without comparing the quote with any source
+ * text: no text to check (UNVERIFIABLE-QUOTE, VRFY-20), no answer
+ * (UNVERIFIABLE-NETWORK) or no source to attribute it to (UNATTRIBUTED). Their
+ * rows print `lev=n/a`, never a score that reads as a 0% match — the
+ * signature of a fabricated quote (main-branch merge review, round 2).
+ */
+const UNCOMPARED_QUOTE_VERDICTS: ReadonlySet<string> = new Set(['UNVERIFIABLE-QUOTE', 'UNVERIFIABLE-NETWORK', 'UNATTRIBUTED']);
+
 /** Render a Pass-3 row in the Phase 20 format (with its quote id). */
 export function renderQuoteRow(row: {
   key: string;
@@ -124,7 +133,7 @@ export function renderQuoteRow(row: {
   reason: string;
   accepted?: { at: string; via: string } | undefined;
 }): string {
-  const lev = Number.isFinite(row.levRatio) ? row.levRatio.toFixed(3) : 'n/a';
+  const lev = Number.isFinite(row.levRatio) && !UNCOMPARED_QUOTE_VERDICTS.has(row.verdict) ? row.levRatio.toFixed(3) : 'n/a';
   const accepted = row.accepted ? ` — accepted by you ${row.accepted.at} (${row.accepted.via === 'flag' ? '--accept-quote' : 'at the prompt'})` : '';
   return `- ${row.key} [${row.id}] ("${safeSnippet(row.snippet)}…"): **${row.verdict}** — lev=${lev} — ${oneLine(row.reason)}${accepted}`;
 }

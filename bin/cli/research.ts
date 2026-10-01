@@ -101,6 +101,7 @@ import {
   renderResearchLog,
   writeResearchLog,
   logExclusions,
+  unconfirmedNote,
   evaluatorNotes,
   tierSummary,
   upsertCounts,
@@ -671,6 +672,9 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
   out('pensmith research: sources by adapter');
   for (const line of renderAdapterTable(pass.adapters)) out(line);
   for (const n of evaluatorNotes(pass)) err(`pensmith research: WARN — ${n}`);
+  // Main-branch merge review, round 2: a kept source whose DOI the registrar
+  // records as another work is dropped (verify would block it as MIS-CITED).
+  for (const u of pass.unconfirmed) err(`pensmith research: WARN — dropped [@${u.candidate.citekey}]: ${u.registrarMismatch ?? 'another work under its DOI'}`);
 
   const writeLog = async (args: {
     summary: string;
@@ -707,10 +711,19 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     );
   }
   if (pass.kept.length === 0 && pass.rejected.length === 0) {
-    await writeLog({ summary: `no usable sources: all ${pass.excluded.length} candidate(s) excluded by the [sources] policy`, excluded: logExclusions(pass.excluded, []), sourcesBlock: await currentBlock() });
+    const dropped = pass.unconfirmed.length;
+    const policy = `${pass.excluded.length} candidate(s) excluded by the [sources] policy`;
+    await writeLog({
+      summary: dropped === 0 ? `no usable sources: all ${policy}` : `no usable sources: ${policy}; ${unconfirmedNote(dropped)}`,
+      excluded: logExclusions(pass.excluded, [], pass.unconfirmed),
+      sourcesBlock: await currentBlock(),
+    });
     throw new ResearchError(
-      `pensmith research: no usable sources — all ${pass.excluded.length} candidate(s) were excluded by the [sources] policy ` +
-        `(${exclusionCounts(pass.excluded)}); relax [sources] in .paper/config.toml or add sources you know (pensmith add <doi>); see .paper/RESEARCH.md`,
+      dropped === 0
+        ? `pensmith research: no usable sources — all ${pass.excluded.length} candidate(s) were excluded by the [sources] policy ` +
+            `(${exclusionCounts(pass.excluded)}); relax [sources] in .paper/config.toml or add sources you know (pensmith add <doi>); see .paper/RESEARCH.md`
+        : `pensmith research: no usable sources — ${policy}${pass.excluded.length > 0 ? ` (${exclusionCounts(pass.excluded)})` : ''}; ${unconfirmedNote(dropped)}; ` +
+            'add sources you know (pensmith add <doi>) or try other queries; see .paper/RESEARCH.md',
     );
   }
 
@@ -723,7 +736,7 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     .filter((k) => !selected.has(k.candidate.citekey))
     .map((k) => ({ citekey: k.candidate.citekey, reference: formatReference(k.view), why: 'deselected at the approval gate' }));
   const rejectedStill = pass.rejected.filter((r) => !selected.has(r.candidate.citekey));
-  const excludedLog = [...logExclusions(pass.excluded, rejectedStill), ...deselected];
+  const excludedLog = [...logExclusions(pass.excluded, rejectedStill, pass.unconfirmed), ...deselected];
   if (final.length === 0 && userAdded.length === 0) {
     const relevantNone = pass.kept.length === 0;
     await writeLog({ summary: relevantNone ? 'no relevant sources' : 'no sources kept', excluded: excludedLog, sourcesBlock: await currentBlock() });
@@ -790,6 +803,7 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
   const rescuedCount = final.filter((i) => i.decision === 'rejected').length;
   const summary =
     `${tierSummary(final)}; ${pass.excluded.length} excluded by [sources] policy; ${rejectedStill.length} rejected by the evaluator` +
+    `${pass.unconfirmed.length > 0 ? `; ${unconfirmedNote(pass.unconfirmed.length)}` : ''}` +
     `${deselected.length > 0 ? `; ${deselected.length} deselected at the approval gate` : ''}` +
     `${rescuedCount > 0 ? `; ${rescuedCount} kept at your choice despite the evaluator` : ''}` +
     `${userAdded.length > 0 ? `; ${userAdded.length} added at the approval gate` : ''}` +

@@ -14,7 +14,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -34,7 +34,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -54,7 +54,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -74,7 +74,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -94,7 +94,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -114,7 +114,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -134,7 +134,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -154,7 +154,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -174,7 +174,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -194,7 +194,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -214,7 +214,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -234,7 +234,27 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recordedAt": "2026-10-01T01:08:37.306Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.4230",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.4230",
+        "RA": "DataCite"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-10-01T01:08:37.306Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }

@@ -80074,6 +80074,14 @@ function readDoneRecord(paperRoot) {
     return null;
   }
 }
+function verificationCheckedSha256(paperRoot) {
+  try {
+    const md = readFileSync12(join10(paperDir(paperRoot), "VERIFICATION.md"), "utf8");
+    return /^Text checked: .+ \(sha256 ([0-9a-f]{64})\)\s*$/mu.exec(md)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
 function finalMdState(paperRoot) {
   const dir = paperDir(paperRoot);
   const finalPath = join10(dir, "FINAL.md");
@@ -80083,11 +80091,12 @@ function finalMdState(paperRoot) {
   const draftSha = fileSha256(join10(dir, "DRAFT.md"));
   const record2 = readDoneRecord(paperRoot);
   if (record2 !== null && record2.final_sha256 === finalSha) return record2.compiled_draft_sha256 === draftSha ? "current" : "stale";
+  if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? "current" : "stale";
   return finalSha === draftSha ? "stale" : "edited";
 }
 function editedFinalReason(paperRoot) {
   const dir = basename3(paperDir(paperRoot));
-  return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: make the edit in the section drafts (then \`pensmith\` re-verifies and recompiles them), or move ${dir}/FINAL.md out of the paper folder, and run \`pensmith done\``;
+  return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
 }
 var DONE_RECORD_FILE;
 var init_done_record2 = __esm({
@@ -80100,6 +80109,7 @@ var init_done_record2 = __esm({
     DONE_RECORD_FILE = "DONE-RECORD.json";
     __name(doneRecordPath, "doneRecordPath");
     __name(readDoneRecord, "readDoneRecord");
+    __name(verificationCheckedSha256, "verificationCheckedSha256");
     __name(finalMdState, "finalMdState");
     __name(editedFinalReason, "editedFinalReason");
   }
@@ -80139,6 +80149,11 @@ function draftHashOf(draftPath, assignedSources) {
   } catch {
     return null;
   }
+}
+function sectionDraftState(draftPath, info) {
+  if (!existsSync10(draftPath)) return "missing";
+  if (info.status !== "verified") return "current";
+  return info.verifiedHash === null || draftHashOf(draftPath, info.assignedSources) === info.verifiedHash ? "current" : "changed";
 }
 function verificationBlockers(verificationPath) {
   let md;
@@ -80380,6 +80395,7 @@ var init_router = __esm({
     init_done_record2();
     __name(readSectionInfo, "readSectionInfo");
     __name(draftHashOf, "draftHashOf");
+    __name(sectionDraftState, "sectionDraftState");
     __name(verificationBlockers, "verificationBlockers");
     __name(recordHasPlaceholder, "recordHasPlaceholder");
     __name(recordRevisable, "recordRevisable");
@@ -83758,9 +83774,11 @@ async function buildStatusView(root, opts = { tier: "cli" }) {
   }
   const sections2 = registered.map(({ n: n2, suffix, slug }) => {
     const r2 = readSectionInfo(sectionPlan(n2, slug, root));
-    const status = r2.absent ? "not planned" : r2.corrupt ? `corrupt/unreadable PLAN.md ${marks.dash} needs attention` : r2.status === "planned" && r2.stub ? "outlined (not planned)" : r2.status === "failed" && r2.failureReason ? `failed ${marks.dash} ${r2.failureReason}` : r2.status === "unverifiable" ? unverifiableStatus(sectionVerification(n2, slug, root), formatSectionId(sectionIdOf(n2, suffix)), marks.dash) : r2.status;
-    const phase = phaseOf(r2.status, r2.absent || r2.stub, r2.corrupt);
-    const row2 = { n: n2, id: formatSectionId(sectionIdOf(n2, suffix)), slug, title: titles.get(slug) ?? slug, status, phase, glyph: glyphs[phase] };
+    const label = formatSectionId(sectionIdOf(n2, suffix));
+    const draft = !r2.absent && !r2.corrupt && DRAFT_STATUSES.has(r2.status) ? sectionDraftState(sectionDraft(n2, slug, root), r2) : "current";
+    const status = r2.absent ? "not planned" : r2.corrupt ? `corrupt/unreadable PLAN.md ${marks.dash} needs attention` : draft === "missing" ? `${r2.status}, DRAFT.md missing ${marks.dash} \`pensmith write ${label}\` re-drafts it` : draft === "changed" ? `verified draft edited since ${marks.dash} compile re-verifies it` : r2.status === "planned" && r2.stub ? "outlined (not planned)" : r2.status === "failed" && r2.failureReason ? `failed ${marks.dash} ${r2.failureReason}` : r2.status === "unverifiable" ? unverifiableStatus(sectionVerification(n2, slug, root), label, marks.dash) : r2.status;
+    const phase = draft === "missing" ? "attention" : draft === "changed" ? "in-progress" : phaseOf(r2.status, r2.absent || r2.stub, r2.corrupt);
+    const row2 = { n: n2, id: label, slug, title: titles.get(slug) ?? slug, status, phase, glyph: glyphs[phase] };
     if (suffix !== void 0) row2.suffix = suffix;
     return row2;
   });
@@ -83897,7 +83915,7 @@ async function renderConfigView(root, env = process.env) {
   }
   return lines2.join("\n");
 }
-var GLYPHS, MARKS;
+var GLYPHS, MARKS, DRAFT_STATUSES;
 var init_status_view = __esm({
   "bin/lib/status-view.ts"() {
     "use strict";
@@ -83924,6 +83942,7 @@ var init_status_view = __esm({
       ascii: Object.freeze({ section: "#", dash: "-" })
     });
     __name(glyphSetFor, "glyphSetFor");
+    DRAFT_STATUSES = /* @__PURE__ */ new Set(["verified", "written", "verifying", "unverifiable"]);
     __name(phaseOf, "phaseOf");
     __name(readText2, "readText");
     __name(describeNext, "describeNext");
@@ -115473,6 +115492,13 @@ var init_name_match = __esm({
 });
 
 // bin/lib/sources/registrar-confirm.ts
+function registrarName(source) {
+  return source === "crossref" ? "Crossref" : source === "datacite" ? "DataCite" : source === "doi.org" ? "its registration agency (doi.org)" : source;
+}
+function quoted(title) {
+  const t = title.replace(/\s+/g, " ").replace(/"/g, "'").trim();
+  return `"${t.length > 120 ? `${t.slice(0, 117)}\u2026` : t}"`;
+}
 function needsConfirmation(c2) {
   return AGGREGATOR_SOURCES.has(c2.source) && typeof c2.doi === "string" && c2.doi.trim() !== "" && !isDataCiteArxivDoi(c2.doi);
 }
@@ -115506,6 +115532,7 @@ function sameWorkReordered(c2, record2, m3) {
 async function confirmRegistrarRecords(candidates, lookup) {
   const out2 = [];
   const confirmed = [];
+  const mismatched = [];
   const answers = /* @__PURE__ */ new Map();
   const recordOf = /* @__PURE__ */ __name((doi) => {
     const key2 = doi.trim().toLowerCase();
@@ -115523,7 +115550,7 @@ async function confirmRegistrarRecords(candidates, lookup) {
     }
     return p2;
   }, "recordOf");
-  for (const c2 of candidates) {
+  for (const [index, c2] of candidates.entries()) {
     if (!needsConfirmation(c2)) {
       out2.push(c2);
       continue;
@@ -115542,12 +115569,14 @@ async function confirmRegistrarRecords(candidates, lookup) {
     });
     if (!same) {
       out2.push(c2);
+      const doi = c2.doi.trim();
+      mismatched.push({ index, citekey: c2.citekey, doi, reason: `DOI ${doi} is ${quoted(record2.title)} at ${registrarName(record2.source)}, not ${quoted(c2.title)}` });
       continue;
     }
     out2.push(withRecordFields(c2, record2));
     confirmed.push(c2.citekey);
   }
-  return { candidates: out2, confirmed };
+  return { candidates: out2, confirmed, mismatched };
 }
 var AGGREGATOR_SOURCES;
 var init_registrar_confirm = __esm({
@@ -115559,11 +115588,163 @@ var init_registrar_confirm = __esm({
     init_fuzzy();
     init_pubmed();
     AGGREGATOR_SOURCES = /* @__PURE__ */ new Set(["semanticscholar", "openalex", "pubmed"]);
+    __name(registrarName, "registrarName");
+    __name(quoted, "quoted");
     __name(needsConfirmation, "needsConfirmation");
     __name(titlesOf, "titlesOf");
     __name(withRecordFields, "withRecordFields");
     __name(sameWorkReordered, "sameWorkReordered");
     __name(confirmRegistrarRecords, "confirmRegistrarRecords");
+  }
+});
+
+// bin/lib/source-input.ts
+function identifierLabel(s2) {
+  switch (s2.kind) {
+    case "doi":
+      return `DOI ${s2.doi}`;
+    case "arxiv":
+      return `arXiv:${s2.arxiv}`;
+    case "pmid":
+      return `PMID ${s2.pmid}`;
+    case "isbn":
+      return `ISBN ${s2.isbn}`;
+  }
+}
+function registryAdapter(name) {
+  return sources[name];
+}
+function adapterId(input2) {
+  switch (input2.kind) {
+    case "doi":
+      return input2.doi;
+    case "arxiv":
+      return input2.arxiv;
+    case "pmid":
+      return input2.pmid;
+    case "isbn":
+      return `isbn:${input2.isbn}`;
+  }
+}
+async function lookupIdentifier(input2) {
+  const name = ADAPTER_FOR[input2.kind];
+  const adapter = registryAdapter(name);
+  const id = adapterId(input2);
+  if (typeof adapter?.lookupById === "function") {
+    const r2 = await adapter.lookupById(id);
+    if (input2.kind === "doi" && r2.kind === "not-found") return crossrefNotFound(input2.doi, r2);
+    if (input2.kind === "pmid" && r2.kind === "found") return pubmedConfirmed(r2.candidate);
+    return r2;
+  }
+  if (typeof adapter?.fetchById === "function") {
+    try {
+      const c2 = await adapter.fetchById(id);
+      return c2 !== null ? lookupFound(c2) : lookupNotFound(`${name} has no record of ${identifierLabel(input2)}`);
+    } catch (e2) {
+      if (isSourceLookupError(e2)) {
+        return lookupFailed(e2.reason, {
+          ...e2.status !== void 0 ? { status: e2.status } : {},
+          ...e2.retryAfterMs !== void 0 ? { retryAfterMs: e2.retryAfterMs } : {}
+        });
+      }
+      throw e2;
+    }
+  }
+  return lookupFailed(`no ${input2.kind === "isbn" ? "book (ISBN)" : name} lookup is available in this build`);
+}
+async function pubmedConfirmed(candidate) {
+  const { candidates } = await confirmRegistrarRecords([candidate], (doi) => registrarLookup(doi));
+  return lookupFound(candidates[0] ?? candidate);
+}
+async function registrarLookup(doi, crossref = (d3) => sources.crossref.lookupById(d3)) {
+  const r2 = await crossref(doi);
+  return r2.kind === "not-found" ? crossrefNotFound(doi, r2) : r2;
+}
+async function crossrefNotFound(doi, notFound) {
+  const ra = await registrationAgency(doi);
+  switch (ra.kind) {
+    case "agency": {
+      if (/^crossref$/i.test(ra.agency)) return notFound;
+      const elsewhere = `registered with ${ra.agency}, not Crossref`;
+      const r2 = /^datacite$/i.test(ra.agency) ? await sources.datacite.lookupById(doi) : servesContentNegotiation(ra.agency) ? await lookupById10(doi) : null;
+      if (r2 === null) {
+        return lookupFailed(
+          `${elsewhere}, which serves no record pensmith can read \u2014 add the work by its arXiv id, PMID or ISBN instead`,
+          { permanent: true }
+        );
+      }
+      if (r2.kind === "found") return r2;
+      if (r2.kind === "not-found") return lookupNotFound(`${elsewhere}, and ${ra.agency} has no record of it (${r2.reason})`);
+      return lookupFailed(`${elsewhere}; ${ra.agency} lookup failed (${r2.reason})`, {
+        ...r2.status !== void 0 ? { status: r2.status } : {},
+        ...r2.retryAfterMs !== void 0 ? { retryAfterMs: r2.retryAfterMs } : {},
+        ...r2.permanent === true ? { permanent: true } : {}
+      });
+    }
+    case "unknown-prefix":
+      return lookupNotFound(`no registration agency holds the DOI prefix ${doiPrefix(doi) ?? doi}`);
+    case "failed":
+      return lookupFailed(
+        `Crossref has no record of this DOI, and doi.org could not say which agency registered it (${ra.reason}) \u2014 try again later`
+      );
+  }
+}
+async function checkDoi(doi) {
+  const canonical = normalizeDoi(doi);
+  if (canonical === null) return { outcome: "invalid", valid: false, canonical: null, reason: "not a DOI (a DOI starts with 10. and a registrant prefix)" };
+  let r2;
+  try {
+    r2 = await lookupIdentifier({ kind: "doi", raw: doi, doi: canonical });
+  } catch (e2) {
+    if (isOfflineEgressError(e2)) {
+      return { outcome: "failed", valid: false, canonical, reason: `the registrar was not asked (${offlineLabel(e2)}) \u2014 check it again online` };
+    }
+    throw e2;
+  }
+  if (r2.kind === "found") {
+    const c2 = r2.candidate;
+    return {
+      outcome: "found",
+      valid: true,
+      canonical,
+      metadata: {
+        title: c2.title,
+        authors: c2.authors,
+        ...c2.year !== void 0 ? { year: c2.year } : {},
+        ...c2.venue !== void 0 ? { venue: c2.venue } : {},
+        source: c2.source
+      }
+    };
+  }
+  return { outcome: r2.kind, valid: false, canonical, reason: r2.reason };
+}
+var MAX_INFLATED_HTML_BYTES, ADAPTER_FOR;
+var init_source_input = __esm({
+  "bin/lib/source-input.ts"() {
+    "use strict";
+    init_doi();
+    init_shape();
+    init_sources();
+    init_lookup();
+    init_doi_ra();
+    init_doi_cn();
+    init_registrar_confirm();
+    init_http();
+    __name(identifierLabel, "identifierLabel");
+    MAX_INFLATED_HTML_BYTES = 8 * 1024 * 1024;
+    __name(registryAdapter, "registryAdapter");
+    ADAPTER_FOR = {
+      doi: "crossref",
+      arxiv: "arxiv",
+      pmid: "pubmed",
+      isbn: "books"
+    };
+    __name(adapterId, "adapterId");
+    __name(lookupIdentifier, "lookupIdentifier");
+    __name(pubmedConfirmed, "pubmedConfirmed");
+    __name(registrarLookup, "registrarLookup");
+    __name(crossrefNotFound, "crossrefNotFound");
+    __name(checkDoi, "checkDoi");
   }
 });
 
@@ -116055,7 +116236,7 @@ function oneLine8(s2) {
   return s2.replace(/\s*[\r\n]+\s*/g, " ").replace(/\*/g, "\\*").trim();
 }
 function renderQuoteRow(row2) {
-  const lev = Number.isFinite(row2.levRatio) ? row2.levRatio.toFixed(3) : "n/a";
+  const lev = Number.isFinite(row2.levRatio) && !UNCOMPARED_QUOTE_VERDICTS.has(row2.verdict) ? row2.levRatio.toFixed(3) : "n/a";
   const accepted = row2.accepted ? ` \u2014 accepted by you ${row2.accepted.at} (${row2.accepted.via === "flag" ? "--accept-quote" : "at the prompt"})` : "";
   return `- ${row2.key} [${row2.id}] ("${safeSnippet(row2.snippet)}\u2026"): **${row2.verdict}** \u2014 lev=${lev} \u2014 ${oneLine8(row2.reason)}${accepted}`;
 }
@@ -116257,7 +116438,7 @@ function summaryMismatches(md) {
   if (doc.summary.some((s2) => s2.pass === "Pass-2") || doc.pass2Verdicts.length > 0) check3("Pass-2", doc.pass2Verdicts);
   return out2;
 }
-var SUMMARY_HEADING, PASS1_HEADING, PASS3_HEADING, DRAFT_CHECKS_HEADING, ACCEPTED_QUOTES_HEADING, SUMMARY_TABLE_HEADER, NO_CITATIONS_NOTE, ACCEPTED_QUOTE_LABEL, QUOTE_ROW_RE, KEY_ROW_RE, ACCEPTED_RE;
+var SUMMARY_HEADING, PASS1_HEADING, PASS3_HEADING, DRAFT_CHECKS_HEADING, ACCEPTED_QUOTES_HEADING, SUMMARY_TABLE_HEADER, NO_CITATIONS_NOTE, ACCEPTED_QUOTE_LABEL, UNCOMPARED_QUOTE_VERDICTS, QUOTE_ROW_RE, KEY_ROW_RE, ACCEPTED_RE;
 var init_verification_md = __esm({
   "bin/lib/verify/verification-md.ts"() {
     "use strict";
@@ -116273,6 +116454,7 @@ var init_verification_md = __esm({
     ACCEPTED_QUOTE_LABEL = "UNVERIFIABLE-QUOTE (accepted)";
     __name(safeSnippet, "safeSnippet");
     __name(oneLine8, "oneLine");
+    UNCOMPARED_QUOTE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-QUOTE", "UNVERIFIABLE-NETWORK", "UNATTRIBUTED"]);
     __name(renderQuoteRow, "renderQuoteRow");
     __name(renderGateRow, "renderGateRow");
     __name(orderedLabels, "orderedLabels");
@@ -119023,15 +119205,16 @@ function validHttpUrl(s2) {
 }
 async function enrichOpenAccess(targets, opts = {}) {
   const todo = targets.filter((t) => typeof t.doi === "string" && t.doi.length > 0 && !isDataCiteArxivDoi(t.doi) && !validHttpUrl(t.oa_url));
-  if (todo.length === 0) return { asked: 0, found: 0, unconfirmed: 0, problem: null };
+  if (todo.length === 0) return { asked: 0, answered: 0, found: 0, unconfirmed: 0, problem: null };
   const mode = networkMode();
-  if (mode.dryRun) return { asked: todo.length, found: 0, unconfirmed: 0, problem: "not looked up under --dry-run" };
+  if (mode.dryRun) return { asked: todo.length, answered: 0, found: 0, unconfirmed: 0, problem: "not looked up: --dry-run makes no request" };
   const injected = opts.lookup !== void 0;
   if (!injected && contactEmail().email === null) {
-    return { asked: todo.length, found: 0, unconfirmed: 0, problem: `not looked up: Unpaywall needs a contact email (set ${contactEmail().envName})` };
+    return { asked: todo.length, answered: 0, found: 0, unconfirmed: 0, problem: `not looked up: Unpaywall needs a contact email (set ${contactEmail().envName})` };
   }
   const lookup = opts.lookup ?? lookupById7;
   const confirm = opts.confirm ?? confirmOpenAccessPdf;
+  let answered = 0;
   let found = 0;
   let unconfirmed = 0;
   let problem = null;
@@ -119046,6 +119229,7 @@ async function enrichOpenAccess(targets, opts = {}) {
       problem ??= `not looked up (${offlineLabel(e2)})`;
       break;
     }
+    if (r2.kind !== "failed") answered += 1;
     if (r2.kind === "found") {
       const url = r2.candidate.oa_pdf_url;
       if (!validHttpUrl(url)) continue;
@@ -119067,7 +119251,7 @@ async function enrichOpenAccess(targets, opts = {}) {
     const listed = checkOffline !== null && firstUnconfirmed !== null && firstUnconfirmed.endsWith(`not checked (${checkOffline})`) ? `${unconfirmed} link(s) Unpaywall lists were not checked (${checkOffline}), so they count as abstract-only` : `${unconfirmed} link(s) Unpaywall lists did not answer with a PDF (${firstUnconfirmed ?? "no PDF"}), so they count as abstract-only`;
     problem = problem === null ? listed : `${problem}; ${listed}`;
   }
-  return { asked: todo.length, found, unconfirmed, problem };
+  return { asked: todo.length, answered, found, unconfirmed, problem };
 }
 function hostOf2(url) {
   try {
@@ -119078,10 +119262,15 @@ function hostOf2(url) {
 }
 function describeOpenAccess(s2) {
   if (s2.asked === 0) return null;
-  const base = `open access: ${s2.found} of ${s2.asked} source(s) with a DOI have an open-access PDF (Unpaywall, checked)`;
+  if (s2.answered === 0) {
+    const why = s2.problem ?? "Unpaywall answered no lookup";
+    return NOT_LOOKED_UP.test(why) ? `open access: not looked up for ${s2.asked} source(s) with a DOI \u2014 ${why.replace(NOT_LOOKED_UP, "")}` : `open access: no Unpaywall answer for ${s2.asked} source(s) with a DOI \u2014 ${why}`;
+  }
+  const checked = s2.answered === s2.asked ? "Unpaywall, checked" : `Unpaywall, ${s2.answered} checked`;
+  const base = `open access: ${s2.found} of ${s2.asked} source(s) with a DOI have an open-access PDF (${checked})`;
   return s2.problem !== null ? `${base}; ${s2.problem}` : base;
 }
-var PDF_PREFIX_BYTES;
+var PDF_PREFIX_BYTES, NOT_LOOKED_UP;
 var init_open_access = __esm({
   "bin/lib/open-access.ts"() {
     "use strict";
@@ -119098,6 +119287,7 @@ var init_open_access = __esm({
     __name(validHttpUrl, "validHttpUrl");
     __name(enrichOpenAccess, "enrichOpenAccess");
     __name(hostOf2, "hostOf");
+    NOT_LOOKED_UP = /^not looked up(?::\s*|\s+)/;
     __name(describeOpenAccess, "describeOpenAccess");
   }
 });
@@ -119866,12 +120056,14 @@ async function runResearchPass(args) {
     else if (e2.decision === "rejected") rejected.push(e2);
     else kept.push(e2);
   }
+  const confirmedKept = await confirmKept(rankItems(kept), args.registry, now);
   return {
     adapters: discovery.adapters,
     perQuery: discovery.perQuery,
     found: discovery.found,
     distinct: discovery.candidates.length,
-    kept: await confirmKept(rankItems(kept), args.registry, now),
+    kept: confirmedKept.kept,
+    unconfirmed: confirmedKept.unconfirmed,
     rejected: rankItems(rejected),
     excluded,
     notEvaluated: kept.filter((k2) => k2.decision === "not-evaluated").length,
@@ -119881,13 +120073,25 @@ async function runResearchPass(args) {
 }
 async function confirmKept(items, registry2, now) {
   const crossref = registry2["crossref"];
-  if (crossref === void 0 || typeof crossref.lookupById !== "function") return items;
+  if (crossref === void 0 || typeof crossref.lookupById !== "function") return { kept: items, unconfirmed: [] };
   const lookupById12 = crossref.lookupById;
-  const { candidates } = await confirmRegistrarRecords(items.map((i) => i.candidate), (doi) => lookupById12(doi));
-  return items.map((item, i) => {
+  const { candidates, mismatched } = await confirmRegistrarRecords(items.map((i) => i.candidate), (doi) => registrarLookup(doi, lookupById12));
+  const why = new Map(mismatched.map((m3) => [m3.index, m3.reason]));
+  const kept = [];
+  const unconfirmed = [];
+  items.forEach((item, i) => {
+    const reason = why.get(i);
+    if (reason !== void 0) {
+      unconfirmed.push({ ...item, registrarMismatch: reason });
+      return;
+    }
     const c2 = candidates[i] ?? item.candidate;
-    return c2 === item.candidate ? item : { ...item, candidate: c2, view: candidateToEntry(c2, [], now) };
+    kept.push(c2 === item.candidate ? item : { ...item, candidate: c2, view: candidateToEntry(c2, [], now) });
   });
+  return { kept, unconfirmed };
+}
+function unconfirmedNote(n2) {
+  return `${n2} dropped: the DOI's registrar records another work (verify would block it as MIS-CITED)`;
 }
 function renderAdapterTable(adapters) {
   const w3 = Math.max(8, ...adapters.map((a3) => a3.adapter.length));
@@ -119930,6 +120134,7 @@ var init_research_orchestrator = __esm({
     init_dry_run();
     init_source_candidate();
     init_registrar_confirm();
+    init_source_input();
     init_doi();
     init_http();
     init_http_mock();
@@ -119973,6 +120178,7 @@ var init_research_orchestrator = __esm({
     __name(policyInputOf, "policyInputOf");
     __name(runResearchPass, "runResearchPass");
     __name(confirmKept, "confirmKept");
+    __name(unconfirmedNote, "unconfirmedNote");
     __name(renderAdapterTable, "renderAdapterTable");
     __name(tierSummary, "tierSummary");
     __name(upsertCounts, "upsertCounts");
@@ -120113,8 +120319,9 @@ async function runSectionResearch(opts) {
   out2(`${label}: sources by adapter`);
   for (const line of renderAdapterTable(pass.adapters)) out2(line);
   for (const n2 of evaluatorNotes(pass)) err(`${label}: WARN \u2014 ${n2}`);
+  for (const u of pass.unconfirmed) err(`${label}: WARN \u2014 dropped [@${u.candidate.citekey}]: ${u.registrarMismatch ?? "another work under its DOI"}`);
   if (pass.kept.length === 0 && pass.rejected.length === 0) {
-    const why = pass.distinct === 0 ? adapterReasons(pass) : `all ${pass.excluded.length} candidate(s) were excluded by the [sources] policy (${exclusionCounts(pass.excluded)})`;
+    const why = pass.distinct === 0 ? adapterReasons(pass) : pass.unconfirmed.length > 0 ? `${pass.excluded.length} candidate(s) were excluded by the [sources] policy; ${unconfirmedNote(pass.unconfirmed.length)}` : `all ${pass.excluded.length} candidate(s) were excluded by the [sources] policy (${exclusionCounts(pass.excluded)})`;
     throw new SectionResearchError(`${label}: no research hits for "${query}" \u2014 ${why}; nothing was changed`);
   }
   if (pass.kept.length === 0 && (opts.yolo || !canPrompt())) {
@@ -134553,7 +134760,7 @@ async function checkQuote(q3, claimed, libEntry, root, refresh, byoTexts, prepar
   const mode = networkMode();
   const doi = typeof claimed?.DOI === "string" ? claimed.DOI : void 0;
   if (doi !== void 0 && isReservedDryRunId(doi)) {
-    return mode.dryRun ? { verdict: "UNVERIFIABLE-QUOTE", levRatio: 0, reason: "text unavailable (dry-run): a synthetic dry-run source has no text" } : { verdict: "NOT_FOUND", levRatio: 0, reason: `reserved dry-run identifier ${doi} \u2014 a synthetic source cannot be quoted` };
+    return mode.dryRun ? { verdict: "UNVERIFIABLE-QUOTE", levRatio: 0, reason: "text unavailable (dry-run): a synthetic dry-run source has no text" } : { verdict: "NOT_FOUND", levRatio: Number.NaN, reason: `reserved dry-run identifier ${doi} \u2014 a synthetic source cannot be quoted` };
   }
   const checked = [];
   let best = 0;
@@ -147306,147 +147513,7 @@ __name(registerPaperResources, "registerPaperResources");
 // mcp/tools.ts
 init_zod();
 init_state2();
-
-// bin/lib/source-input.ts
-init_doi();
-init_shape();
-init_sources();
-init_lookup();
-init_doi_ra();
-init_doi_cn();
-init_registrar_confirm();
-init_http();
-function identifierLabel(s2) {
-  switch (s2.kind) {
-    case "doi":
-      return `DOI ${s2.doi}`;
-    case "arxiv":
-      return `arXiv:${s2.arxiv}`;
-    case "pmid":
-      return `PMID ${s2.pmid}`;
-    case "isbn":
-      return `ISBN ${s2.isbn}`;
-  }
-}
-__name(identifierLabel, "identifierLabel");
-var MAX_INFLATED_HTML_BYTES = 8 * 1024 * 1024;
-function registryAdapter(name) {
-  return sources[name];
-}
-__name(registryAdapter, "registryAdapter");
-var ADAPTER_FOR = {
-  doi: "crossref",
-  arxiv: "arxiv",
-  pmid: "pubmed",
-  isbn: "books"
-};
-function adapterId(input2) {
-  switch (input2.kind) {
-    case "doi":
-      return input2.doi;
-    case "arxiv":
-      return input2.arxiv;
-    case "pmid":
-      return input2.pmid;
-    case "isbn":
-      return `isbn:${input2.isbn}`;
-  }
-}
-__name(adapterId, "adapterId");
-async function lookupIdentifier(input2) {
-  const name = ADAPTER_FOR[input2.kind];
-  const adapter = registryAdapter(name);
-  const id = adapterId(input2);
-  if (typeof adapter?.lookupById === "function") {
-    const r2 = await adapter.lookupById(id);
-    if (input2.kind === "doi" && r2.kind === "not-found") return crossrefNotFound(input2.doi, r2);
-    if (input2.kind === "pmid" && r2.kind === "found") return pubmedConfirmed(r2.candidate);
-    return r2;
-  }
-  if (typeof adapter?.fetchById === "function") {
-    try {
-      const c2 = await adapter.fetchById(id);
-      return c2 !== null ? lookupFound(c2) : lookupNotFound(`${name} has no record of ${identifierLabel(input2)}`);
-    } catch (e2) {
-      if (isSourceLookupError(e2)) {
-        return lookupFailed(e2.reason, {
-          ...e2.status !== void 0 ? { status: e2.status } : {},
-          ...e2.retryAfterMs !== void 0 ? { retryAfterMs: e2.retryAfterMs } : {}
-        });
-      }
-      throw e2;
-    }
-  }
-  return lookupFailed(`no ${input2.kind === "isbn" ? "book (ISBN)" : name} lookup is available in this build`);
-}
-__name(lookupIdentifier, "lookupIdentifier");
-async function pubmedConfirmed(candidate) {
-  const { candidates } = await confirmRegistrarRecords([candidate], (doi) => sources.crossref.lookupById(doi));
-  return lookupFound(candidates[0] ?? candidate);
-}
-__name(pubmedConfirmed, "pubmedConfirmed");
-async function crossrefNotFound(doi, notFound) {
-  const ra = await registrationAgency(doi);
-  switch (ra.kind) {
-    case "agency": {
-      if (/^crossref$/i.test(ra.agency)) return notFound;
-      const elsewhere = `registered with ${ra.agency}, not Crossref`;
-      const r2 = /^datacite$/i.test(ra.agency) ? await sources.datacite.lookupById(doi) : servesContentNegotiation(ra.agency) ? await lookupById10(doi) : null;
-      if (r2 === null) {
-        return lookupFailed(
-          `${elsewhere}, which serves no record pensmith can read \u2014 add the work by its arXiv id, PMID or ISBN instead`,
-          { permanent: true }
-        );
-      }
-      if (r2.kind === "found") return r2;
-      if (r2.kind === "not-found") return lookupNotFound(`${elsewhere}, and ${ra.agency} has no record of it (${r2.reason})`);
-      return lookupFailed(`${elsewhere}; ${ra.agency} lookup failed (${r2.reason})`, {
-        ...r2.status !== void 0 ? { status: r2.status } : {},
-        ...r2.retryAfterMs !== void 0 ? { retryAfterMs: r2.retryAfterMs } : {},
-        ...r2.permanent === true ? { permanent: true } : {}
-      });
-    }
-    case "unknown-prefix":
-      return lookupNotFound(`no registration agency holds the DOI prefix ${doiPrefix(doi) ?? doi}`);
-    case "failed":
-      return lookupFailed(
-        `Crossref has no record of this DOI, and doi.org could not say which agency registered it (${ra.reason}) \u2014 try again later`
-      );
-  }
-}
-__name(crossrefNotFound, "crossrefNotFound");
-async function checkDoi(doi) {
-  const canonical = normalizeDoi(doi);
-  if (canonical === null) return { outcome: "invalid", valid: false, canonical: null, reason: "not a DOI (a DOI starts with 10. and a registrant prefix)" };
-  let r2;
-  try {
-    r2 = await lookupIdentifier({ kind: "doi", raw: doi, doi: canonical });
-  } catch (e2) {
-    if (isOfflineEgressError(e2)) {
-      return { outcome: "failed", valid: false, canonical, reason: `the registrar was not asked (${offlineLabel(e2)}) \u2014 check it again online` };
-    }
-    throw e2;
-  }
-  if (r2.kind === "found") {
-    const c2 = r2.candidate;
-    return {
-      outcome: "found",
-      valid: true,
-      canonical,
-      metadata: {
-        title: c2.title,
-        authors: c2.authors,
-        ...c2.year !== void 0 ? { year: c2.year } : {},
-        ...c2.venue !== void 0 ? { venue: c2.venue } : {},
-        source: c2.source
-      }
-    };
-  }
-  return { outcome: r2.kind, valid: false, canonical, reason: r2.reason };
-}
-__name(checkDoi, "checkDoi");
-
-// mcp/tools.ts
+init_source_input();
 init_paths();
 init_session_lock();
 init_verb_outcome();

@@ -46,7 +46,8 @@ import { sources } from './sources/index.js';
 import * as dryRunProvider from './sources/dry-run.js';
 import type { SearchOptions } from './sources/search-failure.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
-import { confirmRegistrarRecords, type CrossrefLookup } from './sources/registrar-confirm.js';
+import { confirmRegistrarRecords, type RegistrarLookup } from './sources/registrar-confirm.js';
+import { registrarLookup } from './source-input.js';
 import type { SourceTier } from './schemas/source-types.js';
 import type { LibraryEntry } from './schemas/library.js';
 import { normalizeDoi, isReservedDryRunId } from './doi.js';
@@ -614,6 +615,8 @@ export interface ResearchItem {
   readonly decision: ResearchDecision;
   /** Set when the `[sources]` policy excluded it. */
   readonly exclusion?: PolicyExclusion;
+  /** Set when its DOI's registrar records another work (registrar-confirm.ts): why it was dropped. */
+  readonly registrarMismatch?: string;
 }
 
 /**
@@ -682,6 +685,12 @@ export interface ResearchPassResult {
   readonly distinct: number;
   /** Kept by the evaluator or not evaluated, ranked (relevance, then preference). */
   readonly kept: ResearchItem[];
+  /**
+   * Kept candidates dropped because their DOI's registrar records another
+   * work (registrarMismatch says which): Pass 1 would block each as MIS-CITED
+   * (main-branch merge review, round 2). Never offered, never in LIBRARY.json.
+   */
+  readonly unconfirmed: ResearchItem[];
   readonly rejected: ResearchItem[];
   readonly excluded: ResearchItem[];
   readonly notEvaluated: number;
@@ -812,12 +821,14 @@ export async function runResearchPass(args: {
     else if (e.decision === 'rejected') rejected.push(e);
     else kept.push(e);
   }
+  const confirmedKept = await confirmKept(rankItems(kept), args.registry, now);
   return {
     adapters: discovery.adapters,
     perQuery: discovery.perQuery,
     found: discovery.found,
     distinct: discovery.candidates.length,
-    kept: await confirmKept(rankItems(kept), args.registry, now),
+    kept: confirmedKept.kept,
+    unconfirmed: confirmedKept.unconfirmed,
     rejected: rankItems(rejected),
     excluded,
     notEvaluated: kept.filter((k) => k.decision === 'not-evaluated').length,
@@ -827,22 +838,39 @@ export async function runResearchPass(args: {
 }
 
 /**
- * The kept candidates an aggregator found, confirmed at Crossref (Phase 20,
- * VRFY-13; sources/registrar-confirm.ts): a record that pairs the journal
+ * The kept candidates an aggregator found, confirmed at the DOI's registrar
+ * (Phase 20, VRFY-13; sources/registrar-confirm.ts) — Crossref, else the
+ * agency doi.org names, as Pass 1 asks it: a record that pairs the journal
  * DOI with another version's year gets the DOI's own fields, so what research
- * writes is what verify finds. Only with a registry whose `crossref` adapter
- * can look a DOI up (never the --dry-run provider or a test's fakes without
- * one).
+ * writes is what verify finds; a DOI the registrar records as another work is
+ * dropped (`unconfirmed`, with the registrar's title; main-branch merge
+ * review, round 2), so research never keeps a source verify must block. Only
+ * with a registry whose `crossref` adapter can look a DOI up (never the
+ * --dry-run provider or a test's fakes without one).
  */
-async function confirmKept(items: ResearchItem[], registry: AdapterRegistry, now: string): Promise<ResearchItem[]> {
+async function confirmKept(items: ResearchItem[], registry: AdapterRegistry, now: string): Promise<{ kept: ResearchItem[]; unconfirmed: ResearchItem[] }> {
   const crossref = registry['crossref'] as { lookupById?: unknown } | undefined;
-  if (crossref === undefined || typeof crossref.lookupById !== 'function') return items;
-  const lookupById = crossref.lookupById as CrossrefLookup;
-  const { candidates } = await confirmRegistrarRecords(items.map((i) => i.candidate), (doi) => lookupById(doi));
-  return items.map((item, i) => {
+  if (crossref === undefined || typeof crossref.lookupById !== 'function') return { kept: items, unconfirmed: [] };
+  const lookupById = crossref.lookupById as RegistrarLookup;
+  const { candidates, mismatched } = await confirmRegistrarRecords(items.map((i) => i.candidate), (doi) => registrarLookup(doi, lookupById));
+  const why = new Map(mismatched.map((m) => [m.index, m.reason] as const));
+  const kept: ResearchItem[] = [];
+  const unconfirmed: ResearchItem[] = [];
+  items.forEach((item, i) => {
+    const reason = why.get(i);
+    if (reason !== undefined) {
+      unconfirmed.push({ ...item, registrarMismatch: reason });
+      return;
+    }
     const c = candidates[i] ?? item.candidate;
-    return c === item.candidate ? item : { ...item, candidate: c, view: candidateToEntry(c, [], now) };
+    kept.push(c === item.candidate ? item : { ...item, candidate: c, view: candidateToEntry(c, [], now) });
   });
+  return { kept, unconfirmed };
+}
+
+/** The count clause a research summary gives the candidates confirmKept dropped. */
+export function unconfirmedNote(n: number): string {
+  return `${n} dropped: the DOI's registrar records another work (verify would block it as MIS-CITED)`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1031,10 +1059,11 @@ export async function writeResearchLog(root: string, log: string): Promise<strin
   return file;
 }
 
-/** The exclusion list items of a pass (policy first, then the evaluator's rejections). */
-export function logExclusions(excluded: readonly ResearchItem[], rejected: readonly ResearchItem[]): LogExclusion[] {
+/** The exclusion list items of a pass (policy first, then the registrar's other works, then the evaluator's rejections). */
+export function logExclusions(excluded: readonly ResearchItem[], rejected: readonly ResearchItem[], unconfirmed: readonly ResearchItem[] = []): LogExclusion[] {
   return [
     ...excluded.map((x) => ({ citekey: x.candidate.citekey, reference: formatReference(x.view), why: `policy: ${x.exclusion?.reason ?? 'excluded'}` })),
+    ...unconfirmed.map((x) => ({ citekey: x.candidate.citekey, reference: formatReference(x.view), why: `registrar: ${x.registrarMismatch ?? 'another work under this DOI'}` })),
     ...rejected.map((x) => ({ citekey: x.candidate.citekey, reference: formatReference(x.view), why: `evaluator: ${x.reason ?? 'rejected'}` })),
   ];
 }

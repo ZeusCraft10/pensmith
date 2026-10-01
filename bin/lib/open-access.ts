@@ -72,6 +72,8 @@ export interface OpenAccessTarget {
 export interface OpenAccessSummary {
   /** Candidates with a DOI and no confirmed `oa_url` yet: the ones looked up (or that would have been). */
   readonly asked: number;
+  /** Of those, how many Unpaywall answered (found or not-found): the ones actually checked. */
+  readonly answered: number;
   /** Of those, how many now carry a confirmed open-access PDF URL (`oa_url`). */
   readonly found: number;
   /** Links Unpaywall listed that did not answer with a PDF (a landing page, a bot wall): abstract-only. */
@@ -105,15 +107,16 @@ function validHttpUrl(s: unknown): s is string {
  */
 export async function enrichOpenAccess(targets: readonly OpenAccessTarget[], opts: OpenAccessOptions = {}): Promise<OpenAccessSummary> {
   const todo = targets.filter((t) => typeof t.doi === 'string' && t.doi.length > 0 && !isDataCiteArxivDoi(t.doi) && !validHttpUrl(t.oa_url));
-  if (todo.length === 0) return { asked: 0, found: 0, unconfirmed: 0, problem: null };
+  if (todo.length === 0) return { asked: 0, answered: 0, found: 0, unconfirmed: 0, problem: null };
   const mode = networkMode();
-  if (mode.dryRun) return { asked: todo.length, found: 0, unconfirmed: 0, problem: 'not looked up under --dry-run' };
+  if (mode.dryRun) return { asked: todo.length, answered: 0, found: 0, unconfirmed: 0, problem: 'not looked up: --dry-run makes no request' };
   const injected = opts.lookup !== undefined;
   if (!injected && contactEmail().email === null) {
-    return { asked: todo.length, found: 0, unconfirmed: 0, problem: `not looked up: Unpaywall needs a contact email (set ${contactEmail().envName})` };
+    return { asked: todo.length, answered: 0, found: 0, unconfirmed: 0, problem: `not looked up: Unpaywall needs a contact email (set ${contactEmail().envName})` };
   }
   const lookup = opts.lookup ?? unpaywallLookupById;
   const confirm = opts.confirm ?? confirmOpenAccessPdf;
+  let answered = 0;
   let found = 0;
   let unconfirmed = 0;
   let problem: string | null = null;
@@ -129,6 +132,7 @@ export async function enrichOpenAccess(targets: readonly OpenAccessTarget[], opt
       problem ??= `not looked up (${offlineLabel(e)})`;
       break;
     }
+    if (r.kind !== 'failed') answered += 1;
     if (r.kind === 'found') {
       const url = r.candidate.oa_pdf_url;
       if (!validHttpUrl(url)) continue;
@@ -154,7 +158,7 @@ export async function enrichOpenAccess(targets: readonly OpenAccessTarget[], opt
         : `${unconfirmed} link(s) Unpaywall lists did not answer with a PDF (${firstUnconfirmed ?? 'no PDF'}), so they count as abstract-only`;
     problem = problem === null ? listed : `${problem}; ${listed}`;
   }
-  return { asked: todo.length, found, unconfirmed, problem };
+  return { asked: todo.length, answered, found, unconfirmed, problem };
 }
 
 /** The host of `url`, for a one-line reason. */
@@ -166,9 +170,24 @@ function hostOf(url: string): string {
   }
 }
 
-/** One line for a run's output: how many sources have an open-access PDF pensmith can read. */
+/** A problem that says no request was made (no contact email, --dry-run, offline with no recording). */
+const NOT_LOOKED_UP = /^not looked up(?::\s*|\s+)/;
+
+/**
+ * One line for a run's output: how many sources have an open-access PDF
+ * pensmith can read. `checked` only for the sources Unpaywall answered — a
+ * run that asked nothing (no contact email, --dry-run, offline) says so
+ * instead (main-branch merge review, round 2).
+ */
 export function describeOpenAccess(s: OpenAccessSummary): string | null {
   if (s.asked === 0) return null;
-  const base = `open access: ${s.found} of ${s.asked} source(s) with a DOI have an open-access PDF (Unpaywall, checked)`;
+  if (s.answered === 0) {
+    const why = s.problem ?? 'Unpaywall answered no lookup';
+    return NOT_LOOKED_UP.test(why)
+      ? `open access: not looked up for ${s.asked} source(s) with a DOI — ${why.replace(NOT_LOOKED_UP, '')}`
+      : `open access: no Unpaywall answer for ${s.asked} source(s) with a DOI — ${why}`;
+  }
+  const checked = s.answered === s.asked ? 'Unpaywall, checked' : `Unpaywall, ${s.answered} checked`;
+  const base = `open access: ${s.found} of ${s.asked} source(s) with a DOI have an open-access PDF (${checked})`;
   return s.problem !== null ? `${base}; ${s.problem}` : base;
 }

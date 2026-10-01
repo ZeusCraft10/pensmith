@@ -63,6 +63,7 @@ import {
   runResearchPass,
   renderAdapterTable,
   evaluatorNotes,
+  unconfirmedNote,
   tierSummary,
   upsertCounts,
   type ResearchItem,
@@ -272,12 +273,16 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
   out(`${label}: sources by adapter`);
   for (const line of renderAdapterTable(pass.adapters)) out(line);
   for (const n of evaluatorNotes(pass)) err(`${label}: WARN — ${n}`);
+  // A hit whose DOI the registrar records as another work is dropped (main-branch merge review, round 2).
+  for (const u of pass.unconfirmed) err(`${label}: WARN — dropped [@${u.candidate.citekey}]: ${u.registrarMismatch ?? 'another work under its DOI'}`);
 
   // Zero hits: the per-adapter reasons, exit 1, nothing written.
   if (pass.kept.length === 0 && pass.rejected.length === 0) {
     const why = pass.distinct === 0
       ? adapterReasons(pass)
-      : `all ${pass.excluded.length} candidate(s) were excluded by the [sources] policy (${exclusionCounts(pass.excluded)})`;
+      : pass.unconfirmed.length > 0
+        ? `${pass.excluded.length} candidate(s) were excluded by the [sources] policy; ${unconfirmedNote(pass.unconfirmed.length)}`
+        : `all ${pass.excluded.length} candidate(s) were excluded by the [sources] policy (${exclusionCounts(pass.excluded)})`;
     throw new SectionResearchError(`${label}: no research hits for "${query}" — ${why}; nothing was changed`);
   }
   if (pass.kept.length === 0 && (opts.yolo || !canPrompt())) {

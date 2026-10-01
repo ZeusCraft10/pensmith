@@ -217,6 +217,23 @@ function draftHashOf(draftPath: string, assignedSources: readonly string[]): str
 }
 
 /**
+ * Whether a section's DRAFT.md is still the draft its PLAN.md status speaks
+ * for: `missing` (no DRAFT.md — the router re-drafts the section, VRFY-16),
+ * `changed` (a verified section whose draft hash is not the
+ * verified_against_draft_hash it records — compile re-verifies it), else
+ * `current`.
+ * `status` labels a section from it, so it never lists a section as verified
+ * while the router routes it back to write (main-branch merge review,
+ * round 2). Never throws.
+ */
+export function sectionDraftState(draftPath: string, info: Pick<SectionInfoRead, 'status' | 'verifiedHash' | 'assignedSources'>): 'missing' | 'changed' | 'current' {
+  if (!existsSync(draftPath)) return 'missing';
+  if (info.status !== 'verified') return 'current';
+  // No recorded hash (a PLAN.md written by hand or by an older pensmith): nothing to compare.
+  return info.verifiedHash === null || draftHashOf(draftPath, info.assignedSources) === info.verifiedHash ? 'current' : 'changed';
+}
+
+/**
  * Why a section's VERIFICATION.md may not compile (verdict-rows.ts
  * sectionVerificationReasons); a missing or unreadable file is one reason.
  * Never throws.

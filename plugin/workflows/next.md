@@ -81,8 +81,9 @@ Once every section is verified, compile runs whenever the compiled `DRAFT.md` is
 bytes (a redone, re-verified, added or dropped section — decided from content, so a git checkout
 or a sync client that reorders mtimes does not recompile), and done runs whenever `FINAL.md` is
 missing or is done's text of an older compiled draft (`DONE-RECORD.json`: done records the compiled
-draft and the FINAL.md it exported every time; a `FINAL.md` that is byte-for-byte the compiled draft
-with no record counts as done's too). A `FINAL.md` done did not leave — edited or written by hand —
+draft and the FINAL.md it exported every time; with no record, a `FINAL.md` whose sha256 the
+paper-level VERIFICATION.md's `Text checked:` line names — a paper an older pensmith finished —
+or that is byte-for-byte the compiled draft counts as done's too). A `FINAL.md` done did not leave — edited or written by hand —
 is attention naming the remedy, never "complete": done neither exports nor replaces it. done exports
 only a compiled draft its `COMPILE-INPUTS.json` proves compile wrote (VRFY-27), so a compiled
 draft with no usable record (an older pensmith's compile) is compiled again first. When the

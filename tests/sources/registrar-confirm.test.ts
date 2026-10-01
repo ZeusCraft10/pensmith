@@ -1,5 +1,5 @@
 // tests/sources/registrar-confirm.test.ts — research confirms an aggregator's
-// DOI record at Crossref (Phase 20, VRFY-13; sources/registrar-confirm.ts),
+// DOI record at its registrar (Phase 20, VRFY-13; sources/registrar-confirm.ts),
 // found by the live self-consistency lane (scripts/live-verify.mjs): Semantic
 // Scholar paired the Clinical Psychological Science DOI of Ghai et al. (2023)
 // with the PsyArXiv preprint's year (2021), and Pass 1 blocked the tool's own
@@ -8,8 +8,12 @@
 //   - an aggregator candidate whose Crossref record is the same work takes the
 //     record's bibliographic fields (the year among them); its citekey,
 //     identifiers and abstract stay;
-//   - another work under that DOI, a DOI Crossref does not know, a failed
-//     lookup and an offline miss leave the candidate as it was;
+//   - a DOI no registrar answers for, a failed lookup and an offline miss
+//     leave the candidate as it was; another work under that DOI is named in
+//     `mismatched` with the registrar's title (main-branch merge review,
+//     round 2), and runResearchPass drops it from the kept sources — the
+//     recorded case is a DataCite DOI OpenAlex pairs with another work's
+//     title, asked where Pass 1 asks it (Crossref 404 → doi.org → DataCite);
 //   - a Crossref candidate and an arXiv DataCite DOI are never asked; one DOI
 //     is asked once;
 //   - runResearchPass applies it to the kept candidates of a registry whose
@@ -25,7 +29,8 @@ import { pubmedToCandidate, pubmedVernacularTitle } from '../../bin/lib/sources/
 import { lookupFailed, lookupFound, lookupNotFound, type LookupResult } from '../../bin/lib/sources/lookup.js';
 import { OfflineEgressError } from '../../bin/lib/http.js';
 import type { SourceCandidate } from '../../bin/lib/schemas/source-candidate.js';
-import { researchAdapterPlan, runResearchPass } from '../../bin/lib/research-orchestrator.js';
+import { logExclusions, researchAdapterPlan, runResearchPass, unconfirmedNote } from '../../bin/lib/research-orchestrator.js';
+import { registrarLookup } from '../../bin/lib/source-input.js';
 import { sourcePolicyFrom } from '../../bin/lib/source-policy.js';
 import { sources } from '../../bin/lib/sources/index.js';
 import { matchWork } from '../../bin/lib/verify/name-match.js';
@@ -85,7 +90,7 @@ test('VRFY-13: an aggregator record pairing the journal DOI with the preprint ye
   assert.equal(c?.abstract, 'An abstract from the aggregator.');
 });
 
-test('VRFY-13: another work under the DOI, a DOI Crossref does not know, a failed lookup and an offline miss leave the candidate as it was', async () => {
+test('VRFY-13: another work under the DOI, a DOI Crossref does not know, a failed lookup and an offline miss leave the candidate as it was (another work is named as mismatched)', async () => {
   const other = cand({ source: 'crossref', title: 'Deep learning', authors: ['LeCun, Yann'], year: 2015 });
   const cases: Array<[string, () => Promise<LookupResult>]> = [
     ['another work', async () => lookupFound(other)],
@@ -95,9 +100,16 @@ test('VRFY-13: another work under the DOI, a DOI Crossref does not know, a faile
   ];
   for (const [why, lookup] of cases) {
     const input = cand({});
-    const { candidates, confirmed } = await confirmRegistrarRecords([input], lookup);
+    const { candidates, confirmed, mismatched } = await confirmRegistrarRecords([input], lookup);
     assert.equal(candidates[0], input, why);
     assert.deepEqual(confirmed, [], why);
+    assert.deepEqual(
+      mismatched,
+      why === 'another work'
+        ? [{ index: 0, citekey: 'ghai2021', doi: VOR, reason: `DOI ${VOR} is "Deep learning" at Crossref, not "${TITLE}"` }]
+        : [],
+      why,
+    );
   }
   await assert.rejects(() => confirmRegistrarRecords([cand({})], async () => { throw new TypeError('a bug'); }), /a bug/, 'an unexpected error is not swallowed');
 });
@@ -237,4 +249,66 @@ test('VRFY-13 (review round 3): an aggregator that lists the authors in another 
   assert.deepEqual(other.confirmed, []);
   assert.equal(other.candidates[0], stranger);
   assert.equal(other.candidates[1], loose);
+  // Neither is the work Crossref records under the DOI: Pass 1 would block both (main-branch merge review, round 2).
+  assert.deepEqual(other.mismatched.map((m) => m.citekey), ['nobody2025', 'loose2025']);
+});
+
+/**
+ * Main-branch merge review, round 2 (the live chain's jakubuv2023): OpenAlex
+ * W4385245566 pairs the DataCite DOI 10.4230/lipics.itp.2023.19 with the
+ * title "Exploiting Generative AI to Scale up Intelligent Tutoring Systems";
+ * DataCite records "MizAR 60 for Mizar 50" under it. Crossref answers 404,
+ * so the confirmation used to keep the candidate as OpenAlex gave it, the
+ * outline assigned it and `verify` blocked the tool's own source as
+ * MIS-CITED. Recorded answers: openalex/works-doi-lipics-itp-2023-19,
+ * crossref/works-lipics-itp-2023-19-404, generic/doi-ra-prefixes (10.4230 →
+ * DataCite) and datacite/doi-lipics-itp-2023-19.
+ */
+const MISPAIRED_DOI = '10.4230/lipics.itp.2023.19';
+
+test('review round 2: an aggregator DOI the registrar (DataCite, asked as Pass 1 asks it) records as another work is dropped by research — never kept, so never in LIBRARY.json, an outline or a plan', async () => {
+  const found = await sources.openalex.lookupById(MISPAIRED_DOI);
+  assert.equal(found.kind, 'found');
+  const openalex = (found as { candidate: SourceCandidate }).candidate;
+  assert.equal(openalex.title, 'Exploiting Generative AI to Scale up Intelligent Tutoring Systems');
+  assert.equal(openalex.source, 'openalex');
+
+  // The DOI is asked where Pass 1 asks it: Crossref's 404, then the agency doi.org names.
+  const crossref = await sources.crossref.lookupById(MISPAIRED_DOI);
+  assert.equal(crossref.kind, 'not-found', 'Crossref does not register it');
+  const routed = await registrarLookup(MISPAIRED_DOI);
+  assert.equal(routed.kind, 'found');
+  assert.equal((routed as { candidate: SourceCandidate }).candidate.title, 'MizAR 60 for Mizar 50');
+
+  const { candidates, confirmed, mismatched } = await confirmRegistrarRecords([openalex], (d) => registrarLookup(d));
+  assert.equal(candidates[0], openalex);
+  assert.deepEqual(confirmed, []);
+  assert.equal(mismatched.length, 1);
+  assert.equal(
+    mismatched[0]?.reason,
+    `DOI ${MISPAIRED_DOI} is "MizAR 60 for Mizar 50" at DataCite, not "Exploiting Generative AI to Scale up Intelligent Tutoring Systems"`,
+  );
+
+  // The research pass: OpenAlex finds it, the evaluator (its contract stub) keeps it, the registrar drops it.
+  const saved = process.env['PENSMITH_NO_LLM'];
+  process.env['PENSMITH_NO_LLM'] = '1';
+  try {
+    const registry = {
+      openalex: { search: async (): Promise<SourceCandidate[]> => [openalex] },
+      crossref: { search: async (): Promise<SourceCandidate[]> => [], lookupById: (doi: string): Promise<LookupResult> => sources.crossref.lookupById(doi) },
+    };
+    const plan = researchAdapterPlan({ registry, byPreference: false, discipline: 'computer-science' });
+    const r = await runResearchPass({ queries: ['generative AI intelligent tutoring systems'], plan, registry, policy: sourcePolicyFrom(undefined), topic: 't', discipline: 'computer-science', scope: 's' });
+    assert.deepEqual(r.kept.map((i) => i.candidate.doi), [], 'never kept');
+    assert.deepEqual(r.rejected.map((i) => i.candidate.doi), [], 'never offered at the prune question either');
+    assert.equal(r.unconfirmed.length, 1);
+    assert.equal(r.unconfirmed[0]?.candidate.doi, MISPAIRED_DOI);
+    const log = logExclusions(r.excluded, r.rejected, r.unconfirmed);
+    assert.equal(log.length, 1);
+    assert.match(log[0]?.why ?? '', /^registrar: DOI 10\.4230\/lipics\.itp\.2023\.19 is "MizAR 60 for Mizar 50" at DataCite, not "Exploiting Generative AI/);
+    assert.match(unconfirmedNote(1), /^1 dropped: the DOI's registrar records another work/);
+  } finally {
+    if (saved === undefined) delete process.env['PENSMITH_NO_LLM'];
+    else process.env['PENSMITH_NO_LLM'] = saved;
+  }
 });

@@ -59,7 +59,7 @@ test('GRND-14: enrichOpenAccess records Unpaywall\'s OA PDF as oa_url for each D
   assert.equal(targets[1]!.oa_url, undefined);
   assert.equal(targets[5]!.oa_url, undefined, 'Unpaywall has no PDF: the adapter link does not become oa_url');
   assert.equal(targets[6]!.oa_url, undefined);
-  assert.deepEqual(s, { asked: 4, found: 1, unconfirmed: 0, problem: null });
+  assert.deepEqual(s, { asked: 4, answered: 4, found: 1, unconfirmed: 0, problem: null });
   assert.equal(describeOpenAccess(s), 'open access: 1 of 4 source(s) with a DOI have an open-access PDF (Unpaywall, checked)');
 });
 
@@ -126,7 +126,8 @@ test('GRND-14 (review round 3, MockAgent): confirmOpenAccessPdf reads only the P
 
 test('GRND-14: a failed or offline lookup is reported, never a gate; offline stops asking', async () => {
   const failed = await enrichOpenAccess([{ doi: '10.5555/x' }], { lookup: async () => lookupFailed('HTTP 503 after retries') });
-  assert.deepEqual(failed, { asked: 1, found: 0, unconfirmed: 0, problem: 'Unpaywall lookup failed: HTTP 503 after retries' });
+  assert.deepEqual(failed, { asked: 1, answered: 0, found: 0, unconfirmed: 0, problem: 'Unpaywall lookup failed: HTTP 503 after retries' });
+  assert.equal(describeOpenAccess(failed), 'open access: no Unpaywall answer for 1 source(s) with a DOI — Unpaywall lookup failed: HTTP 503 after retries');
   let calls = 0;
   const offline = await enrichOpenAccess([{ doi: '10.5555/a' }, { doi: '10.5555/b' }], {
     lookup: async () => {
@@ -136,6 +137,8 @@ test('GRND-14: a failed or offline lookup is reported, never a gate; offline sto
   });
   assert.equal(calls, 1, 'the rest would miss the same way');
   assert.match(offline.problem ?? '', /^not looked up \(offline/);
+  assert.match(describeOpenAccess(offline) ?? '', /^open access: not looked up for 2 source\(s\) with a DOI [-—] \(offline/);
+  assert.doesNotMatch(describeOpenAccess(offline) ?? '', /checked/);
 });
 
 test('GRND-14: without a contact email Unpaywall is not asked (it requires one) and the summary says so', async () => {
@@ -143,7 +146,9 @@ test('GRND-14: without a contact email Unpaywall is not asked (it requires one) 
   delete process.env['PENSMITH_CONTACT_EMAIL'];
   try {
     const s = await enrichOpenAccess([{ doi: '10.5555/x' }]);
-    assert.deepEqual(s, { asked: 1, found: 0, unconfirmed: 0, problem: 'not looked up: Unpaywall needs a contact email (set PENSMITH_CONTACT_EMAIL)' });
+    assert.deepEqual(s, { asked: 1, answered: 0, found: 0, unconfirmed: 0, problem: 'not looked up: Unpaywall needs a contact email (set PENSMITH_CONTACT_EMAIL)' });
+    // Main-branch merge review, round 2: the line never says Unpaywall was checked when nothing was asked.
+    assert.equal(describeOpenAccess(s), 'open access: not looked up for 1 source(s) with a DOI — Unpaywall needs a contact email (set PENSMITH_CONTACT_EMAIL)');
   } finally {
     if (saved !== undefined) process.env['PENSMITH_CONTACT_EMAIL'] = saved;
   }
@@ -161,4 +166,13 @@ test('GRND-14 (built CLI): `add` of an open-access DOI records its OA PDF as oa_
   const [entry] = (JSON.parse(fs.readFileSync(path.join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<{ citekey: string; oa_url: string | null }> }).entries;
   assert.equal(entry!.citekey, 'almeida2006');
   assert.equal(entry!.oa_url, 'https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0000001&type=printable');
+});
+
+test('main-branch merge review, round 2: `checked` names only the sources Unpaywall answered', async () => {
+  let n = 0;
+  const s = await enrichOpenAccess([{ doi: '10.5555/a' }, { doi: '10.5555/b' }, { doi: '10.5555/c' }], {
+    lookup: async () => (++n === 2 ? lookupFailed('HTTP 503 after retries') : lookupNotFound('HTTP 404')),
+  });
+  assert.equal(s.answered, 2);
+  assert.equal(describeOpenAccess(s), 'open access: 0 of 3 source(s) with a DOI have an open-access PDF (Unpaywall, 2 checked); Unpaywall lookup failed: HTTP 503 after retries');
 });

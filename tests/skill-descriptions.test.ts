@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 import { BLOCKING_VERDICTS } from '../bin/lib/verify/verdicts.js';
+import { isTextRowKey } from '../bin/lib/verify/verdict-rows.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS_DIR = path.join(REPO, 'plugin', 'skills');
@@ -226,13 +227,18 @@ test('D-23a-09: each plumbing skill forwards `<verb> $ARGUMENTS` to the pensmith
 test('review round 2 (Phase 20 + 23a merge): the skills send only a citekey row to --revise — a text row (`(L<line>)`) and an UNVERIFIABLE-QUOTE go to a re-draft', () => {
   const { body } = readSkill(ROUTER);
   const redo = /\| "redo section 3"[^\n]*\|/.exec(body)?.[0] ?? '';
-  assert.match(redo, /or UNPARSEABLE on a bibliography entry — a row keyed `\(L<line>\)` is a citation form in the prose, not a citekey\), `plan 3 --revise`/);
+  // Review round 2 of the main-branch merge: every text-row key revise cannot swap
+  // (verdict-rows.ts isTextRowKey) is named, with the edit or re-draft it needs.
+  assert.match(redo, /or UNPARSEABLE on a bibliography entry — a row keyed `\(L<line>\)`, `doi:…`, `arXiv:…`, `PMID:…` or `\(unattributed\)`, or a draft check \(`- draft:`\), names text in the prose, not a citekey: an edit of the section's DRAFT\.md then `verify 3`, or `write 3`\), `plan 3 --revise`/);
   assert.match(redo, /a quote no source text could check \(UNVERIFIABLE-QUOTE\) needs only `write 3`, which re-drafts it paraphrased, or the user's own edit of the draft and `verify 3`, or accepting that quote/);
   assert.match(body, /it cannot rewrite prose \(a quote to\s+paraphrase, a citation form to rewrite as `\[@citekey\]`\)/);
   const plan = readSkill('plan-section').body;
   assert.match(plan, /or UNPARSEABLE on a bibliography entry\), one a run/);
-  assert.match(plan, /a row keyed `\(L<line>\)`/);
-  assert.match(plan, /A quote no source text could check \(UNVERIFIABLE-QUOTE\) is paraphrased by `write N`, never by `--revise`\./);
+  assert.match(plan, /a row keyed `\(L<line>\)`, `doi:…`, `arXiv:…`, `PMID:…` or `\(unattributed\)`, or a draft check \(`- draft:`\), names text in the prose, not a citekey: .* edit the section's DRAFT\.md and run `verify N`, or re-draft\)/);
+  assert.match(plan, /A quote no source text could check \(UNVERIFIABLE-QUOTE\) is paraphrased by `write N`, never by `--revise`\./);  // The keys the skills name are the ones revise treats as text.
+  for (const key of ['(L12)', 'doi:10.9999/x', 'arXiv:1706.03762', 'PMID:31535829', 'draft', '(unattributed)']) {
+    assert.equal(isTextRowKey(key), true, key);
+  }
 });
 
 test('review round 2 (Phase 20 + 23a merge): the pensmith skill names the revise swap among the questions and when the tools\' `yolo` may be passed', () => {

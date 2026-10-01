@@ -370,13 +370,31 @@ export async function lookupIdentifier(input: IdentifierInput): Promise<LookupRe
  * title counts — takes Crossref's bibliographic fields; identifiers, abstract
  * and provenance stay) runs here too, so every path that identifies a PMID
  * like `add` — `add`, a URL that declares a PMID, research's prune question —
- * stores what verify finds. Best-effort: a DOI Crossref does not know, a
- * failed or offline lookup, or another work under the DOI leaves the record
- * as PubMed gave it.
+ * stores what verify finds — the DOI asked at its own registrar
+ * (registrarLookup). Best-effort: a DOI no registrar answers for, a failed or
+ * offline lookup, or another work under the DOI leaves the record as PubMed
+ * gave it.
  */
 async function pubmedConfirmed(candidate: SourceCandidate): Promise<LookupResult> {
-  const { candidates } = await confirmRegistrarRecords([candidate], (doi) => sources.crossref.lookupById(doi));
+  const { candidates } = await confirmRegistrarRecords([candidate], (doi) => registrarLookup(doi));
   return lookupFound(candidates[0] ?? candidate);
+}
+
+/**
+ * A DOI's record where Pass 1 reads it (VRFY-11): Crossref, else — on
+ * Crossref's 404 — the agency doi.org names (crossrefNotFound: DataCite, or
+ * content negotiation for mEDRA / JaLC / KISTI). `crossref` is the Crossref
+ * lookup to start from (research passes its registry's). Research's
+ * aggregator confirmation and `add`'s PubMed confirmation ask a DOI through
+ * it (sources/registrar-confirm.ts; main-branch merge review, round 2: a
+ * DataCite DOI was never confirmed). The typed OfflineEgressError propagates.
+ */
+export async function registrarLookup(
+  doi: string,
+  crossref: (doi: string) => Promise<LookupResult> = (d) => sources.crossref.lookupById(d),
+): Promise<LookupResult> {
+  const r = await crossref(doi);
+  return r.kind === 'not-found' ? crossrefNotFound(doi, r) : r;
 }
 
 /**

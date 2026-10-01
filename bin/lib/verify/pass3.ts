@@ -133,7 +133,7 @@ async function checkQuote(
   if (doi !== undefined && isReservedDryRunId(doi)) {
     return mode.dryRun
       ? { verdict: 'UNVERIFIABLE-QUOTE', levRatio: 0, reason: 'text unavailable (dry-run): a synthetic dry-run source has no text' }
-      : { verdict: 'NOT_FOUND', levRatio: 0, reason: `reserved dry-run identifier ${doi} — a synthetic source cannot be quoted` };
+      : { verdict: 'NOT_FOUND', levRatio: Number.NaN, reason: `reserved dry-run identifier ${doi} — a synthetic source cannot be quoted` }; // no text was compared: lev=n/a
   }
 
   const checked: string[] = [];

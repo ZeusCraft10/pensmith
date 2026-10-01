@@ -17537,6 +17537,14 @@ function readDoneRecord(paperRoot) {
     return null;
   }
 }
+function verificationCheckedSha256(paperRoot) {
+  try {
+    const md = readFileSync8(join5(paperDir(paperRoot), "VERIFICATION.md"), "utf8");
+    return /^Text checked: .+ \(sha256 ([0-9a-f]{64})\)\s*$/mu.exec(md)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
 function finalMdState(paperRoot) {
   const dir = paperDir(paperRoot);
   const finalPath = join5(dir, "FINAL.md");
@@ -17546,11 +17554,12 @@ function finalMdState(paperRoot) {
   const draftSha = fileSha256(join5(dir, "DRAFT.md"));
   const record = readDoneRecord(paperRoot);
   if (record !== null && record.final_sha256 === finalSha) return record.compiled_draft_sha256 === draftSha ? "current" : "stale";
+  if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? "current" : "stale";
   return finalSha === draftSha ? "stale" : "edited";
 }
 function editedFinalReason(paperRoot) {
   const dir = basename2(paperDir(paperRoot));
-  return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: make the edit in the section drafts (then \`pensmith\` re-verifies and recompiles them), or move ${dir}/FINAL.md out of the paper folder, and run \`pensmith done\``;
+  return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
 }
 var DONE_RECORD_FILE;
 var init_done_record2 = __esm({
@@ -17563,6 +17572,7 @@ var init_done_record2 = __esm({
     DONE_RECORD_FILE = "DONE-RECORD.json";
     __name(doneRecordPath, "doneRecordPath");
     __name(readDoneRecord, "readDoneRecord");
+    __name(verificationCheckedSha256, "verificationCheckedSha256");
     __name(finalMdState, "finalMdState");
     __name(editedFinalReason, "editedFinalReason");
   }

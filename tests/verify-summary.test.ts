@@ -68,7 +68,7 @@ test('VRFY-24: the Status and Draft lines, then the Summary FIRST, then Pass-1, 
   assert.match(md, /^- ghost\.2099: \*\*FABRICATED\*\* — titleJW=0\.00, authorJW=0\.00 — not in bib$/m);
   assert.match(md, /^- \(L7\): \*\*UNSUPPORTED-FORM\*\* — titleJW=n\/a, authorJW=n\/a — `\\cite\{fake2019\}`: raw TeX citation$/m);
   assert.match(md, /^- vaswani2017 \[q1\] \("The dominant sequence transduction mod…"\): \*\*PASS\*\* — lev=1\.000 — arXiv PDF$/m);
-  assert.match(md, /^- aggarwal2022 \[q2\] \("attention mechanisms are \\\*\\\*nothing\\\*\\\* mo…"\): \*\*UNVERIFIABLE-QUOTE\*\* — lev=0\.000 — no open-access copy — accepted by you 2026-09-30T10:00:00\.000Z \(--accept-quote\)$/m);
+  assert.match(md, /^- aggarwal2022 \[q2\] \("attention mechanisms are \\\*\\\*nothing\\\*\\\* mo…"\): \*\*UNVERIFIABLE-QUOTE\*\* — lev=n\/a — no open-access copy — accepted by you 2026-09-30T10:00:00\.000Z \(--accept-quote\)$/m);
   assert.match(md, /^- draft: \*\*NO-CITATIONS\*\* — no citations; 2 sources assigned$/m);
   assert.match(md, /^\| q2 "attention mechanisms are nothing more" \| aggarwal2022 \| 2026-09-30T10:00:00\.000Z \| --accept-quote \|$/m);
 });

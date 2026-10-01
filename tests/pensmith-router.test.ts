@@ -14,6 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -684,7 +685,7 @@ test('VRFY-26 (main-branch merge review, round 1): the paper is complete only wh
     await resolveNextAction(root); // moves the legacy root STATE.json into .paper/, as a real run would
     await writeCompileRecordFor(root, [{ n: 1, slug: 'intro' }]);
     assert.equal((await resolveNextAction(root)).verb, 'done', 'no FINAL.md: done');
-    const attention = /^\.paper\/FINAL\.md is not the text `pensmith done` exported \(it was edited or written by hand\) [-—] .*make the edit in the section drafts.*move \.paper\/FINAL\.md out of the paper folder, and run `pensmith done`$/;
+    const attention = /^\.paper\/FINAL\.md is not the text `pensmith done` exported \(it was edited or written by hand\) [-—] .*: move \.paper\/FINAL\.md out of the paper folder \(your copy keeps the edit\) and run `pensmith done`; to keep the edit in the paper itself, make it in the section drafts first .*$/;
     // A FINAL.md written by hand, done never run: never "complete" (done would refuse it).
     writePaperFile(root, 'FINAL.md', 'A hand-written final paper citing [@Fake2021].\n');
     const handWritten = await resolveNextAction(root);
@@ -707,6 +708,19 @@ test('VRFY-26 (main-branch merge review, round 1): the paper is complete only wh
     // A record that does not parse is no record; the compiled-draft FINAL.md goes back to done.
     writePaperFile(root, 'DONE-RECORD.json', '{"$schemaVersion": 1}');
     assert.equal((await resolveNextAction(root)).verb, 'done');
+    // Review round 2: with no usable record, a FINAL.md the paper-level
+    // VERIFICATION.md names as done's exported text is done's own — complete
+    // while it is the compiled draft, done again after a recompile, never
+    // attention; any other text stays attention.
+    const shaOf = (t: string): string => createHash('sha256').update(t, 'utf8').digest('hex');
+    const older = '# Paper\n\nAn older compiled text [@k].\n';
+    writePaperFile(root, 'VERIFICATION.md', `# Paper Verification (done)\n\n## Gate\n\nText checked: .paper/DRAFT.md (sha256 ${shaOf(compiled)})\n`);
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' }, 'the raw export of the current compiled draft');
+    writePaperFile(root, 'VERIFICATION.md', `# Paper Verification (done)\n\n## Gate\n\nText checked: .paper/DRAFT.md (sha256 ${shaOf(older)})\n`);
+    writePaperFile(root, 'FINAL.md', older);
+    assert.equal((await resolveNextAction(root)).verb, 'done', 'done\'s export of an older compiled draft: replaced');
+    writePaperFile(root, 'FINAL.md', `${older}A hand edit.\n`);
+    assert.equal((await resolveNextAction(root) as { reason?: string }).reason, 'attention');
   });
 
 // === Phase 18 review round 3 ===

@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: Open Source Release
 status: executing
-last_updated: "2026-09-30T23:30:00.000Z"
-last_activity: 2026-09-30
+last_updated: "2026-10-01T02:00:00.000Z"
+last_activity: 2026-10-01
 progress:
   total_phases: 11
   completed_phases: 2
@@ -324,7 +324,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - Phase 23a maintainer items (23a-SUMMARY §8): decide PLUG-04's amended acceptance text (23a-PLAN §7.6); after the push, record the first green `plugin` job (ubuntu/macOS/Windows) and `check` matrix with `bundle:check`, make them required checks (23a-VERIFICATION §5), then tick CI-05 and PLUG-14. (The old `claude plugin validate .` failure on the `plugin.json` `skills` shape is gone: Phase 23a's manifest passes `--strict`, PLUG-01.)
 - SRC-06: the maintainer runs `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` and one keyed `pensmith research --yolo`, records the output in 19-VERIFICATION §8.4, then marks SRC-06 Complete.
 - VRFY-12 live evidence (20-VERIFICATION §9): run `PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org PENSMITH_LIVE_STRICT=1 npm run live:verify` on a day with OpenAlex budget (or with `OPENALEX_API_KEY`) so the unknown-work UNRESOLVABLE row is observed live, and record it in 20-VERIFICATION §2.
-- Phase 21 (EXP-14) inherits `.paper/DONE-RECORD.json` (the main-branch merge review, round 1): the real humanizer must keep FINAL.md = the text GATE-04 judged and write the record, and a refused humanization keeps the FINAL.md it replaced (`done-record.ts`, 20-VERIFICATION §9).
+- Phase 21 (EXP-14) inherits `.paper/DONE-RECORD.json` (the main-branch merge review, round 1): the real humanizer must keep FINAL.md = the text GATE-04 judged and write the record, and a refused or failed humanized done keeps the FINAL.md it replaced (`done-record.ts`; 20-VERIFICATION §9, §10).
 - Follow-ups from the Phase 19 closer (EXP-03): APA lowercases the proper nouns of a Title Case title ("china"), and `done` reads the citation style only from INTAKE.md, so a paper without one exports raw `[@key]` tokens. (The missing PubMed abstracts were closed in Phase 20: `efetch`, VRFY-21.)
 
 ### Blockers/Concerns
@@ -347,8 +347,8 @@ Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24
 
 ## Session Continuity
 
-Last session: 2026-09-30T23:30:00.000Z
-Stopped at: Phase 20 closed (22/22 requirements, 7/7 success criteria; 20-VERIFICATION.md). Phase 23a (`v1/int-23a`, with the CI run 68 fixes) and the test-only `v1/flake-arxiv-3way` are merged into the main branch (23a-SUMMARY §13); 23a is 5 of 8, with PLUG-04, CI-05 and PLUG-14's CI leg left to the maintainer. The main-branch merge review (round 1) is addressed (`fix(merge): address review round 1`): pensmith_verify carries an early refusal's line, a FINAL.md done did not write is refused and never "complete" (DONE-RECORD.json), `plan N --revise` and the refusals name the edit or re-draft for text-only failures, the live lane reports an unobserved verdict as INCONCLUSIVE (20-VERIFICATION §9). Phase 17 remains open on CI-06, and Phase 19 on SRC-06. Next: /gsd:plan-phase 21.
+Last session: 2026-10-01T02:00:00.000Z
+Stopped at: Phase 20 closed (22/22 requirements, 7/7 success criteria; 20-VERIFICATION.md). Phase 23a (`v1/int-23a`, with the CI run 68 fixes) and the test-only `v1/flake-arxiv-3way` are merged into the main branch (23a-SUMMARY §13); 23a is 5 of 8, with PLUG-04, CI-05 and PLUG-14's CI leg left to the maintainer. The main-branch merge review (round 1) is addressed (`fix(merge): address review round 1`): pensmith_verify carries an early refusal's line, a FINAL.md done did not write is refused and never "complete" (DONE-RECORD.json), `plan N --revise` and the refusals name the edit or re-draft for text-only failures, the live lane reports an unobserved verdict as INCONCLUSIVE (20-VERIFICATION §9). Round 2 is addressed (`fix(merge): address review round 2`, 20-VERIFICATION §10): a FINAL.md an older pensmith exported is done's own after a recompile (the paper-level VERIFICATION.md names it), the edited-FINAL.md remedy leads with the step that unblocks done, done puts the replaced FINAL.md back on every early exit after the humanizer, research drops an aggregator source whose DOI the registrar (asked as Pass 1 asks it) records as another work, and status, the skills, Pass-3 rows and the open-access line say what happened. Phase 17 remains open on CI-06, and Phase 19 on SRC-06. Next: /gsd:plan-phase 21.
 Resume file: None
 
 ## Operator Next Steps

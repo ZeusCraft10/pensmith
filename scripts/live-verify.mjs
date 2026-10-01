@@ -35,8 +35,8 @@
 //     FABRICATED and every row of tests/fixtures/known-mis-cited.json MIS-CITED;
 //   - VRFY-15: the Wakefield paper is RETRACTED, in VERIFICATION.md and as the
 //     stderr warning, and the section fails;
-//   - VRFY-13 self-consistency: research runs live on a computer-science and a
-//     medicine topic (the adapters and the research pass pensmith uses; the
+//   - VRFY-13 self-consistency: research runs live on two computer-science
+//     topics and a medicine topic (the adapters and the research pass pensmith uses; the
 //     evaluator as its contract stub keeps every candidate), every source the
 //     outline could be offered is cited, and `verify 1` must block none of them
 //     (0 false blocks).
@@ -107,7 +107,11 @@ const ROUND2 = [
   ['srivastava_noid', 'OK', '@article{srivastava_noid, author = {Srivastava, Nitish and Hinton, Geoffrey}, title = {Dropout: A Simple Way to Prevent Neural Networks from Overfitting}, journal = {Journal of Machine Learning Research}, year = {2014}}'],
 ];
 
-/** The CS and medicine self-consistency topics (the audit's FU3-1 sample; PLAN VRFY-13). */
+/**
+ * The self-consistency topics: the audit's FU3-1 sample (CS, medicine; PLAN
+ * VRFY-13) and, since the main-branch merge review round 2, the topic whose
+ * live chain kept a DataCite DOI OpenAlex paired with another work.
+ */
 const SELF_CONSISTENCY = [
   {
     name: 'computer science',
@@ -120,6 +124,12 @@ const SELF_CONSISTENCY = [
     discipline: 'biology',
     topic: 'social media use and adolescent depression',
     queries: ['social media use and adolescent depression', 'screen time and depressive symptoms in adolescents'],
+  },
+  {
+    name: 'machine translation',
+    discipline: 'computer-science',
+    topic: 'neural machine translation',
+    queries: ['neural machine translation literature review', 'generative AI for intelligent tutoring and theorem proving'],
   },
 ];
 
@@ -280,8 +290,12 @@ async function runChild(work) {
       });
       const kept = r.kept.map((i) => i.candidate);
       line('INFO', `${t.name} research`, `${r.distinct} distinct candidate(s), ${kept.length} kept; ${r.adapters.map((a) => `${a.adapter} ${a.count} (${a.status})`).join(', ')}`);
+      // A kept source whose DOI the registrar records as another work is dropped before the library (registrar-confirm.ts).
+      for (const u of r.unconfirmed ?? []) line('INFO', `${t.name} dropped`, `${u.candidate.citekey}: ${u.registrarMismatch}`);
       await crossCheckRetractions(kept);
-      const root = path.join(work, `self-${t.discipline}`);
+      // One paper per topic (two topics share a discipline).
+      const paperName = `self-${t.name.replace(/[^a-z0-9]+/gi, '-')}`;
+      const root = path.join(work, paperName);
       mkdirSync(path.join(root, '.paper'), { recursive: true });
       await upsertSources(root, kept, { provenance: 'research' });
       const bibText = readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8');
@@ -293,7 +307,7 @@ async function runChild(work) {
         fail(name, 'research found no citable source (see the INFO lines)');
         continue;
       }
-      const { dir } = await seedPaper(work, `self-${t.discipline}`, cited, null);
+      const { dir } = await seedPaper(work, paperName, cited, null);
       const v = verifySection(root, dir);
       const counts = new Map();
       const falseBlocks = [];

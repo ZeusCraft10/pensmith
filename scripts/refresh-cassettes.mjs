@@ -87,6 +87,14 @@ export const ISTIC_PMID = '42706103';
  */
 export const TRANSLATED_TITLE_PMID = '40121571';
 export const TRANSLATED_TITLE_DOI = '10.1556/650.2025.33246';
+/**
+ * A DataCite DOI an aggregator pairs with another work (main-branch merge
+ * review, round 2, from the live chain): OpenAlex W4385245566 gives
+ * 10.4230/lipics.itp.2023.19 the title "Exploiting Generative AI to Scale up
+ * Intelligent Tutoring Systems"; DataCite, which registers it, records "MizAR
+ * 60 for Mizar 50". Research drops it (sources/registrar-confirm.ts).
+ */
+export const MISPAIRED_DATACITE_DOI = '10.4230/lipics.itp.2023.19';
 /** A retracted work with a Retraction Watch record in Crossref (Wakefield et al. 1998). */
 export const RECORDED_RETRACTED_DOI = '10.1016/S0140-6736(97)11096-0';
 /**
@@ -244,6 +252,8 @@ const QUERY_SETS = {
     { file: 'works-ijsra-2025-0980', calls: [{ fn: 'lookupById', arg: '10.30574/ijsra.2025.15.1.0980' }] },
     // Crossref's 404 for DOIs other agencies registered (DataCite, mEDRA, JaLC) and a fake DataCite-prefix DOI.
     { file: 'works-other-agency-404', calls: [VRFY11_ZENODO_DOI, DATACITE_FAKE_DOI, MEDRA_DOI, JALC_DOI].map((arg) => ({ fn: 'lookupById', arg })) },
+    // Research's registrar confirmation of an aggregator's DataCite DOI: Crossref's 404 (main-branch merge review, round 2).
+    { file: 'works-lipics-itp-2023-19-404', calls: [{ fn: 'lookupById', arg: MISPAIRED_DATACITE_DOI }] },
     // VRFY-29: every fabricated DOI of tests/fixtures/known-bad-citations.json — Crossref's 404.
     { file: 'works-known-bad-404', calls: KNOWN_BAD_DOIS.map((arg) => ({ fn: 'lookupById', arg })) },
     // VRFY-10: a bare `doi:10.9999/x` in a draft's prose — Crossref's 404 (its prefix has no agency).
@@ -255,6 +265,8 @@ const QUERY_SETS = {
   datacite: [
     { file: 'doi-zenodo-1212303', calls: [{ fn: 'lookupById', arg: VRFY11_ZENODO_DOI }] },
     { file: 'doi-zenodo-fake-404', calls: [{ fn: 'lookupById', arg: DATACITE_FAKE_DOI }] },
+    // The registrar's record of the DOI OpenAlex pairs with another work (main-branch merge review, round 2).
+    { file: 'doi-lipics-itp-2023-19', calls: [{ fn: 'lookupById', arg: MISPAIRED_DATACITE_DOI }] },
     // VRFY-12: Pass 1's DataCite title search for an identifier-less entry of no work.
     { file: 'title-search-no-match', calls: [{ fn: 'searchTitle', arg: [METADATA_SEARCH_NO_MATCH_TITLE] }] },
   ],
@@ -265,6 +277,8 @@ const QUERY_SETS = {
     { file: 'works-W2919115771', calls: [{ fn: 'lookupById', arg: 'W2919115771' }] },
     // A W-id OpenAlex does not know: a real 404 (not-found).
     { file: 'works-W2963403868-404', calls: [{ fn: 'lookupById', arg: 'W2963403868' }] },
+    // An OpenAlex record pairing a DataCite DOI with another work's title (main-branch merge review, round 2).
+    { file: 'works-doi-lipics-itp-2023-19', calls: [{ fn: 'lookupById', arg: MISPAIRED_DATACITE_DOI }] },
     // Title searches only: research's own queries ask OpenAlex for 10 works
     // with abstracts, which exceeds the 51200-byte cassette cap at any size
     // research requests — the fixture lane reports those as `offline: no
@@ -409,6 +423,8 @@ const QUERY_SETS = {
         { fn: 'fetch', arg: 'https://doi.org/ra/10.1016' },
         { fn: 'fetch', arg: 'https://doi.org/ra/10.58346' },
         { fn: 'fetch', arg: 'https://doi.org/ra/10.9999' },
+        // Main-branch merge review, round 2: Schloss Dagstuhl's LIPIcs (DataCite).
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.4230' },
       ],
     },
     // Phase 20 (VRFY-11, D-20-10): doi.org content negotiation (CSL JSON) of an

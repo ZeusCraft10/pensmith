@@ -13,7 +13,12 @@
 //     export/ untouched) and is attention for the router — never "complete",
 //     and bare `pensmith` never runs done over it;
 //   - a FINAL.md written by hand, done never run, likewise;
-//   - moved out of the paper folder, done exports and the paper is complete.
+//   - moved out of the paper folder, done exports and the paper is complete;
+//   - review round 2: the remedy the refusal names first is the one that
+//     works — an edit made in the section drafts and recompiled leaves the
+//     edited FINAL.md refused until it is moved; and a FINAL.md an older
+//     pensmith exported (no record; the paper-level VERIFICATION.md names its
+//     text) is done's own after a recompile too — replaced, never "edited".
 //
 // Built CLI, sources offline (the cited works are recorded), model stubbed, no
 // task runner — the path every CLI user takes.
@@ -34,7 +39,7 @@ const SECTIONS = [
 
 const ENV = { PENSMITH_NO_LLM: '1', PENSMITH_CONTACT_EMAIL: undefined };
 
-const EDITED = /\.paper\/FINAL\.md is not the text `pensmith done` exported \(it was edited or written by hand\) [-—] done exports only the compiled draft it checks and never replaces your file: make the edit in the section drafts .*move \.paper\/FINAL\.md out of the paper folder, and run `pensmith done`/;
+const EDITED = /\.paper\/FINAL\.md is not the text `pensmith done` exported \(it was edited or written by hand\) [-—] done exports only the compiled draft it checks and never replaces your file: move \.paper\/FINAL\.md out of the paper folder \(your copy keeps the edit\) and run `pensmith done`; to keep the edit in the paper itself, make it in the section drafts first/;
 
 const HAND_EDIT = '\nAs (Nguyen & Patel, 2019) showed, [@Fake2021] and @fake2019 agree.[^1]\n\n[^1]: A note typed by hand.\n';
 
@@ -136,4 +141,66 @@ test('VRFY-26 (built CLI): a FINAL.md that is the compiled draft with no record 
   assert.match(bare.stderr, /^pensmith: ran done; next: status \(done\)$/m);
   assert.ok(readdirSync(join(p.root, '.paper', 'export')).some((f) => f.startsWith('DRAFT.')), 'exported');
   assert.ok(existsSync(paperFile(p, 'DONE-RECORD.json')));
+});
+
+test('review round 2 (built CLI): the remedy works as the refusal words it — an edit made in the section drafts is re-verified and recompiled, the edited FINAL.md stays refused until it is moved, then done exports the new draft', () => {
+  const p = finishedPaper('done-final-remedy');
+  const first = p.cli(['done', '--yolo', '--format', 'md'], ENV);
+  assert.equal(first.status, EXIT_OK, `${first.stdout}\n${first.stderr}`);
+  appendFileSync(paperFile(p, 'FINAL.md'), '\nA closing sentence typed into the exported paper.\n');
+  const edited = readFileSync(paperFile(p, 'FINAL.md'));
+
+  // The edit made where the refusal says to keep it: section 1's draft.
+  const draft1 = join(p.sectionDir(1, 'intro'), 'DRAFT.md');
+  writeFileSync(draft1, readFileSync(draft1, 'utf8').replace('learn layered representations', 'learn deep, layered representations'));
+  const v = p.cli(['verify', '1'], ENV);
+  assert.equal(v.status, EXIT_OK, `${v.stdout}\n${v.stderr}`);
+  const c = p.cli(['compile', '--yolo'], ENV);
+  assert.equal(c.status, EXIT_OK, `${c.stdout}\n${c.stderr}`);
+  assert.match(readFileSync(paperFile(p, 'DRAFT.md'), 'utf8'), /deep, layered representations/);
+
+  // Still the user's file: refused and attention, never replaced.
+  const s = p.cli(['status'], ENV);
+  assert.match(s.stdout, EDITED);
+  const d = p.cli(['done', '--yolo', '--format', 'md'], ENV);
+  assert.equal(d.status, EXIT_BLOCKED, `${d.stdout}\n${d.stderr}`);
+  assert.match(d.stdout, EDITED);
+  assert.deepEqual(readFileSync(paperFile(p, 'FINAL.md')), edited);
+
+  // The step that unblocks it: move the file out of the paper folder.
+  renameSync(paperFile(p, 'FINAL.md'), join(p.root, 'FINAL.mine.md'));
+  const again = p.cli(['done', '--yolo', '--format', 'md'], ENV);
+  assert.equal(again.status, EXIT_OK, `${again.stdout}\n${again.stderr}`);
+  assert.equal(readFileSync(paperFile(p, 'FINAL.md'), 'utf8'), readFileSync(paperFile(p, 'DRAFT.md'), 'utf8'));
+  assert.deepEqual(readFileSync(join(p.root, 'FINAL.mine.md')), edited, 'the moved copy keeps the edit');
+  assert.match(p.cli(['status'], ENV).stdout, /current: complete/);
+});
+
+test('review round 2 (built CLI, upgrade path): a FINAL.md an older pensmith exported, with no DONE-RECORD.json, is done\'s own after a recompile — next is done, never "edited"; done replaces it and records it', () => {
+  const p = finishedPaper('done-final-upgrade');
+  const first = p.cli(['done', '--yolo', '--format', 'md'], ENV);
+  assert.equal(first.status, EXIT_OK, `${first.stdout}\n${first.stderr}`);
+  const exported = readFileSync(paperFile(p, 'FINAL.md'), 'utf8');
+  // What a paper finished before this release holds: FINAL.md and the
+  // paper-level VERIFICATION.md naming its text, no record.
+  rmSync(paperFile(p, 'DONE-RECORD.json'));
+  assert.match(readFileSync(paperFile(p, 'VERIFICATION.md'), 'utf8'), new RegExp(`^Text checked: \\.paper/DRAFT\\.md \\(sha256 ${sha(paperFile(p, 'FINAL.md'))}\\)$`, 'm'));
+  assert.match(p.cli(['status'], ENV).stdout, /current: complete/, 'unchanged since that done: complete');
+
+  // Recompiled since (a re-done section).
+  const draft2 = join(p.sectionDir(2, 'measurement'), 'DRAFT.md');
+  writeFileSync(draft2, readFileSync(draft2, 'utf8').replace('shapes what an observer can record', 'limits what an observer can record'));
+  assert.equal(p.cli(['verify', '2'], ENV).status, EXIT_OK);
+  assert.equal(p.cli(['compile', '--yolo'], ENV).status, EXIT_OK);
+  assert.notEqual(readFileSync(paperFile(p, 'DRAFT.md'), 'utf8'), exported);
+
+  const s = p.cli(['status'], ENV);
+  assert.doesNotMatch(s.stdout, /edited or written by hand|needs attention/);
+  assert.match(s.stdout, /next: done/);
+  const bare = p.cli(['--yolo'], ENV);
+  assert.equal(bare.status, EXIT_OK, `${bare.stdout}\n${bare.stderr}`);
+  assert.match(bare.stderr, /^pensmith: ran done; next: status \(done\)$/m);
+  assert.equal(readFileSync(paperFile(p, 'FINAL.md'), 'utf8'), readFileSync(paperFile(p, 'DRAFT.md'), 'utf8'), 'replaced by the new export');
+  assert.ok(existsSync(paperFile(p, 'DONE-RECORD.json')));
+  assert.match(p.cli(['status'], ENV).stdout, /current: complete/);
 });
