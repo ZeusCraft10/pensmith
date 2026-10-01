@@ -500,11 +500,13 @@ done.md step 2 and the README say so, and plugin.json was re-stamped; no bundle 
 
 **Merge notes for Phase 23b (close-out):** `plagiarism.ts`: `PlagiarismPacing` gains the required `maxBackoffMs` and `budgetPerPhraseMs` (`DDG_PACING` sets 30 000 and 12 000); new `budgetSpentReason(budgetMs)`; `runPlagiarism` keeps its signature. `PlagiarismOptions.pacing` and `_setPlagiarismPacingForTest` still take a `Partial`, so callers passing zero gaps are unaffected. A Tier-1 plagiarism memo that replays `runPlagiarism` results needs no change.
 
-**Gate (Linux, as root, Node 22.22.2, LANG=C.UTF-8, pandoc 3.9 on PATH):**
-- prebuild and build clean, with `git status --porcelain` empty after the build; lint, typecheck, `validate:manifests` and `bundle:check` (plugin version `0.1.0-dev+94ea9de82086`) all pass.
+**Gate (Linux, as root, Node 22.22.2, LANG=C.UTF-8, pandoc 3.9 on PATH), at `25b758d` after the fix:**
+- prebuild and build clean; the build left nothing in `git status --porcelain`. Lint, typecheck, `validate:manifests` and `bundle:check` (plugin version `0.1.0-dev+bcb7e05066a7`) all pass.
 - `test:tier-contract`: 63/63.
-- `CI=true npm test`: 3146 tests, 3145 pass, 0 skipped, 0 todo. The one failure is the root-only atomic-write case. HARDEN-03 ran 1000 drafts against pandoc 3.9, and the real-data-dir fingerprint was unchanged.
-- `e2e-smoke`: 17 PASS. `plugin:smoke` (Claude Code 2.1.286): all checks passed.
+- `CI=true npm test`: 3147 tests, 3146 pass, 0 skipped, 0 todo. The one failure is the root-only atomic-write case. HARDEN-03 ran 1000 drafts against pandoc 3.9, and the real-data-dir fingerprint was unchanged.
+- `e2e-smoke`: 17 PASS.
+
+Before the fix, at `e800683`, the same gate gave 3146 tests with 3145 passing (the same failure), tier-contract 63/63, `e2e-smoke` 17 PASS, and `plugin:smoke` (Claude Code 2.1.286) with all checks passing.
 
 **User path.** The integration pass's acceptance drivers (s1–s6) were re-run on the final code, together with a new `s7-rounds` driver for the review-round behaviour: @@ACCEPT_SCORE@@ checks pass (21-VERIFICATION §4). Where a review round deliberately changed the behaviour, the expectation was updated, and 21-VERIFICATION §4 names each change and the round that made it. These are consent recorded in the data dir, the non-breaking space after a locator label, the goldens normalisation and the "Works Cited" heading, the three-place skill search line, the service's own reason in an unavailable score, and tectonic `--only-cached`. The one product defect the re-run found, the unbounded plagiarism back-off, is described above. Every other failure in the first run was an expectation the review rounds had changed.
 

@@ -23,15 +23,15 @@ caveats: [no CI run has exercised Phase 21 code (CI-06), so the pandoc-dependent
 
 | Step | Result |
 |---|---|
-| `npm run prebuild`, `npm run build` | exit 0; `git status --porcelain` empty after the build |
+| `npm run prebuild`, `npm run build` | exit 0; the build left nothing in `git status --porcelain` (the only entry was the close-out's own `.planning` edit) |
 | `npm run lint` | exit 0 |
 | `npm run typecheck` | exit 0 |
 | `npm run validate:manifests` | exit 0 (`plugin/ (plugin.json, hooks.json, 8 skills, 16 workflow bodies) + marketplace.json + .mcp.json valid`) |
-| `npm run bundle:check` | exit 0 (`plugin/dist and the plugin version match what is committed`; plugin version `0.1.0-dev+94ea9de82086`) |
-| `npm run test:tier-contract` (CI=true) | exit 0: **63/63 pass** |
-| `CI=true npm test` | **3146 tests: 3145 pass, 1 fail, 0 skipped, 0 todo** (838 s). The failure is `tests/atomic-write.test.ts` "preserves OLD content on rename/write failure", which is root-only (`chmod 0o500` does not stop root; it passes in CI). HARDEN-03: `1000 drafts checked against pandoc 3.9 (seed 611516277)`. The runner's real-data-dir fingerprint reported no change. |
-| `node scripts/e2e-smoke.mjs` | exit 0: **PASS=17, FINDING=0, FAIL=0** |
-| `npm run plugin:smoke` (Claude Code 2.1.286) | exit 0, all checks passed: `validate --strict` (plugin, plugin.json, marketplace), the legacy negative control, a fresh clone installs with no build, 8 skills / 4 hooks / 1 MCP server, `mcp list` connected, 11 tools, no-node negative control, the git-marketplace install and update move to the new stamp |
+| `npm run bundle:check` | exit 0 (`plugin/dist and the plugin version match what is committed`; plugin version `0.1.0-dev+bcb7e05066a7`, re-stamped for the done.md change in `25b758d`) |
+| `npm run test:tier-contract` (CI=true) | exit 0: **63/63 pass** (also 63/63 at `e800683`) |
+| `CI=true npm test` | **3147 tests: 3146 pass, 1 fail, 0 skipped, 0 todo** (1740 s, while the concurrent Phase 23b session kept the load average near 14). The failure is `tests/atomic-write.test.ts` "preserves OLD content on rename/write failure", which is root-only (`chmod 0o500` does not stop root; it passes in CI). HARDEN-03: `1000 drafts checked against pandoc 3.9 (seed 1788553088)`. The runner's real-data-dir fingerprint reported no change. Before the fix, at `e800683`, the same suite ran 3146 tests: 3145 pass, with the same one failure (838 s; seed 611516277). |
+| `node scripts/e2e-smoke.mjs` | exit 0: **PASS=17, FINDING=0, FAIL=0** (also at `e800683`) |
+| `npm run plugin:smoke` (Claude Code 2.1.286, at `e800683`; the fix changed no bundle) | exit 0, all checks passed: `validate --strict` (plugin, plugin.json, marketplace), the legacy negative control, a fresh clone installs with no build, 8 skills / 4 hooks / 1 MCP server, `mcp list` connected, 11 tools, no-node negative control, the git-marketplace install and update move to the new stamp |
 
 The integration pass recorded the same gate at `c1eb302` on Node 22 and Node 24, with coverage of 93.65 % lines and 84.58 % branches (gate 80 / 66). Every review round re-ran the gate on Node 22 (21-SUMMARY §6–§8).
 
