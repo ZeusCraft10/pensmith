@@ -181,12 +181,20 @@ with `pensmith verify N`, and records no claim or decision for it.
    Bundle the cited-only `.paper/export/CITATIONS.bib` / `.ris` (library.ts
    `exportCitedCitations`, written before any Pandoc run). Then record
    `last_verified` (VRFY-28), write the source `.paper/VERIFICATION.md` (gate,
-   decisions, quote lists, honesty, plagiarism, Pass-4 sections), and — when
-   no humanizer wrote FINAL.md — write `.paper/FINAL.md` from the exported
-   `DRAFT.md` whenever FINAL.md is absent or older than it (a humanized FINAL.md
-   of this compile is kept). The router's terminus is a FINAL.md not older than
-   the compiled draft, so after a recompile the next `done` refreshes it and the
-   bare loop settles at `status (done)` instead of re-running `done`.
+   decisions, quote lists, honesty, plagiarism, Pass-4 sections), and leave
+   `.paper/FINAL.md` holding exactly the text that was exported: the humanized
+   FINAL.md GATE-04 judged, or — when no humanizer wrote one — the compiled
+   `DRAFT.md`, written whenever FINAL.md differs from it. Then write
+   `.paper/DONE-RECORD.json` (`bin/lib/done-record.ts`): the sha256 of the
+   compiled draft the gate judged and of that FINAL.md. The router's terminus
+   is "FINAL.md and DRAFT.md hold the bytes DONE-RECORD.json recorded", so a
+   recompile sends the paper back to `done`, and the bare loop settles at
+   `status (done)` instead of re-running `done`. A FINAL.md done did not leave
+   — edited or written by hand — is refused in step 1 (exit 4, never exported,
+   never replaced; move it out of the paper folder or make the edit in the
+   section drafts) and is attention for the router, never "complete". When
+   GATE-04 refuses a humanized FINAL.md, the FINAL.md it replaced is put back
+   (or removed, when there was none).
 
 8. **Shell fallback** (TIER-06 equivalence path): `pensmith done [--yolo]
    [--format docx|pdf|latex|md] [--raw]`.

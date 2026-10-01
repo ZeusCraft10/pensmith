@@ -35,8 +35,8 @@
 //
 // PURE: no I/O.
 
-import { renderPass1VerdictRow, dryRunVerificationReason } from './verdict-rows.js';
-import { DRAFT_VERDICTS, LEGACY_UNAVAILABLE_VERDICTS, PASS1_VERDICTS, PASS3_VERDICTS, UNATTRIBUTED_CITEKEY } from './verdicts.js';
+import { renderPass1VerdictRow, dryRunVerificationReason, reviseCanRepair } from './verdict-rows.js';
+import { DRAFT_ROW_KEY, DRAFT_VERDICTS, LEGACY_UNAVAILABLE_VERDICTS, PASS1_VERDICTS, PASS3_VERDICTS, UNATTRIBUTED_CITEKEY } from './verdicts.js';
 import type { GateRow, AcceptedQuote } from './gate.js';
 import type { FreshnessResult } from './freshness.js';
 
@@ -54,8 +54,8 @@ export const NO_CITATIONS_NOTE = 'Note: DRAFT.md cites no sources ([@citekey]) �
 /** The Summary's label for an UNVERIFIABLE-QUOTE row the user accepted. */
 export const ACCEPTED_QUOTE_LABEL = 'UNVERIFIABLE-QUOTE (accepted)';
 
-/** The key slot of a draft-check row. */
-export const DRAFT_ROW_KEY = 'draft';
+/** The key slot of a draft-check row (verdicts.ts). */
+export { DRAFT_ROW_KEY };
 
 export type SummaryPass = 'Pass-1' | 'Pass-3' | 'Draft' | 'Pass-2' | 'Pass-4' | 'Freshness';
 
@@ -424,8 +424,13 @@ export function verificationRecordReasons(md: string | null, id: string, draftHa
   if (dry !== null) return [dry];
   const out: string[] = [];
   if (doc.status.toLowerCase() === 'failed') {
+    // `plan N --revise` swaps or removes a flagged citation; a record whose
+    // failing rows are all text (an unsupported citation form, an unattributed
+    // quote, a draft check) needs an edit or a re-draft instead.
     out.push(
-      `VERIFICATION.md Status is 'failed' — repair the flagged citations (\`pensmith plan ${id} --revise\`) or re-draft (\`pensmith write ${id}\`), then \`pensmith verify ${id}\``,
+      reviseCanRepair(md)
+        ? `VERIFICATION.md Status is 'failed' — repair the flagged citations (\`pensmith plan ${id} --revise\`) or re-draft (\`pensmith write ${id}\`), then \`pensmith verify ${id}\``
+        : `VERIFICATION.md Status is 'failed' — edit the flagged text in the section's DRAFT.md (a citation written as [@citekey]) or re-draft (\`pensmith write ${id}\`), then \`pensmith verify ${id}\``,
     );
   }
   if (draftHash !== null && doc.draftHash !== null && doc.draftHash !== draftHash) {

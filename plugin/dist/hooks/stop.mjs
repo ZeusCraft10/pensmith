@@ -8153,6 +8153,7 @@ var init_dry_run_paper = __esm({
       "COMPILE-INPUTS.json",
       "VERIFICATION.md",
       "FINAL.md",
+      "DONE-RECORD.json",
       "HANDOFF.json",
       "sections",
       "export"

@@ -153,8 +153,15 @@ export interface ChainSandboxOptions {
   readonly env?: Record<string, string | undefined>;
 }
 
-/** Keys a test's own environment must never leak into a spawned CLI. */
+/**
+ * Keys a test's own environment must never leak into a spawned CLI.
+ * PENSMITH_CONTACT_EMAIL too: a chain runs as CI runs it, with no polite-pool
+ * email (Pass 3 cannot ask Unpaywall without one), even when the developer
+ * exported one for the live lanes (CONTRIBUTING); a case that needs one sets
+ * it through its own env (main-branch merge review, round 1).
+ */
 const DROPPED_ENV = new Set([
+  'PENSMITH_CONTACT_EMAIL',
   'PENSMITH_PAPER_ROOT',
   'PENSMITH_PROMPT_MODE',
   'PENSMITH_DEBUG',

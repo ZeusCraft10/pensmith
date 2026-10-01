@@ -6,6 +6,10 @@
 //     data note — never the gate result with its parsed CITATIONS.bib, whose
 //     citation-js entries each carry the whole parse (the reply grew with the
 //     square of the library and carried every uncited abstract, unfenced);
+//   - a verify that stops before judging the draft (the section's last write
+//     failed, or it has no DRAFT.md) adds the line the CLI prints for it —
+//     the reason and `pensmith write N` — fenced after VERB_WORDS_NOTE, and
+//     `recorded: false` when it wrote no VERIFICATION.md (main-branch merge review, round 1);
 //   - the server cannot prompt: with PENSMITH_PROMPT_MODE=numbered in its
 //     environment, the quote-accept gate (VRFY-20) is skipped as without a
 //     terminal — it never reads an answer from the JSON-RPC stdin, so the call
@@ -18,15 +22,16 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { EXIT_BLOCKED } from '../bin/lib/exit-codes.js';
+import { EXIT_BLOCKED, EXIT_ERROR } from '../bin/lib/exit-codes.js';
 import { FENCE_OPEN, unfence } from '../bin/lib/untrusted-fence.js';
 import { verifyReply, MAX_REPLY_ROWS, MAX_REPLY_ROW_CHARS } from '../bin/lib/verify/verify-reply.js';
 import type { GateRow } from '../bin/lib/verify/gate.js';
 import { MCP_BIN, REPO, runCli } from './helpers/paper-cli-harness.js';
+import { VERB_WORDS_NOTE } from '../mcp/tools.js';
 import { seedGatePaper, LECUN_BIB, type GatePaper } from './helpers/gate-paper.js';
 
 const BUNDLED_SERVER = join(REPO, 'plugin', 'dist', 'mcp', 'server.mjs');
@@ -82,6 +87,13 @@ async function callVerify(server: string, p: GatePaper, env: Record<string, stri
   }
 }
 
+/** The one fenced block after VERB_WORDS_NOTE in a reply, unfenced (null: none). */
+function verbWords(r: Reply): string | null {
+  const at = r.blocks.findIndex((b) => b === VERB_WORDS_NOTE);
+  if (at < 0) return null;
+  return unfence(r.blocks[at + 1] ?? '');
+}
+
 function planStatus(p: GatePaper): string | undefined {
   return /^status:\s*(\S+)/m.exec(readFileSync(join(p.sectionDir(1, 'intro'), 'PLAN.md'), 'utf8'))?.[1];
 }
@@ -100,7 +112,8 @@ for (const leg of LEGS) {
     assert.equal(r.blocks.length, 3, 'the JSON summary, the data note, the fenced rows');
     const body = JSON.parse(r.blocks[0] ?? '') as { exit_code: number; result: Record<string, unknown> };
     assert.equal(body.exit_code, EXIT_BLOCKED);
-    assert.deepEqual(Object.keys(body.result).sort(), ['blocked', 'blocking_rows', 'ok', 'path', 'status', 'summary']);
+    assert.deepEqual(Object.keys(body.result).sort(), ['blocked', 'blocking_rows', 'ok', 'path', 'recorded', 'status', 'summary']);
+    assert.equal(body.result['recorded'], true, 'this call wrote the VERIFICATION.md it names');
     assert.equal(body.result['status'], 'unverifiable');
     assert.equal(body.result['blocked'], true);
     assert.equal(body.result['blocking_rows'], 1);
@@ -120,6 +133,49 @@ for (const leg of LEGS) {
     // The rows are the ones VERIFICATION.md lists.
     const verification = readFileSync(join(p.sectionDir(1, 'intro'), 'VERIFICATION.md'), 'utf8');
     for (const line of rows.split('\n')) assert.ok(verification.includes(line), `VERIFICATION.md lists: ${line}`);
+  });
+
+  test(`pensmith_verify on a section whose last write failed: the refusal and \`pensmith write N\` arrive fenced, and the result says no VERIFICATION.md was written — ${leg.name}`, async () => {
+    assert.ok(existsSync(leg.server), `${leg.server} is missing — run \`npm run build\` / \`npm run bundle\``);
+    const p = quotePaper('mcp-verify-failed-write', 0);
+    const planPath = join(p.sectionDir(1, 'intro'), 'PLAN.md');
+    const reason = 'citekey x not assigned to section 1';
+    writeFileSync(planPath, readFileSync(planPath, 'utf8').replace(/^status: .*$/m, `status: failed\nfailure_reason: '${reason}'`));
+    // An earlier verdict on disk that the refusal must not be read as.
+    const verifPath = join(p.sectionDir(1, 'intro'), 'VERIFICATION.md');
+    const stale = '# Verification — Section 1: intro\n\nStatus: verified\n';
+    writeFileSync(verifPath, stale);
+
+    const cli = runCli(p.sb, p.root, ['verify', '1', '--yolo'], { env: { PENSMITH_CONTACT_EMAIL: undefined } });
+    assert.equal(cli.status, EXIT_BLOCKED, `${cli.stdout}\n${cli.stderr}`);
+    const cliLine = cli.stderr.split('\n').find((l) => l.startsWith('pensmith verify: section 1 not verified'));
+    assert.ok(cliLine !== undefined, cli.stderr);
+
+    const r = await callVerify(leg.server, p, {});
+    assert.equal(r.isError, true, r.blocks.join('\n'));
+    const body = JSON.parse(r.blocks[0] ?? '') as { exit_code: number; result: Record<string, unknown> };
+    assert.equal(body.exit_code, EXIT_BLOCKED);
+    assert.equal(body.result['status'], 'failed');
+    assert.equal(body.result['recorded'], false, 'the VERIFICATION.md on disk is not this call\'s verdict');
+    assert.ok(!('message' in body.result), 'the words are not in the JSON half');
+    assert.ok(!(r.blocks[0] ?? '').includes(reason), 'the JSON half quotes nothing from PLAN.md');
+    const words = verbWords(r);
+    assert.equal(words, cliLine, 'the fenced words are the line the CLI prints');
+    assert.match(words ?? '', /its last write failed \(citekey x not assigned to section 1\).*run `pensmith write 1`/);
+    assert.equal(readFileSync(verifPath, 'utf8'), stale, 'nothing was written');
+    assert.equal(planStatus(p), 'failed');
+  });
+
+  test(`pensmith_verify on a section with no DRAFT.md: the \`pensmith write N\` line arrives fenced — ${leg.name}`, async () => {
+    assert.ok(existsSync(leg.server), `${leg.server} is missing — run \`npm run build\` / \`npm run bundle\``);
+    const p = seedGatePaper('mcp-verify-no-draft', [{ n: 1, slug: 'intro', assigned: ['lecun2015'], draft: null }], LECUN_BIB);
+    const r = await callVerify(leg.server, p, {});
+    assert.equal(r.isError, true, r.blocks.join('\n'));
+    const body = JSON.parse(r.blocks[0] ?? '') as { exit_code: number; result: Record<string, unknown> };
+    assert.equal(body.exit_code, EXIT_ERROR);
+    assert.equal(body.result['status'], 'unverifiable');
+    assert.equal(body.result['recorded'], true);
+    assert.match(verbWords(r) ?? '', /^pensmith verify: DRAFT\.md missing — wrote unverifiable VERIFICATION\.md to .*; run `pensmith write 1` first$/);
   });
 
   test(`pensmith_verify never prompts on the JSON-RPC stdin: PENSMITH_PROMPT_MODE=numbered skips the quote-accept gate and releases the paper — ${leg.name}`, async () => {
@@ -162,9 +218,17 @@ test('verifyReply: lists only blocking rows, at most MAX_REPLY_ROWS of them, eac
   ]);
 });
 
-test('verifyReply: an early refusal (no gate) is a summary with no rows; a thrown verb (null) is no reply', () => {
-  const reply = verifyReply({ ok: false, status: 'failed', blocked: true, path: '/p/VERIFICATION.md' });
-  assert.deepEqual(reply, { summary: { ok: false, status: 'failed', blocked: true, path: '/p/VERIFICATION.md', summary: [], blocking_rows: 0 }, rows: [] });
+test('verifyReply: an early refusal (no gate) is a summary with no rows and its line as the message; a thrown verb (null) is no reply', () => {
+  const line = 'pensmith verify: section 1 not verified — its last write failed (r); the DRAFT.md on disk is older — run `pensmith write 1`';
+  const reply = verifyReply({ ok: false, status: 'failed', blocked: true, path: '/p/VERIFICATION.md', recorded: false, message: line });
+  assert.deepEqual(reply, {
+    summary: { ok: false, status: 'failed', blocked: true, path: '/p/VERIFICATION.md', recorded: false, summary: [], blocking_rows: 0 },
+    rows: [],
+    message: line,
+  });
+  const judged = verifyReply({ ok: true, status: 'verified', blocked: false, path: '/p/VERIFICATION.md', gate: { rows: [] } });
+  assert.equal(judged?.summary.recorded, true);
+  assert.equal(judged?.message, null);
   assert.equal(verifyReply(null), null);
   assert.equal(verifyReply({ ok: true }), null);
 });

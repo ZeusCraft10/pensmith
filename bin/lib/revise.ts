@@ -44,37 +44,15 @@ import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
 import { extractCitedKeysForVerification, findCitations, removeCitekey, renameCitekey } from './citation-token.js';
 import { sectionDraft, sectionPlan, sectionVerification } from './paths.js';
-import { ACCEPTABLE_QUOTE_VERDICT, UNATTRIBUTED_CITEKEY, textRowLine } from './verify/verdicts.js';
-import { parseBlockingVerdictRows } from './verify/verdict-rows.js';
-import { DRAFT_ROW_KEY } from './verify/verification-md.js';
+import { ACCEPTABLE_QUOTE_VERDICT, textRowLine } from './verify/verdicts.js';
+import { parseBlockingVerdictRows, REVISABLE_VERDICTS, revisableRows, type FailingRow } from './verify/verdict-rows.js';
 import { formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
 
 // --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
 
-/**
- * The verifier verdicts that --revise repairs by swapping or removing the
- * flagged citation: every failing verdict whose row names a citekey (Phase 20:
- * RETRACTED, UNASSIGNED, UNPARSEABLE and UNRESOLVABLE join FABRICATED,
- * MIS-CITED and NOT_FOUND). The rows without a citekey (a citation form the
- * grammar cannot read, an unattributed quote, NO-CITATIONS) need a re-plan —
- * REV-03 (Phase 22).
- */
-export const REVISABLE_VERDICTS = ['FABRICATED', 'MIS-CITED', 'RETRACTED', 'UNASSIGNED', 'UNPARSEABLE', 'UNRESOLVABLE', 'NOT_FOUND'] as const;
-
-/**
- * One verdict row of VERIFICATION.md (D-20-20): a Pass-3 quote row
- * `- <key> [q<N>] ("<snippet>…"): **<VERDICT>** — rest` or a keyed row
- * `- <key>: **<VERDICT>** — rest` (any citekey the grammar accepts). Null for
- * any other line.
- */
-function verdictRowOf(line: string): { citekey: string; verdict: string; rest: string } | null {
-  const m =
-    /^\s*-\s*(\S+?)(?:\s+\[q[1-9]\d*\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line) ??
-    /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line);
-  if (!m || m[1] === undefined || m[2] === undefined) return null;
-  return { citekey: m[1], verdict: m[2], rest: m[3] ?? '' };
-}
+/** The verdicts --revise repairs (verify/verdict-rows.ts, shared with the router's wording). */
+export { REVISABLE_VERDICTS };
 
 // Strict-JSON contract for the revise-swap LLM response (04-RESEARCH §I).
 const ReviseSwapSchema = z.object({
@@ -137,10 +115,7 @@ export interface ReviseResult {
 // VERIFICATION.md parsing — first failing citation, in appearance order.
 // ---------------------------------------------------------------------------
 
-interface FailingCitation {
-  citekey: string;
-  reason: string;
-}
+type FailingCitation = FailingRow;
 
 /**
  * Every failing citation in VERIFICATION.md, in order of appearance (each
@@ -153,35 +128,9 @@ export function failingCitations(verificationMd: string): FailingCitation[] {
   return failingRows(verificationMd).citations;
 }
 
-/**
- * The key slot of a row that names no citation (review round 2): a text
- * finding (`(L<line>)` — an UNPARSEABLE or UNSUPPORTED-FORM text), an
- * identifier written in the prose (`doi:10.…`, `arXiv:…`, `PMID:…`), a draft
- * check (`draft`) or an unattributed quote. revise cannot swap one: the text
- * needs a hand edit or a re-draft.
- */
-function isTextRowKey(key: string): boolean {
-  if (key === DRAFT_ROW_KEY || key === UNATTRIBUTED_CITEKEY) return true;
-  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key)) return true;
-  // A text finding's key slot `(L<line>)` — never a citekey (review round 3: a
-  // citekey `L12` is a citation revise can repair).
-  return textRowLine(key) !== null;
-}
-
-/** The failing rows of VERIFICATION.md: the citations revise can repair, and the text rows it cannot (each once). */
+/** The failing rows of VERIFICATION.md: the citations revise can repair, and the text rows it cannot (verdict-rows.ts). */
 function failingRows(verificationMd: string): { citations: FailingCitation[]; textRows: FailingCitation[] } {
-  const citations: FailingCitation[] = [];
-  const textRows: FailingCitation[] = [];
-  const seen = new Set<string>();
-  for (const line of verificationMd.split(/\r?\n/)) {
-    const row = verdictRowOf(line);
-    if (row === null || seen.has(row.citekey)) continue;
-    if (!(REVISABLE_VERDICTS as readonly string[]).includes(row.verdict)) continue;
-    seen.add(row.citekey);
-    const f = { citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, '').trim()}` };
-    (isTextRowKey(row.citekey) ? textRows : citations).push(f);
-  }
-  return { citations, textRows };
+  return revisableRows(verificationMd);
 }
 
 /**

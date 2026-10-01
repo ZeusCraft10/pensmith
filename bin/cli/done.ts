@@ -24,7 +24,7 @@
 // (GRND-19); done prints that path and says it is a dry-run export.
 
 import { defineCommand } from 'citty';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
@@ -48,7 +48,8 @@ import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
 import { PASS2_TABLE_HEADER, PASS2_TABLE_HEADER_V1, quoteTextSha256 } from '../lib/verify/verdicts.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { outlineIdentitiesSync, registeredSectionsSync, sectionRegistryProblem, type SectionIdentity } from '../lib/section-registry.js';
-import { compileRecordProblems } from '../lib/compile-inputs.js';
+import { compileRecordProblems, fileSha256 } from '../lib/compile-inputs.js';
+import { editedFinalReason, finalMdState, writeDoneRecord } from '../lib/done-record.js';
 import { verificationRecordReasons } from '../lib/verify/verification-md.js';
 import { dryRunVerificationReason, parseBlockingVerdictRows, verdictRowReason } from '../lib/verify/verdict-rows.js';
 import {
@@ -843,16 +844,6 @@ export async function recheckUnknownRetractions(paperRoot: string, text: string)
   return out;
 }
 
-/** True when FINAL.md is absent or older than the compiled DRAFT.md. Never throws. */
-function finalMdStale(finalMdPath: string, draftPath: string): boolean {
-  try {
-    if (!existsSync(finalMdPath)) return true;
-    return statSync(finalMdPath).mtimeMs < statSync(draftPath).mtimeMs;
-  } catch {
-    return true;
-  }
-}
-
 export const doneCommand = defineCommand({
   meta: {
     name: 'done',
@@ -917,6 +908,11 @@ export const doneCommand = defineCommand({
     const sections = doneSections(paperRoot);
     const blocking = runExportBlockingGate(paperRoot);
     const reasons = [...blocking.reasons];
+    // FINAL.md is the file pensmith calls the finished paper. One done did not
+    // leave — edited or written by hand — is never exported and never
+    // replaced (the humanizer would overwrite it too): refused, naming the
+    // remedy (done-record.ts; main-branch merge review, round 1).
+    if (finalMdState(paperRoot) === 'edited') reasons.push(editedFinalReason(paperRoot));
     if (sectionRegistryProblem(paperRoot) === null && sections.length > 0) {
       const current = new Map(sections.map((s) => [s.id, s.verifiedHash]));
       reasons.push(...compileRecordProblems(paperRoot, sections.map((s) => s.identity), current));
@@ -933,7 +929,7 @@ export const doneCommand = defineCommand({
     for (const r of draftGate.refusals) reasons.push(`.paper/DRAFT.md: ${r}`);
     if (reasons.length > 0) {
       writeOut(
-        'pensmith done: BLOCKED — export refused (unresolved blocking citations, unverified or stale sections, or a stale compiled draft):\n',
+        'pensmith done: BLOCKED — export refused (unresolved blocking citations, unverified or stale sections, a stale compiled draft, or a FINAL.md done did not write):\n',
       );
       for (const r of reasons) writeOut(`  - ${r}\n`);
       writeOut(
@@ -963,6 +959,12 @@ export const doneCommand = defineCommand({
     const before = await scoreHonesty(draftMd);
 
     // (3) DONE-03 humanize (skip-clean if absent / no transport), honesty after.
+    // The humanizer writes FINAL.md before GATE-04 judges it: the FINAL.md it
+    // replaces (done's own, or none — step (1) refused any other) is put back
+    // when GATE-04 refuses, so an unjudged humanized text never stays behind
+    // as the finished paper.
+    const finalMdPath = join(paperDir(paperRoot), 'FINAL.md');
+    const finalBefore = existsSync(finalMdPath) ? readFileSync(finalMdPath) : null;
     let finalPath: string | null = null;
     let after: Awaited<ReturnType<typeof scoreHonesty>> = null;
     if (args.raw !== true) {
@@ -998,8 +1000,14 @@ export const doneCommand = defineCommand({
       const finalGate = await recomputeExportGate(paperRoot, finalMd, { sections, bib });
       finalReasons.push(...finalGate.refusals);
       if (finalReasons.length > 0) {
+        if (finalBefore === null) rmSync(finalMdPath, { force: true });
+        else await atomicWriteFile(finalMdPath, finalBefore);
         writeOut('pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification:\n');
         for (const r of finalReasons) writeOut(`  - ${r}\n`);
+        writeOut(
+          `pensmith done: the humanized text was not kept (FINAL.md ${finalBefore === null ? 'was removed' : 'is back as it was'}); ` +
+            '`pensmith done --raw` exports the compiled draft without the humanizer.\n',
+        );
         return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
       }
       exportedText = finalMd;
@@ -1137,22 +1145,24 @@ export const doneCommand = defineCommand({
     );
 
 
-    // Audit #15 / review round 2: the router's terminus is "FINAL.md present and
-    // not older than DRAFT.md" (router.ts). In Tier 2 there is usually no
-    // humanizer, so runHumanizer returns null and writes no FINAL.md — mark
-    // completion by writing FINAL.md from what was exported: the humanized
-    // FINAL.md when a humanizer ran (already on disk), otherwise the compiled
-    // draft (the manuscript is final, just not humanized). Written whenever it
-    // is ABSENT OR OLDER than the DRAFT.md just exported: after a recompile (a
-    // section re-drafted or re-verified, a re-outline) the old FINAL.md is
-    // stale, and keeping it would send every later bare `pensmith` back to
-    // `done` — re-running the paid advisory passes, the plagiarism queries and
-    // the export gate — forever. A FINAL.md newer than DRAFT.md (a humanized
-    // manuscript of THIS compile) is kept.
-    const finalMdPath = join(paperDir(paperRoot), 'FINAL.md');
-    if (finalPath === null && finalMdStale(finalMdPath, draftPath)) {
-      await atomicWriteFile(finalMdPath, draftMd);
+    // Audit #15, VRFY-26 (main-branch merge review, round 1): FINAL.md
+    // holds exactly the text this done judged and exported — the humanized
+    // manuscript when a humanizer ran (already on disk), otherwise the
+    // compiled draft (final, just not humanized), written on every done whose
+    // FINAL.md differs from it (step (1) refused one done did not write). The
+    // record of both hashes is the router's terminus (done-record.ts): the
+    // paper is complete only while DRAFT.md and FINAL.md hold these bytes, so
+    // a recompile sends it back to done and a hand edit to attention — never
+    // an mtime comparison, and never "complete" for a FINAL.md no gate judged.
+    if (finalPath === null && fileSha256(finalMdPath) !== sha(exportedText)) {
+      await atomicWriteFile(finalMdPath, exportedText);
     }
+    await writeDoneRecord(paperRoot, {
+      doneAt: new Date().toISOString(),
+      compiledDraftSha256: sha(draftMd),
+      finalSha256: sha(exportedText),
+      humanized: finalPath !== null,
+    });
 
     writeOut(`pensmith done: exported ${result.outputPath}\n`);
     if (networkMode().dryRun) {

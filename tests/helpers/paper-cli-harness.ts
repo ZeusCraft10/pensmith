@@ -255,6 +255,23 @@ export function writeCompileRecord(root: string, sections: Array<{ n: number; sl
   writeFileSync(join(root, '.paper', 'COMPILE-INPUTS.json'), JSON.stringify(record, null, 2) + '\n');
 }
 
+/**
+ * The DONE-RECORD.json v1 a done that exported the current `.paper/DRAFT.md`
+ * as the current `.paper/FINAL.md` writes (done-record.ts): with it, the
+ * router calls the paper complete.
+ */
+export function writeDoneRecordFile(root: string): void {
+  const sha = (p: string): string => createHash('sha256').update(readFileSync(p)).digest('hex');
+  const record = {
+    $schemaVersion: 1,
+    done_at: '2026-01-01T00:00:00.000Z',
+    compiled_draft_sha256: sha(join(root, '.paper', 'DRAFT.md')),
+    final_sha256: sha(join(root, '.paper', 'FINAL.md')),
+    humanized: false,
+  };
+  writeFileSync(join(root, '.paper', 'DONE-RECORD.json'), JSON.stringify(record, null, 2) + '\n');
+}
+
 // ---------------------------------------------------------------------------
 // Snapshots — "nothing was changed"
 // ---------------------------------------------------------------------------

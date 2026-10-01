@@ -101,6 +101,7 @@ const PAPER_ARTIFACTS: ReadonlySet<string> = new Set([
   'COMPILE-INPUTS.json',
   'VERIFICATION.md',
   'FINAL.md',
+  'DONE-RECORD.json',
   'HANDOFF.json',
   'sections',
   'export',

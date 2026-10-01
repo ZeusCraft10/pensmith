@@ -14,6 +14,10 @@
 // same answers). One line per check:
 //   PASS  <check>
 //   FAIL  <check>: <why>          → the script exits 1
+//   INCONCLUSIVE <check>: <why>   → an expected non-OK verdict (FABRICATED,
+//                                   UNRESOLVABLE) was not observed because its
+//                                   lookup got no answer; PASS never claims it.
+//                                   With PENSMITH_LIVE_STRICT=1 the script exits 1
 //   INFO  <line>                  → context (e.g. a lookup that got no answer)
 //
 // The checks:
@@ -40,6 +44,10 @@
 // row whose lookup got no answer (UNVERIFIABLE-NETWORK — a throttled or
 // unreachable service, e.g. OpenAlex's keyless daily budget) is reported as
 // INFO, not counted: it failed closed, and what it would have been is unknown.
+// When such a row was expected to be FABRICATED or UNRESOLVABLE, that verdict
+// is INCONCLUSIVE, and the PASS line names only the verdicts it observed
+// (main-branch merge review, round 1: evidence for VRFY-12 must come from a
+// run that produced the verdict).
 //
 // How it runs: the parent (plain node) checks the contact email and the build,
 // then runs one CHILD (under `node --import tsx`, for the seeding helper and the
@@ -159,8 +167,12 @@ function verifySection(root, dir) {
 }
 
 async function runChild(work) {
-  const results = { pass: 0, fail: 0 };
+  const results = { pass: 0, fail: 0, inconclusive: 0 };
   const line = (tag, name, why) => process.stdout.write(`${tag.padEnd(5)} ${name}${why ? `: ${why}` : ''}\n`);
+  const inconclusive = (name, why) => {
+    results.inconclusive += 1;
+    line('INCONCLUSIVE', name, why);
+  };
   const pass = (name) => {
     results.pass += 1;
     line('PASS', name);
@@ -190,10 +202,15 @@ async function runChild(work) {
     const counted = [];
     for (const [key, want] of VRFY11) {
       const got = v.rows.get(key);
-      if (got?.verdict === 'UNVERIFIABLE-NETWORK' && want !== 'UNVERIFIABLE-NETWORK') line('INFO', `VRFY-11 ${key} not counted (no answer)`, got.line);
-      else counted.push([key, want]);
+      if (got?.verdict === 'UNVERIFIABLE-NETWORK' && want !== 'UNVERIFIABLE-NETWORK') {
+        line('INFO', `VRFY-11 ${key} not counted (no answer)`, got.line);
+        // An expected refusal that never happened is not evidence of one.
+        if (!want.startsWith('OK')) inconclusive(`VRFY-11 / VRFY-12: ${key} ${want}`, `not observed — its lookup got no answer (${got.line})`);
+      } else counted.push([key, want]);
     }
-    expectRows('VRFY-11 / VRFY-12: the acceptance list verifies at each registrar (fake DOI FABRICATED, unknown work UNRESOLVABLE)', v, counted);
+    const NON_OK_LABEL = { fake2024: 'fake DOI FABRICATED', nobody2017: 'unknown work UNRESOLVABLE' };
+    const observed = counted.filter(([, want]) => !want.startsWith('OK')).map(([key, want]) => NON_OK_LABEL[key] ?? `${key} ${want}`);
+    expectRows(`VRFY-11 / VRFY-12: the acceptance list verifies at each registrar${observed.length > 0 ? ` (${observed.join(', ')})` : ''}`, v, counted);
     const noid = v.rows.get('lecun2015noid');
     if (noid && !/metadata search matched DOI 10\.1038\/nature14539/.test(noid.line)) fail('VRFY-12: the metadata-search row names the DOI it found', noid.line);
     else if (noid) pass('VRFY-12: the metadata-search row names the DOI it found');
@@ -297,8 +314,9 @@ async function runChild(work) {
     }
   }
 
-  process.stdout.write(`live-verify: ${results.pass} passed, ${results.fail} failed\n`);
-  return results.fail > 0 ? 1 : 0;
+  process.stdout.write(`live-verify: ${results.pass} passed, ${results.fail} failed, ${results.inconclusive} inconclusive\n`);
+  if (results.fail > 0) return 1;
+  return results.inconclusive > 0 && process.env.PENSMITH_LIVE_STRICT === '1' ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------

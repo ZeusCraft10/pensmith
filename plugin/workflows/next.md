@@ -24,8 +24,9 @@ It calls `resolveNextAction()` (`bin/lib/router.ts`) — a total, never-throwing
 paper's files: `.paper/STATE.json`, each section's PLAN.md frontmatter (read through the versioned
 loader without write-back), each section's DRAFT.md hash (against `verified_against_draft_hash`),
 OUTLINE.md's rows (which must list the sections STATE.json registers), `OUTLINE.rejected.md`,
-`COMPILE-INPUTS.json` (what the compiled draft was made from) and the mtimes of the compiled
-`DRAFT.md` and `FINAL.md`. The resolver IGNORES HANDOFF.json (H4) and NEVER returns
+`COMPILE-INPUTS.json` (what the compiled draft was made from), `DONE-RECORD.json` (the compiled
+draft and the FINAL.md done exported) and the mtimes of the compiled `DRAFT.md` and the section
+files (the staleness check of a draft compiled with no record). The resolver IGNORES HANDOFF.json (H4) and NEVER returns
 `{ verb:'resume' }`.
 
 **One invocation completes one step (GRND-18, D-18-28).** A step is one verb — intake,
@@ -79,7 +80,10 @@ Once every section is verified, compile runs whenever the compiled `DRAFT.md` is
 `COMPILE-INPUTS.json` says it was made from other sections or other section draft/verification
 bytes (a redone, re-verified, added or dropped section — decided from content, so a git checkout
 or a sync client that reorders mtimes does not recompile), and done runs whenever `FINAL.md` is
-missing or older than the compiled draft (done refreshes it every time it exports). done exports
+missing or is done's text of an older compiled draft (`DONE-RECORD.json`: done records the compiled
+draft and the FINAL.md it exported every time; a `FINAL.md` that is byte-for-byte the compiled draft
+with no record counts as done's too). A `FINAL.md` done did not leave — edited or written by hand —
+is attention naming the remedy, never "complete": done neither exports nor replaces it. done exports
 only a compiled draft its `COMPILE-INPUTS.json` proves compile wrote (VRFY-27), so a compiled
 draft with no usable record (an older pensmith's compile) is compiled again first. When the
 user's OUTLINE.md and STATE.json list different sections, the router reports attention naming

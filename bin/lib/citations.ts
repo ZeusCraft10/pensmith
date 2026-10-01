@@ -493,7 +493,8 @@ export function parseBibEntries(text: string): BibEntriesResult {
 /**
  * citation-js keeps, on every entry, a `_graph` of the parse that holds the
  * whole input text's raw entries: serialized, a bibliography of n entries is
- * n² in size (a 60-entry library became megabytes in the MCP verify reply).
+ * n² in size (a 60-entry library once made the MCP verify reply megabytes
+ * long; that reply is now a projection that carries no entry, verify-reply.ts).
  * The graph stays readable (the raw fields CSL has no slot for — rawBibFields)
  * but is not enumerable, so JSON and object spreads leave it out.
  */

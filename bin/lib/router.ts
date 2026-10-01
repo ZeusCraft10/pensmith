@@ -6,7 +6,9 @@
 // verified_against_draft_hash), OUTLINE.md's rows (section-registry.ts: they must
 // list the sections STATE.json registers), OUTLINE.rejected.md,
 // COMPILE-INPUTS.json (compile-inputs.ts: the content the compiled draft was made
-// from) and the compiled DRAFT.md / FINAL.md mtimes. It IGNORES HANDOFF.json entirely (H4 — see the PINNED ORDERING
+// from), DONE-RECORD.json (done-record.ts: the DRAFT.md and FINAL.md bytes done
+// exported) and the compiled DRAFT.md's and the sections' mtimes (the fallback
+// with no compile record). It IGNORES HANDOFF.json entirely (H4 — see the PINNED ORDERING
 // in 07-RESEARCH): a non-done HANDOFF must NOT trap bare /pensmith in a resume
 // loop, so the resolver always returns a concrete next WORK verb (plan / write /
 // verify / compile / done) or a status terminus, NEVER { verb:'resume' }. The
@@ -64,7 +66,10 @@
 // After the walk: a compiled DRAFT.md whose bytes differ from the sha256
 // COMPILE-INPUTS.json recorded (a hand edit, VRFY-27) → status/attention
 // (recompiling would replace the edit); else compile when the compiled draft
-// is stale, done when FINAL.md is, status/done otherwise.
+// is stale; a FINAL.md done did not write (edited or written by hand) →
+// status/attention (done neither exports nor replaces it); done when FINAL.md
+// is absent or stale; status/done while FINAL.md and DRAFT.md hold the bytes
+// DONE-RECORD.json recorded.
 //
 // Imports: loadState/StateNotFoundError (state.ts), existsSync (node:fs), join
 // (node:path), paperDir/sectionPlan (paths.ts), loadFrontmatterDocSync
@@ -81,11 +86,12 @@ import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import { computeDraftHash } from './draft-hash.js';
 import { compiledInputsCurrent } from './compile-inputs.js';
 import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
-import { parseBlockingVerdictRows, sectionVerificationReasons } from './verify/verdict-rows.js';
+import { parseBlockingVerdictRows, reviseCanRepair, sectionVerificationReasons } from './verify/verdict-rows.js';
 import { RETRY_ONLINE_VERDICTS } from './verify/verdicts.js';
 import { isResearchDone } from './research-sentinel.js';
 import { ACCEPTABLE_QUOTE_VERDICT } from './verify/verdicts.js';
 import { readCompileInputs, fileSha256 } from './compile-inputs.js';
+import { editedFinalReason, finalMdState } from './done-record.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -101,7 +107,7 @@ export type RouterDecision =
   | { verb: 'compile' }
   | { verb: 'done' }
   // C3-HIGH-1 / C4-HIGH: status.reason is widened so the resolver is TOTAL.
-  //   reason:'done'      → DRAFT.md + FINAL.md both present (nothing left to do)
+  //   reason:'done'      → DRAFT.md + FINAL.md hold the bytes done exported (nothing left to do)
   //   reason:'attention' → a section is in an unrecognized state, a corrupt
   //                        STATE.json / PLAN.md was reclassified here, the last
   //                        outline was rejected (GRND-08), a section failed
@@ -239,6 +245,19 @@ function recordHasPlaceholder(verificationPath: string): boolean {
     return parseBlockingVerdictRows(readFileSync(verificationPath, 'utf8')).some((r) => r.verdict === 'PLACEHOLDER');
   } catch {
     return false;
+  }
+}
+
+/**
+ * Does the section's VERIFICATION.md flag a citation `plan N --revise` can
+ * swap or remove (verdict-rows.ts reviseCanRepair)? True when it cannot be
+ * read (the wording then names both routes, as before). Never throws.
+ */
+function recordRevisable(verificationPath: string): boolean {
+  try {
+    return reviseCanRepair(readFileSync(verificationPath, 'utf8'));
+  } catch {
+    return true;
   }
 }
 
@@ -527,15 +546,22 @@ export async function resolveNextAction(
           // (FABRICATED, MIS-CITED, NOT_FOUND) is deterministic — re-running
           // it would re-bill the advisory passes and change nothing. Name the
           // fix instead; an explicit `pensmith verify N` still runs.
+          // When every failing row is text revise cannot swap (an unsupported
+          // citation form, an unattributed quote, NO-CITATIONS), `--revise`
+          // would change nothing: name the edit or the re-draft instead
+          // (main-branch merge review, round 1).
           if (r.verifiedHash !== null && draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) === r.verifiedHash) {
             return {
               verb: 'status',
               reason: 'attention',
               section: id,
-              detail:
-                `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since — ` +
-                `repair the flagged citations with \`pensmith plan ${label} --revise\` (one per run; then \`pensmith\` re-verifies the section), or re-draft with \`pensmith write ${label}\` ` +
-                `(\`pensmith verify ${label}\` re-checks it as it is)`,
+              detail: recordRevisable(sectionVerification(n, slug, paperRoot))
+                ? `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since — ` +
+                  `repair the flagged citations with \`pensmith plan ${label} --revise\` (one per run; then \`pensmith\` re-verifies the section), or re-draft with \`pensmith write ${label}\` ` +
+                  `(\`pensmith verify ${label}\` re-checks it as it is)`
+                : `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since — ` +
+                  `the flagged text is not a citation \`--revise\` can swap: edit it in the section's DRAFT.md (a citation written as [@citekey]) ` +
+                  `and run \`pensmith verify ${label}\`, or re-draft with \`pensmith write ${label}\``,
             };
           }
           return { verb: 'verify', ...id }; // the draft changed: re-attempt verification — NOT continue
@@ -612,11 +638,15 @@ export async function resolveNextAction(
     // section redone, re-verified or added by a re-outline (GRND-09/10) since
     // the last compile is compiled again, never reported as done.
     if (compiledDraftStale(pDir, sections, paperRoot)) return { verb: 'compile' };
-    // FINAL.md is current only when it is not older than the compiled draft
-    // (done writes it after reading DRAFT.md, on every run that finds it absent
-    // or older — so this never loops).
-    const finalAt = mtimeOf(join(pDir, 'FINAL.md'));
-    if (finalAt === null || finalAt < (mtimeOf(join(pDir, 'DRAFT.md')) ?? 0)) {
+    // The paper is complete only while FINAL.md and DRAFT.md hold the bytes
+    // done recorded when it exported (DONE-RECORD.json, done-record.ts; VRFY-26):
+    // a recompile since sends it back to done, and a FINAL.md done did not
+    // write — edited or written by hand — is attention, because done neither
+    // exports nor replaces it (it refuses, naming the same remedy). done
+    // writes the record on every export, so this never loops.
+    const finalState = finalMdState(paperRoot);
+    if (finalState === 'edited') return { verb: 'status', reason: 'attention', detail: editedFinalReason(paperRoot) };
+    if (finalState !== 'current') {
       // VRFY-27: done exports only a compiled draft whose COMPILE-INPUTS.json
       // proves it is the one compile wrote. With no usable record (a draft an
       // older pensmith compiled, or a record that does not parse) done could

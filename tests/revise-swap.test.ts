@@ -313,6 +313,39 @@ test('revise (review round 2): text rows ((L<line>), a bare doi:…) are not cit
   assert.equal(readFileSync(targetDraftPath(root), 'utf8'), before, 'DRAFT.md unchanged');
 });
 
+test('revise (main-branch merge review, round 1): a section failed only by UNSUPPORTED-FORM text (author-date prose, a footnote, a typed reference list) and an UNATTRIBUTED quote is named with the edit or re-draft — never "no FABRICATED/MIS-CITED citation"', async () => {
+  const { root } = seedFixture();
+  const md = [
+    '# VERIFICATION (Section 2, target)',
+    '',
+    'Status: failed',
+    '',
+    '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
+    '',
+    '- smith2020: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed',
+    '- (L11): **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — `Okonkwo (2017)`: an author-date citation',
+    '- (L13): **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — `[^1]`: a footnote',
+    '- (L17): **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — `## References`: a typed reference list',
+    '',
+    '## Pass-3',
+    '',
+    '- (unattributed) [q1] ("a quoted passage with no citation…"): **UNATTRIBUTED** — lev=n/a — no citation after or before the quote',
+    '- smith2020 [q2] ("an advisory quote row…"): **PASS** — lev=0.000 — found',
+    '',
+  ].join('\n');
+  assert.deepEqual(failingCitations(md), [], 'no citation revise can swap');
+  writeFileSync(targetVerifPath(root), md);
+  const before = readFileSync(targetDraftPath(root), 'utf8');
+  const res = await runRevise({ paperRoot: root, n: 2, slug: 'target', yolo: true, proposeSwap: () => Promise.reject(new Error('no model call expected')) });
+  assert.equal(res.accepted, false);
+  assert.doesNotMatch(res.message, /No FABRICATED\/MIS-CITED/);
+  assert.match(
+    res.message,
+    /^No citation in section 2 for revise to swap\. VERIFICATION\.md flags text that is not a citation revise can swap — line 11 \(UNSUPPORTED-FORM\), line 13 \(UNSUPPORTED-FORM\), line 17 \(UNSUPPORTED-FORM\), \(unattributed\) \(UNATTRIBUTED\): edit that text in DRAFT\.md \(a citation written as \[@citekey\]\) or re-draft the section \(`pensmith write 2`\), then `pensmith verify 2`\.$/,
+  );
+  assert.equal(readFileSync(targetDraftPath(root), 'utf8'), before, 'DRAFT.md unchanged');
+});
+
 test('revise (review round 3): a real citekey shaped like a line number (L12, L1) is a citation revise can repair — never taken for a text row', () => {
   const md = [
     'Status: failed',

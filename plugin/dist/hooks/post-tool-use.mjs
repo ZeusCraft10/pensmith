@@ -443,14 +443,14 @@ function resolvePaperRoot(opts) {
   }
   return { kind: "root", root: cwd, source: "fallback" };
 }
-function parseSectionDirName(basename3) {
-  if (typeof basename3 !== "string" || basename3.length === 0) return null;
-  if (basename3.includes("\0")) return null;
-  if (basename3.includes("/") || basename3.includes("\\")) return null;
-  if (basename3 === "." || basename3 === "..") return null;
-  if (basename3.includes("..")) return null;
-  if (/^[a-zA-Z]:/.test(basename3)) return null;
-  const m2 = /^(\d{2})([a-z])?-([a-z0-9-]+)$/.exec(basename3);
+function parseSectionDirName(basename4) {
+  if (typeof basename4 !== "string" || basename4.length === 0) return null;
+  if (basename4.includes("\0")) return null;
+  if (basename4.includes("/") || basename4.includes("\\")) return null;
+  if (basename4 === "." || basename4 === "..") return null;
+  if (basename4.includes("..")) return null;
+  if (/^[a-zA-Z]:/.test(basename4)) return null;
+  const m2 = /^(\d{2})([a-z])?-([a-z0-9-]+)$/.exec(basename4);
   if (!m2) return null;
   const n = Number(m2[1]);
   if (!Number.isInteger(n) || n < 0 || n > 99) return null;
@@ -17256,7 +17256,7 @@ function textRowLine(key) {
   const m2 = /^\(L([1-9]\d*)\)$/.exec(key);
   return m2 === null ? null : Number(m2[1]);
 }
-var DRAFT_VERDICTS, FAILING_VERDICTS, UNVERIFIABLE_VERDICTS, BLOCKING_VERDICTS, ACCEPTABLE_QUOTE_VERDICT, RETRY_ONLINE_VERDICTS;
+var DRAFT_VERDICTS, FAILING_VERDICTS, UNVERIFIABLE_VERDICTS, BLOCKING_VERDICTS, ACCEPTABLE_QUOTE_VERDICT, RETRY_ONLINE_VERDICTS, UNATTRIBUTED_CITEKEY, DRAFT_ROW_KEY;
 var init_verdicts = __esm({
   "bin/lib/verify/verdicts.ts"() {
     "use strict";
@@ -17277,11 +17277,41 @@ var init_verdicts = __esm({
     BLOCKING_VERDICTS = /* @__PURE__ */ new Set([...FAILING_VERDICTS, ...UNVERIFIABLE_VERDICTS]);
     ACCEPTABLE_QUOTE_VERDICT = "UNVERIFIABLE-QUOTE";
     RETRY_ONLINE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-NETWORK"]);
+    UNATTRIBUTED_CITEKEY = "(unattributed)";
+    DRAFT_ROW_KEY = "draft";
     __name(textRowLine, "textRowLine");
   }
 });
 
 // bin/lib/verify/verdict-rows.ts
+function verdictRowOf(line) {
+  const m2 = /^\s*-\s*(\S+?)(?:\s+\[q[1-9]\d*\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line) ?? /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line);
+  if (!m2 || m2[1] === void 0 || m2[2] === void 0) return null;
+  return { citekey: m2[1], verdict: m2[2], rest: m2[3] ?? "" };
+}
+function isTextRowKey(key) {
+  if (key === DRAFT_ROW_KEY || key === UNATTRIBUTED_CITEKEY) return true;
+  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key)) return true;
+  return textRowLine(key) !== null;
+}
+function revisableRows(verificationMd) {
+  const citations = [];
+  const textRows = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const line of verificationMd.split(/\r?\n/)) {
+    const row = verdictRowOf(line);
+    if (row === null || seen.has(row.citekey)) continue;
+    const text = isTextRowKey(row.citekey);
+    if (text ? !FAILING_VERDICTS.has(row.verdict) : !REVISABLE_VERDICTS.includes(row.verdict)) continue;
+    seen.add(row.citekey);
+    const f = { citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, "").trim()}` };
+    (text ? textRows : citations).push(f);
+  }
+  return { citations, textRows };
+}
+function reviseCanRepair(verificationMd) {
+  return revisableRows(verificationMd).citations.length > 0;
+}
 function rowReason(afterVerdict) {
   const m2 = /^\s*—\s*(?:titleJW=\S+,\s*authorJW=\S+\s*—\s*|lev=\S+\s*—\s*)?(.*)$/u.exec(afterVerdict);
   const reason = m2?.[1]?.replace(/ — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/, "").trim();
@@ -17357,12 +17387,17 @@ function dryRunVerificationReason(verificationMd, dryRunNow) {
   const first = verificationMd.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
   return first.startsWith(DRY_RUN_VERIFICATION_MARKER) ? "verified under --dry-run against synthetic sources \u2014 re-run `pensmith verify` without --dry-run" : null;
 }
-var UNREADABLE_CITEKEY, DRY_RUN_VERIFICATION_MARKER;
+var REVISABLE_VERDICTS, UNREADABLE_CITEKEY, DRY_RUN_VERIFICATION_MARKER;
 var init_verdict_rows = __esm({
   "bin/lib/verify/verdict-rows.ts"() {
     "use strict";
     init_verdicts();
     init_verdicts();
+    REVISABLE_VERDICTS = ["FABRICATED", "MIS-CITED", "RETRACTED", "UNASSIGNED", "UNPARSEABLE", "UNRESOLVABLE", "NOT_FOUND"];
+    __name(verdictRowOf, "verdictRowOf");
+    __name(isTextRowKey, "isTextRowKey");
+    __name(revisableRows, "revisableRows");
+    __name(reviseCanRepair, "reviseCanRepair");
     __name(rowReason, "rowReason");
     __name(parseBlockingVerdictRows, "parseBlockingVerdictRows");
     UNREADABLE_CITEKEY = "(unreadable verdict row)";
@@ -17467,12 +17502,78 @@ var init_research_sentinel = __esm({
   }
 });
 
-// bin/lib/router.ts
-import { existsSync as existsSync4, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
+// bin/lib/schemas/done-record.ts
+var DONE_RECORD_SCHEMA_VERSION, SHA2562, DoneRecordSchema;
+var init_done_record = __esm({
+  "bin/lib/schemas/done-record.ts"() {
+    "use strict";
+    init_zod();
+    DONE_RECORD_SCHEMA_VERSION = 1;
+    SHA2562 = /^[0-9a-f]{64}$/;
+    DoneRecordSchema = external_exports.object({
+      $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
+      done_at: external_exports.string().datetime(),
+      /** sha256 of the `.paper/DRAFT.md` bytes done's gate judged. */
+      compiled_draft_sha256: external_exports.string().regex(SHA2562),
+      /** sha256 of the `.paper/FINAL.md` done left: the text it exported. */
+      final_sha256: external_exports.string().regex(SHA2562),
+      /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
+      humanized: external_exports.boolean()
+    }).strict();
+  }
+});
+
+// bin/lib/done-record.ts
+import { existsSync as existsSync4, readFileSync as readFileSync8 } from "node:fs";
 import { basename as basename2, join as join5 } from "node:path";
+function doneRecordPath(paperRoot) {
+  return join5(paperDir(paperRoot), DONE_RECORD_FILE);
+}
+function readDoneRecord(paperRoot) {
+  try {
+    const parsed = DoneRecordSchema.safeParse(JSON.parse(readFileSync8(doneRecordPath(paperRoot), "utf8")));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+function finalMdState(paperRoot) {
+  const dir = paperDir(paperRoot);
+  const finalPath = join5(dir, "FINAL.md");
+  if (!existsSync4(finalPath)) return "absent";
+  const finalSha = fileSha256(finalPath);
+  if (finalSha === "") return "edited";
+  const draftSha = fileSha256(join5(dir, "DRAFT.md"));
+  const record = readDoneRecord(paperRoot);
+  if (record !== null && record.final_sha256 === finalSha) return record.compiled_draft_sha256 === draftSha ? "current" : "stale";
+  return finalSha === draftSha ? "stale" : "edited";
+}
+function editedFinalReason(paperRoot) {
+  const dir = basename2(paperDir(paperRoot));
+  return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: make the edit in the section drafts (then \`pensmith\` re-verifies and recompiles them), or move ${dir}/FINAL.md out of the paper folder, and run \`pensmith done\``;
+}
+var DONE_RECORD_FILE;
+var init_done_record2 = __esm({
+  "bin/lib/done-record.ts"() {
+    "use strict";
+    init_atomic_write();
+    init_compile_inputs2();
+    init_paths();
+    init_done_record();
+    DONE_RECORD_FILE = "DONE-RECORD.json";
+    __name(doneRecordPath, "doneRecordPath");
+    __name(readDoneRecord, "readDoneRecord");
+    __name(finalMdState, "finalMdState");
+    __name(editedFinalReason, "editedFinalReason");
+  }
+});
+
+// bin/lib/router.ts
+import { existsSync as existsSync5, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
+import { basename as basename3, join as join6 } from "node:path";
 function readSectionInfo(planPath) {
   const none = { stub: false, failureReason: null, verifiedHash: null, assignedSources: [] };
-  if (!existsSync4(planPath)) {
+  if (!existsSync5(planPath)) {
     return { status: "planned", corrupt: false, absent: true, ...none };
   }
   try {
@@ -17497,7 +17598,7 @@ function readSectionInfo(planPath) {
 }
 function draftHashOf(draftPath, assignedSources) {
   try {
-    return computeDraftHash(readFileSync8(draftPath), [...assignedSources]);
+    return computeDraftHash(readFileSync9(draftPath), [...assignedSources]);
   } catch {
     return null;
   }
@@ -17505,7 +17606,7 @@ function draftHashOf(draftPath, assignedSources) {
 function verificationBlockers(verificationPath) {
   let md;
   try {
-    md = readFileSync8(verificationPath, "utf8");
+    md = readFileSync9(verificationPath, "utf8");
   } catch {
     return ["its VERIFICATION.md is missing or unreadable"];
   }
@@ -17520,15 +17621,22 @@ function verificationBlockers(verificationPath) {
 }
 function recordHasPlaceholder(verificationPath) {
   try {
-    return parseBlockingVerdictRows(readFileSync8(verificationPath, "utf8")).some((r) => r.verdict === "PLACEHOLDER");
+    return parseBlockingVerdictRows(readFileSync9(verificationPath, "utf8")).some((r) => r.verdict === "PLACEHOLDER");
   } catch {
     return false;
+  }
+}
+function recordRevisable(verificationPath) {
+  try {
+    return reviseCanRepair(readFileSync9(verificationPath, "utf8"));
+  } catch {
+    return true;
   }
 }
 function unverifiableSectionDetail(verificationPath, label) {
   let md;
   try {
-    md = readFileSync8(verificationPath, "utf8");
+    md = readFileSync9(verificationPath, "utf8");
   } catch {
     return `section ${label} could not be verified: its VERIFICATION.md is missing or unreadable \u2014 run \`pensmith verify ${label}\``;
   }
@@ -17564,14 +17672,14 @@ function mtimeOf(p) {
 }
 function compiledSectionCount(pDir) {
   try {
-    const m2 = /^sections_count:\s*(\d+)\s*$/m.exec(readFileSync8(join5(pDir, "COMPILE-REPORT.md"), "utf8"));
+    const m2 = /^sections_count:\s*(\d+)\s*$/m.exec(readFileSync9(join6(pDir, "COMPILE-REPORT.md"), "utf8"));
     return m2 ? Number(m2[1]) : null;
   } catch {
     return null;
   }
 }
 function compiledDraftStale(pDir, sections, paperRoot) {
-  const compiledAt = mtimeOf(join5(pDir, "DRAFT.md"));
+  const compiledAt = mtimeOf(join6(pDir, "DRAFT.md"));
   if (compiledAt === null) return true;
   const record = readCompileInputs(paperRoot);
   if (record !== null && (record.compiled_draft_sha256 === null || record.sections.some((s2) => s2.verified_against_draft_hash === null))) return true;
@@ -17606,7 +17714,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
       return { verb: "status", reason: "done" };
     }
     const sections = state.sections ?? [];
-    if (sections.length === 0 && existsSync4(join5(pDir, "OUTLINE.rejected.md"))) {
+    if (sections.length === 0 && existsSync5(join6(pDir, "OUTLINE.rejected.md"))) {
       return {
         verb: "status",
         reason: "attention",
@@ -17615,7 +17723,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
     }
     const outlineIssue = outlineProblem(paperRoot);
     if (outlineIssue !== null) return { verb: "status", reason: "attention", detail: outlineIssue };
-    if (!existsSync4(join5(pDir, "OUTLINE.md"))) return { verb: "outline" };
+    if (!existsSync5(join6(pDir, "OUTLINE.md"))) return { verb: "outline" };
     if (sections.length === 0) return { verb: "outline" };
     const registry = sectionRegistryProblem(paperRoot);
     if (registry !== null) return { verb: "status", reason: "attention", detail: registry };
@@ -17636,14 +17744,14 @@ async function resolveNextAction(paperRoot, opts = {}) {
       }
       switch (r.status) {
         case "verified":
-          if (!existsSync4(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
+          if (!existsSync5(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
           continue;
         case "planned":
           return r.stub ? { verb: "plan", ...id } : { verb: "write", ...id };
         case "writing":
           return { verb: "write", ...id };
         case "failed":
-          if (r.failureReason !== null || !existsSync4(sectionDraft(n, slug, paperRoot))) {
+          if (r.failureReason !== null || !existsSync5(sectionDraft(n, slug, paperRoot))) {
             return {
               verb: "status",
               reason: "attention",
@@ -17656,13 +17764,13 @@ async function resolveNextAction(paperRoot, opts = {}) {
               verb: "status",
               reason: "attention",
               section: id,
-              detail: `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 repair the flagged citations with \`pensmith plan ${label} --revise\` (one per run; then \`pensmith\` re-verifies the section), or re-draft with \`pensmith write ${label}\` (\`pensmith verify ${label}\` re-checks it as it is)`
+              detail: recordRevisable(sectionVerification(n, slug, paperRoot)) ? `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 repair the flagged citations with \`pensmith plan ${label} --revise\` (one per run; then \`pensmith\` re-verifies the section), or re-draft with \`pensmith write ${label}\` (\`pensmith verify ${label}\` re-checks it as it is)` : `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since \u2014 the flagged text is not a citation \`--revise\` can swap: edit it in the section's DRAFT.md (a citation written as [@citekey]) and run \`pensmith verify ${label}\`, or re-draft with \`pensmith write ${label}\``
             };
           }
           return { verb: "verify", ...id };
         // the draft changed: re-attempt verification — NOT continue
         case "unverifiable": {
-          if (!existsSync4(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
+          if (!existsSync5(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
           if (r.verifiedHash === null || draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) !== r.verifiedHash) {
             return { verb: "verify", ...id };
           }
@@ -17671,7 +17779,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
         }
         case "written":
         case "verifying":
-          if (!existsSync4(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
+          if (!existsSync5(sectionDraft(n, slug, paperRoot))) return { verb: "write", ...id };
           return { verb: "verify", ...id };
         default:
           return {
@@ -17694,16 +17802,17 @@ async function resolveNextAction(paperRoot, opts = {}) {
       }
     }
     const record = readCompileInputs(paperRoot);
-    if (record !== null && record.compiled_draft_sha256 !== null && existsSync4(join5(pDir, "DRAFT.md")) && fileSha256(join5(pDir, "DRAFT.md")) !== record.compiled_draft_sha256) {
+    if (record !== null && record.compiled_draft_sha256 !== null && existsSync5(join6(pDir, "DRAFT.md")) && fileSha256(join6(pDir, "DRAFT.md")) !== record.compiled_draft_sha256) {
       return {
         verb: "status",
         reason: "attention",
-        detail: `${basename2(pDir)}/DRAFT.md was edited after compile \u2014 make the edit in the section drafts (then \`pensmith\` re-verifies them) and run \`pensmith compile\`, which replaces the edited file`
+        detail: `${basename3(pDir)}/DRAFT.md was edited after compile \u2014 make the edit in the section drafts (then \`pensmith\` re-verifies them) and run \`pensmith compile\`, which replaces the edited file`
       };
     }
     if (compiledDraftStale(pDir, sections, paperRoot)) return { verb: "compile" };
-    const finalAt = mtimeOf(join5(pDir, "FINAL.md"));
-    if (finalAt === null || finalAt < (mtimeOf(join5(pDir, "DRAFT.md")) ?? 0)) {
+    const finalState = finalMdState(paperRoot);
+    if (finalState === "edited") return { verb: "status", reason: "attention", detail: editedFinalReason(paperRoot) };
+    if (finalState !== "current") {
       return record === null ? { verb: "compile" } : { verb: "done" };
     }
     return { verb: "status", reason: "done" };
@@ -17731,10 +17840,12 @@ var init_router = __esm({
     init_research_sentinel();
     init_verdicts();
     init_compile_inputs2();
+    init_done_record2();
     __name(readSectionInfo, "readSectionInfo");
     __name(draftHashOf, "draftHashOf");
     __name(verificationBlockers, "verificationBlockers");
     __name(recordHasPlaceholder, "recordHasPlaceholder");
+    __name(recordRevisable, "recordRevisable");
     __name(unverifiableSectionDetail, "unverifiableSectionDetail");
     __name(mtimeOf, "mtimeOf");
     __name(compiledSectionCount, "compiledSectionCount");
@@ -19421,7 +19532,7 @@ var init_config_text = __esm({
 });
 
 // bin/lib/config.ts
-import { existsSync as existsSync5, readFileSync as readFileSync9 } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync10 } from "node:fs";
 import path9 from "node:path";
 function paperConfigPath(root = projectRoot()) {
   return path9.join(paperDir(root), "config.toml");
@@ -19564,9 +19675,9 @@ function emitWarnings(fileLabel, warnings) {
 }
 function readPaperConfigSync(root = projectRoot()) {
   const file = paperConfigPath(root);
-  if (!existsSync5(file)) return { config: EMPTY_CONFIG, exists: false, path: file, migratedFrom: null };
+  if (!existsSync6(file)) return { config: EMPTY_CONFIG, exists: false, path: file, migratedFrom: null };
   const label = relName(root, file);
-  const parsed = parseAndValidate(readFileSync9(file, "utf8"), label);
+  const parsed = parseAndValidate(readFileSync10(file, "utf8"), label);
   emitWarnings(label, parsed.warnings);
   return { config: parsed.config, exists: true, path: file, migratedFrom: parsed.migratedFrom };
 }

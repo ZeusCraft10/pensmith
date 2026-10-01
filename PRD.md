@@ -319,7 +319,7 @@ This is the equivalent of GSD's milestone completion. It assembles the verified 
 
 The umbrella for finishing. Equivalent to GSD's `/gsd:ship`.
 
-- Refuses to run if any section's verification is unclean. *(Amended in v1.0.0 Phase 20 — VRFY-26, VRFY-27: before any paid or third-party step, done takes the sections STATE.json registers, refuses a section changed since its verification and a compiled draft changed since compile, and recomputes the verifier's gate over the exact text it exports — the compiled draft, and again the humanized FINAL.md — listing every reason at once. `--yolo` and `--raw` never bypass it. done never writes under `sections/`.)*
+- Refuses to run if any section's verification is unclean. *(Amended in v1.0.0 Phase 20 — VRFY-26, VRFY-27: before any paid or third-party step, done takes the sections STATE.json registers, refuses a section changed since its verification and a compiled draft changed since compile, and recomputes the verifier's gate over the exact text it exports — the compiled draft, and again the humanized FINAL.md — listing every reason at once. `--yolo` and `--raw` never bypass it. done never writes under `sections/`. Amended again at the Phase 20 + 23a merge review: done leaves `.paper/FINAL.md` holding exactly the text it exported — the humanized text GATE-04 judged, else the compiled draft — and records both hashes in `.paper/DONE-RECORD.json`; the paper is complete only while FINAL.md and DRAFT.md hold them. A FINAL.md done did not leave — edited or written by hand — is refused (exit 4) and never exported or replaced, and the router reports it as attention.)*
 - Runs **whole-paper verify pass** (Pass 4 — per-paragraph audit across the compiled draft, catches issues that emerged at section boundaries). *(Since Phase 20 over the exact text to be exported — VRFY-23.)*
 - Runs **plagiarism check** (§7.16).
 - Runs **humanizer** (§7.10), which itself runs the **detection-aware honesty score** (§7.11).
@@ -805,9 +805,10 @@ The `.paper/` directory layout per project. The project folder that contains `.p
 ├── CAPABILITIES.json
 ├── SESSION.log              # jsonl, append-only
 ├── DRAFT.md                 # written by compile
-├── FINAL.md                 # written by humanize
+├── FINAL.md                 # written by done: the exported text (humanized, or the compiled draft)
 ├── COMPILE-REPORT.md
 ├── COMPILE-INPUTS.json      # what the compile was made from (content hashes; D-18-39)
+├── DONE-RECORD.json         # what done exported: the compiled draft's and FINAL.md's sha256 (VRFY-26)
 ├── VERIFICATION.md          # whole-paper verify report from `done`
 └── sections/
     ├── 01-introduction/

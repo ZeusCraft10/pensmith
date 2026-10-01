@@ -20,6 +20,7 @@ import {
   UNREADABLE_CITEKEY,
 } from '../bin/lib/verify/verdict-rows.js';
 import { runExportBlockingGate } from '../bin/cli/done.js';
+import { verificationRecordReasons } from '../bin/lib/verify/verification-md.js';
 import { sandbox, runCli, seedFabricatedSection, sectionDirOf } from './helpers/paper-cli-harness.js';
 
 test('verdict rows: every CITEKEY_GRAMMAR key shape is named; an unreadable blocking row still blocks', () => {
@@ -44,6 +45,14 @@ test('verdict rows: every CITEKEY_GRAMMAR key shape is named; an unreadable bloc
   assert.deepEqual(sectionVerificationReasons('Status: verified\n', false), []);
   assert.deepEqual(sectionVerificationReasons('Status: unverifiable\n', false), [], 'Pitfall 3: unverifiable with no blocking row passes');
   assert.match(sectionVerificationReasons('no status here', false)[0] ?? '', /no verifiable VERIFICATION\.md/);
+});
+
+test('verificationRecordReasons (main-branch merge review, round 1): a failed record names `plan N --revise` only when it flags a citation revise can swap — text rows name the edit or the re-draft', () => {
+  const textOnly = 'Status: failed\n\n- (L3): **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — `Okonkwo (2017)`: an author-date citation\n';
+  const [text] = verificationRecordReasons(textOnly, '2', null, false);
+  assert.match(text ?? '', /^VERIFICATION\.md Status is 'failed' — edit the flagged text in the section's DRAFT\.md \(a citation written as \[@citekey\]\) or re-draft \(`pensmith write 2`\), then `pensmith verify 2`$/);
+  const [cite] = verificationRecordReasons(`${textOnly}- ghost.2099: **FABRICATED** — titleJW=0.00, authorJW=0.00 — not in bib\n`, '2', null, false);
+  assert.match(cite ?? '', /^VERIFICATION\.md Status is 'failed' — repair the flagged citations \(`pensmith plan 2 --revise`\) or re-draft \(`pensmith write 2`\), then `pensmith verify 2`$/);
 });
 
 test('compile and done both refuse a section whose verifier FAILED on a dotted citekey (`[@ghost.2099]`)', () => {

@@ -1,10 +1,12 @@
 // tests/done-terminal.test.ts — audit #15 regression.
 //
-// The router's terminal state is "DRAFT.md present AND FINAL.md present"
-// (router.ts:216-218). In Tier 2 there is no humanizer, so runHumanizer returns
-// null, FINAL.md is never written, and bare `pensmith`/next/resume re-run the
-// whole export pipeline on every invocation instead of reaching the done
-// terminus. `done` now writes FINAL.md from the exported source when absent.
+// The router's terminal state was "DRAFT.md present AND FINAL.md present". In
+// Tier 2 there is no humanizer, so runHumanizer returns null, FINAL.md was
+// never written, and bare `pensmith`/next/resume re-ran the whole export
+// pipeline on every invocation instead of reaching the done terminus. `done`
+// now writes FINAL.md from the text it exported, with DONE-RECORD.json, and
+// the terminus is "FINAL.md and DRAFT.md hold the bytes done recorded"
+// (done-record.ts; tests/done-final-record.test.ts covers a hand edit).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

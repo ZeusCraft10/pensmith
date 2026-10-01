@@ -161,9 +161,13 @@ export interface VerifySectionOptions {
 /**
  * The gate result verifySection returns: every row and the outcome, with the
  * bibliography reduced to where it is and what did not parse. The parsed
- * entries stay in the process — the MCP `pensmith_verify` tool serializes this
- * result into its reply, and every entry of a real library (with its abstract)
- * would make that reply megabytes long.
+ * entries (each with its abstract) stay with the gate core: no caller of
+ * verifySection reads them — `write` reads the status, compile's staleness
+ * re-verify the rows — so its result stays small. The MCP `pensmith_verify`
+ * tool never sends this result at all: bin/lib/verify/verify-reply.ts projects
+ * it into a summary and the fenced blocking rows, reading only the rows, Pass 2,
+ * Pass 4, the freshness probe and an early return's line. Neither mechanism
+ * depends on the other.
  */
 export type VerifyGateResult = Omit<GateResult, 'bib'> & { readonly bib: Omit<LoadedBibliography, 'entries'> };
 
@@ -183,7 +187,21 @@ export interface VerifySectionResult {
   readonly ok: boolean;
   readonly status: string;
   readonly blocked?: boolean;
+  /** The section's VERIFICATION.md. */
   readonly path: string;
+  /**
+   * False when verify refused before judging the draft and wrote no
+   * VERIFICATION.md (a failed write, FEED-04): a VERIFICATION.md at `path` is
+   * an earlier verdict. Absent otherwise (this call wrote it).
+   */
+  readonly recorded?: false;
+  /**
+   * The line verify printed when it stopped before judging the draft (a failed
+   * write's refusal, a missing DRAFT.md) — the reason and the step that fixes
+   * it. The MCP `pensmith_verify` tool hands it to the model fenced, as the CLI
+   * prints it (bin/lib/verify/verify-reply.ts).
+   */
+  readonly message?: string;
   readonly exitCode?: number;
   readonly gate?: VerifyGateResult;
   readonly pass1?: Pass1Result[];
@@ -315,8 +333,9 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
       assignedSources = [];
     }
     if (block !== null) {
-      process.stderr.write(`pensmith verify: section ${id} not verified — ${block}\n`);
-      return { ok: false, status: 'failed', blocked: true, path: verifPath };
+      const message = `pensmith verify: section ${id} not verified — ${block}`;
+      process.stderr.write(`${message}\n`);
+      return { ok: false, status: 'failed', blocked: true, path: verifPath, recorded: false, message };
     }
   }
 
@@ -340,8 +359,9 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
       delete fm.failure_reason;
       delete fm.verified_against_draft_hash;
     });
-    out(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first\n`);
-    return { ok: false, status: 'unverifiable', path: verifPath };
+    const message = `pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first`;
+    out(`${message}\n`);
+    return { ok: false, status: 'unverifiable', path: verifPath, message };
   }
 
   // VRFY-16: `verifying`, and no earlier verdict's hash, BEFORE any pass runs —

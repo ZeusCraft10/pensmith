@@ -14,6 +14,7 @@ import { withLlmSandbox, type LlmSandbox } from './helpers/llm-sandbox.js';
 import { projectEstimate, renderEstimate } from '../bin/lib/estimator.js';
 import { initState, initSection } from '../bin/lib/state.js';
 import { setRuntimeOverride } from '../bin/lib/runtime.js';
+import { writeDoneRecordFile } from './helpers/paper-cli-harness.js';
 
 const KEY = 'sk-test-estimate-0001';
 const ASSIGNMENT = fs.readFileSync(path.join('tests', 'fixtures', 'assignment.txt'), 'utf8');
@@ -93,6 +94,7 @@ test('RUN-20: completed steps are excluded; a finished paper has nothing left to
     plan(2, 'body', 'verified');
     fs.writeFileSync(path.join(sb.paper, 'DRAFT.md'), '# Draft\n');
     fs.writeFileSync(path.join(sb.paper, 'FINAL.md'), '# Final\n');
+    writeDoneRecordFile(sb.root); // done exported it (done-record.ts)
     const done = await projectEstimate({ paperRoot: sb.root });
     assert.equal(done.nothingLeft, true);
     assert.equal(renderEstimate(done), 'pensmith estimate: nothing left to run ($0.00)');
@@ -111,6 +113,7 @@ test('RUN-20: --estimate on an explicit verb projects that verb (and section) â€
     }
     fs.writeFileSync(path.join(sb.paper, 'DRAFT.md'), '# Draft\n');
     fs.writeFileSync(path.join(sb.paper, 'FINAL.md'), '# Final\n');
+    writeDoneRecordFile(sb.root); // done exported it (done-record.ts)
     // The whole paper is done: bare --estimate has nothing left â€¦
     const bare = await sb.runTsx(null, ['--estimate']);
     assert.equal(bare.status, 0, bare.stderr);

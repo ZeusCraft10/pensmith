@@ -22,6 +22,7 @@ import {
   writeOutline,
   writePlan,
   seedCompiledPaper,
+  writeDoneRecordFile,
   snapshot,
   changedPaths,
   REPO,
@@ -107,6 +108,7 @@ test('RUN-13 / RUN-14: a run from inside .paper/ (or deeper) addresses the paper
   writeFileSync(join(root, '.paper', 'RESEARCH.md'), '# Research\n');
   writeFileSync(join(root, '.paper', 'INTAKE.md'), 'Topic: tidal power\n');
   writeFileSync(join(root, '.paper', 'FINAL.md'), '# Paper\n\nOne.\n\nTwo.\n');
+  writeDoneRecordFile(root);
   const inside = join(root, '.paper');
   const deeper = join(root, '.paper', 'sections', '01-one');
   // The resolver folds the cwd for every mode.

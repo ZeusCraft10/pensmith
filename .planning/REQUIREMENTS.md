@@ -1220,7 +1220,7 @@ Which phases cover which requirements.
 | VRFY-27 | Phase 20 | Complete |
 | VRFY-28 | Phase 20 | Complete |
 | VRFY-29 | Phase 20 | Complete |
-| HARDEN-03 | Phase 20 | Complete |
+| HARDEN-03 | Phase 20 | Complete (20-VERIFICATION §4; met locally: `CI=true`, pandoc 3.9, 1000 drafts) — its CI leg (the test in the required `check` matrix with the ci.yml pandoc 3.9 step) has not run on a runner yet: confirmed by the first green `check` matrix (CI-06). If that run fails this test, HARDEN-03 returns to Pending (main-branch merge review, round 1) |
 | EXP-01 | Phase 21 | Pending |
 | EXP-02 | Phase 21 | Pending |
 | EXP-03 | Phase 21 | Pending |
@@ -1256,7 +1256,7 @@ Which phases cover which requirements.
 | PLUG-01 | Phase 23 | Complete (Phase 23a; 23a-VERIFICATION §8.1) — its CI leg (the pinned Claude Code in the `plugin` job) has not run on a runner yet: confirmed by the same first green run as CI-05. Ticked while PLUG-14 is not (Phase 20 + 23a merge, review round 2): this criterion's check is `claude plugin validate --strict`, a platform-independent check of the manifest files, and it passed here with the same Claude Code 2.1.285 the job pins; PLUG-14's acceptance names results on macOS and Windows (spawned hooks, a < 500 ms budget) that no Linux run can show. If the first runner run fails this leg, PLUG-01 returns to Pending with CI-05 |
 | PLUG-02 | Phase 23 | Complete (Phase 23a; 23a-VERIFICATION §8.2) — its CI leg (`bundle:check` in the `check` matrix, i.e. re-bundle then fail on drift) has not run on a runner yet: confirmed by the same first green run as CI-05. Ticked while PLUG-14 is not (Phase 20 + 23a merge, review round 2): this criterion asks that CI *runs* the drift check (the `check` job's step is in ci.yml, and the check passes here), where PLUG-14's asks that its tests *pass on* macOS and Windows. Byte-identical esbuild output on Windows is first shown by that run (23a-SUMMARY §8); if it fails there, PLUG-02 returns to Pending with CI-05 |
 | PLUG-03 | Phase 23 | Complete (Phase 23a; 23a-VERIFICATION §8.3) |
-| PLUG-04 | Phase 23 | Pending (Phase 23a: shipped and connected with PWD = the repo root or unset, deduped with PWD = the root; the criteria cannot both hold on every shell — a stale or MSYS PWD fails, a launch from a subfolder of the checkout fails (the path is relative to the root), and PWD unset keeps two servers — so the acceptance text needs a maintainer amendment, 23a-PLAN §7.6; 23a-VERIFICATION §8.4) |
+| PLUG-04 | Phase 23 | Pending (Phase 23a: shipped and connected with PWD = the repo root or unset, deduped with PWD = the root; the criteria cannot both hold on every shell — a stale or MSYS PWD fails (Claude Code on the web starts Claude Code in the checkout with PWD=/home/user, so it fails in every web session), a launch from a subfolder of the checkout fails (the path is relative to the root), and PWD unset keeps two servers — so the acceptance text needs a maintainer amendment, 23a-PLAN §7.6; 23a-VERIFICATION §8.4) |
 | PLUG-05 | Phase 23 | Complete (Phase 23a; 23a-VERIFICATION §8.5) |
 | PLUG-06 | Phase 23 | Pending |
 | PLUG-07 | Phase 23 | Pending |

@@ -213,15 +213,19 @@ export const VERIFY_DATA_NOTE =
 /**
  * The MCP result of pensmith_verify: the classified outcome with the verify
  * result projected by bin/lib/verify/verify-reply.ts — a small JSON summary
- * (status, blocked, the VERIFICATION.md path, the summary counts; nothing
- * quoted from the paper), then VERIFY_DATA_NOTE and the blocking rows inside
- * the FEED-05 fence when there are any; a verify that threw is
- * verbToolResult's fenced failure line. Never the gate result itself: its rows
- * quote the draft and its parsed bibliography grows with the library.
+ * (status, blocked, the VERIFICATION.md path and whether this call wrote it,
+ * the summary counts; nothing quoted from the paper), then VERIFY_DATA_NOTE and
+ * the blocking rows inside the FEED-05 fence when there are any. A verify that
+ * stopped before judging the draft (a failed write, a missing DRAFT.md) adds
+ * the line the CLI prints for it — the reason and `pensmith write N` — as the
+ * verb's words (verbToolResult's fence after VERB_WORDS_NOTE); a verify that
+ * threw is verbToolResult's fenced failure line. Never the gate result itself:
+ * its rows quote the draft.
  */
 function verifyToolResult(o: ClassifiedOutcome): { content: Array<{ type: 'text'; text: string }>; isError?: boolean } {
   const reply = verifyReply(o.result);
-  const base = verbToolResult({ ...o, result: reply?.summary ?? null });
+  const result = reply === null ? null : reply.message === null ? reply.summary : { ...reply.summary, message: reply.message };
+  const base = verbToolResult({ ...o, result });
   if (reply === null || reply.rows.length === 0) return base;
   return { ...base, content: [...base.content, { type: 'text', text: VERIFY_DATA_NOTE }, { type: 'text', text: fenceUntrusted(reply.rows.join('\n')) }] };
 }
@@ -442,8 +446,9 @@ export function registerPaperTools(server: McpServer): void {
       title: 'Verify a section DRAFT.md (deterministic Pass-1 + Pass-3)',
       description:
         'Tier 1 equivalent of `pensmith verify <N>`. Imports bin/cli/verify.ts default export. Returns the status, whether the ' +
-        'section blocks compile, the VERIFICATION.md path and its summary counts, then the blocking rows fenced as untrusted data ' +
-        '(a failure\'s line instead when verify could not run). ' +
+        'section blocks compile, the VERIFICATION.md path, whether this call wrote it (`recorded`) and its summary counts, then ' +
+        'the blocking rows fenced as untrusted data; when verify stopped before judging the draft (a failed write, a missing ' +
+        'draft) or could not run, the line the CLI prints for it — the reason and the step that fixes it — fenced the same way. ' +
         '`accept_quote` is `--accept-quote`: the ids (q1, q2, …) of UNVERIFIABLE-QUOTE rows the user accepted after being asked (VRFY-20) — never on your own.',
       inputSchema: {
         n: z.number().int().min(1),

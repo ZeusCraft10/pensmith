@@ -15,7 +15,9 @@
 // steps are excluded: intake when INTAKE.md exists, research when LIBRARY.json
 // exists, outline when sections are registered, each verified section (and a
 // section's finished plan/write steps), compile when DRAFT.md exists and done
-// when FINAL.md exists. Nothing left → `nothing left to run ($0.00)`.
+// unless FINAL.md is absent or stale (done-record.ts: a current FINAL.md is
+// finished; one written by hand is attention, which runs nothing). Nothing
+// left → `nothing left to run ($0.00)`.
 //
 // The advisory verify passes are priced from the text they will read
 // (D-20-28, D-20-29; review round 2): a section's verify is one claim-support
@@ -59,6 +61,7 @@ import { MAX_QUERIES } from './query-expansion.js';
 import { resolveDiscipline } from './disciplines.js';
 import { readIntakeBrief } from './intake-brief.js';
 import { isResearchDone } from './research-sentinel.js';
+import { finalMdState } from './done-record.js';
 
 // ---------------------------------------------------------------------------
 // Per-call projection
@@ -556,7 +559,8 @@ export async function projectEstimate(args: {
   if (compiled === null) {
     rows.push({ step: 'compile', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' });
   }
-  if (!existsSync(path.join(pDir, 'FINAL.md'))) {
+  const finalState = finalMdState(root);
+  if (finalState === 'absent' || finalState === 'stale') {
     rows.push(row(rt, root, 'done', doneCalls, stubbed));
   }
 

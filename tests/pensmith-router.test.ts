@@ -228,6 +228,14 @@ async function writeCompileRecordFor(root: string, sections: Array<{ n: number; 
   await writeCompileInputs(root, sections, new Date().toISOString(), { compiledDraftSha256: compiledSha, verifiedHashes });
 }
 
+/** The DONE-RECORD.json done writes when it exports: the compiled DRAFT.md and the FINAL.md as they are now. */
+async function writeDoneRecordFor(root: string): Promise<void> {
+  const { writeDoneRecord } = await import('../bin/lib/done-record.js');
+  const { createHash } = await import('node:crypto');
+  const sha = (name: string): string => createHash('sha256').update(readFileSync(join(root, '.paper', name))).digest('hex');
+  await writeDoneRecord(root, { doneAt: new Date().toISOString(), compiledDraftSha256: sha('DRAFT.md'), finalSha256: sha('FINAL.md'), humanized: false });
+}
+
 // ===========================================================================
 // C3-HIGH-1 TOTALITY — every SectionStateSchema state + the mixed stuck case.
 // The original suite fixtured only planned/verified/DRAFT/FINAL, so a reachable
@@ -525,13 +533,33 @@ test('GRND-18: "failed" whose draft hash equals verified_against_draft_hash → 
     assert.equal(same.reason, 'attention');
     assert.deepEqual(same.section, { n: 1, slug: 'intro' });
     assert.match(same.detail ?? '', /section 1 failed verification .* has not changed since — .*`pensmith plan 1 --revise`.*`pensmith write 1`.*`pensmith verify 1`/);
+    // Main-branch merge review, round 1: a record whose failing rows
+    // are all text `--revise` cannot swap (author-date prose, a footnote, a
+    // typed reference list) names the edit and the re-draft, never `--revise`.
+    const verif = join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md');
+    const textRows = [
+      'Status: failed',
+      '',
+      '- a2020: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed',
+      '- (L3): **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — `Okonkwo (2017)`: an author-date citation',
+      '- (L5): **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — `[^1]`: a footnote',
+      '',
+    ].join('\n');
+    writeFileSync(verif, textRows);
+    const text = await resolveNextAction(root);
+    assert.equal(text.reason, 'attention');
+    assert.doesNotMatch(text.detail ?? '', /--revise`? \(one per run|plan 1 --revise/);
+    assert.match(text.detail ?? '', /section 1 failed verification .* has not changed since — the flagged text is not a citation `--revise` can swap: edit it in the section's DRAFT\.md .* `pensmith verify 1`, or re-draft with `pensmith write 1`$/);
+    // A citation revise can swap alongside them: `--revise` is named again.
+    writeFileSync(verif, `${textRows}- a2020: **MIS-CITED** — titleJW=0.10, authorJW=1.00 — title mismatch\n`);
+    assert.match((await resolveNextAction(root)).detail ?? '', /`pensmith plan 1 --revise`/);
     // The draft changed since that verdict: verify it again.
     writeFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'Draft text, revised.\n');
     assert.equal((await resolveNextAction(root)).verb, 'verify');
   });
 
 // A section redone or added after the last compile is compiled again (GRND-09/10, HARDEN-01's section redo).
-test('GRND-18: a section newer than the compiled DRAFT.md → compile; FINAL.md older than DRAFT.md → done (compile first with no compile record); a changed section count → compile',
+test('GRND-18: a section newer than the compiled DRAFT.md → compile; a recompiled DRAFT.md → done (compile first with no compile record); a changed section count → compile',
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const { utimesSync } = await import('node:fs');
@@ -541,6 +569,7 @@ test('GRND-18: a section newer than the compiled DRAFT.md → compile; FINAL.md 
     writePaperFile(root, 'DRAFT.md');
     writePaperFile(root, 'COMPILE-REPORT.md', '---\nschema_version: 1\nsections_count: 1\n---\n');
     writePaperFile(root, 'FINAL.md');
+    await writeDoneRecordFor(root);
     const t = (s: number): Date => new Date(Date.UTC(2026, 0, 1, 0, 0, s));
     const sec = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
     utimesSync(sec, t(1), t(1));
@@ -550,14 +579,17 @@ test('GRND-18: a section newer than the compiled DRAFT.md → compile; FINAL.md 
     // §1 redone after the compile.
     utimesSync(sec, t(4), t(4));
     assert.equal((await resolveNextAction(root)).verb, 'compile');
-    // Recompiled; FINAL.md is now older than the compiled draft. With no
+    // Recompiled: the compiled draft is not the one done exported. With no
     // COMPILE-INPUTS.json done could only refuse (VRFY-27): compile writes one.
+    writePaperFile(root, 'DRAFT.md', '# DRAFT.md\n\nRecompiled.\n');
     utimesSync(join(root, '.paper', 'DRAFT.md'), t(5), t(5));
     assert.equal((await resolveNextAction(root)).verb, 'compile', 'no compile record: compile before done');
     await writeCompileRecordFor(root, [{ n: 1, slug: 'intro' }]);
     assert.equal((await resolveNextAction(root)).verb, 'done');
+    // done exported again (FINAL.md and its record rewritten).
     rmSync(join(root, '.paper', 'COMPILE-INPUTS.json'));
-    utimesSync(join(root, '.paper', 'FINAL.md'), t(6), t(6));
+    writePaperFile(root, 'FINAL.md', '# DRAFT.md\n\nRecompiled.\n');
+    await writeDoneRecordFor(root);
     assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' });
     // A re-outline registered a second (verified) section the compiled draft does not hold.
     // (The first resolve moved the legacy root STATE.json into .paper/.)
@@ -589,6 +621,7 @@ test('GRND-18 / D-18-39 (review round 2): with COMPILE-INPUTS.json the compiled 
     const verifiedHashes = new Map([['1', 'a'.repeat(64)]]);
     await writeCompileInputs(root, [{ n: 1, slug: 'intro' }], new Date().toISOString(), { compiledDraftSha256: compiledSha, verifiedHashes });
     writePaperFile(root, 'FINAL.md');
+    await writeDoneRecordFor(root);
     const t = (s: number): Date => new Date(Date.UTC(2026, 0, 1, 0, 0, s));
     const sec = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
     utimesSync(join(root, '.paper', 'DRAFT.md'), t(2), t(2));
@@ -638,6 +671,42 @@ test('GRND-18 / D-18-39 (review round 2): with COMPILE-INPUTS.json the compiled 
     writeSectionPlan(root, 2, 'methods', 'verified');
     writeDraft(root, 2, 'methods');
     assert.equal((await resolveNextAction(root)).verb, 'compile');
+  });
+
+test('VRFY-26 (main-branch merge review, round 1): the paper is complete only while FINAL.md is the text done exported — a FINAL.md done never wrote, or one edited since, is attention, never "complete"; the compiled draft itself with no record goes to done',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const root = totalityRoot([{ n: 1, slug: 'intro' }]);
+    writeSectionPlan(root, 1, 'intro', 'verified');
+    writeDraft(root, 1, 'intro');
+    const compiled = '# Paper\n\nCompiled text [@k].\n';
+    writePaperFile(root, 'DRAFT.md', compiled);
+    await resolveNextAction(root); // moves the legacy root STATE.json into .paper/, as a real run would
+    await writeCompileRecordFor(root, [{ n: 1, slug: 'intro' }]);
+    assert.equal((await resolveNextAction(root)).verb, 'done', 'no FINAL.md: done');
+    const attention = /^\.paper\/FINAL\.md is not the text `pensmith done` exported \(it was edited or written by hand\) [-—] .*make the edit in the section drafts.*move \.paper\/FINAL\.md out of the paper folder, and run `pensmith done`$/;
+    // A FINAL.md written by hand, done never run: never "complete" (done would refuse it).
+    writePaperFile(root, 'FINAL.md', 'A hand-written final paper citing [@Fake2021].\n');
+    const handWritten = await resolveNextAction(root);
+    assert.equal(handWritten.verb, 'status');
+    assert.equal((handWritten as { reason?: string }).reason, 'attention');
+    assert.match((handWritten as { detail?: string }).detail ?? '', attention);
+    // The compiled draft itself with no record (a paper an older pensmith finished): done replaces it.
+    writePaperFile(root, 'FINAL.md', compiled);
+    assert.equal((await resolveNextAction(root)).verb, 'done');
+    // done exported it: complete.
+    await writeDoneRecordFor(root);
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' });
+    // A hand edit of the exported FINAL.md → attention, whatever its mtime.
+    writePaperFile(root, 'FINAL.md', `${compiled}\nAs (Nguyen & Patel, 2019) showed, [@Fake2021] and @fake2019 agree.[^1]\n\n[^1]: A note.\n`);
+    const edited = await resolveNextAction(root);
+    assert.equal((edited as { reason?: string }).reason, 'attention');
+    assert.match((edited as { detail?: string }).detail ?? '', attention);
+    writePaperFile(root, 'FINAL.md', compiled);
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' }, 'the bytes done exported');
+    // A record that does not parse is no record; the compiled-draft FINAL.md goes back to done.
+    writePaperFile(root, 'DONE-RECORD.json', '{"$schemaVersion": 1}');
+    assert.equal((await resolveNextAction(root)).verb, 'done');
   });
 
 // === Phase 18 review round 3 ===

@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { withLlmSandbox } from './helpers/llm-sandbox.js';
 import { writeState, writeOutline, writePlan, sectionDirOf } from './helpers/paper-cli-harness.js';
 import { mtimes } from './helpers/gate-paper.js';
@@ -92,6 +93,9 @@ test('VRFY-26 (in process): a humanized FINAL.md is gated on its own bytes — e
         assert.match(r.out, /GATE-04 BLOCKED — FINAL\.md failed re-verification/, what);
         assert.ok(!existsSync(join(sb.paper, 'export')), `${what}: nothing exported`);
         assert.deepEqual(mtimes(join(sb.paper, 'sections')), sections, `${what}: nothing under sections/ changed`);
+        // The refused humanized text never stays behind as the finished paper (main-branch merge review, round 1).
+        assert.ok(!existsSync(join(sb.paper, 'FINAL.md')), `${what}: the refused FINAL.md was not kept`);
+        assert.match(r.out, /pensmith done: the humanized text was not kept \(FINAL\.md was removed\); `pensmith done --raw` exports the compiled draft/, what);
       }
       // A humanizer that only improves the prose: the citation is kept, the export happens.
       __setTaskRunnerForTest(async () => ({ output: compiled.replace('reshaped', 'transformed') }));
@@ -99,6 +103,12 @@ test('VRFY-26 (in process): a humanized FINAL.md is gated on its own bytes — e
       assert.equal((ok.result as { ok?: boolean }).ok, true, ok.out);
       assert.ok(existsSync(join(sb.paper, 'export', 'FINAL.md')) || existsSync(join(sb.paper, 'export', 'DRAFT.md')), ok.out);
       assert.match(readFileSync(join(sb.paper, 'VERIFICATION.md'), 'utf8'), /\.paper\/FINAL\.md/, 'the paper-level record names the bytes it judged');
+      const humanized = compiled.replace('reshaped', 'transformed');
+      assert.equal(readFileSync(join(sb.paper, 'FINAL.md'), 'utf8'), humanized, 'FINAL.md is the humanized text GATE-04 judged');
+      const record = JSON.parse(readFileSync(join(sb.paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
+      assert.equal(record['humanized'], true);
+      assert.equal(record['final_sha256'], createHash('sha256').update(humanized, 'utf8').digest('hex'));
+      assert.equal(record['compiled_draft_sha256'], createHash('sha256').update(compiled, 'utf8').digest('hex'));
     } finally {
       __setTaskRunnerForTest(null);
     }

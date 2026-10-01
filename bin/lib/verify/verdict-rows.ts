@@ -11,7 +11,89 @@
 // than silently nulling the blocking set.
 
 import { BLOCKING_VERDICTS, RETRY_ONLINE_VERDICTS, ACCEPTABLE_QUOTE_VERDICT } from './verdicts.js';
-import { DRAFT_VERDICTS, textRowLine } from './verdicts.js';
+import { DRAFT_ROW_KEY, DRAFT_VERDICTS, FAILING_VERDICTS, UNATTRIBUTED_CITEKEY, textRowLine } from './verdicts.js';
+
+// ---------------------------------------------------------------------------
+// What `plan N --revise` can repair (revise.ts), read from a VERIFICATION.md.
+// Here, not in revise.ts, so the router's attention wording and the compile /
+// done refusals (verification-md.ts) name `--revise` only when it can change
+// something (main-branch merge review, round 1).
+// ---------------------------------------------------------------------------
+
+/**
+ * The verifier verdicts that --revise repairs by swapping or removing the
+ * flagged citation: every failing verdict whose row names a citekey (Phase 20:
+ * RETRACTED, UNASSIGNED, UNPARSEABLE and UNRESOLVABLE join FABRICATED,
+ * MIS-CITED and NOT_FOUND). The rows without a citekey (a citation form the
+ * grammar cannot read, an unattributed quote, NO-CITATIONS) need an edit or a
+ * re-draft — a re-plan is REV-03 (Phase 22).
+ */
+export const REVISABLE_VERDICTS = ['FABRICATED', 'MIS-CITED', 'RETRACTED', 'UNASSIGNED', 'UNPARSEABLE', 'UNRESOLVABLE', 'NOT_FOUND'] as const;
+
+/**
+ * One verdict row of VERIFICATION.md (D-20-20): a Pass-3 quote row
+ * `- <key> [q<N>] ("<snippet>…"): **<VERDICT>** — rest` or a keyed row
+ * `- <key>: **<VERDICT>** — rest` (any citekey the grammar accepts). Null for
+ * any other line.
+ */
+function verdictRowOf(line: string): { citekey: string; verdict: string; rest: string } | null {
+  const m =
+    /^\s*-\s*(\S+?)(?:\s+\[q[1-9]\d*\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line) ??
+    /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line);
+  if (!m || m[1] === undefined || m[2] === undefined) return null;
+  return { citekey: m[1], verdict: m[2], rest: m[3] ?? '' };
+}
+
+/**
+ * The key slot of a row that names no citation (review round 2): a text
+ * finding (`(L<line>)` — an UNPARSEABLE or UNSUPPORTED-FORM text), an
+ * identifier written in the prose (`doi:10.…`, `arXiv:…`, `PMID:…`), a draft
+ * check (`draft`) or an unattributed quote. revise cannot swap one: the text
+ * needs a hand edit or a re-draft.
+ */
+export function isTextRowKey(key: string): boolean {
+  if (key === DRAFT_ROW_KEY || key === UNATTRIBUTED_CITEKEY) return true;
+  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key)) return true;
+  // A text finding's key slot `(L<line>)` — never a citekey (review round 3: a
+  // citekey `L12` is a citation revise can repair).
+  return textRowLine(key) !== null;
+}
+
+/** A failing row of VERIFICATION.md: its key and `<VERDICT>: <reason>`. */
+export interface FailingRow {
+  citekey: string;
+  reason: string;
+}
+
+/**
+ * The failing rows of VERIFICATION.md (each key once, in order): the citations
+ * revise can repair (a citekey with a REVISABLE_VERDICTS verdict) and the text
+ * rows it cannot (every row whose key names no citation and whose verdict
+ * fails the section — an UNSUPPORTED-FORM or UNPARSEABLE text, an UNATTRIBUTED
+ * quote, NO-CITATIONS, a bare identifier; main-branch merge review, round 1:
+ * before, a verdict outside REVISABLE_VERDICTS was dropped, so revise
+ * reported "nothing wrong" for a section failed by author-date prose).
+ */
+export function revisableRows(verificationMd: string): { citations: FailingRow[]; textRows: FailingRow[] } {
+  const citations: FailingRow[] = [];
+  const textRows: FailingRow[] = [];
+  const seen = new Set<string>();
+  for (const line of verificationMd.split(/\r?\n/)) {
+    const row = verdictRowOf(line);
+    if (row === null || seen.has(row.citekey)) continue;
+    const text = isTextRowKey(row.citekey);
+    if (text ? !FAILING_VERDICTS.has(row.verdict) : !(REVISABLE_VERDICTS as readonly string[]).includes(row.verdict)) continue;
+    seen.add(row.citekey);
+    const f = { citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, '').trim()}` };
+    (text ? textRows : citations).push(f);
+  }
+  return { citations, textRows };
+}
+
+/** True when VERIFICATION.md flags a citation `plan N --revise` can swap or remove. */
+export function reviseCanRepair(verificationMd: string): boolean {
+  return revisableRows(verificationMd).citations.length > 0;
+}
 
 /**
  * Verdicts that block compile and done: the ONE vocabulary of verdicts.ts

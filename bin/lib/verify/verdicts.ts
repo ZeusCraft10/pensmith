@@ -120,6 +120,9 @@ export const LEGACY_UNAVAILABLE_VERDICTS: ReadonlySet<string> = new Set(['PDF_UN
 /** The citekey slot of an UNATTRIBUTED Pass-3 row (a quote with no citation). */
 export const UNATTRIBUTED_CITEKEY = '(unattributed)';
 
+/** The key slot of a draft-check row (NO-CITATIONS, PLACEHOLDER). */
+export const DRAFT_ROW_KEY = 'draft';
+
 /** A verdict row as the status rule reads it. */
 export interface VerdictRowLike {
   readonly verdict: string;
