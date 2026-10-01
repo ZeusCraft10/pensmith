@@ -5,7 +5,8 @@
 // with this reader: ATX (and setext) headings, paragraphs, emphasis and strong
 // emphasis, strikeout, superscript and subscript, inline code and code blocks
 // (fenced and indented), block quotes, bullet and ordered lists (nested;
-// decimal, letter and roman markers), links and autolinks, horizontal rules,
+// decimal, letter and roman markers), links (inline, reference-style with
+// their `[label]: url` definitions, and autolinks), horizontal rules,
 // pipe tables, hard line breaks, backslash escapes and HTML entities — read as
 // pandoc's Markdown reader reads them (`markdown-yaml_metadata_block-
 // raw_attribute-raw_tex`: a heading, a block quote or an indented code block
@@ -175,9 +176,11 @@ function compactify(items: Block[][]): Block[][] {
 /** The parse state for one container's lines. */
 class BlockParser {
   private readonly literal: Set<string>;
+  private readonly refs: ReadonlyMap<string, string>;
 
-  constructor(literal: Set<string>) {
+  constructor(literal: Set<string>, refs: ReadonlyMap<string, string> = NO_REFS) {
     this.literal = literal;
+    this.refs = refs;
   }
 
   /** Parse a container's lines; in a list item a list marker line starts a (nested) list, as in pandoc. */
@@ -211,7 +214,7 @@ class BlockParser {
       const atx = ATX_RE.exec(line);
       if (atx !== null && (afterBlank || out.length === 0)) {
         const text = (atx[2] as string).replace(/[ \t]+#+[ \t]*$/, '').replace(/^#+$/, '');
-        out.push({ t: 'heading', level: (atx[1] as string).length, children: parseInlines(text, this.literal) });
+        out.push({ t: 'heading', level: (atx[1] as string).length, children: parseInlines(text, this.literal, this.refs) });
         i++;
         continue;
       }
@@ -275,14 +278,14 @@ class BlockParser {
       // A setext heading: one line underlined with = or -.
       if (para.length === 2 && SETEXT_RE.test(para[1] as string) && (afterBlank || out.length === 0)) {
         const level = (para[1] as string).trim().startsWith('=') ? 1 : 2;
-        out.push({ t: 'heading', level, children: parseInlines((para[0] as string).trim(), this.literal) });
+        out.push({ t: 'heading', level, children: parseInlines((para[0] as string).trim(), this.literal, this.refs) });
         i = j;
         continue;
       }
       this.noteLiteralBlocks(para);
       // In a list item a paragraph not followed by a blank line is plain text (pandoc's para / plain).
       const plain = inListItem && !(j < lines.length && isBlank(lines[j] as string));
-      out.push({ t: plain ? 'plain' : 'para', children: parseInlines(para.join('\n'), this.literal) });
+      out.push({ t: plain ? 'plain' : 'para', children: parseInlines(para.join('\n'), this.literal, this.refs) });
       i = j;
     }
     return out;
@@ -388,18 +391,69 @@ class BlockParser {
       const l = lines[i] as string;
       if (isBlank(l) || !l.includes('|')) break;
       const row = cells(l);
-      rows.push(head.map((_h, c) => parseInlines(row[c] ?? '', this.literal)));
+      rows.push(head.map((_h, c) => parseInlines(row[c] ?? '', this.literal, this.refs)));
     }
-    return { block: { t: 'table', aligns, head: head.map((h) => parseInlines(h, this.literal)), rows }, next: i };
+    return { block: { t: 'table', aligns, head: head.map((h) => parseInlines(h, this.literal, this.refs)), rows }, next: i };
   }
 }
 
 /** Parse a Markdown text in the subset (CRLF and LF alike). */
 export function parseMarkdown(text: string): ParsedMarkdown {
   const literal = new Set<string>();
-  const lines = text.replace(/\r\n?/g, '\n').split('\n');
-  const blocks = new BlockParser(literal).parse(lines);
+  const { lines, refs } = takeReferenceDefinitions(text.replace(/\r\n?/g, '\n').split('\n'));
+  const blocks = new BlockParser(literal, refs).parse(lines);
   return { blocks, literal: [...literal] };
+}
+
+const NO_REFS: ReadonlyMap<string, string> = new Map();
+
+/** A link reference definition line: `[label]: destination "title"` (up to three spaces of indent). */
+const REF_DEF_RE = /^ {0,3}\[((?:\\.|[^[\]\\])+)\]:[ \t]*(<[^<>\n]*>|\S+)(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^)]*\)))?[ \t]*$/;
+
+/** A reference label as pandoc matches it: case and white space folded. */
+function refLabel(raw: string): string {
+  return raw.trim().replace(/\s+/gu, ' ').toLowerCase();
+}
+
+/**
+ * The link reference definitions of a document (review round 2): each
+ * `[label]: url` line that starts a block outside a fenced code block, taken
+ * out of the text (a blank line in its place) and kept for `[text][label]`,
+ * `[text][]` and `[label]` — as pandoc reads them, never printed as a stray
+ * paragraph. A footnote definition (`[^1]: …`) is not one.
+ */
+function takeReferenceDefinitions(lines: readonly string[]): { lines: string[]; refs: Map<string, string> } {
+  const out = [...lines];
+  const refs = new Map<string, string>();
+  let fence: string | null = null;
+  let blockStart = true;
+  lines.forEach((l, i) => {
+    if (fence !== null) {
+      if (new RegExp(`^ {0,3}${fence[0] === '`' ? '`' : '~'}{${fence.length},}[ \\t]*$`).test(l)) fence = null;
+      return;
+    }
+    const f = FENCE_RE.exec(l);
+    if (f !== null) {
+      fence = f[1] as string;
+      blockStart = true;
+      return;
+    }
+    if (isBlank(l)) {
+      blockStart = true;
+      return;
+    }
+    const m = blockStart ? REF_DEF_RE.exec(l) : null;
+    if (m !== null && !(m[1] as string).startsWith('^')) {
+      const label = refLabel(m[1] as string);
+      let dest = m[2] as string;
+      if (dest.startsWith('<')) dest = dest.slice(1, -1);
+      if (!refs.has(label)) refs.set(label, dest.replace(/\\([!-/:-@[-`{-~])/g, '$1'));
+      out[i] = '';
+      return;
+    }
+    blockStart = ATX_RE.test(l);
+  });
+  return { lines: out, refs };
 }
 
 // ---------------------------------------------------------------------------
@@ -460,10 +514,12 @@ const WORD_CHAR = /[\p{L}\p{N}]/u;
 class InlineParser {
   private readonly s: string;
   private readonly literal: Set<string>;
+  private readonly refs: ReadonlyMap<string, string>;
 
-  constructor(s: string, literal: Set<string>) {
+  constructor(s: string, literal: Set<string>, refs: ReadonlyMap<string, string> = NO_REFS) {
     this.s = s;
     this.literal = literal;
+    this.refs = refs;
   }
 
   /** Parse s[from, to) into inlines; `close` is a delimiter that ends this run (for emphasis). */
@@ -752,7 +808,8 @@ class InlineParser {
         if (depth === 0) break;
       }
     }
-    if (k >= to || s[k + 1] !== '(') return null;
+    if (k >= to) return null;
+    if (s[k + 1] !== '(') return this.referenceLink(i, k, to);
     const dest = /^\(\s*(<[^<>\n]*>|[^\s()]*(?:\([^\s()]*\)[^\s()]*)*)(?:\s+("[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/.exec(s.slice(k + 1, to));
     if (dest === null) return null;
     let href = dest[1] as string;
@@ -760,11 +817,32 @@ class InlineParser {
     href = href.replace(/\\([!-/:-@[-`{-~])/g, '$1');
     return { children: this.run(i + 1, k), href, end: k + 1 + dest[0].length };
   }
+
+  /**
+   * A reference link whose text is s[i, k] (`]` at k): `[text][label]`,
+   * `[text][]` or the shortcut `[label]`, when the document defines the label
+   * (takeReferenceDefinitions); null otherwise (written as text, as pandoc).
+   */
+  private referenceLink(i: number, k: number, to: number): { children: Inline[]; href: string; end: number } | null {
+    if (this.refs.size === 0) return null;
+    const s = this.s;
+    const text = s.slice(i + 1, k);
+    if (s[k + 1] === '[') {
+      const close = s.indexOf(']', k + 2);
+      if (close !== -1 && close < to && !s.slice(k + 2, close).includes('[')) {
+        const raw = s.slice(k + 2, close);
+        const href = this.refs.get(refLabel(raw === '' ? text : raw));
+        return href !== undefined ? { children: this.run(i + 1, k), href, end: close + 1 } : null;
+      }
+    }
+    const href = this.refs.get(refLabel(text));
+    return href !== undefined ? { children: this.run(i + 1, k), href, end: k + 1 } : null;
+  }
 }
 
 /** Parse inline Markdown into inlines (white space normalised, trimmed). */
-export function parseInlines(text: string, literal: Set<string> = new Set()): Inline[] {
-  const p = new InlineParser(text, literal);
+export function parseInlines(text: string, literal: Set<string> = new Set(), refs: ReadonlyMap<string, string> = NO_REFS): Inline[] {
+  const p = new InlineParser(text, literal, refs);
   return trimInlines(normalizeSpaces(deepNormalize(p.run(0, text.length))));
 }
 

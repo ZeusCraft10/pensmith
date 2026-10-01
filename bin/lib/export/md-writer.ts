@@ -20,9 +20,19 @@ export function escapeMarkdownText(s: string): string {
     .replace(/&(?=#?[A-Za-z0-9]+;)/g, '\\&');
 }
 
-/** True when a link's text is its own target (an autolink). */
+/**
+ * True when a link's text is its own target and an autolink can hold it: an
+ * autolink ends at the first `>` and may hold no `<` or white space, so a SICI
+ * DOI (`10.1002/(SICI)…49:4<327::AID-ASI4>3.0.CO;2-4`) is written as
+ * `[text](dest)` (review round 2).
+ */
 function isAutolink(r: RichRun): boolean {
-  return r.href !== undefined && r.text === r.href && /^[a-z][a-z0-9+.-]*:\S+$/i.test(r.href);
+  return r.href !== undefined && r.text === r.href && /^[a-z][a-z0-9+.-]*:[^\s<>]+$/i.test(r.href);
+}
+
+/** A link destination for `[text](dest)`: `<`, `>`, parentheses and white space percent-encoded (encodeURIComponent leaves parentheses as they are). */
+function linkDestination(href: string): string {
+  return href.replace(/[<>()\s]/gu, (c) => (/[<>()]/u.test(c) ? `%${c.charCodeAt(0).toString(16).toUpperCase()}` : encodeURIComponent(c)));
 }
 
 /** One run as Markdown: emphasis, strong, superscript, subscript, small caps and links, white space kept outside the markers. */
@@ -40,7 +50,7 @@ function runMarkdown(r: RichRun): string {
     else if (r.bold === true) s = `**${s}**`;
     else if (r.italic === true) s = `*${s}*`;
     if (r.smallCaps === true) s = `[${s}]{.smallcaps}`;
-    if (r.href !== undefined) s = `[${s}](${r.href.replace(/[()\s]/g, (c) => encodeURIComponent(c))})`;
+    if (r.href !== undefined) s = `[${s}](${linkDestination(r.href)})`;
   }
   if (r.sup === true) s = `^${s}^`;
   else if (r.sub === true) s = `~${s}~`;

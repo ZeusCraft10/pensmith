@@ -16,6 +16,11 @@ Anomalies pile up...[^8] Is lending growth-led?![^9] Kuhn wrote of "the essentia
 
 The pages are cited as a range,[^13] an open run.[^14] A chapter[^15] and a section.[^16]
 
+## Notes and Line Breaks
+
+A prefixed note.[^17] An abbreviation.[^18] A suffix after a title.[^19] A wrapped claim.[^20] A hard break[^21]\
+on the next line. An ampersand run&[^22]more.
+
 ## Bibliography {#bibliography .unnumbered}
 
 :::::: {#refs .references .csl-bib-body .hanging-indent entry-spacing="0"}
@@ -63,3 +68,15 @@ Okafor, Chidi. "Measuring Trust in [NGO]{.nocase} Networks." In *[Handbook of Ci
 [^15]: Kuhn, *[The Structure of Scientific Revolutions]{.nocase}*, chap. 2.
 
 [^16]: Kuhn, sec. 3.
+
+[^17]: See also Okafor, "Measuring Trust in [NGO]{.nocase} Networks."
+
+[^18]: E.g., Lindqvist and Berg, "Economic Growth in [China]{.nocase} and the [World]{.nocase} [Bank's]{.nocase} Lending Policy."
+
+[^19]: Okafor, "Measuring Trust in [NGO]{.nocase} Networks," emphasis added.
+
+[^20]: Kuhn, *[The Structure of Scientific Revolutions]{.nocase}*.
+
+[^21]: Lindqvist and Berg, "Economic Growth in [China]{.nocase} and the [World]{.nocase} [Bank's]{.nocase} Lending Policy."
+
+[^22]: Okafor, "Measuring Trust in [NGO]{.nocase} Networks."

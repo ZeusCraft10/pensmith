@@ -10,11 +10,13 @@
 //     one whose rendering opens with a superscript (AMA) drops the white space
 //     before it (`claim^1^.`);
 //   - a note style's citation becomes a footnote: the white space before it
-//     goes, and the run of punctuation right after it — every Unicode
-//     punctuation character but the en and em dash, as pandoc's mvPunct takes
-//     it (`...`, `?!`, `).`) — moves before the marker (`claim [@k]...` →
-//     `claim...[^1]`), unless a narrative citation's author already ends with
-//     punctuation; with a locale that puts punctuation inside quotes (en-US),
+//     goes (a soft line break inside the paragraph too), and the run of
+//     punctuation right after it — every Unicode punctuation character but
+//     the en and em dash, as pandoc's mvPunct takes it (`...`, `?!`, `).`),
+//     stopping at the next citation and before a hard line break (review
+//     round 2) — moves before the marker (`claim [@k]...` → `claim...[^1]`),
+//     unless a narrative citation's author already ends with punctuation; the
+//     note's first letter is capitalised (`See also`, `Van Gogh`); with a locale that puts punctuation inside quotes (en-US),
 //     a period or comma that lands after a closing straight quotation mark
 //     goes inside it (`"…here" [@k].` → `"…here."[^1]`), and a period there
 //     after `?` or `!` is dropped (review round 1); a narrative citation keeps
@@ -153,11 +155,57 @@ function plain(runs: readonly RichRun[]): string {
   return runs.map((r) => r.text).join('');
 }
 
-/** The start of the horizontal white space right before `at` in `text` (`at` when there is none). */
+/**
+ * The start of the white space right before `at` in `text` (`at` when there
+ * is none) that pandoc drops before a note or a superscript citation: spaces
+ * and tabs, and a soft line break inside the paragraph with the spaces around
+ * it (review round 2: `claim\n[@k].` is `claim.[^1]`, never `claim .[^1]`) —
+ * never a blank line, a hard line break (a line ending in `\` or two spaces),
+ * or the line break after a heading, a table row or a fence.
+ */
 function spaceStart(text: string, at: number, floor: number): number {
   let i = at;
   while (i > floor && (text[i - 1] === ' ' || text[i - 1] === '\t')) i--;
-  return i;
+  let nl = i;
+  if (nl > floor && text[nl - 1] === '\n') nl--;
+  else return i;
+  if (nl > floor && text[nl - 1] === '\r') nl--;
+  const lineStart = text.lastIndexOf('\n', nl - 1) + 1;
+  const prev = text.slice(Math.max(lineStart, floor), nl);
+  if (prev.trim() === '' || / {2,}$|\\$/.test(prev) || /^ {0,3}(?:#{1,6}(?:\s|$)|\||```|~~~)/.test(text.slice(lineStart, nl))) return i;
+  let j = nl;
+  while (j > floor && (text[j - 1] === ' ' || text[j - 1] === '\t')) j--;
+  return j;
+}
+
+/**
+ * The run of punctuation right after a note citation that moves before its
+ * marker (NOTE_PUNCT_RUN), cut at `limit` — the next citation's start, so a
+ * run never swallows `[@` of an adjacent citation (`[@a][@b].`; review round
+ * 2) — and before a backslash that ends a line (a hard line break, not
+ * punctuation: `[@k]\` keeps its break after the marker).
+ */
+function notePunctRun(text: string, end: number, limit: number): string {
+  let run = NOTE_PUNCT_RUN.exec(text.slice(end, Math.max(end, limit)))?.[0] ?? '';
+  const hardBreak = /\\(?=\r?\n|$)/u.exec(text.slice(end, end + run.length + 2));
+  if (hardBreak !== null && hardBreak.index < run.length) run = run.slice(0, hardBreak.index);
+  return run;
+}
+
+/**
+ * A note's text with its first letter capitalised, as pandoc's citeproc
+ * capitalises a citation that starts a note (`see also` → `See also`, `van
+ * Gogh, 33` → `Van Gogh, 33`; review round 2). A first word with a capital
+ * after its first letter (`iPhone`, case-protected) is left as it is.
+ */
+function capitalizeNote(runs: readonly RichRun[]): RichRun[] {
+  const out = runs.map((r) => ({ ...r }));
+  const first = out.find((r) => r.text !== '');
+  if (first === undefined) return out;
+  const m = /^(\p{Ll})(\p{L}*)/u.exec(first.text);
+  if (m === null || /\p{Lu}/u.test(m[2] as string)) return out;
+  (first as { text: string }).text = (m[1] as string).toUpperCase() + first.text.slice(1);
+  return out;
 }
 
 /**
@@ -205,6 +253,9 @@ export async function prepareText(
 
   const placed: PlacedCitation[] = [];
   const notes: Array<readonly RichRun[]> = [];
+  // Each citation's next neighbour in the text (rendered or not): a moved
+  // punctuation run stops there.
+  const nextStart = new Map<(typeof found)[number], number>(found.map((f, k) => [f, found[k + 1]?.c.start ?? text.length] as const));
   let floor = 0;
   rendered.forEach((f, idx) => {
     const r = doc.citations[idx] as (typeof doc.citations)[number];
@@ -216,7 +267,7 @@ export async function prepareText(
     const parts: PlacedPart[] = [];
     if (r.note !== null) {
       const n = notes.length + 1;
-      notes.push(r.note);
+      notes.push(capitalizeNote(r.note));
       if (r.inline.length > 0) {
         parts.push({ kind: 'runs', runs: r.inline });
       } else {
@@ -225,7 +276,7 @@ export async function prepareText(
       // The punctuation run after the citation moves before the note marker
       // (see the header), unless a narrative author already ends with
       // punctuation (pandoc's mvPunct).
-      const run = unknownTail === '' ? (NOTE_PUNCT_RUN.exec(text.slice(end))?.[0] ?? '') : '';
+      const run = unknownTail === '' ? notePunctRun(text, end, nextStart.get(f) ?? text.length) : '';
       const narrativeEnds = r.inline.length > 0 && /\p{P}$/u.test(plain(r.inline));
       if (run !== '' && !narrativeEnds) {
         end += run.length;

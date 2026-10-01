@@ -232,5 +232,6 @@ test('exporter (D-21-07): a .csl file outside the bundled 8 renders through the 
   const { value: res } = await captured(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style: csl }));
   const md = readFileSync(res.outputPath, 'utf8');
   assert.ok(md.includes('A claim <<Xu 2020 at 4>>.') || md.includes('A claim \\<\\<Xu 2020 at 4\\>\\>.'), md);
-  assert.match(md, /## References\n\nXU, Wei: X\./);
+  // The style prints no DOI, so the title links to it, as pandoc's citeproc links it (review round 2).
+  assert.match(md, /## References\n\nXU, Wei: \[X\]\(https:\/\/doi\.org\/10\.1\/x\)\./);
 });

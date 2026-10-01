@@ -871,7 +871,11 @@ export function caseProtectItems(entries: ReadonlyArray<Record<string, unknown>>
 // (author-in-text) citation is rendered as pandoc renders it: the author-only
 // form of its item in the text, and the item with the author suppressed after
 // it (an in-text style) or in its note (a note style). citeproc's HTML output
-// is parsed into rich-text runs that each writer serialises.
+// is parsed into rich-text runs that each writer serialises. Two pandoc
+// behaviours citeproc-js lacks are added (review round 2): a suffix's comma
+// or period goes inside a closing quotation mark under an en-US locale, and a
+// bibliography entry whose style prints none of its DOI / PMCID / PMID / URL
+// gets its title linked to the first of them (pandoc's link-bibliography).
 
 /** One run of rendered text and its formatting. */
 export interface RichRun {
@@ -1084,6 +1088,92 @@ function replaceInRuns(runs: readonly RichRun[], from: string, to: string): Rich
     done = true;
     return { ...r, text: r.text.replace(from, to) };
   });
+}
+
+/**
+ * A citation's runs with a suffix that opens with a comma or a period moved
+ * inside the closing quotation mark before it, under a locale that puts
+ * punctuation inside quotes (en-US): `“Measured Measurement,” emphasis added`,
+ * as pandoc's citeproc prints it (review round 2; citeproc-js moves its own
+ * delimiters but not an affix).
+ */
+function suffixIntoQuote(runs: readonly RichRun[], items: readonly CitationItemInput[], facts: LocaleFacts): RichRun[] {
+  let out = [...runs];
+  if (!facts.punctuationInQuote) return out;
+  for (const i of items) {
+    const sfx = i.suffix ?? '';
+    if (!/^[,.]/u.test(sfx)) continue;
+    out = replaceInRuns(out, `\u201D${sfx}`, `${sfx[0] as string}\u201D${sfx.slice(1)}`);
+  }
+  return out;
+}
+
+/** One character as the title match compares it: quotes, dashes and spaces folded, lower case. */
+function foldTitleChar(ch: string): string {
+  if (/[\u2018\u2019\u201A\u2032']/u.test(ch)) return "'";
+  if (/[\u201C\u201D\u201E\u2033"]/u.test(ch)) return '"';
+  if (/[\u2010-\u2015-]/u.test(ch)) return '-';
+  if (/\s/u.test(ch)) return ' ';
+  return ch.toLowerCase();
+}
+
+/** Runs with the text from `start` to `end` (offsets into their joined text) linked to `href`. */
+function linkRange(runs: readonly RichRun[], start: number, end: number, href: string): RichRun[] {
+  const out: RichRun[] = [];
+  let at = 0;
+  for (const r of runs) {
+    const a = at;
+    const b = at + r.text.length;
+    at = b;
+    if (b <= start || a >= end) {
+      out.push(r);
+      continue;
+    }
+    const from = Math.max(start, a) - a;
+    const to = Math.min(end, b) - a;
+    if (from > 0) out.push({ ...r, text: r.text.slice(0, from) });
+    out.push({ ...r, text: r.text.slice(from, to), href });
+    if (to < r.text.length) out.push({ ...r, text: r.text.slice(to) });
+  }
+  return out;
+}
+
+/**
+ * A bibliography entry's runs with its title linked, as pandoc's citeproc
+ * links it (link-bibliography, review round 2): when the entry has a DOI, a
+ * PMCID, a PMID or a URL (the first of them) and the style prints none of
+ * them (no link in the entry), the title's text becomes a link to it — the
+ * Vancouver entry of a DOI-bearing article links its title to doi.org. The
+ * title is found in the printed text with quotes, dashes and case folded; one
+ * the style rewrote past recognition stays unlinked.
+ */
+function linkBibliographyTitle(runs: RichRun[], item: Record<string, unknown> | undefined): RichRun[] {
+  if (item === undefined || runs.some((r) => r.href !== undefined)) return runs;
+  const str = (k: string): string => (typeof item[k] === 'string' || typeof item[k] === 'number' ? String(item[k]).trim() : '');
+  const href = str('DOI') !== ''
+    ? `https://doi.org/${str('DOI')}`
+    : str('PMCID') !== ''
+      ? `https://www.ncbi.nlm.nih.gov/pmc/articles/${str('PMCID')}`
+      : str('PMID') !== ''
+        ? `https://www.ncbi.nlm.nih.gov/pubmed/${str('PMID')}`
+        : str('URL');
+  const title = str('title').replace(/<[^>]*>/g, '').replace(/---/g, '\u2014').replace(/--/g, '\u2013');
+  if (href === '' || title === '') return runs;
+  const text = runsText(runs);
+  for (const id of ['DOI', 'PMCID', 'PMID', 'URL']) if (str(id) !== '' && text.includes(str(id))) return runs;
+  // Fold per UTF-16 unit so offsets map back (every fold is one unit to one
+  // unit); a match must stand as whole words, and one in the title's own case
+  // wins over one in another case (`X` in `XU, Wei: X.` is the last `X`).
+  const fold = (t: string): string => t.split('').map(foldTitleChar).join('');
+  const bounded = (hay: string, needle: string): number => {
+    for (let at = hay.indexOf(needle); at !== -1; at = hay.indexOf(needle, at + 1)) {
+      if (!/[\p{L}\p{N}]/u.test(hay[at - 1] ?? ' ') && !/[\p{L}\p{N}]/u.test(hay[at + needle.length] ?? ' ')) return at;
+    }
+    return -1;
+  };
+  const exact = bounded(text.split('').map((c) => (foldTitleChar(c) === c.toLowerCase() ? c : foldTitleChar(c))).join(''), title.split('').map((c) => (foldTitleChar(c) === c.toLowerCase() ? c : foldTitleChar(c))).join(''));
+  const at = exact !== -1 ? exact : bounded(fold(text), fold(title));
+  return at === -1 ? runs : linkRange(runs, at, at + title.length, href);
 }
 
 /** The citeproc engine (citation-js's CSL plugin) for `template`, over `items`, emitting HTML. */
@@ -1376,6 +1466,7 @@ export async function renderDocumentCitations(
     let rest = printedRuns(passA[n]?.[2] ?? '');
     for (const [from, to] of restores) rest = replaceInRuns(rest, from, to);
     rest = nbspAfterLabels(rest, c.items.filter((i) => i.locator).map((i) => i.label ?? 'page'), facts);
+    rest = suffixIntoQuote(rest, c.items, facts);
     if (c.narrative !== true) return noteStyle ? { inline: [], note: rest.length > 0 ? rest : null } : { inline: rest, note: null };
     const author = printedRuns(authors[n] ?? '');
     if (noteStyle) return { inline: author, note: rest.length > 0 ? rest : null };
@@ -1394,7 +1485,8 @@ export async function renderDocumentCitations(
       const right = /<div class="csl-right-inline">([\s\S]*)<\/div>\s*<\/div>\s*$/.exec(entryHtml);
       const label = margin !== null ? trimRuns(citeprocHtmlRuns(margin[1] as string)) : null;
       const body = margin !== null && right !== null ? (right[1] as string) : entryHtml;
-      bibliography.push({ id, label: label !== null && label.length > 0 ? label : null, runs: trimRuns(citeprocHtmlRuns(body)) });
+      const item = entries.find((e) => String(e['id'] ?? '') === id);
+      bibliography.push({ id, label: label !== null && label.length > 0 ? label : null, runs: linkBibliographyTitle(trimRuns(citeprocHtmlRuns(body)), item) });
     });
   }
   return { noteStyle, citations: rendered, bibliography, hangingIndent, localeFallback: fallback, punctuationInQuote: facts.punctuationInQuote };

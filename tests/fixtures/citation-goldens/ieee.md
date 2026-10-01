@@ -16,6 +16,11 @@ Anomalies pile up \[1\]... Is lending growth-led \[2\]?! Kuhn wrote of "the esse
 
 The pages are cited as a range \[3, pp. 33--38\], an open run \[3, p. 33ff\]. A chapter \[1, Ch. 2\] and a section \[1, Sec. 3\].
 
+## Notes and Line Breaks
+
+A prefixed note see also \[3\]. An abbreviation e.g., \[2\]. A suffix after a title \[3\], emphasis added. A wrapped claim \[1\]. A hard break \[2\]\
+on the next line. An ampersand run \[3\]&more.
+
 ## References {#references .unnumbered}
 
 :::::: {#refs .references .csl-bib-body entry-spacing="0"}

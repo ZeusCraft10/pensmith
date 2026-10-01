@@ -16,6 +16,11 @@ Anomalies pile up (Kuhn)... Is lending growth-led (Lindqvist and Berg)?! Kuhn wr
 
 The pages are cited as a range (Okafor 33--38), an open run (Okafor 33ff.). A chapter (Kuhn, chap.2) and a section (Kuhn, sec.3).
 
+## Notes and Line Breaks
+
+A prefixed note (see also Okafor). An abbreviation (e.g., Lindqvist and Berg). A suffix after a title (Okafor, emphasis added). A wrapped claim (Kuhn). A hard break (Lindqvist and Berg)\
+on the next line. An ampersand run (Okafor)&more.
+
 ## References {#references .unnumbered}
 
 :::::: {#refs .references .csl-bib-body .hanging-indent entry-spacing="0" line-spacing="2"}

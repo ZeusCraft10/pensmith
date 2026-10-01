@@ -14,7 +14,9 @@
 //     `url`) and backslash escapes;
 //   - spellings of the same character: curly and straight quotes, `--` / `–`,
 //     `---` / `—`, `...` / `…`;
-//   - white space: runs of spaces as one, no trailing space, blank lines as one.
+//   - white space: runs of spaces as one, no trailing space, blank lines as one,
+//     a soft line break inside a paragraph as a space (a hard one — a
+//     backslash before it — stays).
 // After it, the body (every in-text citation string, every number, every
 // superscript and note marker in place), every note's text and number, and
 // the bibliography's order, labels and entry text must be EQUAL. A genuine
@@ -51,6 +53,8 @@ const EXCEPTIONS = JSON.parse(readFileSync(join(DIR, 'EXCEPTIONS.json'), 'utf8')
 export function normalizeGolden(md: string): string {
   let s = md.replace(/\r\n?/g, '\n');
   s = s.replace(/^:{3,}.*$/gm, '');
+  // A soft line break inside a paragraph is a space (a hard one, `\\` before it, stays).
+  s = s.replace(/(?<![\\\n])\n(?!\n)/g, ' ');
   // Bracketed spans and links, innermost first; then the attribute blocks left (headings).
   for (let i = 0; i < 6; i++) {
     s = s.replace(/(?<!\\)\[((?:\\.|[^[\]\\])*)\]\{[^{}]*\}/g, '$1').replace(/(?<![\\^])\[((?:\\.|[^[\]\\])*)\]\([^()\s]*\)/g, '$1');
@@ -61,6 +65,26 @@ export function normalizeGolden(md: string): string {
   s = s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/—/g, '---').replace(/–/g, '--').replace(/…/g, '...');
   s = s.replace(/ /g, ' ').replace(/[ \t]+/g, ' ').replace(/ +$/gm, '').replace(/\n{3,}/g, '\n\n');
   return s.trim();
+}
+
+/**
+ * The link targets of a Markdown text, in order (`[text](url)` and `<url>`):
+ * compared per bibliography entry beside the normalised text, so a title the
+ * style links (pandoc's link-bibliography: Vancouver's DOI) or a printed DOI's
+ * target cannot differ unseen (review round 2).
+ */
+function linkTargets(md: string): string[] {
+  return [...md.matchAll(/(?<!\\)\]\(([^()\s]*)\)|<([a-z][a-z0-9+.-]*:[^<>\s]*)>/gi)].map((m) => (m[1] ?? m[2]) as string);
+}
+
+/** The bibliography entries of an export, unnormalised (one per entry, in order). */
+function rawEntries(md: string): string[] {
+  const s = md.replace(/\r\n?/g, '\n');
+  const refs = /\n## (References|Bibliography)[^\n]*\n/.exec(s);
+  if (refs === null) return [];
+  const rest = s.slice(refs.index + refs[0].length);
+  const end = rest.search(/^\[\^[^\]]+\]: /m);
+  return (end === -1 ? rest : rest.slice(0, end)).split(/\n(?:\s*\n)+/).filter((x) => /[\p{L}\p{N}]/u.test(x.replace(/^:{3,}.*$/gm, '')));
 }
 
 /** A normalised export split into its body, its bibliography entries and its notes. */
@@ -97,6 +121,9 @@ for (const style of STYLES) {
     assert.equal(ours.body, golden.body, `${style}: the body (in-text citations, numbers, note markers, the heading) differs`);
     assert.deepEqual(ours.notes, golden.notes, `${style}: the notes differ`);
     assert.equal(ours.entries.length, golden.entries.length, `${style}: the bibliography has another number of entries`);
+    const ourLinks = rawEntries(await builtIn(style)).map(linkTargets);
+    const goldenLinks = rawEntries(readFileSync(join(DIR, `${style}.md`), 'utf8')).map(linkTargets);
+    assert.deepEqual(ourLinks, goldenLinks, `${style}: the bibliography's link targets differ (a linked title, a printed DOI or URL)`);
     ours.entries.forEach((entry, i) => {
       const g = golden.entries[i] as string;
       if (entry === g) return;
@@ -115,13 +142,20 @@ for (const style of STYLES) {
   });
 }
 
-test('D-21-05: the fixture covers B, A, B, [A; C], a p. locator, a bare-number locator and a narrative citation over an article, a book and a chapter — and (review round 1) the note punctuation and locator forms', () => {
+test('D-21-05: the fixture covers B, A, B, [A; C], a p. locator, a bare-number locator and a narrative citation over an article, a book and a chapter — and (review rounds 1 and 2) the note punctuation, locator, prefix, suffix and line-break forms', () => {
   const md = readFileSync(join(DIR, 'fixture.md'), 'utf8');
   const order = [...md.matchAll(/@([a-z]+\d{4})/g)].map((m) => m[1]);
   assert.deepEqual(order, [
     'kuhn1962', 'lindqvist2012', 'kuhn1962', 'lindqvist2012', 'okafor2019', 'okafor2019', 'okafor2019', 'lindqvist2012',
     'kuhn1962', 'lindqvist2012', 'kuhn1962', 'kuhn1962', 'lindqvist2012', 'okafor2019', 'okafor2019', 'kuhn1962', 'kuhn1962',
+    'okafor2019', 'lindqvist2012', 'okafor2019', 'kuhn1962', 'lindqvist2012', 'okafor2019',
   ]);
+  // Review round 2: a note opening with a prefix is capitalised, a suffix's comma
+  // goes inside a closing quote (en-US), a soft line break before a note goes, a
+  // hard line break stays after the marker, a run stops at what is not punctuation.
+  for (const form of ['[see also @okafor2019].', '[e.g., @lindqvist2012].', '[@okafor2019, emphasis added].', 'A wrapped claim\n[@kuhn1962].', '[@lindqvist2012]\\\n', '[@okafor2019]&more.']) {
+    assert.ok(md.includes(form), JSON.stringify(form));
+  }
   assert.ok(md.includes('[@lindqvist2012; @okafor2019]') && md.includes(', p. 40]') && md.includes('[@okafor2019 41]') && /^@lindqvist2012 /m.test(md));
   // A note marker moves past an ellipsis and `?!`, a period goes inside a closing
   // quote (en-US) and is dropped after `?`, a `).` run moves; a `--` page range,

@@ -16,6 +16,11 @@ Anomalies pile up (Kuhn, 1962)... Is lending growth-led (Lindqvist & Berg, 2012)
 
 The pages are cited as a range (Okafor, 2019, pp. 33--38), an open run (Okafor, 2019, p. 33ff.). A chapter (Kuhn, 1962, Chapter 2) and a section (Kuhn, 1962, Section 3).
 
+## Notes and Line Breaks
+
+A prefixed note (see also Okafor, 2019). An abbreviation (e.g., Lindqvist & Berg, 2012). A suffix after a title (Okafor, 2019, emphasis added). A wrapped claim (Kuhn, 1962). A hard break (Lindqvist & Berg, 2012)\
+on the next line. An ampersand run (Okafor, 2019)&more.
+
 ## References {#references .unnumbered}
 
 :::::: {#refs .references .csl-bib-body .hanging-indent entry-spacing="0" line-spacing="2"}

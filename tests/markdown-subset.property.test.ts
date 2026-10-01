@@ -271,6 +271,20 @@ test(`D-21-10: the subset reader builds pandoc's block and inline structure (${R
   assert.deepEqual(failures.slice(0, 3), [], `${failures.length} of ${drafts.length} drafts differ`);
 });
 
+// Review round 2: reference-style links and their definitions are read as
+// pandoc reads them — the definition line is never printed as a stray
+// paragraph, and a definition inside a paragraph or a code block is text.
+test('D-21-10 (review r2): reference-style links resolve and their definition lines go, as in pandoc', (t) => {
+  const d = 'Text with a [link][ref], a [Shortcut] and a [collapsed][].\n\n[ref]: https://example.org/ref\n[shortcut]: <https://example.org/s> "Title"\n[collapsed]: /local/x\n\nPara\n[late]: https://late.example\nsee [late] and [undefined][nope].\n\n```\n[ref]: kept as code\n```\n';
+  const parsed = parseMarkdown(d);
+  const ours = normOurBlocks(parsed.blocks);
+  assert.ok(JSON.stringify(parsed.blocks).includes('"href":"https://example.org/ref"'), JSON.stringify(parsed.blocks));
+  assert.ok(!JSON.stringify(parsed.blocks).includes('[ref]: https'), 'the definition line is not printed');
+  assert.deepEqual(parsed.literal, []);
+  if (!requirePandoc(t, 'reference links')) return;
+  assert.deepEqual(ours, pandocBlocks([d])[0]);
+});
+
 test('D-21-10: anything outside the subset is written as its literal text, with a note — never dropped', () => {
   const r = parseMarkdown('A formula $x^2$ and <b>raw</b> HTML.\n\n::: note\nfenced\n:::\n\n![alt](img.png)\n');
   const text = JSON.stringify(r.blocks);

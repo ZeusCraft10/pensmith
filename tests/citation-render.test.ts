@@ -339,6 +339,45 @@ test('D-21-04: notes go after punctuation and superscripts drop the space before
   assert.ok(ama.includes('A claim^1^. Another^2^, then more. Already punctuated.^3^'), ama);
 });
 
+// Review round 2: a moved punctuation run stops at the next citation and
+// before a hard line break; a soft line break before a note or a superscript
+// goes (pandoc drops a SoftBreak as it drops a Space); a note that starts with
+// a prefix is capitalised; a SICI DOI's link is written so a Markdown reader
+// keeps it whole.
+test('D-21-04 (review r2): adjacent citations, a hard break, a soft break, a capitalised prefix and a SICI DOI in the md export', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-placement-r2-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  const sici = '@article{bates1998, author = {Bates, Marcia J.}, title = {Indexing and access for digital libraries}, journal = {J Am Soc Inf Sci}, year = {1998}, volume = {49}, pages = {1185--1205}, doi = {10.1002/(SICI)1097-4571(19981101)49:13<1185::AID-ASI6>3.0.CO;2-V}}\n';
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), readFileSync(GOLD_BIB, 'utf8') + sici);
+  const inputPath = join(root, '.paper', 'DRAFT.md');
+  writeFileSync(inputPath, '# T\n\nAdjacent [@kuhn1962][@lindqvist2012]. Break here [@okafor2019]\\\nnext line. A wrapped claim\n[@kuhn1962]. Prefixed [see also @okafor2019].\n');
+  const notes = await withCapturedOutput(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style: 'chicago-notes-bib' }));
+  const md = readFileSync(notes.result.outputPath, 'utf8');
+  assert.ok(md.includes('Adjacent[^1].[^2] Break here[^3]\\\nnext line. A wrapped claim.[^4] Prefixed.[^5]'), md);
+  assert.ok(!md.includes('[@'), 'no citation half is left in the text');
+  assert.match(md, /^\[\^5\]: See also Okafor/m);
+  const sup = await withCapturedOutput(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style: 'ama' }));
+  assert.ok(readFileSync(sup.result.outputPath, 'utf8').includes('A wrapped claim^1^.'), 'the superscript drops the soft break too');
+  writeFileSync(inputPath, '# T\n\nIndexing [@bates1998].\n');
+  const apa = await withCapturedOutput(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style: 'apa' }));
+  const apaMd = readFileSync(apa.result.outputPath, 'utf8');
+  assert.ok(apaMd.includes('](https://doi.org/10.1002/%28SICI%291097-4571%2819981101%2949:13%3C1185::AID-ASI6%3E3.0.CO;2-V)'), apaMd);
+  assert.ok(!/<https:[^>]*</.test(apaMd), 'no autolink holding a <');
+});
+
+// Review round 2: pandoc links an entry's title to its DOI (else PMCID, PMID,
+// URL) when the style prints none of them — Vancouver prints no DOI.
+test('D-21-03 (review r2): a style that prints no DOI links the title to it; one that prints it does not', async () => {
+  const v = await renderDocumentCitations(DOC_ENTRIES, 'vancouver', [cite(A), cite(B)]);
+  const lind = v.bibliography.find((e) => e.id === A);
+  assert.deepEqual(lind?.runs.filter((r) => r.href !== undefined).map((r) => [r.text, r.href]), [["Economic growth in China and the World Bank's lending policy".replace("'", '\u2019'), 'https://doi.org/10.1016/j.jdeveco.2011.08.003']]);
+  assert.ok(v.bibliography.find((e) => e.id === B)?.runs.every((r) => r.href === undefined), 'no identifier, no link');
+  const apa = await renderDocumentCitations(DOC_ENTRIES, 'apa', [cite(A)]);
+  assert.deepEqual(apa.bibliography[0]?.runs.filter((r) => r.href !== undefined).map((r) => r.text), ['https://doi.org/10.1016/j.jdeveco.2011.08.003'], 'APA prints the DOI: only it is a link');
+  const notes = await renderDocumentCitations(DOC_ENTRIES, 'chicago-notes-bib', [cite(C), cite(A), { items: [{ id: C, suffix: ', emphasis added' }] }]);
+  assert.equal(runsText(notes.citations[2]?.note ?? []), 'Okafor, \u201cMeasuring Trust in NGO Networks,\u201d emphasis added.', 'the suffix comma goes inside the quote (en-US)');
+});
+
 test('D-21-06: case protection — acronyms and mixed case always, capitalised words after the first in a non-Title-Case title, a Title Case title whole', () => {
   assert.equal(
     caseProtectTitle("Economic growth in China and the World Bank's lending policy"),
