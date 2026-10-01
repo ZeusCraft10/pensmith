@@ -261,6 +261,74 @@ export function dropDuplicateTitleHeading(draft: string, title: string): string 
 }
 
 /**
+ * A section draft with its headings set below the section's own `##` heading
+ * (review round 2): compile writes `## <section title>`, so a `#` or `##`
+ * heading inside a draft would become a sibling of the section titles — in
+ * DRAFT.md, in every export (Heading 2 in a .docx) and for the humanizer,
+ * which splits on `##`. Every ATX heading outside a fenced code block moves
+ * down by the same number of levels — enough that the draft's highest one
+ * becomes `###`, capped at `######` — and a setext heading (a one-line
+ * paragraph underlined with `=` or `-`) becomes the ATX heading of its
+ * shifted level. A draft whose headings already start at `###` is returned
+ * as it is. Pure.
+ */
+export function demoteSectionHeadings(draft: string): string {
+  const lines = draft.split('\n');
+  const fenceAt: boolean[] = [];
+  let fence: string | null = null;
+  for (const l of lines) {
+    const f = /^ {0,3}(`{3,}|~{3,})/.exec(l);
+    if (fence !== null) {
+      fenceAt.push(true);
+      if (f !== null && (f[1] as string)[0] === fence[0] && (f[1] as string).length >= fence.length && /^ {0,3}(`{3,}|~{3,})[ \t]*\r?$/.test(l)) fence = null;
+      continue;
+    }
+    fenceAt.push(f !== null);
+    if (f !== null) fence = f[1] as string;
+  }
+  const atx = (l: string): RegExpExecArray | null => /^( {0,3})(#{1,6})(?=[ \t]|\r?$)/.exec(l);
+  const setext = (i: number): 1 | 2 | null => {
+    const text = lines[i] ?? '';
+    const under = lines[i + 1];
+    if (under === undefined || fenceAt[i] === true || fenceAt[i + 1] === true || text.trim() === '') return null;
+    if (i > 0 && (lines[i - 1] ?? '').trim() !== '') return null;
+    if (atx(text) !== null || /^ {0,3}(?:[-*+>|]|\d+[.)])(?:[ \t]|$)/.test(text) || /^ {4}/.test(text)) return null;
+    const m = /^ {0,3}(=+|-+)[ \t]*\r?$/.exec(under);
+    return m === null ? null : (m[1] as string).startsWith('=') ? 1 : 2;
+  };
+  let top = 7;
+  lines.forEach((l, i) => {
+    if (fenceAt[i] === true) return;
+    const a = atx(l);
+    if (a !== null) top = Math.min(top, (a[2] as string).length);
+    const s = setext(i);
+    if (s !== null) top = Math.min(top, s);
+  });
+  if (top >= 3) return draft;
+  const shift = 3 - top;
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const l = lines[i] as string;
+    if (fenceAt[i] !== true) {
+      const s = setext(i);
+      if (s !== null) {
+        const cr = l.endsWith('\r') ? '\r' : '';
+        out.push(`${'#'.repeat(Math.min(6, s + shift))} ${l.trim()}${cr}`);
+        i += 1;
+        continue;
+      }
+      const a = atx(l);
+      if (a !== null) {
+        out.push(`${a[1] as string}${'#'.repeat(Math.min(6, (a[2] as string).length + shift))}${l.slice((a[0] as string).length)}`);
+        continue;
+      }
+    }
+    out.push(l);
+  }
+  return out.join('\n');
+}
+
+/**
  * What a heading compile adds would bring into the compiled text that no
  * section gate judged (EXP-05, D-21-13): a citation of any form the grammar
  * reads, a text finding (an unparseable or unsupported citation form), a
@@ -533,7 +601,8 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     // the compiled dry-run draft (and so every dry-run export) does not.
     if (dryRun) for (const s of loaded) s.draft = normalizeTrailingNewline(stripStubMarker(s.draft));
     // A first heading that repeats the section's title would print twice under `## <title>`.
-    const drafts = loaded.map((s) => normalizeTrailingNewline(dropDuplicateTitleHeading(s.draft, s.outline.title)));
+    // A heading inside a draft sits below the section's `##` (review round 2).
+    const drafts = loaded.map((s) => normalizeTrailingNewline(demoteSectionHeadings(dropDuplicateTitleHeading(s.draft, s.outline.title))));
 
     // ---- Step 4: N-1 per-boundary smoothing (EXP-10, D-21-14) ---------------
     const transitions: TransitionEntry[] = [];

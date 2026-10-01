@@ -284,6 +284,30 @@ test('EXP-05 (built CLI): a section title holding a citation or an author-date f
   });
 });
 
+// Review round 2: a heading inside a section draft sits below the section's
+// own `##` heading — `## Internal` / `### Deeper` become `###` / `####` — so
+// DRAFT.md, every export and the humanizer's `##` split keep the outline's
+// hierarchy. Unit cases: fenced code untouched, setext headings, a draft
+// already at `###`.
+test('EXP-05 (review r2, built CLI): headings inside a section draft are demoted below the section heading', async () => {
+  const { demoteSectionHeadings } = await import('../bin/lib/compile.js');
+  assert.equal(demoteSectionHeadings('# Top\n\nText.\n\n```\n## code\n```\n'), '### Top\n\nText.\n\n```\n## code\n```\n');
+  assert.equal(demoteSectionHeadings('Intro.\n\nSub\n---\n\nText.\n'), 'Intro.\n\n### Sub\n\nText.\n');
+  assert.equal(demoteSectionHeadings('### Already\n\nText.\n\n---\n\nAfter a rule.\n'), '### Already\n\nText.\n\n---\n\nAfter a rule.\n');
+  assert.equal(demoteSectionHeadings('##### Deep\n\n# Top\n'), '###### Deep\n\n### Top\n', 'shifted together, capped at six');
+  const sections = THREE_SECTIONS.map((s, i) => (i === 1 ? { ...s, draft: `## Internal Heading\n\n${s.draft}\n### Deeper\n\nA closing remark on the method [@aspelmeyer2009].\n` } : s));
+  await withPipelinePaper({ sections }, async (p) => {
+    await p.verifyAll();
+    const r = await p.cli(['compile', '--yolo'], { PENSMITH_NO_LLM: '1' });
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    const draft = readFileSync(join(p.root, '.paper', 'DRAFT.md'), 'utf8');
+    const headings = draft.split('\n').filter((l) => /^#{1,6} /.test(l));
+    assert.deepEqual(headings, [`# ${TITLE}`, '## Learning Representations', '## Measurement in Physics', '### Internal Heading', '#### Deeper', `## ${THREE_SECTIONS[2]!.title}`]);
+    const sectionFile = readFileSync(join(p.sectionDir(2, 'measurement'), 'DRAFT.md'), 'utf8');
+    assert.match(sectionFile, /^## Internal Heading$/m, 'the section draft itself is never written');
+  });
+});
+
 test('EXP-10 / EXP-13 (built CLI): a --dry-run compile says `smoothing skipped (dry-run)` and the contradiction model check names dry-run — no model call', async () => {
   const sb = await openChainSandbox({ prefix: 'compile-dry', assignment: true });
   try {

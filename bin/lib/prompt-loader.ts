@@ -77,7 +77,7 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   'source-evaluator':    'b10cd38425ab01dd5572592dc01f11b646006dbd86b13be311f8b0eb9ca0eed4',  // D-12 LOCKED (research split #2; re-pinned Phase 19 SRC-09: relevance, tier, reasons)
   'outline-author':      '914bdd23f6182ac47b5679b45144a10ada702ab8e6eb3415db879063f7419c2a',  // D-12 LOCKED (re-pinned Phase 18 GRND-07/RUN-26: fixed instructions, data blocks brief/existing_sections/sources)
   'section-planner':     'd10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c',  // D-12 LOCKED (re-pinned Phase 18 GRND-13/RUN-26: fixed instructions, data blocks brief/section/upstream/sources)
-  'section-drafter':     '0600aed58e85b9182a5c3ea0e7e45a691d41a8e21797ed00559e7b56b08999cc',  // D-12 LOCKED (re-pinned Phase 18 FEED-02/RUN-26: fixed instructions, data blocks brief/section/voice/style_profile/plan/sources)
+  'section-drafter':     'b3ed7af75d12b37d4dc53de26e3d6397f69765c548a4f88b2f71a75625ab6327',  // D-12 LOCKED (re-pinned Phase 18 FEED-02/RUN-26: fixed instructions, data blocks brief/section/voice/style_profile/plan/sources; Phase 21 review round 2: subheadings start at ###)
   'pass1-fuzzy-judge':   '80011728b81766a6bad092a6fae2868cd7e75515344c5e8ecb38b3cfac14498d',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   'pass3-quote-checker': '19ef3929f85b0f20c4b0f12cea535cbb7c2e28a342c883f9af6737fd7e896421',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   // Phase 4 04-CONTEXT.md D-05 — hash-pinned revise-swap prompt. Re-pinned to

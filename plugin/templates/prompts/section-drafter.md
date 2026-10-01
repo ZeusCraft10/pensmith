@@ -72,8 +72,8 @@ counterexamples acknowledged, serving the paper's thesis. Land within ±20% of
 
 ## Output Format
 Markdown body only: no frontmatter, no `#` title (the section title is added
-at compile time), no notes to the reader and no text before or after the
-section. Start with the section's first paragraph and end with its last. For
+at compile time as a `##` heading, so a subheading inside the section starts
+at `###`), no notes to the reader and no text before or after the section. Start with the section's first paragraph and end with its last. For
 example:
 
 ```
