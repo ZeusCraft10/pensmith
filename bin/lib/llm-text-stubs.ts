@@ -21,7 +21,11 @@
 //   - revise-swap: a valid strict-JSON `remove` recommendation for the flagged
 //     citekey (revise.ts ReviseSwapSchema);
 //   - tutorial-section-provenance / tutorial-research-rationale: short text,
-//     one labelled line per source.
+//     one labelled line per source;
+//   - humanizer (EXP-14): the masked section text with its prose rewritten
+//     word by word from a fixed table — every placeholder, heading and block
+//     quote kept, nothing quoted, cited or added — so the rewrite guard and
+//     the gate accept it and FINAL.md differs from DRAFT.md.
 //
 // The prose lives in templates/stubs/text-stubs.json (shipped with templates/);
 // this module only assembles it. Untrusted text from the request (titles,
@@ -83,6 +87,11 @@ const TextStubsFileSchema = z.object({
     per_source: Sentence,
     coverage: Sentence,
     none: Sentence,
+  }).strict(),
+  humanizer: z.object({
+    $comment: z.string().optional(),
+    replacements: z.array(z.tuple([Sentence, Sentence])).min(1),
+    fallback_prefix: Sentence,
   }).strict(),
 }).strict();
 
@@ -305,9 +314,62 @@ function researchRationaleStub(hints: Record<string, unknown>): string {
   return `${lines.join('\n')}\n\n${prose.coverage}\n`;
 }
 
+// ---------------------------------------------------------------------------
+// humanizer (EXP-14, D-21-18)
+// ---------------------------------------------------------------------------
+
+/** A placeholder token the rewrite guard writes (rewrite-guard.ts): never edited. */
+const GUARD_PLACEHOLDER_RE = /\{\{(?:cite|quote)_\d+_\d+\}\}/g;
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** `from` → `to` on whole words, keeping the case of the first letter. */
+function replaceWord(text: string, from: string, to: string): string {
+  return text.replace(new RegExp(`\\b${escapeRe(from)}\\b`, 'gi'), (hit) =>
+    /^[A-Z]/.test(hit) ? to.charAt(0).toUpperCase() + to.slice(1) : to);
+}
+
+/**
+ * The humanizer stub: the masked section text of the `<text>` block, its
+ * prose paragraphs rewritten word by word from the stub table (headings,
+ * block quotes, list items and every placeholder token untouched), so a
+ * stubbed or mocked humanizer changes the prose and keeps everything the
+ * rewrite guard checks. Nothing is quoted, cited or added.
+ */
+function humanizerStub(hints: Record<string, unknown>): string {
+  const source = typeof hints['text'] === 'string' ? (hints['text'] as string).trim() : '';
+  const prose = loadTextStubs().humanizer;
+  const paras = source.split(/\n[ \t]*\n/);
+  let changed = false;
+  const out = paras.map((p) => {
+    if (/^\s{0,3}(?:#{1,6}\s|>|[-*+]\s|\d+[.)]\s|\||```|~~~)/.test(p)) return p;
+    // Keep the placeholders out of the word rewrite.
+    const tokens: string[] = [];
+    let t = p.replace(GUARD_PLACEHOLDER_RE, (ph) => {
+      tokens.push(ph);
+      return `\u0000${tokens.length - 1}\u0000`;
+    });
+    for (const [from, to] of prose.replacements) t = replaceWord(t, from, to);
+    const back = t.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => tokens[Number(i)] ?? '');
+    if (back !== p) changed = true;
+    return back;
+  });
+  if (!changed) {
+    const last = out.findIndex((p) => !/^\s{0,3}(?:#{1,6}\s|>|[-*+]\s|\d+[.)]\s|\||```|~~~)/.test(p) && /^[A-Za-z]/.test(p.trim()));
+    if (last !== -1) {
+      const p = out[last] as string;
+      out[last] = `${prose.fallback_prefix} ${p}`;
+    }
+  }
+  return out.join('\n\n');
+}
+
 const TEXT_STUBS: Readonly<Record<string, (hints: Record<string, unknown>) => string>> = Object.freeze({
   'section-drafter': drafterStub,
   smoother: smootherStub,
+  humanizer: humanizerStub,
   'revise-swap': reviseSwapStub,
   'tutorial-section-provenance': sectionProvenanceStub,
   'tutorial-research-rationale': researchRationaleStub,

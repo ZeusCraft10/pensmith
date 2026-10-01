@@ -73,6 +73,8 @@ export const PROMPT_INPUTS: Readonly<Record<string, readonly PromptInputSpec[]>>
   'claim-support': [input('citation', true, true), input('claim', true, true), input('source_text', true, true)],
   'orphan-label': [input('paragraph', true, true)],
   'smoother': [input('boundary', true, false), input('tail', true, true), input('head', true, true)],
+  // Phase 21 (EXP-11, D-21-15): the cross-section claim pairs (sentences from the drafts: fenced).
+  'claim-consistency': [input('pairs', true, true)],
   'revise-swap': [input('flag', true, false), input('voice', true, false), input('available_sources', true, true), input('claim', true, true)],
   'pass1-fuzzy-judge': [input('comparison', true, true)],
   'pass3-quote-checker': [input('match', true, false), input('quote', true, true), input('pdf_context', true, true)],

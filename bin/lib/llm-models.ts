@@ -362,6 +362,14 @@ export interface SlugSpec {
   readonly cacheSystem: boolean;
   /** Structured slugs return schema-validated data (llm-contracts.ts). */
   readonly structured: boolean;
+  /**
+   * False for a MODEL slug with no `plugin/templates/prompts/<slug>.md`: its
+   * system prompt comes from elsewhere. Only `humanizer` (EXP-14, D-21-18):
+   * the user's installed humanizer skill is the system prompt, and S-06 forbids
+   * a templates/prompts slug for it. Template-coverage checks skip such slugs
+   * by this flag.
+   */
+  readonly template: boolean;
 }
 
 function s(
@@ -376,7 +384,7 @@ function s(
   structured: boolean,
 ): SlugSpec {
   return Object.freeze({
-    slug, verb, tier, effort, maxTokens, retryMaxTokens: maxTokens * 2, p90Output, inputEstimate, cacheSystem, structured,
+    slug, verb, tier, effort, maxTokens, retryMaxTokens: maxTokens * 2, p90Output, inputEstimate, cacheSystem, structured, template: true,
   });
 }
 
@@ -401,6 +409,18 @@ const SLUG_LIST: readonly SlugSpec[] = [
   // orphan-label audits one paragraph (<= 4000 chars) and lists its claims.
   s('claim-support', 'verify', 'judgment', 'low', 2_000, 350, 2_200, true, true),
   s('orphan-label', 'verify', 'judgment', 'low', 2_000, 500, 1_800, true, true),
+  // Phase 21 (EXP-11, D-21-15; the D-12 amendment): one compile call judges up
+  // to [compile] contradiction_pairs (default 20) cross-section claim pairs —
+  // ~90 input tokens a pair plus the ~1100-token template, ~45 output tokens a
+  // verdict.
+  s('claim-consistency', 'compile', 'judgment', 'low', 4_000, 1_200, 3_000, true, true),
+  // Phase 21 (EXP-14, D-21-18): the Tier-2 humanizer, one call per `##`
+  // section of the compiled draft. A MODEL slug with no template (S-06): the
+  // system prompt is the user's humanizer SKILL.md (cached like every system
+  // prompt), the user message the pinned contract plus the masked section.
+  // Output ~ the section again (a 500-word section is ~700 tokens) plus
+  // adaptive thinking at medium effort.
+  { ...s('humanizer', 'done', 'generation', 'medium', 16_000, 4_000, 4_500, true, false), template: false },
 ];
 
 export const SLUGS: Readonly<Record<string, SlugSpec>> = Object.freeze(

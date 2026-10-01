@@ -14,7 +14,10 @@
 //
 // Every hash-pinned prompt slug is covered: LAYOUT_SLUGS must equal the key
 // set of EXPECTED_PROMPT_HASHES and of PROMPT_INPUTS (a new slug cannot skip
-// the layout).
+// the layout). The `humanizer` MODEL slug (llm-models.ts, template: false) is
+// not a template and is excluded by name: S-06 / D-21-18 forbid a
+// templates/prompts slug for it — its system prompt is the user's installed
+// humanizer skill.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -40,6 +43,8 @@ const LAYOUT_SLUGS = [
   'section-drafter',
   'claim-support',
   'orphan-label',
+  // Phase 21 D-21-15 (the D-12 amendment): the cross-section contradiction judge.
+  'claim-consistency',
   'smoother',
   'revise-swap',
   'pass1-fuzzy-judge',
@@ -70,7 +75,7 @@ test('D-18-03: the layout covers every prompt slug', () => {
     assert.ok(slug in EXPECTED_PROMPT_HASHES, `${slug} is hash-pinned`);
     assert.ok(PROMPT_INPUTS[slug], `${slug} has a PROMPT_INPUTS entry`);
   }
-  assert.equal(LAYOUT_SLUGS.length, 14);
+  assert.equal(LAYOUT_SLUGS.length, 15);
   assert.deepEqual([...LAYOUT_SLUGS].sort(), Object.keys(EXPECTED_PROMPT_HASHES).sort(), 'every hash-pinned template is checked');
   assert.deepEqual([...LAYOUT_SLUGS].sort(), Object.keys(PROMPT_INPUTS).sort(), 'every PROMPT_INPUTS slug is checked');
 });

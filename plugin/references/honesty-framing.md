@@ -1,7 +1,7 @@
-# Honesty Framing Strings (locked — Phase 6 DONE-04)
+# Honesty Framing Strings (locked — Phase 6 DONE-04; Phase 21 EXP-16..18)
 
-This file is the SINGLE source of truth for GPTZero honesty-score user-facing
-framing prose. `bin/lib/honesty.ts` reads these strings at module load and
+This file is the SINGLE source of truth for the honesty-score user-facing
+framing prose. `bin/lib/honesty.ts` reads these strings at run time and
 renders them VERBATIM — it never embeds the copy inline. Drift between the code
 and this file is a CI failure: the SHA-256 of this file is byte-pinned in
 `tests/repo-files.test.ts`. See CONTRIBUTING.md for the lock rule.
@@ -13,8 +13,11 @@ tool.
 
 ## Output format
 
-> Pensmith honesty check (before humanize): reads as XX% AI-generated (GPTZero).
-> Pensmith honesty check (after humanize):  reads as XX% AI-generated (GPTZero).
+> Pensmith honesty check (before humanize): XX% AI-generated (<detector>, <ISO time>)
+> Pensmith honesty check (after humanize):  XX% AI-generated (<detector>, <ISO time>)
+
+(When no score was taken, the line gives the one reason instead — `skipped (…)`,
+`unavailable (…)` or, after the humanizer, `N/A (…)` — and never a number.)
 
 ## Note
 
@@ -28,7 +31,19 @@ without also updating the SHA-256 pin in tests/repo-files.test.ts.)
 
 > Disclosure: the honesty check sends your full paper text to GPTZero (api.gptzero.me), an external service, for AI-detection scoring. This is for your transparency only — it does NOT make your output undetectable. No data is sent without your consent.
 
-(Transparency-only. This disclosure is shown before any POST to GPTZero. It NEVER claims
-detection avoidance or undetectability. `bin/lib/honesty.ts` reads this section at runtime
-and prints it to stdout before the consent gate. Do NOT weaken or remove the transparency-only
-constraint. Do NOT edit without updating the SHA-256 pin in tests/repo-files.test.ts.)
+## Originality.ai Data Transmission Disclosure
+
+> Disclosure: the honesty check sends your full paper text to Originality.ai (api.originality.ai), an external service, for AI-detection scoring; pensmith asks it not to store the scan. This is for your transparency only — it does NOT make your output undetectable. No data is sent without your consent.
+
+## Sapling Data Transmission Disclosure
+
+> Disclosure: the honesty check sends your full paper text to Sapling (api.sapling.ai), an external service, for AI-detection scoring. This is for your transparency only — it does NOT make your output undetectable. No data is sent without your consent.
+
+(Transparency-only. The disclosure of the configured detector is shown before any
+text is sent to it, on every scoring run. It NEVER claims detection avoidance or
+undetectability. `bin/lib/honesty.ts` reads these sections at run time and
+prints the one for the configured backend to stdout before the consent question.
+Your answer to that question is recorded in `.paper/config.toml`
+(`[humanizer] honesty_consent`); `--yolo` never answers it. Do NOT weaken or
+remove the transparency-only constraint. Do NOT edit without updating the
+SHA-256 pin in tests/repo-files.test.ts.)

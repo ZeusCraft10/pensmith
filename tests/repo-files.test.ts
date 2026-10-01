@@ -247,8 +247,33 @@ test('plugin/references/honesty-framing.md hash-pin (Phase 6 DONE-04 LOCKED)', (
   const bytes = readFileSync('plugin/references/honesty-framing.md');  // raw bytes, no BOM strip
   const hash = createHash('sha256').update(bytes).digest('hex');
   // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/references/honesty-framing.md')).digest('hex'))"
-  const PINNED = '9f894ea88129e2b43975de5e1179180d4dc71d70e3959f33ee02601986009707';
+  // Re-pinned Phase 21 (EXP-16..18, D-21-20/21): the timestamped output format and the
+  // Originality.ai and Sapling disclosures — still transparency-only (see the test below).
+  const PINNED = 'b64bb090016d0959c46169cf6c0811aa693e13d592842f5ed37eea3ae03fcb1c';
   assert.equal(hash, PINNED, `plugin/references/honesty-framing.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional (and review the transparency-only constraint in CONTRIBUTING.md).`);
+});
+
+// Phase 21 (EXP-14, D-21-18): plugin/references/humanizer-contract.md is the
+// fixed instruction every Tier-2 humanizer request carries (bin/lib/humanizer.ts
+// reads its `## Contract` section verbatim). It frames the humanizer as a prose
+// improvement only and binds it to the rewrite guard's rules.
+test('plugin/references/humanizer-contract.md hash-pin (Phase 21 EXP-14 LOCKED)', () => {
+  const bytes = readFileSync('plugin/references/humanizer-contract.md');
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/references/humanizer-contract.md')).digest('hex'))"
+  const PINNED = '0899b7fbada305e0df2ea7c63c051c6dbfe1b623b18d813aec85867b5b97662c';
+  assert.equal(hash, PINNED, `plugin/references/humanizer-contract.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
+});
+
+// The framing copy and the humanizer contract stay transparency-only (PRD §14):
+// no sentence promises undetectable output or calls the humanizer a way to evade detection.
+test('Phase 21: honesty-framing.md and humanizer-contract.md make no detection-avoidance claim', () => {
+  for (const file of ['plugin/references/honesty-framing.md', 'plugin/references/humanizer-contract.md']) {
+    const text = readFileSync(file, 'utf8');
+    for (const line of text.split(/\r?\n/).filter((l) => /undetectable|evade|evasion|bypass/i.test(l))) {
+      assert.match(line, /\b(?:not|never|NOT|NEVER)\b/, `${file}: a detection-avoidance word appears only negated: ${line}`);
+    }
+  }
 });
 
 // Phase 6 TEST-10 fixture: tests/fixtures/sample-zero-trace.docx is the offline
@@ -386,6 +411,9 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // loop now runs (no longer skipped) and the file-exists loop still guards presence.
   { slug: 'tutorial-section-provenance', path: 'plugin/templates/prompts/tutorial-section-provenance.md', decision: 'Phase 9 D-12', hash: 'ce1d8c4876e1096d02239e55283e55decd2df8b0358b0d697d14d5005baab380' },
   { slug: 'tutorial-research-rationale', path: 'plugin/templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: 'd4d305f2a1e8bebe87849b358f9e4fb9199b78a493bc867a306a63b6e51523e7' },
+  // Phase 21 D-21-15 — the D-12 amendment (S-06): the claim-consistency judge (EXP-11).
+  // Pinned in the same commit as bin/lib/prompt-loader.ts EXPECTED_PROMPT_HASHES (WN-3 lockstep).
+  { slug: 'claim-consistency',   path: 'plugin/templates/prompts/claim-consistency.md',   decision: 'Phase 21 D-21-15 (D-12 amendment)', hash: '0b62ae208e9d0cddc4f6cdaae1a37f5ac47982c6b2a2f6f960eddf8929374231' },
 ];
 for (const pin of PENDING_HASH_PINS) {
   // WN-3 sentinel entries (hash === `__PENDING_HASH_<slug>__`) are NOT yet

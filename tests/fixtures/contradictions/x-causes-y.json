@@ -1,0 +1,29 @@
+{
+  "$comment": "EXP-11 fixture (Phase 21, D-21-15): §2 says X causes Y, §3 says there is no relationship between X and Y. The citations name recorded works (tests/helpers/gate-paper.ts RECORDED_BIB) so Pass 1 verifies them offline; the claims are invented for the fixture.",
+  "sections": [
+    {
+      "n": 1,
+      "slug": "learning",
+      "title": "Learning Representations",
+      "assigned": ["lecun2015"],
+      "draft": "Neural networks with many layers learn representations of raw data at several levels of abstraction [@lecun2015].\n\nThese layered models now set the pace for speech and image recognition across the field [@lecun2015].\n",
+      "claims": ["Deep networks learn layered representations of raw data."]
+    },
+    {
+      "n": 2,
+      "slug": "screen",
+      "title": "Screen Time and Sleep",
+      "assigned": ["aspelmeyer2009"],
+      "draft": "Heavy screen time causes sleep loss in adolescents across the schools we surveyed [@aspelmeyer2009].\n\nThe effect was largest for students who used phones after midnight on school nights [@aspelmeyer2009].\n",
+      "claims": ["Heavy screen time causes sleep loss in adolescents."]
+    },
+    {
+      "n": 3,
+      "slug": "second-look",
+      "title": "A Second Look",
+      "assigned": ["zhu2020"],
+      "draft": "There is no relationship between screen time and sleep loss in adolescents at these schools [@zhu2020].\n\nA longer study would be needed to settle how teenagers sleep during exam periods [@zhu2020].\n",
+      "claims": ["There is no relationship between screen time and sleep loss in adolescents."]
+    }
+  ]
+}

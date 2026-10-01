@@ -7501,7 +7501,8 @@ function s(slug, verb, tier, effort, maxTokens, p90Output, inputEstimate, cacheS
     p90Output,
     inputEstimate,
     cacheSystem,
-    structured
+    structured,
+    template: true
   });
 }
 var PROVIDER_NAMES, DEFAULT_ENDPOINTS, DEFAULT_KEY_ENV, DEFAULT_MODELS, ALL_EFFORTS, NO_XHIGH, OPENAI_GPT5_EFFORTS, MODEL_LIST, MODELS, RETIRED_SUCCESSOR, ANTHROPIC_MIN_CACHEABLE_TOKENS, PROMPT_CACHE_TTL_MS, SLUG_LIST, SLUGS, SLUG_NAMES, SLUG_ALIASES;
@@ -7595,7 +7596,19 @@ var init_llm_models = __esm({
       // abstract (<= 4000 chars) plus a full-text passage (<= 2400) — and
       // orphan-label audits one paragraph (<= 4000 chars) and lists its claims.
       s("claim-support", "verify", "judgment", "low", 2e3, 350, 2200, true, true),
-      s("orphan-label", "verify", "judgment", "low", 2e3, 500, 1800, true, true)
+      s("orphan-label", "verify", "judgment", "low", 2e3, 500, 1800, true, true),
+      // Phase 21 (EXP-11, D-21-15; the D-12 amendment): one compile call judges up
+      // to [compile] contradiction_pairs (default 20) cross-section claim pairs —
+      // ~90 input tokens a pair plus the ~1100-token template, ~45 output tokens a
+      // verdict.
+      s("claim-consistency", "compile", "judgment", "low", 4e3, 1200, 3e3, true, true),
+      // Phase 21 (EXP-14, D-21-18): the Tier-2 humanizer, one call per `##`
+      // section of the compiled draft. A MODEL slug with no template (S-06): the
+      // system prompt is the user's humanizer SKILL.md (cached like every system
+      // prompt), the user message the pinned contract plus the masked section.
+      // Output ~ the section again (a 500-word section is ~700 tokens) plus
+      // adaptive thinking at medium effort.
+      { ...s("humanizer", "done", "generation", "medium", 16e3, 4e3, 4500, true, false), template: false }
     ];
     SLUGS = Object.freeze(
       Object.fromEntries(SLUG_LIST.map((x) => [x.slug, x]))
@@ -7762,7 +7775,11 @@ function citationStyleKey(name) {
   if (t.length === 0) return null;
   return Object.prototype.hasOwnProperty.call(CITATION_STYLE_KEYS, t) ? CITATION_STYLE_KEYS[t] : null;
 }
-var CURRENT_CONFIG_VERSION, DEFAULT_QUOTE_MIN_WORDS, DEFAULT_RECHECK_AFTER_DAYS, CITATION_STYLE_NAMES, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HumanizerSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
+function isCslPathSpelling(v) {
+  const t = v.trim();
+  return t.length > 4 && /\.csl$/i.test(t) && !/[\0\r\n]/.test(t);
+}
+var CURRENT_CONFIG_VERSION, DEFAULT_CONTRADICTION_PAIRS, DEFAULT_PLAGIARISM_MAX_PHRASES, DEFAULT_QUOTE_MIN_WORDS, DEFAULT_RECHECK_AFTER_DAYS, CITATION_STYLE_NAMES, CITATION_STYLE_KEYS, CitationStyleSchema, PositiveInt, NonNegInt, NonNegNumber, ProjectSchema, SOURCE_DATABASES, SourcesSchema, VerificationSchema, HONESTY_BACKENDS, HumanizerSchema, CompileSchema, StyleSchema, PaperSlugOverrideSchema, PaperRuntimeSchema, BudgetSchema, NetworkSchema, LoggingSchema, PaperConfigSchema, CONFIG_TABLES;
 var init_config = __esm({
   "bin/lib/schemas/config.ts"() {
     "use strict";
@@ -7770,7 +7787,9 @@ var init_config = __esm({
     init_tutorial();
     init_runtime_config();
     init_lookup_table();
-    CURRENT_CONFIG_VERSION = 3;
+    CURRENT_CONFIG_VERSION = 4;
+    DEFAULT_CONTRADICTION_PAIRS = 20;
+    DEFAULT_PLAGIARISM_MAX_PHRASES = 30;
     DEFAULT_QUOTE_MIN_WORDS = 5;
     DEFAULT_RECHECK_AFTER_DAYS = 30;
     CITATION_STYLE_NAMES = [
@@ -7818,8 +7837,9 @@ var init_config = __esm({
     });
     __name(normalizeStyleName, "normalizeStyleName");
     __name(citationStyleKey, "citationStyleKey");
-    CitationStyleSchema = external_exports.string().refine((v) => citationStyleKey(v) !== null, {
-      message: `citation_style must be one of: ${CITATION_STYLE_NAMES.join(", ")}`
+    __name(isCslPathSpelling, "isCslPathSpelling");
+    CitationStyleSchema = external_exports.string().refine((v) => citationStyleKey(v) !== null || isCslPathSpelling(v), {
+      message: `citation_style must be one of: ${CITATION_STYLE_NAMES.join(", ")} \u2014 or a path to a local .csl file`
     });
     PositiveInt = external_exports.number().int().positive();
     NonNegInt = external_exports.number().int().nonnegative();
@@ -7864,14 +7884,27 @@ var init_config = __esm({
       flag_threshold: external_exports.enum(["low", "medium", "high"]).optional(),
       recheck_after_days: NonNegInt.optional(),
       plagiarism_check: external_exports.boolean().optional(),
+      // EXP-19 (D-21-22): how many distinctive phrases done sends to the search (at least one per body paragraph, up to this).
+      plagiarism_max_phrases: PositiveInt.optional(),
       citation_density_min: NonNegNumber.optional(),
       citation_density_max: NonNegNumber.optional()
     });
+    HONESTY_BACKENDS = ["gptzero", "originality", "sapling"];
     HumanizerSchema = external_exports.object({
       enabled: external_exports.boolean().optional(),
       preserve_voice: external_exports.enum(["academic", "formal", "casual"]).optional(),
       honesty_score: external_exports.boolean().optional(),
-      honesty_backend: external_exports.enum(["gptzero", "originality", "sapling"]).optional()
+      honesty_backend: external_exports.enum(HONESTY_BACKENDS, {
+        errorMap: /* @__PURE__ */ __name(() => ({ message: `honesty_backend must be one of: ${HONESTY_BACKENDS.join(", ")}` }), "errorMap")
+      }).optional(),
+      // EXP-17 (D-21-20): the answer to the detector-consent question, asked once
+      // in a terminal and recorded here (true: send the paper to the detector;
+      // false: never). Unset means not asked yet; --yolo never answers it.
+      honesty_consent: external_exports.boolean().optional()
+    });
+    CompileSchema = external_exports.object({
+      smooth_transitions: external_exports.boolean().optional(),
+      contradiction_pairs: NonNegInt.optional()
     });
     StyleSchema = external_exports.object({
       match_past_writing: external_exports.boolean().optional(),
@@ -7910,6 +7943,7 @@ var init_config = __esm({
       sources: SourcesSchema.optional(),
       verification: VerificationSchema.optional(),
       humanizer: HumanizerSchema.optional(),
+      compile: CompileSchema.optional(),
       style: StyleSchema.optional(),
       runtime: PaperRuntimeSchema.optional(),
       budget: BudgetSchema.optional(),
@@ -7921,6 +7955,7 @@ var init_config = __esm({
       sources: SourcesSchema,
       verification: VerificationSchema,
       humanizer: HumanizerSchema,
+      compile: CompileSchema,
       style: StyleSchema,
       runtime: PaperRuntimeSchema,
       budget: BudgetSchema,
@@ -7994,6 +8029,22 @@ var init_v2_to_v3 = __esm({
   "bin/lib/migrations/config/v2_to_v3.ts"() {
     "use strict";
     __name(migrate3, "migrate");
+  }
+});
+
+// bin/lib/migrations/config/v3_to_v4.ts
+function migrate4(input) {
+  const out = { schema_version: 4 };
+  for (const [k, v] of Object.entries(input)) {
+    if (k === "schema_version") continue;
+    out[k] = v;
+  }
+  return out;
+}
+var init_v3_to_v4 = __esm({
+  "bin/lib/migrations/config/v3_to_v4.ts"() {
+    "use strict";
+    __name(migrate4, "migrate");
   }
 });
 
@@ -8071,13 +8122,15 @@ var init_config2 = __esm({
     init_v0_to_v1();
     init_v1_to_v2();
     init_v2_to_v3();
+    init_v3_to_v4();
     init_config_text();
     init_disciplines();
     init_config();
     MIGRATIONS = Object.freeze({
       0: migrate,
       1: migrate2,
-      2: migrate3
+      2: migrate3,
+      3: migrate4
     });
     EMPTY_CONFIG = Object.freeze({ schema_version: CURRENT_CONFIG_VERSION });
     DEFAULTS = Object.freeze({
@@ -8091,9 +8144,12 @@ var init_config2 = __esm({
       "verification.recheck_after_days": DEFAULT_RECHECK_AFTER_DAYS,
       "verification.send_byo_passages": false,
       "verification.plagiarism_check": true,
+      "verification.plagiarism_max_phrases": DEFAULT_PLAGIARISM_MAX_PHRASES,
       "humanizer.enabled": true,
       "humanizer.honesty_score": true,
       "humanizer.honesty_backend": "gptzero",
+      "compile.smooth_transitions": true,
+      "compile.contradiction_pairs": DEFAULT_CONTRADICTION_PAIRS,
       "style.match_past_writing": false,
       "budget.cost_cap_usd": 5,
       "network.contact_email_env": "PENSMITH_CONTACT_EMAIL",

@@ -18,7 +18,7 @@ required:
 degrade_if_missing:
   - if no MCP tools: direct file reads from .paper/
   - if no Task (parallel smoothing unavailable): smooth boundaries sequentially in-process
-  - if no model transport (Tier 2): skip boundary smoothing entirely (raw concat) — smoothing is best-effort prose and never blocks compile
+  - if no model is configured, or the run is LLM-stubbed (PENSMITH_NO_LLM), a --dry-run or offline with a non-loopback endpoint: skip boundary smoothing and the contradiction judge, keep the raw text and the heuristic contradiction floor, and name the reason in COMPILE-REPORT.md — smoothing is best-effort prose and never blocks compile
 </capability_check>
 
 ## Overview
@@ -33,7 +33,11 @@ BRDTH-01), and citeproc renders only the keys the draft cites.
 
 The implementation lives in `bin/lib/compile.ts` (`runCompile`); the verb is
 `bin/cli/compile.ts` — a thin delegate. Both Tier 1 (plugin) and Tier 2 (CLI)
-run the SAME `runCompile`; tier divergence is only the smoother transport.
+run the SAME `runCompile`; tier divergence is only the model transport. Tier 2
+sends the smoother and the contradiction judge through `complete()` (the cost
+cap is checked before every call); Tier 1 (Phase 23b, PLUG-07) submits the same
+masked windows and the same candidate pairs through MCP and validates the
+replies with the same `bin/lib/rewrite-guard.ts` and `bin/lib/claim-consistency.ts`.
 
 **LOCKED INVARIANT — compile NEVER invokes Pass 2 (claim support) or Pass 4
 (uncited-load).** Those are advisory and ship in Phase 5. The staleness
@@ -43,21 +47,35 @@ smoothing operates only on placeholder-masked text — the model never sees raw
 
 ## Outputs
 
-- `.paper/DRAFT.md` — the compiled manuscript, sections concatenated in OUTLINE
-  order (COMP-02), citation tokens preserved for Phase-6 export.
-- `.paper/COMPILE-REPORT.md` — schema v1 (D-14): Transitions Changed,
-  Cross-Section Consistency Flags, Citation Density, Compile-Staleness Resolved,
-  Advisory Findings, then (Phase 20, additive) `## Accepted Quotes` (the quotes
-  the user accepted without a source check, with their times) and
-  `## Quotes Verified Against Your Files`.
-- `.paper/COMPILE-INPUTS.json` — v2 (D-18-39, D-20-23): the compiled sections
+- `.paper/DRAFT.md` — the compiled manuscript (EXP-05, D-21-13): `# <paper
+  title>` (OUTLINE.md's H1, else the intake brief's title), then one
+  `## <section title>` per section in OUTLINE order (COMP-02), citation tokens
+  preserved for the export. A section draft's own leading heading that repeats
+  its title is dropped. The headings are text no section gate judged, so a
+  title that is empty, spans lines or holds a citation, a direct quote, an
+  identifier or an unparseable or unsupported citation form is refused, naming
+  the fix (retitle it in OUTLINE.md and run `pensmith outline`).
+- `.paper/COMPILE-REPORT.md` — schema v1 (D-14), every section populated
+  (EXP-13, D-21-17): Transitions Changed (each boundary's status, the reason and
+  its before/after text, or the skip reason), Cross-Section Consistency Flags,
+  Citation Density (the discipline and where it came from, the band and its
+  source, per-section and out-of-band paragraphs), Compile-Staleness Resolved,
+  Advisory Findings (each section's Pass-2 rows that are not SUPPORTED and its
+  Pass-4 orphans, read from its VERIFICATION.md; a section whose Pass 2 did not
+  judge its current draft says so), `## Accepted Quotes`, `## Quotes Verified
+  Against Your Files` and (Phase 21, additive) `## Contradictions`
+  (`Contradictions flagged: N (target 0)`, each pair with both sections and both
+  sentences, the cleared pairs and the skip reason). The frontmatter `title`
+  is the paper title. COMPILE-REPORT is never exported.
+- `.paper/COMPILE-INPUTS.json` — v3 (D-18-39, D-20-23, D-21-13): the compiled sections
   (ids and slugs, in order), the sha256 of each section's DRAFT.md and
   VERIFICATION.md as compile read them and each section's
   `verified_against_draft_hash`, plus `compiled_draft_sha256` — the sha256 of
-  the DRAFT.md compile wrote. The router recompiles only when the paper's
-  sections or those bytes change — never because a checkout or sync client
+  the DRAFT.md compile wrote, and (v3) `headings_sha256` — the title and section
+  titles compile wrote as headings. The router recompiles only when the paper's
+  sections, those bytes or the headings change — never because a checkout or sync client
   reordered mtimes; `done` refuses a compiled draft edited since (VRFY-27). A v1
-  record migrates with both new fields null, which `done` treats as stale
+  or v2 record migrates with the new fields null, which `done` treats as stale
   ("recompile").
 - `.paper/CITATIONS.bib` and `.paper/LIBRARY.json` are read, never written
   (BRDTH-01): compile records no `last_verified` either (VRFY-28).
@@ -133,32 +151,62 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    the refusal naming every offending section + citekey (the verifier-blocks-
    compile invariant).
 
-6. **Concatenate in OUTLINE order** (COMP-02): join the section drafts (each
-   normalized to exactly one trailing newline) with a blank line between.
+6. **Title and headings, then concatenate in OUTLINE order** (COMP-02, EXP-05):
+   `# <title>`, then for each section `## <section title>` and its draft (each
+   normalized to exactly one trailing newline), a blank line between. No title
+   (an outline without an H1 and a brief without a title), or a title the
+   heading check flags (see Outputs), is a refusal naming the fix.
 
-7. **Boundary smoothing** (COMP-03 / D-12 / D-13): for each of the N-1 adjacent
-   boundaries, mask `[@key]` → `{{cite_K_M}}` placeholders, hand only the
-   `[tail, head]` window to the smoother (Task-parallel in Tier 1; sequential in
-   Tier 2; skipped when no model transport), then require the output placeholder
-   set to equal the input set, and the restored text to cite exactly the sources
-   the original boundary cited (read with the one citation grammar, so a new
-   `[-@k]`, `@{k}`, narrative `@k` or a rewritten cluster counts, D-18-40), and
-   to add nothing else the gate core checks — no unsupported or unparseable
-   citation form, no direct quote and no identifier written in the prose that
-   the section drafts did not hold (VRFY-25: the gate judged the drafts). Any
-   drift REJECTS that boundary (keep the original prose) and records a
-   Transitions-Changed rejection. Then run the deterministic
-   cross-section consistency scan (COMP-04, flags only) and the citation-density
-   computation vs. the discipline preset's per-paragraph band (COMP-05,
-   warn-only). The discipline is the paper's own (config.toml
-   `discipline_preset`, else the INTAKE.md brief; GRND-06); `--discipline`
-   overrides it.
+7. **Boundary smoothing through the rewrite guard** (COMP-03, EXP-10, D-21-14):
+   for each of the N-1 adjacent boundaries, `bin/lib/rewrite-guard.ts`
+   `maskForRewrite` turns every citation cluster into `{{cite_K_M}}` and every
+   direct quote Pass 3 would check into `{{quote_K_M}}`; only the last
+   paragraph of section N and the first of N+1 go to the `smoother` prompt (one
+   call per boundary through `complete()`, the cost cap checked before each).
+   `validateRewrite` accepts the reply only when the placeholder multiset is
+   unchanged, the headings are byte-identical, nothing outside the two
+   paragraphs changed, the restored text cites exactly what the original cited
+   (every citation as written, read with the one citation grammar, D-18-40) and
+   it adds nothing the gate core checks — no unsupported or unparseable citation
+   form, no direct quote and no identifier written in the prose (VRFY-25). A
+   rejected boundary keeps the raw text and the report names why (`rejected
+   (citation set changed)`). Smoothing is skipped, with the reason in the report
+   and on stdout, by `--no-smooth`, `--raw`, `[compile] smooth_transitions =
+   false` (`skipped (config)`), PENSMITH_NO_LLM (`skipped (no LLM)`),
+   `--dry-run` (`skipped (dry-run)`), a sources-offline run whose model endpoint
+   is not loopback (`skipped (offline)`) and a runtime with no usable model
+   (`skipped (no model configured)`). `sections/*` are never written.
+
+7a. **Contradictions** (EXP-11, D-21-15 — the D-12 amendment adding the
+   `claim-consistency` prompt slug): `bin/lib/claim-consistency.ts` collects each
+   section's claims (its PLAN.md `## Claims` and its draft's claim sentences, by
+   Pass 4's marker lexicon), pairs them across sections, ranks the pairs by
+   shared content terms and sends the top `[compile] contradiction_pairs`
+   (default 20) to ONE `claim-consistency` call (judgment tier, structured,
+   UNCLEAR-biased: CONTRADICTS only when both sentences cannot be true
+   together). A deterministic negation / direction heuristic over pairs sharing
+   a subject and predicate always runs and is the offline floor.
+   `Contradictions flagged: N (target 0)` counts the model's CONTRADICTS plus the
+   heuristic flags the model did not judge; a heuristic pair the model judged
+   CONSISTENT is listed as cleared, with its rationale. Flags only — done's
+   confirmation lists them.
+
+7b. **Consistency scan and density** (COMP-04, COMP-05, EXP-12, D-21-16): the
+   deterministic cross-section consistency scan (flags only) and the citation
+   density against the band: the discipline preset's per-paragraph band,
+   overridden by `[verification] citation_density_min/max`; `--discipline`
+   overrides the paper's discipline (config.toml `discipline_preset`, else the
+   INTAKE.md brief; GRND-06). The report names the discipline and its source
+   and the band and its source (warn-only).
 
 8. **Emit the outputs**: `atomicWriteFile` `.paper/DRAFT.md`,
-   `.paper/COMPILE-REPORT.md` (schema v1, D-14) and `.paper/COMPILE-INPUTS.json` (v2, with the compiled draft's sha256). EVERY write routes through the
+   `.paper/COMPILE-REPORT.md` (schema v1, D-14) and `.paper/COMPILE-INPUTS.json` (v3, with the compiled draft's and the headings' sha256). EVERY write routes through the
    D-07 atomic-write chokepoint; section drafts are never written (ARCH-20), and
    `.paper/CITATIONS.bib` is left exactly as the library writer rendered it
    (BRDTH-01 — compile once pruned it to the cited keys and even emptied it).
 
 9. **Shell fallback** (TIER-06 equivalence path): `pensmith compile [--yolo]
-   [--lintHeadings] [--discipline <preset>]`.
+   [--no-smooth] [--raw] [--lint-headings] [--discipline <preset>]`
+   (`--lint-headings`: the opt-in heading-tense consistency heuristic, COMP-04)
+   (`--raw`: the raw concatenation — no smoothing; the contradiction heuristic
+   and the density check still run).

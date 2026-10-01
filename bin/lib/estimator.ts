@@ -29,6 +29,13 @@
 // whole paper: one orphan-label call per paragraph of the compiled DRAFT.md,
 // or of the sections' drafts and plans before compile.
 //
+// Phase 21 (D-21-27): compile makes N−1 `smoother` calls (one per section
+// boundary, unless `[compile] smooth_transitions = false`) and one
+// `claim-consistency` call (two or more sections, `[compile]
+// contradiction_pairs` > 0); done makes one `humanizer` call per section when
+// the user's humanizer skill is installed and `[humanizer] enabled` is not
+// false (compileCallsFor, humanizerCallsFor).
+//
 // NO network and NO LLM call: this module reads files only (STATE.json,
 // PLAN.md frontmatter, SESSION.log, config files, the assignment text). It
 // never writes COSTS.jsonl. Under PENSMITH_NO_LLM every model row is $0.00.
@@ -62,6 +69,8 @@ import { resolveDiscipline } from './disciplines.js';
 import { readIntakeBrief } from './intake-brief.js';
 import { isResearchDone } from './research-sentinel.js';
 import { finalMdState } from './done-record.js';
+import { isHumanizerSkillPresent } from './ecosystem-presence.js';
+import { DEFAULT_CONTRADICTION_PAIRS } from './schemas/config.js';
 
 // ---------------------------------------------------------------------------
 // Per-call projection
@@ -405,6 +414,41 @@ function researchAdapterCount(root: string, env: Readonly<Record<string, string 
   return plan.entries.length;
 }
 
+/**
+ * compile's model calls (D-21-27, EXP-10, EXP-11): one `smoother` call per
+ * section boundary (N−1) unless `[compile] smooth_transitions = false`, and
+ * one `claim-consistency` call for a paper of two or more sections unless
+ * `[compile] contradiction_pairs = 0`.
+ */
+export function compileCallsFor(root: string, sectionCount: number): Array<[string, number]> {
+  let config: ReturnType<typeof tryReadPaperConfigSync> = null;
+  try {
+    config = tryReadPaperConfigSync(root);
+  } catch {
+    config = null;
+  }
+  const calls: Array<[string, number]> = [];
+  if (sectionCount < 2) return calls;
+  if (config?.compile?.smooth_transitions !== false) calls.push(['smoother', sectionCount - 1]);
+  if ((config?.compile?.contradiction_pairs ?? DEFAULT_CONTRADICTION_PAIRS) > 0) calls.push(['claim-consistency', 1]);
+  return calls;
+}
+
+/**
+ * done's humanizer calls (D-21-27, EXP-14): one `humanizer` call per section
+ * of the compiled paper when the user's humanizer skill is installed and
+ * `[humanizer] enabled` is not false — done skips the humanizer otherwise.
+ */
+export function humanizerCallsFor(root: string, sectionCount: number): Array<[string, number]> {
+  let enabled = true;
+  try {
+    enabled = tryReadPaperConfigSync(root)?.humanizer?.enabled !== false;
+  } catch {
+    enabled = true;
+  }
+  return enabled && sectionCount > 0 && isHumanizerSkillPresent() ? [['humanizer', sectionCount]] : [];
+}
+
 /** The model calls one run of each cost-incurring verb makes (other verbs make none; research: researchCalls; verify and done: per section / paper). */
 const STEP_SLUGS: Readonly<Record<string, ReadonlyArray<readonly [string, number]>>> = Object.freeze({
   new: [['intake-clarifier', 1]],
@@ -430,8 +474,10 @@ function scopeRows(
   sectionResearch: ReadonlyArray<readonly [string, number]>,
   /** A section's verify calls (its draft's pairs and paragraphs, or its plan's). */
   verifyCalls: (id: number | string) => Array<[string, number]>,
-  /** done's whole-paper Pass 4 calls. */
+  /** done's calls: the humanizer per section and the whole-paper Pass 4. */
   doneCalls: Array<[string, number]>,
+  /** compile's calls: the smoother per boundary and the claim-consistency call. */
+  compileCalls: Array<[string, number]>,
 ): EstimateRow[] {
   if (scope.research === true && scope.verb === 'plan') {
     // GRND-17: the section pass's evaluator calls; `plan --revise` re-plans after it.
@@ -443,6 +489,7 @@ function scopeRows(
     return [price(`${scope.verb}${at} --research`, calls)];
   }
   if (scope.verb === 'done') return [all.find((r) => r.step === 'done') ?? price('done', doneCalls)];
+  if (scope.verb === 'compile' && compileCalls.length > 0) return [all.find((r) => r.step === 'compile' && r.calls.length > 0) ?? price('compile', compileCalls)];
   const slugs = scope.verb === 'research' ? research : scope.verb === 'verify' ? [] : STEP_SLUGS[scope.verb];
   if (!slugs) {
     // compile, add, status, … make no model call.
@@ -555,9 +602,16 @@ export async function projectEstimate(args: {
       : sections.length > 0
         ? sections.reduce((sum, s) => sum + sectionWork(formatSectionId(sectionIdOf(s.n, s.suffix)), s.n, s.slug).paragraphs, 0)
         : sectionCount * plannedAdvisoryWork(defaultWords, 0, perParagraph).paragraphs;
-  const doneCalls: Array<[string, number]> = [['orphan-label', paperParagraphs]];
+  // D-21-27: compile smooths each boundary and judges the cross-section
+  // claims; done humanizes each section (when the skill is installed).
+  const compileCalls = compileCallsFor(root, sectionCount);
+  const doneCalls: Array<[string, number]> = [...humanizerCallsFor(root, sectionCount), ['orphan-label', paperParagraphs]];
   if (compiled === null) {
-    rows.push({ step: 'compile', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' });
+    rows.push(
+      compileCalls.length > 0
+        ? row(rt, root, 'compile', compileCalls, stubbed)
+        : { step: 'compile', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' },
+    );
   }
   const finalState = finalMdState(root);
   if (finalState === 'absent' || finalState === 'stale') {
@@ -572,7 +626,7 @@ export async function projectEstimate(args: {
         return !r.absent && !r.stub;
       })
       .map((s) => formatSectionId(sectionIdOf(s.n, s.suffix)));
-    rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed), research, sectionResearchCalls(root), verifyCallsOf, doneCalls);
+    rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed), research, sectionResearchCalls(root), verifyCallsOf, doneCalls, compileCalls);
   }
 
   const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);

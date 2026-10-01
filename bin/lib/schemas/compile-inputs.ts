@@ -14,12 +14,17 @@
 // (migrations/compile-inputs/v1_to_v2.ts) sets both null, which done reads as
 // stale ("recompile").
 //
+// v3 (Phase 21, EXP-05, D-21-13) adds `headings_sha256`: the sha256 of the
+// paper title and section titles compile wrote as headings (compile-inputs.ts
+// headingsSha256), so a retitled outline sends the paper back to compile. The
+// v2 → v3 migration sets it null, which the router and done read as stale.
+//
 // `$schemaVersion`, strict. Adding a field is a migration plus a version bump
 // (S-20).
 
 import { z } from 'zod';
 
-export const COMPILE_INPUTS_SCHEMA_VERSION = 2;
+export const COMPILE_INPUTS_SCHEMA_VERSION = 3;
 
 const SHA256_OR_EMPTY = /^(?:[0-9a-f]{64})?$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -44,6 +49,8 @@ export const CompileInputsSchema = z
     compiled_at: z.string().datetime(),
     /** sha256 of the `.paper/DRAFT.md` bytes compile wrote (null: recorded by a v1 compile — stale). */
     compiled_draft_sha256: z.string().regex(SHA256).nullable(),
+    /** sha256 of the title and section titles compile wrote as headings (null: recorded before v3 — stale). */
+    headings_sha256: z.string().regex(SHA256).nullable(),
     /** The compiled sections in (n, suffix) order. */
     sections: z.array(CompileInputsSectionSchema),
   })

@@ -126,7 +126,7 @@ Several actions that the user might think of as standalone are **folded into the
 - **Detection-aware honesty pass** runs as part of humanize.
 - **Plagiarism check** runs as part of `done` (after verify, before humanize).
 
-Standalone power-user paths (`/pensmith verify`, `/pensmith humanize`, `/pensmith score`, `/pensmith plagiarism`) exist but aren't in the README's quick start.
+Standalone power-user paths (`/pensmith verify`, `/pensmith humanize`, `/pensmith score`, `/pensmith plagiarism`) exist but aren't in the README's quick start. *(Amended in v1.0.0 Phase 21 — EXP-21, D-21-23: `export`, `humanize`, `score` and `plagiarism` are **aliases of done's sub-steps**, not verbs — `pensmith export …` is rewritten to `pensmith done --only export …` before argument validation (likewise the other three), because the 16 verbs are locked (UX-02); no workflow file is added. Every `--only` runs done's blocking gate first.)*
 
 ### 5.4 Natural-language skill triggering
 
@@ -311,24 +311,25 @@ This is the equivalent of GSD's milestone completion. It assembles the verified 
 
 - Refuses if any section has FABRICATED, MIS-CITED, or quote-NOT_FOUND. *(Amended in v1.0.0 Phase 20 — VRFY-25, VRFY-27: compile trusts no section record. It recomputes every section's verdicts with the verifier's gate core over the exact draft bytes it concatenates and refuses on any blocking row — whatever VERIFICATION.md says — and on a missing, Status-less or failed record. A section changed since its verification is re-verified (Passes 1 and 3 only); that re-verify is the only section write compile makes. compile never writes LIBRARY.json, CITATIONS.bib or `last_verified`.)*
 - Concatenates sections in outline order.
-- **Cross-section smoothing pass**: reads the assembled draft and edits *only* the last paragraph of each section + first paragraph of the next, integrating transitions. Does not touch citations or claims.
-- **Cross-section claim consistency check**: flags contradictions between sections (e.g., section 2 claims X, section 4 claims not-X).
-- **Citation density check**: per-discipline density target (§8); flags out-of-range paragraphs.
-- Writes `.paper/DRAFT.md` (the compiled paper), `.paper/COMPILE-REPORT.md` (transitions changed, contradictions flagged, density stats, the quotes accepted without a source check and the quotes verified against the user's own files) and `.paper/COMPILE-INPUTS.json` (the sections it compiled and the sha256 of each section's draft and verification, so the next step decides from content whether the compiled paper is current — D-18-39; since Phase 20 also the sha256 of the DRAFT.md it wrote and each section's verified draft hash, so `done` refuses a compiled draft edited by hand — VRFY-27).
+- **Cross-section smoothing pass**: reads the assembled draft and edits *only* the last paragraph of each section + first paragraph of the next, integrating transitions. Does not touch citations or claims. *(Amended in v1.0.0 Phase 21 — EXP-10, D-21-14: both tiers smooth through one rewrite guard, `bin/lib/rewrite-guard.ts`: every citation and every direct quote Pass 3 would check is a placeholder the model must return unchanged; a reply that changes a placeholder, a heading or anything outside the two paragraphs, or adds a citation, quote or identifier is rejected and the raw text kept, with the reason in COMPILE-REPORT. Tier 2 makes one `smoother` call per boundary through the cost-capped transport. Skipped, with the reason, by `--no-smooth`, `--raw`, `[compile] smooth_transitions = false`, `PENSMITH_NO_LLM`, `--dry-run` and an offline run with a non-loopback model endpoint.)*
+- **Cross-section claim consistency check**: flags contradictions between sections (e.g., section 2 claims X, section 4 claims not-X). *(Amended in v1.0.0 Phase 21 — EXP-11, D-21-15, amending D-12 with one new prompt slug, `claim-consistency`: cross-section pairs of claim sentences (each plan's `## Claims` and the drafts' claim sentences), ranked by shared content terms, the top `[compile] contradiction_pairs` (default 20) judged in one structured, UNCLEAR-biased call; a deterministic negation/direction heuristic always runs and is the offline floor. COMPILE-REPORT's `## Contradictions` reports `Contradictions flagged: N (target 0)` with both sentences of each pair; done's confirmation lists them.)*
+- **Citation density check**: per-discipline density target (§8); flags out-of-range paragraphs. *(Amended in v1.0.0 Phase 21 — EXP-12, D-21-16: the band is the discipline preset's, overridden by `[verification] citation_density_min/max`, and `--discipline` overrides both; the report names the discipline and the band with their sources.)*
+- Writes `.paper/DRAFT.md` (the compiled paper — *amended in v1.0.0 Phase 21, EXP-05: `# <paper title>` then `## <section title>` per section, so every export starts with the title and its section headings*), `.paper/COMPILE-REPORT.md` (transitions changed, contradictions flagged, density stats, the quotes accepted without a source check and the quotes verified against the user's own files — *every section populated since Phase 21, EXP-13, with each skipped step's mode named*) and `.paper/COMPILE-INPUTS.json` (the sections it compiled and the sha256 of each section's draft and verification, so the next step decides from content whether the compiled paper is current — D-18-39; since Phase 20 also the sha256 of the DRAFT.md it wrote and each section's verified draft hash, so `done` refuses a compiled draft edited by hand — VRFY-27).
 
-### 7.9 Done (`/pensmith done` or `/pensmith export`)
+### 7.9 Done (`/pensmith done`; `/pensmith export` is an alias of `done --only export`)
 
 The umbrella for finishing. Equivalent to GSD's `/gsd:ship`.
 
 - Refuses to run if any section's verification is unclean. *(Amended in v1.0.0 Phase 20 — VRFY-26, VRFY-27: before any paid or third-party step, done takes the sections STATE.json registers, refuses a section changed since its verification and a compiled draft changed since compile, and recomputes the verifier's gate over the exact text it exports — the compiled draft, and again the humanized FINAL.md — listing every reason at once. `--yolo` and `--raw` never bypass it. done never writes under `sections/`. Amended again at the Phase 20 + 23a merge review: done leaves `.paper/FINAL.md` holding exactly the text it exported — the humanized text GATE-04 judged, else the compiled draft — and records both hashes in `.paper/DONE-RECORD.json`; the paper is complete only while FINAL.md and DRAFT.md hold them. A FINAL.md done did not leave — edited or written by hand — is refused (exit 4) and never exported or replaced until the user moves it out of the paper folder, and the router reports it as attention; a FINAL.md an older pensmith exported (the paper-level VERIFICATION.md names its text) is done's own and is replaced (amended again in the merge review's round 2).)*
 - Runs **whole-paper verify pass** (Pass 4 — per-paragraph audit across the compiled draft, catches issues that emerged at section boundaries). *(Since Phase 20 over the exact text to be exported — VRFY-23.)*
-- Runs **plagiarism check** (§7.16).
+- Runs **plagiarism check** (§7.17).
 - Runs **humanizer** (§7.10), which itself runs the **detection-aware honesty score** (§7.11).
+- *(Amended in v1.0.0 Phase 21 — the order and FINAL.md, EXP-15, D-21-19: the blocking gate → plagiarism → honesty before → humanizer and its acceptance (a rejection is EXIT_BLOCKED, nothing exported) → honesty after → whole-paper Pass 4 → the confirmation → the export → `.paper/VERIFICATION.md` → `.paper/FINAL.md` and `.paper/DONE-RECORD.json`. FINAL.md — the accepted humanized text, else the compiled draft — is written once per successful run, after the export, so a refused, declined, failed or capped done leaves it byte-identical; a later done after a recompile rewrites it and the export. The citation style is resolved once: `--style` > config.toml `[project] citation_style` > the intake brief's style > the discipline preset's default, one of the 8 bundled styles or a local `.csl` file; done prints `style: <name> (from <source>)`.)*
 - Confirms with user if any UNSUPPORTED, orphan claims, or plagiarism hits. *(Amended in v1.0.0 Phase 20 — VRFY-22: UNSUPPORTED claims are listed with their evidence at the `unsupported-claims` gate, §7.20; each decision — confirmed by the user, or auto-accepted under `--yolo` — is recorded with its time in `.paper/VERIFICATION.md`.)*
 - Exports to `.docx` / `.pdf` / `.tex` / `.md` (via pandoc if present, else markdown for docx). *(Amended in v1.0.0 Phase 21 — EXP-03 … EXP-09, D-21-02 … D-21-12: the requested format is always produced. `md` is always pensmith's own writer; `docx`, `pdf` and `latex` use pandoc when it is installed (a PDF also needs a TeX engine — pdflatex, xelatex, lualatex or tectonic) and otherwise pensmith's built-in writer of that format — a real .docx, a real PDF in the bundled OFL Liberation Serif, a standalone LaTeX article that compiles under pdfLaTeX and XeTeX — never a Markdown fallback; stdout names the writer. Citations are rendered in the paper's style, or any `.csl` file, by one citeproc engine over the whole document on both paths (notes numbered across the document, numeric styles in first-citation order, every citation form the gate accepts, `[@k 33]` as page 33 as pandoc reads it, titles case-protected); pandoc runs in a temporary directory on neutral names only. The exporter renders only keys the gate read, and a note built from a citation carries nothing the gate did not check (D-21-12).)*
 - **No metadata stamp. No visible footer. No trace of pensmith in the exported document.** This is a deliberate user-facing design choice. The README disclaimer (§3) is the project's only integrity-disclosure mechanism.
 - Bundles the bibliography of the cited sources only (`export/CITATIONS.bib` / `.ris`, never the whole research library), formatted in the configured citation style. *(Amended in v1.0.0 Phase 21 — EXP-01, EXP-02, D-21-11: the document's References list is rendered in the style; the RIS is rendered from the same parsed entries as the export bib — the same keys, one unwrapped `TAG  - value` per line, `AU  - Family, Given`, `SP`/`EP`, a journal article's `JO` — and a text that cites keys none of which the bibliography holds is an error that exports nothing.)*
-- Flags: `--raw` skips humanize. `--no-verify` skips the final whole-paper verify pass (warns; refuses to combine with `--raw` without `--yolo`).
+- Flags: `--raw` skips humanize. `--no-verify` skips the final whole-paper verify pass (warns; refuses to combine with `--raw` without `--yolo`). *(Amended in v1.0.0 Phase 21 — EXP-21, D-21-23: also `--style <name|path.csl>`, `--no-score`, `--no-plagiarism-check`, `--format md|docx|pdf|latex|tex` (`tex` = latex; anything else is a usage error listing them) and `--only export|humanize|score|plagiarism`; `--no-verify` skips only the whole-paper Pass 4 — the blocking re-verification always runs. `--only plagiarism` prints the matches and `--only score` the score, writing nothing; `--only humanize` writes FINAL.md and the record after GATE-04 without exporting; `--only export` renders done's own current FINAL.md (re-gated) or the compiled draft, after the confirmation. The aliases `export`, `humanize`, `score` and `plagiarism` name these sub-steps, §5.3.)*
 
 ### 7.10 Humanize (folded into `done`)
 
@@ -336,6 +337,7 @@ The umbrella for finishing. Equivalent to GSD's `/gsd:ship`.
 - If `humanizer` skill not present, prints a clear note and skips with no error.
 - Output `.paper/FINAL.md`.
 - Calls the honesty score (§7.11) before and after; reports both numbers.
+- *(Amended in v1.0.0 Phase 21 — EXP-14, D-21-18: in Tier 2 the skill's `SKILL.md` body is the system prompt of a `humanizer` model call (a model slug with no prompt template) made one `##` section at a time — the title and headings never reach the model — with a hash-pinned contract (`references/humanizer-contract.md`) and every citation and quote masked by the rewrite guard. The result is accepted only through `acceptHumanized` (the rewrite guard, the cited-key diff and the verifier's gate core over the humanized bytes), the one acceptance function both tiers call; a rejection blocks the export (EXIT_BLOCKED) and leaves FINAL.md untouched, `--raw` is the way out; a provider failure exports the compiled draft and says `humanizer failed: <reason>`; the cost cap applies. Skipped, with the reason, when the skill is missing (`humanizer skill not found at ~/.claude/skills/humanizer/SKILL.md — skipping`), `[humanizer] enabled = false`, `--raw`, without a model (`PENSMITH_NO_LLM`, `--dry-run`, offline with a non-loopback endpoint, none configured). The humanizer improves prose; it is never described as avoiding detection.)*
 
 ### 7.11 Detection-aware honesty (folded into humanize)
 
@@ -352,6 +354,7 @@ it does not promise to make output undetectable.
 - Multiple backends supported (GPTZero, Originality, Sapling); user picks via config.
 - Framing is non-negotiable: "improves prose," not "evades detection."
 - Score reported in `.paper/VERIFICATION.md` with timestamp.
+- *(Amended in v1.0.0 Phase 21 — EXP-16..EXP-18, D-21-20, D-21-21: a score is real or clearly absent: `Pensmith honesty check (before humanize): 61% AI-generated (gptzero, 2026-10-01T09:12:44.120Z)`, or one exact reason — `skipped (no GPTZERO_API_KEY set)`, `skipped (no consent recorded — …)`, `skipped (consent declined in config.toml)`, `skipped (--no-score)`, `skipped (config: honesty_score = false)`, `unavailable (offline)` / `(dry-run)`, `unavailable (GPTZero rejected the API key)`, `unavailable (rate limited)`, `unavailable (network: …)`; the after line adds `N/A (humanize skipped with --raw)`, `N/A (humanizer not installed)`, `N/A (humanizer failed: …)`, `N/A (humanizer disabled)`. Consent (S-14) is asked once in a terminal through the `detector-consent` gate and recorded in config.toml (`[humanizer] honesty_consent`, yes or no); `--yolo` never grants it; without a terminal and without a recorded answer nothing is sent. Every scoring run prints the configured backend's disclosure (verbatim from `references/honesty-framing.md`) before anything is sent. GPTZero (`GPTZERO_API_KEY`), Originality.ai (`ORIGINALITY_API_KEY`) and Sapling (`SAPLING_API_KEY`) are real adapters through the egress gate, each key in a request header only; `doctor` reports each key as present or absent.)*
 
 ### 7.12 Last-verified timestamps + auto-recheck
 
@@ -413,6 +416,7 @@ A free-only plagiarism check runs as part of `done` (after compile, before human
 - Output added to `.paper/VERIFICATION.md`.
 - Disable with `--no-plagiarism-check`.
 - README is clear: this is a basic check, not a substitute for institutional plagiarism tools.
+- *(Amended in v1.0.0 Phase 21 — EXP-19, EXP-20, D-21-22: the phrases are 6–10-word windows of body paragraphs (never the title, headings, citations, quoted passages, block quotes, list items or the reference list), ranked by rarity against a shipped word-frequency list (SCOWL, `templates/wordfreq/`, credited in the README), at least one per paragraph in paper order, up to `[verification] plagiarism_max_phrases` (default 30). Each is sent as a quoted exact-phrase DuckDuckGo query; a result is a match only when the normalised phrase appears verbatim in its title or snippet, and its real destination is decoded from DuckDuckGo's redirect link. Each match carries its location (`§<id> paragraph <k>`). `--no-plagiarism-check` and `[verification] plagiarism_check = false` send nothing and say so; offline and dry-run runs say `skipped (offline)` / `(dry-run)`.)*
 
 ### 7.18 Style-match to past writing (opt-in at intake)
 
@@ -452,7 +456,7 @@ For power users / batch processing / CI testing:
 | `revise-swap` | Apply this citation swap to the section? | skip: apply the proposed swap | refuse: 3 | 3 | PRD §7.5 |
 | `cost-cap` | This call would exceed your cost cap. Continue? | never | refuse: 5 | 5 | RUN-18 |
 | `estimate-proceed` | Proceed? | never | skip: 0 | 0 | RUN-20 |
-| `detector-consent` | Send the full paper text to GPTZero for an AI-detection score? | never | skip: 0 | 0 | EXP-17 |
+| `detector-consent` | Send the full paper text to the configured AI detector for a score (your answer is saved)? | never | skip: 0 | 0 | EXP-17 |
 | `paper-pointer` | Continue the active paper, or start a new paper here? | never | refuse: 2 | 2 | RUN-14 |
 | `sketch-confirm` | Proceed to intake with this thesis? | skip: proceed to intake | refuse: 3 | 3 | ERGO-05 |
 | `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |
@@ -551,10 +555,10 @@ Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/Open
 
 ## 10. Per-project config (`.paper/config.toml`)
 
-`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 3` (v2 since Phase 19: `[verification] send_byo_passages` and the `books` / `nber` values of `[sources] allowed_databases`; v3 since Phase 20: `[verification] quote_min_words`). An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
+`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 4` (v2 since Phase 19: `[verification] send_byo_passages` and the `books` / `nber` values of `[sources] allowed_databases`; v3 since Phase 20: `[verification] quote_min_words`; v4 since Phase 21: `[humanizer] honesty_consent`, the `[compile]` table, `[verification] plagiarism_max_phrases` and a local `.csl` path as `[project] citation_style`). An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
 
 ```toml
-schema_version = 3                   # MANDATORY — see §14 NFRs
+schema_version = 4                   # MANDATORY — see §14 NFRs
 
 [project]
 # `pensmith new` writes mode, goal, class, discipline_preset, citation_style,
@@ -566,7 +570,7 @@ assignment_prompt = "@./assignment.pdf"
 mode = "draft"                       # draft | outline
 goal = "draft"                       # draft | learning | both (the §7.13 intake choices)
 length_target_words = 2500
-citation_style = "APA"               # APA | MLA | Chicago (Notes-Bibliography) | Chicago (Author-Date) | IEEE | AMA | Vancouver | Harvard — or a CSL key (intake writes one, e.g. chicago-notes-bib) or an alias ("APA 7", "Chicago")
+citation_style = "APA"               # APA | MLA | Chicago (Notes-Bibliography) | Chicago (Author-Date) | IEEE | AMA | Vancouver | Harvard — or a CSL key (intake writes one, e.g. chicago-notes-bib) or an alias ("APA 7", "Chicago") — or a path to a local .csl file ("styles/my-journal.csl", relative to the project root, or absolute; checked as CSL 1.0 when done uses it). Unset: the intake brief's style, else the discipline preset's (§8). `done --style` wins over all (§7.9)
 discipline_preset = "psychology"
 due_date = "2026-05-20"
 counterargument_required = true
@@ -590,7 +594,8 @@ send_byo_passages = false           # Pass 2 may send your own PDFs' passages ne
 quote_min_words = 5                  # Pass 3 checks every direct quote of at least this many words (1–5: a paper may only lower the floor)
 flag_threshold = "low"               # low | medium | high
 recheck_after_days = 30
-plagiarism_check = true              # free distinctive-phrase check
+plagiarism_check = true              # free distinctive-phrase check (§7.17)
+plagiarism_max_phrases = 30          # phrases done sends to the search: at least one per body paragraph, up to this many
 citation_density_min = 1             # per ¶
 citation_density_max = 3             # per ¶
 # verify_quotes is NOT a key: Pass 3 quote verification is a blocking pass (§14).
@@ -599,8 +604,13 @@ citation_density_max = 3             # per ¶
 [humanizer]
 enabled = true
 preserve_voice = "academic"          # academic | formal | casual
-honesty_score = true                 # show GPTZero score
-honesty_backend = "gptzero"          # gptzero | originality | sapling
+honesty_score = true                 # show the AI-detection score (§7.11)
+honesty_backend = "gptzero"          # gptzero | originality | sapling (key: GPTZERO_API_KEY / ORIGINALITY_API_KEY / SAPLING_API_KEY)
+honesty_consent = true               # example — unset: not asked yet. Your answer to "send the paper to the detector?", asked once in a terminal and recorded here (true or false); --yolo never answers it, and without it a non-interactive run sends nothing
+
+[compile]
+smooth_transitions = true            # rewrite the N-1 section boundaries for flow (§7.8); citations and quotes are masked and checked
+contradiction_pairs = 20             # cross-section claim pairs one compile sends to the claim-consistency judge (0: the offline heuristic only)
 
 [style]
 match_past_writing = false           # written by intake from the style-match answer (§7.18)

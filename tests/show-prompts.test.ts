@@ -199,7 +199,8 @@ test('RUN-16: DuckDuckGo — every plagiarism phrase query is mirrored before it
       assert.ok(results.length >= 1 && queried.length >= 1);
       assert.deepEqual(mirroredQueries(), queried.map((x) => x.q), 'exactly one mirror line per query sent, same query');
       assert.ok(queried.every((x) => x.mirroredFirst), 'each query was on stderr before the request was dispatched');
-      for (const r of results) assert.ok(queried.some((x) => x.q === r.phrase), `the phrase "${r.phrase}" was the query`);
+      // EXP-19 (D-21-22): each phrase is sent as a quoted exact-phrase query.
+      for (const r of results) assert.ok(queried.some((x) => x.q === `"${r.phrase}"`), `the quoted phrase "${r.phrase}" was the query`);
     });
   } finally {
     await restore();

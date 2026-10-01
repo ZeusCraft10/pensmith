@@ -119,6 +119,11 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // Mirrors the Phase-4 smoother + Phase-5 claim-support/orphan-label re-pin precedent.
   'tutorial-section-provenance': 'ce1d8c4876e1096d02239e55283e55decd2df8b0358b0d697d14d5005baab380', // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
   'tutorial-research-rationale': 'd4d305f2a1e8bebe87849b358f9e4fb9199b78a493bc867a306a63b6e51523e7', // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
+  // Phase 21 21-CONTEXT.md D-21-15 — the D-12 amendment (REQUIREMENTS.md S-06):
+  // the cross-section contradiction judge, invoked from bin/lib/claim-consistency.ts
+  // at compile (EXP-11). Pinned here and in tests/repo-files.test.ts PENDING_HASH_PINS
+  // in the same commit (WN-3 lockstep).
+  'claim-consistency':   '0b62ae208e9d0cddc4f6cdaae1a37f5ac47982c6b2a2f6f960eddf8929374231',   // Phase 21 D-21-15 (D-12 amendment; input <pairs>, output {pairs:[{id,verdict,rationale}]}; ACTIVE at compile via claim-consistency.ts)
 };
 
 /**

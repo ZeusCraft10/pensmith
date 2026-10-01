@@ -1,7 +1,7 @@
 # pensmith done
 
-> Finalize the paper — whole-paper audit, optional humanize, and a trace-free
-> export (DOCX / PDF / LaTeX / MD).
+> Finalize the paper — re-verify, plagiarism check, honesty score, humanize,
+> and a trace-free export (DOCX / PDF / LaTeX / MD).
 >
 > **NON-NEGOTIABLE (CLAUDE.md / PRD §3, §14): no exported document carries a
 > pensmith metadata trace, in ANY format** — not the .docx ZIP entries
@@ -19,47 +19,83 @@ required:
 degrade_if_missing:
   - if no Pandoc: markdown-only export (latex is still produced via the offline md→tex writer; docx/pdf fall back to a markdown deliverable in the export dir). The offline path renders every citation form the gates accept in the paper's style — locators and prefixes kept, `-@key` as the year only, a narrative `@key` as "Author (Year)" ("Author [n]" in a numeric style, numbered in first-citation order like the References list)
   - if no PDF engine: markdown-only fallback for the pdf format (never an ENOENT crash)
-  - if no humanizer skill: skip the humanize step (banner + null) and skip the 'after' honesty score — the export proceeds on DRAFT.md, never fails
-  - if no GPTZERO_API_KEY: skip the honesty score (the report emits the skip banner, never a fabricated percent)
+  - if no humanizer skill: print `humanizer skill not found at ~/.claude/skills/humanizer/SKILL.md — skipping`, export the compiled draft (FINAL.md = DRAFT.md) and report the after score as `N/A (humanizer not installed)` — never fail
+  - if no model transport (no model configured, PENSMITH_NO_LLM, --dry-run, offline with a non-loopback endpoint): skip the humanizer with the reason, as above
+  - if no detector key (GPTZERO_API_KEY / ORIGINALITY_API_KEY / SAPLING_API_KEY for the configured backend): the score line says `skipped (no <KEY> set)` — never a number
 </capability_check>
 
 ## Overview
 
 `pensmith done` is the milestone-completion verb (intake → research → outline →
-for each section { plan → write → verify } → compile → **done**). It assembles
-the Wave-1 export modules into one pipeline over the compiled `.paper/DRAFT.md`,
-runs the DONE-09 export-confirmation gate, and emits a trace-free deliverable.
+for each section { plan → write → verify } → compile → **done**). Over the
+compiled `.paper/DRAFT.md` it re-runs the blocking gate, checks for copied
+phrases, scores the text with the configured AI detector (with consent),
+humanizes it through the user's humanizer skill, audits the exact text to be
+exported, asks for the export decision and writes a trace-free deliverable,
+then `.paper/FINAL.md` and the record of what it exported.
 
-The implementation lives in `bin/lib/*` (`runPass4`, `runPlagiarism`,
-`scoreHonesty` / `renderHonestyReport`, `runHumanizer`, `exportDraft`); the verb
-is `bin/cli/done.ts` — a thin delegate. Both Tier 1 (plugin) and Tier 2 (CLI)
-run the SAME `bin/cli/done.ts` → `bin/lib` path; there is no `pensmith_done` MCP
-tool (the Tier-1 surface is THIS workflow body delegating to the same code, the
-compile precedent — a documented asymmetry that keeps the locked 16 verbs
-bijective with the 16 workflow bodies).
+The implementation lives in `bin/lib/*` — `done-gate.ts` (the export gate),
+`export-style.ts` (the citation style), `plagiarism.ts`, `honesty.ts`,
+`humanizer.ts` (`humanizeDraft`, and `acceptHumanized`, the one acceptance
+function both tiers call, PLUG-10), `verify/pass4.ts` and `exporter.ts`; the
+verb is `bin/cli/done.ts` — a thin orchestrator. Both tiers run the SAME
+`bin/cli/done.ts` → `bin/lib` path; there is no `pensmith_done` MCP tool (the
+Tier-1 surface is THIS workflow body delegating to the same code, the compile
+precedent — a documented asymmetry that keeps the locked 16 verbs bijective
+with the 16 workflow bodies). The Tier-1 humanizer submission (Phase 23b,
+PLUG-10) runs the skill in the host and hands its text to `acceptHumanized`.
+
+**Aliases, not verbs (EXP-21, D-21-23; PRD §5.3).** `pensmith export`,
+`pensmith humanize`, `pensmith score` and `pensmith plagiarism` are rewritten
+before argument validation to `pensmith done --only export|humanize|score|plagiarism`
+(`bin/lib/verbs.ts` VERB_ALIASES): the 16 verbs stay locked and no workflow
+file is added. Every `--only` runs the blocking gate (step 1) first.
 
 **LOCKED INVARIANT — done trusts no local file (VRFY-26).** Before any paid or
 third-party step it recomputes the gate with the one gate core over the exact
-text it exports — `.paper/DRAFT.md`, and again over a humanized FINAL.md — and
-refuses (EXIT_BLOCKED, whatever `--yolo` / `--raw`) on any blocking row, a
-section record that refuses, a section changed since its verification, or a
-compiled draft changed since compile (VRFY-27). Pass 2 (claim support) and
-Pass 4 (orphan claims) are advisory and NEVER auto-block (VRFY-07); the Core
-Value ("every citation supports its claim") is honored by REQUIRING an explicit
-decision before export: the `unsupported-claims` gate when any UNSUPPORTED claim
-is present (each listed with its evidence; `--yolo` records it as
-auto-accepted), else the generic export confirmation — only `--yolo` skips it.
-The Pass-2 UNSUPPORTED feed is read from each section `VERIFICATION.md` and FAILS
-SAFE: a present-but-unparseable `## Pass-2` table is treated as issues-present,
-never a silent clean. A section compile re-verified after an edit (advisory
-passes off) has no claim-support judgment of its current draft: done names it
-with `pensmith verify N`, and records no claim or decision for it.
+text it exports — `.paper/DRAFT.md`, and again over the humanized text — and
+refuses (EXIT_BLOCKED, whatever `--yolo`, `--raw`, `--no-verify` or `--only`)
+on any blocking row, a section record that refuses, a section changed since its
+verification, or a compiled draft changed since compile (VRFY-27). Pass 2
+(claim support) and Pass 4 (orphan claims) are advisory and NEVER auto-block
+(VRFY-07); the Core Value ("every citation supports its claim") is honored by
+REQUIRING an explicit decision before export: the `unsupported-claims` gate
+when any UNSUPPORTED claim is present (each listed with its evidence; `--yolo`
+records it as auto-accepted), else the generic export confirmation — only
+`--yolo` skips it. The Pass-2 UNSUPPORTED feed is read from each section
+`VERIFICATION.md` and FAILS SAFE: a present-but-unparseable `## Pass-2` table is
+treated as issues-present, never a silent clean. A section compile re-verified
+after an edit (advisory passes off) has no claim-support judgment of its
+current draft: done names it with `pensmith verify N`, and records no claim or
+decision for it.
+
+## Flags
+
+- `--format md|docx|pdf|latex|tex` (default docx; `tex` = latex); anything else
+  is EXIT_USAGE listing them.
+- `--style <name|path.csl>` — the citation style (EXP-03, D-21-24): `--style` >
+  config.toml `[project] citation_style` > the intake brief's style > the
+  discipline preset's default. One of the 8 bundled styles (any alias: "APA 7",
+  "Chicago") or a local `.csl` file (relative to the project root, or absolute)
+  that is a well-formed, independent CSL 1.0 style. An unknown name or a bad file
+  is EXIT_USAGE with the reason. done prints `style: <name> (from <source>)`.
+- `--raw` — skip the humanizer (`humanizer skipped (--raw)`; no request is sent).
+- `--no-verify` — skip ONLY the whole-paper Pass 4 audit, with a warning; the
+  blocking re-verification always runs. `--no-verify --raw` without `--yolo` is
+  EXIT_USAGE (PRD §7.9).
+- `--no-score` — no detector request (`skipped (--no-score)`).
+- `--no-plagiarism-check` — no search request (`plagiarism check skipped
+  (--no-plagiarism-check)`).
+- `--only export|humanize|score|plagiarism` — one step after the gate (below).
+- `--yolo` — answers the export confirmation; never the blocking gate, the cost
+  cap, the detector consent or the quote acceptances.
 
 ## Outputs
 
 - The exported deliverable in the DISTINCT export dir (default `.paper/export/`):
   `DRAFT.docx` / `DRAFT.pdf` / `DRAFT.tex` / `DRAFT.md` per `--format` (with the
-  Pandoc-absent markdown fallback) — carrying ZERO pensmith trace.
+  Pandoc-absent markdown fallback), named after the compiled draft whichever
+  text it holds — carrying ZERO pensmith trace.
 - `.paper/export/CITATIONS.bib` and `.paper/export/CITATIONS.ris` — the bundled
   bibliography (DONE-08): ONLY the sources the exported document cites, each
   entry exactly as in `.paper/CITATIONS.bib` / `.ris` (never the whole research
@@ -69,13 +105,25 @@ with `pensmith verify N`, and records no claim or decision for it.
   recomputed rows), `## Decisions` (`| Section | Row | Claim | Decision |` —
   each UNSUPPORTED claim `Confirmed by user <time>` or
   `Auto-accepted under --yolo <time>`, VRFY-22), the accepted quotes and the
-  quotes verified against the user's own files, the honesty report (DONE-04,
-  framed verbatim), the plagiarism section (DONE-02), and the whole-paper Pass-4
-  table over the exported text (DONE-01, VRFY-23).
+  quotes verified against the user's own files, `## Honesty` (the before and
+  after lines and the framing note, verbatim), the plagiarism section (each
+  probed phrase with its `§<id> paragraph <k>` location and its verbatim
+  matches, or the line saying why the check was skipped) and the whole-paper
+  Pass-4 table over the exported text (DONE-01, VRFY-23; or `skipped
+  (--no-verify)`).
+- `.paper/FINAL.md` — the finished paper (EXP-15, D-21-19): exactly the text
+  this done exported — the accepted humanized text, else the compiled draft —
+  written ONCE, after the export and VERIFICATION.md. `.paper/DONE-RECORD.json`
+  then records the sha256 of the compiled draft the gate judged and of FINAL.md
+  (`bin/lib/done-record.ts`).
 - `.paper/LIBRARY.json` — `last_verified` of the citations a registrar
-  confirmed during done's gate, through the one library writer (VRFY-28).
+  confirmed during done's gate, and the retraction statuses re-checked, through
+  the one library writer (VRFY-28, VRFY-15).
+- `.paper/config.toml` `[humanizer] honesty_consent` — the detector-consent
+  answer, recorded the first time it is asked (EXP-17).
 - done never writes under `.paper/sections/`.
-- stdout: `pensmith done: exported <path>` — the deliverable's path.
+- stdout: `pensmith done: style: <name> (from <source>)`, the step lines, the
+  honesty lines and `pensmith done: exported <path>`.
 - **Under `--dry-run`** (GRND-19, D-18-29) the paper is the dry-run workspace
   `./.paper-dry-run/` (seeded from `.paper/`, which is never written): the
   deliverable is `.paper-dry-run/export/DRAFT.dry-run.<ext>` (`.dry-run` before
@@ -83,7 +131,9 @@ with `pensmith verify N`, and records no claim or decision for it.
   `CITATIONS.dry-run.ris` (every exported file is named `.dry-run`), FINAL.md and VERIFICATION.md
   are written in the workspace, and done prints the path plus one line saying it
   is a dry-run export (synthetic sources, stub text) and the real paper was not
-  touched. The document itself stays zero-trace: the name and place disclose it.
+  touched. The humanizer, the detector and the plagiarism check say
+  `skipped (dry-run)` / `unavailable (dry-run)`. The document itself stays
+  zero-trace: the name and place disclose it.
 
 ## Body
 
@@ -92,10 +142,16 @@ with `pensmith verify N`, and records no claim or decision for it.
 > `zeroTracePdf` for pdf). The export-confirmation gate ALWAYS prompts (generic
 > confirm even on a clean paper); only `--yolo` skips it.
 
-0. **Export blocking gate** (audit #3/#14, VRFY-26, VRFY-27 — unconditional,
-   `--yolo` and `--raw` never skip it; D-20-24): every reason is collected, then
-   the export is refused with EXIT_BLOCKED (4) before any paid or third-party
-   step, writing nothing:
+0. **Flags** — every check above that is EXIT_USAGE (`--format`, `--only`,
+   `--style`, `--no-verify --raw`, an `--only` step its own skip flag cancels,
+   an alias given `--only` again) fails before anything is read, written or sent.
+   An export run (no `--only`, or `--only export`) prints `style: <name> (from
+   <source>)`.
+
+1. **Export blocking gate** (audit #3/#14, VRFY-26, VRFY-27 — unconditional;
+   every `--only` runs it first; D-20-24): every reason is collected, then the
+   run is refused with EXIT_BLOCKED (4) before any paid or third-party step,
+   writing nothing:
    - the sections are the ones STATE.json registers (OUTLINE.md must list the
      same; a paper whose STATE.json registers none uses OUTLINE.md's rows, as
      compile does) — never a directory listing; a paper with no section refuses;
@@ -106,10 +162,12 @@ with `pensmith verify N`, and records no claim or decision for it.
      whose DRAFT.md changed since its verification is `stale: §N changed since
      verification — re-verify and recompile`;
    - the compiled `.paper/DRAFT.md` must be the one compile wrote from those
-     verifications (`COMPILE-INPUTS.json` v2: `compiled_draft_sha256` and each
-     section's verified hash): a hand edit is `stale: .paper/DRAFT.md changed
-     since compile` (VRFY-27) — the edit belongs in the section drafts; a v1
-     record is stale ("recompile");
+     verifications (`COMPILE-INPUTS.json` v3: `compiled_draft_sha256`, each
+     section's verified hash and the headings' hash): a hand edit is `stale:
+     .paper/DRAFT.md changed since compile` (VRFY-27) — the edit belongs in the
+     section drafts; an older record is stale ("recompile");
+   - a `.paper/FINAL.md` done did not leave (edited or written by hand) is
+     refused, naming the remedy (move it out of the paper folder);
    - the gate core recomputes every row over `.paper/DRAFT.md`'s exact bytes
      (`bin/lib/verify/gate.ts`): a cited key outside the union of the sections'
      `assigned_sources` is UNASSIGNED, and every blocking row (FABRICATED,
@@ -128,83 +186,127 @@ with `pensmith verify N`, and records no claim or decision for it.
    `.paper/DRAFT.md` at all, the section records are checked first: when a
    section's verification blocks (compile refused, so there is no draft), done
    prints those reasons and exits EXIT_BLOCKED (4); only a paper that has not
-   reached compile yet is "run `pensmith compile` first" (exit 1). Without a
-   terminal and without `--yolo`, done then refuses at once (EXIT_APPROVAL, 3)
-   because the export decision (step 6) needs an answer — before the paid steps.
+   reached compile yet is "run `pensmith compile` first" (exit 1). An export
+   run without a terminal and without `--yolo` then refuses at once
+   (EXIT_APPROVAL, 3) because the export decision (step 7) needs an answer —
+   before the paid steps.
 
-1. **Whole-paper Pass 4** (DONE-01, VRFY-23): run `runPass4` over the exact text
-   to be exported (FINAL.md when the humanizer wrote one, after step 5's
-   re-check; else `.paper/DRAFT.md`). The per-paragraph orphan counts
-   (HIGH-confidence, R8) feed the DONE-09 gate and the per-paragraph table of
-   `.paper/VERIFICATION.md`.
+2. **Plagiarism check** (DONE-02, EXP-19, EXP-20, D-21-22; advisory — a basic
+   check, not a substitute for an institutional service): 6–10-word windows of
+   the body paragraphs (never the title, a heading, a citation, a quoted
+   passage, a block quote, a list item or the reference list), ranked by rarity
+   against the shipped SCOWL word tiers (`templates/wordfreq/`), at least one
+   per paragraph in paper order, up to `[verification] plagiarism_max_phrases`
+   (default 30). Each is one quoted DuckDuckGo HTML query through the egress
+   gate; a result is a match only when the normalised phrase appears verbatim in
+   its title or snippet, and its link is decoded from DuckDuckGo's `/l/?uddg=`
+   redirect. A DuckDuckGo bot challenge is reported per phrase, never read as
+   "no match". `--no-plagiarism-check` and `[verification] plagiarism_check =
+   false` send nothing (`plagiarism check skipped (--no-plagiarism-check)` /
+   `(config)`); offline and `--dry-run` say `skipped (offline)` /
+   `(dry-run)`. Matches feed the confirmation; the check never blocks.
 
-2. **Plagiarism check** (DONE-02, advisory): run `runPlagiarism` over the draft
-   (distinctive 5+-word phrases via the DuckDuckGo HTML endpoint, offline
-   cassette in CI). Any phrase with web matches feeds the gate; it never blocks.
+3. **Honesty score — before** (DONE-04, EXP-16..EXP-18, D-21-20, D-21-21):
+   `measureHonesty(draft)` with the configured `[humanizer] honesty_backend`
+   (GPTZero, Originality.ai or Sapling; each through the egress gate with its
+   key in a header only). The backend's disclosure line (verbatim from
+   `references/honesty-framing.md`) is printed before anything is sent.
+   Consent is `[humanizer] honesty_consent`: asked once in a terminal through
+   the `detector-consent` gate and the answer — yes or no — recorded; `--yolo`
+   never answers it; without a terminal and without a recorded answer nothing
+   is sent. A score is `<n>% AI-generated (<backend>, <ISO time>)`; an absent
+   one gives one exact reason (`skipped (no <KEY> set)`, `skipped (no consent
+   recorded — …)`, `skipped (consent declined in config.toml)`, `skipped
+   (--no-score)`, `skipped (config: honesty_score = false)`, `unavailable
+   (offline)` / `(dry-run)`, `unavailable (<backend> rejected the API key)`,
+   `unavailable (rate limited)`, `unavailable (network: …)`). Transparency
+   only — never a claim about detectability.
 
-3. **Honesty score — before** (DONE-04, framed VERBATIM from
-   `references/honesty-framing.md`): `scoreHonesty(draft)`. Skip cleanly (banner,
-   no fabricated percent) when `GPTZERO_API_KEY` is absent.
+4. **Humanize** (DONE-03, EXP-14, D-21-18): `humanizeDraft` sends the compiled
+   draft one `##` section at a time — the title and the headings never reach
+   the model — through the `humanizer` model slug: the skill's SKILL.md body
+   (frontmatter stripped) is the system prompt, the user message is the
+   hash-pinned contract (`references/humanizer-contract.md`), the voice to keep
+   and the section text with every citation and every direct quote masked as a
+   placeholder (the rewrite guard, `bin/lib/rewrite-guard.ts`), inside the
+   FEED-05 fence. Each reply must pass `validateRewrite`; then `acceptHumanized`
+   — the rewrite guard over the whole text, the cited-key diff and the gate
+   core over the humanized bytes (GATE-04) — must pass it. A rejection exits
+   EXIT_BLOCKED (4) with every reason, exports nothing and leaves FINAL.md
+   untouched (`pensmith done --raw` is the way out). A provider failure prints
+   `humanizer failed: <reason>` and done exports the compiled draft; the cost
+   cap's refusal propagates (exit 5). Skips: the skill missing, `[humanizer]
+   enabled = false`, `--raw`, PENSMITH_NO_LLM, `--dry-run`, offline with a
+   non-loopback endpoint, no model configured — each named.
 
-4. **Humanize** (DONE-03, skip-clean if absent): `runHumanizer(draft)`. When the
-   `~/.claude/skills/humanizer/` skill is absent (or no Task transport in this
-   tier) → print a banner, return null, and proceed on `DRAFT.md` — NEVER fail
-   the export. When present (Tier 1) → write `.paper/FINAL.md`. `--raw` skips
-   this step entirely.
+5. **Honesty score — after**: scored again over the accepted humanized text
+   (no second consent question); otherwise `N/A (humanize skipped with
+   --raw)`, `N/A (humanizer not installed)`, `N/A (humanizer failed: …)`,
+   `N/A (humanizer disabled)` or the before line's reason. Both lines and the
+   framing note are printed and written to `.paper/VERIFICATION.md`.
 
-5. **Honesty score — after**: `scoreHonesty(FINAL.md)` when a humanized artifact
-   was produced; otherwise the 'after' score is N/A in the report. A humanized
-   FINAL.md is then gated on its OWN exact bytes (GATE-04, VRFY-26): its cited
-   keys must equal the compiled draft's (the humanizer never adds, drops or
-   swaps a citation) and the gate core recomputes every row over it; any
-   refusal blocks the export (EXIT_BLOCKED).
+6. **Whole-paper Pass 4** (DONE-01, VRFY-23): `runPass4` over the exact text to
+   be exported (the accepted humanized text, else `.paper/DRAFT.md`) unless
+   `--no-verify`. The per-paragraph orphan counts feed the confirmation and the
+   per-paragraph table of `.paper/VERIFICATION.md`.
 
-6. **DONE-09 export decision** (`runDoneGate`): collect the gate issue
-   set — UNSUPPORTED Pass-2 rows (read from each section `VERIFICATION.md`, FAIL
-   SAFE on an unparseable table), Pass-4 orphans, and plagiarism hits. Print
-   each UNSUPPORTED claim with its evidence, the orphans, the plagiarism hits,
-   the quotes accepted without a source check and the quotes verified against
-   the user's own files FIRST; then ALWAYS require an explicit answer: the
-   `unsupported-claims` gate ("Export the paper with these UNSUPPORTED
-   claims?") when an UNSUPPORTED claim is present, else the generic confirm
-   (even when clean — PRD §7.9). `--yolo` skips it and records each UNSUPPORTED
-   claim as `Auto-accepted under --yolo <time>`; a confirmation records
-   `Confirmed by user <time>`. A declined gate cancels the export (exit 3) and
-   writes no deliverable.
+7. **DONE-09 export decision** (`runDoneGate`): print each UNSUPPORTED claim
+   with its evidence, the sections Pass 2 did not judge, the contradictions
+   compile flagged (COMPILE-REPORT `## Contradictions`, EXP-11), the orphans,
+   the plagiarism matches with their locations, the quotes accepted without a
+   source check and the quotes verified against the user's own files FIRST;
+   then ALWAYS require an explicit answer: the `unsupported-claims` gate
+   ("Export the paper with these UNSUPPORTED claims?") when an UNSUPPORTED
+   claim is present, else the generic confirm (even when clean — PRD §7.9).
+   `--yolo` skips it and records each UNSUPPORTED claim as `Auto-accepted under
+   --yolo <time>`; a confirmation records `Confirmed by user <time>`. A
+   declined gate cancels the export (exit 3) and writes nothing.
 
-7. **Export + mandatory scrub** (DONE-06/07/08): `exportDraft` into the DISTINCT
-   export dir (`outputDir` LEFT UNSET so the md-fallback never overwrites the
+8. **Export + mandatory scrub** (DONE-06/07/08): `exportDraft` into the DISTINCT
+   export dir (`outputDir` LEFT UNSET so the md export never overwrites the
    source `DRAFT.md`), from the exact text and bibliography bytes the gate
    checked (a temporary copy — an edit made while done ran is not exported;
-   done warns and names the checked text's sha256). docx → `zeroTracePatch`; pdf → `zeroTracePdf`; latex →
-   the offline md→tex writer (no generator comment); md → the trace-free body.
-   Bundle the cited-only `.paper/export/CITATIONS.bib` / `.ris` (library.ts
+   done warns and names the checked text's sha256), in the resolved style.
+   docx → `zeroTracePatch`; pdf → `zeroTracePdf`; latex → the offline md→tex
+   writer (no generator comment); md → the trace-free body. Bundle the
+   cited-only `.paper/export/CITATIONS.bib` / `.ris` (library.ts
    `exportCitedCitations`, written before any Pandoc run). Then record
-   `last_verified` (VRFY-28), write the source `.paper/VERIFICATION.md` (gate,
-   decisions, quote lists, honesty, plagiarism, Pass-4 sections), and leave
-   `.paper/FINAL.md` holding exactly the text that was exported: the humanized
-   FINAL.md GATE-04 judged, or — when no humanizer wrote one — the compiled
-   `DRAFT.md`, written whenever FINAL.md differs from it. Then write
-   `.paper/DONE-RECORD.json` (`bin/lib/done-record.ts`): the sha256 of the
-   compiled draft the gate judged and of that FINAL.md. The router's terminus
-   is "FINAL.md and DRAFT.md hold the bytes DONE-RECORD.json recorded", so a
-   recompile sends the paper back to `done`, and the bare loop settles at
-   `status (done)` instead of re-running `done`. A FINAL.md done did not leave
-   — edited or written by hand — is refused in step 1 (exit 4, never exported,
-   never replaced; moving it out of the paper folder is what unblocks done —
-   the moved copy keeps the edit, and an edit meant for the paper itself is
-   made in the section drafts first) and is attention for the router, never
-   "complete". With no record (a paper an older pensmith finished, or a done
-   stopped after its export), a FINAL.md whose sha256 the paper-level
-   VERIFICATION.md names on its `Text checked:` line is done's own export —
-   replaced by the next done, never "edited". Whenever this done stops
-   between the humanizer writing FINAL.md and the paper-level VERIFICATION.md
-   naming the export — GATE-04, a declined confirmation, the cost cap, a
-   failed export or write — the FINAL.md it replaced is put back (or removed,
-   when there was none).
+   `last_verified` and the re-checked retraction statuses, write the source
+   `.paper/VERIFICATION.md`, then `.paper/FINAL.md` (the exported text) and
+   `.paper/DONE-RECORD.json`. FINAL.md is never replaced before this point, so
+   a refused, declined, failed or capped done leaves it byte-identical. The
+   router's terminus is "FINAL.md and DRAFT.md hold the bytes DONE-RECORD.json
+   recorded", so a recompile sends the paper back to `done` (which rewrites
+   FINAL.md and the export with the new text), and the bare loop settles at
+   `status (done)`. A FINAL.md done did not leave — edited or written by hand —
+   is refused in step 1 (exit 4, never exported, never replaced; moving it out
+   of the paper folder is what unblocks done — the moved copy keeps the edit,
+   and an edit meant for the paper itself is made in the section drafts first)
+   and is attention for the router, never "complete". With no record (a paper
+   an older pensmith finished, or a done stopped after its export), a FINAL.md
+   whose sha256 the paper-level VERIFICATION.md names on its `Text checked:`
+   line is done's own export — replaced by the next done, never "edited".
 
-8. **Shell fallback** (TIER-06 equivalence path): `pensmith done [--yolo]
-   [--format docx|pdf|latex|md] [--raw]`.
+9. **`--only`** (D-21-23): each runs step 1 first.
+   - `--only plagiarism` (`pensmith plagiarism`): step 2, the matches printed
+     with their locations; nothing written.
+   - `--only score` (`pensmith score`): step 3 (the consent rules apply), the
+     line and the framing note printed; nothing written.
+   - `--only humanize` (`pensmith humanize`): steps 4–5 without a score, then
+     FINAL.md and DONE-RECORD.json — no export, no confirmation (FINAL.md is
+     the finished paper; an export renders it). A skipped humanizer writes
+     nothing; a failed one exits 1.
+   - `--only export` (`pensmith export`): the confirmation (step 7) applies;
+     exports FINAL.md when it is done's own and current — re-gated through
+     `acceptHumanized` — else the compiled draft (writing FINAL.md and the
+     record as a raw done does); VERIFICATION.md says the plagiarism and honesty
+     steps were skipped (`--only export`).
+
+10. **Shell fallback** (TIER-06 equivalence path): `pensmith done [--yolo]
+   [--format md|docx|pdf|latex|tex] [--style <name|path.csl>] [--raw]
+   [--no-verify] [--no-score] [--no-plagiarism-check]
+   [--only export|humanize|score|plagiarism]`, or the aliases `pensmith export
+   | humanize | score | plagiarism`.
 
 ### Export writers and zero trace
 

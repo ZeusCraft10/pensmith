@@ -21,9 +21,9 @@
 // query — no writes, no atomicWriteFile, no withLock.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { isInsideSyncFolder, paperDir, activePaperRoot, servicePaperRoot, userHomeDir, realpathNearest } from './paths.js';
+import { isInsideSyncFolder, paperDir, activePaperRoot, servicePaperRoot, userHomeDir, realpathNearest, humanizerSkillPath } from './paths.js';
 
 /**
  * Probe whether `pandoc` is on PATH and answers `--version`.
@@ -200,16 +200,16 @@ export function isZoteroMcpPresent(): boolean {
 }
 
 /**
- * Probe whether the humanizer skill is installed at the standard path.
- * Present iff the directory exists, is a directory, and is non-empty.
+ * Probe whether the humanizer skill is installed at the standard path:
+ * `~/.claude/skills/humanizer/SKILL.md` is a file (paths.ts
+ * humanizerSkillPath — the file the Tier-2 humanizer reads, EXP-14). Under a
+ * test context only a home inside os.tmpdir() counts (CI-09).
  */
 export function isHumanizerSkillPresent(): boolean {
-  const skillPath = join(userHomeDir(), '.claude', 'skills', 'humanizer');
-  if (!existsSync(skillPath)) return false;
+  const skillFile = humanizerSkillPath();
+  if (skillFile === null) return false;
   try {
-    const stat = statSync(skillPath);
-    if (!stat.isDirectory()) return false;
-    return readdirSync(skillPath).length > 0;
+    return statSync(skillFile).isFile();
   } catch {
     return false;
   }

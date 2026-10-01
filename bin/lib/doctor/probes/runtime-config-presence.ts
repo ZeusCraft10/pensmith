@@ -6,7 +6,9 @@
 //   - the resolved provider, generation model and key variable (with where
 //     each came from: flag, config, global runtime.json, env, default);
 //   - presence booleans for the key variables and for OPENALEX_API_KEY,
-//     PENSMITH_S2_API_KEY, GPTZERO_API_KEY, PENSMITH_CONTACT_EMAIL, ZOTERO_API_KEY;
+//     PENSMITH_S2_API_KEY, the three AI-detector keys GPTZERO_API_KEY,
+//     ORIGINALITY_API_KEY and SAPLING_API_KEY (EXP-18), PENSMITH_CONTACT_EMAIL,
+//     ZOTERO_API_KEY;
 //   - the endpoint: `GET <endpoint>/models` through anthropic.ts
 //     probeLlmEndpoint() — PASS when it answers, WARN when it is down, and WARN
 //     naming the key variable when it answers 401/403 (the key was rejected).
@@ -40,6 +42,8 @@ export const OPTIONAL_KEY_VARS = [
   'OPENALEX_API_KEY',
   'PENSMITH_S2_API_KEY',
   'GPTZERO_API_KEY',
+  'ORIGINALITY_API_KEY',
+  'SAPLING_API_KEY',
   'PENSMITH_CONTACT_EMAIL',
   'ZOTERO_API_KEY',
 ] as const;

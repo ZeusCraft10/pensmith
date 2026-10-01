@@ -66,7 +66,7 @@ import { existsSync } from 'node:fs';
 import { defineCommand, runCommand, renderUsage, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
 import { VERSION } from './lib/version.generated.js';
-import { UX02_VERBS, type Ux02Verb, canonicalVerb, VERB_ALIASES, nearest } from './lib/verbs.js';
+import { UX02_VERBS, type Ux02Verb, canonicalVerb, VERB_ALIASES, nearest, expandVerbAlias } from './lib/verbs.js';
 import {
   projectRoot,
   workingDirectory,
@@ -438,6 +438,25 @@ function globalBooleanName(tok: string): string | null {
   if (GLOBAL_BOOLEAN_FLAGS.includes(name)) return name;
   if (!tok.includes('=') && tok.startsWith('--no-') && GLOBAL_BOOLEAN_FLAGS.includes(tok.slice(5))) return tok.slice(5);
   return null;
+}
+
+/**
+ * argv with an alias at the verb position replaced by its verb and arguments
+ * (verbs.ts expandVerbAlias). An alias given its own option again
+ * (`pensmith export --only score`) is EXIT_USAGE.
+ */
+export function rewriteVerbAlias(argv: readonly string[]): string[] {
+  const at = verbTokenIndex(argv);
+  const { argv: expanded, conflict } = expandVerbAlias(argv, at);
+  if (conflict !== null) {
+    const alias = argv[at] ?? '';
+    const named = VERB_ALIASES[alias];
+    const spelled = named !== undefined ? `pensmith ${named.verb} ${named.args.join(' ')}` : `pensmith ${alias}`;
+    throw usage(
+      `'pensmith ${alias}' is '${spelled}' — it takes no ${conflict} of its own (run 'pensmith ${named?.verb ?? alias} ${conflict} …' instead)`,
+    );
+  }
+  return expanded;
 }
 
 /**
@@ -985,6 +1004,11 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   //   3. the one-time legacy-layout move (root STATE.json/config.toml → .paper/);
   //   4. the active-paper banner for a read-only run served by the pointer;
   //   5. the session lock for a mutating run (bare/next/resume included).
+  // EXP-21 (D-21-23): an alias (`export`, `humanize`, `score`, `plagiarism`)
+  // is rewritten to the verb and arguments it names (`done --only export`)
+  // BEFORE argv validation, so it validates, dispatches and logs exactly as
+  // that invocation would.
+  argv = rewriteVerbAlias(argv);
   const checked = await validateArgv(argv);
   // Every check below reads the normalized global booleans (`--dry-run=true`
   // is a dry run, `--no-yolo` is not --yolo) — never the raw spellings.
@@ -1250,7 +1274,7 @@ export const ENVIRONMENT_DOCS: ReadonlyArray<readonly [string, string]> = Object
   ['ANTHROPIC_API_KEY', 'API key for the Anthropic provider (the default)'],
   ['OPENAI_API_KEY', 'API key for the OpenAI provider (used when it is the only key set)'],
   ['PENSMITH_NO_LLM', 'replaces every LLM call with a deterministic stub (testing and dry-run)'],
-  ['PENSMITH_OFFLINE', 'sources, verification, detector and plagiarism checks use recorded fixtures instead of the network (a disclosed offline mode)'],
+  ['PENSMITH_OFFLINE', 'sources and verification use recorded fixtures instead of the network; the detector score and the plagiarism check are skipped, never replayed (a disclosed offline mode)'],
   ['PENSMITH_PAPER_ROOT', 'the project folder (containing .paper/) to work on; the CLI, the MCP server and the hooks honour it'],
   ['PENSMITH_CONTACT_EMAIL', 'polite-pool contact sent to Crossref, OpenAlex and Unpaywall only (Unpaywall is skipped without it)'],
   ['OPENALEX_API_KEY', 'optional, free: OpenAlex key sent as api_key (keyless requests share a small daily budget)'],
@@ -1259,6 +1283,9 @@ export const ENVIRONMENT_DOCS: ReadonlyArray<readonly [string, string]> = Object
   ['ZOTERO_GROUP_ID', 'optional: read a Zotero group library instead of your own'],
   ['PENSMITH_ZOTERO_LOCAL', '1 reads Zotero 7\'s local API on this machine (127.0.0.1:23119); nothing leaves the machine'],
   ['PENSMITH_GROBID_URL', 'optional: a loopback GROBID server that reads your PDFs\' title, authors and DOI'],
+  ['GPTZERO_API_KEY', 'optional: done\'s AI-detector score through GPTZero (sent only as x-api-key, after your consent)'],
+  ['ORIGINALITY_API_KEY', 'optional: the same score through Originality.ai ([humanizer] honesty_backend = "originality")'],
+  ['SAPLING_API_KEY', 'optional: the same score through Sapling ([humanizer] honesty_backend = "sapling")'],
   ['PENSMITH_COST_CAP_USD', 'session cost cap in USD (overrides [budget] cost_cap_usd)'],
   ['PENSMITH_PROMPT_MODE', '"numbered" reads gate answers from stdin one line per question (scripted answers)'],
   ['PENSMITH_DEBUG', 'print a stack trace for an unexpected error'],
@@ -1283,6 +1310,10 @@ function columns(rows: ReadonlyArray<readonly [string, string]>): string[] {
 /** The footer appended to every `--help` (root and per-verb). */
 export function helpFooter(): string {
   return [
+    'ALIASES (sub-steps of a verb, not verbs of their own)',
+    '',
+    ...columns(Object.entries(VERB_ALIASES).map(([alias, a]) => [alias, `pensmith ${a.verb} ${a.args.join(' ')}`] as const)),
+    '',
     'GLOBAL FLAGS (accepted by every verb)',
     '',
     ...columns(GLOBAL_FLAG_DOCS),

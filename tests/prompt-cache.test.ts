@@ -70,10 +70,15 @@ test('RUN-26: every slug sends its template as one cache_control-marked system b
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     for (const slug of SLUG_NAMES) {
       assert.equal(slugSpec(slug).cacheSystem, true, `${slug}: cacheSystem`);
-      const req = buildPromptRequest(slug, sampleValues(slug, 1));
+      // S-06 / D-21-18: a model slug with no template (the humanizer: the user's
+      // installed SKILL.md is its system prompt) is cached the same way, with
+      // the system prompt its caller supplies.
+      const req = slugSpec(slug).template
+        ? buildPromptRequest(slug, sampleValues(slug, 1))
+        : { system: '# Humanizer\n\nRewrite the text so it reads naturally.', messages: [{ role: 'user' as const, content: 'sample text, variant 1' }] };
       await complete({ slug, system: req.system, messages: req.messages });
       const body = sb.mock!.bodiesFor(slug)[0]!;
-      assert.deepEqual(body['system'], [{ type: 'text', text: loadPrompt(slug), cache_control: { type: 'ephemeral' } }], slug);
+      assert.deepEqual(body['system'], [{ type: 'text', text: slugSpec(slug).template ? loadPrompt(slug) : req.system, cache_control: { type: 'ephemeral' } }], slug);
       const msgs = body['messages'] as Array<{ role: string; content: string }>;
       assert.equal(msgs.length, 1, `${slug}: the data is sent once, in one user message`);
       assert.equal(msgs[0]!.content, req.messages[0]!.content);

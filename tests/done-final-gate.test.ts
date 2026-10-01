@@ -1,14 +1,16 @@
-// tests/done-final-gate.test.ts — VRFY-26 (D-20-24): done gates a humanized
-// FINAL.md on its OWN exact bytes through the ONE gate core. The humanizer
-// (the Tier-1 Task transport; here the exporter's test seam) returns the
-// compiled draft plus one citation form it must never introduce — an
-// unassigned or fabricated key in any Pandoc form, author-date prose, a
-// footnote, a typed reference list, a metadata block that redefines a cited
-// key, a raw {=format} block or span — and done refuses: exit 4, nothing
-// exported, nothing under sections/ touched. A humanized FINAL.md that keeps
-// the citations exports, and a done that fails after the humanizer wrote
-// FINAL.md (main-branch merge review, round 2) puts the recorded FINAL.md
-// back. Sources offline (recorded fixtures), in process.
+// tests/done-final-gate.test.ts — VRFY-26 (D-20-24) and EXP-14/EXP-15 (D-21-18,
+// D-21-19): a humanized text is gated on its OWN exact bytes through the ONE
+// acceptance function both tiers call (bin/lib/humanizer.ts acceptHumanized:
+// the rewrite guard, the cited-key diff and the gate core). A text that adds
+// any citation form it must never introduce — an unassigned or fabricated key
+// in any Pandoc form, author-date prose, a footnote, a typed reference list, a
+// metadata block that redefines a cited key, a raw {=format} block or span —
+// is refused; one that only improves the prose is accepted. done writes
+// FINAL.md ONCE, after the export and the paper-level record, so a done that
+// fails before then leaves FINAL.md byte-identical (the Phase-20 "put the
+// previous FINAL.md back" path is gone with the Task-transport seam). The
+// done-level humanizer outcomes (mock LLM, built CLI) are in
+// tests/humanizer-task.test.ts. Sources offline (recorded fixtures), in process.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +21,7 @@ import { withLlmSandbox } from './helpers/llm-sandbox.js';
 import { writeState, writeOutline, writePlan, sectionDirOf } from './helpers/paper-cli-harness.js';
 import { mtimes } from './helpers/gate-paper.js';
 import { LECUN_BIB } from './helpers/gate-paper.js';
-import { __setTaskRunnerForTest } from '../bin/lib/exporter.js';
+import { acceptHumanized } from '../bin/lib/humanizer.js';
 import { EXIT_BLOCKED } from '../bin/lib/exit-codes.js';
 import { finalMdState } from '../bin/lib/done-record.js';
 
@@ -69,7 +71,37 @@ const ADDED: ReadonlyArray<readonly [string, string]> = [
   ['a table-source label', 'The effect is large (Source: Okafor 2021).'],
 ];
 
-test('VRFY-26 (in process): a humanized FINAL.md is gated on its own bytes — every added citation form is refused (exit 4, nothing exported, sections/ untouched); one that keeps the citations exports', async () => {
+test('VRFY-26 (in process): the ONE acceptance function refuses a humanized text that adds any citation form, and accepts one that only improves the prose', async () => {
+  await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1', PENSMITH_CONTACT_EMAIL: undefined } }, async (sb) => {
+    writeState(sb.root, [{ n: 1, slug: 'intro' }]);
+    writeOutline(sb.root, [{ n: 1, slug: 'intro', sources: ['lecun2015'] }]);
+    writeFileSync(join(sb.paper, 'CITATIONS.bib'), LECUN_BIB);
+    writePlan(sb.root, 1, 'intro', { status: 'written', assigned_sources: '[lecun2015]' });
+    writeFileSync(join(sectionDirOf(sb.root, 1, 'intro'), 'DRAFT.md'), '# Intro\n\nDeep learning reshaped computer vision and speech recognition [@lecun2015].\n');
+    const { verifySection } = await import('../bin/cli/verify.js');
+    const { compileCommand } = await import('../bin/cli/compile.js');
+    const v = await quiet(() => verifySection(1, 'intro', null));
+    assert.equal(v.result.status, 'verified', v.out);
+    const c = await quiet(() => compileCommand.run!({ args: { yolo: true } } as never));
+    assert.notEqual((c.result as { refused?: boolean }).refused, true, c.out);
+    const compiled = readFileSync(join(sb.paper, 'DRAFT.md'), 'utf8');
+    const sections = mtimes(join(sb.paper, 'sections'));
+
+    for (const [what, added] of ADDED) {
+      const verdict = await acceptHumanized({ paperRoot: sb.root, draft: compiled, humanized: `${compiled.trimEnd()}\n\n${added}\n` });
+      assert.equal(verdict.ok, false, `${what}: refused`);
+      assert.ok(verdict.reasons.length > 0, what);
+    }
+    const improved = compiled.replace('reshaped', 'transformed');
+    const ok = await acceptHumanized({ paperRoot: sb.root, draft: compiled, humanized: improved });
+    assert.deepEqual(ok.reasons, [], 'a prose-only change is accepted');
+    assert.equal(ok.ok, true);
+    assert.deepEqual(mtimes(join(sb.paper, 'sections')), sections, 'nothing under sections/ changed');
+    assert.ok(!existsSync(join(sb.paper, 'FINAL.md')), 'the acceptance function writes nothing');
+  });
+});
+
+test('EXP-15 (in process): FINAL.md is written once, after the export and the paper record — a done that fails before then leaves it byte-identical', async () => {
   await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1', PENSMITH_CONTACT_EMAIL: undefined } }, async (sb) => {
     writeState(sb.root, [{ n: 1, slug: 'intro' }]);
     writeOutline(sb.root, [{ n: 1, slug: 'intro', sources: ['lecun2015'] }]);
@@ -79,61 +111,38 @@ test('VRFY-26 (in process): a humanized FINAL.md is gated on its own bytes — e
     const { verifySection } = await import('../bin/cli/verify.js');
     const { compileCommand } = await import('../bin/cli/compile.js');
     const { doneCommand } = await import('../bin/cli/done.js');
-    const v = await quiet(() => verifySection(1, 'intro', null));
-    assert.equal(v.result.status, 'verified', v.out);
-    const c = await quiet(() => compileCommand.run!({ args: { yolo: true } } as never));
-    assert.notEqual((c.result as { refused?: boolean }).refused, true, c.out);
+    await quiet(() => verifySection(1, 'intro', null));
+    await quiet(() => compileCommand.run!({ args: { yolo: true } } as never));
     const compiled = readFileSync(join(sb.paper, 'DRAFT.md'), 'utf8');
-    const sections = mtimes(join(sb.paper, 'sections'));
 
+    // The paper-level VERIFICATION.md cannot be written (a folder in its place): done fails after the export.
+    const verificationMd = join(sb.paper, 'VERIFICATION.md');
+    mkdirSync(verificationMd);
+    await assert.rejects(() => quiet(() => doneCommand.run!({ args: { yolo: true, raw: false, format: 'md' } } as never)));
+    assert.ok(!existsSync(join(sb.paper, 'FINAL.md')), 'no FINAL.md before the record is written');
+    assert.ok(!existsSync(join(sb.paper, 'DONE-RECORD.json')));
+    rmSync(verificationMd, { recursive: true, force: true });
+
+    const ok = await quiet(() => doneCommand.run!({ args: { yolo: true, raw: false, format: 'md' } } as never));
+    assert.equal((ok.result as { ok?: boolean }).ok, true, ok.out);
+    assert.match(ok.out, /pensmith done: humanizer skill not found at ~\/\.claude\/skills\/humanizer\/SKILL\.md — skipping/);
+    assert.equal(readFileSync(join(sb.paper, 'FINAL.md'), 'utf8'), compiled, 'FINAL.md is the compiled draft');
+    const record = JSON.parse(readFileSync(join(sb.paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
+    assert.equal(record['humanized'], false);
+    assert.equal(record['final_sha256'], createHash('sha256').update(compiled, 'utf8').digest('hex'));
+    assert.equal(finalMdState(sb.root), 'current');
+
+    // A second failure leaves the recorded FINAL.md exactly as it was — never read as a hand edit.
+    const before = readFileSync(join(sb.paper, 'FINAL.md'));
+    rmSync(verificationMd);
+    mkdirSync(verificationMd);
     try {
-      for (const [what, added] of ADDED) {
-        __setTaskRunnerForTest(async () => ({ output: `${compiled.trimEnd()}\n\n${added}\n` }));
-        const r = await quiet(() => doneCommand.run!({ args: { yolo: true, raw: false, format: 'md' } } as never));
-        const res = r.result as { ok?: boolean; exitCode?: number };
-        assert.equal(res.ok, false, `${what}: ${r.out}`);
-        assert.equal(res.exitCode, EXIT_BLOCKED, `${what}: ${r.out}`);
-        assert.match(r.out, /GATE-04 BLOCKED — FINAL\.md failed re-verification/, what);
-        assert.ok(!existsSync(join(sb.paper, 'export')), `${what}: nothing exported`);
-        assert.deepEqual(mtimes(join(sb.paper, 'sections')), sections, `${what}: nothing under sections/ changed`);
-        // The refused humanized text never stays behind as the finished paper (main-branch merge review, round 1).
-        assert.ok(!existsSync(join(sb.paper, 'FINAL.md')), `${what}: the refused FINAL.md was not kept`);
-        assert.match(r.out, /pensmith done: the humanized text was not kept \(FINAL\.md was removed\); `pensmith done --raw` exports the compiled draft/, what);
-      }
-      // A humanizer that only improves the prose: the citation is kept, the export happens.
-      __setTaskRunnerForTest(async () => ({ output: compiled.replace('reshaped', 'transformed') }));
-      const ok = await quiet(() => doneCommand.run!({ args: { yolo: true, raw: false, format: 'md' } } as never));
-      assert.equal((ok.result as { ok?: boolean }).ok, true, ok.out);
-      assert.ok(existsSync(join(sb.paper, 'export', 'FINAL.md')) || existsSync(join(sb.paper, 'export', 'DRAFT.md')), ok.out);
-      assert.match(readFileSync(join(sb.paper, 'VERIFICATION.md'), 'utf8'), /\.paper\/FINAL\.md/, 'the paper-level record names the bytes it judged');
-      const humanized = compiled.replace('reshaped', 'transformed');
-      assert.equal(readFileSync(join(sb.paper, 'FINAL.md'), 'utf8'), humanized, 'FINAL.md is the humanized text GATE-04 judged');
-      const record = JSON.parse(readFileSync(join(sb.paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
-      assert.equal(record['humanized'], true);
-      assert.equal(record['final_sha256'], createHash('sha256').update(humanized, 'utf8').digest('hex'));
-      assert.equal(record['compiled_draft_sha256'], createHash('sha256').update(compiled, 'utf8').digest('hex'));
+      await assert.rejects(() => quiet(() => doneCommand.run!({ args: { yolo: true, raw: false, format: 'md' } } as never)));
+      assert.deepEqual(readFileSync(join(sb.paper, 'FINAL.md')), before);
       assert.equal(finalMdState(sb.root), 'current');
-
-      // Main-branch merge review, round 2: every way out after the humanizer
-      // wrote FINAL.md and before the export is recorded puts the previous
-      // FINAL.md back — here the paper-level VERIFICATION.md cannot be
-      // written (a folder in its place), after the export itself. The FINAL.md
-      // done recorded stays the finished paper, never a "hand edit".
-      const verificationMd = join(sb.paper, 'VERIFICATION.md');
-      const savedVerification = readFileSync(verificationMd);
-      rmSync(verificationMd);
-      mkdirSync(verificationMd);
-      __setTaskRunnerForTest(async () => ({ output: compiled.replace('reshaped', 'remade') }));
-      try {
-        await assert.rejects(() => quiet(() => doneCommand.run!({ args: { yolo: true, raw: false, format: 'md' } } as never)));
-        assert.equal(readFileSync(join(sb.paper, 'FINAL.md'), 'utf8'), humanized, 'the FINAL.md done recorded is back');
-        assert.equal(finalMdState(sb.root), 'current', 'never read as a hand edit');
-      } finally {
-        rmSync(verificationMd, { recursive: true, force: true });
-        writeFileSync(verificationMd, savedVerification);
-      }
     } finally {
-      __setTaskRunnerForTest(null);
+      rmSync(verificationMd, { recursive: true, force: true });
     }
+    assert.equal(EXIT_BLOCKED, 4);
   });
 });

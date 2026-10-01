@@ -101,6 +101,24 @@ test('RUN-20: completed steps are excluded; a finished paper has nothing left to
   });
 });
 
+test('D-21-27: the §15 paper with the humanizer skill installed — compile smooths and judges, done humanizes each section — still projects ≥ 30% under the $5 cap', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY }, paper: false }, async (sb) => {
+    fs.writeFileSync(path.join(sb.root, 'assignment.txt'), ASSIGNMENT);
+    const skillDir = path.join(sb.dataDir, '.claude', 'skills', 'humanizer');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.copyFileSync(new URL('./fixtures/humanizer-skill/humanizer-skill.md', import.meta.url), path.join(skillDir, 'SKILL.md'));
+    const r = await sb.runTsx(null, ['--estimate'], { env: { USERPROFILE: sb.dataDir } });
+    assert.equal(r.status, 0, r.stderr);
+    // 3 sections: 2 smoother + 1 claim-consistency at compile; 3 humanizer + the Pass-4 audit at done.
+    assert.match(r.stdout, /^  compile\s+3\s.*claude-opus-5, claude-haiku-4-5$/m);
+    const doneRow = /^  done\s+(\d+)\s/m.exec(r.stdout);
+    assert.ok(doneRow && Number(doneRow[1]) >= 4, `done counts the 3 humanizer calls: ${r.stdout}`);
+    const total = totalOf(r.stdout);
+    assert.ok(total < 3.5, `the default §15 paper projects under $5.00 with >= 30% margin (got $${total})`);
+    assert.equal(sb.mock!.requests.length, 0, 'estimating makes no LLM call');
+  });
+});
+
 test('RUN-20: --estimate on an explicit verb projects that verb (and section) — `write` includes the verify it chains (GRND-15), a wave `write` prices every planned section', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await researchedPaper(sb);
@@ -143,10 +161,17 @@ test('RUN-20: --estimate on an explicit verb projects that verb (and section) �
     assert.equal(waveDraftOnly.status, 0, waveDraftOnly.stderr);
     assert.doesNotMatch(waveDraftOnly.stdout, /^  verify/m);
     assert.ok(Math.abs(totalOf(waveDraftOnly.stdout) - 2 * totalOf(draftOnly.stdout)) < 0.011, 'two drafter calls');
-    // A verb with no model call says so.
+    // Phase 21 (D-21-27): compile smooths the one boundary and judges the
+    // cross-section claims — two calls for two sections ...
     const compile = await sb.runTsx(null, ['compile', '--estimate']);
     assert.equal(compile.status, 0, compile.stderr);
-    assert.match(compile.stdout, /^  compile\s.*no model calls$/m);
+    assert.match(compile.stdout, /^  compile\s+2\s/m);
+    assert.ok(totalOf(compile.stdout) > 0);
+    // ... and with both steps turned off it makes no model call, and says so.
+    fs.writeFileSync(path.join(sb.paper, 'config.toml'), 'schema_version = 4\n\n[compile]\nsmooth_transitions = false\ncontradiction_pairs = 0\n');
+    const quiet = await sb.runTsx(null, ['compile', '--estimate']);
+    assert.equal(quiet.status, 0, quiet.stderr);
+    assert.match(quiet.stdout, /^  compile\s.*no model calls$/m);
     assert.equal(sb.mock!.requests.length, 0, 'estimating makes no LLM call');
   });
 });

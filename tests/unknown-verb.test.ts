@@ -183,16 +183,27 @@ test('RUN-11: nearest-verb suggestion is Levenshtein ≤ 2', () => {
   assert.equal(nearest('xyzzy', UX02_VERBS), null);
 });
 
-test('RUN-11: the 16-verb set is unchanged and the alias table is empty in Phase 17', () => {
+// EXP-21 (D-21-23) filled the Phase-17 empty alias table: the four done
+// sub-steps, each an alias of `done --only <step>`, never a 17th verb.
+test('RUN-11 / EXP-21: the 16-verb set is unchanged and the aliases are the four done sub-steps', () => {
   assert.equal(UX02_VERBS.length, 16);
-  assert.deepEqual(Object.keys(VERB_ALIASES), [], 'EXP-21 fills VERB_ALIASES');
+  assert.deepEqual(
+    Object.entries(VERB_ALIASES).map(([alias, a]) => [alias, a.verb, a.args.join(' ')]),
+    [
+      ['export', 'done', '--only export'],
+      ['humanize', 'done', '--only humanize'],
+      ['score', 'done', '--only score'],
+      ['plagiarism', 'done', '--only plagiarism'],
+    ],
+  );
+  for (const alias of Object.keys(VERB_ALIASES)) assert.ok(!(UX02_VERBS as readonly string[]).includes(alias), `${alias} is not a verb`);
 });
 
 test('RUN-11: an alias registered in VERB_ALIASES dispatches exactly like its verb', async () => {
   const sb = sandbox('alias');
   const root = sb.project('p');
   seedCompiledPaper(root);
-  VERB_ALIASES['st'] = 'status';
+  VERB_ALIASES['st'] = { verb: 'status', args: [] };
   const prevCwd = process.cwd();
   process.chdir(root);
   const captured: string[] = [];

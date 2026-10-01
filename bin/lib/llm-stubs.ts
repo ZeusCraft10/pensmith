@@ -287,7 +287,19 @@ const STUBS: Readonly<Record<string, (hint: StubHint) => unknown>> = Object.free
   // The per-paragraph orphan audit (D-20-29) can only ADD orphans, so the
   // conservative stub names no claim: the deterministic floor stands alone.
   'orphan-label': () => ({ claims: [] }),
+  // The contradiction judge (EXP-11): every pair UNCLEAR — the stub makes no
+  // judgment, so the deterministic heuristic's flags stand unjudged.
+  'claim-consistency': (hint: StubHint) => ({
+    pairs: stubPairIds(hint).map((id) => ({ id, verdict: 'UNCLEAR', rationale: 'LLM stubbed: no consistency judgment was made.' })),
+  }),
 });
+
+/** The ids of the claim-consistency request's `pairs` block. */
+function stubPairIds(hint: StubHint): string[] {
+  const pairs = (hint as Record<string, unknown> | undefined)?.['pairs'];
+  if (!Array.isArray(pairs)) return [];
+  return pairs.flatMap((p) => (typeof p === 'object' && p !== null && typeof (p as Record<string, unknown>)['id'] === 'string' ? [(p as Record<string, unknown>)['id'] as string] : []));
+}
 
 /** True when a deterministic structured stub exists for `slug`. */
 export function hasStructuredStub(slug: string): boolean {

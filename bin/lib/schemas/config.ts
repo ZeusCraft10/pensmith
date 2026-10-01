@@ -25,8 +25,18 @@ import { lookupTable } from '../lookup-table.js';
  * v2 (Phase 19, review round 3): `[verification] send_byo_passages` and the
  * `[sources] allowed_databases` values `books` / `nber` (migrations/config/v1_to_v2.ts).
  * v3 (Phase 20, VRFY-18): `[verification] quote_min_words` (migrations/config/v2_to_v3.ts).
+ * v4 (Phase 21, D-21-26): `[humanizer] honesty_consent`, the `[compile]` table
+ * (`smooth_transitions`, `contradiction_pairs`), `[verification]
+ * plagiarism_max_phrases`, and `[project] citation_style` as a path to a local
+ * `.csl` file (migrations/config/v3_to_v4.ts).
  */
-export const CURRENT_CONFIG_VERSION = 3;
+export const CURRENT_CONFIG_VERSION = 4;
+
+/** The default `[compile] contradiction_pairs` (EXP-11, RUN-26): claim pairs one compile sends to the claim-consistency judge. */
+export const DEFAULT_CONTRADICTION_PAIRS = 20;
+
+/** The default `[verification] plagiarism_max_phrases` (EXP-19, D-21-22): distinctive phrases one done probes. */
+export const DEFAULT_PLAGIARISM_MAX_PHRASES = 30;
 
 /**
  * `[verification] quote_min_words` (VRFY-18, D-20-17): a direct quote of at
@@ -135,8 +145,19 @@ export function citationStyleChoices(): string {
   return `${CITATION_STYLE_NAMES.join(', ')} (or their CSL keys: ${keys.join(', ')})`;
 }
 
-const CitationStyleSchema = z.string().refine((v) => citationStyleKey(v) !== null, {
-  message: `citation_style must be one of: ${CITATION_STYLE_NAMES.join(', ')}`,
+/**
+ * A `citation_style` value that names a local CSL file (EXP-03, D-21-07): a
+ * path ending in `.csl`, relative to the project root or absolute. Only its
+ * spelling is checked here; bin/lib/export-style.ts `validateCslFile` checks
+ * the file itself when done resolves the export style.
+ */
+export function isCslPathSpelling(v: string): boolean {
+  const t = v.trim();
+  return t.length > 4 && /\.csl$/i.test(t) && !/[\0\r\n]/.test(t);
+}
+
+const CitationStyleSchema = z.string().refine((v) => citationStyleKey(v) !== null || isCslPathSpelling(v), {
+  message: `citation_style must be one of: ${CITATION_STYLE_NAMES.join(', ')} — or a path to a local .csl file`,
 });
 
 const PositiveInt = z.number().int().positive();
@@ -199,15 +220,35 @@ export const VerificationSchema = z.object({
   flag_threshold: z.enum(['low', 'medium', 'high']).optional(),
   recheck_after_days: NonNegInt.optional(),
   plagiarism_check: z.boolean().optional(),
+  // EXP-19 (D-21-22): how many distinctive phrases done sends to the search (at least one per body paragraph, up to this).
+  plagiarism_max_phrases: PositiveInt.optional(),
   citation_density_min: NonNegNumber.optional(),
   citation_density_max: NonNegNumber.optional(),
 });
+
+/** The AI-detection backends (EXP-18): `[humanizer] honesty_backend`. */
+export const HONESTY_BACKENDS = ['gptzero', 'originality', 'sapling'] as const;
 
 export const HumanizerSchema = z.object({
   enabled: z.boolean().optional(),
   preserve_voice: z.enum(['academic', 'formal', 'casual']).optional(),
   honesty_score: z.boolean().optional(),
-  honesty_backend: z.enum(['gptzero', 'originality', 'sapling']).optional(),
+  honesty_backend: z.enum(HONESTY_BACKENDS, {
+    errorMap: () => ({ message: `honesty_backend must be one of: ${HONESTY_BACKENDS.join(', ')}` }),
+  }).optional(),
+  // EXP-17 (D-21-20): the answer to the detector-consent question, asked once
+  // in a terminal and recorded here (true: send the paper to the detector;
+  // false: never). Unset means not asked yet; --yolo never answers it.
+  honesty_consent: z.boolean().optional(),
+});
+
+/**
+ * `[compile]` (EXP-10, EXP-11; D-21-14, D-21-15): the boundary smoother and the
+ * cross-section contradiction check.
+ */
+export const CompileSchema = z.object({
+  smooth_transitions: z.boolean().optional(),
+  contradiction_pairs: NonNegInt.optional(),
 });
 
 export const StyleSchema = z.object({
@@ -254,6 +295,7 @@ export const PaperConfigSchema = z.object({
   sources: SourcesSchema.optional(),
   verification: VerificationSchema.optional(),
   humanizer: HumanizerSchema.optional(),
+  compile: CompileSchema.optional(),
   style: StyleSchema.optional(),
   runtime: PaperRuntimeSchema.optional(),
   budget: BudgetSchema.optional(),
@@ -270,6 +312,7 @@ export const CONFIG_TABLES: Readonly<Record<string, z.AnyZodObject>> = Object.fr
   sources: SourcesSchema,
   verification: VerificationSchema,
   humanizer: HumanizerSchema,
+  compile: CompileSchema,
   style: StyleSchema,
   runtime: PaperRuntimeSchema,
   budget: BudgetSchema,

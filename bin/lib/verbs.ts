@@ -33,24 +33,62 @@ export const UX02_VERBS = [
 
 export type Ux02Verb = (typeof UX02_VERBS)[number];
 
+/** An alias: the verb it runs and the arguments it stands for (`export` = `done --only export`). */
+export interface VerbAlias {
+  readonly verb: Ux02Verb;
+  readonly args: readonly string[];
+}
+
 /**
- * Verb aliases (RUN-11, D-17-35): alias → canonical verb. EMPTY in Phase 17;
- * EXP-21 fills it. An alias dispatches exactly like its verb and is never a
- * 17th verb (the 16-verb list above stays the only verb set). Kept a plain
- * record so a test can register an alias and observe the dispatch.
+ * Verb aliases (RUN-11, D-17-35; EXP-21, D-21-23): alias → `{ verb, args }`.
+ * The pre-dispatch rewrite (bin/pensmith.ts, expandVerbAlias) turns
+ * `pensmith export …` into `pensmith done --only export …` before argv
+ * validation, so an alias dispatches exactly like the verb and arguments it
+ * names and is never a 17th verb (the 16-verb list above stays the only verb
+ * set; no workflow file is added). The four done sub-steps are aliases
+ * because the 16 verbs are locked (PRD §5.3, §7.9). Kept a plain record so a
+ * test can register an alias and observe the dispatch.
  */
-export const VERB_ALIASES: Record<string, Ux02Verb> = {};
+export const VERB_ALIASES: Record<string, VerbAlias> = {
+  export: { verb: 'done', args: ['--only', 'export'] },
+  humanize: { verb: 'done', args: ['--only', 'humanize'] },
+  score: { verb: 'done', args: ['--only', 'score'] },
+  plagiarism: { verb: 'done', args: ['--only', 'plagiarism'] },
+};
 
 /** True if `token` is one of the 16 verbs. */
 export function isVerb(token: string): token is Ux02Verb {
   return (UX02_VERBS as readonly string[]).includes(token);
 }
 
+/** The alias `token` names, or null. */
+export function verbAlias(token: string): VerbAlias | null {
+  const alias = Object.prototype.hasOwnProperty.call(VERB_ALIASES, token) ? VERB_ALIASES[token] : undefined;
+  return alias !== undefined && isVerb(alias.verb) ? alias : null;
+}
+
 /** The canonical verb for a verb or alias token, or null for anything else. */
 export function canonicalVerb(token: string): Ux02Verb | null {
   if (isVerb(token)) return token;
-  const alias = Object.prototype.hasOwnProperty.call(VERB_ALIASES, token) ? VERB_ALIASES[token] : undefined;
-  return alias !== undefined && isVerb(alias) ? alias : null;
+  return verbAlias(token)?.verb ?? null;
+}
+
+/**
+ * argv with the alias at `at` (the verb position) replaced by its verb and
+ * arguments: `['export', '--format', 'docx']` → `['done', '--only', 'export',
+ * '--format', 'docx']`. Unchanged when `at` holds no alias. An alias whose
+ * arguments the user also gives (`pensmith export --only score`) is
+ * ambiguous: `conflict` names the option and the caller refuses it.
+ */
+export function expandVerbAlias(argv: readonly string[], at: number): { argv: string[]; conflict: string | null } {
+  const alias = at >= 0 ? verbAlias(argv[at] ?? '') : null;
+  if (alias === null) return { argv: [...argv], conflict: null };
+  const options = alias.args.filter((a) => a.startsWith('--'));
+  const rest = argv.slice(at + 1);
+  const end = rest.indexOf('--');
+  const given = end >= 0 ? rest.slice(0, end) : rest;
+  const conflict = options.find((o) => given.some((t) => t === o || t.startsWith(`${o}=`))) ?? null;
+  return { argv: [...argv.slice(0, at), alias.verb, ...alias.args, ...rest], conflict };
 }
 
 /** Levenshtein edit distance (small inputs: verbs, aliases and flag names). */

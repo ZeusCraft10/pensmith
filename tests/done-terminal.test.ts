@@ -1,8 +1,8 @@
 // tests/done-terminal.test.ts — audit #15 regression.
 //
 // The router's terminal state was "DRAFT.md present AND FINAL.md present". In
-// Tier 2 there is no humanizer, so runHumanizer returns null, FINAL.md was
-// never written, and bare `pensmith`/next/resume re-ran the whole export
+// Tier 2 there was no humanizer then (Phase 21 added one, EXP-14; it is
+// skipped when no skill is installed, as here), so FINAL.md was never written, and bare `pensmith`/next/resume re-ran the whole export
 // pipeline on every invocation instead of reaching the done terminus. `done`
 // now writes FINAL.md from the text it exported, with DONE-RECORD.json, and
 // the terminus is "FINAL.md and DRAFT.md hold the bytes done recorded"
