@@ -7,13 +7,18 @@
 //   - a `.csl` file config.toml names is used only once this user approved it
 //     for this paper (the `csl-style` gate: --yolo never answers it, no
 //     terminal refuses with exit 3; the approval lives in the data dir, bound
-//     to the file's real path and sha256 — an edited file is asked about
-//     again); a bundled style and a `--style` value the user typed never ask;
+//     to the file's path and sha256 — an edited file is asked about again);
+//     a bundled style and a `--style` value the user typed never ask;
+//   - the file is not touched — stat'ed, read or hashed — before an approval
+//     for its path exists, and a network path is refused outright (review
+//     round 3: on Windows opening a UNC path sends the user's credentials);
 //   - the exporter refuses an export whose rendered citations print a DOI,
 //     arXiv id or PMID none of the cited entries holds (defence in depth).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fsModule from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { resolveExportStyle } from '../bin/lib/export-style.js';
 import { approveCslStyle, assertCslStyleApproved, isCslStyleApproved } from '../bin/lib/style-approvals.js';
 import { GateRefusedError } from '../bin/lib/gates.js';
-import { EXIT_APPROVAL, EXIT_ERROR, EXIT_OK, PensmithError } from '../bin/lib/exit-codes.js';
+import { EXIT_APPROVAL, EXIT_ERROR, EXIT_OK, EXIT_USAGE, PensmithError } from '../bin/lib/exit-codes.js';
 import { exportDraft } from '../bin/lib/exporter.js';
 import { withCapturedOutput } from '../bin/lib/output-sink.js';
 import { seedGatePaper, RECORDED_BIB } from './helpers/gate-paper.js';
@@ -67,6 +72,60 @@ test('EXP-03 (review r2): a .csl file config.toml names needs this user\'s appro
   await assertCslStyleApproved(root, resolveExportStyle(root, 'styles/journal.csl', root), () => {});
   await assertCslStyleApproved(paperWith('[project]\ncitation_style = "apa"\n'), resolveExportStyle(paperWith('[project]\ncitation_style = "apa"\n')), () => {});
   assert.deepEqual(lines, []);
+});
+
+/** Run `fn` with every fs call that names a path recorded (the builtin ESM exports synced, so named imports see it). */
+async function recordingFsPaths<T>(fn: () => Promise<T>): Promise<{ paths: string[]; result: T | unknown }> {
+  const paths: string[] = [];
+  const names = ['statSync', 'lstatSync', 'readFileSync', 'openSync', 'existsSync', 'realpathSync', 'accessSync'] as const;
+  const fsAny = fsModule as unknown as Record<string, (...a: unknown[]) => unknown>;
+  const saved = names.map((n) => [n, fsAny[n]] as const);
+  for (const [n, orig] of saved) {
+    fsAny[n] = (...a: unknown[]) => {
+      if (typeof a[0] === 'string') paths.push(a[0]);
+      return (orig as (...b: unknown[]) => unknown)(...a);
+    };
+  }
+  syncBuiltinESMExports();
+  let result: T | unknown;
+  try {
+    result = await fn();
+  } catch (e) {
+    result = e;
+  } finally {
+    for (const [n, orig] of saved) fsAny[n] = orig;
+    syncBuiltinESMExports();
+  }
+  return { paths, result };
+}
+
+test('review r3: a .csl file config.toml names is not touched before the user approves it; a network path is refused outright', async () => {
+  const root = paperWith('[project]\ncitation_style = "styles/journal.csl"\n');
+  const file = join(root, 'styles', 'journal.csl');
+  writeFileSync(file, APA);
+  const { paths, result } = await recordingFsPaths(async () => assertCslStyleApproved(root, resolveExportStyle(root), () => {}));
+  assert.ok(result instanceof GateRefusedError && result.exitCode === EXIT_APPROVAL, String(result));
+  assert.deepEqual(paths.filter((p) => p.endsWith('journal.csl')), [], 'the style file is never stat\'ed, read or hashed before the approval');
+  // Resolving alone never reads it: a file that does not exist resolves `pending`.
+  assert.equal(resolveExportStyle(paperWith('[project]\ncitation_style = "styles/none.csl"\n')).pending, true);
+  // Network paths are refused before anything else.
+  for (const unc of ['\\\\attacker.example\\share\\x.csl', '//attacker.example/share/x.csl']) {
+    const p = paperWith(`[project]\ncitation_style = ${JSON.stringify(unc)}\n`);
+    const r = await recordingFsPaths(async () => resolveExportStyle(p));
+    assert.ok(r.result instanceof PensmithError && r.result.exitCode === EXIT_USAGE && /is a network path/.test(r.result.message), `${unc}: ${String(r.result)}`);
+    assert.deepEqual(r.paths.filter((x) => x.includes('attacker')), [], unc);
+  }
+  // Once approved, the file is read and validated: an invalid one is EXIT_USAGE with the validator's reason.
+  await approveCslStyle(root, file);
+  const read = await recordingFsPaths(async () => assertCslStyleApproved(root, resolveExportStyle(root), () => {}));
+  assert.ok(read.paths.some((p) => p.endsWith('journal.csl')), 'control: the recorder sees the reads made after the approval');
+  const ok = read.result as Awaited<ReturnType<typeof assertCslStyleApproved>>;
+  assert.equal(ok.pending, undefined);
+  assert.match(ok.name, /^journal\.csl \(/);
+  const bad = paperWith('[project]\ncitation_style = "styles/bad.csl"\n');
+  writeFileSync(join(bad, 'styles', 'bad.csl'), '<style>not csl</style>');
+  await approveCslStyle(bad, join(bad, 'styles', 'bad.csl'));
+  await assert.rejects(assertCslStyleApproved(bad, resolveExportStyle(bad), () => {}), (e: unknown) => e instanceof PensmithError && e.exitCode === EXIT_USAGE && /config\.toml \[project\] citation_style: bad\.csl is not a CSL 1\.0 style/.test(e.message));
 });
 
 test('D-21-12 (review r2): a style that prints an identifier no cited entry holds refuses the export — nothing is written', async () => {

@@ -229,3 +229,18 @@ test('EXP-02 / D-21-11: the export pair holds exactly the cited keys, the RIS re
   assert.equal(first(records.get('smith2010')!, 'TI'), 'A Chapter on China', 'the title as written — never sentence-cased');
   assert.ok(!existsSync(join(exportDir, 'CITATIONS.dry-run.ris')));
 });
+
+// Review round 3: only the markup tags citation-js and CSL write are removed —
+// a `<` or `>` of the text (doses, p-values, sample sizes) is kept, so the RIS
+// says what the bib, the rendered references and the source say.
+test('review r3: a title and an abstract holding < and > keep them; citation-js markup is still removed', async () => {
+  const bib =
+    '@article{dose2020,\n  title = {Outcomes at doses <5 mg versus >10 mg in children},\n  author = {Doe, Jane},\n  journal = {Journal of Dosing},\n  year = {2020},\n' +
+    '  abstract = {Mortality was lower when p<0.05 and n>100 in the cohort.}\n}\n';
+  const ris = renderRisFromCsl((await parseBib(bib)) as Parameters<typeof renderRisFromCsl>[0]);
+  const rec = parseRisStrict(ris)[0]!;
+  assert.deepEqual(rec.tags.get('TI'), ['Outcomes at doses <5 mg versus >10 mg in children']);
+  assert.deepEqual(rec.tags.get('AB'), ['Mortality was lower when p<0.05 and n>100 in the cohort.']);
+  const marked = parseRisStrict(renderRisFromCsl([{ id: 'x', type: 'article-journal', title: 'The <i>Drosophila</i> genome and CO<sub>2</sub> in <span class="nocase">iPS</span> cells &amp; more', issued: { 'date-parts': [[2020]] } }]))[0]!;
+  assert.deepEqual(marked.tags.get('TI'), ['The Drosophila genome and CO2 in iPS cells & more']);
+});

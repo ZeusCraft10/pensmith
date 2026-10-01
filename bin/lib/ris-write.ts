@@ -36,6 +36,7 @@
 
 import { atomicWriteFile } from './atomic-write.js';
 import { lookupTable } from './lookup-table.js';
+import { decodeEntities, stripMarkupTags } from './markup.js';
 import { assignUniqueCitekeys, toCsl, type BibSource, type CslEntry } from './bibtex-write.js';
 
 /** CSL item type → RIS type (citation-js's mapping; anything else is GEN). */
@@ -66,18 +67,16 @@ interface CslNameLike {
   readonly 'dropping-particle'?: unknown;
 }
 
-/** A value on one line: markup tags out, entities decoded, white space runs (newlines too) as one space. */
+/**
+ * A value on one line: the markup tags citation-js and CSL write removed (only
+ * known tags — markup.ts stripMarkupTags: `<i>`, `<sup>`, `<span
+ * class="nocase">`, …; review round 3: a `<` or `>` of the text, as in `<5 mg`
+ * or `p<0.05`, is kept), entities decoded once, white space runs (newlines
+ * too) as one space.
+ */
 function oneLine(value: unknown): string {
   if (value === undefined || value === null) return '';
-  const s = String(value)
-    .replace(/<[^>]*>/g, '')
-    .replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d)))
-    .replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"');
-  return s.replace(/\s+/gu, ' ').trim();
+  return decodeEntities(stripMarkupTags(String(value))).replace(/\s+/gu, ' ').trim();
 }
 
 /** `Family, Given` (particles kept, suffix after the given names), or an organisation as written. */

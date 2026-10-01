@@ -91,6 +91,7 @@ import { defaultCitationStyleFor } from './disciplines.js';
 // to stay portable across both runtimes.
 import Cite from 'citation-js';
 import { lookupTable } from './lookup-table.js';
+import { stripMarkupTags } from './markup.js';
 const plugins = Cite.plugins;
 
 // CYCLE-3 NEW-H-1: re-export Cite so downstream Plan 04 / Plan 09
@@ -1157,7 +1158,7 @@ function linkBibliographyTitle(runs: RichRun[], item: Record<string, unknown> | 
       : str('PMID') !== ''
         ? `https://www.ncbi.nlm.nih.gov/pubmed/${str('PMID')}`
         : str('URL');
-  const title = str('title').replace(/<[^>]*>/g, '').replace(/---/g, '\u2014').replace(/--/g, '\u2013');
+  const title = decodeEntities(stripMarkupTags(str('title'))).replace(/---/g, '\u2014').replace(/--/g, '\u2013');
   if (href === '' || title === '') return runs;
   const text = runsText(runs);
   for (const id of ['DOI', 'PMCID', 'PMID', 'URL']) if (str(id) !== '' && text.includes(str(id))) return runs;

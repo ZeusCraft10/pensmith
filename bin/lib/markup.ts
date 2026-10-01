@@ -59,6 +59,15 @@ const TAG_RE = new RegExp(`</?(?:[a-z][a-z0-9-]*:)?(?:${MARKUP_TAGS})(?:\\s[^<>]
 const BREAK_TAG_RE = /<(?:br|\/?p|\/?div|\/?(?:[a-z][a-z0-9-]*:)?(?:sec|list-item|title))\b[^<>]*>/gi;
 
 /**
+ * `s` with its known markup tags removed (see the header) — a break or block
+ * tag becomes a space — and nothing else: entities stay encoded, and a `<` or
+ * `>` that opens no known tag (`<5 mg`, `p<0.05`, `n>100`) is text.
+ */
+export function stripMarkupTags(s: string): string {
+  return s.replace(BREAK_TAG_RE, ' ').replace(TAG_RE, '');
+}
+
+/**
  * `s` as plain text: entities decoded (twice, for a double-encoded `&amp;amp;`),
  * markup tags removed (see the header), whitespace collapsed.
  */

@@ -706,9 +706,8 @@ export const doneCommand = defineCommand({
         writeOut(`pensmith done: ${only} skipped (outline only — there is no prose; done exports the outline and the annotated bibliography)\n`);
         return { ok: true, outlineOnly: true };
       }
-      const outlineStyle = resolveExportStyle(paperRoot, flags.style);
+      const outlineStyle = await assertCslStyleApproved(paperRoot, resolveExportStyle(paperRoot, flags.style), warnLine);
       writeOut(`pensmith done: style: ${outlineStyle.name} (from ${outlineStyle.from})\n`);
-      await assertCslStyleApproved(paperRoot, outlineStyle, warnLine);
       return runOutlineDone({ paperRoot, format: flags.format, style: outlineStyle.style, yolo: flags.yolo });
     }
     const exporting = only === null || only === 'export';
@@ -719,12 +718,12 @@ export const doneCommand = defineCommand({
     // unknown name or a bad .csl file is EXIT_USAGE here, before the gate.
     let style: ExportStyle | null = null;
     if (exporting) {
-      style = resolveExportStyle(paperRoot, flags.style);
-      writeOut(`pensmith done: style: ${style.name} (from ${style.from})\n`);
       // A .csl file config.toml names prints its own text in every citation
       // and reference: used only once this user approved it for this paper
-      // (style-approvals.ts; review round 2) — before any step.
-      await assertCslStyleApproved(paperRoot, style, warnLine);
+      // (style-approvals.ts; review round 2) — before any step, and read only
+      // after that approval (review round 3).
+      style = await assertCslStyleApproved(paperRoot, resolveExportStyle(paperRoot, flags.style), warnLine);
+      writeOut(`pensmith done: style: ${style.name} (from ${style.from})\n`);
     }
     if (flags.noVerify && exporting) {
       process.stderr.write(

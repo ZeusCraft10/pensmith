@@ -68,8 +68,12 @@ test('EXP-03: --style bogus is EXIT_USAGE listing the 8 styles and the path form
   const root = paper();
   usageError(() => resolveExportStyle(root, 'bogus'), /--style: unknown citation style "bogus" — use one of APA, MLA, .*Harvard .* or a path to a local \.csl file/);
   assert.match(exportStyleChoices(), /Vancouver/);
-  // A bad configured style fails the same way, naming where it came from.
-  usageError(() => resolveExportStyle(paper({ config: '[project]\ncitation_style = "styles/missing.csl"\n' })), /config\.toml \[project\] citation_style: .*missing\.csl cannot be read/);
+  // A configured .csl file is not read here (review round 3): it is returned
+  // pending, and read only after the user approves it (csl-style-approval.test.ts).
+  const pending = resolveExportStyle(paper({ config: '[project]\ncitation_style = "styles/missing.csl"\n' }));
+  assert.equal(pending.pending, true);
+  assert.equal(pending.source, 'config');
+  assert.match(pending.style, /missing\.csl$/);
 });
 
 test('D-21-07: a local .csl file (relative to the folder --style is typed in, or absolute) is accepted when it is an independent CSL 1.0 style', () => {

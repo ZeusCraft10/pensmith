@@ -19,7 +19,12 @@
 // validator's reason. Pure reads; nothing is written. A `.csl` file prints its
 // own text in every citation of the export, so one config.toml names is used
 // only once the user approved it for the paper — done checks that right after
-// resolving (style-approvals.ts assertCslStyleApproved; review round 2).
+// resolving (style-approvals.ts assertCslStyleApproved; review round 2). Such a
+// file is NOT touched here (review round 3): config.toml travels with a shared
+// paper, so its path is resolved lexically and returned `pending`; the approval
+// step asks first and only then reads, validates and hashes it. A network path
+// (`\\host\share\x.csl`, `//host/share/x.csl` — on Windows opening one starts
+// an SMB session that sends the user's credentials) is refused outright.
 
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, resolve, basename } from 'node:path';
@@ -43,6 +48,21 @@ export interface ExportStyle {
   readonly from: string;
   /** `in-text` or `note` for a local file (the bundled keys: unset). */
   readonly cslClass?: 'in-text' | 'note';
+  /**
+   * A `.csl` file config.toml names, not read yet (review round 3): only
+   * style-approvals.ts assertCslStyleApproved reads it — after the user
+   * approved it — and returns the validated style. Never exported as is.
+   */
+  readonly pending?: true;
+}
+
+/**
+ * True when `value` names a file on another machine: a UNC path
+ * (`\\host\share\…`, `\\?\UNC\…`) or its slash spelling (`//host/share/…`).
+ * Lexical; never touches the file system.
+ */
+export function isNetworkPath(value: string): boolean {
+  return /^(?:\\\\|\/\/|\\\/|\/\\)/.test(value.trim());
 }
 
 /** The largest local `.csl` file accepted (the bundled styles are under 100 KB). */
@@ -187,6 +207,9 @@ export function validateCslFile(file: string): CslValidation {
   return { ok: true, cslClass, title };
 }
 
+/** How the terminal names config.toml's style key. */
+export const CONFIG_STYLE_WHERE = 'config.toml [project] citation_style';
+
 function usage(message: string): PensmithError {
   return new PensmithError(message, EXIT_USAGE);
 }
@@ -195,13 +218,20 @@ function usage(message: string): PensmithError {
  * A style value (a name, an alias or a `.csl` path) → the key or the
  * validated absolute path. A relative path is resolved against `base`: the
  * folder the command was typed in for `--style`, the project root for
- * config.toml's value. Throws EXIT_USAGE.
+ * config.toml's value. With `deferRead` (config.toml's value) a `.csl` path is
+ * resolved lexically and returned `pending`, its file untouched; a network
+ * path is refused. Throws EXIT_USAGE.
  */
-function resolveValue(base: string, value: string, where: string): Omit<ExportStyle, 'source' | 'from'> {
+function resolveValue(base: string, value: string, where: string, deferRead = false): Omit<ExportStyle, 'source' | 'from'> {
   const key = citationStyleKey(value);
   if (key !== null) return { style: key, name: key };
   if (isCslPathSpelling(value)) {
+    if (deferRead && isNetworkPath(value)) {
+      throw usage(`${where}: "${value.trim()}" is a network path — a style file a paper's config.toml names must be on this machine (pass a file yourself with --style)`);
+    }
     const file = isAbsolute(value.trim()) ? value.trim() : resolve(base, value.trim());
+    // Not read before the user approves it (style-approvals.ts).
+    if (deferRead) return { style: file, name: basename(file), pending: true };
     const v = validateCslFile(file);
     if (!v.ok) throw usage(`${where}: ${v.reason}`);
     return { style: file, name: `${basename(file)}${v.title.length > 0 ? ` (${v.title})` : ''}`, cslClass: v.cslClass };
@@ -211,7 +241,8 @@ function resolveValue(base: string, value: string, where: string): Omit<ExportSt
 
 /**
  * The export style of the paper at `paperRoot` (see the header), with its
- * source. `flag` is done's `--style` value (a relative `.csl` path is the
+ * source — a `.csl` file config.toml names `pending`, unread (pass it to
+ * style-approvals.ts assertCslStyleApproved). `flag` is done's `--style` value (a relative `.csl` path is the
  * typing folder's, `flagBase`, default the invocation directory). Throws
  * PensmithError(EXIT_USAGE) for an unknown style or a bad `.csl` file; an
  * INTAKE.md or config.toml falls through to the next layer only when it is
@@ -227,7 +258,7 @@ export function resolveExportStyle(paperRoot: string, flag?: string, flagBase: s
   const config = tryReadPaperConfigSync(paperRoot);
   const configured = config?.project?.citation_style;
   if (configured !== undefined && configured.trim().length > 0) {
-    return { ...resolveValue(paperRoot, configured, 'config.toml [project] citation_style'), source: 'config', from: 'config.toml [project] citation_style' };
+    return { ...resolveValue(paperRoot, configured, CONFIG_STYLE_WHERE, true), source: 'config', from: CONFIG_STYLE_WHERE };
   }
   let intakeStyle: CslStyleKey | undefined;
   let intakeDiscipline: string | undefined;

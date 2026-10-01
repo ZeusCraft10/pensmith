@@ -84,10 +84,14 @@ decision for it.
   bibliography entry, after the gate, so one that config.toml names (a paper
   file that travels with a shared paper) is used only once this user approved
   it for this paper — the `csl-style` gate, recorded in the pensmith data dir
-  and bound to the file's real path and sha256 (an edited file is asked about
-  again; `bin/lib/style-approvals.ts`). `--yolo` never answers it; without a
-  terminal done refuses (exit 3) before any step, naming `--style` — a style
-  typed with `--style`, and the 8 bundled ones, never ask.
+  and bound to the file's path and sha256 (an edited file is asked about
+  again; `bin/lib/style-approvals.ts`). The file is not opened before that
+  approval exists — the question names its path, and only an approved file is
+  read and validated (a bad one is then EXIT_USAGE) — and a network path
+  (`\\host\share\x.csl`, `//host/share/x.csl`) in config.toml is EXIT_USAGE
+  outright. `--yolo` never answers the gate; without a terminal done refuses
+  (exit 3) before any step, naming `--style` — a style typed with `--style`,
+  and the 8 bundled ones, never ask.
 - `--raw` — skip the humanizer (`humanizer skipped (--raw)`; no request is sent).
 - `--no-verify` — skip ONLY the whole-paper Pass 4 audit, with a warning; the
   blocking re-verification always runs. `--no-verify --raw` without `--yolo` is

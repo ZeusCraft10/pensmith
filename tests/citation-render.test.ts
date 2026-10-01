@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import {
   caseProtectTitle,
   isNoteStyle,
+  parseBib,
   parseBibEntries,
   renderDocumentCitations,
   runsText,
@@ -405,4 +406,10 @@ test('D-21-07: a .csl file is registered by its content — two files with one n
   assert.equal(runsText(a.citations[0]?.inline ?? []), '<<Kuhn 1962>>');
   assert.equal(runsText(b.citations[0]?.inline ?? []), '{{Kuhn 1962}}');
   assert.equal(isNoteStyle(join(d1, 'style.csl')), false);
+});
+
+test('review r3: a title holding < and > is still found and linked (only known markup tags are stripped)', async () => {
+  const entries = await parseBib('@article{dose2020,\n  title = {Outcomes at doses <5 mg versus >10 mg in children},\n  author = {Doe, Jane},\n  journal = {Journal of Dosing},\n  year = {2020},\n  doi = {10.1234/dose.2020}\n}\n');
+  const v = await renderDocumentCitations(entries as never, 'vancouver', [{ items: [{ id: 'dose2020' }] }]);
+  assert.deepEqual(v.bibliography[0]?.runs.filter((r) => r.href !== undefined).map((r) => [r.text, r.href]), [['Outcomes at doses <5 mg versus >10 mg in children', 'https://doi.org/10.1234/dose.2020']]);
 });
