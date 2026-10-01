@@ -307,6 +307,73 @@ export function humanizeRejectionReason(paperRoot: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// A compiled draft no export may carry (review round 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * The file that keeps why done refused to export THIS compiled draft before
+ * any paid or third-party step: the zero-trace author-content rule
+ * (export/zero-trace.ts scanExportText — the paper's folder path, a home path,
+ * a `.paper` path, a pensmith marker) found something in the gated text. The
+ * rule is deterministic, so a routed done would only refuse again: while the
+ * compiled draft is the one recorded, the router reports attention naming the
+ * fix instead. A recompile (another draft) or any export clears it.
+ */
+export const EXPORT_REFUSED_FILE = 'EXPORT.refused.md';
+
+/** `<root>/.paper/EXPORT.refused.md`. */
+export function exportRefusedPath(paperRoot: string): string {
+  return join(paperDir(paperRoot), EXPORT_REFUSED_FILE);
+}
+
+/** Keep done's refusal to export the compiled draft `compiledDraftSha256`, with its reasons. */
+export async function writeExportRefusal(paperRoot: string, r: { readonly compiledDraftSha256: string; readonly reasons: readonly string[]; readonly at: string }): Promise<void> {
+  const dir = basename(paperDir(paperRoot));
+  const text = [
+    '# The compiled draft cannot be exported',
+    '',
+    `Compiled draft: sha256 ${r.compiledDraftSha256}`,
+    `Refused: ${r.at}`,
+    '',
+    `${dir}/DRAFT.md holds text no export may carry (zero trace), so done stopped before the plagiarism check, the detector and the humanizer, and exported nothing. ` +
+      'Remove it from the section draft that holds it, then `pensmith verify N` and `pensmith compile`. ' +
+      'A bare `pensmith` does not run done again while the compiled draft is unchanged.',
+    '',
+    '## Reasons',
+    '',
+    ...r.reasons.map((x) => `- ${x.replace(/\r?\n/g, ' ')}`),
+    '',
+  ].join('\n');
+  await atomicWriteFile(exportRefusedPath(paperRoot), text);
+}
+
+/** Remove a kept export refusal (a done that passed the pre-scan, or an export). */
+export async function clearExportRefusal(paperRoot: string): Promise<void> {
+  await rm(exportRefusedPath(paperRoot), { force: true });
+}
+
+/**
+ * The router's attention detail when done refused to export the CURRENT
+ * compiled draft (EXPORT.refused.md names its sha256), else null. Fixed
+ * wording — nothing quoted from the file. Never throws.
+ */
+export function exportRefusalReason(paperRoot: string): string | null {
+  let text: string;
+  try {
+    text = readFileSync(exportRefusedPath(paperRoot), 'utf8');
+  } catch {
+    return null;
+  }
+  const recorded = /^Compiled draft: sha256 ([0-9a-f]{64})\s*$/mu.exec(text)?.[1];
+  if (recorded === undefined || recorded !== fileSha256(join(paperDir(paperRoot), 'DRAFT.md'))) return null;
+  const dir = basename(paperDir(paperRoot));
+  return (
+    `the compiled draft holds text no export may carry — a folder path or a pensmith marker (the reasons are in ${dir}/${EXPORT_REFUSED_FILE}) — ` +
+    'remove it from the section draft, then `pensmith verify N` and `pensmith compile`'
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Outline-only mode (GRND-11, D-21-25).
 // ---------------------------------------------------------------------------
 

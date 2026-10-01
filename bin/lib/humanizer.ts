@@ -32,6 +32,7 @@ import { parseFrontmatter } from './frontmatter.js';
 import { fenceUntrusted, stripFenceMarkers } from './untrusted-fence.js';
 import { maskForRewrite, validateRewrite, compareRewrite } from './rewrite-guard.js';
 import { citedKeySetChange, recomputeExportGate, type DoneSection } from './done-gate.js';
+import { scanExportText } from './export/zero-trace.js';
 import type { GateResult, LoadedBibliography } from './verify/gate.js';
 
 /** The `humanizer` model slug (llm-models.ts; generation tier, verb done, no template). */
@@ -266,6 +267,17 @@ export interface AcceptResult {
  */
 export async function acceptHumanized(input: AcceptInput): Promise<AcceptResult> {
   const reasons: string[] = [...compareRewrite(input.draft, input.humanized, input.quoteMinWords !== undefined ? { quoteMinWords: input.quoteMinWords } : {})];
+  // Review round 3: a rewrite that adds text no export may carry (a folder or
+  // home path, a pensmith marker — the zero-trace author rule) is the
+  // humanizer's fault, kept as its rejection, never an export refused after
+  // the paid steps. What the compiled draft already holds is done's pre-scan's.
+  const traced = (t: string): string[] => scanExportText('FINAL.md', t, { paperRoot: input.paperRoot }).map((f) => f.finding);
+  const before = traced(input.draft);
+  for (const f of traced(input.humanized)) {
+    const at = before.indexOf(f);
+    if (at === -1) reasons.push(`the humanized text ${f}`);
+    else before.splice(at, 1);
+  }
   const change = citedKeySetChange(input.humanized, input.draft);
   if (change !== null) reasons.push(change);
   const gate = await recomputeExportGate(input.paperRoot, input.humanized, {

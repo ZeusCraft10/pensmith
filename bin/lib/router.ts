@@ -100,7 +100,7 @@ import { RETRY_ONLINE_VERDICTS } from './verify/verdicts.js';
 import { isResearchDone } from './research-sentinel.js';
 import { ACCEPTABLE_QUOTE_VERDICT } from './verify/verdicts.js';
 import { readCompileInputs, fileSha256 } from './compile-inputs.js';
-import { editedAnnotatedReason, editedFinalReason, finalMdState, humanizeRejectionReason, newerDoneRecordReason, outlineDoneState, readDoneRecordFile, unexportedFinalReason } from './done-record.js';
+import { editedAnnotatedReason, editedFinalReason, exportRefusalReason, finalMdState, humanizeRejectionReason, newerDoneRecordReason, outlineDoneState, readDoneRecordFile, unexportedFinalReason } from './done-record.js';
 import type { Handoff } from './schemas/handoff.js';
 import { hasStubOutlineMarker, stubOutlineReason } from './outline-parse.js';
 
@@ -756,6 +756,12 @@ export async function resolveNextAction(
       // draft) or any export clears it.
       const rejected = humanizeRejectionReason(paperRoot);
       if (rejected !== null) return { verb: 'status', reason: 'attention', detail: rejected };
+      // Review round 3: done refused THIS compiled draft on the zero-trace
+      // author rule (EXPORT.refused.md) — deterministic, so a routed done
+      // would only send the paper to DuckDuckGo, the detector and the
+      // humanizer again before the same refusal.
+      const refused = exportRefusalReason(paperRoot);
+      if (refused !== null) return { verb: 'status', reason: 'attention', detail: refused };
       return { verb: 'done' };
     }
     return { verb: 'status', reason: 'done' };

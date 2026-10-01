@@ -215,6 +215,60 @@ test('review r3 (built CLI, mock LLM): a citing sentence the humanizer changed i
   });
 });
 
+// Review round 3: the zero-trace author rule is deterministic — a compiled
+// draft holding the paper's folder path is refused BEFORE the plagiarism
+// queries, the detector and the paid humanizer, the refusal is kept for the
+// router (attention, no routed done again), and a humanized text that adds
+// text the rule refuses is the humanizer's rejection, never an export refused late.
+test('review r3 (built CLI, mock LLM): a draft holding the folder path is refused before any paid step and is attention; a humanizer that adds one is rejected', async () => {
+  await withPipelinePaper({ sections: THREE_SECTIONS }, async (p) => {
+    const paper = join(p.root, '.paper');
+    const mock = p.sb.mock!;
+    const sectionDraft = join(p.sectionDir(1, 'learning'), 'DRAFT.md');
+    const clean = readFileSync(sectionDraft, 'utf8');
+    writeFileSync(sectionDraft, `${clean}\nThe replication files are kept under ${p.root}/data for review [@lecun2015].\n`);
+    await p.verifyAll();
+    assert.equal((await p.cli(['compile', '--yolo', '--no-smooth'])).status, 0);
+    p.installHumanizerSkill();
+    mock.reset();
+    const r = await p.cli(['done', '--yolo', '--format', 'md']);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /the compiled draft holds text no export may carry — nothing was sent or exported; the reasons are kept in \.paper\/EXPORT\.refused\.md/);
+    assert.match(r.stderr, /export refused: \.paper\/DRAFT\.md \(text\) holds the paper's folder path/);
+    assert.equal(mock.callCount('humanizer'), 0, 'no humanizer request');
+    assert.doesNotMatch(r.stdout, /plagiarism check|honesty check/i, 'refused before the plagiarism check and the detector');
+    assert.ok(existsSync(join(paper, 'EXPORT.refused.md')));
+    assert.equal(existsSync(join(paper, 'export')), false, 'nothing exported');
+    const st = await p.cli(['status']);
+    assert.match(st.stdout, /current: needs attention/);
+    assert.match(st.stdout, /the compiled draft holds text no export may carry/);
+    const bare = await p.cli(['--yolo']);
+    assert.doesNotMatch(bare.stderr, /ran done/, 'no routed done while the compiled draft is unchanged');
+    assert.equal(mock.callCount('humanizer'), 0);
+
+    // The fix: the path goes, the section is re-verified and recompiled; the
+    // record no longer names the compiled draft.
+    writeFileSync(sectionDraft, clean);
+    assert.equal((await p.cli(['verify', '1'])).status, 0);
+    assert.equal((await p.cli(['compile', '--yolo', '--no-smooth'])).status, 0);
+    assert.doesNotMatch((await p.cli(['status'])).stdout, /holds text no export may carry/);
+
+    // A humanizer reply that adds the folder path is rejected as the humanizer's.
+    const draft = readFileSync(join(paper, 'DRAFT.md'), 'utf8');
+    const m0 = maskedSection(draft, 0);
+    mock.reset();
+    // (The temp folder's own name holds "pensmith", which the guard rejects
+    // first; a `.paper` path is the same author rule.)
+    mock.script('humanizer', { text: m0.replace('several levels of abstraction {{cite_0_0}}', 'several levels of abstraction, as the files in .paper/notes show {{cite_0_0}}') });
+    const h = await p.cli(['done', '--yolo', '--format', 'md']);
+    assert.equal(h.status, 4, h.stdout + h.stderr);
+    assert.match(h.stdout, /GATE-04 BLOCKED/);
+    assert.match(h.stdout, /the humanized text holds a \.paper path/);
+    assert.ok(existsSync(join(paper, 'FINAL.rejected.md')));
+    assert.equal(existsSync(join(paper, 'EXPORT.refused.md')), false, 'the clean compiled draft cleared the export refusal');
+  });
+});
+
 test('EXP-14: the Task-transport banner and seam are gone from bin, mcp, hooks and plugin (21-PLAN §7.3)', () => {
   // The committed bundles under plugin/dist are built from these sources and
   // drift-checked by `npm run bundle:check`, so they are not read here.

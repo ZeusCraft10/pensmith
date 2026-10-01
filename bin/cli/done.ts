@@ -70,7 +70,8 @@ import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { sectionRegistryProblem } from '../lib/section-registry.js';
 import { compileRecordProblems, fileSha256, readCompileInputs } from '../lib/compile-inputs.js';
 import { assertCslStyleApproved } from '../lib/style-approvals.js';
-import { assertDoneRecordWritable, clearHumanizeRejection, editedFinalReason, finalMdState, FINAL_REJECTED_FILE, readDoneRecord, writeDoneRecord, writeHumanizeRejection } from '../lib/done-record.js';
+import { assertDoneRecordWritable, clearExportRefusal, clearHumanizeRejection, editedFinalReason, EXPORT_REFUSED_FILE, finalMdState, FINAL_REJECTED_FILE, readDoneRecord, writeDoneRecord, writeExportRefusal, writeHumanizeRejection } from '../lib/done-record.js';
+import { scanExportText, ZeroTraceError } from '../lib/export/zero-trace.js';
 import { loadBibliography, type AcceptedQuote, type ByoQuote, type GateResult, type LoadedBibliography } from '../lib/verify/gate.js';
 import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
 import { recordLastVerified, recordRetractionStatuses, LibraryNotFoundError } from '../lib/library.js';
@@ -808,6 +809,25 @@ export const doneCommand = defineCommand({
       return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
     }
 
+    // Review round 3: the zero-trace author-content rule (a folder or home
+    // path, a `.paper` path, a pensmith marker) is deterministic, so it runs
+    // on the gated text NOW — before the plagiarism queries, the detector and
+    // the paid humanizer — for every format (the exporter scans every written
+    // file again). A refusal is kept for the router (EXPORT.refused.md): a
+    // bare `pensmith` reports attention instead of repeating those steps.
+    if (only === null || only === 'export' || only === 'humanize') {
+      const trace = scanExportText(`${basename(paperDir(paperRoot))}/DRAFT.md`, draftMd, { paperRoot });
+      if (trace.length > 0) {
+        await writeExportRefusal(paperRoot, { compiledDraftSha256: sha(draftMd), reasons: trace.map((f) => `${f.file} ${f.finding}`), at: new Date().toISOString() });
+        writeOut(
+          `pensmith done: the compiled draft holds text no export may carry — nothing was sent or exported; the reasons are kept in ${basename(paperDir(paperRoot))}/${EXPORT_REFUSED_FILE} ` +
+            '(remove it from the section draft, then `pensmith verify N` and `pensmith compile`)\n',
+        );
+        throw new ZeroTraceError(trace, []);
+      }
+      await clearExportRefusal(paperRoot);
+    }
+
     const sectionIds = compiledSectionIds(paperRoot, sections);
     const honestyOpts = { paperRoot, yolo: flags.yolo, noScore: flags.noScore };
 
@@ -1115,6 +1135,7 @@ export const doneCommand = defineCommand({
       exported: true,
     });
     await clearHumanizeRejection(paperRoot);
+    await clearExportRefusal(paperRoot);
 
     writeOut(`pensmith done: exported ${result.outputPath}\n`);
     if (networkMode().dryRun) {
