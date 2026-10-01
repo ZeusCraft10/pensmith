@@ -94,7 +94,7 @@ test(`D-21-12: export text minus rendered citations, notes and bibliography = ga
     const out = readFileSync(result.outputPath, 'utf8');
     const prep = await prepareText(md, ENTRIES, style);
     // Remove the bibliography and the note definitions.
-    let body = out.split(/\n\n## (?:References|Bibliography)\n\n/)[0] as string;
+    let body = out.split(/\n\n## (?:References|Bibliography|Works Cited)\n\n/)[0] as string;
     body = body.split(/\n\n\[\^\d+\]: /)[0] as string;
     // Remove each rendered citation, in order, with the white space before it.
     let rest = body;

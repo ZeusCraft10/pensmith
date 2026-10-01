@@ -48,6 +48,7 @@ import {
 } from '../citation-token.js';
 import { smartText } from './markdown.js';
 import {
+  cslStyleText,
   renderDocumentCitations,
   styleLocaleFacts,
   type CitationItemInput,
@@ -83,7 +84,7 @@ export interface PreparedText {
   readonly notes: ReadonlyArray<readonly RichRun[]>;
   /** The bibliography of exactly the rendered keys, in the style's order (empty when nothing is rendered). */
   readonly bibliography: readonly RenderedBibEntry[];
-  /** The heading over the bibliography: `References`, or `Bibliography` for a note style (D-21-04). */
+  /** The heading over the bibliography: `References`, `Works Cited` for MLA, or `Bibliography` for a note style (D-21-04; referencesHeading). */
   readonly referencesTitle: string;
   readonly hangingIndent: boolean;
   readonly noteStyle: boolean;
@@ -121,6 +122,26 @@ export function toCslItem(item: CitationItem, terms?: ReadonlyArray<readonly [Re
   const loc = terms !== undefined ? splitLocator(item.suffix, terms) : splitLocator(item.suffix);
   if (loc !== null) return { ...base, locator: loc.locator, label: loc.label, ...(loc.rest.trim() ? { suffix: smartText(loc.rest) } : {}) };
   return { ...base, suffix: smartText(item.suffix.startsWith(' ') || item.suffix.startsWith(',') ? item.suffix : ` ${item.suffix}`) };
+}
+
+/**
+ * The heading over the bibliography: `Bibliography` for a note style,
+ * `Works Cited` for MLA (MLA 9 calls its list that — review round 3; a local
+ * `.csl` whose `<id>` or `<title>` names the Modern Language Association
+ * too), else `References`.
+ */
+export function referencesHeading(style: string, noteStyle: boolean): string {
+  if (noteStyle) return 'Bibliography';
+  if (style === 'mla') return 'Works Cited';
+  let csl = '';
+  try {
+    csl = cslStyleText(style);
+  } catch {
+    csl = '';
+  }
+  const info = /<info\b[\s\S]*?<\/info>/.exec(csl)?.[0] ?? '';
+  const named = [/<id>([^<]*)<\/id>/.exec(info)?.[1] ?? '', /<title>([^<]*)<\/title>/.exec(info)?.[1] ?? ''].join(' ');
+  return /modern[- ]language[- ]association|\bMLA\b/i.test(named) ? 'Works Cited' : 'References';
 }
 
 /** True when `runs` open with a superscript (a superscript style's citation, AMA). */
@@ -310,7 +331,7 @@ export async function prepareText(
     placed,
     notes,
     bibliography: doc.bibliography,
-    referencesTitle: doc.noteStyle ? 'Bibliography' : 'References',
+    referencesTitle: referencesHeading(style, doc.noteStyle),
     hangingIndent: doc.hangingIndent,
     noteStyle: doc.noteStyle,
     renderedKeys,

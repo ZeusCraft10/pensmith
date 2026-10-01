@@ -83,7 +83,7 @@ async function builtIn(md: string, style: string): Promise<string> {
   const inputPath = join(root, '.paper', 'DRAFT.md');
   writeFileSync(inputPath, md);
   const { result } = await withCapturedOutput(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style }));
-  return (readFileSync(result.outputPath, 'utf8').split(/\n## References\n/)[0] as string);
+  return (readFileSync(result.outputPath, 'utf8').split(/\n## (?:References|Works Cited)\n/)[0] as string);
 }
 
 function viaPandoc(md: string, style: string): string {

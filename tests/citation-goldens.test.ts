@@ -80,7 +80,7 @@ function linkTargets(md: string): string[] {
 /** The bibliography entries of an export, unnormalised (one per entry, in order). */
 function rawEntries(md: string): string[] {
   const s = md.replace(/\r\n?/g, '\n');
-  const refs = /\n## (References|Bibliography)[^\n]*\n/.exec(s);
+  const refs = /\n## (References|Bibliography|Works Cited)[^\n]*\n/.exec(s);
   if (refs === null) return [];
   const rest = s.slice(refs.index + refs[0].length);
   const end = rest.search(/^\[\^[^\]]+\]: /m);
@@ -94,7 +94,7 @@ function parts(md: string): { body: string; entries: string[]; notes: string[] }
   const firstNote = n.search(noteRe);
   const main = firstNote === -1 ? n : n.slice(0, firstNote).trim();
   const notes = firstNote === -1 ? [] : n.slice(firstNote).split(/\n\n(?=\[\^)/).map((x) => x.trim());
-  const refs = /\n## (References|Bibliography)\n/.exec(main);
+  const refs = /\n## (References|Bibliography|Works Cited)\n/.exec(main);
   const body = refs === null ? main : main.slice(0, refs.index).trim() + `\n## ${refs[1]}`;
   const entries = refs === null ? [] : main.slice(refs.index + refs[0].length).split(/\n\n/).map((x) => x.trim()).filter((x) => x !== '');
   return { body, entries, notes };

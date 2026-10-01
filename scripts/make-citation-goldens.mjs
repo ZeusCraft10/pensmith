@@ -41,6 +41,8 @@ if (!/^pandoc 3\.9\b/.test(version)) {
   process.exit(1);
 }
 const { parseBibEntries, caseProtectItems, cslStyleText, isNoteStyle } = await import(join(ROOT, 'bin', 'lib', 'citations.ts'));
+// The heading the exporter writes over the list (export/render.ts referencesHeading: Works Cited for MLA).
+const { referencesHeading } = await import(join(ROOT, 'bin', 'lib', 'export', 'render.ts'));
 const { entries, problems } = parseBibEntries(readFileSync(join(DIR, 'fixture.bib'), 'utf8'));
 if (problems.length > 0) throw new Error(`fixture.bib: ${JSON.stringify(problems)}`);
 const fixture = readFileSync(join(DIR, 'fixture.md'), 'utf8').replace(/\s+$/u, '');
@@ -48,7 +50,7 @@ const fixture = readFileSync(join(DIR, 'fixture.md'), 'utf8').replace(/\s+$/u, '
 for (const style of GOLDEN_STYLES) {
   const tmp = mkdtempSync(join(os.tmpdir(), 'pensmith-goldens-'));
   try {
-    const title = isNoteStyle(style) ? 'Bibliography' : 'References';
+    const title = referencesHeading(style, isNoteStyle(style));
     writeFileSync(join(tmp, 'input.md'), `${fixture}\n\n## ${title} {.unnumbered}\n\n::: {#refs}\n:::\n`);
     writeFileSync(join(tmp, 'references.json'), JSON.stringify(caseProtectItems(entries), null, 1));
     writeFileSync(join(tmp, 'style.csl'), cslStyleText(style));

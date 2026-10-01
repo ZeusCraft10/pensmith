@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { exportDraft, ExportFormatError, type ExportFormat } from '../bin/lib/exporter.js';
 import { pandocArgs } from '../bin/lib/export/pandoc.js';
+import { referencesHeading } from '../bin/lib/export/render.js';
 import { PensmithError, EXIT_ERROR } from '../bin/lib/exit-codes.js';
 import { withCapturedOutput } from '../bin/lib/output-sink.js';
 
@@ -74,6 +75,22 @@ test('exporter (D-21-02): md is always the built-in writer, even with pandoc ins
   const md = readFileSync(res.outputPath, 'utf8');
   assert.match(md, /A clean draft with no identifying trace \(Xu, 2020\)\./);
   assert.match(md, /\n## References\n\nXu, W\. \(2020\)\. X\. \*J\*\./);
+});
+
+// Review round 3: MLA 9 calls its list "Works Cited" — every writer, both paths.
+test('review r3: an MLA export titles its list "Works Cited" (md, LaTeX, docx; the pandoc path gets the same title); other styles keep theirs', async () => {
+  const { root, inputPath } = seedPaper('mla');
+  const md = readFileSync((await captured(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style: 'mla' }))).value.outputPath, 'utf8');
+  assert.match(md, /\n## Works Cited\n\nXu, Wei\./);
+  assert.doesNotMatch(md, /## References/);
+  const tex = readFileSync((await captured(() => exportDraft({ inputPath, format: 'latex', paperRoot: root, pandocPresent: false, style: 'mla' }))).value.outputPath, 'utf8');
+  assert.match(tex, /\\section\*\{Works Cited\}/);
+  const docx = (await captured(() => exportDraft({ inputPath, format: 'docx', paperRoot: root, pandocPresent: false, style: 'mla' }))).value.outputPath;
+  const xml = await (await JSZip.loadAsync(readFileSync(docx))).file('word/document.xml')!.async('string');
+  assert.match(xml, />Works Cited</);
+  assert.equal(referencesHeading('mla', false), 'Works Cited');
+  assert.equal(referencesHeading('apa', false), 'References');
+  assert.equal(referencesHeading('chicago-notes-bib', true), 'Bibliography');
 });
 
 test('exporter (D-21-02): an unknown format is an ExportFormatError (EXIT_ERROR) and writes nothing', async () => {
