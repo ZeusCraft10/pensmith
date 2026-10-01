@@ -69,7 +69,7 @@ test('VRFY-26 (built CLI, no humanizer): done leaves FINAL.md = the text it expo
   assert.equal(d.status, EXIT_OK, `${d.stdout}\n${d.stderr}`);
   assert.equal(readFileSync(paperFile(p, 'FINAL.md'), 'utf8'), readFileSync(paperFile(p, 'DRAFT.md'), 'utf8'), 'FINAL.md is the compiled draft done judged');
   const record = JSON.parse(readFileSync(paperFile(p, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
-  assert.equal(record['$schemaVersion'], 1);
+  assert.equal(record['$schemaVersion'], 2); // DONE-RECORD v2 (Phase 21, GRND-11): a draft record is v1's fields under v2
   assert.equal(record['compiled_draft_sha256'], sha(paperFile(p, 'DRAFT.md')));
   assert.equal(record['final_sha256'], sha(paperFile(p, 'FINAL.md')));
   assert.equal(record['humanized'], false);

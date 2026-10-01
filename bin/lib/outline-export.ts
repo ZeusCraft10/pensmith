@@ -398,13 +398,17 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
   }
   await atomicWriteFile(annotatedPath, annotated);
   const exportDir = join(dir, 'export');
-  const made = [annotatedExport.outputPath, outlineExport.outputPath].map((p) => `export/${basename(p)}`);
+  const made = [outlineExport.outputPath, annotatedExport.outputPath].map((p) => `export/${basename(p)}`);
   const outlineSha = createHash('sha256').update(outlineBytes).digest('hex');
   const bibSha = fileSha256(join(dir, 'CITATIONS.bib'));
   const annotatedSha = sha256(annotated);
-  // The same inputs exported before in another format: keep those files listed too.
+  // The same inputs exported before in another format: keep those files
+  // listed too. "Same" is the bibliography this run's gate judged (the one the
+  // last done left) — this run's own last_verified stamps never make the
+  // earlier exports stale.
   const prior = state.record;
-  const same = prior !== null && prior.outline_sha256 === outlineSha && prior.bib_sha256 === bibSha && prior.annotated_sha256 === annotatedSha;
+  const judgedBibSha = gate.bib.text !== undefined ? sha256(gate.bib.text) : '';
+  const same = prior !== null && prior.outline_sha256 === outlineSha && prior.bib_sha256 === judgedBibSha && prior.annotated_sha256 === annotatedSha;
   const exports = [...new Set([...(same ? prior.outline_exports : []), ...made])];
   await writeOutlineDoneRecord(paperRoot, { doneAt: new Date().toISOString(), outlineSha256: outlineSha, bibSha256: bibSha, annotatedSha256: annotatedSha, exports });
 
@@ -412,5 +416,5 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
   if (networkMode().dryRun) {
     out(`pensmith done: this is a dry-run export (synthetic sources) in ${exportDir}; the real paper was not touched\n`);
   }
-  return { ok: true, outputs: [annotatedPath, annotatedExport.outputPath, outlineExport.outputPath] };
+  return { ok: true, outputs: [annotatedPath, outlineExport.outputPath, annotatedExport.outputPath] };
 }

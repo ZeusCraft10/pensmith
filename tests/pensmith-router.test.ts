@@ -820,19 +820,73 @@ test('review round 3 (GRND-08): an OUTLINE.md table with one malformed row is at
     assert.equal((await resolveNextAction(fresh)).reason, 'attention', 'no section registered yet: still never an `outline` that would overwrite it');
   });
 
-test('review round 3 (GRND-02): stopAfterOutline halts at status (done) once the outline is approved — no section is planned',
+test('GRND-11 (D-21-25 amends GRND-02): an approved outline-only paper routes to done until its outline record is current, then status (done) naming the deliverables — never a section',
   { skip: !built }, async () => {
     const mod = (await import(ROUTER_MOD)) as {
       resolveNextAction: (root: string, opts?: { stopAfterOutline?: boolean }) => Promise<RouterDecision>;
+      isOutlineOnlyDoneDetail: (detail: string) => boolean;
     };
+    const record = (await import('../bin/lib/done-record.js')) as typeof import('../bin/lib/done-record.js');
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
     writePaperFile(root, 'OUTLINE.md', outlineTable([[1, 'intro', 'intro']]));
+    writePaperFile(root, 'CITATIONS.bib', '@article{a2020,\n  title = {A},\n  year = {2020},\n  doi = {10.5555/a},\n}\n');
     writeStubPlan(root, 1, 'intro');
-    assert.equal((await mod.resolveNextAction(root)).verb, 'plan');
-    const stop = await mod.resolveNextAction(root, { stopAfterOutline: true });
-    assert.equal(stop.verb, 'status');
-    assert.equal(stop.reason, 'done');
-    assert.match(stop.detail ?? '', /^outline only: the approved outline is \.paper\/OUTLINE\.md .* mode = "draft" .*`pensmith plan 1`/);
+    assert.equal((await mod.resolveNextAction(root)).verb, 'plan', 'a draft-mode paper plans its first section');
+    assert.equal((await mod.resolveNextAction(root, { stopAfterOutline: true })).verb, 'done', 'no outline record yet: done exports the outline');
+
+    // done's outputs and record: the paper is complete, the deliverables named.
+    const sha = (name: string): string => createHash('sha256').update(readFileSync(join(root, '.paper', name))).digest('hex');
+    writePaperFile(root, 'ANNOTATED-BIBLIOGRAPHY.md', '# Intro — Annotated Bibliography\n');
+    mkdirSync(join(root, '.paper', 'export'), { recursive: true });
+    writePaperFile(root, 'export/OUTLINE.md', '# Intro\n');
+    writePaperFile(root, 'export/ANNOTATED-BIBLIOGRAPHY.md', '# Intro\n');
+    await record.writeOutlineDoneRecord(root, {
+      doneAt: new Date().toISOString(),
+      outlineSha256: sha('OUTLINE.md'),
+      bibSha256: sha('CITATIONS.bib'),
+      annotatedSha256: sha('ANNOTATED-BIBLIOGRAPHY.md'),
+      exports: ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md'],
+    });
+    const done = await mod.resolveNextAction(root, { stopAfterOutline: true });
+    assert.equal(done.verb, 'status');
+    assert.equal(done.reason, 'done');
+    assert.equal(
+      done.detail,
+      'outline only — complete: export/OUTLINE.md and export/ANNOTATED-BIBLIOGRAPHY.md — to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)',
+    );
+    assert.equal(mod.isOutlineOnlyDoneDetail(done.detail ?? ''), true, 'the detail is built from validated names only');
+    assert.equal(mod.isOutlineOnlyDoneDetail('outline only — complete: export/../../secret and x'), false);
+    assert.equal((await mod.resolveNextAction(root)).verb, 'plan', 'the record never changes draft-mode routing');
+
+    // The bibliography changes (a source added): done again.
+    writePaperFile(root, 'CITATIONS.bib', readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8') + '\n@book{b2021,\n  title = {B},\n  year = {2021},\n  isbn = {9780226458083},\n}\n');
+    assert.equal((await mod.resolveNextAction(root, { stopAfterOutline: true })).verb, 'done', 'a changed bibliography is exported again');
+    // An export deleted: done again.
+    await record.writeOutlineDoneRecord(root, {
+      doneAt: new Date().toISOString(),
+      outlineSha256: sha('OUTLINE.md'),
+      bibSha256: sha('CITATIONS.bib'),
+      annotatedSha256: sha('ANNOTATED-BIBLIOGRAPHY.md'),
+      exports: ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md'],
+    });
+    assert.equal((await mod.resolveNextAction(root, { stopAfterOutline: true })).verb, 'status');
+    rmSync(join(root, '.paper', 'export', 'OUTLINE.md'));
+    assert.equal((await mod.resolveNextAction(root, { stopAfterOutline: true })).verb, 'done', 'a missing export is made again');
+    writePaperFile(root, 'export/OUTLINE.md', '# Intro\n');
+
+    // An annotated bibliography done did not write: attention naming the remedy.
+    writePaperFile(root, 'ANNOTATED-BIBLIOGRAPHY.md', '# Intro — Annotated Bibliography\n\nMy own note.\n');
+    const edited = await mod.resolveNextAction(root, { stopAfterOutline: true });
+    assert.equal(edited.reason, 'attention');
+    assert.match(edited.detail ?? '', /^\.paper\/ANNOTATED-BIBLIOGRAPHY\.md is not the text `pensmith done` wrote .* move .* out of the paper folder/);
+
+    // A record a newer pensmith wrote: attention, never read as this version's.
+    writePaperFile(root, 'DONE-RECORD.json', JSON.stringify({ $schemaVersion: 99, mode: 'outline' }));
+    rmSync(join(root, '.paper', 'ANNOTATED-BIBLIOGRAPHY.md'));
+    const newer = await mod.resolveNextAction(root, { stopAfterOutline: true });
+    assert.equal(newer.reason, 'attention');
+    assert.match(newer.detail ?? '', /DONE-RECORD\.json was written by a newer pensmith \(record v99/);
+
     const early = freshRoot();
     writeState(early, []);
     writePaperFile(early, 'RESEARCH.md');
