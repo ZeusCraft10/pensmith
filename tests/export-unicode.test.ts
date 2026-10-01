@@ -24,7 +24,15 @@ import { withCapturedOutput } from '../bin/lib/output-sink.js';
 import { extractPdfText } from '../bin/lib/pdf-text.js';
 import { detectPdfEngine, pandocFailure, pdfEngineHeader } from '../bin/lib/export/pandoc.js';
 import { escapeLatex, latexCharFor, pdfTexUnprintable, writeLatex } from '../bin/lib/export/latex-writer.js';
-import { drawableText, pdfUnprintable } from '../bin/lib/export/glyphs.js';
+import { drawableText, pdfFontHas } from '../bin/lib/export/glyphs.js';
+
+/** The characters of `chars` the shipped PDF font can neither show nor fold (what the built-in PDF prints as `?`). */
+function pdfUnprintable(chars: Iterable<string>): string[] {
+  const has = pdfFontHas();
+  const missing = new Set<string>();
+  for (const ch of chars) drawableText(ch, has, missing);
+  return [...missing].sort();
+}
 import { buildExportDocument } from '../bin/lib/export/document.js';
 import { prepareText } from '../bin/lib/export/render.js';
 import { parseBibEntries } from '../bin/lib/citations.js';

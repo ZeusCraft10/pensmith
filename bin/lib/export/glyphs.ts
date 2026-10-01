@@ -171,14 +171,6 @@ export function documentChars(doc: ExportDocument): Set<string> {
   return new Set([...parts.join('')]);
 }
 
-/** The characters of `chars` the shipped PDF font can neither show nor fold (what a PDF prints as `?`). */
-export function pdfUnprintable(chars: Iterable<string>): string[] {
-  const has = pdfFontHas();
-  const missing = new Set<string>();
-  for (const ch of chars) drawableText(ch, has, missing);
-  return [...missing].sort();
-}
-
 /** The export note for characters printed as `?`: `<n> character(s) <what>: 注 (U+6CE8), … — <remedy>`. */
 export function unprintableNote(chars: readonly string[], what: string, remedy: string): string {
   const shown = chars.slice(0, 12).map((c) => `${c} (U+${(c.codePointAt(0) as number).toString(16).toUpperCase().padStart(4, '0')})`).join(', ');

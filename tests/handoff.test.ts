@@ -37,7 +37,7 @@ import {
 } from '../bin/lib/handoff.js';
 import { HandoffV1Schema } from '../bin/lib/schemas/handoff.js';
 import { migrate } from '../bin/lib/migrations/handoff/v1_to_v2.js';
-import { OUTLINE_ONLY_DONE, type RouterDecision } from '../bin/lib/router.js';
+import { outlineOnlyDoneDetail, type RouterDecision } from '../bin/lib/router.js';
 import { CLI_BIN, runCli, sandbox } from './helpers/paper-cli-harness.js';
 import { seedThreeSectionPaper } from './helpers/status-fixture.js';
 
@@ -166,7 +166,7 @@ test('HANDOFF v2: nextActionOf({ quoteDetail: false }) never quotes the router\'
   );
   // The router's own outline-only end state is a constant, not file text: still quoted.
   assert.match(
-    nextActionOf({ verb: 'status', reason: 'done', detail: OUTLINE_ONLY_DONE }, { quoteDetail: false }),
+    nextActionOf({ verb: 'status', reason: 'done', detail: outlineOnlyDoneDetail(['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md', 'export/OUTLINE.docx', 'export/ANNOTATED-BIBLIOGRAPHY.docx']) }, { quoteDetail: false }),
     /^Nothing more is routed: outline only/,
   );
   // Every other decision reads the same either way.

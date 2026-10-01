@@ -25,7 +25,6 @@ import {
   finalMdState,
   readDoneRecord,
   readDoneRecordFile,
-  readOutlineDoneRecord,
   writeDoneRecord,
   writeOutlineDoneRecord,
 } from '../bin/lib/done-record.js';
@@ -33,8 +32,14 @@ import { migrate } from '../bin/lib/migrations/done-record/v1_to_v2.js';
 import { migrate as migrateV3 } from '../bin/lib/migrations/done-record/v2_to_v3.js';
 import { migrate as migrateV4 } from '../bin/lib/migrations/done-record/v3_to_v4.js';
 import { outlineDoneState } from '../bin/lib/done-record.js';
-import { OutlineDoneRecordSchema } from '../bin/lib/schemas/done-record.js';
+import { OutlineDoneRecordSchema, type OutlineDoneRecord } from '../bin/lib/schemas/done-record.js';
 import { PensmithError } from '../bin/lib/exit-codes.js';
+
+/** The outline-mode record, or null (readDoneRecordFile's `outline` kind). */
+function outlineRecordOf(root: string): OutlineDoneRecord | null {
+  const read = readDoneRecordFile(root);
+  return read.kind === 'outline' ? read.record : null;
+}
 
 const sha = (s: string): string => createHash('sha256').update(s).digest('hex');
 
@@ -52,7 +57,7 @@ test('DONE-RECORD v1 → v4: a v1 record reads as an exported draft record; the 
   const read = readDoneRecordFile(root);
   assert.equal(read.kind, 'draft');
   assert.deepEqual(readDoneRecord(root), { ...V1, $schemaVersion: 4, exported: true });
-  assert.equal(readOutlineDoneRecord(root), null);
+  assert.equal(outlineRecordOf(root), null);
   const input = { ...V1 };
   const once = migrate(input);
   assert.deepEqual(input, V1, 'the input is not mutated');
@@ -73,7 +78,7 @@ test('DONE-RECORD v2 → v3: a v2 draft record gains exported: true, a v2 outlin
   assert.deepEqual(migrateV3(once), once);
   const root = paper();
   writeFileSync(join(root, '.paper', 'DONE-RECORD.json'), JSON.stringify(v2outline));
-  assert.equal(readOutlineDoneRecord(root)?.$schemaVersion, 4);
+  assert.equal(outlineRecordOf(root)?.$schemaVersion, 4);
 });
 
 // Review round 2: v4 adds the optional previous_final_sha256 (`pensmith
@@ -134,7 +139,7 @@ test('DONE-RECORD v4: draft-mode done writes v4 with no mode; an outline record 
     annotatedSha256: sha('annotated'),
     exports: ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md'],
   });
-  const outline = readOutlineDoneRecord(root);
+  const outline = outlineRecordOf(root);
   assert.equal(outline?.mode, 'outline');
   assert.equal(outline?.outline_sha256, sha('outline'));
   assert.deepEqual(outline?.outline_exports, ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md']);

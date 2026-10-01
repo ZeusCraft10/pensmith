@@ -187,7 +187,9 @@ Notes on individual checks:
 | `pandoc -f docx -t plain` reads it back (title, citations, references) | PASS | Citations Across Fields / / Introduction |
 | no --format docx run ends with only a .md in export/ | PASS |  |
 
-### EXP-09 — 6/6 checks pass
+### EXP-09 — 6/6 local checks pass; the CI half is deferred to HARDEN-04
+
+*Review round 2:* the acceptance bullet "`--format latex` output compiles with tectonic (or pdflatex) in the CI export job" is **not met in Phase 21**: `.github/workflows/ci.yml` installs pandoc 3.9 but no TeX engine, so `tests/latex-standalone.test.ts` skips its compile assertions on CI (it fails instead under `PENSMITH_REQUIRE_TEX=1`). Installing tectonic on the three CI legs is HARDEN-04's required export job (Phase 26), whose acceptance already names "the LaTeX output compiles with tectonic"; it also has to warm tectonic's bundle cache, because the exporter runs tectonic `--only-cached` while sources are offline (every test run). The checks below are local evidence (tectonic 0.15 and pdflatex in this container) and are not counted as the CI criterion.
 
 | Check | Result | Evidence |
 |---|---|---|

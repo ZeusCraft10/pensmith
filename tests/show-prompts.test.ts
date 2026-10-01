@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { fetch as httpFetch, _resetBucketsForTest } from '../bin/lib/http.js';
 import { setMirrorPromptsToStderr } from '../bin/lib/session-log.js';
 import { loadCassetteFile } from '../bin/lib/http-mock.js';
-import { scoreHonestyWithOptions } from '../bin/lib/honesty.js';
+import { measureHonesty } from '../bin/lib/honesty.js';
 import { runPlagiarism } from '../bin/lib/plagiarism.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import { startHttpServer, withLocalHosts } from './helpers/local-servers/transport.js';
@@ -149,8 +149,8 @@ test('RUN-16: GPTZero — the POST is mirrored with a length + 200-char preview;
   process.chdir(mkdtempSync(join(tmpdir(), 'pensmith-show-prompts-')));
   try {
     await withMirror(async (c) => {
-      const score = await liveLane(() => scoreHonestyWithOptions(text, { consentGranted: true }));
-      assert.ok(score, 'the live lane scores against the MockAgent');
+      const score = await liveLane(() => measureHonesty(text, { consentGranted: true }));
+      assert.equal(score.kind, 'score', 'the live lane scores against the MockAgent');
       const [head, preview, ...rest] = c.lines;
       assert.equal(head, '[show-prompts] POST https://api.gptzero.me/v2/predict/text');
       const m = /^\[show-prompts\] body: (\d+) bytes: (.*)$/.exec(preview ?? '');

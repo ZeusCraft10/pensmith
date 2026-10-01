@@ -435,9 +435,6 @@ export function outlineOnlyDoneDetail(exports: readonly string[]): string {
   return `${OUTLINE_ONLY_PREFIX}${listed(exports)}${OUTLINE_ONLY_SUFFIX}`;
 }
 
-/** The detail of an outline-only paper exported as Markdown (what a routed outline-mode done exports). */
-export const OUTLINE_ONLY_DONE = outlineOnlyDoneDetail(['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md']);
-
 /**
  * True for a detail outlineOnlyDoneDetail built — its fixed words around
  * validated export names only — so the SessionStart context may quote it

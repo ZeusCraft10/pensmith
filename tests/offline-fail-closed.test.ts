@@ -37,7 +37,7 @@ const { runCompile } = await import('../bin/lib/compile.js');
 const { runExportBlockingGate, recomputeExportGate, doneSections } = await import('../bin/cli/done.js');
 const { computeDraftHash } = await import('../bin/lib/draft-hash.js');
 const { runPlagiarism } = await import('../bin/lib/plagiarism.js');
-const { scoreHonestyWithOptions } = await import('../bin/lib/honesty.js');
+const { measureHonesty, honestyLine } = await import('../bin/lib/honesty.js');
 const { runResearchPassWithLog } = await import('./helpers/research-pass.js');
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
@@ -368,12 +368,10 @@ test('RUN-03: offline honesty with GPTZERO_API_KEY set reports "score unavailabl
   const saved = process.env['GPTZERO_API_KEY'];
   process.env['GPTZERO_API_KEY'] = 'gz-sentinel-offline-fail-closed';
   try {
-    const { value, out, err } = await captureStreams(() =>
-      scoreHonestyWithOptions('Some paper text that would be scored.', { yolo: true }),
-    );
-    assert.equal(value, null, 'no score offline');
-    assert.match(out, /GPTZero honesty score unavailable \(offline\) — no text was sent\./);
-    assert.ok(!/\d+(\.\d+)?%/.test(out + err), 'no percentage is ever printed offline');
+    const { value, out, err } = await captureStreams(() => measureHonesty('Some paper text that would be scored.', { yolo: true }));
+    assert.deepEqual([value.kind, value.kind === 'score' ? null : value.reason], ['unavailable', 'offline'], 'no score offline');
+    assert.equal(honestyLine(value), 'unavailable (offline)');
+    assert.ok(!/\d+(\.\d+)?%/.test(out + err + honestyLine(value)), 'no percentage is ever printed offline');
     assert.ok(!(out + err).includes('gz-sentinel-offline-fail-closed'));
   } finally {
     if (saved === undefined) delete process.env['GPTZERO_API_KEY'];

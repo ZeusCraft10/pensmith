@@ -129,12 +129,6 @@ export function readDoneRecord(paperRoot: string): DoneRecord | null {
   return read.kind === 'draft' ? read.record : null;
 }
 
-/** The outline-mode record (GRND-11), or null. Never throws. */
-export function readOutlineDoneRecord(paperRoot: string): OutlineDoneRecord | null {
-  const read = readDoneRecordFile(paperRoot);
-  return read.kind === 'outline' ? read.record : null;
-}
-
 /** The refusal of a record a newer pensmith wrote (never overwritten). */
 export function newerDoneRecordReason(paperRoot: string, version: number): string {
   return (

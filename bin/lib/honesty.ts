@@ -205,18 +205,6 @@ const BACKENDS: Readonly<Record<HonestyBackendName, BackendSpec>> = Object.freez
   },
 });
 
-/** The backend's display name (`GPTZero`, `Originality.ai`, `Sapling`). */
-export function backendLabel(name: HonestyBackendName): string {
-  return BACKENDS[name].label;
-}
-
-/** The key variable each backend reads (doctor reports their presence only). */
-export const DETECTOR_KEY_VARS: Readonly<Record<HonestyBackendName, string>> = Object.freeze({
-  gptzero: BACKENDS.gptzero.keyEnv,
-  originality: BACKENDS.originality.keyEnv,
-  sapling: BACKENDS.sapling.keyEnv,
-});
-
 function classify(ai: number): HonestyClassification {
   if (ai >= 0.8) return 'AI_ONLY';
   if (ai <= 0.2) return 'HUMAN_ONLY';
@@ -453,27 +441,3 @@ export function renderHonestySection(before: HonestyOutcome, after: HonestyOutco
     honestyFramingNote(),
   ].join('\n');
 }
-
-// ============================================================
-//   Compatibility surface (DONE-04/05 callers)
-// ============================================================
-
-/** One stdout line for an absent score (the pre-Phase-21 wording, kept for its callers). */
-function announceAbsent(o: HonestyOutcome): void {
-  if (o.kind === 'score') return;
-  const label = BACKENDS[o.backend].label;
-  if (o.kind === 'unavailable') out(`pensmith: ${label} honesty score unavailable (${o.reason}) — no text was sent.\n`);
-  else out(`pensmith: ${label} honesty score skipped (${o.reason}).\n`);
-}
-
-/**
- * Score `text` and return the bare score, or null with one stdout line saying
- * why (the DONE-04 surface; done uses measureHonesty).
- */
-export async function scoreHonestyWithOptions(text: string, opts: HonestyOptions = {}): Promise<HonestyScore | null> {
-  const o = await measureHonesty(text, opts);
-  if (o.kind === 'score') return o.score;
-  announceAbsent(o);
-  return null;
-}
-

@@ -81649,7 +81649,9 @@ var init_gates = __esm({
       // VRFY-20 / S-04: a verification decision — --yolo never accepts a quote; without a terminal the section stays unverifiable (verify's own exit, 4).
       { id: "quote-accept", label: "Accept these quotes whose source text cannot be checked?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "VRFY-20", summary: "accepting a quote whose source text cannot be checked" },
       // VRFY-22: done's confirmation when Pass 2 judged claims UNSUPPORTED; the decision is recorded in .paper/VERIFICATION.md.
-      { id: "unsupported-claims", label: "Export the paper with these UNSUPPORTED claims?", yolo: "skip", yoloChoice: "export and record them as auto-accepted", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "VRFY-22", summary: "the UNSUPPORTED-claims confirmation" }
+      { id: "unsupported-claims", label: "Export the paper with these UNSUPPORTED claims?", yolo: "skip", yoloChoice: "export and record them as auto-accepted", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "VRFY-22", summary: "the UNSUPPORTED-claims confirmation" },
+      // EXP-03 (review round 2): a .csl file prints its own text in every citation and reference of the export — a paper's config.toml can name one, only the user can approve it (style-approvals.ts).
+      { id: "csl-style", label: "Use the citation style file this paper's config.toml names? Its text is printed in every citation and reference of the export.", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "EXP-03", summary: "using a citation style file a paper's config names" }
     ]);
     __name(gateDef, "gateDef");
     promptsDisabled = false;
@@ -82428,13 +82430,25 @@ var init_v2_to_v35 = __esm({
   }
 });
 
+// bin/lib/migrations/done-record/v3_to_v4.ts
+function migrate17(input2) {
+  const src = typeof input2 === "object" && input2 !== null && !Array.isArray(input2) ? input2 : {};
+  return { ...src, $schemaVersion: 4 };
+}
+var init_v3_to_v42 = __esm({
+  "bin/lib/migrations/done-record/v3_to_v4.ts"() {
+    "use strict";
+    __name(migrate17, "migrate");
+  }
+});
+
 // bin/lib/schemas/done-record.ts
 var DONE_RECORD_SCHEMA_VERSION, SHA2562, OUTLINE_EXPORT_PATH, DoneRecordSchema, OutlineDoneRecordSchema, DoneRecordFileSchema;
 var init_done_record = __esm({
   "bin/lib/schemas/done-record.ts"() {
     "use strict";
     init_zod();
-    DONE_RECORD_SCHEMA_VERSION = 3;
+    DONE_RECORD_SCHEMA_VERSION = 4;
     SHA2562 = /^[0-9a-f]{64}$/;
     OUTLINE_EXPORT_PATH = /^export\/(?:OUTLINE|ANNOTATED-BIBLIOGRAPHY)(?:\.dry-run)?\.(?:md|docx|pdf|tex)$/;
     DoneRecordSchema = external_exports.object({
@@ -82449,7 +82463,9 @@ var init_done_record = __esm({
       /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
       humanized: external_exports.boolean(),
       /** True when an export rendered that FINAL.md; false when `pensmith humanize` wrote it and nothing exported it yet (v3). */
-      exported: external_exports.boolean()
+      exported: external_exports.boolean(),
+      /** sha256 of the FINAL.md text this record replaces, written before FINAL.md by `pensmith humanize` (v4). */
+      previous_final_sha256: external_exports.string().regex(SHA2562).optional()
     }).strict();
     OutlineDoneRecordSchema = external_exports.object({
       $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
@@ -82492,6 +82508,7 @@ function readDoneRecordFile(paperRoot) {
   if (typeof version2 === "number" && Number.isInteger(version2) && version2 > DONE_RECORD_SCHEMA_VERSION) return { kind: "newer", version: version2 };
   if (version2 === 1) value = migrate15(value);
   if (version2 === 1 || version2 === 2) value = migrate16(value);
+  if (version2 === 1 || version2 === 2 || version2 === 3) value = migrate17(value);
   const parsed = DoneRecordFileSchema.safeParse(value);
   if (!parsed.success) return { kind: "invalid" };
   return parsed.data.mode === "outline" ? { kind: "outline", record: parsed.data } : { kind: "draft", record: parsed.data };
@@ -82523,6 +82540,7 @@ function finalMdState(paperRoot) {
     if (record2.compiled_draft_sha256 !== draftSha) return "stale";
     return record2.exported ? "current" : "unexported";
   }
+  if (record2 !== null && record2.previous_final_sha256 === finalSha) return "stale";
   if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? "current" : "stale";
   return finalSha === draftSha ? "stale" : "edited";
 }
@@ -82533,6 +82551,21 @@ function unexportedFinalReason(paperRoot) {
 function editedFinalReason(paperRoot) {
   const dir = basename2(paperDir(paperRoot));
   return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
+}
+function finalRejectedPath(paperRoot) {
+  return join9(paperDir(paperRoot), FINAL_REJECTED_FILE);
+}
+function humanizeRejectionReason(paperRoot) {
+  let text4;
+  try {
+    text4 = readFileSync12(finalRejectedPath(paperRoot), "utf8");
+  } catch {
+    return null;
+  }
+  const recorded2 = /^Compiled draft: sha256 ([0-9a-f]{64})\s*$/mu.exec(text4)?.[1];
+  if (recorded2 === void 0 || recorded2 !== fileSha256(join9(paperDir(paperRoot), "DRAFT.md"))) return null;
+  const dir = basename2(paperDir(paperRoot));
+  return `the humanizer's rewrite of the compiled draft was rejected (the reasons are in ${dir}/${FINAL_REJECTED_FILE}) \u2014 \`pensmith done --raw\` exports the verified draft without the humanizer; \`pensmith done\` asks the humanizer again`;
 }
 function annotatedBibliographyPath(paperRoot) {
   return join9(paperDir(paperRoot), ANNOTATED_BIBLIOGRAPHY_FILE);
@@ -82557,7 +82590,7 @@ function editedAnnotatedReason(paperRoot) {
   const dir = basename2(paperDir(paperRoot));
   return `${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} is not the text \`pensmith done\` wrote (it was edited or written by hand) \u2014 done never replaces your file: move ${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} out of the paper folder (your copy keeps the edit) and run \`pensmith done\``;
 }
-var DONE_RECORD_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
+var DONE_RECORD_FILE, FINAL_REJECTED_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
 var init_done_record2 = __esm({
   "bin/lib/done-record.ts"() {
     "use strict";
@@ -82567,6 +82600,7 @@ var init_done_record2 = __esm({
     init_paths();
     init_v1_to_v27();
     init_v2_to_v35();
+    init_v3_to_v42();
     init_done_record();
     DONE_RECORD_FILE = "DONE-RECORD.json";
     __name(doneRecordPath, "doneRecordPath");
@@ -82577,6 +82611,9 @@ var init_done_record2 = __esm({
     __name(finalMdState, "finalMdState");
     __name(unexportedFinalReason, "unexportedFinalReason");
     __name(editedFinalReason, "editedFinalReason");
+    FINAL_REJECTED_FILE = "FINAL.rejected.md";
+    __name(finalRejectedPath, "finalRejectedPath");
+    __name(humanizeRejectionReason, "humanizeRejectionReason");
     ANNOTATED_BIBLIOGRAPHY_FILE = "ANNOTATED-BIBLIOGRAPHY.md";
     __name(annotatedBibliographyPath, "annotatedBibliographyPath");
     __name(outlineDoneState, "outlineDoneState");
@@ -83415,7 +83452,10 @@ async function resolveNextAction(paperRoot, opts = {}) {
     if (finalState === "edited") return { verb: "status", reason: "attention", detail: editedFinalReason(paperRoot) };
     if (finalState === "unexported") return { verb: "status", reason: "attention", detail: unexportedFinalReason(paperRoot) };
     if (finalState !== "current") {
-      return record2 === null ? { verb: "compile" } : { verb: "done" };
+      if (record2 === null) return { verb: "compile" };
+      const rejected = humanizeRejectionReason(paperRoot);
+      if (rejected !== null) return { verb: "status", reason: "attention", detail: rejected };
+      return { verb: "done" };
     }
     return { verb: "status", reason: "done" };
   } catch (e2) {
@@ -83426,7 +83466,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
     return { verb: "status", reason: "attention" };
   }
 }
-var OUTLINE_ONLY_PREFIX, OUTLINE_ONLY_SUFFIX, OUTLINE_ONLY_DONE;
+var OUTLINE_ONLY_PREFIX, OUTLINE_ONLY_SUFFIX;
 var init_router = __esm({
   "bin/lib/router.ts"() {
     "use strict";
@@ -83457,7 +83497,6 @@ var init_router = __esm({
     OUTLINE_ONLY_SUFFIX = ' \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
     __name(listed, "listed");
     __name(outlineOnlyDoneDetail, "outlineOnlyDoneDetail");
-    OUTLINE_ONLY_DONE = outlineOnlyDoneDetail(["export/OUTLINE.md", "export/ANNOTATED-BIBLIOGRAPHY.md"]);
     __name(outlineModeDecision, "outlineModeDecision");
     __name(resolveNextAction, "resolveNextAction");
   }
@@ -84270,8 +84309,8 @@ var init_prompt_loader = __esm({
       // D-12 LOCKED (re-pinned Phase 18 GRND-07/RUN-26: fixed instructions, data blocks brief/existing_sections/sources)
       "section-planner": "d10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c",
       // D-12 LOCKED (re-pinned Phase 18 GRND-13/RUN-26: fixed instructions, data blocks brief/section/upstream/sources)
-      "section-drafter": "0600aed58e85b9182a5c3ea0e7e45a691d41a8e21797ed00559e7b56b08999cc",
-      // D-12 LOCKED (re-pinned Phase 18 FEED-02/RUN-26: fixed instructions, data blocks brief/section/voice/style_profile/plan/sources)
+      "section-drafter": "b3ed7af75d12b37d4dc53de26e3d6397f69765c548a4f88b2f71a75625ab6327",
+      // D-12 LOCKED (re-pinned Phase 18 FEED-02/RUN-26: fixed instructions, data blocks brief/section/voice/style_profile/plan/sources; Phase 21 review round 2: subheadings start at ###)
       "pass1-fuzzy-judge": "80011728b81766a6bad092a6fae2868cd7e75515344c5e8ecb38b3cfac14498d",
       // D-12 LOCKED + D-13 DORMANT in Phase 3
       "pass3-quote-checker": "19ef3929f85b0f20c4b0f12cea535cbb7c2e28a342c883f9af6737fd7e896421",

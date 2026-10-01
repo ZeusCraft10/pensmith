@@ -19368,7 +19368,9 @@ var init_gates = __esm({
       // VRFY-20 / S-04: a verification decision — --yolo never accepts a quote; without a terminal the section stays unverifiable (verify's own exit, 4).
       { id: "quote-accept", label: "Accept these quotes whose source text cannot be checked?", yolo: "never", yoloChoice: "", nonInteractive: "skip", nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: "VRFY-20", summary: "accepting a quote whose source text cannot be checked" },
       // VRFY-22: done's confirmation when Pass 2 judged claims UNSUPPORTED; the decision is recorded in .paper/VERIFICATION.md.
-      { id: "unsupported-claims", label: "Export the paper with these UNSUPPORTED claims?", yolo: "skip", yoloChoice: "export and record them as auto-accepted", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "VRFY-22", summary: "the UNSUPPORTED-claims confirmation" }
+      { id: "unsupported-claims", label: "Export the paper with these UNSUPPORTED claims?", yolo: "skip", yoloChoice: "export and record them as auto-accepted", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "VRFY-22", summary: "the UNSUPPORTED-claims confirmation" },
+      // EXP-03 (review round 2): a .csl file prints its own text in every citation and reference of the export — a paper's config.toml can name one, only the user can approve it (style-approvals.ts).
+      { id: "csl-style", label: "Use the citation style file this paper's config.toml names? Its text is printed in every citation and reference of the export.", yolo: "never", yoloChoice: "", nonInteractive: "refuse", nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: "EXP-03", summary: "using a citation style file a paper's config names" }
     ]);
   }
 });
@@ -19523,13 +19525,25 @@ var init_v2_to_v34 = __esm({
   }
 });
 
+// bin/lib/migrations/done-record/v3_to_v4.ts
+function migrate16(input) {
+  const src = typeof input === "object" && input !== null && !Array.isArray(input) ? input : {};
+  return { ...src, $schemaVersion: 4 };
+}
+var init_v3_to_v42 = __esm({
+  "bin/lib/migrations/done-record/v3_to_v4.ts"() {
+    "use strict";
+    __name(migrate16, "migrate");
+  }
+});
+
 // bin/lib/schemas/done-record.ts
 var DONE_RECORD_SCHEMA_VERSION, SHA2562, OUTLINE_EXPORT_PATH, DoneRecordSchema, OutlineDoneRecordSchema, DoneRecordFileSchema;
 var init_done_record = __esm({
   "bin/lib/schemas/done-record.ts"() {
     "use strict";
     init_zod();
-    DONE_RECORD_SCHEMA_VERSION = 3;
+    DONE_RECORD_SCHEMA_VERSION = 4;
     SHA2562 = /^[0-9a-f]{64}$/;
     OUTLINE_EXPORT_PATH = /^export\/(?:OUTLINE|ANNOTATED-BIBLIOGRAPHY)(?:\.dry-run)?\.(?:md|docx|pdf|tex)$/;
     DoneRecordSchema = external_exports.object({
@@ -19544,7 +19558,9 @@ var init_done_record = __esm({
       /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
       humanized: external_exports.boolean(),
       /** True when an export rendered that FINAL.md; false when `pensmith humanize` wrote it and nothing exported it yet (v3). */
-      exported: external_exports.boolean()
+      exported: external_exports.boolean(),
+      /** sha256 of the FINAL.md text this record replaces, written before FINAL.md by `pensmith humanize` (v4). */
+      previous_final_sha256: external_exports.string().regex(SHA2562).optional()
     }).strict();
     OutlineDoneRecordSchema = external_exports.object({
       $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
@@ -19587,6 +19603,7 @@ function readDoneRecordFile(paperRoot) {
   if (typeof version === "number" && Number.isInteger(version) && version > DONE_RECORD_SCHEMA_VERSION) return { kind: "newer", version };
   if (version === 1) value = migrate14(value);
   if (version === 1 || version === 2) value = migrate15(value);
+  if (version === 1 || version === 2 || version === 3) value = migrate16(value);
   const parsed = DoneRecordFileSchema.safeParse(value);
   if (!parsed.success) return { kind: "invalid" };
   return parsed.data.mode === "outline" ? { kind: "outline", record: parsed.data } : { kind: "draft", record: parsed.data };
@@ -19618,6 +19635,7 @@ function finalMdState(paperRoot) {
     if (record.compiled_draft_sha256 !== draftSha) return "stale";
     return record.exported ? "current" : "unexported";
   }
+  if (record !== null && record.previous_final_sha256 === finalSha) return "stale";
   if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? "current" : "stale";
   return finalSha === draftSha ? "stale" : "edited";
 }
@@ -19628,6 +19646,21 @@ function unexportedFinalReason(paperRoot) {
 function editedFinalReason(paperRoot) {
   const dir = basename(paperDir(paperRoot));
   return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
+}
+function finalRejectedPath(paperRoot) {
+  return join4(paperDir(paperRoot), FINAL_REJECTED_FILE);
+}
+function humanizeRejectionReason(paperRoot) {
+  let text;
+  try {
+    text = readFileSync8(finalRejectedPath(paperRoot), "utf8");
+  } catch {
+    return null;
+  }
+  const recorded = /^Compiled draft: sha256 ([0-9a-f]{64})\s*$/mu.exec(text)?.[1];
+  if (recorded === void 0 || recorded !== fileSha256(join4(paperDir(paperRoot), "DRAFT.md"))) return null;
+  const dir = basename(paperDir(paperRoot));
+  return `the humanizer's rewrite of the compiled draft was rejected (the reasons are in ${dir}/${FINAL_REJECTED_FILE}) \u2014 \`pensmith done --raw\` exports the verified draft without the humanizer; \`pensmith done\` asks the humanizer again`;
 }
 function annotatedBibliographyPath(paperRoot) {
   return join4(paperDir(paperRoot), ANNOTATED_BIBLIOGRAPHY_FILE);
@@ -19652,7 +19685,7 @@ function editedAnnotatedReason(paperRoot) {
   const dir = basename(paperDir(paperRoot));
   return `${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} is not the text \`pensmith done\` wrote (it was edited or written by hand) \u2014 done never replaces your file: move ${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} out of the paper folder (your copy keeps the edit) and run \`pensmith done\``;
 }
-var DONE_RECORD_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
+var DONE_RECORD_FILE, FINAL_REJECTED_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
 var init_done_record2 = __esm({
   "bin/lib/done-record.ts"() {
     "use strict";
@@ -19662,6 +19695,7 @@ var init_done_record2 = __esm({
     init_paths();
     init_v1_to_v27();
     init_v2_to_v34();
+    init_v3_to_v42();
     init_done_record();
     DONE_RECORD_FILE = "DONE-RECORD.json";
     __name(doneRecordPath, "doneRecordPath");
@@ -19672,6 +19706,9 @@ var init_done_record2 = __esm({
     __name(finalMdState, "finalMdState");
     __name(unexportedFinalReason, "unexportedFinalReason");
     __name(editedFinalReason, "editedFinalReason");
+    FINAL_REJECTED_FILE = "FINAL.rejected.md";
+    __name(finalRejectedPath, "finalRejectedPath");
+    __name(humanizeRejectionReason, "humanizeRejectionReason");
     ANNOTATED_BIBLIOGRAPHY_FILE = "ANNOTATED-BIBLIOGRAPHY.md";
     __name(annotatedBibliographyPath, "annotatedBibliographyPath");
     __name(outlineDoneState, "outlineDoneState");
@@ -20398,7 +20435,10 @@ async function resolveNextAction(paperRoot, opts = {}) {
     if (finalState === "edited") return { verb: "status", reason: "attention", detail: editedFinalReason(paperRoot) };
     if (finalState === "unexported") return { verb: "status", reason: "attention", detail: unexportedFinalReason(paperRoot) };
     if (finalState !== "current") {
-      return record === null ? { verb: "compile" } : { verb: "done" };
+      if (record === null) return { verb: "compile" };
+      const rejected = humanizeRejectionReason(paperRoot);
+      if (rejected !== null) return { verb: "status", reason: "attention", detail: rejected };
+      return { verb: "done" };
     }
     return { verb: "status", reason: "done" };
   } catch (e) {
@@ -20409,7 +20449,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
     return { verb: "status", reason: "attention" };
   }
 }
-var OUTLINE_ONLY_PREFIX, OUTLINE_ONLY_SUFFIX, OUTLINE_EXPORT_NAME, OUTLINE_ONLY_DONE;
+var OUTLINE_ONLY_PREFIX, OUTLINE_ONLY_SUFFIX, OUTLINE_EXPORT_NAME;
 var init_router = __esm({
   "bin/lib/router.ts"() {
     "use strict";
@@ -20440,7 +20480,6 @@ var init_router = __esm({
     OUTLINE_EXPORT_NAME = "export/(?:OUTLINE|ANNOTATED-BIBLIOGRAPHY)(?:[.]dry-run)?[.](?:md|docx|pdf|tex)";
     __name(listed, "listed");
     __name(outlineOnlyDoneDetail, "outlineOnlyDoneDetail");
-    OUTLINE_ONLY_DONE = outlineOnlyDoneDetail(["export/OUTLINE.md", "export/ANNOTATED-BIBLIOGRAPHY.md"]);
     __name(isOutlineOnlyDoneDetail, "isOutlineOnlyDoneDetail");
     __name(outlineModeDecision, "outlineModeDecision");
     __name(resolveNextAction, "resolveNextAction");

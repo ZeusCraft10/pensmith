@@ -59,17 +59,30 @@ that production code renders verbatim. Each is byte-pinned by SHA-256 in
 
 ### Honesty framing copy is LOCKED
 
-`plugin/references/honesty-framing.md` is the single source of the GPTZero honest-framing
-prose. `bin/lib/honesty.ts` reads and renders it VERBATIM — the copy is never
-inlined in code. This file is byte-pinned in `tests/repo-files.test.ts`.
+`plugin/references/honesty-framing.md` is the single source of the honest-framing
+prose shown with the AI-detector score — whichever detector is configured
+(GPTZero, Originality.ai or Sapling). `bin/lib/honesty.ts` reads and renders it
+VERBATIM — the copy is never inlined in code. This file is byte-pinned in
+`tests/repo-files.test.ts`.
 
 Any wording change is a deliberate PR that MUST also re-pin the SHA-256 in
 `tests/repo-files.test.ts` (the test message prints the new hash to paste). The
-framing MUST remain transparency-only: it states what the GPTZero score means and
+framing MUST remain transparency-only: it states what a detector's score means and
 that the humanizer "improves prose" — it NEVER claims to make output undetectable
 and is NEVER framed as a detection-avoidance tool. This is the CLAUDE.md
 non-negotiable ("improves prose, does not evade detection"); a PR that turns the
 framing into an undetectability claim must not be merged.
+
+### The humanizer contract is LOCKED
+
+`plugin/references/humanizer-contract.md` is the fixed instruction pensmith adds
+to every Tier-2 humanizer request: `bin/lib/humanizer.ts` sends its `## Contract`
+section VERBATIM after the user's skill (the system prompt). It binds the
+humanizer to the rewrite guard's rules — every placeholder, heading and quote
+kept, each citation on its claim, the final rewrite only. It is byte-pinned in
+`tests/repo-files.test.ts`, and the same no-evasion rule applies: it describes
+the humanizer as improving prose, never as a way to avoid AI detection (a
+test fails on any un-negated "undetectable", "evade", "evasion" or "bypass").
 
 The committed zero-trace negative-control fixtures
 (`tests/fixtures/sample-zero-trace.docx` and `.pdf`) are likewise SHA-256
@@ -118,6 +131,7 @@ Adding or renaming an input tag is a template re-pin **plus** an edit of `PROMPT
 - A draft written under `PENSMITH_NO_LLM=1` carries the stub marker and is `PLACEHOLDER` to the verifier outside `--dry-run` (VRFY-24): a test that needs a draft to verify, compile or export uses the mock LLM (its default replies are the same contract stubs, unmarked), `--dry-run`, `write --no-verify` followed by a seeded draft, or a hand-written DRAFT.md — never a way around the verdict.
 - compile and done recompute every verdict over the text they process (D-20-23..25): a fixture's VERIFICATION.md and PLAN.md must agree with its draft and bibliography, and a compiled paper handed to `done` needs the compile record `done` checks (`tests/helpers/paper-cli-harness.ts` `writeCompileRecord`).
 - Every local test server (mock LLM, TLS/SNI and streaming servers, MockAgent helper, npm registry) lives in `tests/helpers/local-servers/` — the only place under `tests/` allowed to import `node:http` / `undici`.
+- **The export suites use pandoc as their oracle too** (Phase 21). `tests/citation-goldens.test.ts` compares the built-in renderer with pandoc 3.9's citeproc for all 8 styles (body, notes, bibliography text and link targets) against committed goldens in `tests/fixtures/citation-goldens/` — after a change to `fixture.md`, `fixture.bib` or a style, regenerate them with pandoc 3.9 on `PATH`: `node scripts/make-citation-goldens.mjs`, and commit the goldens. `tests/locator-oracle.test.ts`, `tests/markdown-subset.property.test.ts` (the subset reader against `pandoc -t json`), `tests/docx-writer.test.ts`, `tests/export-unicode.test.ts`, `tests/zero-trace-export.test.ts` and the pandoc paths of the exporter run against the live binary through `tests/helpers/pandoc-oracle.ts` `requirePandoc`: skipped with one line without pandoc, FAILED when `CI=true`. `tests/latex-standalone.test.ts` compiles both LaTeX paths when a TeX engine is found (`pdflatex`, `xelatex`, `tectonic` or `lualatex` on `PATH`, or `PENSMITH_TEX_ENGINE=<name or path>`); with `PENSMITH_REQUIRE_TEX=1` a missing engine fails it instead of skipping. The product never needs a TeX engine.
 - **The citation-integrity property test needs pandoc** (HARDEN-03, D-20-09). `tests/citation-integrity.property.test.ts` generates at least 1000 drafts with fast-check and asks pandoc (3.x, the oracle) which citations each one holds: every key pandoc sees must be one Pass 1 checks, or the draft must carry a blocking UNPARSEABLE / UNSUPPORTED-FORM row, and the gate core never passes a draft with a form it cannot check. CI installs pandoc on every runner; locally, without pandoc on `PATH`, the test is skipped with one loud line (with `CI=true` it fails). A failure prints its seed — re-run it with `PENSMITH_PROPERTY_SEED=<seed>` (and more drafts with `PENSMITH_PROPERTY_RUNS=<n>`). `tests/citation-grammar-pandoc.test.ts` checks the grammar against recorded pandoc 3.9 readings (`tests/fixtures/citation-grammar/`, re-recorded by `node scripts/record-pandoc-cites.mjs`) and, when pandoc is on `PATH`, against the live binary.
 
 ### Data-dir isolation
