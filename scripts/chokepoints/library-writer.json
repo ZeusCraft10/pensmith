@@ -9,7 +9,7 @@
     {
       "kind": "import",
       "pattern": "(?:^|/)(?:bibtex-write|ris-write)(?:\\.[cm]?[jt]s)?$",
-      "names": "^(?:writeBibtex|writeRis|renderBibtex|renderRis)$"
+      "names": "^(?:writeBibtex|writeRis|renderBibtex|renderRis|renderRisFromCsl)$"
     },
     {
       "kind": "call",

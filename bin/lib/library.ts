@@ -88,7 +88,7 @@ import {
   type LibraryEntry,
 } from './schemas/library.js';
 import { BibRenderError, renderBibtex, suffixForCollision } from './bibtex-write.js';
-import { renderRis } from './ris-write.js';
+import { renderRis, renderRisFromCsl } from './ris-write.js';
 import { parseBib, parseBibEntries, parseBibFileAt, parseBibSync } from './citations.js';
 import { jaroWinkler } from './fuzzy.js';
 import { firstAuthorSurname } from './author-normalize.js';
@@ -1224,28 +1224,52 @@ function exportedBibBlock(block: BibBlock): string {
 }
 
 export interface CitedExportResult {
-  /** The written export/CITATIONS.bib, or null when no cited source is in the bib. */
+  /** The written export/CITATIONS.bib, or null when the text cites nothing. */
   bibPath: string | null;
-  /** The written export/CITATIONS.ris, or null when no cited source is in the RIS. */
+  /** The written export/CITATIONS.ris, or null when the text cites nothing. */
   risPath: string | null;
   /** Cited keys written to the exported bib (in bib order). */
   exported: string[];
   /** Cited keys the paper's bib does not hold. */
   missing: string[];
+  /** The exported entries, parsed (CSL-JSON, in bib order): the renderer's input. */
+  entries: Array<Record<string, unknown>>;
+}
+
+/** The cited-only bibliography of an export, computed and checked before anything is written (planExportCitations). */
+export interface ExportCitationsPlan {
+  /** The cited-only BibTeX ('' when the text cites nothing). */
+  readonly bibText: string;
+  /** The RIS of the same entries ('' when the text cites nothing). */
+  readonly risText: string;
+  /** Cited keys in the exported bib (in bib order). */
+  readonly exported: string[];
+  /** Cited keys the paper's bib does not hold. */
+  readonly missing: string[];
+  /** The exported entries, parsed (CSL-JSON, in bib order). */
+  readonly entries: Array<Record<string, unknown>>;
 }
 
 /**
  * Write the bibliography of an exported document into `exportDir`: ONLY the
- * sources `citekeys` names (the keys the compiled draft cites), never the
- * whole research library — uncited candidates, unverified and retracted-flagged
- * entries and synthetic --dry-run records stay in `.paper/`. Each kept entry
- * is the paper's `.paper/CITATIONS.bib` / `.ris` entry with only its standard
- * fields (EXPORT_BIB_FIELDS — zero trace, D-20-15: no `last_verified`, no
- * `note = {RETRACTED}`, no RIS `N1  - RETRACTED`), byte for byte otherwise (a
- * hand edit survives); the result is re-parsed and must hold exactly the kept keys.
- * A file with no cited source is not written (a stale one from an earlier
- * export is removed). `.paper/CITATIONS.bib` that does not parse is a one-line
- * BibParseError — the export never guesses.
+ * sources `citekeys` names (the keys the gated text cites), never the whole
+ * research library — uncited candidates, unverified and retracted-flagged
+ * entries and synthetic --dry-run records stay in `.paper/` (EXP-01). Each
+ * kept bib entry is the paper's `.paper/CITATIONS.bib` entry (or the bytes
+ * done's gate judged, `opts.bibText`) with only its standard fields
+ * (EXPORT_BIB_FIELDS — zero trace, D-20-15: no `last_verified`, no
+ * `note = {RETRACTED}`), byte for byte otherwise (a hand edit survives); the
+ * result is re-parsed and must hold exactly the kept keys. The export RIS is
+ * rendered from those SAME parsed entries (ris-write.ts renderRisFromCsl,
+ * D-21-11) — never filtered from `.paper/CITATIONS.ris` — so the two files
+ * hold the same key set by construction, and that is asserted.
+ *
+ * A text that cites nothing gets no bibliography files (a stale one from an
+ * earlier export is removed). A text that cites keys none of which is in the
+ * bibliography is a PensmithError (EXIT_ERROR) and writes nothing: an empty
+ * cited bibliography for a citing text is never written (EXP-01). A
+ * `.paper/CITATIONS.bib` that does not parse is a one-line BibParseError —
+ * the export never guesses.
  */
 export async function exportCitedCitations(
   root: string,
@@ -1260,24 +1284,59 @@ export async function exportCitedCitations(
    */
   opts: { readonly bibText?: string } = {},
 ): Promise<CitedExportResult> {
+  const plan = await planExportCitations(root, citekeys, exportDir, opts);
+  const written = await writeExportCitations(plan, exportDir, stem);
+  return { ...written, exported: plan.exported, missing: plan.missing, entries: plan.entries };
+}
+
+/**
+ * Write a planned export bibliography into `exportDir` as `<stem>.bib` and
+ * `<stem>.ris` (both, or — a text that cites nothing — neither: a stale pair is
+ * removed). Returns the paths written.
+ */
+export async function writeExportCitations(
+  plan: ExportCitationsPlan,
+  exportDir: string,
+  stem = 'CITATIONS',
+): Promise<{ bibPath: string | null; risPath: string | null }> {
+  const bibDst = path.join(exportDir, `${stem}.bib`);
+  const risDst = path.join(exportDir, `${stem}.ris`);
+  await fsp.mkdir(exportDir, { recursive: true });
+  if (plan.bibText) await atomicWriteFile(bibDst, plan.bibText);
+  else await fsp.rm(bibDst, { force: true });
+  if (plan.risText) await atomicWriteFile(risDst, plan.risText);
+  else await fsp.rm(risDst, { force: true });
+  return { bibPath: plan.bibText ? bibDst : null, risPath: plan.risText ? risDst : null };
+}
+
+/**
+ * The cited-only bib and RIS texts for `citekeys` (see exportCitedCitations),
+ * computed and checked without writing anything: every refusal (a bib that
+ * does not parse, a key defined twice, a filtered bib that reads back with
+ * other keys, a RIS whose keys differ, an empty bibliography for a citing
+ * text) happens before the first write.
+ */
+export async function planExportCitations(
+  root: string,
+  citekeys: readonly string[],
+  exportDir: string,
+  opts: { readonly bibText?: string },
+): Promise<ExportCitationsPlan> {
   const paths = libraryPaths(root);
   if (path.resolve(exportDir) === path.resolve(paths.dir)) {
     throw new Error('exportCitedCitations: the export dir must not be the .paper folder (it would overwrite the library files)');
   }
   const wanted = new Set(citekeys);
-  const readText = async (file: string): Promise<string> => {
-    try {
-      return await fsp.readFile(file, 'utf8');
-    } catch (e) {
-      if (isEnoent(e)) return '';
-      throw e;
-    }
-  };
-
-  const { bibText, risText } = await withLock(paths.library, async () => ({
-    bibText: opts.bibText ?? (await readText(paths.bib)),
-    risText: await readText(paths.ris),
-  }));
+  const bibText =
+    opts.bibText ??
+    (await withLock(paths.library, async () => {
+      try {
+        return await fsp.readFile(paths.bib, 'utf8');
+      } catch (e) {
+        if (isEnoent(e)) return '';
+        throw e;
+      }
+    }));
 
   // Fail closed on a bib that does not parse (verify, compile and done read
   // it the same way), then keep the cited entries verbatim.
@@ -1295,6 +1354,17 @@ export async function exportCitedCitations(
       EXIT_ERROR,
     );
   }
+  const present = new Set(blocks.map((b) => b.key).filter((k): k is string => k !== null));
+  const missing = [...wanted].filter((k) => !present.has(k));
+  // EXP-01: a text with citations whose cited bibliography comes out empty is
+  // an error, never an export with an empty (or no) bibliography.
+  if (wanted.size > 0 && keptEntries.length === 0) {
+    throw new PensmithError(
+      `could not export the cited bibliography: the text cites ${[...wanted].join(', ')}, but ${paths.bib} holds none of them — ` +
+        'nothing was exported (run `pensmith verify` on the sections, which names each missing source)',
+      EXIT_ERROR,
+    );
+  }
   const exported = keptEntries.map((b) => b.key!);
   const keptBib =
     keptEntries.length === 0
@@ -1303,35 +1373,23 @@ export async function exportCitedCitations(
           .filter((b) => b.kind === 'string' || b.kind === 'preamble' || (b.key !== null && wanted.has(b.key)))
           .map((b) => (b.key !== null ? exportedBibBlock(b) : b.text))
           .join('');
-  if (keptBib) {
-    const readBack = parseBibSync(keptBib).map((c) => String(c['id']));
-    if ([...readBack].sort().join('\n') !== [...exported].sort().join('\n')) {
-      throw new PensmithError(
-        `could not export the cited bibliography: ${paths.bib} reads back with different keys once filtered — check its entries`,
-        EXIT_ERROR,
-      );
-    }
+  if (keptBib === '') return { bibText: '', risText: '', exported, missing, entries: [] };
+  const parsed = parseBibEntries(keptBib);
+  const readBack = parsed.entries.map((c) => String(c['id']));
+  if (parsed.problems.length > 0 || [...readBack].sort().join('\n') !== [...exported].sort().join('\n')) {
+    throw new PensmithError(
+      `could not export the cited bibliography: ${paths.bib} reads back with different keys once filtered — check its entries`,
+      EXIT_ERROR,
+    );
   }
-
-  const keptRis = splitRisRecords(risText)
-    .filter((r) => r.key !== null && wanted.has(r.key))
-    // Zero trace (D-20-15): the library's RETRACTED note never leaves .paper/.
-    .map((r) => r.text.split(/(?<=\n)/).filter((line) => !/^N1 {2}- RETRACTED\s*$/i.test(line)).join(''))
-    .join('');
-
-  const bibDst = path.join(exportDir, `${stem}.bib`);
-  const risDst = path.join(exportDir, `${stem}.ris`);
-  await fsp.mkdir(exportDir, { recursive: true });
-  if (keptBib) await atomicWriteFile(bibDst, keptBib);
-  else await fsp.rm(bibDst, { force: true });
-  if (keptRis) await atomicWriteFile(risDst, keptRis);
-  else await fsp.rm(risDst, { force: true });
-
-  const present = new Set(blocks.map((b) => b.key).filter((k): k is string => k !== null));
-  return {
-    bibPath: keptBib ? bibDst : null,
-    risPath: keptRis ? risDst : null,
-    exported,
-    missing: [...wanted].filter((k) => !present.has(k)),
-  };
+  // D-21-11: the RIS is rendered from the same parsed entries, in bib order,
+  // and must hold exactly the bib's keys. No note is ever written (zero trace,
+  // D-20-15: the library's RETRACTED flag never leaves .paper/).
+  const byId = new Map(parsed.entries.map((e) => [String(e['id']), e] as const));
+  const risText = renderRisFromCsl(exported.map((k) => byId.get(k) as Record<string, unknown>), { notes: false });
+  const risKeys = splitRisRecords(risText).map((r) => r.key ?? '');
+  if ([...risKeys].sort().join('\n') !== [...exported].sort().join('\n')) {
+    throw new PensmithError('could not export the cited bibliography: the RIS and the bib would hold different keys', EXIT_ERROR);
+  }
+  return { bibText: keptBib, risText, exported, missing, entries: exported.map((k) => byId.get(k) as Record<string, unknown>) };
 }
