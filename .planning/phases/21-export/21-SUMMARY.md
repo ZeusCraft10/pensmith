@@ -356,6 +356,7 @@ Every finding of the round-1 review was reproduced (or read in the code) before 
 
 - `rewrite-guard.ts`: new `citationAnchorProblem(original, rewritten): string | null`; `validateRewrite` / `compareRewrite` signatures unchanged, new rejection reasons (`a citation crossed the boundary between the paragraphs`, `a citation moved to another paragraph` / `claim`, `paragraph structure changed`, `the reply echoes the untrusted-data fence …`, `the reply adds the word "pensmith" …`). PLUG-07/PLUG-10 submissions get these for free.
 - `untrusted-fence.ts`: new `fenceMarkerCount(text)`.
+- `content-terms.ts` (new): `contentTerms(sentence)` moved here from `claim-consistency.ts` (which re-exports it), so the rewrite guard does not import `claim-consistency.ts` → `verify/pass4.ts` → `anthropic.ts` (keeps PLUG-06's mcp → anthropic import-graph rule satisfied when the Tier-1 tools import the guard).
 - `export/glyphs.ts` (new): `PDF_FONT_FILES`, `foldCandidates`, `drawableText`, `pdfFontHas`, `documentChars`, `pdfUnprintable`, `unprintableNote`.
 - `export/pdf-writer.ts`: `writePdf(doc, missing?: Set<string>)`.
 - `export/latex-writer.ts`: new `pdfTexKnows`, `latexCharFor`, `pdfTexUnprintable`, `pdfTexDeclarations`.
