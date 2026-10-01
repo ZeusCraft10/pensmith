@@ -109,9 +109,18 @@ for (const [skill, verb] of Object.entries(PLUMBING)) {
   });
 }
 
+// EXP-21 (D-21-23) replaced the Phase-6 `docx | pdf | latex | md` description:
+// done validates --format itself (parseDoneFormat; `tex` is latex, anything
+// else is EXIT_USAGE), so the documented choices are checked against it.
 test('PLUG-05: the documented choices of done --format are the ones done accepts', async () => {
-  const src = readFileSync(path.join(REPO, 'bin', 'cli', 'done.ts'), 'utf8');
-  const declared = /format:\s*\{[^}]*description:\s*'Export format: ([a-z |]+)\.'/.exec(src)?.[1]?.split('|').map((s) => s.trim());
-  assert.deepEqual(declared, ['docx', 'pdf', 'latex', 'md']);
-  for (const text of [argumentHint('done'), plumbingRow('done')]) assert.match(text, /--format docx\|pdf\|latex\|md/);
+  const { parseDoneFormat, DONE_FORMAT_CHOICES } = (await import('../bin/cli/done.js')) as {
+    parseDoneFormat: (v: unknown) => string;
+    DONE_FORMAT_CHOICES: string;
+  };
+  const documented = ['md', 'docx', 'pdf', 'latex', 'tex'];
+  for (const f of documented) assert.doesNotThrow(() => parseDoneFormat(f), f);
+  assert.equal(parseDoneFormat('tex'), 'latex');
+  assert.throws(() => parseDoneFormat('html'), /use one of md, docx, pdf, latex \(tex\)/);
+  assert.equal(DONE_FORMAT_CHOICES, 'md, docx, pdf, latex (tex)');
+  for (const text of [argumentHint('done'), plumbingRow('done')]) assert.match(text, /--format md\|docx\|pdf\|latex\|tex/);
 });

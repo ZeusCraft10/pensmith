@@ -2,7 +2,7 @@
 name: compile
 description: "Plumbing for scripts: assemble the verified sections into one draft, the same step as `/pensmith compile`."
 disable-model-invocation: true
-argument-hint: "[--discipline <preset>] [--lintHeadings]"
+argument-hint: "[--discipline <preset>] [--lintHeadings] [--no-smooth] [--raw]"
 ---
 
 # /pensmith:compile
