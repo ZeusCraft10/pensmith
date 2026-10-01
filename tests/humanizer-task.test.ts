@@ -24,6 +24,7 @@
 //     FINAL.md and the export with the new text (EXP-15).
 
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -96,7 +97,31 @@ test('EXP-14 / EXP-15 (built CLI, mock LLM): every humanizer outcome on one pape
       assert.match(r.stdout, /`pensmith done --raw` exports the compiled draft without the humanizer/, what);
       assert.equal(read(join(paper, 'FINAL.md')), rawFinal, `${what}: FINAL.md byte-identical`);
       assert.deepEqual(exportFiles(paper).map((f) => [f, statSync(join(paper, 'export', f)).mtimeMs] as const), exportsBefore, `${what}: no export written`);
+      // Review round 2: the rejection is kept, bound to this compiled draft.
+      const kept = read(join(paper, 'FINAL.rejected.md')) ?? '';
+      assert.match(kept, new RegExp(`^Compiled draft: sha256 ${createHash('sha256').update(draft).digest('hex')}$`, 'm'), what);
+      assert.match(r.stdout, /the reasons are kept in \.paper\/FINAL\.rejected\.md/, what);
     }
+
+    // Review round 2: a bare `pensmith` (and `next`) does not bill the
+    // humanizer again for the same compiled draft — attention naming
+    // `pensmith done --raw` and `pensmith done`; no request is sent.
+    // (A paper whose FINAL.md is the current raw export stays complete: there
+    // is nothing to route to. A paper that has not been exported yet is the
+    // case that looped — FINAL.md and the record are set aside to make it.)
+    mock.reset();
+    assert.match((await p.cli(['status'])).stdout, /current: complete/);
+    rmSync(join(paper, 'FINAL.md'));
+    rmSync(join(paper, 'DONE-RECORD.json'));
+    const st = await p.cli(['status']);
+    assert.match(st.stdout, /current: needs attention/);
+    assert.match(st.stdout, /the humanizer's rewrite of the compiled draft was rejected \(the reasons are in \.paper\/FINAL\.rejected\.md\)/);
+    for (const args of [['--yolo'], ['next', '--yolo']]) {
+      const bare = await p.cli(args);
+      assert.doesNotMatch(bare.stderr, /ran done/, args.join(' '));
+      assert.equal(mock.callCount('humanizer'), 0, `${args.join(' ')}: no humanizer request`);
+    }
+    assert.equal(existsSync(join(paper, 'FINAL.md')), false, 'nothing written by the bare runs');
 
     // (e) A provider failure: `humanizer failed: …`, the compiled draft exported.
     mock.reset();
@@ -105,6 +130,7 @@ test('EXP-14 / EXP-15 (built CLI, mock LLM): every humanizer outcome on one pape
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /pensmith done: humanizer failed: .+ — exporting the compiled draft/);
     assert.equal(read(join(paper, 'FINAL.md')), draft);
+    assert.equal(existsSync(join(paper, 'FINAL.rejected.md')), false, 'an export removes the kept rejection');
     assert.match(read(join(paper, 'VERIFICATION.md')) ?? '', /after humanize\):  N\/A \(humanizer failed: /);
 
     // (f) The cost cap refuses the first humanizer call: exit 5, nothing exported or rewritten.

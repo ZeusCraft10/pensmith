@@ -89,7 +89,7 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   assert.match(outlineMd, /^## (References|Bibliography)$/m, 'the listed sources are a References list');
   assert.doesNotMatch(outlineMd, /\[@/, 'every citation rendered in the style');
   const record = JSON.parse(readFileSync(join(paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
-  assert.equal(record['$schemaVersion'], 3);
+  assert.equal(record['$schemaVersion'], 4);
   assert.equal(record['mode'], 'outline');
   assert.deepEqual(record['outline_exports'], ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md']);
 

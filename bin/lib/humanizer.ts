@@ -142,6 +142,32 @@ export function joinDraftSections(preamble: string, sections: readonly DraftSect
   return [preamble, ...sections.flatMap((s) => [s.heading, s.body])].join('\n');
 }
 
+/** A reply line that labels the final rewrite (`3. Final rewrite`, `**Final rewrite:**`, `## Final version`), with any text after the label. */
+const FINAL_LABEL_RE = /^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?[ \t]*(?:\d+[.)][ \t]*)?(?:\*\*|__)?[ \t]*final (?:rewrite|version)[ \t]*(?:\*\*|__)?[ \t]*(?::[ \t]*(?:\*\*|__)?[ \t]*(.*))?$/im;
+
+/** A reply line that labels a summary of the changes (the part after the final rewrite). */
+const SUMMARY_LABEL_RE = /^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?[ \t]*(?:\d+[.)][ \t]*)?(?:\*\*|__)?[ \t]*(?:a )?(?:brief )?(?:summary of (?:the )?changes|changes made)\b/im;
+
+/**
+ * The final rewrite of a reply that answered in the skill's own multi-part
+ * format (review round 2: the published humanizer skill asks for a draft
+ * rewrite, an audit, a final rewrite and a summary of changes, and a model
+ * that follows its system prompt answers that way): the text after the
+ * `Final rewrite` label, up to a summary label, with horizontal rules at its
+ * ends removed. A reply with no such label is returned as it is — the rewrite
+ * guard then judges it whole. humanizeDraft uses it only when the whole
+ * reply is not accepted.
+ */
+export function finalRewriteOf(reply: string): string {
+  const text = reply.replace(/\r\n/g, '\n');
+  const label = FINAL_LABEL_RE.exec(text);
+  if (label === null) return reply;
+  let rest = `${(label[1] ?? '').trim()}\n${text.slice(label.index + label[0].length + 1)}`;
+  const summary = SUMMARY_LABEL_RE.exec(rest);
+  if (summary !== null) rest = rest.slice(0, summary.index);
+  return rest.replace(/^(?:\s*(?:-{3,}|\*{3,}|_{3,})\s*\n)+/u, '').replace(/(?:\n\s*(?:-{3,}|\*{3,}|_{3,})\s*)+$/u, '').trim();
+}
+
 export interface HumanizeInput {
   /** The compiled draft (DRAFT.md bytes as text). */
   readonly draft: string;
@@ -188,7 +214,16 @@ export async function humanizeDraft(input: HumanizeInput): Promise<HumanizeResul
     const mask = maskForRewrite(core, { namespace: i, ...(input.quoteMinWords !== undefined ? { quoteMinWords: input.quoteMinWords } : {}) });
     const reply = await input.call(humanizerRequest(input.skill, mask.masked, voice), i);
     sent += 1;
-    const verdict = validateRewrite({ original: core, mask, rewritten: reply, ...(input.quoteMinWords !== undefined ? { quoteMinWords: input.quoteMinWords } : {}) });
+    const judge = (rewritten: string): ReturnType<typeof validateRewrite> =>
+      validateRewrite({ original: core, mask, rewritten, ...(input.quoteMinWords !== undefined ? { quoteMinWords: input.quoteMinWords } : {}) });
+    let verdict = judge(reply);
+    // A reply in the skill's own multi-part format: its final rewrite is judged
+    // when the whole reply is not accepted (review round 2).
+    const final = verdict.ok ? reply : finalRewriteOf(reply);
+    if (final !== reply) {
+      const second = judge(final);
+      if (second.ok) verdict = second;
+    }
     if (!verdict.ok) {
       rejected.push(`§${i + 1} (${s.heading.replace(/^##\s+/, '')}): ${verdict.reasons.join('; ')}`);
       out.push(s);

@@ -24,9 +24,12 @@
 //                export/ may hold an older text, so the paper is not complete:
 //                the router names `pensmith export` (unexportedFinalReason);
 //   - `stale`:   FINAL.md is done's text of an older compiled draft (a
-//                recompile since), or FINAL.md is byte-for-byte the compiled
-//                draft with no record — done replaces it, and nothing written
-//                by hand is lost;
+//                recompile since), the FINAL.md a `pensmith humanize` record
+//                says it replaces (v4 `previous_final_sha256`: humanize
+//                writes its record first, so a stop before FINAL.md leaves
+//                done's earlier text; review round 2), or FINAL.md is
+//                byte-for-byte the compiled draft with no record — done
+//                replaces it, and nothing written by hand is lost;
 //   - `edited`:  FINAL.md is none of these — edited or written by hand. done
 //                never exports it and never replaces it: it refuses
 //                (EXIT_BLOCKED) and the router reports attention, both naming
@@ -61,6 +64,7 @@
 // overwritten). readDoneRecord returns only a draft-mode record, as before.
 
 import { existsSync, readFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { fileSha256 } from './compile-inputs.js';
@@ -68,6 +72,7 @@ import { EXIT_ERROR, PensmithError } from './exit-codes.js';
 import { paperDir } from './paths.js';
 import { migrate as v1ToV2 } from './migrations/done-record/v1_to_v2.js';
 import { migrate as v2ToV3 } from './migrations/done-record/v2_to_v3.js';
+import { migrate as v3ToV4 } from './migrations/done-record/v3_to_v4.js';
 import {
   DONE_RECORD_SCHEMA_VERSION,
   DoneRecordFileSchema,
@@ -94,8 +99,8 @@ export type DoneRecordRead =
   | { readonly kind: 'outline'; readonly record: OutlineDoneRecord };
 
 /**
- * Read DONE-RECORD.json through the versioned reader: a v1 or v2 record is
- * migrated in memory (v1_to_v2, v2_to_v3), a record from a newer pensmith is `newer` (never
+ * Read DONE-RECORD.json through the versioned reader: a v1, v2 or v3 record is
+ * migrated in memory (v1_to_v2, v2_to_v3, v3_to_v4), a record from a newer pensmith is `newer` (never
  * read as this version's), anything that does not parse is `invalid`.
  * Never throws.
  */
@@ -110,6 +115,7 @@ export function readDoneRecordFile(paperRoot: string): DoneRecordRead {
   if (typeof version === 'number' && Number.isInteger(version) && version > DONE_RECORD_SCHEMA_VERSION) return { kind: 'newer', version };
   if (version === 1) value = v1ToV2(value);
   if (version === 1 || version === 2) value = v2ToV3(value);
+  if (version === 1 || version === 2 || version === 3) value = v3ToV4(value);
   const parsed = DoneRecordFileSchema.safeParse(value);
   if (!parsed.success) return { kind: 'invalid' };
   return parsed.data.mode === 'outline'
@@ -153,6 +159,8 @@ export async function writeDoneRecord(
     readonly humanized: boolean;
     /** False only for `pensmith humanize` (`done --only humanize`): FINAL.md written, nothing exported. Default true. */
     readonly exported?: boolean;
+    /** The sha256 of done's own FINAL.md this record replaces, when the record is written BEFORE FINAL.md (v4). */
+    readonly previousFinalSha256?: string;
   },
 ): Promise<void> {
   assertDoneRecordWritable(paperRoot);
@@ -163,6 +171,7 @@ export async function writeDoneRecord(
     final_sha256: r.finalSha256,
     humanized: r.humanized,
     exported: r.exported ?? true,
+    ...(r.previousFinalSha256 !== undefined && r.previousFinalSha256 !== r.finalSha256 ? { previous_final_sha256: r.previousFinalSha256 } : {}),
   });
   await atomicWriteFile(doneRecordPath(paperRoot), JSON.stringify(record, null, 2) + '\n');
 }
@@ -196,6 +205,10 @@ export function finalMdState(paperRoot: string): FinalMdState {
     if (record.compiled_draft_sha256 !== draftSha) return 'stale';
     return record.exported ? 'current' : 'unexported';
   }
+  // Review round 2: `pensmith humanize` writes its record before FINAL.md and
+  // names the text it replaces — a stop between the two leaves done's own
+  // earlier text, which done replaces (never `edited`).
+  if (record !== null && record.previous_final_sha256 === finalSha) return 'stale';
   // Review round 2: done's export with no record of it — a paper an older
   // pensmith finished (recompiled since or not), or a done stopped after its
   // export and before the record. The text done checked and exported is named
@@ -226,6 +239,76 @@ export function editedFinalReason(paperRoot: string): string {
     `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) — done exports only the compiled ` +
     `draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run ` +
     `\`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// A rejected humanization (review round 2).
+// ---------------------------------------------------------------------------
+//
+// When the rewrite guard or the gate core refuses the humanizer's text, done
+// exits EXIT_BLOCKED and exports nothing. A routed done (a bare `pensmith`,
+// `next`) would send every section to the paid humanizer again, be refused
+// again, and loop — so the refusal is kept in `.paper/FINAL.rejected.md`
+// (like OUTLINE.rejected.md and a section's DRAFT.rejected.md), bound to the
+// compiled draft it was made from, and the router reports attention naming
+// `pensmith done --raw` and `pensmith done` instead of re-dispatching done
+// while that compiled draft is unchanged. An explicit `pensmith done` asks the
+// humanizer again; any done that exports, and a humanize that is accepted,
+// removes the file.
+
+/** The rejected humanization's file name in the paper folder. */
+export const FINAL_REJECTED_FILE = 'FINAL.rejected.md';
+
+/** `<root>/.paper/FINAL.rejected.md`. */
+export function finalRejectedPath(paperRoot: string): string {
+  return join(paperDir(paperRoot), FINAL_REJECTED_FILE);
+}
+
+/** Keep a rejected humanization of the compiled draft `compiledDraftSha256`, with its reasons. */
+export async function writeHumanizeRejection(paperRoot: string, r: { readonly compiledDraftSha256: string; readonly reasons: readonly string[]; readonly at: string }): Promise<void> {
+  const dir = basename(paperDir(paperRoot));
+  const text = [
+    "# The humanizer's rewrite was rejected",
+    '',
+    `Compiled draft: sha256 ${r.compiledDraftSha256}`,
+    `Rejected: ${r.at}`,
+    '',
+    `The humanized text failed the rewrite guard or re-verification, so nothing was exported and ${dir}/FINAL.md was not changed. ` +
+      '`pensmith done --raw` exports the verified compiled draft without the humanizer; `pensmith done` asks the humanizer again (a new model call). ' +
+      'A bare `pensmith` does not ask again while the compiled draft is unchanged.',
+    '',
+    '## Reasons',
+    '',
+    ...r.reasons.map((x) => `- ${x.replace(/\r?\n/g, ' ')}`),
+    '',
+  ].join('\n');
+  await atomicWriteFile(finalRejectedPath(paperRoot), text);
+}
+
+/** Remove a kept rejection (a done that exported, or an accepted humanize). */
+export async function clearHumanizeRejection(paperRoot: string): Promise<void> {
+  await rm(finalRejectedPath(paperRoot), { force: true });
+}
+
+/**
+ * The router's attention detail when the humanizer's rewrite of the CURRENT
+ * compiled draft was rejected (FINAL.rejected.md names its sha256), else
+ * null. Fixed wording — nothing quoted from the file. Never throws.
+ */
+export function humanizeRejectionReason(paperRoot: string): string | null {
+  let text: string;
+  try {
+    text = readFileSync(finalRejectedPath(paperRoot), 'utf8');
+  } catch {
+    return null;
+  }
+  const recorded = /^Compiled draft: sha256 ([0-9a-f]{64})\s*$/mu.exec(text)?.[1];
+  if (recorded === undefined || recorded !== fileSha256(join(paperDir(paperRoot), 'DRAFT.md'))) return null;
+  const dir = basename(paperDir(paperRoot));
+  return (
+    `the humanizer's rewrite of the compiled draft was rejected (the reasons are in ${dir}/${FINAL_REJECTED_FILE}) — ` +
+    '`pensmith done --raw` exports the verified draft without the humanizer; `pensmith done` asks the humanizer again'
   );
 }
 

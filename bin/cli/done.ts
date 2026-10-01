@@ -47,7 +47,7 @@
 import { defineCommand } from 'citty';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { type Pass2Result } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, locationLabel, type PlagiarismResult } from '../lib/plagiarism.js';
@@ -68,7 +68,7 @@ import { EXIT_BLOCKED, EXIT_ERROR, EXIT_USAGE, PensmithError } from '../lib/exit
 import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { sectionRegistryProblem } from '../lib/section-registry.js';
 import { compileRecordProblems, fileSha256, readCompileInputs } from '../lib/compile-inputs.js';
-import { assertDoneRecordWritable, editedFinalReason, finalMdState, readDoneRecord, writeDoneRecord } from '../lib/done-record.js';
+import { assertDoneRecordWritable, clearHumanizeRejection, editedFinalReason, finalMdState, FINAL_REJECTED_FILE, readDoneRecord, writeDoneRecord, writeHumanizeRejection } from '../lib/done-record.js';
 import { loadBibliography, type AcceptedQuote, type ByoQuote, type GateResult, type LoadedBibliography } from '../lib/verify/gate.js';
 import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
 import { recordLastVerified, recordRetractionStatuses, LibraryNotFoundError } from '../lib/library.js';
@@ -544,6 +544,9 @@ export async function runHumanizeStep(input: {
   if (config?.humanizer?.enabled === false) {
     return { kind: 'skipped', line: 'humanizer skipped ([humanizer] enabled = false)', after: 'humanizer disabled' };
   }
+  // A dry run sends nothing, whatever is installed: it says so first (done.md;
+  // review round 2 — a missing skill used to be reported instead).
+  if (networkMode().dryRun) return { kind: 'skipped', line: 'humanizer skipped (dry-run)', after: 'humanize skipped (dry-run)' };
   const skill = loadHumanizerSkill();
   if (skill === null) {
     return { kind: 'skipped', line: `humanizer skill not found at ${HUMANIZER_SKILL_DISPLAY} — skipping`, after: 'humanizer not installed' };
@@ -859,7 +862,13 @@ export const doneCommand = defineCommand({
       if (step.kind === 'rejected') {
         writeOut('pensmith done: GATE-04 BLOCKED — the humanized text failed re-verification; nothing was exported and FINAL.md was not changed:\n');
         for (const r of step.reasons) writeOut(`  - ${r}\n`);
-        writeOut('pensmith done: `pensmith done --raw` exports the compiled draft without the humanizer.\n');
+        // Kept for the router (review round 2): a bare `pensmith` reports
+        // attention instead of billing the humanizer again for the same draft.
+        await writeHumanizeRejection(paperRoot, { compiledDraftSha256: sha(draftMd), reasons: step.reasons, at: new Date().toISOString() });
+        writeOut(
+          `pensmith done: the reasons are kept in ${basename(paperDir(paperRoot))}/${FINAL_REJECTED_FILE}; \`pensmith done --raw\` exports the compiled draft without the humanizer, ` +
+            '`pensmith done` asks the humanizer again.\n',
+        );
         return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
       }
       if (step.kind === 'skipped') {
@@ -881,10 +890,22 @@ export const doneCommand = defineCommand({
       if (only === 'humanize') {
         if (!humanized) return { ok: true, humanized: false };
         // D-21-19: FINAL.md is the finished paper; an export is a rendering of it.
+        // Not exported yet (DONE-RECORD `exported: false`): the router names
+        // `pensmith export` until an export renders this FINAL.md. The record
+        // is written FIRST and names the FINAL.md it replaces (v4, review
+        // round 2): a stop before FINAL.md is written leaves done's own
+        // earlier text (`stale`), never one the router calls edited by hand.
+        const previous = finalMdState(paperRoot) === 'absent' ? '' : fileSha256(finalMdPath);
+        await writeDoneRecord(paperRoot, {
+          doneAt: new Date().toISOString(),
+          compiledDraftSha256: sha(draftMd),
+          finalSha256: sha(exportedText),
+          humanized: true,
+          exported: false,
+          ...(previous !== '' ? { previousFinalSha256: previous } : {}),
+        });
         await atomicWriteFile(finalMdPath, exportedText);
-        // Not exported yet (DONE-RECORD v3 `exported: false`): the router names
-        // `pensmith export` until an export renders this FINAL.md.
-        await writeDoneRecord(paperRoot, { doneAt: new Date().toISOString(), compiledDraftSha256: sha(draftMd), finalSha256: sha(exportedText), humanized: true, exported: false });
+        await clearHumanizeRejection(paperRoot);
         writeOut('pensmith done: wrote .paper/FINAL.md (humanized; `pensmith export` renders it)\n');
         return { ok: true, humanized: true };
       }
@@ -1040,6 +1061,7 @@ export const doneCommand = defineCommand({
       humanized,
       exported: true,
     });
+    await clearHumanizeRejection(paperRoot);
 
     writeOut(`pensmith done: exported ${result.outputPath}\n`);
     if (networkMode().dryRun) {

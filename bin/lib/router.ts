@@ -7,7 +7,9 @@
 // list the sections STATE.json registers), OUTLINE.rejected.md,
 // COMPILE-INPUTS.json (compile-inputs.ts: the content the compiled draft was made
 // from), DONE-RECORD.json (done-record.ts: the DRAFT.md and FINAL.md bytes done
-// exported) and the compiled DRAFT.md's and the sections' mtimes (the fallback
+// exported), FINAL.rejected.md (a rejected humanization of the current
+// compiled draft: attention, never a re-billed done) and the compiled
+// DRAFT.md's and the sections' mtimes (the fallback
 // with no compile record). It IGNORES HANDOFF.json entirely (H4 — see the PINNED ORDERING
 // in 07-RESEARCH): a non-done HANDOFF must NOT trap bare /pensmith in a resume
 // loop, so the resolver always returns a concrete next WORK verb (plan / write /
@@ -98,7 +100,7 @@ import { RETRY_ONLINE_VERDICTS } from './verify/verdicts.js';
 import { isResearchDone } from './research-sentinel.js';
 import { ACCEPTABLE_QUOTE_VERDICT } from './verify/verdicts.js';
 import { readCompileInputs, fileSha256 } from './compile-inputs.js';
-import { editedAnnotatedReason, editedFinalReason, finalMdState, newerDoneRecordReason, outlineDoneState, readDoneRecordFile, unexportedFinalReason } from './done-record.js';
+import { editedAnnotatedReason, editedFinalReason, finalMdState, humanizeRejectionReason, newerDoneRecordReason, outlineDoneState, readDoneRecordFile, unexportedFinalReason } from './done-record.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -737,7 +739,15 @@ export async function resolveNextAction(
       // proves it is the one compile wrote. With no usable record (a draft an
       // older pensmith compiled, or a record that does not parse) done could
       // only refuse, run after run — compile it again first.
-      return record === null ? { verb: 'compile' } : { verb: 'done' };
+      if (record === null) return { verb: 'compile' };
+      // Review round 2: the humanizer's rewrite of THIS compiled draft was
+      // rejected (FINAL.rejected.md) — a routed done would bill the humanizer
+      // again and be refused again, run after run: attention naming
+      // `pensmith done --raw` / `pensmith done` instead. A recompile (another
+      // draft) or any export clears it.
+      const rejected = humanizeRejectionReason(paperRoot);
+      if (rejected !== null) return { verb: 'status', reason: 'attention', detail: rejected };
+      return { verb: 'done' };
     }
     return { verb: 'status', reason: 'done' };
   } catch (e) {

@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { maskForRewrite, unmaskRewrite, validateRewrite, boundaryAdditions, headingLines } from '../bin/lib/rewrite-guard.js';
+import { maskForRewrite, unmaskRewrite, validateRewrite, boundaryAdditions, headingLines, citationAnchorProblem, compareRewrite } from '../bin/lib/rewrite-guard.js';
 import { boundaryAdditions as compileBoundaryAdditions } from '../bin/lib/compile.js';
 
 const TEXT =
@@ -125,6 +125,53 @@ test('review r1: a reply that swaps two citations between claims is rejected —
   const two = 'Sleep consolidates memory [@a2020], whereas stress impairs recall [@b2021].';
   const tm = maskForRewrite(two);
   assert.match(validateRewrite({ original: two, mask: tm, rewritten: 'Sleep consolidates memory {{cite_0_1}}, whereas stress impairs recall {{cite_0_0}}.' }).reasons[0] ?? '', /swapped places/);
+});
+
+// Review round 2: a humanizer rewords — a cited sentence often keeps under
+// half of its words, and a neighbouring sentence on the same topic shares one
+// or two. Those are not moves (they made done exit 4 on ordinary paraphrases);
+// a move needs another claim to live in the citation's sentence.
+const PARAPHRASES: ReadonlyArray<readonly [string, string]> = [
+  ['Transformer models have reshaped natural language processing. Self-attention allows each token to weigh every other token in the sequence [@vaswani2017]. This design removes the sequential bottleneck of recurrent networks, which processed tokens one at a time [@hochreiter1997]. As a result, training on large corpora became far more efficient.',
+    'Transformer models have changed natural language processing. With self-attention, every token can look at all the others in the sequence at once [@vaswani2017]. Recurrent networks had to read tokens one by one, and this design does away with that bottleneck [@hochreiter1997]. Training on large corpora got much faster as a result.'],
+  ['Sleep deprivation impairs working memory in adolescents [@smith2019]. Several longitudinal studies have documented this effect across different age groups. Moreover, the impairment appears to be dose-dependent, with greater loss of sleep producing larger deficits [@jones2021].',
+    'Teenagers who lose sleep do worse on working-memory tasks [@smith2019]. Several longitudinal studies have documented this effect across different age groups. The more sleep they lose, the bigger the deficit seems to be [@jones2021].'],
+  ['The policy reduced emissions in the first year of implementation [@lee2020]. However, critics argue that the reduction reflected the economic downturn rather than the policy itself [@park2021].',
+    "Emissions fell in the policy's first year [@lee2020]. Critics say the recession, not the policy, drove that drop [@park2021]."],
+  ['Prior research has established a strong link between socioeconomic status and educational attainment [@bourdieu1986]. Students from wealthier families are more likely to complete university degrees. This pattern persists even when controlling for prior academic performance [@chetty2014].',
+    'Family income tracks closely with how far students get in school [@bourdieu1986]. Students from wealthier families are more likely to complete university degrees. The gap holds up even after accounting for earlier grades [@chetty2014].'],
+  ['Climate models project a rise of two to four degrees by 2100 under current policies [@ipcc2021]. Such warming would increase the frequency of extreme heat events. Coastal cities face particular risk from sea-level rise [@nicholls2010].',
+    "Under today's policies, the models expect warming of two to four degrees by 2100 [@ipcc2021]. Such warming would increase the frequency of extreme heat events. Cities on the coast are especially exposed as seas rise [@nicholls2010]."],
+  ['Antibiotic resistance has become one of the most pressing threats to global health [@who2020]. Overuse of antibiotics in livestock contributes substantially to the problem. Resistant strains now account for hundreds of thousands of deaths annually [@murray2022].',
+    'Few health threats worry experts more than drug-resistant bacteria [@who2020]. Overuse of antibiotics in livestock contributes substantially to the problem. Hundreds of thousands of people now die each year from infections that drugs can no longer treat [@murray2022].'],
+  ['Remote work increased self-reported productivity for knowledge workers during the pandemic [@bloom2015]. Managers, however, often perceived a decline in collaboration. Long-term effects on career progression remain unclear [@emanuel2023].',
+    'Knowledge workers said they got more done at home during the pandemic [@bloom2015]. Managers, however, often perceived a decline in collaboration. Nobody yet knows what this means for promotions over the long run [@emanuel2023].'],
+  ['Minimum wage increases have modest effects on employment in most empirical studies [@card1994]. Critics counter that small businesses bear a disproportionate share of the costs. Recent meta-analyses find employment elasticities close to zero [@dube2019].',
+    'Most studies find that raising the minimum wage costs few jobs [@card1994]. Critics counter that small businesses bear a disproportionate share of the costs. Pooled estimates put the employment effect near zero [@dube2019].'],
+  ['Social media use is associated with higher rates of depressive symptoms among teenage girls [@twenge2018]. The direction of causality, however, is still debated. Experimental reductions in use have produced small improvements in well-being [@allcott2020].',
+    'Teenage girls who spend more time on social media report more symptoms of depression [@twenge2018]. The direction of causality, however, is still debated. When people are asked to cut back, their well-being improves a little [@allcott2020].'],
+  ['The section develops this point in steps. Prior work examined here offers direct evidence for the point at hand [@cai2024].',
+    'The section develops this point in steps. Earlier studies back this point up directly [@cai2024].'],
+];
+
+test('review r2: ordinary paraphrases that keep each citation on its own sentence pass the anchor check', () => {
+  for (const [original, rewritten] of PARAPHRASES) {
+    assert.equal(citationAnchorProblem(original, rewritten), null, rewritten);
+    assert.deepEqual(compareRewrite(original, rewritten), [], rewritten);
+  }
+});
+
+test('review r2: a citation moved onto another (uncited or cited) claim is still rejected', () => {
+  const original = 'Vaccination reduced hospitalisation in the cohort [@smith2020]. Rising temperatures had no measurable effect on transmission.';
+  assert.match(
+    citationAnchorProblem(original, 'Vaccination reduced hospitalisation in the cohort. Rising temperatures had no measurable effect on transmission [@smith2020].') ?? '',
+    /moved to another claim \(\[@smith2020\] now sits on "Rising temperatures/,
+  );
+  const [first, second] = PARAPHRASES[3] as readonly [string, string];
+  const swapped = second.replace('[@bourdieu1986]', '\u0001').replace('[@chetty2014]', '[@bourdieu1986]').replace('\u0001', '[@chetty2014]');
+  assert.match(citationAnchorProblem(first, swapped) ?? '', /moved to another claim/, 'two citations swapped between paraphrased claims');
+  const onUncited = second.replace(' [@bourdieu1986]', '').replace('university degrees.', 'university degrees [@bourdieu1986].');
+  assert.match(citationAnchorProblem(first, onUncited) ?? '', /moved to another claim \(\[@bourdieu1986\] now sits on "Students from wealthier/);
 });
 
 test('review r1: a reply that echoes the untrusted-data fence, adds "pensmith" or adds a chatter paragraph is rejected', async () => {

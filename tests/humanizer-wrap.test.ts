@@ -21,6 +21,7 @@ import { join, parse } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   HUMANIZER_SLUG,
+  finalRewriteOf,
   humanizeDraft,
   humanizerContract,
   humanizerRequest,
@@ -178,6 +179,26 @@ test('EXP-14: a reply that drops a placeholder, adds a citation or touches the s
     assert.match(r.rejected[0]!, reason, what);
     assert.ok(r.text.includes('learn representations of raw data at several levels of abstraction [@lecun2015].'), `${what}: the rejected section is kept as compiled`);
   }
+});
+
+// Review round 2: the published humanizer skill asks for a draft rewrite, an
+// audit, a final rewrite and a summary of changes. A reply in that format is
+// judged by its final rewrite (the whole reply is not a rewrite of the
+// section); the contract's rule 6 asks for the final rewrite alone.
+test('review r2: a reply in the skill\'s four-part output format is judged by its final rewrite', async () => {
+  const skill = {
+    path: '/fixture/SKILL.md',
+    body: 'Improve the prose.\n\n## Output Format\n\nProvide:\n1. Draft rewrite\n2. "What makes the below so obviously AI generated?" (brief bullets)\n3. Final rewrite\n4. A brief summary of changes made (optional, if helpful)\n',
+  };
+  assert.match(humanizerContract(), /leave them out and give only the final rewrite/);
+  const reply = (masked: string): string =>
+    `**Draft rewrite**\n\n${masked.replace(/\.\s*$/, ' (draft).')}\n\n**What makes the below so obviously AI generated?**\n\n- Some stiff phrasing.\n\n**Final rewrite**\n\n${masked}\n\n**Summary of changes**\n\n- Smoothed the rhythm.\n`;
+  const r = await humanizeDraft({ draft: DRAFT, skill, call: async (req) => reply(maskedOf(req.messages[0]!.content)) });
+  assert.deepEqual(r.rejected, []);
+  assert.equal(r.text, DRAFT, 'the final rewrite (here the section as sent) is what is kept');
+  assert.equal(finalRewriteOf('3. Final rewrite: The text {{cite_0_0}}.\n\n4. A brief summary of changes made\n- x'), 'The text {{cite_0_0}}.');
+  assert.equal(finalRewriteOf('Plain reply {{cite_0_0}}.'), 'Plain reply {{cite_0_0}}.', 'a reply with no label is judged whole');
+  assert.equal(finalRewriteOf('Final version of the protocol was approved {{cite_0_0}}.'), 'Final version of the protocol was approved {{cite_0_0}}.', 'prose that starts with the words is not a label');
 });
 
 test('EXP-14: a model error propagates to the caller (done reports "humanizer failed: …" or the cost cap)', async () => {

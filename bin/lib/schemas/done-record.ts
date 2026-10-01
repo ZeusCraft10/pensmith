@@ -1,6 +1,6 @@
-// bin/lib/schemas/done-record.ts — `.paper/DONE-RECORD.json` v3 (v1: main-branch
+// bin/lib/schemas/done-record.ts — `.paper/DONE-RECORD.json` v4 (v1: main-branch
 // merge review, round 1, VRFY-26; v2: Phase 21, GRND-11, D-21-25; v3: Phase 21
-// review round 1, `exported`).
+// review round 1, `exported`; v4: review round 2, `previous_final_sha256`).
 //
 // done records what its export was made from, so the router can tell a
 // finished paper from one that changed since — by content, never by mtime.
@@ -15,6 +15,10 @@
 //     `exported` (v3) is false when `pensmith humanize` wrote FINAL.md without
 //     exporting it: the router then names `pensmith export` instead of
 //     calling the paper complete while export/ holds older text.
+//     `previous_final_sha256` (v4, optional) names the FINAL.md text a
+//     `pensmith humanize` record replaces: humanize writes the record BEFORE
+//     FINAL.md, so a stop between the two leaves done's own earlier text,
+//     which reads as `stale` (done replaces it), never as `edited`.
 //   - An outline-mode record (`mode: 'outline'`, GRND-11): the sha256 of the
 //     `.paper/OUTLINE.md` and `.paper/CITATIONS.bib` the outline export was
 //     made from and of the `.paper/ANNOTATED-BIBLIOGRAPHY.md` it wrote, and
@@ -24,13 +28,14 @@
 //     done until these match (D-21-25).
 //
 // A v1 record is a draft record; migrations/done-record/v1_to_v2.ts lifts it,
-// then v2_to_v3.ts (a v2 draft record was always written by an export).
+// then v2_to_v3.ts (a v2 draft record was always written by an export), then
+// v3_to_v4.ts (the version alone).
 // `$schemaVersion`, strict. Adding a field is a migration plus a version bump
 // (S-20).
 
 import { z } from 'zod';
 
-export const DONE_RECORD_SCHEMA_VERSION = 3;
+export const DONE_RECORD_SCHEMA_VERSION = 4;
 
 const SHA256 = /^[0-9a-f]{64}$/;
 
@@ -52,6 +57,8 @@ export const DoneRecordSchema = z
     humanized: z.boolean(),
     /** True when an export rendered that FINAL.md; false when `pensmith humanize` wrote it and nothing exported it yet (v3). */
     exported: z.boolean(),
+    /** sha256 of the FINAL.md text this record replaces, written before FINAL.md by `pensmith humanize` (v4). */
+    previous_final_sha256: z.string().regex(SHA256).optional(),
   })
   .strict();
 

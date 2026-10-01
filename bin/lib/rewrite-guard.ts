@@ -31,8 +31,9 @@
 //          grammar, D-18-40) and holds the same direct quotes (quote-extractor.ts,
 //          the Pass-3 reader) — masking is the first line, this the second;
 //        - every citation stays on its claim (citationAnchorProblem): the
-//          sentence that holds it in the rewrite is not better matched by
-//          another sentence of the original than by the one that held it, and
+//          sentence that holds it in the rewrite is not, on positive evidence,
+//          the rewrite of ANOTHER original claim while its own claim is gone
+//          from it (review round 2: a reworded claim is not a move), and
 //          citations that shared a sentence keep their order — a swap of two
 //          citations between claims passes every multiset check but would
 //          leave a citation on a claim Pass 2 never judged;
@@ -314,13 +315,35 @@ function coverage(of: ReadonlySet<string>, n: ReadonlySet<string>): number {
 /** At least half of the claim's terms survive: the claim is still there, whatever was merged into its sentence. */
 const CLAIM_KEPT = 0.5;
 
+/** The fewest content terms another claim must share with a sentence to be read as living in it (one shared word is a topic, not a claim). */
+const MIN_SHARED_TERMS = 2;
+
+/** How many of `of`'s terms `n` holds. */
+function sharedTerms(of: ReadonlySet<string>, n: ReadonlySet<string>): number {
+  let shared = 0;
+  for (const t of of) if (n.has(t)) shared += 1;
+  return shared;
+}
+
 /**
  * Why a rewrite moved a citation onto another claim, or null (see the
- * header). For each citation of the rewrite, the original sentences that held
- * it are its claim: the claim counts as kept when at least half of its content
- * terms are in the citation's new sentence, or when no other original sentence
- * covers the new sentence better (a sentence reworded beyond recognition, or
- * merged with uncited context, is not a move). Citations that came from one
+ * header). A move needs POSITIVE evidence (review round 2: a humanizer's job
+ * is to reword, so a cited sentence often keeps under half its words, and a
+ * neighbouring sentence on the same topic shares a word or two):
+ *   - each original sentence lives in the rewritten sentence that covers the
+ *     most of its content terms (its home);
+ *   - a citation moved when the sentence that now holds it keeps under half
+ *     of its own claim's terms AND is the home of ANOTHER original sentence —
+ *     one that did not hold the citation — keeping at least half of that
+ *     sentence's terms and at least two of them: the citation now sits on
+ *     that claim (two citations swapped between claims, or a citation moved
+ *     onto an uncited sentence).
+ *   - citations that changed order across sentences must show that their
+ *     claims travelled with them (the new sentence keeps half of the claim's
+ *     terms, or is its home): two reworded claims that swapped citations.
+ * A reworded claim in its place (its terms gone, no other claim moved in), a
+ * merge with uncited context that keeps the claim, a split, and sentences
+ * reordered with their citations are not moves. Citations that came from one
  * original sentence and still share a sentence keep their order (a swap
  * inside a sentence). Pure, never throws.
  */
@@ -328,19 +351,51 @@ export function citationAnchorProblem(original: string, rewritten: string): stri
   const a = anchorView(original);
   const b = anchorView(rewritten);
   const quoteOf = (t: string): string => (t.length > 60 ? `${t.slice(0, 57)}…` : t);
+  // Each original sentence's home in the rewrite: [sentence index, coverage, shared terms].
+  const home = a.sentences.map((s): readonly [number, number, number] => {
+    let best: readonly [number, number, number] = [-1, 0, 0];
+    if (s.terms.size === 0) return best;
+    b.sentences.forEach((t, j) => {
+      const shared = sharedTerms(s.terms, t.terms);
+      if (shared / s.terms.size > best[1]) best = [j, shared / s.terms.size, shared];
+    });
+    return best;
+  });
   for (const o of b.occ) {
     const n = b.sentences[o.sentence];
     if (n === undefined || n.terms.size === 0) continue;
     let own = -1;
-    let other = 0;
-    for (const s of a.sentences) {
-      if (s.terms.size === 0) continue;
-      const c = coverage(s.terms, n.terms);
-      if (s.cites.has(o.cite)) own = Math.max(own, c);
-      else other = Math.max(other, c);
-    }
+    for (const s of a.sentences) if (s.cites.has(o.cite) && s.terms.size > 0) own = Math.max(own, coverage(s.terms, n.terms));
     if (own === -1 || own >= CLAIM_KEPT) continue;
-    if (other > own) return `a citation moved to another claim (${o.cite} now sits on "${quoteOf(n.text)}")`;
+    const usurped = a.sentences.some((s, i) => {
+      const [j, cov, shared] = home[i] as readonly [number, number, number];
+      return !s.cites.has(o.cite) && j === o.sentence && cov >= CLAIM_KEPT && shared >= MIN_SHARED_TERMS && cov > own;
+    });
+    if (usurped) return `a citation moved to another claim (${o.cite} now sits on "${quoteOf(n.text)}")`;
+  }
+  // Citations that changed order across sentences (a citation now comes before
+  // one it followed) moved with their claims only on positive evidence: the
+  // sentence each now sits in keeps half of its own claim's terms, or is that
+  // claim's home. Two reworded claims that swapped their citations show no
+  // other claim in either sentence, but they do change the order.
+  const origAt = new Map<string, number>();
+  a.occ.forEach((o, i) => origAt.set(`${o.cite}\u0000${o.ordinal}`, i));
+  const travelled = (o: (typeof b.occ)[number]): boolean => {
+    const n = b.sentences[o.sentence];
+    if (n === undefined) return false;
+    return a.sentences.some((s, i) => s.cites.has(o.cite) && ((home[i] as readonly [number, number, number])[0] === o.sentence || (s.terms.size > 0 && coverage(s.terms, n.terms) >= CLAIM_KEPT)));
+  };
+  for (let x = 0; x < b.occ.length; x += 1) {
+    for (let y = x + 1; y < b.occ.length; y += 1) {
+      const ox = b.occ[x] as (typeof b.occ)[number];
+      const oy = b.occ[y] as (typeof b.occ)[number];
+      const ix = origAt.get(`${ox.cite}\u0000${ox.ordinal}`);
+      const iy = origAt.get(`${oy.cite}\u0000${oy.ordinal}`);
+      if (ix === undefined || iy === undefined || ix < iy || ox.sentence === oy.sentence) continue;
+      for (const o of [ox, oy]) {
+        if (!travelled(o)) return `a citation moved to another claim (${o.cite} changed places with another citation and now sits on "${quoteOf(b.sentences[o.sentence]?.text ?? '')}")`;
+      }
+    }
   }
   // Order inside a sentence: the k-th occurrence of a citation in the rewrite
   // is the k-th in the original.

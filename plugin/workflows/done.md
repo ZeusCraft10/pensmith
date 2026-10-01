@@ -118,8 +118,14 @@ decision for it.
 - `.paper/FINAL.md` — the finished paper (EXP-15, D-21-19): exactly the text
   this done exported — the accepted humanized text, else the compiled draft —
   written ONCE, after the export and VERIFICATION.md. `.paper/DONE-RECORD.json`
-  (v3) then records the sha256 of the compiled draft the gate judged and of
+  (v4) then records the sha256 of the compiled draft the gate judged and of
   FINAL.md, and that an export rendered it (`exported`; `bin/lib/done-record.ts`).
+- `.paper/FINAL.rejected.md` — only when the humanizer's text was rejected
+  (step 4): the reasons, bound to the sha256 of the compiled draft it was made
+  from. While that draft is unchanged the router reports attention naming
+  `pensmith done --raw` and `pensmith done` instead of sending the paper back
+  to the paid humanizer on every bare run; any done that exports, and an
+  accepted `pensmith humanize`, removes it.
 - `.paper/LIBRARY.json` — `last_verified` of the citations a registrar
   confirmed during done's gate, and the retraction statuses re-checked, through
   the one library writer (VRFY-28, VRFY-15).
@@ -139,7 +145,9 @@ decision for it.
   are written in the workspace, and done prints the path plus one line saying it
   is a dry-run export (synthetic sources, stub text) and the real paper was not
   touched. The humanizer, the detector and the plagiarism check say
-  `skipped (dry-run)` / `unavailable (dry-run)`. The document itself stays
+  `skipped (dry-run)` / `unavailable (dry-run)` (the humanizer says so before
+  it looks for the skill: `humanizer skipped (dry-run)` whether or not one is
+  installed). The document itself stays
   zero-trace: the name and place disclose it.
 
 ## Body
@@ -248,9 +256,15 @@ decision for it.
    closing chatter paragraph is rejected), no fence marker and no added
    "pensmith"; then `acceptHumanized`
    — the rewrite guard over the whole text, the cited-key diff and the gate
-   core over the humanized bytes (GATE-04) — must pass it. A rejection exits
-   EXIT_BLOCKED (4) with every reason, exports nothing and leaves FINAL.md
-   untouched (`pensmith done --raw` is the way out). A provider failure prints
+   core over the humanized bytes (GATE-04) — must pass it. A reply that
+   follows the skill's own multi-part output format (a draft rewrite, an
+   audit, a final rewrite, a summary of changes) is judged by its final
+   rewrite when the whole reply is not accepted; the contract asks for the
+   final rewrite alone. A rejection exits
+   EXIT_BLOCKED (4) with every reason, exports nothing, leaves FINAL.md
+   untouched and keeps the reasons in `.paper/FINAL.rejected.md` (`pensmith
+   done --raw` is the way out; a bare `/pensmith` reports attention instead of
+   asking the humanizer again for the same compiled draft). A provider failure prints
    `humanizer failed: <reason>` and done exports the compiled draft; the cost
    cap's refusal propagates (exit 5). Skips: the skill missing, `[humanizer]
    enabled = false`, `--raw`, PENSMITH_NO_LLM, `--dry-run`, offline with a
@@ -313,7 +327,10 @@ decision for it.
    - `--only score` (`pensmith score`): step 3 (the consent rules apply), the
      line and the framing note printed; nothing written.
    - `--only humanize` (`pensmith humanize`): steps 4–5 without a score, then
-     FINAL.md and DONE-RECORD.json with `exported: false` — no export, no
+     DONE-RECORD.json with `exported: false` and `previous_final_sha256` (the
+     FINAL.md it replaces), then FINAL.md — record first, so a stop between
+     the two leaves done's own earlier text, which the next done replaces,
+     never one the router calls edited — no export, no
      confirmation (FINAL.md is the finished paper; an export renders it). Until
      an export renders that FINAL.md the router reports attention naming
      `pensmith export` — never "complete" while `export/` may hold an older
@@ -449,7 +466,7 @@ write nothing; `--only export` is the outline export:
    `export/ANNOTATED-BIBLIOGRAPHY.<ext>`, through the same writers, scrub and
    scan. A routed done (bare `/pensmith`) exports Markdown; `pensmith done
    --format docx` adds the `.docx` pair.
-5. `DONE-RECORD.json` (v3) records the outline export — written before
+5. `DONE-RECORD.json` (v4) records the outline export — written before
    ANNOTATED-BIBLIOGRAPHY.md, naming the text it replaces, so a done stopped
    between the two leaves a paper done again, never an "edited" one: the sha256
    of OUTLINE.md, CITATIONS.bib and ANNOTATED-BIBLIOGRAPHY.md and the files
