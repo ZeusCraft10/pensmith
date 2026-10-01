@@ -384,6 +384,9 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // loop now runs (no longer skipped) and the file-exists loop still guards presence.
   { slug: 'tutorial-section-provenance', path: 'plugin/templates/prompts/tutorial-section-provenance.md', decision: 'Phase 9 D-12', hash: 'ce1d8c4876e1096d02239e55283e55decd2df8b0358b0d697d14d5005baab380' },
   { slug: 'tutorial-research-rationale', path: 'plugin/templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: 'd4d305f2a1e8bebe87849b358f9e4fb9199b78a493bc867a306a63b6e51523e7' },
+  // Phase 21 D-21-15 — the D-12 amendment (S-06): the claim-consistency judge (EXP-11).
+  // Pinned in the same commit as bin/lib/prompt-loader.ts EXPECTED_PROMPT_HASHES (WN-3 lockstep).
+  { slug: 'claim-consistency',   path: 'plugin/templates/prompts/claim-consistency.md',   decision: 'Phase 21 D-21-15 (D-12 amendment)', hash: '0b62ae208e9d0cddc4f6cdaae1a37f5ac47982c6b2a2f6f960eddf8929374231' },
 ];
 for (const pin of PENDING_HASH_PINS) {
   // WN-3 sentinel entries (hash === `__PENDING_HASH_<slug>__`) are NOT yet

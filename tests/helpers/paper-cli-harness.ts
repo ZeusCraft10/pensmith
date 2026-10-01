@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { computeDraftHash } from '../../bin/lib/draft-hash.js';
 import { pensmithDataDir } from '../../bin/lib/paths.js';
 import { CURRENT_STATE_VERSION } from '../../bin/lib/schemas/state.js';
+import { currentHeadings, headingsSha256 } from '../../bin/lib/compile-inputs.js';
 
 export const REPO = fileURLToPath(new URL('../../', import.meta.url));
 export const CLI_BIN = join(REPO, 'dist', 'bin', 'pensmith.js');
@@ -221,7 +222,7 @@ export function seedVerifiedSection(root: string, n: number, slug: string): void
 
 /**
  * A clean paper ready for `done`: verified sections + a compiled DRAFT.md with
- * the compile record `done` checks (COMPILE-INPUTS.json v2: the sha256 of the
+ * the compile record `done` checks (COMPILE-INPUTS.json v3: the sha256 of the
  * DRAFT.md compile wrote and each section's verified hash — VRFY-27).
  */
 export function seedCompiledPaper(root: string): void {
@@ -236,16 +237,19 @@ export function seedCompiledPaper(root: string): void {
 }
 
 /**
- * The COMPILE-INPUTS.json v2 a compile of `sections` into the current
+ * The COMPILE-INPUTS.json v3 a compile of `sections` into the current
  * `.paper/DRAFT.md` records (compile-inputs.ts): what `done` checks the
  * compiled draft and each section's verified hash against (VRFY-27).
  */
 export function writeCompileRecord(root: string, sections: Array<{ n: number; slug: string }>): void {
   const sha = (p: string): string => (existsSync(p) ? createHash('sha256').update(readFileSync(p)).digest('hex') : '');
+  const headings = currentHeadings(root);
   const record = {
-    $schemaVersion: 2,
+    $schemaVersion: 3,
     compiled_at: '2026-01-01T00:00:00.000Z',
     compiled_draft_sha256: sha(join(root, '.paper', 'DRAFT.md')),
+    // v3 (EXP-05): the title and section titles compile wrote as headings.
+    headings_sha256: headings === null ? null : headingsSha256(headings),
     sections: sections.map((s) => {
       const dir = sectionDirOf(root, s.n, s.slug);
       const hash = /^verified_against_draft_hash:\s*'?([0-9a-f]{64})'?\s*$/m.exec(readFileSync(join(dir, 'PLAN.md'), 'utf8'))?.[1] ?? null;

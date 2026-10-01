@@ -39,5 +39,28 @@
     "per_source": "**{citekey}**: selected as evidence on {topic}. Name the specific facet of the topic it will support, and note what it leaves uncovered.",
     "coverage": "Before writing, check which facet of the topic the set as a whole still leaves under-supported.",
     "none": "The working bibliography is empty, so there are no sources to explain yet."
+  },
+  "humanizer": {
+    "$comment": "The humanizer stub (EXP-14) rewrites prose deterministically: each [from, to] pair replaces the whole word or phrase `from` (case kept on the first letter) in every prose paragraph; headings, block quotes and placeholder tokens are never touched. A section with none of these words gets the fallback prefix on its first prose paragraph instead, so the stubbed text always differs.",
+    "replacements": [
+      ["develops", "works through"],
+      ["examined here", "reviewed here"],
+      ["offers", "gives"],
+      ["extends", "carries forward"],
+      ["clarifies", "makes clear"],
+      ["qualifies", "tempers"],
+      ["frames", "sets out"],
+      ["supports", "backs"],
+      ["demonstrates", "shows"],
+      ["utilize", "use"],
+      ["in order to", "to"],
+      ["Furthermore", "Also"],
+      ["Moreover", "Also"],
+      ["Additionally", "Also"],
+      ["takes up", "picks up"],
+      ["marks the limits of", "shows the limits of"],
+      ["rather than", "instead of"]
+    ],
+    "fallback_prefix": "Put simply:"
   }
 }

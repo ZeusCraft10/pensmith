@@ -250,6 +250,19 @@ export const OrphanLabelSchema = z.object({
   })).describe('every sentence of the paragraph that makes a claim ([] when none)'),
 });
 
+/**
+ * claim-consistency (EXP-11, D-21-15): one verdict per cross-section claim
+ * pair, the input `id` copied back. UNCLEAR-biased (the template); advisory
+ * only — claim-consistency.ts applies it to the candidates it sent.
+ */
+export const ClaimConsistencySchema = z.object({
+  pairs: z.array(z.object({
+    id: z.string().min(1).describe('the pair id, copied from the input'),
+    verdict: z.enum(['CONTRADICTS', 'CONSISTENT', 'UNCLEAR']),
+    rationale: z.string().describe('at most 200 characters, no markdown'),
+  })).describe('one entry per input pair, in input order'),
+});
+
 export type TopicDisambiguation = z.infer<typeof TopicDisambiguatorSchema>;
 export type SourceEvaluation = z.infer<typeof SourceEvaluatorSchema>;
 export type IntakeClarification = z.infer<typeof IntakeClarifierSchema>;
@@ -257,6 +270,7 @@ export type OutlineContract = z.infer<typeof OutlineSchema>;
 export type SectionPlan = z.infer<typeof SectionPlannerSchema>;
 export type ClaimSupport = z.infer<typeof ClaimSupportSchema>;
 export type OrphanLabel = z.infer<typeof OrphanLabelSchema>;
+export type ClaimConsistency = z.infer<typeof ClaimConsistencySchema>;
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -371,6 +385,11 @@ export function coerceEvaluation(v: unknown): unknown {
   return { ...obj, verdicts };
 }
 
+/** claim-consistency replies with a bare array of verdict objects become `{pairs}`. */
+function coerceConsistency(v: unknown): unknown {
+  return Array.isArray(v) && v.length > 0 && v.every(isRecord) ? { pairs: v } : v;
+}
+
 /**
  * orphan-label replies with a bare array of claim objects become `{claims}`.
  * An empty array is left alone: the tolerant parser also offers inner values
@@ -456,6 +475,7 @@ export const CONTRACTS: Readonly<Record<string, Contract>> = Object.freeze({
   'section-planner': { slug: 'section-planner', schema: SectionPlannerSchema, fromText: plannerFromText },
   'claim-support': { slug: 'claim-support', schema: ClaimSupportSchema },
   'orphan-label': { slug: 'orphan-label', schema: OrphanLabelSchema, coerce: coerceOrphanAudit },
+  'claim-consistency': { slug: 'claim-consistency', schema: ClaimConsistencySchema, coerce: coerceConsistency },
 });
 
 export function contractFor(slug: string): Contract | null {
