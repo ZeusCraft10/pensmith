@@ -218,7 +218,7 @@ test('EXP-16: --no-score and honesty_score = false send nothing and say so', asy
 test('EXP-16: a 401 → unavailable (GPTZero rejected the API key); a 429 → unavailable (rate limited)', async () => {
   const root = await consented();
   await withDetectors({ gptzero: [{ status: 401, body: { error: 'bad key' } }] }, { GPTZERO_API_KEY: 'test-key-rejected' }, async () => {
-    assert.equal(honestyLine(await measureHonesty('text', { paperRoot: root })), 'unavailable (GPTZero rejected the API key)');
+    assert.equal(honestyLine(await measureHonesty('text', { paperRoot: root })), 'unavailable (GPTZero rejected the API key: bad key)');
   });
   await withDetectors({ gptzero: [{ status: 429, body: { error: 'slow down' } }] }, { GPTZERO_API_KEY: 'test-key-429' }, async () => {
     assert.equal(honestyLine(await measureHonesty('text', { paperRoot: root })), 'unavailable (rate limited)');
@@ -307,6 +307,21 @@ test('EXP-18: honesty_backend = "originality" → POST api.originality.ai/api/v3
   // An answer without the documented field is never read as a score.
   await withDetectors({ originality: [{ status: 200, body: { results: {} } }] }, { ORIGINALITY_API_KEY: 'test-key-originality' }, async () => {
     assert.equal(honestyLine(await measureHonesty('x', { paperRoot: root })), 'unavailable (Originality.ai returned an unexpected response)');
+  });
+  // Review round 3: the service's own reason is named (the live API answers
+  // 422 for an account without an Enterprise plan), never echoing the key.
+  await withDetectors(
+    { originality: [{ status: 422, body: { error: 'Enterprise Subscription Required to use the Originality.ai API' } }] },
+    { ORIGINALITY_API_KEY: 'test-key-originality' },
+    async () => {
+      assert.equal(
+        honestyLine(await measureHonesty('x', { paperRoot: root })),
+        'unavailable (Originality.ai: Enterprise Subscription Required to use the Originality.ai API (HTTP 422))',
+      );
+    },
+  );
+  await withDetectors({ originality: [{ status: 422, body: { message: 'bad key test-key-originality <b>x</b>' } }] }, { ORIGINALITY_API_KEY: 'test-key-originality' }, async () => {
+    assert.equal(honestyLine(await measureHonesty('x', { paperRoot: root })), 'unavailable (Originality.ai: bad key *** b x /b (HTTP 422))');
   });
 });
 

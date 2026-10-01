@@ -80,7 +80,7 @@ Quote checks (Pass 3) keep a second cache next to it: the text extracted from ea
 | `PENSMITH_S2_API_KEY` | Semantic Scholar | `x-api-key` header | the shared keyless pool, often rejected (HTTP 429) |
 | `ZOTERO_API_KEY` | Zotero Web API | `Zotero-API-Key` header | Zotero via the local API or a public group only |
 | `GPTZERO_API_KEY` | GPTZero | `x-api-key` header | no AI-likelihood score |
-| `ORIGINALITY_API_KEY` | Originality.ai (`[humanizer] honesty_backend = "originality"`) | `X-OAI-API-KEY` header | no AI-likelihood score |
+| `ORIGINALITY_API_KEY` | Originality.ai (`[humanizer] honesty_backend = "originality"`; the API needs an Enterprise plan — another plan answers HTTP 422, which the check names) | `X-OAI-API-KEY` header | no AI-likelihood score |
 | `SAPLING_API_KEY` | Sapling (`[humanizer] honesty_backend = "sapling"`) | `Authorization: Bearer` header | no AI-likelihood score |
 
 Keys are read from the environment only. They are never printed (`--show-prompts` shows no headers and redacts key parameters), never written to `SESSION.log` (a key parameter appears as `api_key=REDACTED`), never part of an HTTP cache key or file, never recorded in a test fixture, and dropped on a redirect to another origin. `pensmith doctor` reports each as present or absent, never its value.

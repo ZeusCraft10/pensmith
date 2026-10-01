@@ -403,9 +403,12 @@ export async function measureHonesty(text: string, opts: HonestyOptions = {}): P
     const msg = ((e as Error).message.split('\n')[0] ?? '').replace(key, '***');
     return none('unavailable', `network: ${msg}`);
   }
-  if (resp.status === 401 || resp.status === 403) return none('unavailable', `${spec.label} rejected the API key`);
+  const said = serviceReason(resp.body, key);
+  if (resp.status === 401 || resp.status === 403) return none('unavailable', `${spec.label} rejected the API key${said !== null ? `: ${said}` : ''}`);
   if (resp.status === 429) return none('unavailable', 'rate limited');
-  if (resp.status !== 200) return none('unavailable', `${spec.label} answered HTTP ${resp.status}`);
+  // The service's own short reason (review round 3: Originality.ai answers
+  // 422 "Enterprise Subscription Required to use the Originality.ai API").
+  if (resp.status !== 200) return none('unavailable', said !== null ? `${spec.label}: ${said} (HTTP ${resp.status})` : `${spec.label} answered HTTP ${resp.status}`);
   let parsed: ReturnType<BackendSpec['parse']>;
   try {
     parsed = spec.parse(JSON.parse(resp.body) as unknown);
@@ -420,6 +423,30 @@ export async function measureHonesty(text: string, opts: HonestyOptions = {}): P
     // the ledger is best-effort for this advisory call
   }
   return { kind: 'score', score: { aiProbability: parsed.ai, classification: parsed.classification ?? classify(parsed.ai), backend: name }, at };
+}
+
+/**
+ * A detector's own short reason for an error answer — the JSON body's
+ * `error` / `message` / `detail` string — sanitised for one line of the
+ * terminal and VERIFICATION.md: the API key never echoed, markup and control
+ * characters out, at most 160 characters. Null when the body says nothing usable.
+ */
+export function serviceReason(body: string, key: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body) as unknown;
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const rec = parsed as Record<string, unknown>;
+  const raw = [rec['error'], rec['message'], rec['detail'], (rec['error'] as Record<string, unknown> | null | undefined)?.['message']].find((v): v is string => typeof v === 'string' && v.trim() !== '');
+  if (raw === undefined) return null;
+  let text = raw;
+  if (key !== '') text = text.split(key).join('***');
+  text = text.replace(/[\u0000-\u001f\u007f<>|`]/gu, ' ').replace(/\s+/gu, ' ').trim();
+  if (text === '') return null;
+  return text.length > 160 ? `${text.slice(0, 159)}…` : text;
 }
 
 /** `61% AI-generated (gptzero, 2026-…Z)`, `skipped (--no-score)`, `unavailable (offline)`, `N/A (…)`. */
