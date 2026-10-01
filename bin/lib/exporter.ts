@@ -61,11 +61,12 @@ import { extractCitedKeysForVerification } from './citation-token.js';
 import { EXIT_ERROR, PensmithError } from './exit-codes.js';
 import { prepareText, type PreparedText } from './export/render.js';
 import { writeMarkdown } from './export/md-writer.js';
-import { buildExportDocument } from './export/document.js';
+import { buildExportDocument, type ExportDocument } from './export/document.js';
 import { writeDocx } from './export/docx-writer.js';
 import { pdfFontPaths, writePdf } from './export/pdf-writer.js';
-import { writeLatex } from './export/latex-writer.js';
-import { detectPdfEngine, runPandoc, scrubPandocLatex } from './export/pandoc.js';
+import { pdfTexUnprintable, writeLatex } from './export/latex-writer.js';
+import { detectPdfEngine, pandocFailure, pdfEngineHeader, runPandoc, scrubPandocLatex } from './export/pandoc.js';
+import { documentChars, unprintableNote } from './export/glyphs.js';
 import { ZeroTraceError, scanExportFile, zeroTracePatch, zeroTracePdf, type ZeroTraceFinding } from './export/zero-trace.js';
 
 export { zeroTracePatch, zeroTracePdf, ZeroTraceError, scanExportFile };
@@ -175,17 +176,29 @@ export function assertRenderedKeys(prep: PreparedText, gatedKeys: readonly strin
   throw new PensmithError(`export refused: ${why} — nothing was exported`, EXIT_ERROR);
 }
 
-/** The built-in writer's bytes for `format`. */
-async function builtIn(format: ExportFormat, prep: PreparedText, withBibliography: boolean): Promise<{ bytes: string | Buffer; literal: readonly string[] }> {
-  if (format === 'md') return { bytes: writeMarkdown(prep, { withBibliography }), literal: [] };
-  const doc = buildExportDocument(prep, { withBibliography });
-  if (format === 'docx') return { bytes: await writeDocx(doc), literal: doc.literal };
-  if (format === 'latex') return { bytes: writeLatex(doc), literal: doc.literal };
+/** The note for characters pdfLaTeX prints as `?` in a .tex (XeTeX / LuaTeX print them with a font that has them). */
+function latexUnprintableNote(doc: ExportDocument): string[] {
+  const chars = pdfTexUnprintable(documentChars(doc));
+  return chars.length > 0
+    ? [unprintableNote(chars, 'pdfLaTeX cannot print are written to print as ? under pdfLaTeX', 'xelatex or lualatex print them with a main font that has them (\\setmainfont)')]
+    : [];
+}
+
+/** The built-in writer's bytes for `format`, the constructs it wrote as text, and the characters it could not print. */
+async function builtIn(format: ExportFormat, prep: PreparedText, doc: ExportDocument, withBibliography: boolean): Promise<{ bytes: string | Buffer; literal: readonly string[]; glyphs: readonly string[] }> {
+  if (format === 'md') return { bytes: writeMarkdown(prep, { withBibliography }), literal: [], glyphs: [] };
+  if (format === 'docx') return { bytes: await writeDocx(doc), literal: doc.literal, glyphs: [] };
+  if (format === 'latex') return { bytes: writeLatex(doc), literal: doc.literal, glyphs: latexUnprintableNote(doc) };
   const missing = pdfFontPaths().filter((p) => !existsSync(p));
   if (missing.length > 0) {
     throw new ExportFormatError(`cannot write the PDF: the built-in PDF writer's font ${missing[0]} is missing — reinstall pensmith, or install pandoc and a TeX engine`);
   }
-  return { bytes: await writePdf(doc), literal: doc.literal };
+  const unprintable = new Set<string>();
+  const bytes = await writePdf(doc, unprintable);
+  const glyphs = unprintable.size > 0
+    ? [unprintableNote([...unprintable].sort(), 'the built-in PDF font (Liberation Serif) has no glyph for were printed as ?', 'no font pensmith ships has them; the .docx and .tex exports keep them')]
+    : [];
+  return { bytes, literal: doc.literal, glyphs };
 }
 
 /** The zero-trace scrub of a written document (docx: zeroTracePatch; PDF: zeroTracePdf). */
@@ -263,7 +276,11 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     writer = 'pandoc';
   }
   let bytes: string | Buffer | null = null;
-  if (writer === 'pandoc') {
+  // The document model: what every writer prints (the characters a PDF or a
+  // .tex cannot show are named from it, EXP-09).
+  const doc = format === 'md' ? null : buildExportDocument(prep, { withBibliography });
+  if (writer === 'pandoc' && doc !== null) {
+    const header = format === 'pdf' && engine !== null ? pdfEngineHeader(engine, documentChars(doc)) : null;
     try {
       const out = await runPandoc({
         text,
@@ -273,18 +290,30 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
             ? { entries: plan.entries, style: opts.style, referencesTitle: withBibliography && prep.bibliography.length > 0 ? prep.referencesTitle : null }
             : null,
         ...(engine !== null ? { pdfEngine: engine } : {}),
+        ...(header !== null ? { pdfHeader: header } : {}),
       });
       bytes = format === 'latex' ? scrubPandocLatex(out.toString('utf8')) : out;
+      if (format === 'latex') notes.push(...latexUnprintableNote(doc));
+      if (header !== null && header.unprintable.length > 0) {
+        notes.push(
+          unprintableNote(
+            [...header.unprintable],
+            engine === 'pdflatex' ? 'pdfLaTeX cannot print were printed as ?' : 'the PDF font (Liberation Serif) has no glyph for were printed as ?',
+            engine === 'pdflatex' ? 'a XeTeX-family engine (xelatex, lualatex or tectonic) prints those Liberation Serif has' : 'no font pensmith ships has them; the .docx and .tex exports keep them',
+          ),
+        );
+      }
     } catch (e) {
       writer = 'built-in';
-      notes.push(`built-in ${FORMAT_LABEL[format]} writer — pandoc failed (${firstLine(e)})`);
+      notes.push(`built-in ${FORMAT_LABEL[format]} writer — pandoc failed (${pandocFailure(e)})`);
     }
   }
   if (bytes === null) {
     notes.push(...localeNote);
-    const made = await builtIn(format, prep, withBibliography);
+    const made = await builtIn(format, prep, doc ?? buildExportDocument(prep, { withBibliography }), withBibliography);
     bytes = made.bytes;
     for (const l of made.literal) notes.push(`${l} (the built-in writer reads a Markdown subset)`);
+    notes.push(...made.glyphs);
   }
 
   // 4. Write, scrub, scan — on any failure, delete everything this call wrote.

@@ -169,15 +169,20 @@ test('exporter (#19, EXP-09): the offline LaTeX is a standalone article with the
 
 test('exporter (EXP-06, D-21-09): pandoc runs on relative, neutral names only — input.md, references.json, style.csl, out.<ext>', () => {
   const args = pandocArgs({ text: '', format: 'docx', citations: { entries: [], style: 'apa', referencesTitle: 'References' } });
-  assert.deepEqual(args.slice(0, 7), ['input.md', '--from', 'markdown-yaml_metadata_block-raw_attribute-raw_tex', '--to', 'docx', '--output', 'out.docx']);
+  // Review round 1: --sandbox (no file or URL pandoc is not given), no
+  // implicit figures, and the images.lua filter that prints an image as text.
+  assert.deepEqual(args.slice(0, 10), ['input.md', '--sandbox', '--from', 'markdown-yaml_metadata_block-raw_attribute-raw_tex-implicit_figures', '--to', 'docx', '--output', 'out.docx', '--lua-filter', 'images.lua']);
   assert.ok(args.indexOf('--citeproc') < args.indexOf('--csl'), '--citeproc precedes --csl');
   assert.equal(args[args.indexOf('--csl') + 1], 'style.csl');
   assert.equal(args[args.indexOf('--bibliography') + 1], 'references.json');
   for (const a of args) assert.ok(!/[\\/]/.test(a.replace(/^markdown-.*/, '')), `no path in argv: ${a}`);
   const tex = pandocArgs({ text: '', format: 'latex', citations: null });
   assert.ok(tex.includes('--standalone') && tex.includes('--shift-heading-level-by=-1'), 'LaTeX is standalone, the title is \\title');
-  const pdf = pandocArgs({ text: '', format: 'pdf', citations: null, pdfEngine: 'tectonic' });
+  const pdf = pandocArgs({ text: '', format: 'pdf', citations: null, pdfEngine: 'tectonic', pdfHeader: { tex: '\\setmainfont{x}\n', fonts: true, unprintable: [] } });
   assert.ok(pdf.includes('--pdf-engine=tectonic') && pdf.includes('--to') && pdf[pdf.indexOf('--to') + 1] === 'latex');
+  assert.equal(pdf[pdf.indexOf('--include-in-header') + 1], 'header.tex', 'the engine header is a neutral relative name');
+  assert.ok(pdf.includes('--pdf-engine-opt=--only-cached'), 'tectonic downloads nothing under the test runner (sources offline)');
+  assert.ok(!pandocArgs({ text: '', format: 'pdf', citations: null, pdfEngine: 'pdflatex' }).includes('--include-in-header'), 'no header when there is none');
 });
 
 // Review round 3 of Phase 18 (D-18-40, D-18-42): the offline renderer reads

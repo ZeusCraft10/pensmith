@@ -16,6 +16,7 @@
 
 import type { Block, Inline, ListStyle } from './markdown.js';
 import type { ExportDocument } from './document.js';
+import { foldCandidates } from './glyphs.js';
 
 /** Characters pdfLaTeX's T1 / utf8 set-up cannot print, as text-mode commands. */
 const LATEX_CHARS: Readonly<Record<string, string>> = {
@@ -67,12 +68,57 @@ const GREEK: ReadonlyArray<[string, string]> = [
 ];
 const GREEK_MAP: Readonly<Record<string, string>> = Object.fromEntries(GREEK.map(([c, n]) => [c, `\\ensuremath{\\${n}}`]));
 
+const SUB_DIGITS = '₀₁₂₃₄₅₆₇₈₉';
+const SUP_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+
+/** True for a character pdfLaTeX's T1 / utf8 / textcomp set-up prints without a declaration. */
+export function pdfTexKnows(ch: string): boolean {
+  const cp = ch.codePointAt(0) as number;
+  return cp < 0x0180 || '–—‘’“”‚„‹›«»·°§¶©®'.includes(ch);
+}
+
+/**
+ * A spelling every engine prints for a character pdfLaTeX's set-up has no
+ * declaration for, or null: Greek and the common symbols as math, sub- and
+ * superscript digits as `\textsubscript` / `\textsuperscript`, other spaces as
+ * a thin space, and a fold (glyphs.ts foldCandidates: the non-breaking hyphen
+ * to a hyphen, a ligature to its letters) when its characters are printable.
+ */
+export function latexCharFor(ch: string): string | null {
+  const mapped = GREEK_MAP[ch] ?? (LATEX_CHARS[ch]?.startsWith('\\ensuremath') === true ? LATEX_CHARS[ch] : undefined);
+  if (mapped !== undefined) return mapped;
+  const sub = SUB_DIGITS.indexOf(ch);
+  if (sub !== -1) return `\\textsubscript{${sub}}`;
+  const sup = SUP_DIGITS.indexOf(ch);
+  if (sup !== -1) return `\\textsuperscript{${sup}}`;
+  for (const f of foldCandidates(ch)) {
+    if (f === '') return '{}';
+    if (f === ' ') return '\\,';
+    if ([...f].every((c) => pdfTexKnows(c) || LATEX_CHARS[c] !== undefined || GREEK_MAP[c] !== undefined)) {
+      return [...f].map((c) => LATEX_CHARS[c] ?? GREEK_MAP[c] ?? c).join('');
+    }
+  }
+  return null;
+}
+
+/** The characters of `chars` that pdfLaTeX prints as `?` (latexCharFor has no spelling for them). */
+export function pdfTexUnprintable(chars: Iterable<string>): string[] {
+  const out = new Set<string>();
+  for (const ch of chars) {
+    const cp = ch.codePointAt(0) as number;
+    if (cp < 0x20 || pdfTexKnows(ch) || LATEX_CHARS[ch] !== undefined || GREEK_MAP[ch] !== undefined) continue;
+    if (latexCharFor(ch) === null) out.add(ch);
+  }
+  return [...out].sort();
+}
+
 /**
  * Text escaped for LaTeX: the ten specials, characters the T1 set-up cannot
- * print as commands, Greek as math, and every other character outside
- * Latin-1, Latin Extended-A and the T1 / textcomp punctuation as
- * `\textfallback{?}{<char>}`: the character itself under XeTeX / LuaTeX, a
- * `?` under pdfLaTeX (which has no glyph for it and would stop on it).
+ * print as commands, Greek as math, latexCharFor's spellings, and every other
+ * character outside Latin-1, Latin Extended-A and the T1 / textcomp
+ * punctuation as `\textfallback{?}{<char>}`: the character itself under XeTeX
+ * / LuaTeX, a `?` under pdfLaTeX (which has no glyph for it and would stop on
+ * it) — the exporter names those characters in a note.
  */
 export function escapeLatex(s: string): string {
   let out = '';
@@ -88,20 +134,26 @@ export function escapeLatex(s: string): string {
       continue;
     }
     // Latin-1, Latin Extended-A, and the typographic punctuation T1 + textcomp know.
-    if (cp < 0x0180 || '–—‘’“”‚„‹›«»·°§¶©®'.includes(ch)) {
+    if (pdfTexKnows(ch)) {
       out += ch;
       continue;
     }
-    out += `\\textfallback{?}{${ch}}`;
+    out += latexCharFor(ch) ?? `\\textfallback{?}{${ch}}`;
   }
   // A line that would start with `[` after a \\ or \item would be read as an optional argument.
   return out.replace(/\[/g, '{[}').replace(/\]/g, '{]}');
 }
 
-/** True for a character pdfLaTeX's T1 / utf8 / textcomp set-up prints without a declaration. */
-function pdfTexKnows(ch: string): boolean {
-  const cp = ch.codePointAt(0) as number;
-  return cp < 0x0180 || '–—‘’“”‚„‹›«»·°§¶©®'.includes(ch);
+/**
+ * The `\DeclareUnicodeCharacter` lines for the characters of `chars` pdfLaTeX
+ * cannot print — latexCharFor's spelling, else `?` (the exporter names those).
+ */
+export function pdfTexDeclarations(chars: Iterable<string>): string[] {
+  const todo = [...new Set([...chars].filter((ch) => (ch.codePointAt(0) as number) >= 0x20 && !pdfTexKnows(ch)))].sort();
+  return todo.map((ch) => {
+    const code = (ch.codePointAt(0) as number).toString(16).toUpperCase().padStart(4, '0');
+    return `  \\DeclareUnicodeCharacter{${code}}{${latexCharFor(ch) ?? '?'}}`;
+  });
 }
 
 /**
@@ -116,17 +168,29 @@ function pdfTexKnows(ch: string): boolean {
 export function declarePdfTexCharacters(tex: string): string {
   const at = tex.indexOf('\\begin{document}');
   if (at === -1) return tex;
-  const chars = [...new Set([...tex.slice(at)].filter((ch) => !pdfTexKnows(ch)))].sort();
-  if (chars.length === 0) return tex;
-  const decl = chars.map((ch) => {
-    const code = (ch.codePointAt(0) as number).toString(16).toUpperCase().padStart(4, '0');
-    const mapped = GREEK_MAP[ch] ?? (LATEX_CHARS[ch]?.startsWith('\\ensuremath') === true ? LATEX_CHARS[ch] : undefined);
-    return `  \\DeclareUnicodeCharacter{${code}}{${mapped ?? '?'}}`;
-  });
+  const decl = pdfTexDeclarations(tex.slice(at));
+  if (decl.length === 0) return tex;
   return `${tex.slice(0, at)}\\ifPDFTeX\n${decl.join('\n')}\n\\fi\n${tex.slice(at)}`;
 }
 
-function inlinesTex(nodes: readonly Inline[], notes: ReadonlyArray<readonly Inline[]>, inNote = false): string {
+/**
+ * Where a note is written: `inline` as `\footnote{…}` (body text), `none` not
+ * at all (inside a note, and a heading's short title), or `mark` as
+ * `\footnotemark` with the note's number added to `marks` (a table cell — a
+ * `\footnote` there is swallowed — or a heading, whose `\footnotetext` follows
+ * it).
+ */
+type NoteMode = { readonly kind: 'inline' } | { readonly kind: 'none' } | { readonly kind: 'mark'; readonly marks: number[] };
+
+const INLINE_NOTE: NoteMode = { kind: 'inline' };
+const NO_NOTE: NoteMode = { kind: 'none' };
+
+/** `\footnotetext` lines for the notes a table or heading marked. */
+function footnoteTexts(marks: readonly number[], notes: ReadonlyArray<readonly Inline[]>): string {
+  return marks.map((n) => `\\footnotetext[${n}]{${inlinesTex(notes[n - 1] ?? [], notes, NO_NOTE)}}`).join('\n');
+}
+
+function inlinesTex(nodes: readonly Inline[], notes: ReadonlyArray<readonly Inline[]>, mode: NoteMode = INLINE_NOTE): string {
   return nodes
     .map((n) => {
       switch (n.t) {
@@ -137,22 +201,27 @@ function inlinesTex(nodes: readonly Inline[], notes: ReadonlyArray<readonly Inli
         case 'break':
           return '\\\\\n';
         case 'note':
-          return inNote ? '' : `\\footnote{${inlinesTex(notes[n.n - 1] ?? [], notes, true)}}`;
+          if (mode.kind === 'none') return '';
+          if (mode.kind === 'mark') {
+            mode.marks.push(n.n);
+            return '\\footnotemark{}';
+          }
+          return `\\footnote{${inlinesTex(notes[n.n - 1] ?? [], notes, NO_NOTE)}}`;
         case 'emph':
-          return `\\emph{${inlinesTex(n.children, notes, inNote)}}`;
+          return `\\emph{${inlinesTex(n.children, notes, mode)}}`;
         case 'strong':
-          return `\\textbf{${inlinesTex(n.children, notes, inNote)}}`;
+          return `\\textbf{${inlinesTex(n.children, notes, mode)}}`;
         case 'strike':
-          return inlinesTex(n.children, notes, inNote);
+          return inlinesTex(n.children, notes, mode);
         case 'sup':
-          return `\\textsuperscript{${inlinesTex(n.children, notes, inNote)}}`;
+          return `\\textsuperscript{${inlinesTex(n.children, notes, mode)}}`;
         case 'sub':
-          return `\\textsubscript{${inlinesTex(n.children, notes, inNote)}}`;
+          return `\\textsubscript{${inlinesTex(n.children, notes, mode)}}`;
         case 'smallcaps':
-          return `\\textsc{${inlinesTex(n.children, notes, inNote)}}`;
+          return `\\textsc{${inlinesTex(n.children, notes, mode)}}`;
         case 'link':
-          if (!/^[a-z][a-z0-9+.-]*:/i.test(n.href)) return inlinesTex(n.children, notes, inNote);
-          return `\\href{${n.href.replace(/[\\{}%#~^&_$]/g, (c) => `\\${c}`)}}{${inlinesTex(n.children, notes, inNote)}}`;
+          if (!/^[a-z][a-z0-9+.-]*:/i.test(n.href)) return inlinesTex(n.children, notes, mode);
+          return `\\href{${n.href.replace(/[\\{}%#~^&_$]/g, (c) => `\\${c}`)}}{${inlinesTex(n.children, notes, mode)}}`;
         default:
           return '';
       }
@@ -175,7 +244,13 @@ function blocksTex(blocks: readonly Block[], notes: ReadonlyArray<readonly Inlin
     switch (b.t) {
       case 'heading': {
         const cmd = ['section', 'section', 'subsection', 'subsubsection', 'paragraph', 'subparagraph'][Math.min(b.level, 6) - 1] as string;
-        out.push(`\\${cmd}{${inlinesTex(b.children, notes)}}`);
+        // A note in a heading: `\footnotemark` in the heading (a `\footnote`
+        // in a moving argument stops pdfLaTeX), a short title without it for
+        // the bookmarks, and the note's `\footnotetext` after the heading.
+        const marks: number[] = [];
+        const title = inlinesTex(b.children, notes, { kind: 'mark', marks });
+        if (marks.length === 0) out.push(`\\${cmd}{${title}}`);
+        else out.push(`\\${cmd}[${inlinesTex(b.children, notes, NO_NOTE)}]{${title}}\n${footnoteTexts(marks, notes)}`);
         break;
       }
       case 'para':
@@ -208,11 +283,14 @@ function blocksTex(blocks: readonly Block[], notes: ReadonlyArray<readonly Inlin
         const w = (0.96 / cols).toFixed(3);
         const align = (a: string): string => (a === 'center' ? '\\centering' : a === 'right' ? '\\raggedleft' : '\\raggedright');
         const spec = b.aligns.map((a) => `>{${align(a)}\\arraybackslash}p{${w}\\linewidth}`).join('');
+        // A note in a cell: `\footnotemark` there (a `\footnote` inside a
+        // tabular is swallowed) and its `\footnotetext` after the table.
+        const marks: number[] = [];
+        const mode: NoteMode = { kind: 'mark', marks };
         const row = (cells: ReadonlyArray<readonly Inline[]>, bold: boolean): string =>
-          cells.map((c) => (bold ? `\\textbf{${inlinesTex(c, notes)}}` : inlinesTex(c, notes))).join(' & ') + ' \\\\';
-        out.push(
-          `\\begin{center}\n\\begin{tabular}{${spec}}\n\\hline\n${row(b.head, true)}\n\\hline\n${b.rows.map((r) => row(r, false)).join('\n')}\n\\hline\n\\end{tabular}\n\\end{center}`,
-        );
+          cells.map((c) => (bold ? `\\textbf{${inlinesTex(c, notes, mode)}}` : inlinesTex(c, notes, mode))).join(' & ') + ' \\\\';
+        const tabular = `\\begin{center}\n\\begin{tabular}{${spec}}\n\\hline\n${row(b.head, true)}\n\\hline\n${b.rows.map((r) => row(r, false)).join('\n')}\n\\hline\n\\end{tabular}\n\\end{center}`;
+        out.push(marks.length === 0 ? tabular : `${tabular}\n${footnoteTexts(marks, notes)}`);
         break;
       }
     }

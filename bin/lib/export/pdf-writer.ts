@@ -23,6 +23,7 @@ import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import { pluginTemplatePath } from '../paths.js';
 import type { Block, Inline, ListStyle } from './markdown.js';
 import type { ExportDocument } from './document.js';
+import { drawableText, PDF_FONT_FILES } from './glyphs.js';
 
 const PAGE_W = 612;
 const PAGE_H = 792;
@@ -34,12 +35,7 @@ const NOTE_SIZE = 9;
 const NOTE_GAP = 10;
 
 /** The four faces of the shipped serif family. */
-const FONT_FILES = {
-  regular: 'LiberationSerif-Regular.ttf',
-  italic: 'LiberationSerif-Italic.ttf',
-  bold: 'LiberationSerif-Bold.ttf',
-  boldItalic: 'LiberationSerif-BoldItalic.ttf',
-} as const;
+const FONT_FILES = PDF_FONT_FILES;
 
 /** The shipped font files' paths (the PDF writer cannot run without them). */
 export function pdfFontPaths(): string[] {
@@ -96,17 +92,21 @@ interface Line {
   readonly before: number;
 }
 
-/** Characters a font lacks are drawn as `?` (never a hidden .notdef). */
-function coverable(font: PDFFont, text: string): string {
-  const set = font.getCharacterSet();
-  let out = '';
-  for (const ch of text) {
-    const cp = ch.codePointAt(0) as number;
-    if (cp === 0x09) out += ' ';
-    else if (cp < 0x20) continue;
-    else out += set.includes(cp) ? ch : cp === 0xa0 ? ' ' : '?';
+const charSets = new WeakMap<PDFFont, Set<number>>();
+
+/**
+ * `text` as `font` can draw it (glyphs.ts drawableText): a character it lacks
+ * is folded to one it has, else drawn as `?` (never a hidden .notdef) and
+ * recorded in `missing` — the exporter names those characters in a note.
+ */
+function coverable(font: PDFFont, text: string, missing: Set<string>): string {
+  let set = charSets.get(font);
+  if (set === undefined) {
+    set = new Set(font.getCharacterSet());
+    charSets.set(font, set);
   }
-  return out;
+  const has = set;
+  return drawableText(text, (cp) => has.has(cp), missing);
 }
 
 function fontFor(fonts: Fonts, s: TextStyle): PDFFont {
@@ -182,11 +182,14 @@ class Typesetter {
   private pendingFoot: Line[] = [];
   private pageNo = 0;
   private readonly notesPlaced = new Set<number>();
+  /** The characters drawn as `?` (no glyph in the font, no fold). */
+  readonly missing: Set<string>;
 
-  constructor(doc: PDFDocument, fonts: Fonts, notes: ReadonlyArray<readonly Inline[]>) {
+  constructor(doc: PDFDocument, fonts: Fonts, notes: ReadonlyArray<readonly Inline[]>, missing: Set<string>) {
     this.doc = doc;
     this.fonts = fonts;
     this.notes = notes;
+    this.missing = missing;
     this.newPage();
   }
 
@@ -264,10 +267,24 @@ class Typesetter {
     if (this.y - need < this.bottom()) this.newPage();
   }
 
+  /** The note lines of the notes in `notes` not placed yet. */
+  private freshNoteLines(notes: readonly number[]): { fresh: number[]; lines: Line[] } {
+    const fresh = notes.filter((n, i) => !this.notesPlaced.has(n) && notes.indexOf(n) === i);
+    return { fresh, lines: fresh.flatMap((n) => this.noteLines(n)) };
+  }
+
+  /** Put note lines at the foot of this page, or carry them to the next one. */
+  private queueNotes(fresh: readonly number[], noteLines: readonly Line[]): void {
+    for (const n of fresh) this.notesPlaced.add(n);
+    for (const nl of noteLines) {
+      if (this.pendingFoot.length === 0 && this.y >= this.bottom(nl.height)) this.addFootLine(nl);
+      else this.pendingFoot.push(nl);
+    }
+  }
+
   /** Place one body line with its notes (see the module header for the footnote rule); returns where it was drawn. */
   place(l: Line): { page: PDFPage; top: number } {
-    const fresh = l.notes.filter((n) => !this.notesPlaced.has(n));
-    const noteLines = fresh.flatMap((n) => this.noteLines(n));
+    const { fresh, lines: noteLines } = this.freshNoteLines(l.notes);
     const noteH = noteLines.reduce((a, x) => a + x.height, 0);
     const fitsAll = this.y - l.height >= this.bottom(noteH);
     const firstH = noteLines[0]?.height ?? 0;
@@ -279,11 +296,7 @@ class Typesetter {
     const at = { page: this.page, top: this.y };
     this.drawLine(l, this.y);
     this.y -= l.height;
-    for (const n of fresh) this.notesPlaced.add(n);
-    for (const nl of noteLines) {
-      if (this.pendingFoot.length === 0 && this.y >= this.bottom(nl.height)) this.addFootLine(nl);
-      else this.pendingFoot.push(nl);
-    }
+    this.queueNotes(fresh, noteLines);
     return at;
   }
 
@@ -314,7 +327,7 @@ class Typesetter {
         size *= 0.68;
         rise = -o.size * 0.16;
       }
-      text = coverable(font, text);
+      text = coverable(font, text, this.missing);
       return { text, width: font.widthOfTextAtSize(text, size), font, size, rise };
     };
     const space = this.fonts.regular.widthOfTextAtSize(' ', o.size);
@@ -376,7 +389,7 @@ class Typesetter {
       const at = this.place(l);
       if (i === 0 && o.marker !== undefined) {
         const font = this.fonts.regular;
-        const marker = coverable(font, o.marker);
+        const marker = coverable(font, o.marker, this.missing);
         const w = font.widthOfTextAtSize(marker, o.size);
         at.page.drawText(marker, { x: o.left - w - 5, y: at.top - l.height * 0.78, size: o.size, font, color: rgb(0, 0, 0) });
       }
@@ -421,7 +434,11 @@ class Typesetter {
         }),
       );
       const h = Math.max(...laid.map((ls) => ls.reduce((a, l) => a + l.height, 0))) + 2 * pad;
-      this.ensure(h);
+      // A note cited in a cell goes to the foot like any other (its marker
+      // is drawn with the row; review round 1: the note text was lost).
+      const { fresh, lines: noteLines } = this.freshNoteLines(laid.flatMap((ls) => ls.flatMap((l) => l.notes)));
+      const noteH = noteLines.reduce((a, x) => a + x.height, 0);
+      if (this.y - h < this.bottom(noteLines.length > 0 ? noteH : 0) && this.y < PAGE_H - MARGIN - 0.5) this.newPage();
       const top = this.y;
       laid.forEach((ls) => {
         let y = top - pad;
@@ -436,6 +453,7 @@ class Typesetter {
       this.page.drawLine({ start: { x: left, y: top }, end: { x: left + width, y: top }, thickness: 0.4, color: rgb(0, 0, 0) });
       this.page.drawLine({ start: { x: left, y: top - h }, end: { x: left + width, y: top - h }, thickness: 0.4, color: rgb(0, 0, 0) });
       this.y -= h;
+      this.queueNotes(fresh, noteLines);
     };
     this.gap(4);
     row(b.head, true);
@@ -513,8 +531,12 @@ function layoutBlocks(t: Typesetter, blocks: readonly Block[], ctx: { left: numb
   }
 }
 
-/** The PDF bytes of a document. */
-export async function writePdf(doc: ExportDocument): Promise<Buffer> {
+/**
+ * The PDF bytes of a document. Every character the font cannot show (and no
+ * fold replaces) is drawn as `?` and added to `missing` (glyphs.ts), so the
+ * exporter can name it.
+ */
+export async function writePdf(doc: ExportDocument, missing: Set<string> = new Set()): Promise<Buffer> {
   const pdf = await PDFDocument.create({ updateMetadata: false });
   pdf.registerFontkit(fontkit as unknown as Parameters<typeof pdf.registerFontkit>[0]);
   const embed = async (file: string): Promise<PDFFont> => pdf.embedFont(readFileSync(pluginTemplatePath('fonts', file)), { subset: true });
@@ -524,7 +546,7 @@ export async function writePdf(doc: ExportDocument): Promise<Buffer> {
     bold: await embed(FONT_FILES.bold),
     boldItalic: await embed(FONT_FILES.boldItalic),
   };
-  const t = new Typesetter(pdf, fonts, doc.notes);
+  const t = new Typesetter(pdf, fonts, doc.notes, missing);
   layoutBlocks(t, doc.blocks, { left: MARGIN, width: TEXT_W, size: BODY, depth: 0 });
   if (doc.bibliography !== null) {
     layoutBlocks(t, [{ t: 'heading', level: 2, children: [{ t: 'text', text: doc.bibliography.title }] }], { left: MARGIN, width: TEXT_W, size: BODY, depth: 0 });
