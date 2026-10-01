@@ -260,7 +260,9 @@ test('tests/fixtures/sample-zero-trace.docx hash-pin (Phase 6 TEST-10 fixture)',
   const hash = createHash('sha256').update(bytes).digest('hex');
   // Regenerate the fixture with `node scripts/make-zero-trace-fixture.mjs`, then
   // recompute: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('tests/fixtures/sample-zero-trace.docx')).digest('hex'))"
-  const PINNED = '84654d3bd9409f1e79e72cfd0259c3a3cb4aaa7c1bfd7ae637097c1193789a7e';
+  // Phase 21 (EXP-07): the fixture gained a docProps/custom.xml with absolute paths (pandoc's --bibliography / --csl),
+  // and the generator no longer lets JSZip add folder entries stamped with the current time (it is now reproducible).
+  const PINNED = 'c22347939b0264ac176088c8d872ea39ffccffb403cb8743a44055b388c4c58e';
   assert.equal(hash, PINNED, `tests/fixtures/sample-zero-trace.docx drifted from locked fixture. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { hostname as hostname_, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -21,6 +22,7 @@ import { collectSectionPointers, writePreCompactHandoff } from '../../bin/lib/ho
 import { checkpointFile, recordCheckpoint, CHECKPOINT_KEEP_LINES, CHECKPOINT_MAX_BYTES } from '../../bin/lib/hooks/post-tool-use.js';
 import { stopHook } from '../../bin/lib/hooks/stop.js';
 import { HandoffSchema } from '../../bin/lib/handoff.js';
+import { writeOutlineDoneRecord } from '../../bin/lib/done-record.js';
 import { acquireSessionLock, readSessionLock, sessionLockFile, type SessionOwner } from '../../bin/lib/session-lock.js';
 import { activePaperRoot, setActivePaperRoot } from '../../bin/lib/paths.js';
 import { out, resetOutputSink } from '../../bin/lib/output-sink.js';
@@ -186,12 +188,28 @@ test('hooks/session-start: the context names the router step, a not-done handoff
     assert.doesNotMatch(await buildSessionStartContext(root, { source }), /Before the last context compaction/, String(source));
   }
 
-  // The CLI's stop flags reach the router: an outline-only paper names its own
-  // end state, never "complete".
+  // The CLI's stop flags reach the router: an outline-only paper goes to done
+  // (its outline export, GRND-11), then names its own end state — the
+  // deliverables, quoted because the router builds them from validated names
+  // only — never "the paper is complete".
   const outlineOnly = await buildSessionStartContext(root, { routeOptions: { stopAfterOutline: true } });
-  assert.match(outlineOnly, /Next step \(the pensmith router\): Nothing more is routed: outline only: the approved outline is \.paper\/OUTLINE\.md/);
-  assert.match(outlineOnly, /Nothing more is routed for this paper; run \/pensmith status to review it\./);
-  assert.doesNotMatch(outlineOnly, /complete/);
+  assert.match(outlineOnly, /Next step \(the pensmith router\): Export the paper: run \/pensmith \(or `pensmith done`\)\./);
+  const sha = (name: string): string => createHash('sha256').update(readFileSync(join(root, '.paper', name))).digest('hex');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '@article{a2020,\n  title = {A},\n  year = {2020},\n  doi = {10.5555/a},\n}\n');
+  writeFileSync(join(root, '.paper', 'ANNOTATED-BIBLIOGRAPHY.md'), '# Paper — Annotated Bibliography\n');
+  mkdirSync(join(root, '.paper', 'export'), { recursive: true });
+  for (const f of ['OUTLINE.md', 'ANNOTATED-BIBLIOGRAPHY.md']) writeFileSync(join(root, '.paper', 'export', f), '# Paper\n');
+  await writeOutlineDoneRecord(root, {
+    doneAt: new Date().toISOString(),
+    outlineSha256: sha('OUTLINE.md'),
+    bibSha256: sha('CITATIONS.bib'),
+    annotatedSha256: sha('ANNOTATED-BIBLIOGRAPHY.md'),
+    exports: ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md'],
+  });
+  const outlineDone = await buildSessionStartContext(root, { routeOptions: { stopAfterOutline: true } });
+  assert.match(outlineDone, /Next step \(the pensmith router\): Nothing more is routed: outline only — complete: export\/OUTLINE\.md and export\/ANNOTATED-BIBLIOGRAPHY\.md/);
+  assert.match(outlineDone, /Nothing more is routed for this paper; run \/pensmith status to review it\./);
+  assert.doesNotMatch(outlineDone, /The paper is complete/);
 });
 
 // ---------------------------------------------------------------------------

@@ -443,9 +443,20 @@ test('HARDEN-03 (Property B): the real offline exporter renders only keys Pass 1
       fs.writeFileSync(path.join(dir, '.paper', 'CITATIONS.bib'), `${bib}\n`);
       const input = path.join(dir, '.paper', 'DRAFT.md');
       fs.writeFileSync(input, d.md);
+      const pass1 = new Set(extractCitedKeysForVerification(d.md));
+      // EXP-01 (Phase 21): a text that cites keys none of which the
+      // bibliography holds exports nothing — an empty cited bibliography for a
+      // citing text is an error, never an export.
+      if (pass1.size > 0 && ![...pass1].some((k) => candidates.includes(k) && /^[A-Za-z0-9_:./+-]+$/.test(k))) {
+        await assert.rejects(
+          exportDraft({ inputPath: input, format: 'md', paperRoot: dir, pandocPresent: false, style: 'apa' }),
+          /could not export the cited bibliography: the text cites/,
+          JSON.stringify(d.md),
+        );
+        continue;
+      }
       const res = await exportDraft({ inputPath: input, format: 'md', paperRoot: dir, pandocPresent: false, style: 'apa' });
       const body = (fs.readFileSync(res.outputPath, 'utf8').split('## References')[0] as string);
-      const pass1 = new Set(extractCitedKeysForVerification(d.md));
       const rendered = candidates.filter((_k, j) => body.includes(author(j)));
       for (const k of rendered) assert.ok(pass1.has(k), `the exporter rendered ${k}, which Pass 1 never sees: ${JSON.stringify(d.md)}`);
       renderedTotal += rendered.length;

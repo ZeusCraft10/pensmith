@@ -6,7 +6,8 @@
 //   - stopAfterResearch: the educator goal (bin/cli/goal.ts, the one goal-aware
 //     mapping);
 //   - stopAfterOutline: `[project] mode = "outline"` (GRND-02 — "Outline only"
-//     at intake stops after the approved outline).
+//     at intake; GRND-11, D-21-25: after the approved outline the paper goes
+//     to `done` — the outline export — and never to a section).
 // An explicit verb (`pensmith plan 1`) is not routed and never stops.
 
 import type { ResolveOptions } from '../lib/router.js';

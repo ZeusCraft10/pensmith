@@ -981,8 +981,11 @@ export interface CitationItem {
 
 /**
  * Locator terms Pandoc recognises after a citekey (`[@k, p. 5]`, `[@k, chap. 3]`),
- * with their CSL labels. A bare number (`[@k, 33]`) is a page, as in Pandoc.
- * The offline exporter (exporter.ts) renders locators from this table too.
+ * with their CSL labels — the en-US locale's locator terms in every form
+ * (long, short, symbol; singular and plural), matched without regard to case,
+ * as pandoc's citeproc builds its locator map. A suffix that opens with a
+ * number and no term (`[@k 33]`, `[@k, 33]`) is a page (D-21-04).
+ * The offline exporter renders locators from this table too.
  */
 export const LOCATOR_TERMS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^(?:pp?\.|pages?\b)/i, 'page'],
@@ -999,10 +1002,17 @@ export const LOCATOR_TERMS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^(?:vv?\.|verses?\b)/i, 'verse'],
   [/^(?:bks?\.|books?\b)/i, 'book'],
   [/^(?:fols?\.|folios?\b)/i, 'folio'],
-  [/^(?:s\.vv?\.|sub verbo\b)/i, 'sub-verbo'],
+  [/^(?:opp?\.|opus\b|opera\b)/i, 'opus'],
+  [/^(?:s\.vv?\.|sub verbo\b|sub verbis\b)/i, 'sub-verbo'],
 ];
-/** A locator value: a number or roman numeral, an optional range, more comma-separated numbers. */
-export const LOCATOR_VALUE_RE = /^[\p{N}ivxlcdm]+(?:[-–—][\p{N}ivxlcdm]+)?(?:,\s*[\p{N}]+(?:[-–—][\p{N}]+)?)*/iu;
+
+/**
+ * One locator word as pandoc's locator parser reads it: a run of characters
+ * other than white space and the separators `, ; & - – —`, optionally joined
+ * by periods (`12.4`, `1:5`, `5a`, `33ff`, `xiv`). A trailing period is
+ * sentence punctuation, never part of the word.
+ */
+export const LOCATOR_VALUE_RE = /^[^\s.,;&\-–—]+(?:\.[^\s.,;&\-–—]+)*/u;
 
 /** A citation item's locator: its value, its CSL label and the suffix text after it. */
 export interface LocatorSplit {
@@ -1012,25 +1022,92 @@ export interface LocatorSplit {
   readonly rest: string;
 }
 
+/** A well-formed roman numeral, either case (`iv`, `XII`, `mix`). */
+const ROMAN_RE = /^(?=[ivxlcdm])m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/i;
+
+/** The locator term `text` opens with (the longest match), its label and length, or null. */
+function locatorTerm(text: string): { label: string; length: number } | null {
+  let best: { label: string; length: number } | null = null;
+  for (const [term, label] of LOCATOR_TERMS) {
+    const t = term.exec(text);
+    if (t !== null && (best === null || t[0].length > best.length)) best = { label, length: t[0].length };
+  }
+  return best;
+}
+
 /**
- * The locator a citation item's suffix opens with (`, p. 5` → 5 / page;
- * ` chap. 3, note` → 3 / chapter, rest `, note`; `, 33-35` → a page range),
- * or null. A term needs a value (`p. 5`, `chap. iv`); a bare number is a page
- * only after a comma, as in Pandoc.
+ * The words of an integrated locator starting at `text`: the first word, then
+ * every further word joined by a separator and/or one space, while each word
+ * passes `accept` (pandoc's requireDigits / requireRomanOrDigit). Returns the
+ * locator as written (white space runs as one space) and how much it took.
+ */
+function locatorWords(text: string, accept: (word: string) => boolean): { value: string; length: number } | null {
+  const first = LOCATOR_VALUE_RE.exec(text);
+  if (first === null || !accept(first[0])) return null;
+  let value = first[0];
+  let at = first[0].length;
+  for (;;) {
+    const m = /^([,&\-–—]?)(\s*)/u.exec(text.slice(at)) as RegExpExecArray;
+    const word = LOCATOR_VALUE_RE.exec(text.slice(at + m[0].length));
+    if ((m[0] === '' && word !== null) || word === null || !accept(word[0])) break;
+    if (m[1] === '' && m[2] !== undefined && m[2].includes('\n')) break;
+    value += `${m[1]}${m[2] !== '' ? ' ' : ''}${word[0]}`;
+    at += m[0].length + word[0].length;
+  }
+  return { value, length: at };
+}
+
+/** `{…}` at the start of `text` with balanced braces and brackets: its inner text and length, or null. */
+function delimitedLocator(text: string): { inner: string; length: number } | null {
+  if (!text.startsWith('{')) return null;
+  const stack: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i] as string;
+    if (ch === '{' || ch === '[') stack.push(ch === '{' ? '}' : ']');
+    else if (ch === '}' || ch === ']') {
+      if (stack.pop() !== ch) return null;
+      if (stack.length === 0) return { inner: text.slice(1, i), length: i + 1 };
+    }
+  }
+  return null;
+}
+
+/**
+ * The locator a citation item's suffix opens with, read as pandoc's citeproc
+ * reads it (D-21-04, carry-over 3; the pandoc differential in
+ * tests/locator-oracle.test.ts checks it): after an optional comma and
+ * optional white space,
+ *   - `{label value}` — a delimited locator: the longest locator term the
+ *     braces open with (else `page`) and the rest of their text;
+ *   - a locator term and one or more words that are numbers or roman numerals
+ *     (`p. 5`, `p.5`, `chap. iv`, `pp. 33, 35`, `vol. 2` — `, p. 5` after it
+ *     is suffix);
+ *   - no term: a page, when its words hold a digit (`33`, `33-35`, `5a`,
+ *     `12.4`, `33, 35`) — `iv` or `xii-xiv` alone is suffix text.
+ * Returns the locator, its CSL label and the suffix after it (`, emphasis
+ * added`, ` and passim`), or null when the suffix opens with no locator.
  */
 export function splitLocator(suffix: string): LocatorSplit | null {
-  const rest = suffix.replace(/^\s*,?\s*/, '');
-  if (rest === '') return null;
-  for (const [term, label] of LOCATOR_TERMS) {
-    const t = term.exec(rest);
-    if (t === null) continue;
-    const after = rest.slice(t[0].length).trimStart();
-    const v = LOCATOR_VALUE_RE.exec(after);
-    if (v === null || !/\p{N}|^[ivxlcdm]+$/iu.test(v[0])) break;
-    return { locator: v[0], label, rest: after.slice(v[0].length) };
+  const lead = /^,?\s*/u.exec(suffix) as RegExpExecArray;
+  const text = suffix.slice(lead[0].length);
+  if (text === '') return null;
+  const delimited = delimitedLocator(text);
+  if (delimited !== null) {
+    const inner = delimited.inner.trimStart();
+    const term = locatorTerm(inner);
+    const value = (term !== null ? inner.slice(term.length) : inner).trim().replace(/\s+/gu, ' ');
+    if (value === '') return null;
+    return { locator: value, label: term?.label ?? 'page', rest: text.slice(delimited.length) };
   }
-  const page = /^,\s*/.test(suffix) ? /^\p{N}+(?:[-–—]\p{N}+)?/u.exec(rest) : null;
-  if (page !== null) return { locator: page[0], label: 'page', rest: rest.slice(page[0].length) };
+  const term = locatorTerm(text);
+  if (term !== null) {
+    const afterTerm = text.slice(term.length);
+    const gap = /^\s*/u.exec(afterTerm) as RegExpExecArray;
+    const words = locatorWords(afterTerm.slice(gap[0].length), (w) => /\p{N}/u.test(w) || ROMAN_RE.test(w));
+    if (words !== null) return { locator: words.value, label: term.label, rest: afterTerm.slice(gap[0].length + words.length) };
+  }
+  const page = locatorWords(text, (w) => /\p{N}/u.test(w));
+  if (page !== null) return { locator: page.value, label: 'page', rest: text.slice(page.length) };
   return null;
 }
 

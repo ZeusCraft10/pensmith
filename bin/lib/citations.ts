@@ -64,13 +64,27 @@
 // remains the SOLE source whose body contains `from 'citation-js'`.
 //
 // =====================================================================
-//   Inline cite resolution is NOT this file's job (D-21)
+//   Whole-document rendering (Phase 21: D-21-03 … D-21-07)
 // =====================================================================
-// DRAFT.md uses Pandoc `[@citekey]` tokens. Inline citation rendering
-// happens at compile time via Pandoc. citations.ts renders only the
-// reference list (bibliography). Phase 6 compile verb wires Pandoc.
+// DRAFT.md uses Pandoc citations (`[@k]`, clusters, locators, `[-@k]`,
+// `@{k}`, narrative `@k`). The export renders them here, offline, by ONE
+// citeproc engine over the whole document — renderDocumentCitations: every
+// citation in order (notes numbered across the document, numeric styles in
+// first-citation order, narrative = author-only + suppress-author, affixed
+// cluster items as sort barriers, a digit-led suffix as a page locator) and
+// the bibliography of exactly the cited keys, as rich-text runs the writers
+// in bin/lib/export/ lay out. It follows pandoc's citeproc output (checked
+// by tests/citation-goldens.test.ts for the 8 bundled styles). Titles are
+// case-protected (caseProtectTitle / caseProtectItems, D-21-06) so a proper
+// noun keeps its capitals in every style, on both export paths. A style is a
+// bundled key or an absolute `.csl` path (ensureStyleTemplate registers a
+// file by its content hash, D-21-07); the style's default locale is honoured
+// from the shipped CSL locales (`templates/csl-locales/`, en-US and en-GB).
+// Placement in the text is bin/lib/export/render.ts's job.
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 import { pluginTemplatePath } from './paths.js';
 import { defaultCitationStyleFor } from './disciplines.js';
@@ -134,19 +148,61 @@ const STYLE_FILENAMES: Readonly<Record<string, string>> = lookupTable({
 /** Styles whose citations are notes (class="note"): a prior citation turns theirs into a short form or "Ibid.". */
 const noteStyles = new Set<string>();
 
-function ensureStyleTemplate(style: string): void {
-  if (registeredStyles.get(style)) return;
-  const filename = STYLE_FILENAMES[style] ?? style;
-  const cslPath = pluginTemplatePath('citation-styles', `${filename}.csl`);
+/** The citeproc template name of each style registered by a `.csl` file, by the style argument (D-21-07). */
+const fileStyleTemplates = new Map<string, string>();
+
+/** True when `style` names a CSL file (a path ending in `.csl`) rather than a bundled style key. */
+export function isCslFileStyle(style: string): boolean {
+  return /\.csl$/i.test(style) && (isAbsolute(style) || /[\\/]/.test(style));
+}
+
+/**
+ * The CSL XML of `style`: a bundled key (`apa`, …, read from the plugin's
+ * citation-styles/) or a `.csl` file path (D-21-07; the caller validated it —
+ * export-style.ts `validateCslFile`). Throws a clear Error naming the path when
+ * the file is absent (no silent empty output — T-10-01-01).
+ */
+export function cslStyleText(style: string): string {
+  const cslPath = isCslFileStyle(style)
+    ? style
+    : pluginTemplatePath('citation-styles', `${STYLE_FILENAMES[style] ?? style}.csl`);
   if (!existsSync(cslPath)) {
-    throw new Error(
-      `renderStyle: CSL file not found for style '${style}' at ${cslPath}`,
-    );
+    throw new Error(`renderStyle: CSL file not found for style '${style}' at ${cslPath}`);
   }
-  const cslString = readFileSync(cslPath, 'utf8');
-  plugins.config.get('@csl').templates.add(`pensmith-${style}`, cslString);
-  if (/<style\b[^>]*\bclass="note"/.test(cslString)) noteStyles.add(style);
+  return readFileSync(cslPath, 'utf8');
+}
+
+/**
+ * Register `style` with citeproc once per process and return its template
+ * name: `pensmith-<key>` for a bundled style; for a `.csl` file, a name made
+ * from the sha256 of its bytes, so two files with the same name never collide
+ * and an edited file is registered afresh (D-21-07).
+ */
+function ensureStyleTemplate(style: string): string {
+  registerShippedLocales();
+  if (isCslFileStyle(style)) {
+    const cslString = cslStyleText(style);
+    const name = `pensmith-csl-${createHash('sha256').update(cslString).digest('hex').slice(0, 24)}`;
+    if (!registeredStyles.get(name)) {
+      plugins.config.get('@csl').templates.add(name, cslString);
+      if (/<style\b[^>]*\bclass="note"/.test(cslString)) noteStyles.add(name);
+      registeredStyles.set(name, true);
+    }
+    fileStyleTemplates.set(style, name);
+    return name;
+  }
+  const name = `pensmith-${style}`;
+  if (registeredStyles.get(style)) return name;
+  const cslString = cslStyleText(style);
+  plugins.config.get('@csl').templates.add(name, cslString);
+  if (/<style\b[^>]*\bclass="note"/.test(cslString)) noteStyles.add(name);
   registeredStyles.set(style, true);
+  return name;
+}
+
+/** True when `style` (a key or a `.csl` path) is a note style (`class="note"`): its citations are footnotes. */
+export function isNoteStyle(style: string): boolean {
+  return noteStyles.has(ensureStyleTemplate(style));
 }
 
 /**
@@ -630,11 +686,11 @@ export async function renderStyle(
   if (!Array.isArray(entries)) {
     throw new TypeError('renderStyle: input must be an array of parsed entries (from parseBib)');
   }
-  ensureStyleTemplate(style);
+  const template = ensureStyleTemplate(style);
   const cite = new Cite(entries, { forceType: '@csl/object' });
   return cite.format('bibliography', {
     format: 'text',
-    template: `pensmith-${style}`,
+    template,
     lang: 'en-US',
   });
 }
@@ -669,11 +725,11 @@ export async function renderInText(
   if (!Array.isArray(entries)) {
     throw new TypeError('renderInText: input must be an array of parsed entries (from parseBib)');
   }
-  ensureStyleTemplate(style);
+  const template = ensureStyleTemplate(style);
   const cite = new Cite(entries, { forceType: '@csl/object' });
   return cite.format('citation', {
     format: 'text',
-    template: `pensmith-${style}`,
+    template,
     lang: 'en-US',
   });
 }
@@ -716,12 +772,12 @@ export async function renderCitationItems(
   if (!Array.isArray(entries)) {
     throw new TypeError('renderCitationItems: input must be an array of parsed entries (from parseBib)');
   }
-  ensureStyleTemplate(style);
+  const template = ensureStyleTemplate(style);
   // A numeric style numbers sources in the order the document first cites
   // them: one prior citation of every cited key in that order gives each item
   // its document number (not "[1]" for each citation). A note style is left
   // alone — a prior citation would print "Ibid.".
-  const citationsPre = citedInOrder.length > 0 && !noteStyles.has(style)
+  const citationsPre = citedInOrder.length > 0 && !noteStyles.has(template)
     ? [{ citationItems: citedInOrder.map((id) => ({ id })), properties: { noteIndex: 0 } }]
     : [];
   const cite = new Cite(entries, { forceType: '@csl/object' });
@@ -735,7 +791,7 @@ export async function renderCitationItems(
   }));
   return cite.format('citation', {
     format: 'text',
-    template: `pensmith-${style}`,
+    template,
     lang: 'en-US',
     entry,
     citationsPre,
@@ -783,4 +839,507 @@ export async function renderApa(entries: Array<Record<string, unknown>>): Promis
     throw new TypeError('renderApa: input must be an array of parsed entries (from parseBib)');
   }
   return renderStyle(entries, 'apa');
+}
+
+// =====================================================================
+//   Case protection (D-21-06, carry-over 1: "APA lowercases `china`")
+// =====================================================================
+// Neither renderer may lowercase a word the source capitalised unless it can
+// tell the word is not a proper noun. Both export paths render from the SAME
+// protected CSL items: citeproc-js reads them here, and pandoc reads them as
+// the CSL JSON bibliography `references.json` (export/pandoc.ts) — never a
+// BibTeX file, whose reader sentence-cases every title and so lowercases
+// "China" and "World Bank". The stored bibliographies (`.paper/CITATIONS.bib`,
+// `export/CITATIONS.bib`) keep the gated bytes; only the renderer input is
+// protected. The rule, per title:
+//   - acronyms and mixed-case words (`NGO`, `COVID-19`, `iPhone`, `McDonald`)
+//     are always protected;
+//   - a title that is not Title Case (it has a lowercase content word) gets
+//     every capitalised word after its first protected (`Economic growth in
+//     China and the World Bank's lending policy`);
+//   - a Title Case title is protected whole: a proper noun cannot be told from
+//     a capitalised word there, and no sentence-casing is better than wrong
+//     lowercasing.
+
+/** The CSL title variables the case-protection pass covers. */
+const TITLE_FIELDS: readonly string[] = [
+  'title', 'title-short', 'shortTitle', 'container-title', 'container-title-short', 'collection-title',
+  'volume-title', 'original-title', 'event-title', 'reviewed-title',
+];
+
+/** Words a Title Case title leaves in lower case (CSL's title-case stop words, and `vs.`, `v.`, `per`, `than`, `upon`, `versus`). */
+const TITLE_STOP_WORDS = new Set([
+  'a', 'an', 'and', 'as', 'at', 'but', 'by', 'down', 'for', 'from', 'in', 'into', 'nor', 'of', 'on', 'onto', 'or', 'over',
+  'so', 'the', 'till', 'to', 'up', 'via', 'with', 'yet', 'vs', 'v', 'per', 'than', 'upon', 'versus', 'et', 'al',
+]);
+
+const NOCASE_OPEN = '<span class="nocase">';
+const NOCASE_CLOSE = '</span>';
+
+/** A word's letters and digits without the punctuation around it (`"China,"` → `China`). */
+function wordCore(word: string): string {
+  return word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+}
+
+/** True for an acronym or a mixed-case word: two or more capitals, or a capital after a lowercase letter. */
+function isMixedCase(core: string): boolean {
+  return (core.match(/\p{Lu}/gu)?.length ?? 0) >= 2 || /\p{Ll}\p{Lu}/u.test(core);
+}
+
+/**
+ * `title` with the words D-21-06 protects wrapped in citeproc's
+ * `<span class="nocase">` (the rule is in the section header). Markup the
+ * parser put in a title (`<i>…</i>`) is kept: words are read between tags.
+ */
+export function caseProtectTitle(title: string): string {
+  if (title.includes(NOCASE_OPEN)) return title;
+  const words: Array<{ start: number; end: number; text: string }> = [];
+  const re = /<[^>]*>|[^\s<]+/g;
+  for (const m of title.matchAll(re)) {
+    if (m[0].startsWith('<')) continue;
+    words.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+  }
+  const lettered = words.filter((w) => /\p{L}/u.test(w.text));
+  if (lettered.length === 0) return title;
+  const titleCase = lettered.every((w, i) => {
+    const core = wordCore(w.text);
+    if (core === '' || !/^\p{L}/u.test(core)) return true;
+    if (i > 0 && TITLE_STOP_WORDS.has(core.toLowerCase())) return true;
+    return /^\p{Lu}/u.test(core);
+  });
+  if (titleCase) return `${NOCASE_OPEN}${title}${NOCASE_CLOSE}`;
+  let out = '';
+  let at = 0;
+  lettered.forEach((w, i) => {
+    const core = wordCore(w.text);
+    const capitalised = i > 0 && /^\p{Lu}/u.test(core);
+    if (!capitalised && !isMixedCase(core)) return;
+    out += title.slice(at, w.start) + NOCASE_OPEN + w.text + NOCASE_CLOSE;
+    at = w.end;
+  });
+  return out + title.slice(at);
+}
+
+/**
+ * The renderer's input items: a plain copy of each parsed entry (no parser
+ * graph) with its title variables case-protected (D-21-06). The exporter
+ * gives the same items to citeproc-js and, as CSL JSON, to pandoc.
+ */
+export function caseProtectItems(entries: ReadonlyArray<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return entries.map((entry) => {
+    const copy: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(entry)) if (k !== '_graph') copy[k] = v;
+    for (const field of TITLE_FIELDS) {
+      const v = copy[field];
+      if (typeof v === 'string' && v.trim() !== '') copy[field] = caseProtectTitle(v);
+    }
+    return copy;
+  });
+}
+
+// =====================================================================
+//   The document renderer (D-21-03, D-21-04): one citeproc pass
+// =====================================================================
+// One citeproc-js engine processes EVERY citation of a document in document
+// order (`rebuildProcessorState`, each citation with its note index in a note
+// style), then makes the bibliography from the same engine — so numbering,
+// first / subsequent / ibid note forms, disambiguation and bibliography order
+// are the engine's, as in pandoc, never assembled per citation. A narrative
+// (author-in-text) citation is rendered as pandoc renders it: the author-only
+// form of its item in the text, and the item with the author suppressed after
+// it (an in-text style) or in its note (a note style). citeproc's HTML output
+// is parsed into rich-text runs that each writer serialises.
+
+/** One run of rendered text and its formatting. */
+export interface RichRun {
+  readonly text: string;
+  readonly italic?: true;
+  readonly bold?: true;
+  readonly sup?: true;
+  readonly sub?: true;
+  readonly smallCaps?: true;
+  /** The target of a link (a DOI or URL the style prints). */
+  readonly href?: string;
+}
+
+/** One citation of a document, in document order. */
+export interface DocumentCitation {
+  readonly items: readonly CitationItemInput[];
+  /** A narrative citation (`@key says`): its one item's author stands in the text. */
+  readonly narrative?: boolean;
+}
+
+/** What one citation renders to. */
+export interface RenderedCitation {
+  /**
+   * The runs that stand in the text where the citation was: an in-text
+   * citation, or a narrative citation's author (followed, in an in-text style,
+   * by the rest). Empty for a note style's bracketed citation, and when the
+   * style prints nothing for it.
+   */
+  readonly inline: readonly RichRun[];
+  /** The text of the citation's footnote (a note style), else null. */
+  readonly note: readonly RichRun[] | null;
+}
+
+/** One bibliography entry: its key, its margin label (`[1]`, `1.`) when the style sets one apart, and its text. */
+export interface RenderedBibEntry {
+  readonly id: string;
+  readonly label: readonly RichRun[] | null;
+  readonly runs: readonly RichRun[];
+}
+
+/** A document's rendered citations and bibliography. */
+export interface RenderedDocument {
+  readonly noteStyle: boolean;
+  readonly citations: readonly RenderedCitation[];
+  /** The bibliography of exactly the cited keys, in the style's order. */
+  readonly bibliography: readonly RenderedBibEntry[];
+  /** The style asks for hanging-indent bibliography paragraphs. */
+  readonly hangingIndent: boolean;
+  /** The style's default locale when it is not available (the document was rendered in en-US), else null. */
+  readonly localeFallback: string | null;
+}
+
+/** The plain text of runs. */
+export function runsText(runs: readonly RichRun[]): string {
+  return runs.map((r) => r.text).join('');
+}
+
+const NAMED_ENTITIES: Readonly<Record<string, string>> = lookupTable({
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+});
+
+function decodeEntities(s: string): string {
+  return s.replace(/&(#[xX][0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (m, e: string) => {
+    if (e.startsWith('#x') || e.startsWith('#X')) return String.fromCodePoint(parseInt(e.slice(2), 16));
+    if (e.startsWith('#')) return String.fromCodePoint(parseInt(e.slice(1), 10));
+    return NAMED_ENTITIES[e.toLowerCase()] ?? m;
+  });
+}
+
+type RunStyle = Omit<RichRun, 'text'>;
+
+function styleAttr(attrs: string, base: RunStyle): RunStyle {
+  const out: { -readonly [K in keyof RunStyle]: RunStyle[K] } = { ...base };
+  const style = /\bstyle\s*=\s*"([^"]*)"/i.exec(attrs)?.[1] ?? '';
+  for (const decl of style.split(';')) {
+    const [prop, value] = decl.split(':').map((x) => x.trim().toLowerCase());
+    if (prop === 'font-style') {
+      if (value === 'italic' || value === 'oblique') out.italic = true;
+      else delete out.italic;
+    } else if (prop === 'font-weight') {
+      if (value === 'bold' || (value !== undefined && Number(value) >= 600)) out.bold = true;
+      else delete out.bold;
+    } else if (prop === 'font-variant') {
+      if (value === 'small-caps') out.smallCaps = true;
+      else delete out.smallCaps;
+    } else if (prop === 'vertical-align') {
+      delete out.sup;
+      delete out.sub;
+      if (value === 'super' || value === 'sup') out.sup = true;
+      else if (value === 'sub') out.sub = true;
+    }
+  }
+  return out;
+}
+
+function sameStyle(a: RunStyle, b: RunStyle): boolean {
+  return a.italic === b.italic && a.bold === b.bold && a.sup === b.sup && a.sub === b.sub && a.smallCaps === b.smallCaps && a.href === b.href;
+}
+
+/** citeproc-js HTML (its `html` output format) as rich-text runs. */
+export function citeprocHtmlRuns(html: string): RichRun[] {
+  const out: RichRun[] = [];
+  const stack: Array<{ tag: string; style: RunStyle }> = [];
+  let cur: RunStyle = {};
+  const push = (text: string): void => {
+    if (text === '') return;
+    const last = out[out.length - 1];
+    if (last !== undefined && sameStyle(last, cur)) out[out.length - 1] = { ...last, text: last.text + text };
+    else out.push({ ...cur, text });
+  };
+  for (const m of html.matchAll(/<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:[^>"]|"[^"]*")*?)(\/?)>|([^<]+)/g)) {
+    if (m[5] !== undefined) {
+      push(decodeEntities(m[5]));
+      continue;
+    }
+    const tag = (m[2] as string).toLowerCase();
+    if (tag === 'br') {
+      push('\n');
+      continue;
+    }
+    if (m[1] === '/') {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if ((stack[i] as { tag: string }).tag !== tag) continue;
+        cur = (stack[i] as { style: RunStyle }).style;
+        stack.length = i;
+        break;
+      }
+      continue;
+    }
+    if (m[4] === '/') continue;
+    const attrs = m[3] ?? '';
+    let next: RunStyle = styleAttr(attrs, cur);
+    if (tag === 'i' || tag === 'em') next = { ...next, italic: true };
+    else if (tag === 'b' || tag === 'strong') next = { ...next, bold: true };
+    else if (tag === 'sup') next = { ...next, sup: true };
+    else if (tag === 'sub') next = { ...next, sub: true };
+    else if (tag === 'a') {
+      const href = /\bhref\s*=\s*"([^"]*)"/i.exec(attrs)?.[1];
+      if (href !== undefined) next = { ...next, href: decodeEntities(href) };
+    }
+    stack.push({ tag, style: cur });
+    cur = next;
+  }
+  return out;
+}
+
+/** Runs with the white space at both ends removed (and empty runs dropped). */
+function trimRuns(runs: readonly RichRun[]): RichRun[] {
+  const out = runs.filter((r) => r.text !== '').map((r) => ({ ...r }));
+  while (out.length > 0 && (out[0] as RichRun).text.trim() === '') out.shift();
+  while (out.length > 0 && (out[out.length - 1] as RichRun).text.trim() === '') out.pop();
+  if (out.length === 0) return out;
+  out[0] = { ...(out[0] as RichRun), text: (out[0] as RichRun).text.replace(/^\s+/u, '') };
+  const li = out.length - 1;
+  out[li] = { ...(out[li] as RichRun), text: (out[li] as RichRun).text.replace(/\s+$/u, '') };
+  return out;
+}
+
+/** A citation's printed runs, or [] when the style prints nothing for it (`[NO_PRINTED_FORM]`, an empty `()`). */
+function printedRuns(html: string): RichRun[] {
+  if (html.includes('NO_PRINTED_FORM')) return [];
+  const runs = trimRuns(citeprocHtmlRuns(html));
+  return /[\p{L}\p{N}]/u.test(runsText(runs)) ? runs : [];
+}
+
+/** One citeproc citation item from a CitationItemInput. */
+function citeprocItem(i: CitationItemInput, flag?: 'suppress-author' | 'author-only'): Record<string, unknown> {
+  return {
+    id: i.id,
+    ...(i.prefix ? { prefix: i.prefix } : {}),
+    ...(i.suffix ? { suffix: i.suffix } : {}),
+    ...(i.locator ? { locator: citeprocLocator(i.locator, i.label ?? 'page').locator, label: i.label ?? 'page' } : {}),
+    ...(i.suppressAuthor || flag === 'suppress-author' ? { 'suppress-author': true } : {}),
+    ...(flag === 'author-only' ? { 'author-only': true } : {}),
+  };
+}
+
+/**
+ * A locator as citeproc-js must receive it to print what pandoc's citeproc
+ * prints (the locator differential, tests/locator-oracle.test.ts):
+ *   - a locator with no digit (a roman numeral, `xii`) is not numeric to
+ *     pandoc (CSL `is-numeric`: numbers only), while citeproc-js reads roman
+ *     numerals as numbers — so it is marked text (`nocase`, which prints
+ *     nothing of its own): APA then prints `xii`, not `Chapter xii`;
+ *   - a list written without a space after its comma (`33,35`) is a list
+ *     to pandoc (a plural label: `pp.`, `vols.`) but one number to
+ *     citeproc-js — so it is given with the space; a page list prints with
+ *     it, as pandoc's page formatting does (`pp. 33, 35`), and any other
+ *     label's list is printed as written (`vols. 97,100`): `restore` maps
+ *     the text citeproc prints back to it.
+ */
+function citeprocLocator(locator: string, label: string): { locator: string; restore: [string, string] | null } {
+  if (!/\p{N}/u.test(locator)) return { locator: `<span class="nocase">${locator}</span>`, restore: null };
+  if (!/\d,\d/.test(locator)) return { locator, restore: null };
+  const spaced = locator.replace(/(\d),(?=\d)/g, '$1, ');
+  return { locator: spaced, restore: label === 'page' ? null : [spaced, locator] };
+}
+
+/** Runs with the first occurrence of `from` (inside one run) replaced by `to`. */
+function replaceInRuns(runs: readonly RichRun[], from: string, to: string): RichRun[] {
+  let done = false;
+  return runs.map((r) => {
+    if (done || !r.text.includes(from)) return r;
+    done = true;
+    return { ...r, text: r.text.replace(from, to) };
+  });
+}
+
+/** The citeproc engine (citation-js's CSL plugin) for `template`, over `items`, emitting HTML. */
+interface CiteprocEngine {
+  rebuildProcessorState(citations: unknown[], mode: string, uncited: unknown[]): Array<[string, number, string]>;
+  registry?: { citationreg?: { citationById?: Record<string, { sortedItems?: Array<[unknown, Record<string, unknown>]> }> } };
+  makeBibliography(): [{ entry_ids: string[][]; hangingindent?: unknown; 'second-field-align'?: unknown }, string[]] | false;
+  opt: { development_extensions: Record<string, unknown> };
+}
+
+/**
+ * The CSL locales the plugin ships (templates/csl-locales/, CC BY-SA 3.0, from
+ * the CSL locales repository): en-US — the current release, which replaces
+ * citation-js's bundled 2015 en-US so the built-in renderer prints the terms
+ * pandoc's citeproc prints (`Issue 3`, not `Number 3`) — and en-GB, the
+ * default locale of Cite Them Right Harvard.
+ */
+const SHIPPED_LOCALES = ['en-US', 'en-GB'] as const;
+let shippedLocalesRegistered = false;
+
+/** Register the shipped locales with citation-js once per process (before any engine is made). */
+function registerShippedLocales(): void {
+  if (shippedLocalesRegistered) return;
+  shippedLocalesRegistered = true;
+  const locales = (plugins.config.get('@csl') as unknown as { locales: { add(k: string, v: string): void } }).locales;
+  for (const lang of SHIPPED_LOCALES) {
+    const file = pluginTemplatePath('csl-locales', `locales-${lang}.xml`);
+    if (existsSync(file)) locales.add(lang, readFileSync(file, 'utf8'));
+  }
+}
+
+/**
+ * The locale a style renders in, as pandoc picks it: the style's
+ * `default-locale` (Cite Them Right Harvard is en-GB: single quotes,
+ * punctuation outside them), else en-US. A locale neither citation-js nor the
+ * plugin (templates/csl-locales/) has falls back to en-US, and `fallback`
+ * names it.
+ */
+export function styleLocale(style: string): { locale: string; fallback: string | null } {
+  const wanted = /<style\b[^>]*\bdefault-locale="([A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*)"/.exec(cslStyleText(style))?.[1] ?? 'en-US';
+  registerShippedLocales();
+  const locales = (plugins.config.get('@csl') as unknown as { locales: { has(k: string): boolean } }).locales;
+  if (locales.has(wanted)) return { locale: wanted, fallback: null };
+  return { locale: 'en-US', fallback: wanted };
+}
+
+function citeprocEngine(items: ReadonlyArray<Record<string, unknown>>, template: string, locale = 'en-US'): CiteprocEngine {
+  const util = (Cite as unknown as { util: { downgradeCsl(items: unknown): unknown } }).util;
+  const data = util.downgradeCsl(items.map((i) => ({ ...i }))) as unknown[];
+  const engine = (plugins.config.get('@csl') as unknown as { engine(d: unknown[], t: string, l: string, f: string): CiteprocEngine }).engine(
+    data, template, locale, 'html',
+  );
+  // Links for the DOIs and URLs a style prints (each writer decides how to show them).
+  engine.opt.development_extensions['wrap_url_and_doi'] = true;
+  return engine;
+}
+
+/** True when a citation item carries text of its own around the reference (a prefix, or a suffix that is not a locator). */
+function hasAffix(i: CitationItemInput): boolean {
+  return (i.prefix ?? '').trim() !== '' || (i.suffix ?? '').trim() !== '';
+}
+
+/**
+ * The item order of each citation whose items are not all plain, as pandoc's
+ * citeproc orders it: an item with a prefix or a suffix stays where it was
+ * written, and each run of plain items between such items is sorted by the
+ * style's citation sort (`[see @b; @a]` keeps `see B` first; `[@b; @a; see @c]`
+ * sorts A and B and keeps `see C` last). The sort keys are citeproc-js's own:
+ * a probe pass sorts each such citation whole, and every run takes its
+ * items' relative order from it. Citations that need no special order are
+ * absent from the map (citeproc sorts them itself).
+ */
+function clusterOrders(
+  items: ReadonlyArray<Record<string, unknown>>,
+  template: string,
+  locale: string,
+  citations: readonly DocumentCitation[],
+  noteStyle: boolean,
+): Map<number, number[]> {
+  const out = new Map<number, number[]>();
+  const affixed = citations.map((c, n) => (c.items.length > 1 && c.items.some(hasAffix) ? n : -1)).filter((n) => n !== -1);
+  if (affixed.length === 0) return out;
+  const probe = citeprocEngine(items, template, locale);
+  probe.rebuildProcessorState(
+    citations.map((c, n) => ({
+      citationID: `c${n}`,
+      citationItems: c.items.map((i, k) => ({ ...citeprocItem(i), 'x-index': k })),
+      properties: { noteIndex: noteStyle ? n + 1 : 0 },
+    })),
+    'html',
+    [],
+  );
+  for (const n of affixed) {
+    const c = citations[n] as DocumentCitation;
+    const sorted = probe.registry?.citationreg?.citationById?.[`c${n}`]?.sortedItems?.map((x) => Number(x[1]['x-index']));
+    const rank = new Map<number, number>((sorted ?? c.items.map((_i, k) => k)).map((k, r) => [k, r] as const));
+    const order: number[] = [];
+    let run: number[] = [];
+    const flush = (): void => {
+      order.push(...run.sort((a, b) => (rank.get(a) ?? a) - (rank.get(b) ?? b)));
+      run = [];
+    };
+    c.items.forEach((item, k) => {
+      if (hasAffix(item)) {
+        flush();
+        order.push(k);
+      } else run.push(k);
+    });
+    flush();
+    out.set(n, order);
+  }
+  return out;
+}
+
+/**
+ * Render every citation of a document and its bibliography in `style` (a
+ * bundled key or a `.csl` path) through ONE citeproc engine (D-21-03; the
+ * section header has the rules). `entries` are parsed bibliography entries
+ * (every cited id must be among them; they are case-protected here, D-21-06);
+ * `citations` are the document's citations in order. Deterministic and
+ * offline. The bibliography holds exactly the cited keys.
+ */
+export async function renderDocumentCitations(
+  entries: ReadonlyArray<Record<string, unknown>>,
+  style: string,
+  citations: readonly DocumentCitation[],
+): Promise<RenderedDocument> {
+  if (!Array.isArray(entries)) throw new TypeError('renderDocumentCitations: entries must be an array of parsed entries');
+  const template = ensureStyleTemplate(style);
+  const noteStyle = noteStyles.has(template);
+  const items = caseProtectItems(entries);
+  const known = new Set(items.map((e) => String(e['id'] ?? '')));
+  for (const c of citations) {
+    for (const i of c.items) {
+      if (!known.has(i.id)) throw new Error(`renderDocumentCitations: no bibliography entry for "${i.id}"`);
+    }
+  }
+  const { locale, fallback } = styleLocale(style);
+  const order = clusterOrders(items, template, locale, citations, noteStyle);
+  const build = (flag: 'suppress-author' | 'author-only'): unknown[] =>
+    citations.map((c, n) => {
+      const ord = order.get(n);
+      const list = ord !== undefined ? ord.map((k) => c.items[k] as CitationItemInput) : c.items;
+      return {
+        citationID: `c${n}`,
+        citationItems: list.map((i, k) => citeprocItem(i, c.narrative === true && k === 0 ? flag : undefined)),
+        properties: { noteIndex: noteStyle ? n + 1 : 0, ...(ord !== undefined ? { unsorted: true } : {}) },
+      };
+    });
+  // The author-only pass first (only when a narrative citation needs it): its
+  // positions are the same as the main pass's, so a narrative citation's name
+  // takes the first or subsequent form pandoc gives it.
+  const authors: string[] = [];
+  if (citations.some((c) => c.narrative === true)) {
+    const passB = citeprocEngine(items, template, locale).rebuildProcessorState(build('author-only'), 'html', []);
+    passB.forEach((r, n) => (authors[n] = r[2]));
+  }
+  const engine = citeprocEngine(items, template, locale);
+  const passA = engine.rebuildProcessorState(build('suppress-author'), 'html', []);
+  const rendered: RenderedCitation[] = citations.map((c, n) => {
+    const restores = c.items
+      .map((i) => (i.locator ? citeprocLocator(i.locator, i.label ?? 'page').restore : null))
+      .filter((r): r is [string, string] => r !== null);
+    let rest = printedRuns(passA[n]?.[2] ?? '');
+    for (const [from, to] of restores) rest = replaceInRuns(rest, from, to);
+    if (c.narrative !== true) return noteStyle ? { inline: [], note: rest.length > 0 ? rest : null } : { inline: rest, note: null };
+    const author = printedRuns(authors[n] ?? '');
+    if (noteStyle) return { inline: author, note: rest.length > 0 ? rest : null };
+    const inline = author.length > 0 && rest.length > 0 ? [...author, { text: ' ' }, ...rest] : author.length > 0 ? author : rest;
+    return { inline, note: null };
+  });
+  const bib = citations.length > 0 ? engine.makeBibliography() : false;
+  const bibliography: RenderedBibEntry[] = [];
+  let hangingIndent = false;
+  if (bib !== false) {
+    const [meta, html] = bib;
+    hangingIndent = Boolean(meta.hangingindent);
+    html.forEach((entryHtml, n) => {
+      const id = meta.entry_ids[n]?.[0] ?? '';
+      const margin = /<div class="csl-left-margin">([\s\S]*?)<\/div>/.exec(entryHtml);
+      const right = /<div class="csl-right-inline">([\s\S]*)<\/div>\s*<\/div>\s*$/.exec(entryHtml);
+      const label = margin !== null ? trimRuns(citeprocHtmlRuns(margin[1] as string)) : null;
+      const body = margin !== null && right !== null ? (right[1] as string) : entryHtml;
+      bibliography.push({ id, label: label !== null && label.length > 0 ? label : null, runs: trimRuns(citeprocHtmlRuns(body)) });
+    });
+  }
+  return { noteStyle, citations: rendered, bibliography, hangingIndent, localeFallback: fallback };
 }

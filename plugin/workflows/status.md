@@ -42,7 +42,7 @@ returns an error result carrying the same "no active paper" line and exit code 1
 
 ## Outputs
 
-- stdout (Tier 1: the `pensmith_status` tool's fenced text, byte for byte inside the fence): per-section status table + `  next: <verb>` line (+ an `  attention: …` line when the router stopped on a problem, or a `  note: …` line when it finished with a detail — an outline-only paper whose outline is approved)
+- stdout (Tier 1: the `pensmith_status` tool's fenced text, byte for byte inside the fence): per-section status table + `  next: <verb>` line (+ an `  attention: …` line when the router stopped on a problem, or a `  note: …` line when it finished with a detail — an outline-only paper whose outline export is current; an outline-only paper also prints `  mode: outline only`, and once complete a `  deliverables:` list: `.paper/ANNOTATED-BIBLIOGRAPHY.md` and each exported `.paper/export/OUTLINE.<ext>` / `ANNOTATED-BIBLIOGRAPHY.<ext>`)
 - exit code 0 when a paper was reported; 1 (EXIT_ERROR) when there is no paper
   here or `.paper/STATE.json` is unreadable (RUN-09)
 
