@@ -1,7 +1,7 @@
 ---
 phase: 21-export
 verified: 2026-10-01
-verified_at_commit: e800683 (the last code change is d8264b4; the close-out adds .planning only)
+verified_at_commit: 25b758d (the close-out's one product fix, the bounded plagiarism check; everything else in the close-out is .planning)
 status: closed — 21 of 22 requirements Complete; EXP-09 Pending (partial); 8 of 8 ROADMAP success criteria met on the user path
 score: 21/22 requirements Complete (EXP-01..08, EXP-10..21, GRND-11); EXP-09 met on every local criterion, its CI-compile criterion deferred to HARDEN-04 (Phase 26); @@ACCEPT_SCORE@@ user-path acceptance checks pass on the final code
 caveats: [no CI run has exercised Phase 21 code (CI-06), so the pandoc-dependent suites (HARDEN-03, zero-trace Test J, the docx read-back) and macOS / Windows are local evidence until the first green check matrix; keyed live GPTZero / Originality.ai / Sapling scores are maintainer items (no keys here; the real GPTZero's rejection of a dummy key was observed live); TeX compilation is local evidence until HARDEN-04 puts a TeX engine on the CI legs]
@@ -15,10 +15,11 @@ caveats: [no CI run has exercised Phase 21 code (CI-06), so the pandoc-dependent
 - **21 of 22 requirements are Complete.** **EXP-09 stays Pending (partial):** its built-in PDF writer, the pandoc-without-engine fallback and the standalone LaTeX on both paths all work, and both LaTeX paths compile with tectonic 0.15 and pdflatex here. Its acceptance bullet "`--format latex` output compiles with tectonic (or pdflatex) **in the CI export job**" cannot be met until HARDEN-04 (Phase 26) installs a TeX engine on the CI legs (review rounds 2 and 3 recorded the deferral; §2).
 - **All 8 ROADMAP success criteria are met** on the user path (§3). Criterion 1 says only "LaTeX compiles", which holds locally on both paths; the CI leg is EXP-09's open bullet.
 - **The ROADMAP Phase 21 box stays unticked**, because EXP-09 is not fully met. This follows Phase 17 and Phase 19, which closed with one requirement open.
-- **Gate:** green at `e800683` (§1). The one failing test is the root-only atomic-write case (CLAUDE.md).
+- **Gate:** green at `25b758d` (§1). The one failing test is the root-only atomic-write case (CLAUDE.md).
+- **Defect found and fixed:** the live plagiarism lane found that the DuckDuckGo back-off grew without bound while DuckDuckGo challenged most queries, so `pensmith plagiarism` and a live `done` ran past five minutes. Each wait is now capped and the run has a time budget (`25b758d`; §4).
 - **User path:** the integration pass's acceptance drivers were re-run on the final code, with expectations updated where the review rounds deliberately changed behaviour, plus a new driver for the review-round behaviour (§4). @@ACCEPT_SCORE@@ checks pass.
 
-## 1. Gate (the closer, at `e800683`; Linux, as root, Node 22.22.2, LANG=C.UTF-8, pandoc 3.9 on PATH)
+## 1. Gate (the closer, at `25b758d`; Linux, as root, Node 22.22.2, LANG=C.UTF-8, pandoc 3.9 on PATH)
 
 | Step | Result |
 |---|---|
@@ -58,7 +59,7 @@ The integration pass recorded the same gate at `c1eb302` on Node 22 and Node 24,
 | EXP-16 — honest, timestamped scores or an exact reason | **Met** | §4 EXP-16: the MockAgent lanes (GPTZero 0.61 → 0.37 with ISO time and `gptzero` in the terminal and VERIFICATION.md); offline never prints a bare percentage; the live GPTZero answers a dummy key with `unavailable (GPTZero rejected the API key)`; `--no-score` and `honesty_score = false` send nothing and say so; no product path reads a GPTZero cassette; the framing file makes no undetectable / evade claim. Tests: `honesty`, `done-honesty`, `done-flags`. |
 | EXP-17 — explicit, persisted consent; exact skip reasons | **Met** | §4 EXP-17 (amended in review round 1, consent stored in the data dir): a non-TTY `--yolo` run with no recorded consent makes 0 detector requests and names the reason; a copied paper whose config.toml says `honesty_consent = true` sends nothing; with the user's consent in `detector-consent.json` a non-TTY score makes one request; under a real pty the first score asks once and records the answer in the data dir (config.toml untouched), and the second does not ask; a failing humanizer gives `humanizer failed: <reason>`. Tests: `honesty-consent`, `honesty`, `gates-registry`. |
 | EXP-18 — Originality and Sapling backends | **Met** | §4 EXP-18: `honesty_backend = "foo"` fails validation listing the three; doctor reports the three keys as present/absent only. The MockAgent lanes cover both new backends' request shapes and score mapping, and the service's own reason (Originality.ai's Enterprise-plan 422). Tests: `honesty`, `done-flags`. |
-| EXP-19 — distinctive quoted phrases; verbatim matches | **Met** | §4 EXP-19: the MockAgent lane (quoted queries, every section, no heading or title text, verbatim-only matches) and the live lane on the real DuckDuckGo with a Bleak House passage in §4 (§4 records the run). Review round 3 paces the live queries and reports per-section coverage, with INCOMPLETE when most queries go unanswered. Tests: `plagiarism`, `done-honesty`. |
+| EXP-19 — distinctive quoted phrases; verbatim matches | **Met** | §4 EXP-19: the MockAgent lane (quoted queries, every section, no heading or title text, verbatim-only matches) and the live lane on the real DuckDuckGo with a Bleak House passage in §4 (§4 records the run). Review round 3 paces the live queries and reports per-section coverage, with INCOMPLETE when most queries go unanswered. The close-out bounds the run: each back-off is capped at 30 s, and the run has 12 s per phrase (`25b758d`). Tests: `plagiarism` (including the close-out's always-refusing DuckDuckGo), `done-honesty`. |
 | EXP-20 — real URLs; never faked | **Met** | §4 EXP-20: offline → `plagiarism check skipped (offline)`; `--no-plagiarism-check` → 0 DuckDuckGo requests and the recorded skip; the live VERIFICATION.md holds no `duckduckgo.com/l/?uddg=`. Tests: `plagiarism` (uddg decoding), `done-flags`. |
 | EXP-21 — done flags and aliases | **Met** | §4 EXP-21: `done --help` lists the seven flags; `--no-verify --raw` exits 2 with the §7.9 refusal, and with `--yolo` proceeds while a FABRICATED citation still blocks; `--format html` exits 2; `export --format docx`, `score`, `plagiarism` and `humanize` behave as D-21-23 says; `cli-verbs` still asserts 16 verbs and `validate:manifests` passes. Tests: `done-flags`, `cli-aliases`, `unknown-verb`, `plumbing-args`, `cli-verbs`. |
 | GRND-11 — outline-only mode | **Met** | §4 GRND-11: `new --mode outline --yolo` then bare `pensmith --yolo` runs research → outline → done and stops; no `sections/*/DRAFT.md`; `status` reports outline only, complete; the annotated bibliography lists each source's styled reference, abstract excerpt, relevance and sections; the routed done writes the `.md` and `.docx` pairs (review round 2), and an explicit `--format docx` run passes the zero-trace scan; a fabricated source exits 4 and exports nothing; the router property test covers the terminus. Tests: `outline-only-mode`, `annotated-bibliography`, `outline-record`, `router-outline.property`, `pensmith-router`, `estimator`. |
@@ -86,7 +87,7 @@ The integration pass recorded the same gate at `c1eb302` on Node 22 and Node 24,
 
 ## 4. User-path acceptance checks on the final code
 
-**What ran.** The integration pass's drivers (`scratchpad/p21/integrate/s1..s6`, 150 checks at `c1eb302`) were copied to `scratchpad/p21/close/accept/` and re-run at `e800683`, with a seventh driver, `s7-rounds`, for behaviour the review rounds added. Each driver:
+**What ran.** The integration pass's drivers (`scratchpad/p21/integrate/s1..s6`, 150 checks at `c1eb302`) were copied to `scratchpad/p21/close/accept/`, with a seventh driver, `s7-rounds`, for behaviour the review rounds added. A first run at `e800683` (165 checks, 155 pass) found the plagiarism defect below; every other failure was an expectation a review round had changed on purpose (listed below). The tables are the final run at `25b758d`. Each driver:
 - spawns the built `node dist/bin/pensmith.js` in its own project folder, outside any test context (no `NODE_TEST_CONTEXT` / `PENSMITH_TEST`, no `CLAUDE_CONFIG_DIR`);
 - puts HOME, USERPROFILE, XDG_DATA_HOME and LOCALAPPDATA inside the workspace, with `PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org` and a dummy Anthropic key;
 - names the RUN-21 mock LLM in the workspace's global `runtime.json`;
@@ -94,6 +95,13 @@ The integration pass recorded the same gate at `c1eb302` on Node 22 and Node 24,
 - chooses PATH per check: pandoc 3.9 (with pdflatex in /usr/bin), pandoc and tectonic only, or no tools.
 
 Independent checkers: a Python RIS reader, Python ZIP / zlib byte scans of every docx part and decompressed PDF stream, `pandoc -f docx -t plain`, pandoc 3.9 citeproc as the EXP-04 oracle, tectonic 0.15 and pdflatex, and a real pseudo-terminal for the consent question. Each command, with stdout, stderr and exit code, is in `close/accept/EVIDENCE.log`, and each check is in `close/accept/results.jsonl`.
+
+**Defect found and fixed (`25b758d`).** On 2026-10-01 DuckDuckGo challenged about two queries in three from this environment (HTTP 202, its bot challenge). `plagiarism.ts` waited 10 s times the number of challenges in a row before the next query, with no cap, and asked a challenged phrase up to twice more. In the first run, the live `pensmith plagiarism` (17 phrases, 25 queries) and the live `pensmith done` were both still running when the driver killed them at 300 s, and neither printed anything after its start line ("about 1 min"). The two live checks therefore failed: EXP-19's live lane and EXP-20's live VERIFICATION.md. With every query refused, the waits would have summed to hours. The fix:
+- caps each back-off wait at 30 s;
+- gives the run 12 s per phrase. Once that is spent, no further query is sent, and each phrase still waiting reports its last refusal or `not queried — the check's time budget (N min) ran out …`, so the coverage line reports the run INCOMPLETE;
+- names the bound in its start line and says when it stops.
+
+done.md step 2 and the README say so. The new `plagiarism` test runs a DuckDuckGo that refuses every query, and it fails if either the cap or the budget is removed. The final run's live lane is in the EXP-19 and EXP-20 tables.
 
 **Expectations updated because a review round changed the behaviour on purpose** (each is the fix the round recorded, never a loosened check):
 - **EXP-17 consent (round 1).** Consent is recorded in the data dir (`detector-consent.json`), not config.toml. The non-TTY "with consent" check now writes the user's record there, a new check confirms that a copied paper's `honesty_consent = true` sends nothing, the pty check reads the data-dir record and confirms config.toml is untouched, and the skip reason is the new text (`run pensmith score (or pensmith done) once in a terminal and answer the detector question`).
