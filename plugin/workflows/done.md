@@ -227,10 +227,17 @@ decision for it.
    against the shipped SCOWL word tiers (`templates/wordfreq/`), at least one
    per paragraph in paper order, up to `[verification] plagiarism_max_phrases`
    (default 30). Each is one quoted DuckDuckGo HTML query through the egress
-   gate; a result is a match only when the normalised phrase appears verbatim in
-   its title or snippet, and its link is decoded from DuckDuckGo's `/l/?uddg=`
-   redirect. A DuckDuckGo bot challenge is reported per phrase, never read as
-   "no match". `--no-plagiarism-check` and `[verification] plagiarism_check =
+   gate, ONE AT A TIME, 2.5–5 s apart (jittered; DuckDuckGo answers a burst
+   with its bot challenge), every section's first phrase before any section's
+   second; a challenged phrase is asked again later (at most twice more, after
+   a growing back-off). A result is a match only when the normalised phrase
+   appears verbatim in its title or snippet, and its link is decoded from
+   DuckDuckGo's `/l/?uddg=` redirect. A query still refused is reported per
+   phrase, never read as "no match"; the run names the sections no answered
+   phrase covers, and one where most queries got no answer is `INCOMPLETE` —
+   in the terminal, in VERIFICATION.md's `Coverage:` line and at the export
+   confirmation — never "0 found" (`pensmith plagiarism` asks again).
+   `--no-plagiarism-check` and `[verification] plagiarism_check =
    false` send nothing (`plagiarism check skipped (--no-plagiarism-check)` /
    `(config)`); offline and `--dry-run` say `skipped (offline)` /
    `(dry-run)`. Matches feed the confirmation; the check never blocks.

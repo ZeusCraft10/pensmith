@@ -30,6 +30,9 @@ import { loadCassetteFile } from '../bin/lib/http-mock.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import { _resetBucketsForTest } from '../bin/lib/http.js';
 import {
+  DDG_PACING,
+  plagiarismCoverage,
+  plagiarismCoverageLine,
   PHRASE_MAX_WORDS,
   PHRASE_MIN_WORDS,
   ddgQueryUrl,
@@ -123,6 +126,8 @@ async function withDdg<T>(name: string, fn: (paths: string[]) => Promise<T>): Pr
 }
 
 const SECTION_IDS = ['1', '2', '3', '3a', '4'];
+/** No waits between queries (the live pacing is DDG_PACING). */
+const FAST = { minGapMs: 0, maxGapMs: 0, backoffMs: 0 };
 
 test('EXP-19: every section contributes a phrase, in paper order, each 6–10 words of body prose — never the title, a heading, a citation, a quote, a list item or the references', () => {
   const phrases = selectPlagiarismPhrases(PAPER, { sectionIds: SECTION_IDS });
@@ -184,7 +189,7 @@ test('EXP-19: a match is the normalised phrase verbatim in a title or snippet �
 
 test('EXP-19 (test lane): a five-section paper sends one quoted query per phrase and finds the Dickens passage in §3a — and only it', async () => {
   await withDdg('results-page', async (paths) => {
-    const results = await runPlagiarism(PAPER, { sectionIds: SECTION_IDS });
+    const results = await runPlagiarism(PAPER, { sectionIds: SECTION_IDS, pacing: FAST });
     assert.equal(paths.length, results.length, 'one query per phrase');
     for (const p of paths) {
       const q = new URL(p, 'https://html.duckduckgo.com').searchParams.get('q') ?? '';
@@ -209,7 +214,7 @@ test('EXP-19 (test lane): DuckDuckGo\'s bot challenge is reported per phrase —
   assert.equal(isDdgChallenge(page('challenge-page').html), true);
   assert.equal(isDdgChallenge(page('results-page').html), false);
   await withDdg('challenge-page', async () => {
-    const results = await runPlagiarism(PAPER, { sectionIds: SECTION_IDS, maxPhrases: 2 });
+    const results = await runPlagiarism(PAPER, { sectionIds: SECTION_IDS, maxPhrases: 2, pacing: FAST });
     assert.equal(results.length, 2);
     for (const r of results) {
       assert.deepEqual(r.matches, []);
@@ -253,4 +258,89 @@ test('EXP-20: a skipped check is one line in the record, naming why', () => {
 test('DONE-02: advisory — a pathological draft never throws', async () => {
   await assert.doesNotReject(runPlagiarism(''));
   await assert.doesNotReject(runPlagiarism('# Only a title\n\n## Only a heading\n'));
+});
+
+// Review round 3: DuckDuckGo answers a burst with its bot challenge, so the
+// queries go one at a time, paced and jittered; every section's first phrase
+// is asked before any second; a challenged phrase is asked again later; and a
+// run where most queries got no answer is INCOMPLETE, naming what it did not
+// check — never "0 found".
+test('review r3: queries go one at a time, every section first; a challenged phrase is retried; coverage names what was not checked', async () => {
+  assert.ok(DDG_PACING.minGapMs >= 2000 && DDG_PACING.maxGapMs >= DDG_PACING.minGapMs && DDG_PACING.retries >= 1, 'the live pacing waits seconds between queries');
+  const { html: results } = page('results-page');
+  const { html: challenge, status: challengeStatus } = page('challenge-page');
+  const saved = process.env['PENSMITH_NETWORK_TESTS'];
+  const savedOffline = process.env['PENSMITH_OFFLINE'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
+  delete process.env['PENSMITH_OFFLINE'];
+  _resetBucketsForTest();
+  const { agent, restore } = installMockAgent();
+  const asked: string[] = [];
+  const at: number[] = [];
+  agent
+    .get('https://html.duckduckgo.com')
+    .intercept({ path: /^\/html\/\?q=/, method: 'GET' })
+    .reply((req) => {
+      const q = new URL(String(req.path), 'https://html.duckduckgo.com').searchParams.get('q') ?? '';
+      asked.push(q);
+      at.push(Date.now());
+      // The first query is challenged once, then answered.
+      const challenged = asked.length === 1;
+      return { statusCode: challenged ? challengeStatus : 200, data: challenged ? challenge : results, responseOptions: { headers: { 'content-type': 'text/html; charset=UTF-8' } } };
+    })
+    .persist();
+  try {
+    const phrases = selectPlagiarismPhrases(PAPER, { sectionIds: SECTION_IDS });
+    const out = await runPlagiarism(PAPER, { sectionIds: SECTION_IDS, pacing: { minGapMs: 25, maxGapMs: 25, backoffMs: 25 } });
+    for (let i = 1; i < at.length; i += 1) assert.ok((at[i] as number) - (at[i - 1] as number) >= 20, `one query at a time, paced: ${at.map((t) => t - (at[0] as number)).join(',')}`);
+    assert.equal(asked.length, phrases.length + 1, 'the challenged phrase was asked again');
+    assert.equal(asked[0], asked.at(-1), 'the challenged phrase was asked again at the end');
+    // Every section's first phrase before any section's second.
+    const firstOf = new Map<string, number>();
+    phrases.forEach((p) => {
+      if (!firstOf.has(p.location.section)) firstOf.set(p.location.section, asked.indexOf(`"${p.phrase}"`));
+    });
+    const seconds = phrases.filter((p, i) => phrases.findIndex((q) => q.location.section === p.location.section) !== i).map((p) => asked.indexOf(`"${p.phrase}"`));
+    assert.ok(Math.max(...firstOf.values()) < Math.min(...seconds), `first phrases first: ${asked.join(' | ')}`);
+    assert.ok(out.every((r) => r.error === undefined), 'the retried phrase was answered');
+    assert.equal(plagiarismCoverageLine(out), null);
+  } finally {
+    await restore();
+    _resetBucketsForTest();
+    if (saved === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = saved;
+    if (savedOffline !== undefined) process.env['PENSMITH_OFFLINE'] = savedOffline;
+  }
+  // Coverage: most queries refused is INCOMPLETE, naming the unchecked sections.
+  const refused = (section: string): PlagiarismResult => ({ phrase: 'x y z', matches: [], location: { section, paragraph: 1 }, error: 'DuckDuckGo refused the query (its bot challenge) — retry later' });
+  const answered = (section: string): PlagiarismResult => ({ phrase: 'a b c', matches: [], location: { section, paragraph: 1 } });
+  const run = [answered('1'), refused('1'), refused('2'), refused('3'), refused('3')];
+  assert.deepEqual(plagiarismCoverage(run), { queried: 5, answered: 1, unanswered: 4, unchecked: ['2', '3'], incomplete: true });
+  assert.equal(plagiarismCoverageLine(run), 'INCOMPLETE — 4 of 5 queries got no answer; not checked: §2, §3 — run `pensmith plagiarism` later to check again');
+  assert.match(renderPlagiarismSection(run), /^Coverage: INCOMPLETE — 4 of 5 queries got no answer; not checked: §2, §3/m);
+  assert.equal(plagiarismCoverage([answered('1'), refused('2')]).incomplete, false, 'half is not most');
+});
+
+test('review r3: a section titled "Sources and Methods" is probed, and every later section keeps its own id', () => {
+  const draft = [
+    '# Title',
+    '',
+    '## Introduction',
+    '',
+    'Archival correspondence between dock unions and shipping firms reveals bitter disputes over hazard pay [@a].',
+    '',
+    '## Sources and Methods',
+    '',
+    'Parish registers transcribed by volunteers record every burial in the riverside parishes during the epidemic [@b].',
+    '',
+    '## Results',
+    '',
+    'Mortality spiked sharply among dockworkers during the unusually hot summer of that cholera year [@c].',
+    '',
+  ].join('\n');
+  const phrases = selectPlagiarismPhrases(draft, { sectionIds: ['1', '2', '3'] });
+  const at = (word: string): string | undefined => phrases.find((p) => p.phrase.toLowerCase().includes(word))?.location.section;
+  assert.equal(at('parish') ?? at('registers') ?? at('volunteers') ?? at('burial'), '2', JSON.stringify(phrases));
+  assert.equal(at('mortality') ?? at('dockworkers') ?? at('cholera'), '3', JSON.stringify(phrases));
+  assert.deepEqual([...new Set(phrases.map((p) => p.location.section))], ['1', '2', '3']);
 });

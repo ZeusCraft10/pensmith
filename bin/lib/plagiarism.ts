@@ -18,8 +18,14 @@
 //   2. runPlagiarism: each phrase is one GET of the hard-coded
 //      https://html.duckduckgo.com/html/ endpoint with q = the phrase in double
 //      quotes (the only dynamic component, URL-encoded), through http.ts — its
-//      per-host rate limits unchanged. Offline / --dry-run send nothing and say
-//      `skipped (offline)` / `(dry-run)` (RUN-03) — never a canned page.
+//      per-host rate limits unchanged — ONE AT A TIME, 2.5–5 s apart (review
+//      round 3: DuckDuckGo answers a burst with its bot challenge), every
+//      section's first phrase before any section's second, a challenged phrase
+//      asked again later (at most twice more, after a growing back-off).
+//      plagiarismCoverage names the sections no answered phrase covers, and a
+//      run where most queries got no answer is INCOMPLETE — never "0 found".
+//      Offline / --dry-run send nothing and say `skipped (offline)` /
+//      `(dry-run)` (RUN-03) — never a canned page.
 //   3. parseDdgHtml: each organic result's title, snippet and REAL destination
 //      — DuckDuckGo's `/l/?uddg=` redirect decoded (`&amp;` unescaped, then
 //      URL-decoded); only http(s) destinations are kept. A bot-challenge page
@@ -35,7 +41,6 @@
 import { readFileSync } from 'node:fs';
 import { fetch as httpFetch } from './http.js';
 import { networkMode } from './http-mock.js';
-import { Semaphore } from './budget.js';
 import { replaceCitations } from './citation-token.js';
 import { out } from './output-sink.js';
 import { pluginTemplatePath } from './paths.js';
@@ -76,6 +81,64 @@ export interface PlagiarismOptions {
   maxPhrases?: number;
   /** The section ids in the order of the draft's `## ` headings (default: their positions, 1, 2, …). */
   sectionIds?: readonly string[];
+  /** How the queries are paced (default DDG_PACING); tests pass zero gaps. */
+  pacing?: Partial<PlagiarismPacing>;
+}
+
+/**
+ * How the DuckDuckGo queries are paced (review round 3): DuckDuckGo answers a
+ * burst with its bot challenge, so the queries go ONE AT A TIME, `minGapMs` to
+ * `maxGapMs` apart (jittered); a challenged phrase is asked again later, at
+ * most `retries` more times, after a back-off of `backoffMs` times the number
+ * of challenges in a row.
+ */
+export interface PlagiarismPacing {
+  readonly minGapMs: number;
+  readonly maxGapMs: number;
+  readonly retries: number;
+  readonly backoffMs: number;
+}
+
+/** The live pacing (measured: six queries 4 s apart got four answers; six in a five-wide burst got one). */
+export const DDG_PACING: PlagiarismPacing = Object.freeze({ minGapMs: 2_500, maxGapMs: 5_000, retries: 2, backoffMs: 10_000 });
+
+/** What a run checked: answered phrases, refused ones, and the sections no answered phrase covers. */
+export interface PlagiarismCoverage {
+  readonly queried: number;
+  readonly answered: number;
+  readonly unanswered: number;
+  /** Sections (in paper order) with a probed phrase but none answered. */
+  readonly unchecked: readonly string[];
+  /** True when most queries got no answer: the run is no "0 found". */
+  readonly incomplete: boolean;
+}
+
+/** The coverage of a run's results (skipped phrases are neither answered nor unanswered). Pure. */
+export function plagiarismCoverage(results: ReadonlyArray<PlagiarismResult>): PlagiarismCoverage {
+  const queried = results.filter((r) => r.skipped === undefined);
+  const answered = queried.filter((r) => r.error === undefined);
+  const sections: string[] = [];
+  for (const r of queried) {
+    const sec = r.location?.section;
+    if (sec !== undefined && !sections.includes(sec)) sections.push(sec);
+  }
+  const unchecked = sections.filter((sec) => !answered.some((r) => r.location?.section === sec));
+  return {
+    queried: queried.length,
+    answered: answered.length,
+    unanswered: queried.length - answered.length,
+    unchecked,
+    incomplete: queried.length > 0 && (queried.length - answered.length) * 2 > queried.length,
+  };
+}
+
+/** The one line naming what a run did not check, or null when every query was answered. */
+export function plagiarismCoverageLine(results: ReadonlyArray<PlagiarismResult>): string | null {
+  const c = plagiarismCoverage(results);
+  if (c.unanswered === 0) return null;
+  const head = c.incomplete ? `INCOMPLETE — ${c.unanswered} of ${c.queried} queries got no answer` : `${c.unanswered} of ${c.queried} queries got no answer`;
+  const sections = c.unchecked.length > 0 ? `; not checked: ${c.unchecked.map((x) => `§${x}`).join(', ')}` : '';
+  return `${head}${sections} — run \`pensmith plagiarism\` later to check again`;
 }
 
 // ============================================================
@@ -201,8 +264,12 @@ function bodyParagraphs(draftMd: string, sectionIds: readonly string[] | undefin
     const heading = /^\s{0,3}(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       flush();
-      references = /^(?:references|bibliography|works cited|sources|literature cited)\b/i.test((heading[2] ?? '').trim());
-      if ((heading[1] ?? '').length === 2 && !references) {
+      // A reference list is only a heading that IS one (`## References`);
+      // a section titled "Sources and Methods" is a section (review round 3).
+      references = /^(?:references|bibliography|works cited|literature cited)$/i.test((heading[2] ?? '').replace(/\s+#+\s*$/, '').trim());
+      // Every `## ` heading is one of compile's sections — it always takes the
+      // next section id, so the later sections keep their own ids.
+      if ((heading[1] ?? '').length === 2) {
         position += 1;
         current = { section: sectionIds?.[position - 1] ?? String(position), paragraphs: [] };
         sections.push(current);
@@ -273,7 +340,6 @@ const DDG_HEADERS: Record<string, string> = {
   Accept: 'text/html',
 };
 
-const DDG_FAN_OUT = 5;
 
 /** The quoted exact-phrase query URL (the host is hard-coded; the quoted phrase is the one, URL-encoded, dynamic part). */
 export function ddgQueryUrl(phrase: string): string {
@@ -383,10 +449,10 @@ function debug(msg: string): void {
 }
 
 /** One quoted query: the verbatim matches' URLs, or why there is no answer. Never throws. */
-async function queryPhrase(phrase: string): Promise<{ matches: string[]; error?: string }> {
+async function queryPhrase(phrase: string): Promise<{ matches: string[]; error?: string; challenged?: true }> {
   try {
     const resp = await httpFetch(ddgQueryUrl(phrase), { source: 'generic', noCache: true, headers: DDG_HEADERS });
-    if (isDdgChallenge(resp.body)) return { matches: [], error: 'DuckDuckGo refused the query (its bot challenge) — retry later' };
+    if (isDdgChallenge(resp.body)) return { matches: [], error: 'DuckDuckGo refused the query (its bot challenge) — retry later', challenged: true };
     if (resp.status !== 200) return { matches: [], error: `DuckDuckGo answered HTTP ${resp.status}` };
     return { matches: parseDdgHtml(resp.body).filter((r) => isVerbatimMatch(phrase, r)).map((r) => r.url) };
   } catch (err) {
@@ -409,15 +475,49 @@ export async function runPlagiarism(draftMd: string, opts: PlagiarismOptions = {
     out(`pensmith: plagiarism check skipped (${skipped}) — ${phrases.length} distinctive phrase(s) not queried.\n`);
     return phrases.map((p) => ({ phrase: p.phrase, matches: [], skipped, location: p.location }));
   }
-  const sem = new Semaphore(DDG_FAN_OUT);
-  return Promise.all(
-    phrases.map((p) =>
-      sem.withLock(async () => {
-        const r = await queryPhrase(p.phrase);
-        return { phrase: p.phrase, matches: r.matches, location: p.location, ...(r.error !== undefined ? { error: r.error } : {}) };
-      }),
-    ),
-  );
+  const pace: PlagiarismPacing = { ...DDG_PACING, ...(opts.pacing ?? {}) };
+  out(`pensmith: plagiarism check: ${phrases.length} distinctive phrase(s), one query at a time (DuckDuckGo refuses bursts) — about ${Math.max(1, Math.round((phrases.length * (pace.minGapMs + pace.maxGapMs)) / 2 / 60_000))} min\n`);
+  // Coverage first: every section's first phrase, then every section's
+  // second, … — so a run cut short by refusals still checked each section.
+  const bySection = new Map<string, number[]>();
+  phrases.forEach((p, i) => {
+    const list = bySection.get(p.location.section) ?? [];
+    list.push(i);
+    bySection.set(p.location.section, list);
+  });
+  const queue: Array<{ index: number; attempt: number }> = [];
+  for (let k = 0; queue.length < phrases.length; k += 1) {
+    for (const list of bySection.values()) {
+      const i = list[k];
+      if (i !== undefined) queue.push({ index: i, attempt: 0 });
+    }
+  }
+  const results: PlagiarismResult[] = phrases.map((p) => ({ phrase: p.phrase, matches: [], location: p.location }));
+  let streak = 0;
+  for (let n = 0; n < queue.length; n += 1) {
+    const item = queue[n] as { index: number; attempt: number };
+    if (n > 0) await sleep(streak > 0 ? pace.backoffMs * streak : jitter(pace.minGapMs, pace.maxGapMs));
+    const p = phrases[item.index] as { phrase: string; location: PhraseLocation };
+    const r = await queryPhrase(p.phrase);
+    const challenged = r.challenged === true;
+    streak = challenged ? streak + 1 : 0;
+    if (challenged && item.attempt < pace.retries) {
+      queue.push({ index: item.index, attempt: item.attempt + 1 });
+      continue;
+    }
+    results[item.index] = { phrase: p.phrase, matches: r.matches, location: p.location, ...(r.error !== undefined ? { error: r.error } : {}) };
+  }
+  return results;
+}
+
+/** A wait of `ms` (none for 0). */
+function sleep(ms: number): Promise<void> {
+  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
+}
+
+/** A uniformly jittered gap in [min, max]. */
+function jitter(min: number, max: number): number {
+  return Math.max(0, Math.round(min + Math.random() * Math.max(0, max - min)));
 }
 
 /** `§2 paragraph 3`. */
@@ -441,6 +541,8 @@ export function renderPlagiarismSection(results: ReadonlyArray<PlagiarismResult>
     lines.push(`plagiarism check skipped (${opts.skipped})`);
     return lines.join('\n');
   }
+  const coverage = plagiarismCoverageLine(results);
+  if (coverage !== null) lines.push(`Coverage: ${coverage}.`, '');
   lines.push('| Location | Phrase | Matches |', '|----------|--------|---------|');
   if (results.length === 0) {
     lines.push('| — | _(none)_ | no body paragraph long enough to probe |');

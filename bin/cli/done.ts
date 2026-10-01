@@ -51,7 +51,7 @@ import { rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { type Pass2Result } from '../lib/verify/pass2.js';
-import { runPlagiarism, renderPlagiarismSection, locationLabel, type PlagiarismResult } from '../lib/plagiarism.js';
+import { runPlagiarism, renderPlagiarismSection, locationLabel, plagiarismCoverageLine, type PlagiarismResult } from '../lib/plagiarism.js';
 import {
   measureHonesty,
   renderHonestySection,
@@ -106,7 +106,9 @@ export interface GateIssues {
   orphanClaims: Pass4Result[];
   /** Plagiarism results that returned at least one match URL. */
   plagiarismHits: PlagiarismResult[];
-  /** True iff ANY of the three buckets is non-empty. */
+  /** What the plagiarism check could not check (plagiarismCoverageLine), when a query got no answer. */
+  plagiarismCoverage?: string;
+  /** True iff ANY of the buckets is non-empty (an incomplete plagiarism check included). */
   hasIssues: boolean;
 }
 
@@ -128,9 +130,10 @@ export function collectGateIssues(input: {
   const plagiarismHits = (input.plagiarismResults ?? []).filter(
     (r) => Array.isArray(r.matches) && r.matches.length > 0,
   );
+  const coverage = plagiarismCoverageLine(input.plagiarismResults ?? []);
   const hasIssues =
-    unsupported.length > 0 || orphanClaims.length > 0 || plagiarismHits.length > 0;
-  return { unsupported, orphanClaims, plagiarismHits, hasIssues };
+    unsupported.length > 0 || orphanClaims.length > 0 || plagiarismHits.length > 0 || coverage !== null;
+  return { unsupported, orphanClaims, plagiarismHits, ...(coverage !== null ? { plagiarismCoverage: coverage } : {}), hasIssues };
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +170,7 @@ function writeGateSummary(issues: GateIssues): void {
     for (const o of sentences.slice(0, 5)) writeOut(`      uncited: "${cell(o, 160)}"\n`);
     if (sentences.length > 5) writeOut(`      … and ${sentences.length - 5} more (see .paper/VERIFICATION.md)\n`);
   }
+  if (issues.plagiarismCoverage !== undefined) writeOut(`  - plagiarism check ${issues.plagiarismCoverage}\n`);
   if (issues.plagiarismHits.length > 0) {
     writeOut(
       `  - ${issues.plagiarismHits.length} distinctive phrase(s) found verbatim on the web (plagiarism):\n`,
@@ -624,6 +628,8 @@ function writePlagiarismSummary(results: readonly PlagiarismResult[]): void {
     `pensmith done: plagiarism check: ${results.length} distinctive phrase(s) searched as exact quotes; ${hits.length} found verbatim on the web` +
       `${failed.length > 0 ? `; ${failed.length} query(ies) got no answer (${failed[0]?.error ?? ''})` : ''}\n`,
   );
+  const coverage = plagiarismCoverageLine(results);
+  if (coverage !== null) writeOut(`pensmith done: plagiarism check ${coverage}\n`);
   for (const r of hits) {
     writeOut(`  - ${locationLabel(r.location)} "${cell(r.phrase, 120)}"\n`);
     for (const u of r.matches) writeOut(`      ${u}\n`);
@@ -967,7 +973,7 @@ export const doneCommand = defineCommand({
     writeExportFindings(claims, exportGate.accepted, exportGate.byoQuotes, unjudged, contradictions);
     if (flags.yolo) {
       const issues = collectGateIssues({ pass2Results: claims.map((c) => c.result), pass4Results, plagiarismResults });
-      if (issues.orphanClaims.length > 0 || issues.plagiarismHits.length > 0) writeGateSummary(issues);
+      if (issues.orphanClaims.length > 0 || issues.plagiarismHits.length > 0 || issues.plagiarismCoverage !== undefined) writeGateSummary(issues);
     }
     const gateResult = await runDoneGate({
       pass2Results: claims.map((c) => c.result),
