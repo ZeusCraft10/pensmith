@@ -182,3 +182,48 @@ export function inlineText(nodes: readonly Inline[]): string {
     })
     .join('');
 }
+
+/** The links' targets among inlines, one per item. */
+function inlineHrefs(nodes: readonly Inline[], out: string[]): void {
+  for (const n of nodes) {
+    if (n.t === 'link') out.push(n.href);
+    if ('children' in n) inlineHrefs(n.children, out);
+  }
+}
+
+/**
+ * The plain text a writer prints for `doc`, one block per line, with each
+ * link's target on a line of its own: the body, the notes and the
+ * bibliography. The exporter scans it for a PDF (review round 2: a PDF's page
+ * text is glyph codes, which the zero-trace scan of the written file cannot
+ * read, so the same rule runs on the text before the PDF is built).
+ */
+export function documentPlainText(doc: ExportDocument): string {
+  const out: string[] = [];
+  const inl = (nodes: readonly Inline[]): void => {
+    out.push(inlineText(nodes));
+    inlineHrefs(nodes, out);
+  };
+  const blocks = (bs: readonly Block[]): void => {
+    for (const b of bs) {
+      if (b.t === 'heading' || b.t === 'para' || b.t === 'plain') inl(b.children);
+      else if (b.t === 'quote') blocks(b.blocks);
+      else if (b.t === 'bullets' || b.t === 'ordered') for (const it of b.items) blocks(it);
+      else if (b.t === 'code') out.push(b.text);
+      else if (b.t === 'table') {
+        for (const c of b.head) inl(c);
+        for (const r of b.rows) for (const c of r) inl(c);
+      }
+    }
+  };
+  blocks(doc.blocks);
+  for (const n of doc.notes) inl(n);
+  if (doc.bibliography !== null) {
+    out.push(doc.bibliography.title);
+    for (const e of doc.bibliography.entries) {
+      if (e.label !== null) inl(e.label);
+      inl(e.body);
+    }
+  }
+  return out.join('\n');
+}

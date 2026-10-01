@@ -61,13 +61,13 @@ import { extractCitedKeysForVerification } from './citation-token.js';
 import { EXIT_ERROR, PensmithError } from './exit-codes.js';
 import { prepareText, type PreparedText } from './export/render.js';
 import { writeMarkdown } from './export/md-writer.js';
-import { buildExportDocument, type ExportDocument } from './export/document.js';
+import { buildExportDocument, documentPlainText, type ExportDocument } from './export/document.js';
 import { writeDocx } from './export/docx-writer.js';
 import { pdfFontPaths, writePdf } from './export/pdf-writer.js';
 import { pdfTexUnprintable, writeLatex } from './export/latex-writer.js';
 import { detectPdfEngine, pandocFailure, pdfEngineHeader, runPandoc, scrubPandocLatex } from './export/pandoc.js';
 import { documentChars, unprintableNote } from './export/glyphs.js';
-import { ZeroTraceError, scanExportFile, zeroTracePatch, zeroTracePdf, type ZeroTraceFinding } from './export/zero-trace.js';
+import { ZeroTraceError, scanExportFile, scanExportText, zeroTracePatch, zeroTracePdf, type ZeroTraceFinding } from './export/zero-trace.js';
 
 export { zeroTracePatch, zeroTracePdf, ZeroTraceError, scanExportFile };
 export type { ZeroTraceFinding };
@@ -279,6 +279,14 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   // The document model: what every writer prints (the characters a PDF or a
   // .tex cannot show are named from it, EXP-09).
   const doc = format === 'md' ? null : buildExportDocument(prep, { withBibliography });
+  // A PDF's page text is glyph codes the scan of the written file cannot read:
+  // the author-content rule runs on the text it will print, before any writer
+  // (review round 2), so the four formats refuse the same text.
+  if (format === 'pdf' && doc !== null) {
+    const pdfName = `${stem}.${FORMAT_EXT[format]}`;
+    const textFindings = scanExportText(pdfName, documentPlainText(doc), { paperRoot: root });
+    if (textFindings.length > 0) throw new ZeroTraceError(textFindings, []);
+  }
   if (writer === 'pandoc' && doc !== null) {
     const header = format === 'pdf' && engine !== null ? pdfEngineHeader(engine, documentChars(doc)) : null;
     try {
