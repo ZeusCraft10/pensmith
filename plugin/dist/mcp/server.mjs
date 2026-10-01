@@ -84463,6 +84463,16 @@ function fmtValue(v2) {
 function cacheCell(provider, model, slug) {
   if (model === null) return { column: "n/a", detail: "no model set" };
   let systemTokens;
+  if (!slugSpec(slug).template) {
+    const skill = humanizerSkillPath();
+    if (skill === null) return { column: "n/a", detail: "no humanizer skill installed" };
+    try {
+      systemTokens = estimateTokens(readFileSync19(skill, "utf8").length);
+    } catch {
+      return { column: "n/a", detail: "no humanizer skill installed" };
+    }
+    return describeCacheReach(systemCacheReach(provider, model, systemTokens));
+  }
   try {
     systemTokens = estimateTokens(loadPrompt(slug).length);
   } catch {
