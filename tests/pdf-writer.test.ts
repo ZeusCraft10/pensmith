@@ -9,7 +9,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PDFDocument, PDFName, PDFDict } from 'pdf-lib';
@@ -17,6 +17,8 @@ import { pdfFontPaths, writePdf } from '../bin/lib/export/pdf-writer.js';
 import { extractPdf } from '../bin/lib/pdf-text.js';
 import { scanExportFile } from '../bin/lib/export/zero-trace.js';
 import { sampleDocument, SAMPLE_MD } from './helpers/export-doc.js';
+import { exportDraft } from '../bin/lib/exporter.js';
+import { withCapturedOutput } from '../bin/lib/output-sink.js';
 
 test('EXP-09: the shipped font family and its licence are in the plugin (four faces, OFL.txt)', () => {
   const paths = pdfFontPaths();
@@ -86,4 +88,24 @@ test('EXP-09: every construct of the sample (quote, lists, table, code, rule, Gr
   for (const needle of ['Trust can be measured', 'First point with code', 'A nested point', 'One', 'Two', 'Region', 'Growth', 'East', '4.2', 'x = f(y)', 'Greek α and β', '[1]']) {
     assert.ok(text.includes(needle), `"${needle}" in:\n${text}`);
   }
+});
+
+// Review round 3: a word longer than the line (a long URL, a hash, a base64
+// string, a long code line) is cut from per-character advances summed once —
+// re-measuring every shorter prefix took 110 s for 3,200 characters.
+test('review r3: a 10,000-character token is laid out within seconds, every character kept', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-pdf-long-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '@book{kuhn1962, author = {Kuhn, Thomas S.}, title = {The Structure of Scientific Revolutions}, publisher = {University of Chicago Press}, year = {1962}}\n');
+  const token = Array.from({ length: 10_000 }, (_v, i) => 'abcdefghijklmnopqrstuvwxyz0123456789'[i % 36]).join('');
+  const inputPath = join(root, '.paper', 'DRAFT.md');
+  writeFileSync(inputPath, `A ${token} word [@kuhn1962].\n\n\`\`\`\n${token.slice(0, 4000)}\n\`\`\`\n`);
+  const started = Date.now();
+  const { result } = await withCapturedOutput(() => exportDraft({ inputPath, format: 'pdf', paperRoot: root, pandocPresent: false, style: 'apa' }));
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed < 20_000, `the export took ${elapsed} ms`);
+  // The page numbers (a line of digits at each page's foot) are not the token's.
+  const text = (await extractPdf(readFileSync(result.outputPath))).text.split('\n').filter((l) => !/^\s*\d+\s*$/.test(l)).join('').replace(/\s+/g, '');
+  assert.ok(text.includes(token), 'the token is kept whole across its lines and pages');
+  assert.ok(text.includes(token.slice(0, 4000)), 'the code line too');
 });

@@ -361,14 +361,39 @@ class Typesetter {
       let m = measure(a);
       const gap = cur.length > 0 && a.spaceBefore ? space : 0;
       if (cur.length > 0 && curW + gap + m.width > widthOf(lineNo)) flush();
-      // A word longer than the line is cut where it no longer fits.
-      while (cur.length === 0 && m.width > widthOf(lineNo) && m.text.length > 1) {
-        let k = m.text.length - 1;
-        while (k > 1 && m.font.widthOfTextAtSize(m.text.slice(0, k), m.size) > widthOf(lineNo)) k--;
-        cur.push({ atom: { ...a, text: m.text.slice(0, k) }, text: m.text.slice(0, k), width: m.font.widthOfTextAtSize(m.text.slice(0, k), m.size), font: m.font, size: m.size, rise: m.rise });
-        curW = (cur[0] as { width: number }).width;
-        flush();
-        m = { ...m, text: m.text.slice(k), width: m.font.widthOfTextAtSize(m.text.slice(k), m.size) };
+      // A word longer than the line is cut where it no longer fits. The cut
+      // is found from per-character advances summed once (review round 3:
+      // re-measuring every shorter prefix took minutes on a long URL, hash or
+      // code line), then confirmed with one real measurement (kerning).
+      if (cur.length === 0 && m.width > widthOf(lineNo) && m.text.length > 1) {
+        const chars = Array.from(m.text);
+        const advance = new Map<string, number>();
+        const cum: number[] = [0];
+        for (const ch of chars) {
+          let w = advance.get(ch);
+          if (w === undefined) {
+            w = m.font.widthOfTextAtSize(ch, m.size);
+            advance.set(ch, w);
+          }
+          cum.push((cum[cum.length - 1] as number) + w);
+        }
+        let from = 0;
+        while (chars.length - from > 1 && (cum[chars.length] as number) - (cum[from] as number) > widthOf(lineNo)) {
+          const limit = widthOf(lineNo);
+          let k = from + 1;
+          while (k + 1 < chars.length && (cum[k + 1] as number) - (cum[from] as number) <= limit) k += 1;
+          let piece = chars.slice(from, k).join('');
+          while (k > from + 1 && m.font.widthOfTextAtSize(piece, m.size) > limit) {
+            k -= 1;
+            piece = chars.slice(from, k).join('');
+          }
+          cur.push({ atom: { ...a, text: piece }, text: piece, width: m.font.widthOfTextAtSize(piece, m.size), font: m.font, size: m.size, rise: m.rise });
+          curW = (cur[0] as { width: number }).width;
+          flush();
+          from = k;
+        }
+        const rest = chars.slice(from).join('');
+        m = { ...m, text: rest, width: m.font.widthOfTextAtSize(rest, m.size) };
       }
       const g = cur.length > 0 && a.spaceBefore ? space : 0;
       cur.push({ atom: a, ...m });
