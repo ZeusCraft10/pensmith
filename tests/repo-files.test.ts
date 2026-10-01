@@ -263,7 +263,7 @@ test('plugin/references/humanizer-contract.md hash-pin (Phase 21 EXP-14 LOCKED)'
   const bytes = readFileSync('plugin/references/humanizer-contract.md');
   const hash = createHash('sha256').update(bytes).digest('hex');
   // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/references/humanizer-contract.md')).digest('hex'))"
-  const PINNED = '0899b7fbada305e0df2ea7c63c051c6dbfe1b623b18d813aec85867b5b97662c';
+  const PINNED = '35f0d852d028ccd09c1fb4278a46790073a59e6b13828ffc70cb86334f6ce077';
   assert.equal(hash, PINNED, `plugin/references/humanizer-contract.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

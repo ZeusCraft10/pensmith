@@ -166,6 +166,10 @@ test('EXP-14: a reply that drops a placeholder, adds a citation or touches the s
     ['a dropped citation', (m) => m.replace(/\s*\{\{cite_0_0\}\}/, ''), /placeholder|citation set changed/],
     ['an added citation', (m) => `${m.trimEnd()} A later survey agrees [@fake2099, p. 3].`, /citation set changed|adds/],
     ['an empty reply', () => '', /empty/],
+    // Review round 1: a reply that echoes its fenced input with a preamble, or
+    // moves a citation between paragraphs, never reaches FINAL.md.
+    ['an echoed fence with chatter', (m) => `Here is the improved text:\n\n${FENCE_OPEN}\n${m}\n<<<END_PENSMITH_UNTRUSTED_DATA_x>>>`, /paragraph structure changed|untrusted-data fence/],
+    ['a citation moved to the other paragraph', (m) => m.replace(' {{cite_0_0}}', '').replace(/\.\s*$/, ' {{cite_0_0}}.'), /moved to another paragraph/],
   ];
   for (const [what, edit, reason] of cases) {
     const r = await humanizeDraft({ draft: DRAFT, skill, call: async (req, i) => (i === 0 ? edit(maskedOf(req.messages[0]!.content)) : maskedOf(req.messages[0]!.content)) });
@@ -182,4 +186,24 @@ test('EXP-14: a model error propagates to the caller (done reports "humanizer fa
     humanizeDraft({ draft: DRAFT, skill, call: async () => { throw new Error('HTTP 500 from the provider'); } }),
     /HTTP 500/,
   );
+});
+
+test('review r1: a reply that swaps the citations of two claims is rejected; the compiled section is kept', async () => {
+  const skill = { path: '/fixture/SKILL.md', body: 'Improve the prose.' };
+  const draft = [
+    '# Public Health',
+    '',
+    '## Findings',
+    '',
+    'Vaccination reduced hospitalisation in the cohort [@smith2020]. Rising temperatures had no measurable effect on transmission [@jones2019].',
+    '',
+  ].join('\n');
+  const r = await humanizeDraft({
+    draft,
+    skill,
+    call: async (req) => maskedOf(req.messages[0]!.content).replace('{{cite_0_0}}', '\u0001').replace('{{cite_0_1}}', '{{cite_0_0}}').replace('\u0001', '{{cite_0_1}}'),
+  });
+  assert.equal(r.rejected.length, 1, JSON.stringify(r.rejected));
+  assert.match(r.rejected[0]!, /a citation moved to another claim/);
+  assert.equal(r.text, draft, 'the section is kept as compiled');
 });

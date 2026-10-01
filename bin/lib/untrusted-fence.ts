@@ -73,6 +73,17 @@ export function stripFenceMarkers(text: string): string {
 }
 
 /**
+ * How many fence markers `text` holds: every spelling of a marker name (the
+ * exact markers, other UUIDs, any case or separator) and every neutralised
+ * marker. A model reply that holds more than the text it was given echoed the
+ * fence (rewrite-guard.ts); an export that holds one carries a pensmith
+ * artifact (export/zero-trace.ts). Linear time.
+ */
+export function fenceMarkerCount(text: string): number {
+  return [...text.matchAll(NAME_RE)].length + text.split(FENCE_MARKER_REPLACEMENT).length - 1;
+}
+
+/**
  * Wrap `text` in the fence: the open marker, the neutralised text, the close
  * marker, each on its own line. The result contains exactly one open and one
  * close marker whatever `text` holds.

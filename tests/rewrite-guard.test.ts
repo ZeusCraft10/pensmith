@@ -74,3 +74,72 @@ test('D-21-14: boundaryAdditions moved to the guard and stays re-exported from c
   assert.equal(boundaryAdditions('Plain text.', 'Plain text, rephrased.'), null);
   assert.match(boundaryAdditions('Plain text.', 'Plain text (Smith, 2019).') ?? '', /UNSUPPORTED-FORM/);
 });
+
+// ---------------------------------------------------------------------------
+// Review round 1: a citation stays in its paragraph (the smoother's two
+// paragraphs are two SECTIONS, PRD §7.6) and on its claim; the reply carries
+// no fence marker, no "pensmith" and no chatter paragraph.
+// ---------------------------------------------------------------------------
+
+test('review r1: the smoother may not move a citation (and its claim) across the section boundary', () => {
+  const window = 'Section one concludes that sleep improves memory [@a2020].\n\nSection two opens: exercise reduces stress in adults [@b2021].';
+  const mask = maskForRewrite(window);
+  assert.match(mask.masked, /\{\{cite_0_0\}\}[\s\S]*\{\{cite_0_1\}\}/);
+  const reply = 'Section one concludes that sleep improves memory {{cite_0_0}} and that exercise reduces stress {{cite_0_1}}.\n\nSection two opens with a related point about adults.';
+  const v = validateRewrite({ original: window, mask, rewritten: reply, allowedParagraphs: [0, 1] });
+  assert.equal(v.ok, false);
+  assert.equal(v.reasons[0], 'a citation crossed the boundary between the paragraphs');
+  assert.equal(v.text, window, 'the original is kept');
+  // A quote placeholder may not cross it either.
+  const qWindow = 'Smith closes with "every measurement leaves a trace on the system" [@a2020].\n\nThe next section begins plainly [@b2021].';
+  const qm = maskForRewrite(qWindow);
+  const qReply = qm.masked.replace(/^(.*?)(\{\{quote_0_0\}\}) /, '$1').replace('begins plainly', 'begins with {{quote_0_0}} plainly');
+  assert.equal(validateRewrite({ original: qWindow, mask: qm, rewritten: qReply, allowedParagraphs: [0, 1] }).ok, false);
+});
+
+test('review r1: a reply that swaps two citations between claims is rejected — the multisets alone would pass it', () => {
+  const original = 'Vaccination reduced hospitalisation in the cohort [@smith2020]. Rising temperatures had no measurable effect on transmission [@jones2019].';
+  const mask = maskForRewrite(original);
+  const swapped = mask.masked.replace('{{cite_0_0}}', '\u0001').replace('{{cite_0_1}}', '{{cite_0_0}}').replace('\u0001', '{{cite_0_1}}');
+  const v = validateRewrite({ original, mask, rewritten: swapped });
+  assert.equal(v.ok, false, 'the swap is rejected');
+  assert.match(v.reasons[0] ?? '', /^a citation moved to another claim/);
+  // A partial overlap (both claims mention the cohort) is a move too.
+  const shared = 'Vaccination reduced hospitalisation in the cohort [@smith2020]. Rising temperatures had no effect on the cohort [@jones2019].';
+  const sm = maskForRewrite(shared);
+  const sSwap = 'Vaccination reduced hospitalisation in the cohort {{cite_0_1}}. Rising temperatures had no effect on the cohort {{cite_0_0}}.';
+  assert.match(validateRewrite({ original: shared, mask: sm, rewritten: sSwap }).reasons[0] ?? '', /moved to another claim/);
+  // Two sentences reordered with their citations is fine; so is a reworded
+  // sentence and a merge with uncited context.
+  const reordered = 'Rising temperatures had no measurable effect on transmission {{cite_0_1}}. Vaccination reduced hospitalisation in the cohort {{cite_0_0}}.';
+  assert.equal(validateRewrite({ original, mask, rewritten: reordered }).ok, true, 'citations travel with their claims');
+  const reworded = 'In the cohort, vaccination cut hospitalisation {{cite_0_0}}. Transmission showed no measurable effect from rising temperatures {{cite_0_1}}.';
+  assert.equal(validateRewrite({ original, mask, rewritten: reworded }).ok, true, 'a reworded sentence keeps its citation');
+  const ctx = 'Sleep was studied in adults over ten years. The results showed improved memory [@walker2017].';
+  const cm = maskForRewrite(ctx);
+  const merged = 'In a ten-year study of adults, sleep improved memory {{cite_0_0}}.';
+  const mv = validateRewrite({ original: ctx, mask: cm, rewritten: merged });
+  assert.notEqual(mv.reasons[0] ?? '', 'paragraph structure changed');
+  assert.equal(mv.ok, true, mv.reasons.join('; '));
+  // Inside one sentence, two citations keep their order.
+  const two = 'Sleep consolidates memory [@a2020], whereas stress impairs recall [@b2021].';
+  const tm = maskForRewrite(two);
+  assert.match(validateRewrite({ original: two, mask: tm, rewritten: 'Sleep consolidates memory {{cite_0_1}}, whereas stress impairs recall {{cite_0_0}}.' }).reasons[0] ?? '', /swapped places/);
+});
+
+test('review r1: a reply that echoes the untrusted-data fence, adds "pensmith" or adds a chatter paragraph is rejected', async () => {
+  const { FENCE_OPEN, FENCE_CLOSE } = await import('../bin/lib/untrusted-fence.js');
+  const original = 'Deep networks learn layered representations [@lecun2015].\n\nA second paragraph follows [@zhu2020].';
+  const mask = maskForRewrite(original);
+  const [p1, p2] = mask.masked.split('\n\n') as [string, string];
+  const fenced = validateRewrite({ original, mask, rewritten: `${FENCE_OPEN}\n${p1}\n${FENCE_CLOSE}\n\n${FENCE_OPEN}\n${p2}\n${FENCE_CLOSE}`, allowedParagraphs: [0, 1] });
+  assert.equal(fenced.ok, false);
+  assert.match(fenced.reasons.join('\n'), /echoes the untrusted-data fence/);
+  const named = validateRewrite({ original, mask, rewritten: `${p1} Pensmith smoothed this.\n\n${p2}` });
+  assert.match(named.reasons.join('\n'), /adds the word "pensmith"/);
+  const chatter = validateRewrite({ original, mask, rewritten: `Here is the improved text:\n\n${p1}\n\n${p2}` });
+  assert.equal(chatter.ok, false);
+  assert.match(chatter.reasons[0] ?? '', /^paragraph structure changed \(2 paragraph\(s\) became 3\)/);
+  const chatterFenced = validateRewrite({ original, mask, rewritten: `Here is the improved text:\n\n${FENCE_OPEN}\n${p1}\n\n${p2}\n${FENCE_CLOSE}` });
+  assert.equal(chatterFenced.ok, false);
+});

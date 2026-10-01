@@ -17,12 +17,25 @@
 //   2. validateRewrite(...) — after the call, the rewrite is accepted only when
 //        - the placeholder multiset is unchanged (each placeholder exactly once:
 //          `citation set changed` / `a quoted passage changed`);
+//        - the reply echoes no untrusted-data fence marker and adds no
+//          "pensmith" (a model that repeats its fenced input would put a
+//          pensmith artifact into FINAL.md and every export — zero trace);
 //        - every ATX heading line is byte-identical, in order (`a heading changed`);
+//        - the paragraph count is kept and each paragraph holds exactly the
+//          placeholders it held (no citation or quote crosses a paragraph — for
+//          the smoother, the SECTION boundary, PRD §7.6; for the humanizer, a
+//          preamble or closing chatter paragraph is a structure change);
 //        - nothing outside the allowed paragraphs changed (the smoother may touch
 //          only the two boundary paragraphs; the humanizer any body paragraph);
 //        - restored, it cites exactly the keys the original did (the broad
 //          grammar, D-18-40) and holds the same direct quotes (quote-extractor.ts,
 //          the Pass-3 reader) — masking is the first line, this the second;
+//        - every citation stays on its claim (citationAnchorProblem): the
+//          sentence that holds it in the rewrite is not better matched by
+//          another sentence of the original than by the one that held it, and
+//          citations that shared a sentence keep their order — a swap of two
+//          citations between claims passes every multiset check but would
+//          leave a citation on a claim Pass 2 never judged;
 //        - boundaryAdditions finds nothing new the gate would check: no text
 //          finding (an unparseable or unsupported citation form, TEXT_SCANNERS),
 //          no direct quote, no bare identifier (VRFY-25).
@@ -39,6 +52,8 @@ import { findBareIdentifiers } from './doi.js';
 import { DEFAULT_QUOTE_MIN_WORDS } from './schemas/config.js';
 import { networkMode } from './http-mock.js';
 import { resolveRuntime } from './runtime.js';
+import { fenceMarkerCount } from './untrusted-fence.js';
+import { contentTerms } from './claim-consistency.js';
 
 /** A masked text and how to put the original spans back. */
 export interface RewriteMask {
@@ -116,6 +131,14 @@ function paragraphRanges(text: string): Array<[number, number]> {
   }
   out.push([start, text.length]);
   return out;
+}
+
+/** The non-blank paragraphs of `text` (blocks between blank lines), CRLF folded. */
+function paragraphBlocks(text: string): string[] {
+  const t = text.replace(/\r\n/g, '\n').trim();
+  return paragraphRanges(t)
+    .map(([s, e]) => t.slice(s, e))
+    .filter((p) => p.trim().length > 0);
 }
 
 /** True when every non-blank line of the block is a block-quote line. */
@@ -225,6 +248,128 @@ export function boundaryAdditions(before: string, after: string, quoteMinWords?:
 }
 
 /**
+ * A pensmith artifact the rewrite adds: an untrusted-data fence marker (a
+ * model that echoed its fenced input) or the word "pensmith" — either would
+ * reach FINAL.md and every export (zero trace). Null when it adds neither.
+ */
+function addedArtifact(original: string, rewritten: string): string | null {
+  if (fenceMarkerCount(rewritten) > fenceMarkerCount(original)) return 'the reply echoes the untrusted-data fence (a model artifact)';
+  const named = (t: string): number => t.match(/pensmith/gi)?.length ?? 0;
+  if (named(rewritten) > named(original)) return 'the reply adds the word "pensmith" (a model artifact)';
+  return null;
+}
+
+/** Sentence breaks: a blank line, or sentence-final punctuation (closing quotes and brackets included) and whitespace. */
+const SENTENCE_BREAK_RE = /\n[ \t]*\n|(?<=[.!?\u2026]["'\u201d\u2019)\]]*)\s+/u;
+
+/** A citation slot written into the text while it is split into sentences (no sentence punctuation, never in prose). */
+const SLOT_RE = /\uE000(\d+)\uE001/g;
+
+interface AnchorSentence {
+  /** The sentence's content terms (claim-consistency.ts contentTerms: stemmed, stop words out). */
+  readonly terms: ReadonlySet<string>;
+  /** The citations (as written) the sentence holds. */
+  readonly cites: ReadonlySet<string>;
+  readonly text: string;
+}
+
+interface AnchorView {
+  readonly sentences: readonly AnchorSentence[];
+  /** Each citation occurrence in text order: as written, its sentence, and its ordinal among occurrences of the same text. */
+  readonly occ: ReadonlyArray<{ readonly cite: string; readonly sentence: number; readonly ordinal: number }>;
+}
+
+/** The sentences of `text` and the sentence each citation occurrence sits in. */
+function anchorView(text: string): AnchorView {
+  const found: Array<{ cite: string; sentence: number; ordinal: number }> = [];
+  const seen = new Map<string, number>();
+  const slotted = replaceCitations(text.replace(/\r\n/g, '\n'), (c) => {
+    const ordinal = seen.get(c.text) ?? 0;
+    seen.set(c.text, ordinal + 1);
+    found.push({ cite: c.text, sentence: -1, ordinal });
+    return `\uE000${found.length - 1}\uE001`;
+  });
+  const sentences = slotted.split(SENTENCE_BREAK_RE).map((piece, si) => {
+    const cites = new Set<string>();
+    for (const m of piece.matchAll(SLOT_RE)) {
+      const o = found[Number(m[1])];
+      if (o === undefined) continue;
+      o.sentence = si;
+      cites.add(o.cite);
+    }
+    const plain = piece.replace(SLOT_RE, ' ').replace(/\s+/g, ' ').trim();
+    return { terms: new Set(contentTerms(plain)), cites, text: plain };
+  });
+  return { sentences, occ: found };
+}
+
+/** The share of `of`'s terms that `n` holds (0 when `of` has none). */
+function coverage(of: ReadonlySet<string>, n: ReadonlySet<string>): number {
+  if (of.size === 0) return 0;
+  let shared = 0;
+  for (const t of of) if (n.has(t)) shared += 1;
+  return shared / of.size;
+}
+
+/** At least half of the claim's terms survive: the claim is still there, whatever was merged into its sentence. */
+const CLAIM_KEPT = 0.5;
+
+/**
+ * Why a rewrite moved a citation onto another claim, or null (see the
+ * header). For each citation of the rewrite, the original sentences that held
+ * it are its claim: the claim counts as kept when at least half of its content
+ * terms are in the citation's new sentence, or when no other original sentence
+ * covers the new sentence better (a sentence reworded beyond recognition, or
+ * merged with uncited context, is not a move). Citations that came from one
+ * original sentence and still share a sentence keep their order (a swap
+ * inside a sentence). Pure, never throws.
+ */
+export function citationAnchorProblem(original: string, rewritten: string): string | null {
+  const a = anchorView(original);
+  const b = anchorView(rewritten);
+  const quoteOf = (t: string): string => (t.length > 60 ? `${t.slice(0, 57)}…` : t);
+  for (const o of b.occ) {
+    const n = b.sentences[o.sentence];
+    if (n === undefined || n.terms.size === 0) continue;
+    let own = -1;
+    let other = 0;
+    for (const s of a.sentences) {
+      if (s.terms.size === 0) continue;
+      const c = coverage(s.terms, n.terms);
+      if (s.cites.has(o.cite)) own = Math.max(own, c);
+      else other = Math.max(other, c);
+    }
+    if (own === -1 || own >= CLAIM_KEPT) continue;
+    if (other > own) return `a citation moved to another claim (${o.cite} now sits on "${quoteOf(n.text)}")`;
+  }
+  // Order inside a sentence: the k-th occurrence of a citation in the rewrite
+  // is the k-th in the original.
+  const origIndex = new Map<string, number>();
+  a.occ.forEach((o, i) => origIndex.set(`${o.cite}\u0000${o.ordinal}`, i));
+  const bySentence = new Map<number, number[]>();
+  for (const o of b.occ) {
+    const i = origIndex.get(`${o.cite}\u0000${o.ordinal}`);
+    if (i === undefined) continue;
+    const list = bySentence.get(o.sentence) ?? [];
+    list.push(i);
+    bySentence.set(o.sentence, list);
+  }
+  for (const [si, list] of bySentence) {
+    for (let x = 0; x < list.length; x += 1) {
+      for (let y = x + 1; y < list.length; y += 1) {
+        const ox = a.occ[list[x] as number];
+        const oy = a.occ[list[y] as number];
+        if (ox === undefined || oy === undefined || ox.sentence !== oy.sentence) continue;
+        if ((list[x] as number) > (list[y] as number)) {
+          return `a citation moved to another claim (${ox.cite} and ${oy.cite} swapped places in "${quoteOf(b.sentences[si]?.text ?? '')}")`;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * The rewrite guard's checks on two UNMASKED texts (a Tier-1 humanized
  * FINAL.md, or a masked rewrite after restoration): the reasons `rewritten`
  * may not replace `original`, in order — empty when it may:
@@ -233,6 +378,10 @@ export function boundaryAdditions(before: string, after: string, quoteMinWords?:
  *     prefix — and every cited key, multisets: D-18-40);
  *   - `a quoted passage changed` (every direct quote Pass 3 reads, with its
  *     attribution);
+ *   - a fence marker or "pensmith" the original did not hold (addedArtifact);
+ *   - `paragraph structure changed` (the non-blank paragraph count) and
+ *     `a citation moved to another paragraph`;
+ *   - `a citation moved to another claim` (citationAnchorProblem);
  *   - `adds …, which no section verified` (boundaryAdditions: a text finding,
  *     a new quote or a bare identifier).
  * Pure, never throws.
@@ -249,6 +398,18 @@ export function compareRewrite(original: string, rewritten: string, opts: { read
   const qOpts = opts.quoteMinWords !== undefined ? { minWords: opts.quoteMinWords } : {};
   const quotesOf = (t: string): string[] => extractQuotes(t, qOpts).map((x) => `${x.text}\u0000${x.citekey ?? ''}`);
   if (!sameMultiset(quotesOf(original), quotesOf(rewritten))) reasons.push('a quoted passage changed');
+  const marker = addedArtifact(original, rewritten);
+  if (marker !== null) reasons.push(marker);
+  const pb = paragraphBlocks(original);
+  const pa = paragraphBlocks(rewritten);
+  if (pb.length !== pa.length) reasons.push(`paragraph structure changed (${pb.length} paragraph(s) became ${pa.length})`);
+  else if (!reasons.includes('citation set changed') && pb.some((p, i) => !sameMultiset(citesOf(p), citesOf(pa[i] as string)))) {
+    reasons.push('a citation moved to another paragraph');
+  }
+  if (reasons.length === 0) {
+    const moved = citationAnchorProblem(original, rewritten);
+    if (moved !== null) reasons.push(moved);
+  }
   if (reasons.length === 0) {
     const added = boundaryAdditions(original, rewritten, opts.quoteMinWords);
     if (added !== null) reasons.push(`adds ${added}, which no section verified`);
@@ -264,10 +425,11 @@ export interface ValidateRewriteInput {
   /** The model's reply: the rewritten masked text. */
   readonly rewritten: string;
   /**
-   * The paragraphs (0-based, blocks between blank lines of the masked text) the
-   * rewrite may change. Given: the rewrite must keep the paragraph count and
-   * every other paragraph byte-identical (the smoother: the two boundary
-   * paragraphs). Omitted: any paragraph may change (the humanizer).
+   * The paragraphs (0-based, non-blank blocks between blank lines of the
+   * masked text) the rewrite may change. Given: every other paragraph stays
+   * byte-identical (the smoother: the two boundary paragraphs). Omitted: any
+   * paragraph may change (the humanizer). Either way the paragraph count is
+   * kept and each paragraph keeps exactly its own placeholders.
    */
   readonly allowedParagraphs?: readonly number[];
   /** `[verification] quote_min_words`, for the quote comparison (default 5). */
@@ -295,17 +457,32 @@ export function validateRewrite(input: ValidateRewriteInput): RewriteVerdict {
     return reject();
   }
   const maskedBefore = input.mask.masked.replace(/\r\n/g, '\n').trim();
-  if (!sameCounts(placeholderCounts(maskedBefore, 'cite'), placeholderCounts(rewritten, 'cite'))) reasons.push('citation set changed');
-  if (!sameCounts(placeholderCounts(maskedBefore, 'quote'), placeholderCounts(rewritten, 'quote'))) reasons.push('a quoted passage changed');
+  const citeCountsOk = sameCounts(placeholderCounts(maskedBefore, 'cite'), placeholderCounts(rewritten, 'cite'));
+  const quoteCountsOk = sameCounts(placeholderCounts(maskedBefore, 'quote'), placeholderCounts(rewritten, 'quote'));
+  if (!citeCountsOk) reasons.push('citation set changed');
+  if (!quoteCountsOk) reasons.push('a quoted passage changed');
+  const marker = addedArtifact(maskedBefore, rewritten);
+  if (marker !== null) reasons.push(marker);
   const before = headingLines(maskedBefore);
   const after = headingLines(rewritten);
   if (before.length !== after.length || before.some((h, i) => h !== after[i])) reasons.push('a heading changed');
-  if (input.allowedParagraphs !== undefined) {
-    const allowed = new Set(input.allowedParagraphs);
-    const pb = paragraphRanges(maskedBefore).map(([s, e]) => maskedBefore.slice(s, e));
-    const pa = paragraphRanges(rewritten).map(([s, e]) => rewritten.slice(s, e));
-    if (pb.length !== pa.length) reasons.push(`paragraph structure changed (${pb.length} paragraph(s) became ${pa.length})`);
-    else if (pb.some((p, i) => !allowed.has(i) && p !== pa[i])) reasons.push('text outside the allowed paragraphs changed');
+  const pb = paragraphBlocks(maskedBefore);
+  const pa = paragraphBlocks(rewritten);
+  if (pb.length !== pa.length) reasons.push(`paragraph structure changed (${pb.length} paragraph(s) became ${pa.length})`);
+  else {
+    // Each paragraph keeps exactly its own placeholders: for the smoother the
+    // two paragraphs are two SECTIONS (PRD §7.6), so a citation — and the
+    // claim it supports — never crosses the boundary.
+    if (citeCountsOk && pb.some((p, i) => !sameCounts(placeholderCounts(p, 'cite'), placeholderCounts(pa[i] as string, 'cite')))) {
+      reasons.push(input.allowedParagraphs !== undefined ? 'a citation crossed the boundary between the paragraphs' : 'a citation moved to another paragraph');
+    }
+    if (quoteCountsOk && pb.some((p, i) => !sameCounts(placeholderCounts(p, 'quote'), placeholderCounts(pa[i] as string, 'quote')))) {
+      reasons.push(input.allowedParagraphs !== undefined ? 'a quoted passage crossed the boundary between the paragraphs' : 'a quoted passage moved to another paragraph');
+    }
+    if (input.allowedParagraphs !== undefined) {
+      const allowed = new Set(input.allowedParagraphs);
+      if (pb.some((p, i) => !allowed.has(i) && p !== pa[i])) reasons.push('text outside the allowed paragraphs changed');
+    }
   }
   if (reasons.length > 0) return reject();
 

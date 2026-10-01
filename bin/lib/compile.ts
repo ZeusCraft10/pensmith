@@ -589,6 +589,16 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         continue;
       }
       const [newTail = tailRaw, newHead = headRaw] = verdict.text.split(/\n[ \t]*\n/);
+      // The second line of PRD §7.6 (the guard keeps each paragraph's
+      // placeholders): each side still cites exactly the keys it cited, so no
+      // section ends up citing a source outside its assigned_sources.
+      const keysOf = (t: string): string => [...extractCitedKeysForVerification(t)].sort().join('\u0000');
+      if (keysOf(newTail) !== keysOf(tailRaw) || keysOf(newHead) !== keysOf(headRaw)) {
+        const reason = 'a citation crossed the section boundary';
+        warn(`WARN: boundary ${boundary} smoothing rejected (${reason}) — keeping original prose`);
+        transitions.push({ boundary, status: 'rejected', reason, before_chars: beforeChars, after_chars: beforeChars, before: window });
+        continue;
+      }
       left[li] = newTail;
       right[ri] = newHead;
       drafts[k] = normalizeTrailingNewline(left.join('\n\n'));

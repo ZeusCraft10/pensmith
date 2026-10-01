@@ -148,3 +148,23 @@ test('VRFY-25: a smoother that ADDS an author-date citation, a reference entry, 
   await runCompile({ paperRoot: root, yolo: true, smoothBoundary: async (input: SmoothBoundaryInput) => `${input.tail} Moreover, this carries on.\n\n${input.head}` });
   assert.match(readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8'), /Moreover, this carries on\./);
 });
+
+test('PRD §7.6 (review round 1): a smoother that moves section 2\'s citation and claim into section 1\'s tail is rejected — no section cites outside its assigned_sources', async () => {
+  const root = seedTwoSection();
+  const result = await runCompile({
+    paperRoot: root,
+    yolo: true,
+    // Both placeholders kept (the window's multiset is unchanged), but the
+    // body's citation — and its claim — now sit in the intro's paragraph.
+    smoothBoundary: async (input: SmoothBoundaryInput) => {
+      const bodyCite = /\{\{cite_\d+_\d+\}\}/.exec(input.head)?.[0] ?? '';
+      return `${input.tail.replace(/\.$/, '')} and the body's first paragraph cites ${bodyCite}.\n\nThe body opens with a related point.`;
+    },
+  });
+  assert.equal(result.refused, false, 'a rejected boundary never refuses compile');
+  const draft = readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8');
+  const intro = draft.slice(draft.indexOf('## '), draft.lastIndexOf('## '));
+  assert.doesNotMatch(intro, /aspelmeyer2009/, 'the intro never cites the body\'s source');
+  assert.doesNotMatch(draft, /related point/, 'the smoothed text never reaches DRAFT.md');
+  assert.match(readFileSync(join(root, '.paper', 'COMPILE-REPORT.md'), 'utf8'), /crossed the boundary/);
+});
