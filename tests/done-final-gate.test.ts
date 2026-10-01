@@ -125,7 +125,7 @@ test('EXP-15 (in process): FINAL.md is written once, after the export and the pa
 
     const ok = await quiet(() => doneCommand.run!({ args: { yolo: true, raw: false, format: 'md' } } as never));
     assert.equal((ok.result as { ok?: boolean }).ok, true, ok.out);
-    assert.match(ok.out, /pensmith done: humanizer skill not found at ~\/\.claude\/skills\/humanizer\/SKILL\.md — skipping/);
+    assert.match(ok.out, /pensmith done: humanizer skill not found \(looked for ~\/\.claude\/skills\/humanizer\/SKILL\.md, .*\) — skipping/);
     assert.equal(readFileSync(join(sb.paper, 'FINAL.md'), 'utf8'), compiled, 'FINAL.md is the compiled draft');
     const record = JSON.parse(readFileSync(join(sb.paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
     assert.equal(record['humanized'], false);

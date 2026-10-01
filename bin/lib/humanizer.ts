@@ -3,7 +3,8 @@
 //
 // The humanizer improves prose; it is never described as a way to avoid
 // detection (PRD §14). It is the user's installed skill
-// (`~/.claude/skills/humanizer/SKILL.md`, located through paths.ts
+// (`~/.claude/skills/humanizer/SKILL.md`, the account-synced skills or an
+// installed plugin's — located through paths.ts
 // humanizerSkillPath): its body (frontmatter stripped) is the system prompt —
 // sent cache_control-marked like every system prompt — through the `humanizer`
 // MODEL slug (llm-models.ts; no templates/prompts file, S-06). The user message
@@ -36,8 +37,6 @@ import type { GateResult, LoadedBibliography } from './verify/gate.js';
 /** The `humanizer` model slug (llm-models.ts; generation tier, verb done, no template). */
 export const HUMANIZER_SLUG = 'humanizer';
 
-/** How done names the skill when it is missing. */
-export const HUMANIZER_SKILL_DISPLAY = '~/.claude/skills/humanizer/SKILL.md';
 
 /** A humanizer request: the skill as the system prompt, the contract and the masked section as the one user message. */
 export interface HumanizerRequest {

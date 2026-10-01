@@ -153,7 +153,7 @@ Phase 17 was built by four parallel streams (egress, llm, paper-cli, foundations
 - Style-match to past writing ships as an opt-in, built from plain statistics into a per-paper `.paper/STYLE.json`, with an honest dual-use disclosure in the README.
 - The plagiarism check uses only free services (distinctive phrases via DuckDuckGo). Paid services were rejected.
 - `--yolo` exists but is off by default.
-- The user's installed `humanizer` skill (`~/.claude/skills/humanizer/`) is the humanize backend, and pensmith wraps it (in Tier 2 its `SKILL.md` body is the system prompt of the `humanizer` model call). If it's missing, `done` skips the humanize step. Tests use `tests/fixtures/humanizer-skill/` under a temp home, never the real skill.
+- The user's installed `humanizer` skill (`~/.claude/skills/humanizer/` — `$CLAUDE_CONFIG_DIR` when set — else an account-synced `skills/synced/*/humanizer/` or an installed plugin's `skills/humanizer/`; `paths.ts` `humanizerSkillPath`) is the humanize backend, and pensmith wraps it (in Tier 2 its `SKILL.md` body is the system prompt of the `humanizer` model call). If it's missing, `done` skips the humanize step. Tests use `tests/fixtures/humanizer-skill/` under a temp home, never the real skill.
 
 ## Answering during development
 

@@ -15,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, parse } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,7 +31,7 @@ import {
   type HumanizerRequest,
 } from '../bin/lib/humanizer.js';
 import { isHumanizerSkillPresent } from '../bin/lib/ecosystem-presence.js';
-import { humanizerSkillPath } from '../bin/lib/paths.js';
+import { humanizerSkillPath, humanizerSkillSearchDescription } from '../bin/lib/paths.js';
 import { slugSpec } from '../bin/lib/llm-models.js';
 import { FENCE_OPEN, unfence } from '../bin/lib/untrusted-fence.js';
 
@@ -105,6 +105,50 @@ test('EXP-14: the skill is found only under a temp home in a test context — ne
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
+  }
+});
+
+// Review round 3: Claude Code also installs skills it syncs from the account
+// (`skills/synced/<bucket>/`) and skills a plugin ships, and honours
+// CLAUDE_CONFIG_DIR — the user's humanizer was never found there.
+test('review r3: the skill is found in the synced skills, in an installed plugin, and under CLAUDE_CONFIG_DIR — the user\'s own first', () => {
+  const saved = { CLAUDE_CONFIG_DIR: process.env['CLAUDE_CONFIG_DIR'] };
+  try {
+    withHome(false, (home) => {
+      const synced = join(home, '.claude', 'skills', 'synced', 'bucket-1', 'humanizer');
+      mkdirSync(synced, { recursive: true });
+      copyFileSync(FIXTURE, join(synced, 'SKILL.md'));
+      assert.equal(humanizerSkillPath(), join(synced, 'SKILL.md'));
+      assert.equal(isHumanizerSkillPresent(), true);
+      assert.equal(loadHumanizerSkill()?.path, join(synced, 'SKILL.md'));
+      // The user's own skill wins over a synced one.
+      mkdirSync(join(home, '.claude', 'skills', 'humanizer'), { recursive: true });
+      copyFileSync(FIXTURE, join(home, '.claude', 'skills', 'humanizer', 'SKILL.md'));
+      assert.equal(humanizerSkillPath(), join(home, '.claude', 'skills', 'humanizer', 'SKILL.md'));
+    });
+    withHome(false, (home) => {
+      const plugin = join(home, '.claude', 'plugins', 'cache', 'mkt', 'writing-tools', '1.0.0');
+      mkdirSync(join(plugin, 'skills', 'humanizer'), { recursive: true });
+      copyFileSync(FIXTURE, join(plugin, 'skills', 'humanizer', 'SKILL.md'));
+      writeFileSync(join(home, '.claude', 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: { 'writing-tools@mkt': [{ scope: 'user', installPath: plugin, version: '1.0.0' }] } }));
+      assert.equal(humanizerSkillPath(), join(plugin, 'skills', 'humanizer', 'SKILL.md'));
+      assert.equal(isHumanizerSkillPresent(), true);
+    });
+    withHome(false, (home) => {
+      const config = join(home, 'claude-config');
+      mkdirSync(join(config, 'skills', 'humanizer'), { recursive: true });
+      copyFileSync(FIXTURE, join(config, 'skills', 'humanizer', 'SKILL.md'));
+      process.env['CLAUDE_CONFIG_DIR'] = config;
+      assert.equal(humanizerSkillPath(), join(config, 'skills', 'humanizer', 'SKILL.md'));
+      assert.match(humanizerSkillSearchDescription(), /^\$CLAUDE_CONFIG_DIR\/skills\/humanizer\/SKILL\.md/);
+      // A CLAUDE_CONFIG_DIR outside os.tmpdir() is refused under a test context.
+      process.env['CLAUDE_CONFIG_DIR'] = parse(tmpdir()).root;
+      assert.equal(humanizerSkillPath(), null);
+      delete process.env['CLAUDE_CONFIG_DIR'];
+    });
+  } finally {
+    if (saved.CLAUDE_CONFIG_DIR === undefined) delete process.env['CLAUDE_CONFIG_DIR'];
+    else process.env['CLAUDE_CONFIG_DIR'] = saved.CLAUDE_CONFIG_DIR;
   }
 });
 

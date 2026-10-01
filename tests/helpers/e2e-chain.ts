@@ -161,6 +161,7 @@ export interface ChainSandboxOptions {
  * it through its own env (main-branch merge review, round 1).
  */
 const DROPPED_ENV = new Set([
+  'CLAUDE_CONFIG_DIR',
   'PENSMITH_CONTACT_EMAIL',
   'PENSMITH_PAPER_ROOT',
   'PENSMITH_PROMPT_MODE',

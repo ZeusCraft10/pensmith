@@ -1,14 +1,16 @@
 // bin/lib/doctor/probes/humanizer-skill-presence.ts
 //
 // DOCT-02d: Humanizer skill presence probe.
-// D-15 severity: PASS when ~/.claude/skills/humanizer/SKILL.md exists (the
-//   file the Tier-2 humanizer reads, EXP-14); WARN when it is missing (an
+// D-15 severity: PASS when the humanizer skill paths.ts humanizerSkillPath
+//   resolves exists — ~/.claude/skills/humanizer/SKILL.md ($CLAUDE_CONFIG_DIR
+//   when set), an account-synced skill or an installed plugin's (the file the
+//   Tier-2 humanizer reads, EXP-14), naming the file; WARN when none is (an
 //   optional dependency: done then skips the humanize step and says so).
 // D-19 read-only: statSync only, no writes.
 
 import type { Probe, ProbeResult } from '../probes.js';
 import { isHumanizerSkillPresent } from '../../ecosystem-presence.js';
-import { humanizerSkillPath, userHomeDir } from '../../paths.js';
+import { humanizerSkillPath, humanizerSkillSearchDescription, userHomeDir } from '../../paths.js';
 import { join } from 'node:path';
 
 export const humanizerSkillPresenceProbe: Probe = {
@@ -27,7 +29,7 @@ export const humanizerSkillPresenceProbe: Probe = {
     return {
       id: 'humanizer-skill-presence',
       severity: 'WARN',
-      summary: `Humanizer skill not installed at ${skillPath} — \`pensmith done\` will skip the humanize step.`,
+      summary: `Humanizer skill not installed (looked for ${humanizerSkillSearchDescription()}) — \`pensmith done\` will skip the humanize step.`,
       fix: 'Install the humanizer skill into ~/.claude/skills/humanizer/ (its SKILL.md). See README humanizer disclosure (PRD §3 & §14).',
     };
   },

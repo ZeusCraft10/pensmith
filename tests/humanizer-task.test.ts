@@ -8,8 +8,8 @@
 // `no Task transport` banner): the humanizer is now a real model call through
 // complete() with the `humanizer` model slug. One paper walks through every
 // outcome in turn, each asserting what done leaves behind:
-//   - no skill → `humanizer skill not found at ~/.claude/skills/humanizer/SKILL.md
-//     — skipping`, exit 0, the compiled draft exported, FINAL.md = DRAFT.md;
+//   - no skill → `humanizer skill not found (looked for ~/.claude/skills/humanizer/SKILL.md,
+//     … synced … or an installed plugin's …) — skipping`, exit 0, the compiled draft exported, FINAL.md = DRAFT.md;
 //   - `--raw` → zero humanizer requests, `humanizer skipped (--raw)`, the after
 //     score `N/A (humanize skipped with --raw)`;
 //   - a reply that drops a citation or adds `[@fake2099, p. 3]` → exit 4,
@@ -67,7 +67,7 @@ test('EXP-14 / EXP-15 (built CLI, mock LLM): every humanizer outcome on one pape
     // (a) No skill installed: skipped with the exact line, the compiled draft exported.
     let r = await p.cli(['done', '--yolo', '--format', 'md']);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.match(r.stdout, /pensmith done: humanizer skill not found at ~\/\.claude\/skills\/humanizer\/SKILL\.md — skipping/);
+    assert.match(r.stdout, /pensmith done: humanizer skill not found \(looked for ~\/\.claude\/skills\/humanizer\/SKILL\.md, ~\/\.claude\/skills\/synced\/\*\/humanizer\/SKILL\.md or an installed plugin's skills\/humanizer\/SKILL\.md\) — skipping/);
     assert.equal(mock.callCount('humanizer'), 0);
     assert.equal(read(join(paper, 'FINAL.md')), draft, 'FINAL.md is the compiled draft');
     assert.match(read(join(paper, 'VERIFICATION.md')) ?? '', /after humanize\):  N\/A \(humanizer not installed\)/);

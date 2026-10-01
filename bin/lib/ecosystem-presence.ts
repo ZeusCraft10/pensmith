@@ -200,9 +200,10 @@ export function isZoteroMcpPresent(): boolean {
 }
 
 /**
- * Probe whether the humanizer skill is installed at the standard path:
- * `~/.claude/skills/humanizer/SKILL.md` is a file (paths.ts
- * humanizerSkillPath — the file the Tier-2 humanizer reads, EXP-14). Under a
+ * Probe whether the humanizer skill is installed: the file paths.ts
+ * humanizerSkillPath resolves — `~/.claude/skills/humanizer/SKILL.md`
+ * (`$CLAUDE_CONFIG_DIR` when set), an account-synced skill or an installed
+ * plugin's; the file the Tier-2 humanizer reads, EXP-14 — is a file. Under a
  * test context only a home inside os.tmpdir() counts (CI-09).
  */
 export function isHumanizerSkillPresent(): boolean {

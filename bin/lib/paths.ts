@@ -254,37 +254,115 @@ export function userHomeDir(): string {
   return os.homedir();
 }
 
+/** True when `p` (as given, or its nearest real path) lies inside os.tmpdir() — the CI-09 test-context rule. */
+function insideTmpdir(p: string): boolean {
+  const fold = (x: string): string => (process.platform === 'win32' ? x.toLowerCase() : x);
+  const roots = new Set<string>([path.resolve(os.tmpdir())]);
+  try {
+    roots.add(fs.realpathSync.native(os.tmpdir()));
+  } catch {
+    /* tmpdir missing — keep the resolved form */
+  }
+  const forms = new Set<string>([path.resolve(p), realpathNearest(p)]);
+  return [...forms].some((f) =>
+    [...roots].some((root) => {
+      const rel = path.relative(fold(root), fold(f));
+      return rel !== '' && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+    }),
+  );
+}
+
 /**
- * The user's installed humanizer skill: `<home>/.claude/skills/humanizer/SKILL.md`
- * (EXP-14, D-21-18; the Tier-2 humanizer reads its body as the system prompt).
- * Under a test context (NODE_TEST_CONTEXT / PENSMITH_TEST=1) the home counts
- * only when it lies inside os.tmpdir() — the CI-09 rule the data dir follows
- * (localDataDir): a test points HOME (USERPROFILE on Windows) at a temp dir to
- * install a fixture skill, and no test can ever read the developer's real one.
- * Returns the path (whether or not the file exists), or null when the home is
- * refused. Never throws.
+ * Claude Code's config folder for skills and plugins: `$CLAUDE_CONFIG_DIR`
+ * when set, else `<home>/.claude`. Null under a test context when it lies
+ * outside os.tmpdir() (CI-09: no test reads the developer's real one).
+ */
+function claudeSkillsRoot(env: NodeJS.ProcessEnv): string | null {
+  const configured = env['CLAUDE_CONFIG_DIR']?.trim();
+  const root = configured ? path.resolve(configured) : path.join(userHomeDir(), '.claude');
+  const testContext = Boolean(env.NODE_TEST_CONTEXT) || env.PENSMITH_TEST === '1';
+  if (testContext && !insideTmpdir(configured ? root : userHomeDir())) return null;
+  return root;
+}
+
+/** The install folders `<root>/plugins/installed_plugins.json` lists (any version of its layout), in file order. Never throws. */
+function installedPluginDirs(root: string, testContext: boolean): string[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'installed_plugins.json'), 'utf8'));
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  const walk = (v: unknown, depth: number): void => {
+    if (depth > 6 || typeof v !== 'object' || v === null) return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x, depth + 1);
+      return;
+    }
+    const rec = v as Record<string, unknown>;
+    const at = rec['installPath'];
+    if (typeof at === 'string' && path.isAbsolute(at) && (!testContext || insideTmpdir(at))) out.push(at);
+    for (const x of Object.values(rec)) walk(x, depth + 1);
+  };
+  walk(data, 0);
+  return [...new Set(out)];
+}
+
+/**
+ * Every place the humanizer skill may be installed, in the order Claude Code
+ * users install it (EXP-14; review round 3 — a skill Claude Code synced to the
+ * account, or one a plugin ships, was never found): the user's own skill
+ * (`<config>/skills/humanizer/SKILL.md`, `<config>` = `$CLAUDE_CONFIG_DIR`
+ * else `~/.claude`), then the account-synced skills
+ * (`<config>/skills/synced/<bucket>/humanizer/SKILL.md`), then each installed
+ * plugin's (`<installPath>/skills/humanizer/SKILL.md`, from
+ * `<config>/plugins/installed_plugins.json`). Empty under a test context whose
+ * config folder lies outside os.tmpdir(). Never throws.
+ */
+export function humanizerSkillCandidates(env: NodeJS.ProcessEnv = process.env): string[] {
+  const root = claudeSkillsRoot(env);
+  if (root === null) return [];
+  const testContext = Boolean(env.NODE_TEST_CONTEXT) || env.PENSMITH_TEST === '1';
+  const out = [path.join(root, 'skills', 'humanizer', 'SKILL.md')];
+  try {
+    const synced = path.join(root, 'skills', 'synced');
+    for (const bucket of fs.readdirSync(synced).sort()) out.push(path.join(synced, bucket, 'humanizer', 'SKILL.md'));
+  } catch {
+    /* no synced skills */
+  }
+  for (const dir of installedPluginDirs(root, testContext)) out.push(path.join(dir, 'skills', 'humanizer', 'SKILL.md'));
+  return out;
+}
+
+/**
+ * The user's installed humanizer skill (EXP-14, D-21-18; the Tier-2 humanizer
+ * reads its body as the system prompt): the first of humanizerSkillCandidates
+ * that is a file — the one resolver done, the estimator, `status --config`,
+ * doctor and the capabilities resource share. When none is, the first
+ * candidate (`<config>/skills/humanizer/SKILL.md`, where to install it); null
+ * under a test context whose home or `$CLAUDE_CONFIG_DIR` lies outside
+ * os.tmpdir() (CI-09: a test points HOME — USERPROFILE on Windows — or
+ * CLAUDE_CONFIG_DIR at a temp dir to install a fixture skill, and no test can
+ * ever read the developer's real one). Never throws.
  */
 export function humanizerSkillPath(env: NodeJS.ProcessEnv = process.env): string | null {
-  const home = userHomeDir();
-  const testContext = Boolean(env.NODE_TEST_CONTEXT) || env.PENSMITH_TEST === '1';
-  if (testContext) {
-    const fold = (p: string): string => (process.platform === 'win32' ? p.toLowerCase() : p);
-    const roots = new Set<string>([path.resolve(os.tmpdir())]);
+  const candidates = humanizerSkillCandidates(env);
+  for (const c of candidates) {
     try {
-      roots.add(fs.realpathSync.native(os.tmpdir()));
+      if (fs.statSync(c).isFile()) return c;
     } catch {
-      /* tmpdir missing — keep the resolved form */
+      /* not here */
     }
-    const forms = new Set<string>([path.resolve(home), realpathNearest(home)]);
-    const inside = [...forms].some((f) =>
-      [...roots].some((root) => {
-        const rel = path.relative(fold(root), fold(f));
-        return rel !== '' && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
-      }),
-    );
-    if (!inside) return null;
   }
-  return path.join(home, '.claude', 'skills', 'humanizer', 'SKILL.md');
+  return candidates[0] ?? null;
+}
+
+/** Where humanizerSkillPath looks, for the "not found" line: `~/.claude/skills/humanizer/SKILL.md, the synced skills or an installed plugin's skills`. */
+export function humanizerSkillSearchDescription(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = env['CLAUDE_CONFIG_DIR']?.trim();
+  const root = configured ? '$CLAUDE_CONFIG_DIR' : '~/.claude';
+  return `${root}/skills/humanizer/SKILL.md, ${root}/skills/synced/*/humanizer/SKILL.md or an installed plugin's skills/humanizer/SKILL.md`;
 }
 
 /**

@@ -146,6 +146,9 @@ const env = {
   TEMP: runTmpDir,
   TMP: runTmpDir,
 };
+// The developer's Claude Code config folder is never a test's: the humanizer
+// skill a test installs lives in its own temp home (bin/lib/paths.ts).
+delete env.CLAUDE_CONFIG_DIR;
 
 // On Windows npm's default cache is %LOCALAPPDATA%\npm-cache, which the
 // redirect above would point at the empty per-run dir. Tests that drive npm

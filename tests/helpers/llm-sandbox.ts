@@ -159,6 +159,9 @@ export async function openLlmSandbox(opts: SandboxOptions = {}): Promise<LlmSand
     },
     spawnEnv(extra: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
       const env: NodeJS.ProcessEnv = { ...process.env, XDG_DATA_HOME: dataDir, LOCALAPPDATA: dataDir, HOME: dataDir };
+      // The developer's Claude Code config folder never leaks in: the
+      // humanizer skill is read from the sandbox home (paths.ts).
+      delete env['CLAUDE_CONFIG_DIR'];
       for (const [k, v] of Object.entries(extra)) {
         if (v === undefined) delete env[k];
         else env[k] = v;
@@ -214,6 +217,7 @@ export async function openLlmSandbox(opts: SandboxOptions = {}): Promise<LlmSand
 
 function childEnv(dataDir: string, extra: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, XDG_DATA_HOME: dataDir, LOCALAPPDATA: dataDir, HOME: dataDir };
+  delete env['CLAUDE_CONFIG_DIR'];
   for (const [k, v] of Object.entries(extra)) {
     if (v === undefined) delete env[k];
     else env[k] = v;

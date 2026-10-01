@@ -61,7 +61,7 @@ import {
   type HonestyNotApplicable,
 } from '../lib/honesty.js';
 import { exportDraft, exportedFormats, exportPathFor, type ExportFormat } from '../lib/exporter.js';
-import { paperDir, projectRoot } from '../lib/paths.js';
+import { humanizerSkillSearchDescription, paperDir, projectRoot } from '../lib/paths.js';
 import { resolveExportStyle, type ExportStyle } from '../lib/export-style.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
@@ -78,7 +78,7 @@ import { out as writeOut } from '../lib/output-sink.js';
 import { isOutlinePaper, runOutlineDone } from '../lib/outline-export.js';
 import { readPaperConfigSync, tryReadPaperConfigSync } from '../lib/config.js';
 import { readReportContradictions } from '../lib/compile-report.js';
-import { acceptHumanized, humanizeDraft, loadHumanizerSkill, HUMANIZER_SKILL_DISPLAY } from '../lib/humanizer.js';
+import { acceptHumanized, humanizeDraft, loadHumanizerSkill } from '../lib/humanizer.js';
 import { rejudgeRewrittenClaims } from '../lib/rewritten-claims.js';
 import { modelStepSkipReason } from '../lib/rewrite-guard.js';
 import { assertLlmConfigured, complete, isFatalLlmError, MissingApiKeyError, RuntimeConfigError } from '../lib/anthropic.js';
@@ -552,10 +552,11 @@ export async function runHumanizeStep(input: {
   if (networkMode().dryRun) return { kind: 'skipped', line: 'humanizer skipped (dry-run)', after: 'humanize skipped (dry-run)' };
   const skill = loadHumanizerSkill();
   if (skill === null) {
-    return { kind: 'skipped', line: `humanizer skill not found at ${HUMANIZER_SKILL_DISPLAY} — skipping`, after: 'humanizer not installed' };
+    return { kind: 'skipped', line: `humanizer skill not found (looked for ${humanizerSkillSearchDescription()}) — skipping`, after: 'humanizer not installed' };
   }
   const mode = await humanizerModelSkip(input.paperRoot);
   if (mode !== null) return { kind: 'skipped', line: `humanizer skipped (${mode})`, after: `humanize skipped (${mode})` };
+  writeOut(`pensmith done: humanizer skill: ${skill.path}\n`);
   const quoteMinWords = config?.verification?.quote_min_words;
   const ids = input.sectionIds ?? [];
   let result;

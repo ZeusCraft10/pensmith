@@ -55,7 +55,7 @@ export function sandbox(prefix: string): Sandbox {
       for (const [k, v] of Object.entries(process.env)) {
         if (v === undefined) continue;
         // A test's own paper root / prompt mode never leaks into the child.
-        if (k === 'PENSMITH_PAPER_ROOT' || k === 'PENSMITH_PROMPT_MODE' || k === 'PENSMITH_DEBUG') continue;
+        if (k === 'PENSMITH_PAPER_ROOT' || k === 'PENSMITH_PROMPT_MODE' || k === 'PENSMITH_DEBUG' || k === 'CLAUDE_CONFIG_DIR') continue;
         env[k] = v;
       }
       env['XDG_DATA_HOME'] = data;
