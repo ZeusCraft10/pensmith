@@ -1,22 +1,49 @@
-// bin/lib/honesty.ts — DONE-04 detection-aware honesty score + DONE-05 pluggable backend.
+// bin/lib/honesty.ts — the detection-aware honesty score (DONE-04/05; Phase 21
+// EXP-16, EXP-17, EXP-18; D-21-20, D-21-21).
 //
-// All HTTP through bin/lib/http.ts — ESLint chokepoint enforced. Honest-framing
-// copy read VERBATIM from references/honesty-framing.md (locked, hash-pinned) —
-// NEVER inlined in code. GPTZERO_API_KEY value never logged (T-01-07 presence-
-// check only). The detection-aware honesty score (DONE-04) is transparency-only
-// — it is NEVER an undetectability claim (PROJECT.md non-negotiable).
+// done shows how an AI detector reads the paper, before and after the
+// humanizer, for TRANSPARENCY ONLY: a score is real (a detector answered, with
+// its backend and an ISO timestamp) or clearly absent with one exact reason —
+// never a replayed or invented number. The framing and every backend's
+// disclosure are read VERBATIM from the hash-pinned references/honesty-framing.md;
+// nothing here ever claims output is undetectable (PRD §14).
 //
-// The module mirrors bin/lib/plagiarism.ts + bin/lib/verify/pass2.ts:
-//   - key-absence / offline guard → clean null skip, NEVER a crash (advisory);
-//     offline prints "score unavailable (offline)" and never replays a score;
-//   - the V2 detector-consent gate before any text leaves (--yolo never skips);
-//   - http.ts as the SOLE network chokepoint (source 'generic', noCache true);
-//   - assertBudget BEFORE the live scored API call (ARCH-10 financial boundary);
-//   - defensive response parse (unexpected shape / non-200 / parse error → null,
-//     never a fabricated score);
-//   - the resolved key value reaches ONLY the x-api-key request header — never a
-//     log payload, the cost ledger, stdout, or a return value (presence-check
-//     only at the call boundary).
+// The checks, in order (the first that applies is the reason):
+//   --no-score                         → skipped (--no-score)
+//   [humanizer] honesty_score = false  → skipped (config: honesty_score = false)
+//   --dry-run                          → unavailable (dry-run)
+//   no key for the backend             → skipped (no <KEY> set)
+//   sources offline                    → unavailable (offline)
+//   consent (EXP-17, S-14)             → `[humanizer] honesty_consent` in
+//     config.toml: false → skipped (consent declined in config.toml); unset →
+//     asked once in a terminal through the backend-neutral `detector-consent`
+//     gate, the answer (yes or no) recorded through config.ts; without a
+//     terminal → skipped (no consent recorded — …). --yolo never answers it.
+//   the request                        → a 401/403 is `unavailable (<Backend>
+//     rejected the API key)`, a 429 `unavailable (rate limited)`, a transport
+//     error `unavailable (network: …)`, an answer that does not parse
+//     `unavailable (<Backend> returned an unexpected response)`.
+// Every scoring run prints the backend's disclosure line before anything is sent.
+//
+// Backends (EXP-18), each behind the same consent gate, budget gate and its
+// own size cap, all through the http.ts egress gate (no environment variable
+// or config key can point a detector at another host):
+//   - GPTZero: POST https://api.gptzero.me/v2/predict/text, header `x-api-key`,
+//     body `{document}`; score `documents[0].class_probabilities.ai`.
+//   - Originality.ai (docs.originality.ai/scan.md, API v3, fetched
+//     2026-10-01): POST https://api.originality.ai/api/v3/scan, header
+//     `X-OAI-API-KEY`, body `{title, check_ai: true, check_plagiarism: false,
+//     check_facts: false, check_readability: false, check_grammar: false,
+//     check_contentQuality: false, storeScan: false, aiModelVersion: "lite",
+//     content}`; score `results.ai.confidence.AI`.
+//   - Sapling (sapling.ai/docs/api/detector, fetched 2026-10-01): POST
+//     https://api.sapling.ai/api/v1/aidetect, header `Authorization: Bearer
+//     <key>` (the API accepts the key in the body or as a bearer token; the
+//     header keeps it out of every body the --show-prompts mirror prints),
+//     body `{text, sent_scores: false}`; score `score` (0–1).
+// A key reaches ONLY its request header: never a log, the cost ledger, the
+// mirror (http.ts never prints headers), a cassette (the cache-header allowlist
+// drops it) or a return value.
 
 import { readFileSync } from 'node:fs';
 import { pluginReferencePath } from './paths.js';
@@ -24,7 +51,9 @@ import { fetch as httpFetch } from './http.js';
 import { networkMode } from './http-mock.js';
 import { out } from './output-sink.js';
 import { assertBudget, appendCost } from './budget.js';
-import { runGate } from './gates.js';
+import { runGate, canPrompt } from './gates.js';
+import { tryReadPaperConfigSync, updatePaperConfig, rawTable } from './config.js';
+import { HONESTY_BACKENDS } from './schemas/config.js';
 
 // ============================================================
 //   Public types
@@ -32,426 +61,400 @@ import { runGate } from './gates.js';
 
 export type HonestyClassification = 'HUMAN_ONLY' | 'MIXED' | 'AI_ONLY';
 
-/** The parsed detection-aware score. `aiProbability` is 0..1; `backend` names
- *  the strategy that produced it (DONE-05). Shown as-is with no trust claim. */
+/** The parsed detection-aware score. `aiProbability` is 0..1; `backend` names the detector. Shown as-is with no trust claim. */
 export interface HonestyScore {
   aiProbability: number;
   classification: HonestyClassification;
   backend: string;
 }
 
-/** Pluggable backend strategy (DONE-05). `score` is advisory: it resolves to a
- *  HonestyScore or null (skip-clean) and MUST NOT throw. */
+export type HonestyBackendName = (typeof HONESTY_BACKENDS)[number];
+
+/** A score with when it was taken, or why there is none (EXP-16). */
+export type HonestyOutcome =
+  | { readonly kind: 'score'; readonly score: HonestyScore; readonly at: string }
+  | { readonly kind: 'skipped' | 'unavailable'; readonly reason: string; readonly backend: HonestyBackendName };
+
+/** The after-humanize line when no second score is taken: `N/A (<why>)`. */
+export interface HonestyNotApplicable {
+  readonly kind: 'na';
+  readonly reason: string;
+}
+
+/** Pluggable backend strategy (DONE-05): score() resolves to a score or null and never throws. */
 export interface HonestyBackend {
   name: string;
   score(text: string): Promise<HonestyScore | null>;
 }
 
-// ============================================================
-//   Locked honest-framing copy (read VERBATIM — never inlined)
-// ============================================================
-// The copy lives in the plugin's references/honesty-framing.md (PLUG-02); the
-// one asset resolver (paths.ts, D-23a-03) finds it from this module's own
-// location in every layout — source, dist/, an npm install, the plugin bundle.
-const framingFile = (): string => pluginReferencePath('honesty-framing.md');
-
-let framingNote: string | null = null;
-
-/**
- * Read the '## Note' blockquote text VERBATIM from references/honesty-framing.md
- * (the locked, hash-pinned copy). Mirrors http.ts loadWarnString: scan for the
- * '## Note' heading, return the following `> ` blockquote line with the markdown
- * marker stripped. Memoized. The copy is NEVER inlined in this module — drift
- * between code and the locked file is a CI failure (repo-files.test.ts pin).
- *
- * Defensive fallback only if the references file is unreadable (should never
- * happen — references/ ships in package.json files[]). The fallback is still
- * transparency-only and carries no detection-avoidance wording.
- */
-function loadFramingNote(): string {
-  if (framingNote !== null) return framingNote;
-  let md: string;
-  try {
-    md = readFileSync(framingFile(), 'utf8');
-  } catch {
-    framingNote =
-      'Note: this score reflects prose patterns. The humanizer improves readability; it does not promise to make output undetectable.';
-    return framingNote;
-  }
-  const lines = md.split(/\r?\n/);
-  let inSection = false;
-  for (const line of lines) {
-    if (line.startsWith('## Note')) {
-      inSection = true;
-      continue;
-    }
-    if (inSection && line.startsWith('> ')) {
-      framingNote = line.slice(2).trim();
-      return framingNote;
-    }
-  }
-  framingNote =
-    'Note: this score reflects prose patterns. The humanizer improves readability; it does not promise to make output undetectable.';
-  return framingNote;
+export interface HonestyOptions {
+  /** The paper root (config.toml: backend, honesty_score, honesty_consent; where consent is recorded). */
+  readonly paperRoot?: string;
+  /** Override the configured backend. */
+  readonly backend?: HonestyBackendName;
+  /** --yolo for this invocation (forwarded to the gate, which --yolo never skips). */
+  readonly yolo?: boolean;
+  /** done --no-score. */
+  readonly noScore?: boolean;
+  /**
+   * An explicit consent decision for this call (a test seam; the Tier-1 tool
+   * after AskUserQuestion): true sends, false declines; undefined → the
+   * recorded config answer, else the gate.
+   */
+  readonly consentGranted?: boolean;
 }
 
 // ============================================================
-//   GPTZero size cap (HARD-05)
+//   Backends
 // ============================================================
 
-/**
- * Maximum bytes of paper text sent to GPTZero per call (HARD-05). Inputs
- * exceeding this cap are truncated before the POST body is constructed.
- * ~50 KB is a practical upper bound for a single API call; the truncation
- * is announced on stdout with a note (never silently discards data).
- * Exported for tests/honesty.test.ts HARD-05 seam probing.
- */
+interface BackendSpec {
+  readonly name: HonestyBackendName;
+  /** How the terminal names it. */
+  readonly label: string;
+  readonly keyEnv: string;
+  readonly url: string;
+  /** The `## <heading>` of its disclosure in references/honesty-framing.md. */
+  readonly disclosureHeading: string;
+  /** The most text one request sends (UTF-8 bytes). */
+  readonly maxBytes: number;
+  readonly estimateUsd: number;
+  request(text: string, key: string): { headers: Record<string, string>; body: string };
+  parse(raw: unknown): { ai: number; classification?: HonestyClassification } | null;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function probability(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : null;
+}
+
+/** Maximum bytes of paper text sent to GPTZero per call (HARD-05). */
 export const GPTZERO_MAX_BYTES = 50_000;
 
-/**
- * Truncate `text` so its UTF-8 byte length does not exceed GPTZERO_MAX_BYTES.
- * Exported as `__truncateForGptzeroTest` for the HARD-05 test seam.
- */
-export function __truncateForGptzeroTest(text: string): string {
-  if (Buffer.byteLength(text, 'utf8') <= GPTZERO_MAX_BYTES) return text;
-  // Slice by character count until the byte length fits. We over-slice slightly
-  // via byte-length and then trim — safe because UTF-8 chars are at most 4 bytes.
-  const buf = Buffer.from(text, 'utf8');
-  return buf.slice(0, GPTZERO_MAX_BYTES).toString('utf8');
+const BACKENDS: Readonly<Record<HonestyBackendName, BackendSpec>> = Object.freeze({
+  gptzero: {
+    name: 'gptzero',
+    label: 'GPTZero',
+    keyEnv: 'GPTZERO_API_KEY',
+    url: 'https://api.gptzero.me/v2/predict/text',
+    disclosureHeading: '## GPTZero Data Transmission Disclosure',
+    maxBytes: GPTZERO_MAX_BYTES,
+    estimateUsd: 0.02,
+    request: (text, key) => ({ headers: { 'x-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify({ document: text }) }),
+    parse: (raw) => {
+      if (!isRecord(raw) || !Array.isArray(raw['documents']) || raw['documents'].length === 0) return null;
+      const first = raw['documents'][0];
+      if (!isRecord(first) || !isRecord(first['class_probabilities'])) return null;
+      const ai = probability(first['class_probabilities']['ai']);
+      if (ai === null) return null;
+      const c = first['document_classification'];
+      return { ai, ...(c === 'HUMAN_ONLY' || c === 'MIXED' || c === 'AI_ONLY' ? { classification: c } : {}) };
+    },
+  },
+  originality: {
+    name: 'originality',
+    label: 'Originality.ai',
+    keyEnv: 'ORIGINALITY_API_KEY',
+    url: 'https://api.originality.ai/api/v3/scan',
+    disclosureHeading: '## Originality.ai Data Transmission Disclosure',
+    maxBytes: 50_000,
+    estimateUsd: 0.02,
+    request: (text, key) => ({
+      headers: { 'X-OAI-API-KEY': key, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Paper',
+        check_ai: true,
+        check_plagiarism: false,
+        check_facts: false,
+        check_readability: false,
+        check_grammar: false,
+        check_contentQuality: false,
+        storeScan: false,
+        aiModelVersion: 'lite',
+        content: text,
+      }),
+    }),
+    parse: (raw) => {
+      if (!isRecord(raw) || !isRecord(raw['results']) || !isRecord(raw['results']['ai']) || !isRecord(raw['results']['ai']['confidence'])) return null;
+      const ai = probability(raw['results']['ai']['confidence']['AI']);
+      return ai === null ? null : { ai };
+    },
+  },
+  sapling: {
+    name: 'sapling',
+    label: 'Sapling',
+    keyEnv: 'SAPLING_API_KEY',
+    url: 'https://api.sapling.ai/api/v1/aidetect',
+    disclosureHeading: '## Sapling Data Transmission Disclosure',
+    // Sapling accepts up to 200,000 characters a request (its documented limit).
+    maxBytes: 200_000,
+    estimateUsd: 0.02,
+    request: (text, key) => ({ headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ text, sent_scores: false }) }),
+    parse: (raw) => {
+      if (!isRecord(raw)) return null;
+      const ai = probability(raw['score']);
+      return ai === null ? null : { ai };
+    },
+  },
+});
+
+/** The backend's display name (`GPTZero`, `Originality.ai`, `Sapling`). */
+export function backendLabel(name: HonestyBackendName): string {
+  return BACKENDS[name].label;
+}
+
+/** The key variable each backend reads (doctor reports their presence only). */
+export const DETECTOR_KEY_VARS: Readonly<Record<HonestyBackendName, string>> = Object.freeze({
+  gptzero: BACKENDS.gptzero.keyEnv,
+  originality: BACKENDS.originality.keyEnv,
+  sapling: BACKENDS.sapling.keyEnv,
+});
+
+function classify(ai: number): HonestyClassification {
+  if (ai >= 0.8) return 'AI_ONLY';
+  if (ai <= 0.2) return 'HUMAN_ONLY';
+  return 'MIXED';
 }
 
 // ============================================================
-//   GPTZero disclosure copy (HARD-05)
+//   Locked framing copy (read VERBATIM — never inlined)
 // ============================================================
 
-let disclosureNote: string | null = null;
+const framingFile = (): string => pluginReferencePath('honesty-framing.md');
 
-/**
- * Read the GPTZero full-text-transmission disclosure line from the
- * "## GPTZero Data Transmission Disclosure" section in references/honesty-framing.md.
- * Same verbatim-read pattern as loadFramingNote. Memoized.
- * Transparency-only — NEVER implies detection avoidance.
- */
-function loadDisclosureNote(): string {
-  if (disclosureNote !== null) return disclosureNote;
+const FRAMING_FALLBACK =
+  'Note: this score reflects prose patterns. The humanizer improves readability; it does not promise to make output undetectable.';
+
+/** The first `> ` line under `heading` in references/honesty-framing.md, or null. */
+function framingLine(heading: string): string | null {
   let md: string;
   try {
     md = readFileSync(framingFile(), 'utf8');
   } catch {
-    disclosureNote =
-      'Disclosure: the honesty check sends your full paper text to GPTZero (api.gptzero.me), an external service, for AI-detection scoring. This is for your transparency only — it does NOT make your output undetectable. No data is sent without your consent.';
-    return disclosureNote;
-  }
-  const lines = md.split(/\r?\n/);
-  let inSection = false;
-  for (const line of lines) {
-    if (line.startsWith('## GPTZero Data Transmission Disclosure')) {
-      inSection = true;
-      continue;
-    }
-    if (inSection && line.startsWith('> ')) {
-      disclosureNote = line.slice(2).trim();
-      return disclosureNote;
-    }
-    // Stop scanning at next top-level heading (not the paragraph text below the blockquote)
-    if (inSection && line.startsWith('## ')) break;
-  }
-  disclosureNote =
-    'Disclosure: the honesty check sends your full paper text to GPTZero (api.gptzero.me), an external service, for AI-detection scoring. This is for your transparency only — it does NOT make your output undetectable. No data is sent without your consent.';
-  return disclosureNote;
-}
-
-// ============================================================
-//   GPTZero backend (DONE-04)
-// ============================================================
-
-const GPTZERO_URL = 'https://api.gptzero.me/v2/predict/text';
-
-// Paper-level honesty budget gate (ARCH-10). GPTZero is not a token-metered LLM;
-// the score runs at most twice per paper (before/after humanize). We model a
-// small fixed per-call estimate and gate it under a paper-scoped cap so a
-// runaway loop cannot rack up scoring cost. The value never depends on the key.
-const HONESTY_PAPER_CAP_DEFAULT = 1.0;
-const HONESTY_CALL_EST_USD = 0.02;
-const HONESTY_BUDGET_SCOPE_ID = 'honesty-gptzero';
-
-/**
- * Defensive parse of a GPTZero `/v2/predict/text` response object into a
- * HonestyScore. UNTRUSTED remote JSON — any unexpected shape (missing
- * documents, non-numeric ai probability) yields null (skip), NEVER a
- * fabricated score (T-06-03-03). The api key never enters this function.
- */
-function parseGptzeroResponse(raw: unknown): HonestyScore | null {
-  try {
-    if (!raw || typeof raw !== 'object') return null;
-    const docs = (raw as { documents?: unknown }).documents;
-    if (!Array.isArray(docs) || docs.length === 0) return null;
-    const first = docs[0] as {
-      class_probabilities?: { ai?: unknown };
-      document_classification?: unknown;
-    };
-    const ai = first?.class_probabilities?.ai;
-    if (typeof ai !== 'number' || !Number.isFinite(ai)) return null;
-    const rawClass = first?.document_classification;
-    const classification: HonestyClassification =
-      rawClass === 'HUMAN_ONLY' || rawClass === 'AI_ONLY' || rawClass === 'MIXED'
-        ? rawClass
-        : 'MIXED';
-    return { aiProbability: ai, classification, backend: 'gptzero' };
-  } catch {
-    // Any unexpected access error → conservative skip (advisory-never-throws).
     return null;
   }
-}
-
-/** Options for scoreWithGptzero (HARD-05 consent seam). */
-export interface GptzeroScoringOptions {
-  /**
-   * --yolo for this invocation. The detector-consent gate is NEVER skipped by
-   * --yolo (D-17-16, RUN-28): the flag is forwarded only so the gate registry
-   * sees the real invocation.
-   */
-  yolo?: boolean;
-  /**
-   * Injected consent decision (for tests). When provided, the gate is bypassed
-   * and this value is used directly. undefined → run the gate normally.
-   */
-  consentGranted?: boolean;
-}
-
-/** One stdout line naming why no GPTZero score was produced. */
-function unavailable(why: string): null {
-  out(`pensmith: GPTZero honesty score unavailable (${why}) — no text was sent.\n`);
+  let inSection = false;
+  for (const line of md.split(/\r?\n/)) {
+    if (line.startsWith('## ')) {
+      if (inSection) return null;
+      inSection = line.trim() === heading;
+      continue;
+    }
+    if (inSection && line.startsWith('> ')) return line.slice(2).trim();
+  }
   return null;
 }
 
+/** The locked `## Note` line (transparency-only). */
+export function honestyFramingNote(): string {
+  return framingLine('## Note') ?? FRAMING_FALLBACK;
+}
+
+/** The backend's locked data-transmission disclosure line (printed before anything is sent). */
+export function disclosureLine(name: HonestyBackendName): string {
+  const spec = BACKENDS[name];
+  return (
+    framingLine(spec.disclosureHeading) ??
+    `Disclosure: the honesty check sends your full paper text to ${spec.label} (${new URL(spec.url).host}), an external service, for AI-detection scoring. This is for your transparency only. No data is sent without your consent.`
+  );
+}
+
+// ============================================================
+//   Size cap
+// ============================================================
+
+/** Truncate `text` to at most `maxBytes` UTF-8 bytes (never splitting a character). */
+function truncateBytes(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text;
+  const s = Buffer.from(text, 'utf8').subarray(0, maxBytes).toString('utf8');
+  return s.replace(/�$/, '');
+}
+
+/** HARD-05 test seam: the GPTZero truncation. */
+export function __truncateForGptzeroTest(text: string): string {
+  return truncateBytes(text, GPTZERO_MAX_BYTES);
+}
+
+// ============================================================
+//   Consent (EXP-17)
+// ============================================================
+
+/** The reason a run without a terminal and without a recorded answer sends nothing. */
+export const NO_CONSENT_REASON = 'no consent recorded — run pensmith done interactively once, or set honesty_consent = true';
+
 /**
- * Score `text` against GPTZero. Behavior:
- *   - GPTZERO_API_KEY absent → null (skip-clean banner; key never logged).
- *   - offline (PENSMITH_OFFLINE=1, --dry-run, the test runner) → "score
- *     unavailable (offline | dry-run)": no request, and never a replayed canned
- *     score (RUN-03).
- *   - Disclosure (HARD-05) — always shown before the consent question.
- *   - Consent — the V2 `detector-consent` gate (D-17-16): asked in a terminal
- *     (or with PENSMITH_PROMPT_MODE=numbered); --yolo NEVER skips it; a run that
- *     cannot prompt gives "score unavailable (no consent)"; "no" → declined.
- *     opts.consentGranted bypasses the gate for test injection.
- *   - Size cap (HARD-05) — input truncated to GPTZERO_MAX_BYTES with a note.
- *   - live → assertBudget BEFORE the call (paper-scoped cap), then httpFetch
- *     POST with the x-api-key header through the http.ts chokepoint; status
- *     !== 200 → null; parse defensively; appendCost AFTER a successful call.
- *
- * NEVER throws and NEVER logs the resolved key value (presence-check only).
+ * Whether the paper may be sent to the detector now: the recorded answer, else
+ * the `detector-consent` gate in a terminal (the answer recorded), else no.
+ * Returns null when it may, or the skip reason. --yolo never answers.
  */
-async function scoreWithGptzero(
-  text: string,
-  opts?: GptzeroScoringOptions,
-): Promise<HonestyScore | null> {
-  // Key-absence guard FIRST. Presence-check only — the value is never printed.
-  const apiKey = process.env['GPTZERO_API_KEY'];
-  if (!apiKey) {
-    out('pensmith: GPTZero API key not set — honesty score skipped.\n');
-    return null;
-  }
-
-  // HARD-05 Step 2a: Explicit test-injection decline. When consentGranted is
-  // explicitly false (injected by tests), return null immediately — no POST,
-  // no disclosure printed (decline takes priority over display).
-  if (opts?.consentGranted === false) {
-    return null;
-  }
-
-  // RUN-03: offline never sends and never replays a canned score.
-  const mode = networkMode();
-  if (mode.sourcesOffline) {
-    return unavailable(mode.dryRun ? 'dry-run' : 'offline');
-  }
-
-  // HARD-05 Step 1: Disclosure — always shown before the consent question,
-  // even if the user later declines. Copy is read VERBATIM from the locked
-  // references/honesty-framing.md (never inlined — loadDisclosureNote).
-  out(`pensmith: ${loadDisclosureNote()}\n`);
-
-  // HARD-05 Step 2 / D-17-16: the detector-consent gate (V2) before any POST.
-  if (opts?.consentGranted !== true) {
-    let consented: boolean;
-    try {
-      const outcome = await runGate('detector-consent', { yolo: opts?.yolo === true });
-      if (outcome.kind === 'skipped') return unavailable('no consent');
-      consented =
-        outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
-    } catch {
-      // A gate refusal or an aborted prompt is "no consent" — the honesty
-      // score is advisory and never breaks export.
-      return unavailable('no consent');
-    }
-    if (!consented) {
-      out('pensmith: GPTZero honesty scoring declined — skipped.\n');
-      return null;
-    }
-  }
-
-  // HARD-05 Step 3: Size cap — truncate over-cap input before POST body.
-  let postText = text;
-  if (Buffer.byteLength(text, 'utf8') > GPTZERO_MAX_BYTES) {
-    postText = __truncateForGptzeroTest(text);
-    out(
-      `pensmith: paper text truncated to ${GPTZERO_MAX_BYTES} bytes for GPTZero scoring.\n`,
-    );
-  }
-
+async function consentReason(spec: BackendSpec, opts: HonestyOptions, recorded: boolean | undefined): Promise<string | null> {
+  if (opts.consentGranted === true) return null;
+  if (opts.consentGranted === false) return 'consent declined';
+  if (recorded === true) return null;
+  if (recorded === false) return 'consent declined in config.toml';
+  if (!canPrompt()) return NO_CONSENT_REASON;
+  let yes: boolean;
   try {
-    // ARCH-10 pre-call gate: assertBudget BEFORE the scored API call. A
-    // BudgetExceededError here aborts the call (financial-safety boundary) and
-    // is swallowed to a clean null skip below (advisory must never crash export).
-    await assertBudget(
-      { scope: 'paper', scopeId: HONESTY_BUDGET_SCOPE_ID, cap: HONESTY_PAPER_CAP_DEFAULT },
-      HONESTY_CALL_EST_USD,
-    );
-
-    const resp = await httpFetch(GPTZERO_URL, {
-      method: 'POST',
-      source: 'generic',
-      noCache: true,
-      headers: {
-        // The resolved key reaches ONLY this header. http.ts's cache-header
-        // allowlist drops x-api-key from any persisted envelope (T-06-03-01),
-        // and --show-prompts never prints headers (D-17-12).
-        'x-api-key': apiKey,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ document: postText }),
+    const outcome = await runGate('detector-consent', {
+      yolo: opts.yolo === true,
+      question: { id: 'detector-consent', kind: 'confirm', label: `Send the full paper text to ${spec.label} for an AI-detection score? (your answer is saved in config.toml)`, default: false },
     });
-
-    if (resp.status !== 200) return null; // non-200 (incl. 429) → skip, no fabrication.
-
-    await appendCost({
-      ts: new Date().toISOString(),
-      scope: 'paper',
-      scopeId: HONESTY_BUDGET_SCOPE_ID,
-      provider: 'other',
-      costUsd: HONESTY_CALL_EST_USD,
-    });
-
-    return parseGptzeroResponse(JSON.parse(resp.body));
+    if (outcome.kind !== 'answered') return NO_CONSENT_REASON;
+    yes = outcome.answer.kind === 'confirm' && outcome.answer.value === true;
   } catch {
-    // Transport / budget / parse error → clean null skip (advisory-never-throws,
-    // Pitfall 4 429 handling). The key value never enters this catch path.
-    return null;
+    return NO_CONSENT_REASON;
   }
-}
-
-/** The shipped GPTZero backend (DONE-04). */
-const gptzeroBackend: HonestyBackend = {
-  name: 'gptzero',
-  score: (text: string) => scoreWithGptzero(text),
-};
-
-// ============================================================
-//   Pluggable backend selection (DONE-05)
-// ============================================================
-
-/**
- * Build a not-implemented stub backend for a configured-but-unshipped provider
- * (Originality / Sapling — 06-RESEARCH Open Question 3). score() returns null
- * with a one-line stdout banner rather than fabricating a score or throwing
- * (advisory-never-crash consistency). No network call, no key read.
- */
-function notImplementedBackend(name: string): HonestyBackend {
-  return {
-    name,
-    score: async (): Promise<HonestyScore | null> => {
-      out(
-        `pensmith: ${name} honesty backend not implemented — score skipped.\n`,
-      );
-      return null;
-    },
-  };
-}
-
-/**
- * Resolve the honesty backend from config (DONE-05). GPTZero is the default and
- * the only shipped backend; 'originality' / 'sapling' return not-implemented
- * stubs that skip cleanly; any unknown / undefined value falls back to GPTZero.
- * This is a pure selector — it reads no key and issues no network call.
- */
-export function selectBackend(config?: { honestyBackend?: string }): HonestyBackend {
-  switch (config?.honestyBackend) {
-    case 'originality':
-      return notImplementedBackend('originality');
-    case 'sapling':
-      return notImplementedBackend('sapling');
-    case 'gptzero':
-    case undefined:
-    default:
-      return gptzeroBackend;
+  if (opts.paperRoot !== undefined) {
+    try {
+      await updatePaperConfig(opts.paperRoot, (raw) => {
+        rawTable(raw, 'humanizer')['honesty_consent'] = yes;
+      });
+      out(`pensmith: recorded your answer in .paper/config.toml ([humanizer] honesty_consent = ${String(yes)}).\n`);
+    } catch (e) {
+      process.stderr.write(`pensmith: WARN — your detector-consent answer could not be recorded (${(e as Error).message.split('\n')[0] ?? ''}); it applies to this run only\n`);
+    }
   }
+  return yes ? null : 'consent declined';
 }
 
 // ============================================================
-//   Public: scoreHonesty
+//   Scoring
 // ============================================================
 
-/**
- * Compute the detection-aware honesty score for `text`. Resolves the backend
- * via selectBackend (DONE-05) and delegates to it. Absent key / offline-no-
- * cassette / unexpected response → null (clean skip). Advisory by construction
- * — never throws, never blocks export.
- */
-export async function scoreHonesty(
-  text: string,
-  config?: { honestyBackend?: string },
-): Promise<HonestyScore | null> {
-  return selectBackend(config).score(text);
+/** The backend this paper uses: the option, else `[humanizer] honesty_backend`, else GPTZero. */
+export function configuredBackend(opts: HonestyOptions = {}): HonestyBackendName {
+  if (opts.backend !== undefined) return opts.backend;
+  try {
+    const b = tryReadPaperConfigSync(opts.paperRoot)?.humanizer?.honesty_backend;
+    if (b !== undefined) return b;
+  } catch {
+    // an unreadable config.toml fails loudly elsewhere; scoring falls back to the default backend
+  }
+  return 'gptzero';
 }
 
 /**
- * Score `text` with explicit HARD-05 consent/yolo options (test seam + caller
- * override). Delegates to scoreWithGptzero directly (GPTZero is the only
- * backend with a consent gate; other backends are advisory stubs with no egress).
- * opts.consentGranted bypasses the gate for test injection. --yolo never skips
- * the detector-consent gate (D-17-16); a run that cannot prompt → null with
- * "score unavailable (no consent)".
+ * Score `text` with the paper's detector (see the header): a score with its
+ * ISO timestamp, or the exact reason there is none. Never throws (except a
+ * budget or cost-cap refusal is reported as unavailable, never thrown — the
+ * score is advisory); never invents or replays a score.
  */
-export async function scoreHonestyWithOptions(
-  text: string,
-  opts?: GptzeroScoringOptions,
-): Promise<HonestyScore | null> {
-  return scoreWithGptzero(text, opts);
+export async function measureHonesty(text: string, opts: HonestyOptions = {}): Promise<HonestyOutcome> {
+  const name = configuredBackend(opts);
+  const spec = BACKENDS[name];
+  const none = (kind: 'skipped' | 'unavailable', reason: string): HonestyOutcome => ({ kind, reason, backend: name });
+  let config: ReturnType<typeof tryReadPaperConfigSync> = null;
+  try {
+    config = opts.paperRoot !== undefined ? tryReadPaperConfigSync(opts.paperRoot) : null;
+  } catch {
+    config = null;
+  }
+  if (opts.noScore === true) return none('skipped', '--no-score');
+  if (config?.humanizer?.honesty_score === false) return none('skipped', 'config: honesty_score = false');
+  const mode = networkMode();
+  if (mode.dryRun) return none('unavailable', 'dry-run');
+  const key = process.env[spec.keyEnv];
+  if (key === undefined || key.length === 0) return none('skipped', `no ${spec.keyEnv} set`);
+  if (mode.sourcesOffline) return none('unavailable', 'offline');
+
+  // Every scoring run says what leaves the machine before anything does.
+  out(`pensmith: ${disclosureLine(name)}\n`);
+  const consent = await consentReason(spec, opts, config?.humanizer?.honesty_consent);
+  if (consent !== null) return none('skipped', consent);
+
+  let body = text;
+  if (Buffer.byteLength(text, 'utf8') > spec.maxBytes) {
+    body = truncateBytes(text, spec.maxBytes);
+    out(`pensmith: paper text truncated to ${spec.maxBytes} bytes for ${spec.label} scoring.\n`);
+  }
+  const scope = { scope: 'paper' as const, scopeId: `honesty-${name}`, cap: 1.0 };
+  try {
+    await assertBudget(scope, spec.estimateUsd);
+  } catch (e) {
+    return none('unavailable', `budget: ${(e as Error).message.split('\n')[0] ?? ''}`);
+  }
+  const req = spec.request(body, key);
+  let resp: { status: number; body: string };
+  try {
+    resp = await httpFetch(spec.url, { method: 'POST', source: 'generic', noCache: true, headers: req.headers, body: req.body });
+  } catch (e) {
+    const msg = ((e as Error).message.split('\n')[0] ?? '').replace(key, '***');
+    return none('unavailable', `network: ${msg}`);
+  }
+  if (resp.status === 401 || resp.status === 403) return none('unavailable', `${spec.label} rejected the API key`);
+  if (resp.status === 429) return none('unavailable', 'rate limited');
+  if (resp.status !== 200) return none('unavailable', `${spec.label} answered HTTP ${resp.status}`);
+  let parsed: ReturnType<BackendSpec['parse']>;
+  try {
+    parsed = spec.parse(JSON.parse(resp.body) as unknown);
+  } catch {
+    parsed = null;
+  }
+  if (parsed === null) return none('unavailable', `${spec.label} returned an unexpected response`);
+  const at = new Date().toISOString();
+  try {
+    await appendCost({ ts: at, scope: 'paper', scopeId: scope.scopeId, provider: 'other', costUsd: spec.estimateUsd }, opts.paperRoot);
+  } catch {
+    // the ledger is best-effort for this advisory call
+  }
+  return { kind: 'score', score: { aiProbability: parsed.ai, classification: parsed.classification ?? classify(parsed.ai), backend: name }, at };
 }
 
-// ============================================================
-//   Public: renderHonestyReport (before/after; verbatim framing note)
-// ============================================================
+/** `61% AI-generated (gptzero, 2026-…Z)`, `skipped (--no-score)`, `unavailable (offline)`, `N/A (…)`. */
+export function honestyLine(o: HonestyOutcome | HonestyNotApplicable): string {
+  if (o.kind === 'score') return `${Math.round(o.score.aiProbability * 100)}% AI-generated (${o.score.backend}, ${o.at})`;
+  if (o.kind === 'na') return `N/A (${o.reason})`;
+  return `${o.kind} (${o.reason})`;
+}
 
 /**
- * Render the before/after honesty report. The before/after percentages come
- * from two scoreHonesty calls (done.ts calls scoreHonesty twice per paper —
- * pre- and post-humanize). `after === null` renders the 'N/A (humanizer not
- * installed)' variant. The trailing note is read VERBATIM from the locked
- * references/honesty-framing.md — it is NEVER an inlined literal, so any drift
- * in the locked copy is caught by the repo-files.test.ts hash pin and the
- * verbatim-render assertion in tests/honesty.test.ts.
- *
- * Transparency-only by construction: the rendered prose states what the score
- * means and that the humanizer improves readability; it carries zero
- * detection-avoidance wording (PROJECT.md non-negotiable).
+ * The before/after report (terminal and `.paper/VERIFICATION.md`): one line
+ * each, then the locked framing note VERBATIM (transparency-only).
  */
-export function renderHonestyReport(
-  before: number,
-  after: number | null,
-  backend: string,
-): string {
-  const beforePct = Math.round(before * 100);
-  const afterLine =
-    after === null
-      ? `Pensmith honesty check (after humanize):  N/A (humanizer not installed).`
-      : `Pensmith honesty check (after humanize):  reads as ${Math.round(after * 100)}% AI-generated (${backend}).`;
-  const lines = [
-    `Pensmith honesty check (before humanize): reads as ${beforePct}% AI-generated (${backend}).`,
-    afterLine,
+export function renderHonestySection(before: HonestyOutcome, after: HonestyOutcome | HonestyNotApplicable): string {
+  return [
+    `Pensmith honesty check (before humanize): ${honestyLine(before)}`,
+    `Pensmith honesty check (after humanize):  ${honestyLine(after)}`,
     '',
-    loadFramingNote(),
-  ];
-  return lines.join('\n');
+    honestyFramingNote(),
+  ].join('\n');
+}
+
+// ============================================================
+//   Compatibility surface (DONE-04/05 callers)
+// ============================================================
+
+/** One stdout line for an absent score (the pre-Phase-21 wording, kept for its callers). */
+function announceAbsent(o: HonestyOutcome): void {
+  if (o.kind === 'score') return;
+  const label = BACKENDS[o.backend].label;
+  if (o.kind === 'unavailable') out(`pensmith: ${label} honesty score unavailable (${o.reason}) — no text was sent.\n`);
+  else out(`pensmith: ${label} honesty score skipped (${o.reason}).\n`);
+}
+
+/**
+ * Score `text` and return the bare score, or null with one stdout line saying
+ * why (the DONE-04 surface; done uses measureHonesty).
+ */
+export async function scoreHonestyWithOptions(text: string, opts: HonestyOptions = {}): Promise<HonestyScore | null> {
+  const o = await measureHonesty(text, opts);
+  if (o.kind === 'score') return o.score;
+  announceAbsent(o);
+  return null;
+}
+
+/** scoreHonestyWithOptions with the configured backend (DONE-05). */
+export async function scoreHonesty(text: string, config?: { honestyBackend?: string }): Promise<HonestyScore | null> {
+  const b = config?.honestyBackend;
+  return scoreHonestyWithOptions(text, b === 'gptzero' || b === 'originality' || b === 'sapling' ? { backend: b } : {});
+}
+
+/** A backend object (DONE-05): every configured name is a real adapter; an unknown name is GPTZero. */
+export function selectBackend(config?: { honestyBackend?: string }): HonestyBackend {
+  const b = config?.honestyBackend;
+  const name: HonestyBackendName = b === 'originality' || b === 'sapling' ? b : 'gptzero';
+  return { name, score: (text: string) => scoreHonestyWithOptions(text, { backend: name }) };
 }

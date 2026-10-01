@@ -247,8 +247,33 @@ test('plugin/references/honesty-framing.md hash-pin (Phase 6 DONE-04 LOCKED)', (
   const bytes = readFileSync('plugin/references/honesty-framing.md');  // raw bytes, no BOM strip
   const hash = createHash('sha256').update(bytes).digest('hex');
   // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/references/honesty-framing.md')).digest('hex'))"
-  const PINNED = '9f894ea88129e2b43975de5e1179180d4dc71d70e3959f33ee02601986009707';
+  // Re-pinned Phase 21 (EXP-16..18, D-21-20/21): the timestamped output format and the
+  // Originality.ai and Sapling disclosures — still transparency-only (see the test below).
+  const PINNED = 'b64bb090016d0959c46169cf6c0811aa693e13d592842f5ed37eea3ae03fcb1c';
   assert.equal(hash, PINNED, `plugin/references/honesty-framing.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional (and review the transparency-only constraint in CONTRIBUTING.md).`);
+});
+
+// Phase 21 (EXP-14, D-21-18): plugin/references/humanizer-contract.md is the
+// fixed instruction every Tier-2 humanizer request carries (bin/lib/humanizer.ts
+// reads its `## Contract` section verbatim). It frames the humanizer as a prose
+// improvement only and binds it to the rewrite guard's rules.
+test('plugin/references/humanizer-contract.md hash-pin (Phase 21 EXP-14 LOCKED)', () => {
+  const bytes = readFileSync('plugin/references/humanizer-contract.md');
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/references/humanizer-contract.md')).digest('hex'))"
+  const PINNED = '0899b7fbada305e0df2ea7c63c051c6dbfe1b623b18d813aec85867b5b97662c';
+  assert.equal(hash, PINNED, `plugin/references/humanizer-contract.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
+});
+
+// The framing copy and the humanizer contract stay transparency-only (PRD §14):
+// no sentence promises undetectable output or calls the humanizer a way to evade detection.
+test('Phase 21: honesty-framing.md and humanizer-contract.md make no detection-avoidance claim', () => {
+  for (const file of ['plugin/references/honesty-framing.md', 'plugin/references/humanizer-contract.md']) {
+    const text = readFileSync(file, 'utf8');
+    for (const line of text.split(/\r?\n/).filter((l) => /undetectable|evade|evasion|bypass/i.test(l))) {
+      assert.match(line, /\b(?:not|never|NOT|NEVER)\b/, `${file}: a detection-avoidance word appears only negated: ${line}`);
+    }
+  }
 });
 
 // Phase 6 TEST-10 fixture: tests/fixtures/sample-zero-trace.docx is the offline

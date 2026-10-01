@@ -1,183 +1,283 @@
-// bin/lib/plagiarism.ts — DONE-02 free distinctive-phrase plagiarism check.
+// bin/lib/plagiarism.ts — the free distinctive-phrase plagiarism check
+// (DONE-02; Phase 21 EXP-19, EXP-20; D-21-22).
 //
-// All HTTP through bin/lib/http.ts — ESLint chokepoint enforced. Advisory-only
-// (DONE-02): warns, never blocks export, never throws — mirrors verify/freshness.ts.
+// A BASIC check, not a substitute for an institutional plagiarism service
+// (README): the paper's most distinctive phrases are searched as exact quoted
+// DuckDuckGo queries, and a result counts only when the phrase appears
+// verbatim in its title or snippet. Advisory: it never blocks export — matches
+// feed done's confirmation — and it never throws.
 //
-// Offline (PENSMITH_OFFLINE=1, --dry-run, the test runner) the check is SKIPPED:
-// no query is sent, every phrase reports 0 matches marked "skipped (offline)"
-// (or "skipped (dry-run)"), and nothing is replayed from a canned page — a
-// fixture can never pretend a live search happened (RUN-03).
+//   1. selectPlagiarismPhrases: 6–10-word windows of BODY paragraphs only —
+//      never the title, a heading, a citation (every Pandoc form, removed by the
+//      one grammar), a quoted passage, a block quote, a list item, a table, code
+//      or a reference list — ranked by rarity against the shipped SCOWL word
+//      tiers (plugin/templates/wordfreq/), at least one per paragraph, taken
+//      round-robin across the sections so every section contributes, up to
+//      `[verification] plagiarism_max_phrases` (default 30). Each carries its
+//      location: `§<section> paragraph <k>`.
+//   2. runPlagiarism: each phrase is one GET of the hard-coded
+//      https://html.duckduckgo.com/html/ endpoint with q = the phrase in double
+//      quotes (the only dynamic component, URL-encoded), through http.ts — its
+//      per-host rate limits unchanged. Offline / --dry-run send nothing and say
+//      `skipped (offline)` / `(dry-run)` (RUN-03) — never a canned page.
+//   3. parseDdgHtml: each organic result's title, snippet and REAL destination
+//      — DuckDuckGo's `/l/?uddg=` redirect decoded (`&amp;` unescaped, then
+//      URL-decoded); only http(s) destinations are kept. A bot-challenge page
+//      ("anomaly") is a refused query, never "0 matches".
+//   4. isVerbatimMatch: the phrase, normalised (case, punctuation, whitespace,
+//      quote and dash spellings), appears contiguously in the normalised title
+//      or snippet (`<b>` and every other tag stripped, entities decoded).
 //
-// The check extracts distinctive 5+-word n-grams from the compiled draft
-// (deterministic, no LLM), queries the DuckDuckGo HTML endpoint through the
-// http.ts chokepoint, parses result links, and renders
-// a `## Plagiarism Check (DONE-02)` section for VERIFICATION.md. It is advisory
-// by construction: there is no blocking verdict, transport errors are swallowed
-// to DEBUG as noise, and an empty result array == no plagiarism signal. Only the
-// DONE-09 export-confirmation gate (06-05) may pause on a hit, and only with the
-// user's confirmation.
-//
-// SSRF mitigation (T-06-02-01): the DDG host is hard-coded; the query is the only
-// dynamic component and is encodeURIComponent-escaped. HTML parsing (T-06-02-02)
-// is regex/String only — no eval, no innerHTML, no DOM — so malformed HTML yields
-// an empty match array, never a crash. Burst protection (T-06-02-03): maxPhrases
-// cap (10/paper) + Semaphore(5) + the http.ts generic TokenBucket (5 RPS) +
-// browser-like headers; rate-limit / transport errors are swallowed advisory.
+// SSRF (T-06-02-01): the DuckDuckGo host is hard-coded. HTML parsing
+// (T-06-02-02) is regex/String only — no DOM, no eval — so malformed HTML
+// yields no result, never a crash.
 
+import { readFileSync } from 'node:fs';
 import { fetch as httpFetch } from './http.js';
 import { networkMode } from './http-mock.js';
 import { Semaphore } from './budget.js';
 import { replaceCitations } from './citation-token.js';
 import { out } from './output-sink.js';
+import { pluginTemplatePath } from './paths.js';
+import { DEFAULT_PLAGIARISM_MAX_PHRASES } from './schemas/config.js';
 
 // ============================================================
 //   Public types
 // ============================================================
 
-/**
- * A single DuckDuckGo result link parsed from the HTML response. `title` is the
- * anchor text when present. Exported so Wave-2 done.ts / the DONE-09 gate can
- * consume richer hit metadata even though the locked runPlagiarism contract
- * surfaces only the URLs (see PlagiarismResult).
- */
+/** One organic DuckDuckGo result: its real destination, title and snippet (tags stripped). */
 export interface PlagiarismMatch {
   url: string;
   title?: string;
+  snippet?: string;
 }
 
-/**
- * One queried distinctive phrase plus the result URLs that came back for it.
- *
- * NOTE (executor reconciliation, Rule 1): the locked Wave-0 RED contract in
- * tests/plagiarism.test.ts (and the DONE-09 gate input in tests/export-gate.test.ts)
- * types `matches` as `string[]` — the raw result URLs. We honor that locked test
- * shape here rather than the plan's draft `PlagiarismMatch[]`; the richer
- * PlagiarismMatch type is still exported (it is what parseDdgHtml returns) for
- * downstream consumers, and runPlagiarism maps `.url` into this string array.
- */
+/** Where a phrase is in the paper: the section (`2`, `1a`, or its position) and the body paragraph within it (1-based). */
+export interface PhraseLocation {
+  section: string;
+  paragraph: number;
+}
+
+/** One queried phrase and the real URLs of the results that hold it verbatim. */
 export interface PlagiarismResult {
   phrase: string;
+  /** Destination URLs of the verbatim matches only (a topical result that does not hold the phrase is not a match). */
   matches: string[];
-  /** Set when the phrase was NOT queried because the run is offline (RUN-03). */
+  /** Set when the phrase was not queried because the run is offline (RUN-03). */
   skipped?: 'offline' | 'dry-run';
+  /** Where the phrase is in the paper. */
+  location?: PhraseLocation;
+  /** Why the query gave no answer (a transport error, DuckDuckGo's bot challenge). */
+  error?: string;
+}
+
+export interface PlagiarismOptions {
+  /** `[verification] plagiarism_max_phrases` (default 30). */
+  maxPhrases?: number;
+  /** The section ids in the order of the draft's `## ` headings (default: their positions, 1, 2, …). */
+  sectionIds?: readonly string[];
 }
 
 // ============================================================
-//   Distinctive-phrase extraction (deterministic, no LLM)
+//   The word-frequency tiers (plugin/templates/wordfreq/)
 // ============================================================
 
-// Common short/function words: a window made entirely of these carries no
-// lexical specificity and would only generate scrape noise. Used by the
-// isDistinctive heuristic together with the >4-char specificity floor.
-const STOP_WORDS: ReadonlySet<string> = new Set([
-  'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'any', 'can',
-  'her', 'was', 'one', 'our', 'out', 'his', 'has', 'had', 'how', 'its',
-  'who', 'did', 'yes', 'his', 'she', 'him', 'this', 'that', 'with', 'from',
-  'they', 'them', 'were', 'been', 'have', 'into', 'than', 'then', 'when',
-  'what', 'your', 'will', 'would', 'there', 'their', 'which', 'these', 'those',
-  'such', 'only', 'also', 'over', 'upon', 'each',
-]);
+/** Rarity weight of each SCOWL tier (10 = the commonest words); a word in no tier weighs RARE. */
+const TIER_WEIGHT: Readonly<Record<string, number>> = Object.freeze({ '10': 0, '20': 1, '35': 2, '40': 3, '50': 4 });
+const RARE = 5;
 
-/**
- * A phrase is "distinctive" when it carries enough lexical specificity to be a
- * useful plagiarism probe. Heuristic (deterministic, no LLM): reject windows
- * that are entirely stop-words, and require at least two words longer than four
- * characters so generic boilerplate ("for all of the and") is filtered out.
- */
-function isDistinctive(phrase: string): boolean {
-  const words = phrase.split(/\s+/).filter((w) => w.length > 0);
-  if (words.length === 0) return false;
-  const lowered = words.map((w) => w.toLowerCase());
-  if (lowered.every((w) => STOP_WORDS.has(w))) return false;
-  const specific = words.filter((w) => w.length > 4).length;
-  return specific >= 2;
+let tiers: Map<string, number> | null = null;
+
+/** word → rarity weight, from plugin/templates/wordfreq/scowl-tiers.txt (read once). An unreadable list weighs every word the same. */
+function wordWeights(): Map<string, number> {
+  if (tiers !== null) return tiers;
+  const map = new Map<string, number>();
+  try {
+    let weight = RARE;
+    for (const line of readFileSync(pluginTemplatePath('wordfreq', 'scowl-tiers.txt'), 'utf8').split(/\r?\n/)) {
+      if (line.length === 0 || line.startsWith('#')) continue;
+      if (line.startsWith('@')) {
+        weight = TIER_WEIGHT[line.slice(1)] ?? RARE;
+        continue;
+      }
+      if (!map.has(line)) map.set(line, weight);
+    }
+  } catch {
+    // no list: every window ranks equally (the selection still stratifies)
+  }
+  tiers = map;
+  return map;
 }
 
-/**
- * Strip every Pandoc citation (`[@citekey]`, `[@a; @b, p. 4]`, `[-@k]`,
- * `@{k}`, a narrative `@k` — read by the one citation grammar,
- * citation-token.ts, VRFY-09) and surrounding markdown punctuation from a
- * chunk of draft text so citation keys are never searched as plagiarism
- * phrases (behavior block), then collapse whitespace. Deterministic.
- */
-function stripCitationsAndMarkdown(text: string): string {
-  return replaceCitations(text, () => ' ')
-    // stray inline @tokens the grammar reads as code or as no citation
-    .replace(/(^|\s)@[A-Za-z0-9_:-]+/g, ' ')
-    // markdown emphasis / code / heading / link punctuation → space
-    .replace(/[*_`#>~|]+/g, ' ')
+/** How rare a word is (0 = among the commonest; RARE = in no tier). */
+export function wordRarity(word: string): number {
+  const w = word.toLowerCase().replace(/[’']s$/, '').replace(/[^a-z]/g, '');
+  if (w.length <= 1) return 0;
+  const weights = wordWeights();
+  if (weights.size === 0) return 1;
+  return weights.get(w) ?? RARE;
+}
+
+// ============================================================
+//   Phrase selection
+// ============================================================
+
+/** The shortest and longest window. */
+export const PHRASE_MIN_WORDS = 6;
+export const PHRASE_MAX_WORDS = 10;
+/** The preferred window length (shorter when the run of prose is shorter). */
+const PHRASE_WORDS = 8;
+
+/** A candidate window of one body paragraph. */
+interface Window {
+  readonly phrase: string;
+  readonly score: number;
+  readonly location: PhraseLocation;
+  readonly order: number;
+}
+
+/** True for a line that is not body prose: a heading, list item, block quote, table row, rule, code fence or HTML. */
+function nonProseLine(line: string): boolean {
+  return /^\s{0,3}(?:#{1,6}(?:\s|$)|[-*+]\s|\d+[.)]\s|>|\||<|```|~~~|(?:-{3,}|\*{3,}|_{3,})\s*$|\[\^)/.test(line);
+}
+
+/** Double-quoted spans (straight and curly) become breaks: a quoted passage is never probed. */
+function dropQuoted(text: string): string {
+  return text.replace(/"[^"\n]*"|“[^”\n]*”|„[^“”\n]*[“”]|«[^»\n]*»/g, ' | ');
+}
+
+/** The runs of plain words of a paragraph: citations, quotes, emphasis and links handled; sentence ends and removed spans break a run. */
+function wordRuns(paragraph: string): string[][] {
+  const text = dropQuoted(replaceCitations(paragraph, () => ' | '))
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, ' $1 ')
-    // drop residual brackets / parens / quotes
-    .replace(/[[\]()"'<>]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/`[^`]*`/g, ' | ')
+    .replace(/[*_~]+/g, '')
+    .replace(/(^|\s)@[\w:.-]+/g, ' | ');
+  const runs: string[][] = [];
+  for (const piece of text.split(/[.!?;:|()[\]{}]+(?:\s|$)|\s[|]\s|[()[\]{}|]/)) {
+    const words = piece.split(/\s+/).map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')).filter((w) => /[\p{L}]/u.test(w));
+    if (words.length >= PHRASE_MIN_WORDS) runs.push(words);
+  }
+  return runs;
 }
 
-/**
- * Extract distinctive >=minWords-word n-grams from `text` (06-RESEARCH Pattern 4).
- *
- * Splits on terminal punctuation + whitespace into sentences; for each sentence
- * with >= minWords words, slides overlapping minWords-length windows; filters via
- * isDistinctive; dedupes via a Set preserving first-seen order; returns at most
- * maxPhrases phrases. Strips [@citekey] tokens and markdown before windowing.
- *
- * Deterministic: identical input always yields identical ordered output (no
- * Math.random, no Date).
- */
-export function extractDistinctivePhrases(
-  text: string,
-  minWords = 5,
-  maxPhrases = 10,
-): string[] {
-  if (typeof text !== 'string' || text.trim().length === 0) return [];
-  const cleaned = stripCitationsAndMarkdown(text);
-  // Split into sentences on terminal punctuation followed by whitespace, then
-  // also handle a trailing sentence with no terminal punctuation.
-  const sentences = cleaned.split(/[.!?]+\s+/);
-  const seen = new Set<string>();
-  const phrases: string[] = [];
-  for (const sentence of sentences) {
-    // Drop residual terminal punctuation and tokenize; keep words with >2 chars
-    // so single-letter / stray tokens do not pad a window (06-RESEARCH algo).
-    const words = sentence
-      .replace(/[.!?,;:]+$/g, '')
-      .trim()
-      .split(/\s+/)
-      .filter((w) => w.length > 2);
-    if (words.length < minWords) continue;
-    for (let i = 0; i <= words.length - minWords; i++) {
-      const phrase = words.slice(i, i + minWords).join(' ');
-      if (!isDistinctive(phrase)) continue;
-      const key = phrase.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      phrases.push(phrase);
-      if (phrases.length >= maxPhrases) return phrases;
+/** The windows of one paragraph, best first (mean rarity, then position). */
+function paragraphWindows(paragraph: string, location: PhraseLocation, base: number): Window[] {
+  const out: Window[] = [];
+  let order = base;
+  for (const run of wordRuns(paragraph)) {
+    const len = Math.min(PHRASE_MAX_WORDS, Math.max(PHRASE_MIN_WORDS, Math.min(PHRASE_WORDS, run.length)));
+    for (let i = 0; i + len <= run.length; i += 1) {
+      const words = run.slice(i, i + len);
+      const score = words.reduce((a, w) => a + wordRarity(w), 0) / len;
+      out.push({ phrase: words.join(' '), score, location, order });
+      order += 1;
     }
   }
-  return phrases;
+  return out.sort((a, b) => b.score - a.score || a.order - b.order);
 }
 
-// ============================================================
-//   Advisory debug helper (mirrors verify/freshness.ts)
-// ============================================================
-function debug(msg: string): void {
-  if (process.env['PENSMITH_DEBUG'] === '1') {
-    process.stderr.write(`[plagiarism] ${msg}\n`);
+/** The body paragraphs of each `## ` section of the compiled draft (the title, headings, non-prose lines and a reference list excluded). */
+function bodyParagraphs(draftMd: string, sectionIds: readonly string[] | undefined): Array<{ section: string; paragraphs: string[] }> {
+  const lines = draftMd.replace(/\r\n?/g, '\n').split('\n');
+  const sections: Array<{ section: string; paragraphs: string[] }> = [];
+  let current: { section: string; paragraphs: string[] } | null = null;
+  let buf: string[] = [];
+  let fence = false;
+  let references = false;
+  let position = 0;
+  const flush = (): void => {
+    const p = buf.join(' ').trim();
+    if (p.length > 0 && current !== null && !references) current.paragraphs.push(p);
+    buf = [];
+  };
+  for (const line of lines) {
+    if (/^\s{0,3}(?:```|~~~)/.test(line)) {
+      flush();
+      fence = !fence;
+      continue;
+    }
+    if (fence) continue;
+    const heading = /^\s{0,3}(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      flush();
+      references = /^(?:references|bibliography|works cited|sources|literature cited)\b/i.test((heading[2] ?? '').trim());
+      if ((heading[1] ?? '').length === 2 && !references) {
+        position += 1;
+        current = { section: sectionIds?.[position - 1] ?? String(position), paragraphs: [] };
+        sections.push(current);
+      }
+      continue;
+    }
+    if (line.trim().length === 0 || nonProseLine(line)) {
+      flush();
+      continue;
+    }
+    // A draft with no `## ` heading (a single section) is one section.
+    if (current === null) {
+      position += 1;
+      current = { section: sectionIds?.[0] ?? '1', paragraphs: [] };
+      sections.push(current);
+    }
+    buf.push(line.trim());
   }
+  flush();
+  return sections;
+}
+
+/**
+ * The phrases to probe (see the header): each body paragraph's most
+ * distinctive window, taken round-robin across the sections (every section's
+ * 1st paragraph, then every section's 2nd, …) so each section contributes,
+ * up to `maxPhrases`; any budget left takes the next-best windows. Returned in
+ * paper order. Deterministic: the same draft gives the same phrases.
+ */
+export function selectPlagiarismPhrases(draftMd: string, opts: PlagiarismOptions = {}): Array<{ phrase: string; location: PhraseLocation }> {
+  const max = Math.max(0, Math.floor(opts.maxPhrases ?? DEFAULT_PLAGIARISM_MAX_PHRASES));
+  if (typeof draftMd !== 'string' || max === 0) return [];
+  const sections = bodyParagraphs(draftMd, opts.sectionIds);
+  const perParagraph: Window[][][] = sections.map((s, si) => s.paragraphs.map((p, pi) => paragraphWindows(p, { section: s.section, paragraph: pi + 1 }, si * 1_000_000 + pi * 1_000)));
+  const chosen: Window[] = [];
+  const taken = new Set<string>();
+  const take = (w: Window | undefined): void => {
+    if (w === undefined || chosen.length >= max) return;
+    const key = w.phrase.toLowerCase();
+    if (taken.has(key)) return;
+    taken.add(key);
+    chosen.push(w);
+  };
+  const deepest = Math.max(0, ...perParagraph.map((s) => s.length));
+  for (let k = 0; k < deepest && chosen.length < max; k += 1) {
+    for (const s of perParagraph) take(s[k]?.[0]);
+  }
+  if (chosen.length < max) {
+    // Further windows that do not overlap a chosen one's words, best first.
+    const rest = perParagraph.flat().flatMap((ws) => ws.slice(1)).sort((a, b) => b.score - a.score || a.order - b.order);
+    for (const w of rest) {
+      if (chosen.length >= max) break;
+      const overlaps = chosen.some((c) => c.location.section === w.location.section && c.location.paragraph === w.location.paragraph && (c.phrase.includes(w.phrase.split(' ')[0] ?? '') && w.phrase.includes(c.phrase.split(' ').slice(-1)[0] ?? '')));
+      if (!overlaps) take(w);
+    }
+  }
+  return chosen.sort((a, b) => a.order - b.order).map((w) => ({ phrase: w.phrase, location: w.location }));
+}
+
+/**
+ * The phrases' text only (the DONE-02 surface): `maxPhrases` distinctive
+ * windows of the draft's body text. `minWords` is kept for its callers; every
+ * window has 6–10 words.
+ */
+export function extractDistinctivePhrases(text: string, minWords = PHRASE_MIN_WORDS, maxPhrases = DEFAULT_PLAGIARISM_MAX_PHRASES): string[] {
+  void minWords;
+  return selectPlagiarismPhrases(text, { maxPhrases }).map((p) => p.phrase);
 }
 
 // ============================================================
-//   DuckDuckGo HTML query + parse
+//   DuckDuckGo: query, parse, match
 // ============================================================
 
-// Hard-coded host (T-06-02-01 SSRF mitigation): the ONLY dynamic component of
-// the query URL is the `q` param, which is encodeURIComponent-escaped below.
 const DDG_HTML_ENDPOINT = 'https://html.duckduckgo.com/html/';
 
-// Browser-like headers reduce DDG's burst-blocking (06-RESEARCH Pitfall 5 /
-// T-06-02-03). They are advisory hints only; a block still degrades to an empty
-// match array, never a throw.
 const DDG_HEADERS: Record<string, string> = {
   'Accept-Language': 'en-US,en;q=0.9',
   Accept: 'text/html',
@@ -185,137 +285,187 @@ const DDG_HEADERS: Record<string, string> = {
 
 const DDG_FAN_OUT = 5;
 
-/**
- * Build the DDG HTML search URL for a phrase. Host is hard-coded; the phrase is
- * URL-encoded as the sole dynamic component (T-06-02-01 SSRF/injection
- * mitigation — no arbitrary host can be reached through this function).
- */
-function ddgUrl(phrase: string): string {
-  return `${DDG_HTML_ENDPOINT}?q=${encodeURIComponent(phrase)}`;
+/** The quoted exact-phrase query URL (the host is hard-coded; the quoted phrase is the one, URL-encoded, dynamic part). */
+export function ddgQueryUrl(phrase: string): string {
+  return `${DDG_HTML_ENDPOINT}?q=${encodeURIComponent(`"${phrase.replace(/"/g, '')}"`)}`;
+}
+
+/** Decode the five predefined entities, numeric references and &nbsp;. */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(Number.parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d)))
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;|&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+/** Tags stripped (`<b>` included), entities decoded, whitespace collapsed. */
+function plainText(html: string): string {
+  return decodeEntities(html.replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim();
 }
 
 /**
- * Parse DuckDuckGo HTML into the list of organic result links. Pure function,
- * shared by BOTH the offline-cassette and the live-network branches so they
- * cannot diverge.
- *
- * Implementation is regex/String ONLY — no DOM, no eval, no innerHTML
- * (T-06-02-02 / V5 input validation). Matches the organic `result__a` anchor
- * class exactly so sponsored `result--ad__a` and snippet `result__snippet`
- * anchors are excluded. Malformed HTML simply yields zero matches.
+ * The real destination of a DuckDuckGo result link: the `uddg` parameter of
+ * its `/l/?uddg=…` redirect (`&amp;` unescaped, then URL-decoded), else the
+ * link itself. Only an http(s) URL is returned; anything else is null.
+ */
+export function decodeDdgLink(href: string): string | null {
+  let raw = href.trim().replace(/&amp;/g, '&');
+  if (raw.startsWith('//')) raw = `https:${raw}`;
+  let url: URL;
+  try {
+    url = new URL(raw, 'https://duckduckgo.com');
+  } catch {
+    return null;
+  }
+  if (/(^|\.)duckduckgo\.com$/i.test(url.hostname) && url.pathname === '/l/') {
+    const target = url.searchParams.get('uddg');
+    if (target === null) return null;
+    try {
+      url = new URL(target);
+    } catch {
+      return null;
+    }
+  }
+  return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+}
+
+/** True when the page is DuckDuckGo's bot challenge (it answers 202 with an "anomaly" form). */
+export function isDdgChallenge(html: string): boolean {
+  return /anomaly-modal|anomaly\.js|challenge-form/i.test(html) && !/class=["'][^"']*\bresult__a\b/.test(html);
+}
+
+/**
+ * Parse DuckDuckGo HTML into its organic results — title, snippet and the
+ * decoded destination (sponsored `result--ad__a` anchors excluded, each URL
+ * once). Pure, regex/String only; malformed HTML yields fewer results, never a throw.
  */
 export function parseDdgHtml(html: string): PlagiarismMatch[] {
   if (typeof html !== 'string' || html.length === 0) return [];
-  const matches: PlagiarismMatch[] = [];
-  // class="result__a" (exact token, not a prefix — excludes result__a-foo and
-  // result--ad__a) with an href; capture the URL and the anchor text.
-  const re = /<a\b[^>]*\bclass=["'][^"']*\bresult__a\b[^"']*["'][^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let m: RegExpExecArray | null;
+  const anchors: Array<{ at: number; end: number; href: string; title: string }> = [];
+  const re = /<a\b([^>]*\bclass=["'][^"']*\bresult__a\b[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi;
+  for (let m = re.exec(html); m !== null; m = re.exec(html)) {
+    const attrs = m[1] ?? '';
+    if (/\bresult--ad__a\b/.test(attrs)) continue;
+    const href = /\bhref=["']([^"']+)["']/.exec(attrs)?.[1];
+    if (href === undefined) continue;
+    anchors.push({ at: m.index, end: re.lastIndex, href, title: plainText(m[2] ?? '') });
+  }
+  const results: PlagiarismMatch[] = [];
   const seen = new Set<string>();
-  while ((m = re.exec(html)) !== null) {
-    const url = (m[1] ?? '').trim();
-    if (url.length === 0) continue;
-    // Exclude the sponsored ad anchor class defensively (its class token is
-    // result--ad__a, which the result__a word-boundary above already rejects;
-    // this is belt-and-suspenders against attribute-order variance).
-    if (/\bresult--ad__a\b/.test(m[0])) continue;
-    if (seen.has(url)) continue;
+  anchors.forEach((a, i) => {
+    const url = decodeDdgLink(a.href);
+    if (url === null || seen.has(url)) return;
     seen.add(url);
-    const rawTitle = (m[2] ?? '')
-      .replace(/<[^>]*>/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    matches.push(rawTitle.length > 0 ? { url, title: rawTitle } : { url });
-  }
-  return matches;
+    const region = html.slice(a.end, anchors[i + 1]?.at ?? html.length);
+    const snip = /<(?:a|div|td)\b[^>]*\bclass=["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|div|td)>/i.exec(region)?.[1];
+    results.push({ url, ...(a.title.length > 0 ? { title: a.title } : {}), ...(snip !== undefined ? { snippet: plainText(snip) } : {}) });
+  });
+  return results;
 }
 
-/**
- * Query one phrase against DuckDuckGo through the http.ts chokepoint, parse the
- * result anchors, and return the result URLs. Never throws — transport errors
- * are swallowed to DEBUG and yield an empty array for that phrase (advisory
- * contract, mirrors verify/freshness.ts). Only reached when the run is live.
- */
-async function queryPhrase(phrase: string): Promise<string[]> {
+/** Case, punctuation, whitespace, quote and dash spellings folded: letters and digits separated by single spaces. */
+export function normalizeForMatch(s: string): string {
+  return s
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[‘’‚‛′]/g, "'")
+    .replace(/[“”„‟″]/g, '"')
+    .replace(/[‐-―−]/g, '-')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/** True when the normalised phrase appears, as whole words, in the result's normalised title or snippet. */
+export function isVerbatimMatch(phrase: string, result: PlagiarismMatch): boolean {
+  const p = ` ${normalizeForMatch(phrase)} `;
+  if (p.trim().length === 0) return false;
+  return [result.title, result.snippet].some((t) => t !== undefined && ` ${normalizeForMatch(t)} `.includes(p));
+}
+
+/** Debug only (PENSMITH_DEBUG=1). */
+function debug(msg: string): void {
+  if (process.env['PENSMITH_DEBUG'] === '1') process.stderr.write(`[plagiarism] ${msg}\n`);
+}
+
+/** One quoted query: the verbatim matches' URLs, or why there is no answer. Never throws. */
+async function queryPhrase(phrase: string): Promise<{ matches: string[]; error?: string }> {
   try {
-    const resp = await httpFetch(ddgUrl(phrase), {
-      source: 'generic',
-      noCache: true,
-      headers: DDG_HEADERS,
-    });
-    return parseDdgHtml(resp.body).map((hit) => hit.url);
+    const resp = await httpFetch(ddgQueryUrl(phrase), { source: 'generic', noCache: true, headers: DDG_HEADERS });
+    if (isDdgChallenge(resp.body)) return { matches: [], error: 'DuckDuckGo refused the query (its bot challenge) — retry later' };
+    if (resp.status !== 200) return { matches: [], error: `DuckDuckGo answered HTTP ${resp.status}` };
+    return { matches: parseDdgHtml(resp.body).filter((r) => isVerbatimMatch(phrase, r)).map((r) => r.url) };
   } catch (err) {
-    // Transport / parse error is scrape noise, NOT a plagiarism signal. Swallow
-    // advisory — the check never throws and never blocks export by itself.
-    debug(`phrase=${JSON.stringify(phrase)} transport error: ${String(err)} — swallowed`);
-    return [];
+    debug(`phrase=${JSON.stringify(phrase)} transport error: ${String(err)}`);
+    return { matches: [], error: `query failed (${(err as Error).message.split('\n')[0] ?? 'transport error'})` };
   }
 }
 
 /**
- * Run the free distinctive-phrase plagiarism check over a compiled draft.
- *
- * Extracts distinctive phrases (extractDistinctivePhrases), queries DDG for each
- * under a Semaphore(5) fan-out cap (so the http.ts generic TokenBucket is not
- * overrun), and returns one PlagiarismResult per queried phrase (including
- * phrases with zero matches). Advisory by construction: never throws, never
- * blocks export — an empty `matches` array means no signal for that phrase.
+ * Run the check over the compiled draft (see the header): one result per
+ * probed phrase with its location. Offline / --dry-run: every phrase
+ * `skipped`, nothing sent. Never throws.
  */
-export async function runPlagiarism(
-  draftMd: string,
-  opts?: { maxPhrases?: number },
-): Promise<PlagiarismResult[]> {
-  const maxPhrases = opts?.maxPhrases ?? 10;
-  const phrases = extractDistinctivePhrases(draftMd, 5, maxPhrases);
+export async function runPlagiarism(draftMd: string, opts: PlagiarismOptions = {}): Promise<PlagiarismResult[]> {
+  const phrases = selectPlagiarismPhrases(draftMd, opts);
   if (phrases.length === 0) return [];
   const mode = networkMode();
   if (mode.sourcesOffline) {
-    // RUN-03: offline never queries and never replays a canned search page.
     const skipped = mode.dryRun ? 'dry-run' : 'offline';
-    out(
-      `pensmith: plagiarism check skipped (${skipped}) — ${phrases.length} distinctive phrase(s) not queried.\n`,
-    );
-    return phrases.map((phrase) => ({ phrase, matches: [], skipped }));
+    out(`pensmith: plagiarism check skipped (${skipped}) — ${phrases.length} distinctive phrase(s) not queried.\n`);
+    return phrases.map((p) => ({ phrase: p.phrase, matches: [], skipped, location: p.location }));
   }
   const sem = new Semaphore(DDG_FAN_OUT);
   return Promise.all(
-    phrases.map((phrase) =>
-      sem.withLock(async () => ({ phrase, matches: await queryPhrase(phrase) })),
+    phrases.map((p) =>
+      sem.withLock(async () => {
+        const r = await queryPhrase(p.phrase);
+        return { phrase: p.phrase, matches: r.matches, location: p.location, ...(r.error !== undefined ? { error: r.error } : {}) };
+      }),
     ),
   );
 }
 
+/** `§2 paragraph 3`. */
+export function locationLabel(l: PhraseLocation | undefined): string {
+  return l === undefined ? '—' : `§${l.section} paragraph ${l.paragraph}`;
+}
+
 /**
- * Render the `## Plagiarism Check (DONE-02)` section for VERIFICATION.md.
- * Deterministic, no LLM. Mirrors the verify/freshness.ts renderFreshnessTable
- * shape (06-PATTERNS). Carries a one-line advisory note: this check never blocks
- * export — it only feeds the DONE-09 export-confirmation gate.
+ * The `## Plagiarism Check (DONE-02)` section of `.paper/VERIFICATION.md`:
+ * each probed phrase with its location and its verbatim matches (real URLs),
+ * or the line saying why the check was skipped.
  */
-export function renderPlagiarismSection(
-  results: ReadonlyArray<PlagiarismResult>,
-): string {
+export function renderPlagiarismSection(results: ReadonlyArray<PlagiarismResult>, opts: { skipped?: string } = {}): string {
   const lines = [
     '## Plagiarism Check (DONE-02)',
     '',
-    'Advisory only — never blocks export; feeds the export-confirmation gate (DONE-09).',
+    'A basic check, not a substitute for an institutional plagiarism service: distinctive phrases of the paper searched as exact quotes on DuckDuckGo; a result counts only when it holds the phrase verbatim. Advisory only — never blocks export; matches feed the export confirmation (DONE-09).',
     '',
-    '| Phrase | Matches |',
-    '|--------|---------|',
   ];
+  if (opts.skipped !== undefined) {
+    lines.push(`plagiarism check skipped (${opts.skipped})`);
+    return lines.join('\n');
+  }
+  lines.push('| Location | Phrase | Matches |', '|----------|--------|---------|');
   if (results.length === 0) {
-    lines.push('| _(none)_ | no distinctive phrases probed |');
+    lines.push('| — | _(none)_ | no body paragraph long enough to probe |');
     return lines.join('\n');
   }
   for (const r of results) {
     const cell =
       r.skipped !== undefined
         ? `_(skipped (${r.skipped}) — not queried)_`
-        : r.matches.length === 0
-          ? '_(no matches)_'
-          : r.matches.map((u) => `<${u}>`).join('<br>');
-    // Escape pipes in the phrase so a literal `|` cannot break the table.
-    const phraseCell = r.phrase.replace(/\|/g, '\\|');
-    lines.push(`| ${phraseCell} | ${cell} |`);
+        : r.error !== undefined
+          ? `_(${r.error.replace(/\|/g, '/')})_`
+          : r.matches.length === 0
+            ? '_(no verbatim match)_'
+            : r.matches.map((u) => `<${u}>`).join('<br>');
+    lines.push(`| ${locationLabel(r.location)} | ${r.phrase.replace(/\|/g, '\\|')} | ${cell} |`);
   }
   return lines.join('\n');
 }

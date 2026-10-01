@@ -1,61 +1,93 @@
-// bin/cli/done.ts — `pensmith done` verb entrypoint (DONE-01 / DONE-03 / DONE-09).
+// bin/cli/done.ts — `pensmith done` verb entrypoint (DONE-01 / DONE-03 / DONE-09;
+// Phase 21 EXP-03, EXP-14..EXP-21).
 //
-// THIN ORCHESTRATOR — delegates to bin/lib/* (runPass4, runPlagiarism,
-// scoreHonesty, exportDraft). 'done' IS one of the locked UX-02 16 verbs
-// (bin/lib/verbs.ts) — this file promotes the Phase-2 dispatcher stub to a real
-// loader (bin/pensmith.ts REAL_VERB_LOADERS). No 17th verb is added; the
-// workflows/done.md body (Tier 1) delegates to this SAME bin/lib path.
+// THIN ORCHESTRATOR — delegates to bin/lib/* (the export gate in done-gate.ts,
+// the style in export-style.ts, plagiarism.ts, honesty.ts, humanizer.ts,
+// verify/pass4.ts, exporter.ts). 'done' IS one of the locked UX-02 16 verbs
+// (bin/lib/verbs.ts); `export`, `humanize`, `score` and `plagiarism` are
+// ALIASES of its sub-steps (`done --only <step>`, rewritten before argv
+// validation — EXP-21, D-21-23), never a 17th verb. The workflows/done.md body
+// (Tier 1) delegates to this SAME bin/lib path.
 //
-// stdout-only (no console.* — keeps a future stdio/MCP frame clean, the same
-// Pitfall-7 stance as compile.ts and the other verbs).
+// stdout-only through out() (no console.* — the MCP frame stays clean,
+// PLUG-13); warnings go to stderr.
+//
+// The run (draft mode, 21-PLAN §3.2):
+//   flags (`--format`, `--style` → resolveExportStyle, `--only`, the
+//   `--no-verify --raw` rule; every violation EXIT_USAGE before anything runs)
+//   → the blocking gate over DRAFT.md (VRFY-26/27; every --only runs it first)
+//   → the non-TTY confirmation pre-check (an export run) → plagiarism (unless
+//   skipped) → honesty before (unless skipped) → the humanizer (humanizer.ts;
+//   a rejection is EXIT_BLOCKED, nothing exported, FINAL.md untouched; a
+//   provider failure exports the compiled draft) → honesty after → whole-paper
+//   Pass 4 (unless --no-verify) → the confirmation (UNSUPPORTED claims,
+//   orphans, plagiarism hits, the contradictions COMPILE-REPORT flagged, the
+//   accepted quotes) → exportDraft → last_verified and retraction statuses →
+//   `.paper/VERIFICATION.md` → FINAL.md + DONE-RECORD.
+//
+// FINAL.md (EXP-15, D-21-19) is written ONCE per successful run, after the
+// export and the paper-level VERIFICATION.md: the accepted humanized text,
+// else the compiled draft. It is never replaced before that, so a refused,
+// declined, failed or capped done leaves it byte-identical.
 //
 // DONE-09 export-confirmation gate is the SOLE escape valve reconciling the
 // Core Value ("every citation supports its claim") with VRFY-07 (advisory Pass
-// 2/4 never auto-block). Without the gate the Core Value would force compile/
-// export to block automatically. The gate ALWAYS prompts (generic confirm even
-// when clean — PRD §7.9), shows a per-issue summary when UNSUPPORTED / orphan /
-// plagiarism issues exist, and ONLY --yolo skips it.
+// 2/4 never auto-block). The gate ALWAYS prompts (generic confirm even when
+// clean — PRD §7.9), shows a per-issue summary when UNSUPPORTED / orphan /
+// plagiarism / contradiction issues exist, and ONLY --yolo skips it.
 //
 // Exports go to the exporter's DISTINCT export dir (default `.paper/export/`) —
-// done.ts MUST NOT pass `outputDir=paperDir(paperRoot)`, so the md-fallback
-// never overwrites the source DRAFT.md and the verb-level zero-trace scan
-// targets a real distinct deliverable (cycle-2 MEDIUM). Under --dry-run the
-// export dir is `.paper-dry-run/export/` and the file is `DRAFT.dry-run.<ext>`
-// (GRND-19); done prints that path and says it is a dry-run export.
+// done.ts MUST NOT pass `outputDir=paperDir(paperRoot)`, so the md export
+// never overwrites the source DRAFT.md. The export is always named after the
+// compiled draft (`export/DRAFT.<ext>`), whichever text it holds. Under
+// --dry-run the export dir is `.paper-dry-run/export/` and the file is
+// `DRAFT.dry-run.<ext>` (GRND-19); done prints that path and says it is a
+// dry-run export.
 
 import { defineCommand } from 'citty';
-import { readFileSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { runFreshnessForDraft } from '../lib/verify/pass1.js';
 import { decidedRetractions, type DecidedRetraction } from '../lib/verify/freshness.js';
 import { type Pass2Result } from '../lib/verify/pass2.js';
-import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
-import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
-import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
+import { runPlagiarism, renderPlagiarismSection, locationLabel, type PlagiarismResult } from '../lib/plagiarism.js';
+import {
+  measureHonesty,
+  renderHonestySection,
+  honestyLine,
+  honestyFramingNote,
+  type HonestyOutcome,
+  type HonestyNotApplicable,
+} from '../lib/honesty.js';
+import { exportDraft, type ExportFormat } from '../lib/exporter.js';
 import { paperDir, projectRoot } from '../lib/paths.js';
-import { parseIntakeMd } from '../lib/intake-parse.js';
-import { resolveStyleName } from '../lib/citations.js';
+import { resolveExportStyle, type ExportStyle } from '../lib/export-style.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
-import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
+import { EXIT_BLOCKED, EXIT_ERROR, EXIT_USAGE, PensmithError } from '../lib/exit-codes.js';
 import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { sectionRegistryProblem } from '../lib/section-registry.js';
-import { compileRecordProblems, fileSha256 } from '../lib/compile-inputs.js';
-import { editedFinalReason, finalMdState, writeDoneRecord } from '../lib/done-record.js';
-import { loadBibliography, type AcceptedQuote, type ByoQuote, type GateResult } from '../lib/verify/gate.js';
+import { compileRecordProblems, fileSha256, readCompileInputs } from '../lib/compile-inputs.js';
+import { editedFinalReason, finalMdState, readDoneRecord, writeDoneRecord } from '../lib/done-record.js';
+import { loadBibliography, type AcceptedQuote, type ByoQuote, type GateResult, type LoadedBibliography } from '../lib/verify/gate.js';
 import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
 import { recordLastVerified, recordRetractionStatuses, LibraryNotFoundError } from '../lib/library.js';
 import { out as writeOut } from '../lib/output-sink.js';
+import { tryReadPaperConfigSync } from '../lib/config.js';
+import { readReportContradictions } from '../lib/compile-report.js';
+import { acceptHumanized, humanizeDraft, loadHumanizerSkill, HUMANIZER_SKILL_DISPLAY } from '../lib/humanizer.js';
+import { modelStepSkipReason } from '../lib/rewrite-guard.js';
+import { assertLlmConfigured, complete, isFatalLlmError, MissingApiKeyError, RuntimeConfigError } from '../lib/anthropic.js';
 import {
   doneSections,
   runExportBlockingGate,
   recomputeExportGate,
-  citedKeySetChange,
   readUnsupportedClaims,
   unjudgedClaimSections,
   unjudgedLine,
+  type DoneSection,
   type UnsupportedClaim,
   type UnjudgedSection,
 } from '../lib/done-gate.js';
@@ -133,13 +165,13 @@ function writeGateSummary(issues: GateIssues): void {
     if (sentences.length > 5) writeOut(`      … and ${sentences.length - 5} more (see .paper/VERIFICATION.md)\n`);
   }
   if (issues.plagiarismHits.length > 0) {
-    const sample = issues.plagiarismHits
-      .slice(0, 3)
-      .map((r) => r.phrase.replace(/[\r\n]+/g, ' ').slice(0, 60))
-      .join(' | ');
     writeOut(
-      `  - ${issues.plagiarismHits.length} distinctive phrase(s) with web matches (plagiarism): ${sample}\n`,
+      `  - ${issues.plagiarismHits.length} distinctive phrase(s) found verbatim on the web (plagiarism):\n`,
     );
+    for (const r of issues.plagiarismHits.slice(0, 5)) {
+      writeOut(`      ${locationLabel(r.location)} "${cell(r.phrase, 80)}" — ${r.matches.slice(0, 2).join(', ')}\n`);
+    }
+    if (issues.plagiarismHits.length > 5) writeOut(`      … and ${issues.plagiarismHits.length - 5} more (see .paper/VERIFICATION.md)\n`);
   }
   writeOut('These are advisory only — review before confirming export.\n');
 }
@@ -189,7 +221,7 @@ export async function runDoneGate(input: {
 
 /**
  * Run the whole-paper Pass 4 orphan audit (DONE-01, VRFY-23) over `text` — the
- * exact text done exports (FINAL.md after the humanizer, else the compiled
+ * exact text done exports (the accepted humanized text, else the compiled
  * DRAFT.md) — or, without it, the compiled `.paper/DRAFT.md` (a missing draft
  * yields []; the caller surfaces the missing-draft error separately). runPass4
  * is deterministic and offline under PENSMITH_NO_LLM=1 (CI path). Never throws.
@@ -237,11 +269,89 @@ export {
 } from '../lib/done-gate.js';
 
 // ---------------------------------------------------------------------------
-// doneCommand — the thin orchestrator (DONE-01 + DONE-02 + DONE-03 + DONE-04/05
-//               + DONE-06/07/08 + DONE-09)
+// Flags (EXP-21, D-21-23)
 // ---------------------------------------------------------------------------
 
-const VALID_FORMATS: ReadonlySet<string> = new Set(['docx', 'pdf', 'latex', 'md']);
+/** A sub-step `--only` runs (and the alias that names it: `pensmith export` = `done --only export`). */
+export type DoneStep = 'export' | 'humanize' | 'score' | 'plagiarism';
+
+/** The steps `--only` accepts, in the order done runs them. */
+export const DONE_ONLY_STEPS: readonly DoneStep[] = ['export', 'humanize', 'score', 'plagiarism'];
+
+/** How `--format` errors name what it accepts. */
+export const DONE_FORMAT_CHOICES = 'md, docx, pdf, latex (tex)';
+
+/** PRD §7.9: `--no-verify` refuses to combine with `--raw` without `--yolo`. */
+export const NO_VERIFY_RAW_REFUSAL =
+  'pensmith done: --no-verify cannot be combined with --raw without --yolo (PRD §7.9): together they skip both the whole-paper ' +
+  'verify pass and the humanizer — drop one of them, or pass --yolo to accept that (the blocking citation gate still runs)';
+
+function usageError(message: string): PensmithError {
+  return new PensmithError(message, EXIT_USAGE);
+}
+
+/** `--format`: md, docx, pdf, latex or tex (an alias of latex); anything else is EXIT_USAGE listing them. */
+export function parseDoneFormat(raw: unknown): ExportFormat {
+  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (v === 'md' || v === 'docx' || v === 'pdf' || v === 'latex') return v;
+  if (v === 'tex') return 'latex';
+  throw usageError(`pensmith done: unknown --format '${String(raw)}' — use one of ${DONE_FORMAT_CHOICES}`);
+}
+
+/** `--only`: one of DONE_ONLY_STEPS, or null when absent; anything else is EXIT_USAGE listing them. */
+export function parseDoneOnly(raw: unknown): DoneStep | null {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if ((DONE_ONLY_STEPS as readonly string[]).includes(v)) return v as DoneStep;
+  throw usageError(`pensmith done: unknown --only step '${String(raw)}' — use one of ${DONE_ONLY_STEPS.join(', ')}`);
+}
+
+/** done's validated flags. */
+export interface DoneFlags {
+  readonly format: ExportFormat;
+  readonly only: DoneStep | null;
+  readonly style: string | undefined;
+  readonly yolo: boolean;
+  readonly raw: boolean;
+  /** `--no-verify`: skip the whole-paper Pass 4 (never the blocking gate). */
+  readonly noVerify: boolean;
+  /** `--no-score`. */
+  readonly noScore: boolean;
+  /** `--no-plagiarism-check`. */
+  readonly noPlagiarismCheck: boolean;
+}
+
+/**
+ * Validate done's flags (EXIT_USAGE before anything is read or sent): the
+ * format, the step, `--no-verify --raw` without `--yolo` (PRD §7.9), and a
+ * step that its own skip flag would cancel (`--only score --no-score`).
+ */
+export function checkDoneFlags(args: Record<string, unknown>): DoneFlags {
+  const flags: DoneFlags = {
+    format: parseDoneFormat(args['format'] ?? 'docx'),
+    only: parseDoneOnly(args['only']),
+    style: typeof args['style'] === 'string' && args['style'].trim().length > 0 ? args['style'] : undefined,
+    yolo: args['yolo'] === true,
+    raw: args['raw'] === true,
+    noVerify: args['verify'] === false,
+    noScore: args['score'] === false,
+    noPlagiarismCheck: args['plagiarism-check'] === false || args['plagiarismCheck'] === false,
+  };
+  if (flags.noVerify && flags.raw && !flags.yolo) throw usageError(NO_VERIFY_RAW_REFUSAL);
+  const cancelled =
+    flags.only === 'score' && flags.noScore ? '--no-score'
+      : flags.only === 'plagiarism' && flags.noPlagiarismCheck ? '--no-plagiarism-check'
+        : flags.only === 'humanize' && flags.raw ? '--raw'
+          : null;
+  if (cancelled !== null) {
+    throw usageError(`pensmith done: --only ${flags.only ?? ''} cannot be combined with ${cancelled}, which skips that step`);
+  }
+  return flags;
+}
+
+// ---------------------------------------------------------------------------
+// The paper-level record (`.paper/VERIFICATION.md`)
+// ---------------------------------------------------------------------------
 
 /** One recorded decision on an UNSUPPORTED claim (VRFY-22). */
 export interface ClaimDecision {
@@ -266,9 +376,14 @@ export interface PaperVerificationReport {
   readonly unjudged?: readonly UnjudgedSection[];
   readonly accepted: readonly AcceptedQuote[];
   readonly byoQuotes: readonly ByoQuote[];
+  /** The `## Honesty` body (honesty.ts renderHonestySection). */
   readonly honestyReport: string;
   readonly plagiarismResults: readonly PlagiarismResult[];
+  /** Why the plagiarism check did not run (`--no-plagiarism-check`, `config`, `offline`, `dry-run`, `--only export`). */
+  readonly plagiarismSkipped?: string;
   readonly pass4Results: readonly Pass4Result[];
+  /** Why the whole-paper Pass 4 did not run (`--no-verify`). */
+  readonly pass4Skipped?: string;
 }
 
 /**
@@ -281,7 +396,7 @@ export interface PaperVerificationReport {
  */
 export function buildVerificationReport(r: PaperVerificationReport): string {
   // D-17-08: an offline run's report carries the marker as its first line (the
-  // export never does — exporters read DRAFT.md / FINAL.md, not this file).
+  // export never does — exporters read the gated text, not this file).
   const offlineMarker = offlineMarkerLine();
   const decisions = r.decisions.length
     ? [
@@ -304,6 +419,10 @@ export function buildVerificationReport(r: PaperVerificationReport): string {
   const local = r.byoQuotes.length
     ? r.byoQuotes.map((q) => `- ${q.id} [@${q.citekey}] "${cell(q.snippet, 60)}…" — verified against your local file ${q.localFile}`)
     : ['_(no quotes verified against your own files)_'];
+  const pass4 =
+    r.pass4Skipped !== undefined
+      ? `## Pass-4 (orphan claims, advisory)\n\nwhole-paper Pass 4 skipped (${r.pass4Skipped}) — the blocking re-verification above still ran\n`
+      : renderPass4Section(r.pass4Results);
   return [
     ...(offlineMarker !== null ? [offlineMarker, ''] : []),
     '# Paper Verification (done)',
@@ -331,19 +450,29 @@ export function buildVerificationReport(r: PaperVerificationReport): string {
     '',
     r.honestyReport,
     '',
-    renderPlagiarismSection([...r.plagiarismResults]),
+    renderPlagiarismSection([...r.plagiarismResults], r.plagiarismSkipped !== undefined ? { skipped: r.plagiarismSkipped } : {}),
     '',
-    renderPass4Section(r.pass4Results),
+    pass4,
     '',
   ].join('\n');
 }
 
-/** Print the UNSUPPORTED claims with their evidence, the sections Pass 2 did not judge, the accepted quotes and the local-file quotes (the confirmation's list). */
+/** The contradictions compile flagged (COMPILE-REPORT.md `## Contradictions`, EXP-11). Never throws. */
+function compiledContradictions(paperRoot: string): { count: number; lines: string[] } {
+  try {
+    return readReportContradictions(readFileSync(join(paperDir(paperRoot), 'COMPILE-REPORT.md'), 'utf8'));
+  } catch {
+    return { count: 0, lines: [] };
+  }
+}
+
+/** Print the UNSUPPORTED claims with their evidence, the sections Pass 2 did not judge, the contradictions, the accepted quotes and the local-file quotes (the confirmation's list). */
 function writeExportFindings(
   claims: readonly UnsupportedClaim[],
   accepted: readonly AcceptedQuote[],
   byoQuotes: readonly ByoQuote[],
   unjudged: readonly UnjudgedSection[] = [],
+  contradictions: { count: number; lines: readonly string[] } = { count: 0, lines: [] },
 ): void {
   for (const u of unjudged) writeOut(`pensmith done: ${unjudgedLine(u)}\n`);
   if (claims.length > 0) {
@@ -352,6 +481,10 @@ function writeExportFindings(
       writeOut(`  - §${c.section} [@${c.result.citekey}] "${cell(c.result.claimSentence, 160)}" — ${cell(c.result.rationale, 200)}\n`);
       writeOut(`      evidence: ${c.result.evidence.trim().length > 0 ? `"${cell(c.result.evidence, 200)}"` : '(none quoted)'}\n`);
     }
+  }
+  if (contradictions.count > 0) {
+    writeOut(`pensmith done: Contradictions flagged at compile: ${contradictions.count} (target 0) — see .paper/COMPILE-REPORT.md (EXP-11):\n`);
+    for (const l of contradictions.lines.slice(0, 10)) writeOut(`  - ${cell(l, 400)}\n`);
   }
   for (const a of accepted) {
     writeOut(`  - accepted without a source check: ${a.section !== undefined ? `§${a.section} ` : ''}${a.id} [@${a.citekey}] "${cell(a.excerpt, 80)}" (${a.acceptedAt})\n`);
@@ -402,31 +535,202 @@ export async function recheckUnknownRetractions(paperRoot: string, text: string)
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// The humanizer step (EXP-14, D-21-18)
+// ---------------------------------------------------------------------------
+
+/** What the humanizer step did. */
+export type HumanizeStep =
+  /** The accepted humanized text and the gate core's result over its bytes. */
+  | { readonly kind: 'humanized'; readonly text: string; readonly gate: GateResult }
+  /** Not run: the line done printed and the after-score's `N/A (…)` reason. */
+  | { readonly kind: 'skipped'; readonly line: string; readonly after: string }
+  /** The model call failed (not the cost cap): done exports the compiled draft. */
+  | { readonly kind: 'failed'; readonly reason: string }
+  /** The rewrite guard, the cited-key diff or the gate core refused the text: EXIT_BLOCKED. */
+  | { readonly kind: 'rejected'; readonly reasons: readonly string[] };
+
+/** Why the humanizer's model call cannot run now (the invocation's mode, or no usable model), or null. */
+async function humanizerModelSkip(paperRoot: string): Promise<string | null> {
+  const mode = await modelStepSkipReason(paperRoot);
+  if (mode !== null) return mode;
+  try {
+    await assertLlmConfigured('done');
+    return null;
+  } catch (e) {
+    if (e instanceof MissingApiKeyError || e instanceof RuntimeConfigError) return 'no model configured';
+    throw e;
+  }
+}
+
+/**
+ * Run the humanizer over the gated compiled draft (see the header): skipped
+ * with its reason, failed (a provider error — the cost cap and the other fatal
+ * errors propagate, exit 5), rejected with every reason, or the accepted text.
+ * Writes nothing.
+ */
+export async function runHumanizeStep(input: {
+  readonly paperRoot: string;
+  readonly draft: string;
+  readonly raw: boolean;
+  readonly sections: readonly DoneSection[];
+  readonly bib: LoadedBibliography;
+  /** The section ids in the draft's `##` order (the COSTS/SESSION records). */
+  readonly sectionIds?: readonly string[];
+}): Promise<HumanizeStep> {
+  if (input.raw) return { kind: 'skipped', line: 'humanizer skipped (--raw)', after: 'humanize skipped with --raw' };
+  const config = tryReadPaperConfigSync(input.paperRoot);
+  if (config?.humanizer?.enabled === false) {
+    return { kind: 'skipped', line: 'humanizer skipped ([humanizer] enabled = false)', after: 'humanizer disabled' };
+  }
+  const skill = loadHumanizerSkill();
+  if (skill === null) {
+    return { kind: 'skipped', line: `humanizer skill not found at ${HUMANIZER_SKILL_DISPLAY} — skipping`, after: 'humanizer not installed' };
+  }
+  const mode = await humanizerModelSkip(input.paperRoot);
+  if (mode !== null) return { kind: 'skipped', line: `humanizer skipped (${mode})`, after: `humanize skipped (${mode})` };
+  const quoteMinWords = config?.verification?.quote_min_words;
+  const ids = input.sectionIds ?? [];
+  let result;
+  try {
+    result = await humanizeDraft({
+      draft: input.draft,
+      skill,
+      preserveVoice: config?.humanizer?.preserve_voice ?? 'academic',
+      ...(quoteMinWords !== undefined ? { quoteMinWords } : {}),
+      call: async (req, i) => {
+        const res = await complete({ slug: req.slug, system: req.system, messages: req.messages, section: ids[i] ?? i + 1 });
+        return res.text;
+      },
+    });
+  } catch (e) {
+    if (isFatalLlmError(e)) throw e;
+    return { kind: 'failed', reason: ((e as Error).message ?? String(e)).split('\n')[0] ?? 'the model call failed' };
+  }
+  if (result.rejected.length > 0) return { kind: 'rejected', reasons: result.rejected };
+  const accepted = await acceptHumanized({
+    paperRoot: input.paperRoot,
+    draft: input.draft,
+    humanized: result.text,
+    sections: input.sections,
+    bib: input.bib,
+    ...(quoteMinWords !== undefined ? { quoteMinWords } : {}),
+  });
+  if (!accepted.ok) return { kind: 'rejected', reasons: accepted.reasons };
+  return { kind: 'humanized', text: result.text, gate: accepted.gate };
+}
+
+// ---------------------------------------------------------------------------
+// The plagiarism step (EXP-19, EXP-20, D-21-22)
+// ---------------------------------------------------------------------------
+
+/** Why the plagiarism check sends nothing this run, or null when it runs. */
+export function plagiarismSkipReason(paperRoot: string, noPlagiarismCheck: boolean): string | null {
+  if (noPlagiarismCheck) return '--no-plagiarism-check';
+  if (tryReadPaperConfigSync(paperRoot)?.verification?.plagiarism_check === false) return 'config';
+  const mode = networkMode();
+  if (mode.dryRun) return 'dry-run';
+  if (mode.sourcesOffline) return 'offline';
+  return null;
+}
+
+/** The section ids in the order compile wrote their `##` headings (COMPILE-INPUTS.json), else the registered order. */
+function compiledSectionIds(paperRoot: string, sections: readonly DoneSection[]): string[] {
+  const recorded = readCompileInputs(paperRoot)?.sections.map((s) => s.id);
+  return recorded !== undefined && recorded.length > 0 ? recorded : sections.map((s) => s.id);
+}
+
+/** Print the check's outcome: the phrases searched, and each verbatim match with its location. */
+function writePlagiarismSummary(results: readonly PlagiarismResult[]): void {
+  const hits = results.filter((r) => r.matches.length > 0);
+  const failed = results.filter((r) => r.error !== undefined);
+  writeOut(
+    `pensmith done: plagiarism check: ${results.length} distinctive phrase(s) searched as exact quotes; ${hits.length} found verbatim on the web` +
+      `${failed.length > 0 ? `; ${failed.length} query(ies) got no answer (${failed[0]?.error ?? ''})` : ''}\n`,
+  );
+  for (const r of hits) {
+    writeOut(`  - ${locationLabel(r.location)} "${cell(r.phrase, 120)}"\n`);
+    for (const u of r.matches) writeOut(`      ${u}\n`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// doneCommand — the thin orchestrator
+// ---------------------------------------------------------------------------
+
+const sha = (t: string): string => createHash('sha256').update(t, 'utf8').digest('hex');
+
 export const doneCommand = defineCommand({
   meta: {
     name: 'done',
-    description: 'Finalize the paper: audit + humanize + export (no metadata trace).',
+    description:
+      'Finalize the paper: re-verify, plagiarism check, honesty score, humanize, export (no metadata trace). ' +
+      'Aliases: export, humanize, score, plagiarism (= done --only <step>).',
   },
   args: {
     yolo: {
       type: 'boolean',
-      description: 'Skip the export confirmation gate.',
+      description: 'Skip the export confirmation gate (never the blocking citation gate, the cost cap or detector consent).',
       default: false,
     },
     format: {
       type: 'string',
-      description: 'Export format: docx | pdf | latex | md.',
+      description: `Export format: ${DONE_FORMAT_CHOICES}.`,
       default: 'docx',
+    },
+    style: {
+      type: 'string',
+      description: 'Citation style: APA, MLA, Chicago (Notes-Bibliography), Chicago (Author-Date), IEEE, AMA, Vancouver, Harvard, or a path to a .csl file.',
     },
     raw: {
       type: 'boolean',
       description: 'Skip the humanizer step.',
       default: false,
     },
+    verify: {
+      type: 'boolean',
+      description: 'Run the whole-paper Pass 4 audit.',
+      negativeDescription: 'Skip the whole-paper Pass 4 audit (the blocking re-verification always runs).',
+      default: true,
+    },
+    score: {
+      type: 'boolean',
+      description: 'Score the paper with the configured AI detector (consent asked once).',
+      negativeDescription: 'Skip the AI-detector score.',
+      default: true,
+    },
+    'plagiarism-check': {
+      type: 'boolean',
+      description: 'Search distinctive phrases as exact quotes (DuckDuckGo).',
+      negativeDescription: 'Skip the plagiarism check (nothing is sent).',
+      default: true,
+    },
+    only: {
+      type: 'string',
+      description: `Run one step after the blocking gate: ${DONE_ONLY_STEPS.join(' | ')}.`,
+    },
   },
   async run({ args }) {
+    // (0) Flags — EXIT_USAGE before anything is read, written or sent.
+    const flags = checkDoneFlags(args as Record<string, unknown>);
     const paperRoot = projectRoot();
+    const only = flags.only;
+    const exporting = only === null || only === 'export';
     const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
+    const finalMdPath = join(paperDir(paperRoot), 'FINAL.md');
+
+    // EXP-03 (D-21-24): the style, resolved once with where it came from — an
+    // unknown name or a bad .csl file is EXIT_USAGE here, before the gate.
+    let style: ExportStyle | null = null;
+    if (exporting) {
+      style = resolveExportStyle(paperRoot, flags.style);
+      writeOut(`pensmith done: style: ${style.name} (from ${style.from})\n`);
+    }
+    if (flags.noVerify && exporting) {
+      process.stderr.write(
+        'pensmith done: WARN — --no-verify skips only the whole-paper Pass 4 audit; the blocking re-verification of every citation always runs\n',
+      );
+    }
 
     let draftMd: string;
     try {
@@ -457,19 +761,18 @@ export const doneCommand = defineCommand({
 
     // (1) UNCONDITIONAL export blocking gate (audit #3/#14, VRFY-26, VRFY-27,
     // D-20-24) — BEFORE any paid or third-party step, for EVERY done invocation
-    // (explicit, bare /pensmith, next), whatever --raw or --yolo: the sections
-    // STATE.json and OUTLINE.md register (never a directory listing), each
-    // verified for the draft it holds now; the compiled DRAFT.md exactly as
-    // compile wrote it from those sections; and the ONE gate core recomputed
-    // over the DRAFT.md bytes about to be exported. Every reason is collected
-    // (staleness and recomputed verdicts together) and listed.
+    // (explicit, an alias, bare /pensmith, next), whatever --raw, --yolo,
+    // --no-verify or --only: the sections STATE.json and OUTLINE.md register
+    // (never a directory listing), each verified for the draft it holds now;
+    // the compiled DRAFT.md exactly as compile wrote it from those sections;
+    // and the ONE gate core recomputed over the DRAFT.md bytes about to be
+    // exported. Every reason is collected and listed.
     const sections = doneSections(paperRoot);
     const blocking = runExportBlockingGate(paperRoot);
     const reasons = [...blocking.reasons];
     // FINAL.md is the file pensmith calls the finished paper. One done did not
     // leave — edited or written by hand — is never exported and never
-    // replaced (the humanizer would overwrite it too): refused, naming the
-    // remedy (done-record.ts; main-branch merge review, round 1).
+    // replaced: refused, naming the remedy (done-record.ts).
     if (finalMdState(paperRoot) === 'edited') reasons.push(editedFinalReason(paperRoot));
     if (sectionRegistryProblem(paperRoot) === null && sections.length > 0) {
       const current = new Map(sections.map((s) => [s.id, s.verifiedHash]));
@@ -477,9 +780,8 @@ export const doneCommand = defineCommand({
     }
     // VRFY-15 (D-20-13): every cited source whose LIBRARY.json retraction
     // status is `unknown` is re-checked live, never from the cache: a
-    // retraction found now blocks the export; the decided answers are recorded
-    // (through the library writer) only once done exports — a refused done
-    // writes nothing.
+    // retraction found now blocks; the decided answers are recorded (through
+    // the library writer) only once done exports — a refused done writes nothing.
     const rechecked = await recheckUnknownRetractions(paperRoot, draftMd);
     for (const r of rechecked.retracted) reasons.push(`.paper/DRAFT.md: ${r}`);
     const bib = loadBibliography(paperRoot);
@@ -496,271 +798,274 @@ export const doneCommand = defineCommand({
       return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
     }
 
+    const sectionIds = compiledSectionIds(paperRoot, sections);
+    const honestyOpts = { paperRoot, yolo: flags.yolo, noScore: flags.noScore };
+
+    // --only plagiarism (D-21-23): the gate, the check, the matches printed; nothing written.
+    if (only === 'plagiarism') {
+      const skip = plagiarismSkipReason(paperRoot, false);
+      if (skip !== null) {
+        writeOut(`pensmith done: plagiarism check skipped (${skip})\n`);
+        return { ok: true, plagiarism: [] };
+      }
+      const results = await runPlagiarism(draftMd, { ...maxPhrasesOpt(paperRoot), sectionIds });
+      writePlagiarismSummary(results);
+      return { ok: true, plagiarism: results };
+    }
+
+    // --only score: the gate, the before score (the consent rules apply) printed; nothing written.
+    if (only === 'score') {
+      const score = await measureHonesty(draftMd, honestyOpts);
+      writeOut(`Pensmith honesty check: ${honestyLine(score)}\n\n${honestyFramingNote()}\n`);
+      return { ok: true, honesty: score };
+    }
+
     // The UNSUPPORTED claims of the registered sections (VRFY-22): with any,
     // the confirmation is the `unsupported-claims` gate, else `export-confirm`.
     const claims = readUnsupportedClaims(paperRoot, sections);
     const unjudged = unjudgedClaimSections(paperRoot, sections);
+    const contradictions = compiledContradictions(paperRoot);
     const confirmGate = claims.length > 0 ? 'unsupported-claims' : 'export-confirm';
 
     // RUN-09 / RUN-28: the export confirmation needs an answer. Without a
     // terminal (and without --yolo) refuse NOW — EXIT_APPROVAL, before the
     // plagiarism / detector / humanizer work — instead of after it, listing
-    // what the answer is about (the UNSUPPORTED claims with their evidence and
-    // the quotes the gate took on the user's word) first.
-    if (args.yolo !== true && !canPrompt()) {
-      writeExportFindings(claims, draftGate.gate.accepted, draftGate.gate.byoQuotes, unjudged);
+    // what the answer is about first.
+    if (exporting && !flags.yolo && !canPrompt()) {
+      writeExportFindings(claims, draftGate.gate.accepted, draftGate.gate.byoQuotes, unjudged, contradictions);
       await runGate(confirmGate, { yolo: false, detail: 'nothing was exported' });
     }
 
-    // (2) DONE-02 plagiarism, DONE-04 honesty score (before humanize).
-    const plagiarismResults = await runPlagiarism(draftMd);
-    const before = await scoreHonesty(draftMd);
+    // (2) DONE-02 plagiarism (EXP-19), DONE-04 honesty before the humanizer (EXP-16).
+    let plagiarismResults: PlagiarismResult[] = [];
+    let plagiarismSkipped: string | undefined;
+    let before: HonestyOutcome | null = null;
+    if (only === null) {
+      const skip = plagiarismSkipReason(paperRoot, flags.noPlagiarismCheck);
+      if (skip !== null) {
+        plagiarismSkipped = skip;
+        writeOut(`pensmith done: plagiarism check skipped (${skip})\n`);
+      } else {
+        plagiarismResults = await runPlagiarism(draftMd, { ...maxPhrasesOpt(paperRoot), sectionIds });
+        writePlagiarismSummary(plagiarismResults);
+      }
+      before = await measureHonesty(draftMd, honestyOpts);
+    } else {
+      plagiarismSkipped = `--only ${only}`;
+    }
 
-    // (3) DONE-03 humanize (skip-clean if absent / no transport), honesty after.
-    // The humanizer writes FINAL.md before GATE-04 judges it and before the
-    // export: the FINAL.md it replaces (done's own, or none — step (1)
-    // refused any other) is put back on EVERY way out short of the export
-    // record — a GATE-04 refusal, a declined confirmation, the cost cap, a
-    // failed export or write (main-branch merge review, round 2) — so a
-    // humanized text no export recorded never stays behind as a FINAL.md
-    // done-record.ts would read as a hand edit.
-    const finalMdPath = join(paperDir(paperRoot), 'FINAL.md');
-    const finalBefore = existsSync(finalMdPath) ? readFileSync(finalMdPath) : null;
-    let finalPath: string | null = null;
-    let after: Awaited<ReturnType<typeof scoreHonesty>> = null;
-    // Set once the paper-level VERIFICATION.md names the exported text: from
-    // then on FINAL.md is done's own (done-record.ts) and stays.
-    let exported = false;
-    let restored = false;
-    const restoreFinal = async (): Promise<void> => {
-      if (finalPath === null || restored) return;
-      restored = true;
-      if (finalBefore === null) rmSync(finalMdPath, { force: true });
-      else await atomicWriteFile(finalMdPath, finalBefore);
-    };
-    const restoredWhat = (): string => (finalBefore === null ? 'was removed' : 'is back as it was');
-    try {
-      if (args.raw !== true) {
-        finalPath = await runHumanizer(draftMd, paperRoot);
-        if (finalPath !== null) {
-          try {
-            after = await scoreHonesty(readFileSync(finalPath, 'utf8'));
-          } catch {
-            after = null;
-          }
+    // (3) DONE-03 / EXP-14: the humanizer (a full run and --only humanize).
+    // `--only export` exports FINAL.md when it is done's own and current —
+    // re-gated through the same acceptance function — else the compiled draft.
+    let exportedText = draftMd;
+    let exportGate = draftGate.gate;
+    let humanized = false;
+    let after: HonestyOutcome | HonestyNotApplicable = { kind: 'na', reason: 'humanize skipped' };
+    if (only === null || only === 'humanize') {
+      const step = await runHumanizeStep({ paperRoot, draft: draftMd, raw: flags.raw, sections, bib, sectionIds });
+      if (step.kind === 'rejected') {
+        writeOut('pensmith done: GATE-04 BLOCKED — the humanized text failed re-verification; nothing was exported and FINAL.md was not changed:\n');
+        for (const r of step.reasons) writeOut(`  - ${r}\n`);
+        writeOut('pensmith done: `pensmith done --raw` exports the compiled draft without the humanizer.\n');
+        return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
+      }
+      if (step.kind === 'skipped') {
+        writeOut(`pensmith done: ${step.line}\n`);
+        after = { kind: 'na', reason: step.after };
+      } else if (step.kind === 'failed') {
+        writeOut(`pensmith done: humanizer failed: ${step.reason}${only === null ? ' — exporting the compiled draft' : ''}\n`);
+        after = { kind: 'na', reason: `humanizer failed: ${step.reason}` };
+        if (only === 'humanize') return { ok: false, exitCode: EXIT_ERROR };
+      } else {
+        exportedText = step.text;
+        exportGate = step.gate;
+        humanized = true;
+        writeOut('pensmith done: humanizer: the improved text kept every heading, citation and quote and passed re-verification\n');
+        if (before !== null) {
+          after = before.kind === 'score' ? await measureHonesty(exportedText, { ...honestyOpts, consentGranted: true }) : before;
         }
       }
-
-      // Honesty report: guard the null score explicitly — a missing key emits the
-      // skip banner, NEVER a fabricated percent (T-06-05-05).
-      const honestyReport =
-        before === null
-          ? 'Pensmith honesty check: skipped (no GPTZero API key set or backend unavailable).'
-          : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
-
-      // GATE-04 (VRFY-26): the humanized FINAL.md is gated on its OWN exact bytes
-      // — the humanizer never adds, drops or swaps a citation, and the gate core
-      // recomputes every row over FINAL.md (a form or key the humanizer
-      // introduced is refused). HARD block, before the confirmation; --yolo never
-      // bypasses it (PRD §14).
-      let exportedText = draftMd;
-      let exportGate = draftGate.gate;
-      if (finalPath !== null) {
-        const finalMd = readFileSync(finalPath, 'utf8');
-        const finalReasons: string[] = [];
-        const change = citedKeySetChange(finalMd, draftMd);
-        if (change !== null) finalReasons.push(change);
-        const finalGate = await recomputeExportGate(paperRoot, finalMd, { sections, bib });
-        finalReasons.push(...finalGate.refusals);
-        if (finalReasons.length > 0) {
-          await restoreFinal();
-          writeOut('pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification:\n');
-          for (const r of finalReasons) writeOut(`  - ${r}\n`);
-          writeOut(
-            `pensmith done: the humanized text was not kept (FINAL.md ${restoredWhat()}); ` +
-              '`pensmith done --raw` exports the compiled draft without the humanizer.\n',
-          );
+      if (only === 'humanize') {
+        if (!humanized) return { ok: true, humanized: false };
+        // D-21-19: FINAL.md is the finished paper; an export is a rendering of it.
+        await atomicWriteFile(finalMdPath, exportedText);
+        await writeDoneRecord(paperRoot, { doneAt: new Date().toISOString(), compiledDraftSha256: sha(draftMd), finalSha256: sha(exportedText), humanized: true });
+        writeOut('pensmith done: wrote .paper/FINAL.md (humanized; `pensmith export` renders it)\n');
+        return { ok: true, humanized: true };
+      }
+    } else if (finalMdState(paperRoot) === 'current') {
+      // --only export of done's own, current FINAL.md (D-21-23).
+      let finalMd: string | null = null;
+      try {
+        finalMd = readFileSync(finalMdPath, 'utf8');
+      } catch {
+        finalMd = null;
+      }
+      if (finalMd !== null && finalMd !== draftMd) {
+        const regate = await acceptHumanized({ paperRoot, draft: draftMd, humanized: finalMd, sections, bib, ...quoteFloor(paperRoot) });
+        if (!regate.ok) {
+          writeOut('pensmith done: GATE-04 BLOCKED — .paper/FINAL.md failed re-verification; nothing was exported:\n');
+          for (const r of regate.reasons) writeOut(`  - ${r}\n`);
+          writeOut('pensmith done: `pensmith done` re-humanizes the compiled draft; `pensmith done --raw` exports it without the humanizer.\n');
           return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
         }
         exportedText = finalMd;
-        exportGate = finalGate.gate;
-      }
-
-      // Whole-paper Pass 4 (DONE-01, VRFY-23) over the exact text to be exported.
-      const pass4Results = await runWholePaperPass4(paperRoot, exportedText);
-
-      // (4) The confirmation: every UNSUPPORTED claim with its evidence, the
-      // orphans, the plagiarism hits, the accepted quotes and the quotes verified
-      // against the user's own files; then `unsupported-claims` (VRFY-22) or the
-      // generic `export-confirm` (DONE-09). --yolo answers either.
-      writeExportFindings(claims, exportGate.accepted, exportGate.byoQuotes, unjudged);
-      if (args.yolo === true) {
-        const issues = collectGateIssues({ pass2Results: claims.map((c) => c.result), pass4Results, plagiarismResults });
-        if (issues.orphanClaims.length > 0 || issues.plagiarismHits.length > 0) writeGateSummary(issues);
-      }
-      const gateResult = await runDoneGate({
-        pass2Results: claims.map((c) => c.result),
-        pass4Results,
-        plagiarismResults,
-        yolo: args.yolo === true,
-        // The registry gate (RUN-28). --yolo is handled by runDoneGate; a run that
-        // cannot prompt refuses (EXIT_APPROVAL).
-        approve: async () => {
-          const outcome = await runGate(confirmGate, {
-            yolo: false,
-            question: {
-              id: confirmGate,
-              kind: 'confirm',
-              label: confirmGate === 'unsupported-claims' ? 'Export the paper with these UNSUPPORTED claims?' : 'Export the paper?',
-              default: confirmGate !== 'unsupported-claims',
-            },
-          });
-          return outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
-        },
-      });
-
-      if (gateResult.exported === false && gateResult.gateSkipped !== true) {
-        // An explicit "no" is the gate's decline: EXIT_APPROVAL, nothing exported.
-        declineGate(confirmGate, claims.length > 0 ? 'export cancelled — the UNSUPPORTED claims were not accepted' : 'export cancelled by user');
-      }
-      const decidedAt = new Date().toISOString();
-      const decisions: ClaimDecision[] = claims.map((claim) => ({
-        claim,
-        decision: gateResult.gateSkipped === true ? `Auto-accepted under --yolo ${decidedAt}` : `Confirmed by user ${decidedAt}`,
-      }));
-
-      // (5) DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir. Leave
-      //    outputDir UNSET so the md-fallback never overwrites the source DRAFT.md.
-      const format: ExportFormat = VALID_FORMATS.has(String(args.format))
-        ? (String(args.format) as ExportFormat)
-        : 'docx';
-
-      // Resolve discipline → CSL style from INTAKE.md (never-throw: missing or
-      // unparseable INTAKE.md leaves style undefined; citation rendering is skipped).
-      const intakePath = join(paperDir(paperRoot), 'INTAKE.md');
-      let style: string | undefined;
-      try {
-        const intakeText = readFileSync(intakePath, 'utf8');
-        const { discipline } = parseIntakeMd(intakeText);
-        style = resolveStyleName(discipline);
-      } catch {
-        // Missing or unparseable INTAKE.md → style undefined → citation rendering is skipped.
-      }
-
-      // VRFY-26: the export is EXACTLY the text the gate judged, and the
-      // bibliography the gate read — never the files read again after the
-      // plagiarism queries, the humanizer, the detector or the confirmation (a
-      // sync client, an editor or the user may have changed them meanwhile).
-      const exportedFrom = finalPath ?? draftPath;
-      const result = await exportDraft({
-        inputPath: exportedFrom,
-        text: exportedText,
-        ...(bib.text !== undefined ? { bibText: bib.text } : {}),
-        format,
-        paperRoot,
-        ...(style !== undefined ? { style } : {}),
-      });
-      const sha = (t: string): string => createHash('sha256').update(t, 'utf8').digest('hex');
-      let onDisk: string | null = null;
-      try {
-        onDisk = readFileSync(exportedFrom, 'utf8');
-      } catch {
-        onDisk = null;
-      }
-      const changed = [
-        ...(onDisk !== exportedText ? [finalPath !== null ? '.paper/FINAL.md' : '.paper/DRAFT.md'] : []),
-        ...(bib.text !== undefined && loadBibliography(paperRoot).text !== bib.text ? ['.paper/CITATIONS.bib'] : []),
-      ];
-      if (changed.length > 0) {
-        process.stderr.write(
-          `pensmith done: WARN — ${changed.join(' and ')} changed while done ran; the export holds the text done checked (sha256 ${sha(exportedText).slice(0, 12)}), ` +
-            'not the edit — `pensmith done` checks the edited text before it exports it\n',
-        );
-      }
-
-      // (6) VRFY-28: the registrar answers that confirmed the exported citations
-      // become their LIBRARY.json last_verified (the one writer, under its lock);
-      // VRFY-15: the retraction statuses re-checked above are recorded.
-      const stamps = { ...draftGate.gate.checkedAt, ...exportGate.checkedAt };
-      if (Object.keys(stamps).length > 0) {
-        try {
-          await recordLastVerified(paperRoot, stamps);
-        } catch (e) {
-          if (!(e instanceof LibraryNotFoundError)) throw e;
-        }
-      }
-      if (Object.keys(rechecked.decided).length > 0) {
-        try {
-          await recordRetractionStatuses(paperRoot, rechecked.decided);
-        } catch (e) {
-          if (!(e instanceof LibraryNotFoundError)) throw e;
-        }
-      }
-
-      // The whole-paper VERIFICATION.md (a SOURCE artifact, not the export dir;
-      // never a file under sections/).
-      const verificationPath = join(paperDir(paperRoot), 'VERIFICATION.md');
-      await atomicWriteFile(
-        verificationPath,
-        buildVerificationReport({
-          checkedFile: finalPath !== null ? '.paper/FINAL.md' : '.paper/DRAFT.md',
-          checkedSha256: createHash('sha256').update(exportedText, 'utf8').digest('hex'),
-          gate: exportGate,
-          decisions,
-          unjudged,
-          accepted: exportGate.accepted,
-          byoQuotes: exportGate.byoQuotes,
-          honestyReport,
-          plagiarismResults,
-          pass4Results,
-        }),
-      );
-      // The export is made and the paper-level record names its text: FINAL.md
-      // (the humanized text) is done's own from here on (done-record.ts).
-      exported = true;
-
-      // Audit #15, VRFY-26 (main-branch merge review, round 1): FINAL.md
-      // holds exactly the text this done judged and exported — the humanized
-      // manuscript when a humanizer ran (already on disk), otherwise the
-      // compiled draft (final, just not humanized), written on every done whose
-      // FINAL.md differs from it (step (1) refused one done did not write). The
-      // record of both hashes is the router's terminus (done-record.ts): the
-      // paper is complete only while DRAFT.md and FINAL.md hold these bytes, so
-      // a recompile sends it back to done and a hand edit to attention — never
-      // an mtime comparison, and never "complete" for a FINAL.md no gate judged.
-      if (finalPath === null && fileSha256(finalMdPath) !== sha(exportedText)) {
-        await atomicWriteFile(finalMdPath, exportedText);
-      }
-      await writeDoneRecord(paperRoot, {
-        doneAt: new Date().toISOString(),
-        compiledDraftSha256: sha(draftMd),
-        finalSha256: sha(exportedText),
-        humanized: finalPath !== null,
-      });
-
-      writeOut(`pensmith done: exported ${result.outputPath}\n`);
-      if (networkMode().dryRun) {
-        // GRND-19 (D-18-29): say plainly that this is the dry run's trial export.
-        writeOut(
-          `pensmith done: this is a dry-run export (synthetic sources, stub text) in ${join(paperDir(paperRoot), 'export')}; ` +
-            'the real paper was not touched\n',
-        );
-      }
-      return { ok: true, ...result };
-    } finally {
-      if (!exported && finalPath !== null && !restored) {
-        try {
-          await restoreFinal();
-          writeOut(`pensmith done: the humanized text was not kept (FINAL.md ${restoredWhat()}).\n`);
-        } catch (e) {
-          process.stderr.write(
-            `pensmith done: WARN — the humanized text no export recorded is still in .paper/FINAL.md (putting the previous one back failed: ${(e as Error).message}); ` +
-              'move it out of the paper folder before `pensmith done`\n',
-          );
-        }
+        exportGate = regate.gate;
+        humanized = readDoneRecord(paperRoot)?.humanized ?? true;
       }
     }
+    const honestyReport =
+      before !== null ? renderHonestySection(before, after) : `Pensmith honesty check: skipped (--only ${only ?? 'export'})\n\n${honestyFramingNote()}`;
+    if (before !== null) writeOut(`${renderHonestySection(before, after)}\n`);
+
+    // Whole-paper Pass 4 (DONE-01, VRFY-23) over the exact text to be exported, unless --no-verify.
+    const pass4Results = flags.noVerify ? [] : await runWholePaperPass4(paperRoot, exportedText);
+
+    // (4) The confirmation: every UNSUPPORTED claim with its evidence, the
+    // orphans, the plagiarism hits, the contradictions, the accepted quotes and
+    // the quotes verified against the user's own files; then
+    // `unsupported-claims` (VRFY-22) or `export-confirm` (DONE-09). --yolo answers either.
+    writeExportFindings(claims, exportGate.accepted, exportGate.byoQuotes, unjudged, contradictions);
+    if (flags.yolo) {
+      const issues = collectGateIssues({ pass2Results: claims.map((c) => c.result), pass4Results, plagiarismResults });
+      if (issues.orphanClaims.length > 0 || issues.plagiarismHits.length > 0) writeGateSummary(issues);
+    }
+    const gateResult = await runDoneGate({
+      pass2Results: claims.map((c) => c.result),
+      pass4Results,
+      plagiarismResults,
+      yolo: flags.yolo,
+      // The registry gate (RUN-28). --yolo is handled by runDoneGate; a run that
+      // cannot prompt refuses (EXIT_APPROVAL).
+      approve: async () => {
+        const outcome = await runGate(confirmGate, {
+          yolo: false,
+          question: {
+            id: confirmGate,
+            kind: 'confirm',
+            label: confirmGate === 'unsupported-claims' ? 'Export the paper with these UNSUPPORTED claims?' : 'Export the paper?',
+            default: confirmGate !== 'unsupported-claims',
+          },
+        });
+        return outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
+      },
+    });
+    if (gateResult.exported === false && gateResult.gateSkipped !== true) {
+      // An explicit "no" is the gate's decline: EXIT_APPROVAL, nothing exported.
+      declineGate(confirmGate, claims.length > 0 ? 'export cancelled — the UNSUPPORTED claims were not accepted' : 'export cancelled by user');
+    }
+    const decidedAt = new Date().toISOString();
+    const decisions: ClaimDecision[] = claims.map((claim) => ({
+      claim,
+      decision: gateResult.gateSkipped === true ? `Auto-accepted under --yolo ${decidedAt}` : `Confirmed by user ${decidedAt}`,
+    }));
+
+    // (5) DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir
+    // (outputDir UNSET). VRFY-26: the export is EXACTLY the text the gate
+    // judged and the bibliography the gate read — never the files read again
+    // after the plagiarism queries, the humanizer, the detector or the
+    // confirmation. It is named after the compiled draft (`DRAFT.<ext>`).
+    const result = await exportDraft({
+      inputPath: draftPath,
+      text: exportedText,
+      ...(bib.text !== undefined ? { bibText: bib.text } : {}),
+      format: flags.format,
+      paperRoot,
+      ...(style !== null ? { style: style.style } : {}),
+    });
+    let onDisk: string | null = null;
+    try {
+      onDisk = readFileSync(draftPath, 'utf8');
+    } catch {
+      onDisk = null;
+    }
+    const changed = [
+      ...(onDisk !== draftMd ? ['.paper/DRAFT.md'] : []),
+      ...(bib.text !== undefined && loadBibliography(paperRoot).text !== bib.text ? ['.paper/CITATIONS.bib'] : []),
+    ];
+    if (changed.length > 0) {
+      process.stderr.write(
+        `pensmith done: WARN — ${changed.join(' and ')} changed while done ran; the export holds the text done checked (sha256 ${sha(exportedText).slice(0, 12)}), ` +
+          'not the edit — `pensmith done` checks the edited text before it exports it\n',
+      );
+    }
+
+    // (6) VRFY-28: the registrar answers that confirmed the exported citations
+    // become their LIBRARY.json last_verified (the one writer, under its lock);
+    // VRFY-15: the retraction statuses re-checked above are recorded.
+    const stamps = { ...draftGate.gate.checkedAt, ...exportGate.checkedAt };
+    if (Object.keys(stamps).length > 0) {
+      try {
+        await recordLastVerified(paperRoot, stamps);
+      } catch (e) {
+        if (!(e instanceof LibraryNotFoundError)) throw e;
+      }
+    }
+    if (Object.keys(rechecked.decided).length > 0) {
+      try {
+        await recordRetractionStatuses(paperRoot, rechecked.decided);
+      } catch (e) {
+        if (!(e instanceof LibraryNotFoundError)) throw e;
+      }
+    }
+
+    // (7) The whole-paper VERIFICATION.md (a SOURCE artifact, not the export
+    // dir; never a file under sections/).
+    await atomicWriteFile(
+      join(paperDir(paperRoot), 'VERIFICATION.md'),
+      buildVerificationReport({
+        checkedFile: humanized ? '.paper/FINAL.md' : '.paper/DRAFT.md',
+        checkedSha256: sha(exportedText),
+        gate: exportGate,
+        decisions,
+        unjudged,
+        accepted: exportGate.accepted,
+        byoQuotes: exportGate.byoQuotes,
+        honestyReport,
+        plagiarismResults,
+        ...(plagiarismSkipped !== undefined ? { plagiarismSkipped } : {}),
+        pass4Results,
+        ...(flags.noVerify ? { pass4Skipped: '--no-verify' } : {}),
+      }),
+    );
+
+    // (8) EXP-15 (D-21-19): FINAL.md holds exactly the text this done judged
+    // and exported — the accepted humanized text, else the compiled draft —
+    // written once, now, after the export and the paper-level record. The
+    // record of both hashes is the router's terminus (done-record.ts): the
+    // paper is complete only while DRAFT.md and FINAL.md hold these bytes.
+    if (fileSha256(finalMdPath) !== sha(exportedText)) {
+      await atomicWriteFile(finalMdPath, exportedText);
+    }
+    await writeDoneRecord(paperRoot, {
+      doneAt: new Date().toISOString(),
+      compiledDraftSha256: sha(draftMd),
+      finalSha256: sha(exportedText),
+      humanized,
+    });
+
+    writeOut(`pensmith done: exported ${result.outputPath}\n`);
+    if (networkMode().dryRun) {
+      // GRND-19 (D-18-29): say plainly that this is the dry run's trial export.
+      writeOut(
+        `pensmith done: this is a dry-run export (synthetic sources, stub text) in ${join(paperDir(paperRoot), 'export')}; ` +
+          'the real paper was not touched\n',
+      );
+    }
+    return { ok: true, ...result };
   },
 });
+
+/** `{ maxPhrases }` from `[verification] plagiarism_max_phrases`, when set (the default is plagiarism.ts's). */
+function maxPhrasesOpt(paperRoot: string): { maxPhrases?: number } {
+  const n = tryReadPaperConfigSync(paperRoot)?.verification?.plagiarism_max_phrases;
+  return n !== undefined ? { maxPhrases: n } : {};
+}
+
+/** `{ quoteMinWords }` from `[verification] quote_min_words`, when set. */
+function quoteFloor(paperRoot: string): { quoteMinWords?: number } {
+  const q = tryReadPaperConfigSync(paperRoot)?.verification?.quote_min_words;
+  return q !== undefined ? { quoteMinWords: q } : {};
+}
 
 export default doneCommand;

@@ -255,6 +255,39 @@ export function userHomeDir(): string {
 }
 
 /**
+ * The user's installed humanizer skill: `<home>/.claude/skills/humanizer/SKILL.md`
+ * (EXP-14, D-21-18; the Tier-2 humanizer reads its body as the system prompt).
+ * Under a test context (NODE_TEST_CONTEXT / PENSMITH_TEST=1) the home counts
+ * only when it lies inside os.tmpdir() — the CI-09 rule the data dir follows
+ * (localDataDir): a test points HOME (USERPROFILE on Windows) at a temp dir to
+ * install a fixture skill, and no test can ever read the developer's real one.
+ * Returns the path (whether or not the file exists), or null when the home is
+ * refused. Never throws.
+ */
+export function humanizerSkillPath(env: NodeJS.ProcessEnv = process.env): string | null {
+  const home = userHomeDir();
+  const testContext = Boolean(env.NODE_TEST_CONTEXT) || env.PENSMITH_TEST === '1';
+  if (testContext) {
+    const fold = (p: string): string => (process.platform === 'win32' ? p.toLowerCase() : p);
+    const roots = new Set<string>([path.resolve(os.tmpdir())]);
+    try {
+      roots.add(fs.realpathSync.native(os.tmpdir()));
+    } catch {
+      /* tmpdir missing — keep the resolved form */
+    }
+    const forms = new Set<string>([path.resolve(home), realpathNearest(home)]);
+    const inside = [...forms].some((f) =>
+      [...roots].some((root) => {
+        const rel = path.relative(fold(root), fold(f));
+        return rel !== '' && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+      }),
+    );
+    if (!inside) return null;
+  }
+  return path.join(home, '.claude', 'skills', 'humanizer', 'SKILL.md');
+}
+
+/**
  * Returns `<pensmithDataDir>/own-source-approvals.json` — which of the user's
  * own sources (a bring-your-own folder outside the paper, a Zotero collection)
  * each paper may read (SRC-15, SRC-16; bin/lib/own-source-approvals.ts). It

@@ -451,7 +451,7 @@ For power users / batch processing / CI testing:
 | `revise-swap` | Apply this citation swap to the section? | skip: apply the proposed swap | refuse: 3 | 3 | PRD §7.5 |
 | `cost-cap` | This call would exceed your cost cap. Continue? | never | refuse: 5 | 5 | RUN-18 |
 | `estimate-proceed` | Proceed? | never | skip: 0 | 0 | RUN-20 |
-| `detector-consent` | Send the full paper text to GPTZero for an AI-detection score? | never | skip: 0 | 0 | EXP-17 |
+| `detector-consent` | Send the full paper text to the configured AI detector for a score (your answer is saved)? | never | skip: 0 | 0 | EXP-17 |
 | `paper-pointer` | Continue the active paper, or start a new paper here? | never | refuse: 2 | 2 | RUN-14 |
 | `sketch-confirm` | Proceed to intake with this thesis? | skip: proceed to intake | refuse: 3 | 3 | ERGO-05 |
 | `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |

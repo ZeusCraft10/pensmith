@@ -32,7 +32,7 @@
 // runs over the final text (compile's DRAFT.md is gated by done; done gates the
 // humanized text before it becomes FINAL.md — humanizer.ts acceptHumanized).
 
-import { extractCitedKeysForVerification, replaceCitations } from './citation-token.js';
+import { extractCitedKeysForVerification, findCitations, replaceCitations } from './citation-token.js';
 import { TEXT_SCANNERS } from './verify/gate.js';
 import { extractQuotes } from './quote-extractor.js';
 import { findBareIdentifiers } from './doi.js';
@@ -224,6 +224,38 @@ export function boundaryAdditions(before: string, after: string, quoteMinWords?:
   return null;
 }
 
+/**
+ * The rewrite guard's checks on two UNMASKED texts (a Tier-1 humanized
+ * FINAL.md, or a masked rewrite after restoration): the reasons `rewritten`
+ * may not replace `original`, in order — empty when it may:
+ *   - `a heading changed` (every ATX heading line, in order);
+ *   - `citation set changed` (every citation as written — key, locator,
+ *     prefix — and every cited key, multisets: D-18-40);
+ *   - `a quoted passage changed` (every direct quote Pass 3 reads, with its
+ *     attribution);
+ *   - `adds …, which no section verified` (boundaryAdditions: a text finding,
+ *     a new quote or a bare identifier).
+ * Pure, never throws.
+ */
+export function compareRewrite(original: string, rewritten: string, opts: { readonly quoteMinWords?: number } = {}): string[] {
+  const reasons: string[] = [];
+  const hb = headingLines(original);
+  const ha = headingLines(rewritten);
+  if (hb.length !== ha.length || hb.some((h, i) => h !== ha[i])) reasons.push('a heading changed');
+  const citesOf = (t: string): string[] => findCitations(t).map((c) => c.text);
+  if (!sameMultiset(citesOf(original), citesOf(rewritten)) || !sameMultiset(extractCitedKeysForVerification(original), extractCitedKeysForVerification(rewritten))) {
+    reasons.push('citation set changed');
+  }
+  const qOpts = opts.quoteMinWords !== undefined ? { minWords: opts.quoteMinWords } : {};
+  const quotesOf = (t: string): string[] => extractQuotes(t, qOpts).map((x) => `${x.text}\u0000${x.citekey ?? ''}`);
+  if (!sameMultiset(quotesOf(original), quotesOf(rewritten))) reasons.push('a quoted passage changed');
+  if (reasons.length === 0) {
+    const added = boundaryAdditions(original, rewritten, opts.quoteMinWords);
+    if (added !== null) reasons.push(`adds ${added}, which no section verified`);
+  }
+  return reasons;
+}
+
 export interface ValidateRewriteInput {
   /** The original text, unmasked (what maskForRewrite was given). */
   readonly original: string;
@@ -282,23 +314,9 @@ export function validateRewrite(input: ValidateRewriteInput): RewriteVerdict {
     reasons.push('an unknown placeholder');
     return reject();
   }
-  // D-18-40: the placeholders cover every citation the reader finds, but the
-  // model could still write a NEW one (or rebuild one from its prose).
-  if (!sameMultiset(extractCitedKeysForVerification(input.original), extractCitedKeysForVerification(restored))) {
-    reasons.push('citation set changed');
-    return reject();
-  }
-  const minWords = input.quoteMinWords;
-  const qOpts = minWords !== undefined ? { minWords } : {};
-  const quotesBefore = extractQuotes(input.original, qOpts).map((x) => `${x.text}\u0000${x.citekey ?? ''}`);
-  const quotesAfter = extractQuotes(restored, qOpts).map((x) => `${x.text}\u0000${x.citekey ?? ''}`);
-  if (!sameMultiset(quotesBefore, quotesAfter)) {
-    reasons.push('a quoted passage changed');
-    return reject();
-  }
-  const added = boundaryAdditions(input.original, restored, minWords);
-  if (added !== null) {
-    reasons.push(`adds ${added}, which no section verified`);
+  const unmasked = compareRewrite(input.original, restored, input.quoteMinWords !== undefined ? { quoteMinWords: input.quoteMinWords } : {});
+  if (unmasked.length > 0) {
+    reasons.push(...unmasked);
     return reject();
   }
   return { ok: true, text: restored, reasons: [] };
