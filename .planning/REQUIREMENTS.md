@@ -1229,7 +1229,7 @@ Which phases cover which requirements.
 | EXP-06 | Phase 21 | Pending |
 | EXP-07 | Phase 21 | Pending |
 | EXP-08 | Phase 21 | Pending |
-| EXP-09 | Phase 21 | Pending |
+| EXP-09 | Phase 21 | Pending — partial: every local criterion is met (21-VERIFICATION §EXP-09); the "compiles in the CI export job, with and without pandoc" criterion stays open until HARDEN-04 adds a TeX engine to the CI legs and runs `tests/latex-standalone.test.ts` with `PENSMITH_REQUIRE_TEX=1` (Phase 21 review rounds 2 and 3) |
 | EXP-10 | Phase 21 | Pending |
 | EXP-11 | Phase 21 | Pending |
 | EXP-12 | Phase 21 | Pending |

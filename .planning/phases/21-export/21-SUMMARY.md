@@ -65,7 +65,7 @@ The stream summaries list theirs (export: `exporter`, `zero-trace-export`, `cita
 
 ## 4. Merge notes for Phase 23b — every changed or added exported signature
 
-Phase 23b (PLUG-06..12, PLUG-15) shims the compile smoother, the humanizer and done's decisions. Bases are kept unless noted. No file under `mcp/` and no `plugin/skills/` file other than the `argument-hint` lines of `compile` and `done` changed in Phase 21.
+Phase 23b (PLUG-06..12, PLUG-15) shims the compile smoother, the humanizer and done's decisions. Bases are kept unless noted. No file under `mcp/` changed in Phase 21. In `plugin/skills/`, Phase 21 changed the `argument-hint` lines of `compile` and `done` AND one hunk of `plugin/skills/pensmith/SKILL.md` (the `--yolo`-never list gained "or using a citation style file a paper's config names", the `csl-style` gate of review round 2). *(Corrected in review round 3: this note said only the argument-hint lines changed.)* v1/p23b rewrapped that paragraph (its lines 220-235) without the clause, so the merge will conflict there or silently keep 23b's text: **the merged paragraph must list the `csl-style` gate among the gates `--yolo` never answers**, and 23b's Tier-1 done must ask it with AskUserQuestion and record the answer through `style-approvals.ts` `approveCslStyle` (see the round-2 and round-3 notes below).
 
 **Exporter — `bin/lib/exporter.ts`** (base contract kept, additive):
 - `ExportOptions` gains `pdfEngine?: string | null` and `bibliography?: 'cited' | 'none'`. `style?: string` now also takes an absolute `.csl` path. `text?` and `bibText?` are as before.
