@@ -98,6 +98,10 @@ test('EXP-08: exportDraft without pandoc writes export/DRAFT.docx, names the bui
   const { root, inputPath } = samplePaper();
   const { result, output } = await withCapturedOutput(() => exportDraft({ inputPath, format: 'docx', paperRoot: root, pandocPresent: false, style: 'apa' }));
   assert.match(output, /DRAFT\.docx — built-in docx writer — pandoc not found/);
+  // The scrubbed package holds only its parts: no directory entries (the scrub
+  // rewrites docProps/ and _rels/ parts without creating folder entries).
+  const pkg = await JSZip.loadAsync(readFileSync(result.outputPath));
+  assert.deepEqual(Object.values(pkg.files).filter((f) => f.dir).map((f) => f.name), [], 'no directory entries in the docx');
   if (!requirePandoc(t, 'docx read-back')) return;
   const md = runPandocIn({ 'in.docx': readFileSync(result.outputPath) }, ['in.docx', '-f', 'docx', '-t', 'markdown', '--wrap=none']);
   assert.match(md, /^# The Paradigm & the Bank: 100% "Growth"$/m);

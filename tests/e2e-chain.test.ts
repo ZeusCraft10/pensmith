@@ -145,6 +145,19 @@ test('GRND-18: bare `pensmith --yolo` from a folder with only assignment.txt rea
   // The paper: FINAL.md, an export, every section verified citing its own sources.
   assert.ok(existsSync(join(paper, 'FINAL.md')), 'FINAL.md');
   assert.ok(readdirSync(join(paper, 'export')).some((f) => f.startsWith('DRAFT.')), 'an exported draft');
+  // EXP-03 (Phase 21 integration, carry-over 1): the PRD §15 assignment asks
+  // for "APA style" — the routed done resolves APA (from the brief or the
+  // config intake wrote), never the computer-science preset's IEEE, and the
+  // exported document carries author-date citations, not numbers.
+  const doneRun = runs.find((r) => /^pensmith: ran done\b/m.test(r.stderr));
+  assert.match(doneRun?.stdout ?? '', /^pensmith done: style: apa \(from (config\.toml \[project\] citation_style|INTAKE\.md)\)$/m, transcript);
+  const exported = readdirSync(join(paper, 'export')).find((f) => f.startsWith('DRAFT.'));
+  const docXml = exported === 'DRAFT.docx'
+    ? (await (await import('jszip')).default.loadAsync(readFileSync(join(paper, 'export', exported)))).file('word/document.xml')!.async('string')
+    : Promise.resolve(readFileSync(join(paper, 'export', exported ?? 'DRAFT.md'), 'utf8'));
+  const exportedText = (await docXml).replace(/<[^>]+>/g, '');
+  assert.match(exportedText, /\([A-Z][^()]*?, (19|20)\d\d[a-z]?\)/, 'APA author-date in-text citations');
+  assert.doesNotMatch(exportedText, /\[\d+\]/, 'no IEEE numbers');
   const outline = parseOutline(readFileSync(join(paper, 'OUTLINE.md'), 'utf8')).sections;
   assert.equal(outline.length, n, 'the expected section count');
   const dirs = sectionDirs(paper);

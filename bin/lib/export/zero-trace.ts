@@ -121,25 +121,25 @@ export async function zeroTracePatch(docxPath: string): Promise<void> {
     for (const tag of CORE_BLANK_TAGS) core = blankXmlTag(core, tag);
     core = epochDctermsTag(core, 'dcterms:created');
     core = epochDctermsTag(core, 'dcterms:modified');
-    zip.file('docProps/core.xml', core, { date: ZIP_EPOCH });
+    zip.file('docProps/core.xml', core, { date: ZIP_EPOCH, createFolders: false });
   }
   const appEntry = zip.file('docProps/app.xml');
   if (appEntry) {
     let app = await appEntry.async('string');
     for (const tag of APP_BLANK_TAGS) app = blankXmlTag(app, tag);
-    zip.file('docProps/app.xml', app, { date: ZIP_EPOCH });
+    zip.file('docProps/app.xml', app, { date: ZIP_EPOCH, createFolders: false });
   }
   if (zip.file(CUSTOM_PROPS_PART)) {
     zip.remove(CUSTOM_PROPS_PART);
     const ctEntry = zip.file('[Content_Types].xml');
     if (ctEntry) {
       const ct = await ctEntry.async('string');
-      zip.file('[Content_Types].xml', ct.replace(/<Override\b[^>]*\bPartName="\/docProps\/custom\.xml"[^>]*\/>/g, ''), { date: ZIP_EPOCH });
+      zip.file('[Content_Types].xml', ct.replace(/<Override\b[^>]*\bPartName="\/docProps\/custom\.xml"[^>]*\/>/g, ''), { date: ZIP_EPOCH, createFolders: false });
     }
     const relsEntry = zip.file('_rels/.rels');
     if (relsEntry) {
       const rels = await relsEntry.async('string');
-      zip.file('_rels/.rels', rels.replace(/<Relationship\b[^>]*\bTarget="\/?docProps\/custom\.xml"[^>]*\/>/g, ''), { date: ZIP_EPOCH });
+      zip.file('_rels/.rels', rels.replace(/<Relationship\b[^>]*\bTarget="\/?docProps\/custom\.xml"[^>]*\/>/g, ''), { date: ZIP_EPOCH, createFolders: false });
     }
   }
   for (const [name, file] of Object.entries(zip.files)) {
@@ -154,14 +154,18 @@ export async function zeroTracePatch(docxPath: string): Promise<void> {
     // Comments in a structural part are tool notes, never content: removed;
     // then the literal 'pensmith' is swept from what is left.
     const swept = text.replace(/<!--[\s\S]*?-->/g, '').replace(/pensmith/gi, '');
-    if (swept !== text) zip.file(name, swept, { date: ZIP_EPOCH });
+    if (swept !== text) zip.file(name, swept, { date: ZIP_EPOCH, createFolders: false });
   }
-  // Every entry carries the epoch date (no authoring time in the archive).
+  // The package is rebuilt from its parts alone, in their order: a folder
+  // entry is not an OPC part (pandoc, Word and the built-in writer write
+  // none, but JSZip adds them when a part is rewritten), and every entry
+  // carries the epoch date (no authoring time in the archive).
+  const clean = new JSZip();
   for (const [name, file] of Object.entries(zip.files)) {
-    file.date = ZIP_EPOCH;
-    void name;
+    if (file.dir) continue;
+    clean.file(name, await file.async('nodebuffer'), { date: ZIP_EPOCH, binary: true, createFolders: false });
   }
-  await atomicWriteFile(docxPath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+  await atomicWriteFile(docxPath, await clean.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
 }
 
 // ---------------------------------------------------------------------------

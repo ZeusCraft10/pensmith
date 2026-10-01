@@ -163,6 +163,7 @@ test('zero-trace Test B2: zeroTracePatch removes docProps/custom.xml (absolute b
       }
     }
     assert.deepEqual(violations, [], 'no part holds a local path');
+    assert.deepEqual(Object.values(out.files).filter((f) => f.dir).map((f) => f.name), [], 'the rewrite adds no directory entries');
     // Still a loadable package, and patching again changes nothing.
     const once = readFileSync(tmpDocx);
     await mod.zeroTracePatch(tmpDocx);
@@ -489,6 +490,7 @@ test('zero-trace Test J (EXP-06, EXP-07): pandoc docx / LaTeX / PDF of a paper u
     if (format === 'docx') {
       const zip = await JSZip.loadAsync(readFileSync(res.outputPath));
       assert.equal(zip.file('docProps/custom.xml'), null, 'no custom.xml');
+      assert.deepEqual(Object.values(zip.files).filter((f) => f.dir).map((f) => f.name), [], 'the scrubbed docx holds no directory entries');
       for (const [name, file] of Object.entries(zip.files)) {
         if (file.dir || /^word\/media\//.test(name)) continue;
         const text = await file.async('string');
