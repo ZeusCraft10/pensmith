@@ -155,3 +155,50 @@ test('GRND-11 (built CLI): a fabricated source the outline lists blocks the outl
   assert.equal(existsSync(join(paper, 'DONE-RECORD.json')), false, 'no record');
   assert.match((await sb.run(['status'])).stdout, /next: done/, 'the router still names done');
 });
+
+test('GRND-11 + EXP-03 (Phase 21 integration, built CLI): the outline export runs after done\'s flag checks in the resolved style — config.toml\'s citation_style, then --style; tex is latex; the prose-only steps are skipped', async () => {
+  const { sb, paper } = await outlinePaper('outline-style', /next: done/);
+  const exportDir = join(paper, 'export');
+  const cfgFile = join(paper, 'config.toml');
+  const cfg = readFileSync(cfgFile, 'utf8');
+  writeFileSync(
+    cfgFile,
+    /^citation_style = /m.test(cfg)
+      ? cfg.replace(/^citation_style = .*$/m, 'citation_style = "MLA"')
+      : cfg.replace(/^\[project\]$/m, '[project]\ncitation_style = "MLA"'),
+  );
+
+  // Flag errors come first: nothing is exported.
+  const bogus = await sb.run(['done', '--yolo', '--style', 'bogus']);
+  assert.equal(bogus.status, 2, `${bogus.stdout}\n${bogus.stderr}`);
+  const html = await sb.run(['done', '--yolo', '--format', 'html']);
+  assert.equal(html.status, 2, `${html.stdout}\n${html.stderr}`);
+  assert.match(`${html.stdout}${html.stderr}`, /md, docx, pdf, latex \(tex\)/);
+  assert.equal(existsSync(exportDir), false, 'a usage error exports nothing');
+
+  // The prose-only aliases say why they do nothing.
+  for (const verb of ['score', 'plagiarism', 'humanize']) {
+    const r = await sb.run([verb, '--yolo']);
+    assert.equal(r.status, 0, `${verb}: ${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout, new RegExp(`pensmith done: ${verb} skipped \\(outline only — there is no prose`));
+  }
+  assert.equal(existsSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md')), false, 'the skipped steps wrote nothing');
+
+  // config.toml's style (MLA): a routed done exports Markdown.
+  const mla = await sb.run(['--yolo']);
+  assert.equal(mla.status, 0, `${mla.stdout}\n${mla.stderr}`);
+  assert.match(mla.stdout, /pensmith done: style: mla \(from config\.toml \[project\] citation_style\)/);
+  const mlaAnnotated = readFileSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md'), 'utf8');
+  const mlaOutline = readFileSync(join(exportDir, 'OUTLINE.md'), 'utf8');
+  assert.match(mlaOutline, /^\*Sources:\* \([^()\d]+\)$/m, 'MLA cites by author alone (no year)');
+
+  // --style overrides config; --format tex is the LaTeX export.
+  const apa = await sb.run(['done', '--yolo', '--style', 'apa', '--format', 'tex']);
+  assert.equal(apa.status, 0, `${apa.stdout}\n${apa.stderr}`);
+  assert.match(apa.stdout, /pensmith done: style: apa \(from --style\)/);
+  for (const name of ['OUTLINE.tex', 'ANNOTATED-BIBLIOGRAPHY.tex']) await assertScanClean(join(exportDir, name), sb.root);
+  const tex = readFileSync(join(exportDir, 'OUTLINE.tex'), 'utf8');
+  assert.match(tex, /\\documentclass/);
+  assert.match(tex, /Sources:.*\(\D+, \d{4}[a-z]?[;)]/, 'APA cites author and year');
+  assert.notEqual(readFileSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md'), 'utf8'), mlaAnnotated, 'the annotated bibliography follows the style');
+});
