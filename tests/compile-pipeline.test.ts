@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { withPipelinePaper, THREE_SECTIONS, type PipelineSection } from './helpers/pipeline-paper.js';
+import { openChainSandbox } from './helpers/e2e-chain.js';
 import { maskForRewrite } from '../bin/lib/rewrite-guard.js';
 import { findCitations } from '../bin/lib/citation-token.js';
 import { loadPrompt } from '../bin/lib/prompt-loader.js';
@@ -278,4 +279,20 @@ test('EXP-05 (built CLI): a section title holding a citation or an author-date f
     assert.match(r.stdout, /section 2 \(measurement\): its title "Measurement after Smith \(2019\)" holds UNSUPPORTED-FORM .* retitle it in \.paper\/OUTLINE\.md and run `pensmith outline`/);
     assert.throws(() => readFileSync(join(p.root, '.paper', 'DRAFT.md')), /ENOENT/);
   });
+});
+
+test('EXP-10 / EXP-13 (built CLI): a --dry-run compile says `smoothing skipped (dry-run)` and the contradiction model check names dry-run — no model call', async () => {
+  const sb = await openChainSandbox({ prefix: 'compile-dry', assignment: true });
+  try {
+    const run = await sb.run(['--dry-run', '--yolo'], { timeoutMs: 300_000 });
+    assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+    const md = readFileSync(join(sb.root, '.paper-dry-run', 'COMPILE-REPORT.md'), 'utf8');
+    assert.match(md, /_smoothing skipped \(dry-run\) — every boundary keeps the section text as verified\._/);
+    assert.match(md, /model check skipped \(dry-run\)/);
+    assert.match(run.stdout, /smoothing skipped \(dry-run\)/);
+    assert.equal(sb.calls(), 0, 'a dry run never calls the model');
+    assert.ok(readFileSync(join(sb.root, '.paper-dry-run', 'DRAFT.md'), 'utf8').startsWith('# '), 'the compiled dry-run draft has its title');
+  } finally {
+    await sb.close();
+  }
 });
