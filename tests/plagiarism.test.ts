@@ -29,8 +29,10 @@ import assert from 'node:assert/strict';
 import { loadCassetteFile } from '../bin/lib/http-mock.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import { _resetBucketsForTest } from '../bin/lib/http.js';
+import { DEFAULT_PLAGIARISM_MAX_PHRASES } from '../bin/lib/schemas/config.js';
 import {
   DDG_PACING,
+  budgetSpentReason,
   plagiarismCoverage,
   plagiarismCoverageLine,
   PHRASE_MAX_WORDS,
@@ -319,6 +321,52 @@ test('review r3: queries go one at a time, every section first; a challenged phr
   assert.equal(plagiarismCoverageLine(run), 'INCOMPLETE — 4 of 5 queries got no answer; not checked: §2, §3 — run `pensmith plagiarism` later to check again');
   assert.match(renderPlagiarismSection(run), /^Coverage: INCOMPLETE — 4 of 5 queries got no answer; not checked: §2, §3/m);
   assert.equal(plagiarismCoverage([answered('1'), refused('2')]).incomplete, false, 'half is not most');
+});
+
+// Phase 21 close-out: on 2026-10-01 DuckDuckGo challenged about two queries in
+// three from this environment, and the back-off (10 s times the challenges in
+// a row, uncapped) kept a 17-phrase check running past five minutes with no
+// word. Each back-off wait is now capped, and the run has a time budget per
+// phrase: once it is spent, no further query is sent and the phrases still
+// waiting are reported unanswered — the run is INCOMPLETE, never a hang.
+test('close-out: a DuckDuckGo that refuses every query cannot stall the check — each back-off is capped, the run stops at its time budget, and what was not asked is reported', async () => {
+  assert.ok(DDG_PACING.maxBackoffMs <= 30_000, 'one back-off wait is at most 30 s');
+  assert.ok(DEFAULT_PLAGIARISM_MAX_PHRASES * DDG_PACING.budgetPerPhraseMs <= 6 * 60_000, 'the default run is bounded at 6 min');
+  const pacing = { minGapMs: 0, maxGapMs: 0, retries: 2, backoffMs: 400, maxBackoffMs: 450, budgetPerPhraseMs: 250 };
+  const maxPhrases = 7;
+  const budgetMs = maxPhrases * pacing.budgetPerPhraseMs;
+  await withDdg('challenge-page', async (paths) => {
+    const at: number[] = [];
+    const t0 = Date.now();
+    const out = await (async () => {
+      // Record when each query left (the MockAgent reply runs per request).
+      const timer = setInterval(() => {
+        while (at.length < paths.length) at.push(Date.now());
+      }, 5);
+      try {
+        return await runPlagiarism(PAPER, { sectionIds: SECTION_IDS, maxPhrases, pacing });
+      } finally {
+        clearInterval(timer);
+        while (at.length < paths.length) at.push(Date.now());
+      }
+    })();
+    const elapsed = Date.now() - t0;
+    assert.equal(out.length, maxPhrases);
+    assert.ok(elapsed < budgetMs + 1_000, `stopped at the budget: ${elapsed} ms for a ${budgetMs} ms budget`);
+    assert.ok(paths.length >= 3, `the capped back-off still asked again: ${paths.length} queries`);
+    assert.ok(paths.length < maxPhrases, `the budget ran out before every phrase was asked: ${paths.length} queries`);
+    const gaps = at.slice(1).map((t, i) => t - (at[i] as number));
+    // Uncapped, the third wait alone would be 800 ms (400 × 2).
+    assert.ok(gaps.every((g) => g < 700), `every wait capped near ${pacing.maxBackoffMs} ms: ${gaps.join(', ')}`);
+    assert.ok(out.every((r) => r.error !== undefined), 'nothing reads as "no match"');
+    const unasked = out.filter((r) => r.error === budgetSpentReason(budgetMs));
+    assert.ok(unasked.length >= 1, 'a phrase the budget left unasked says so');
+    assert.match(budgetSpentReason(budgetMs), /^not queried — the check's time budget \(\d+ min\) ran out while DuckDuckGo refused queries; retry later$/);
+    assert.ok(out.filter((r) => r.error !== budgetSpentReason(budgetMs)).every((r) => /DuckDuckGo refused the query \(its bot challenge\)/.test(r.error ?? '')), 'an asked phrase keeps its refusal');
+    const coverage = plagiarismCoverage(out);
+    assert.equal(coverage.incomplete, true);
+    assert.equal(coverage.answered, 0);
+  });
 });
 
 test('review r3: a section titled "Sources and Methods" is probed, and every later section keeps its own id', () => {

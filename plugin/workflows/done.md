@@ -230,7 +230,10 @@ decision for it.
    gate, ONE AT A TIME, 2.5–5 s apart (jittered; DuckDuckGo answers a burst
    with its bot challenge), every section's first phrase before any section's
    second; a challenged phrase is asked again later (at most twice more, after
-   a growing back-off). A result is a match only when the normalised phrase
+   a growing back-off of at most 30 s). The run has a time budget of 12 s per
+   phrase (about 6 min for the default 30): once it is spent no further query
+   goes out, and the phrases still waiting are reported unanswered (the
+   terminal says so). A result is a match only when the normalised phrase
    appears verbatim in its title or snippet, and its link is decoded from
    DuckDuckGo's `/l/?uddg=` redirect. A query still refused is reported per
    phrase, never read as "no match"; the run names the sections no answered

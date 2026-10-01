@@ -21,7 +21,12 @@
 //      per-host rate limits unchanged — ONE AT A TIME, 2.5–5 s apart (review
 //      round 3: DuckDuckGo answers a burst with its bot challenge), every
 //      section's first phrase before any section's second, a challenged phrase
-//      asked again later (at most twice more, after a growing back-off).
+//      asked again later (at most twice more, after a growing back-off capped
+//      at 30 s). The run has a time budget (12 s per phrase: about 6 min for
+//      the default 30): once it is spent no further query goes out and the
+//      phrases still waiting are reported unanswered (Phase 21 close-out — a
+//      DuckDuckGo that challenges most queries otherwise grew the back-off
+//      without bound, and done sat silent for many minutes).
 //      plagiarismCoverage names the sections no answered phrase covers, and a
 //      run where most queries got no answer is INCOMPLETE — never "0 found".
 //      Offline / --dry-run send nothing and say `skipped (offline)` /
@@ -90,17 +95,38 @@ export interface PlagiarismOptions {
  * burst with its bot challenge, so the queries go ONE AT A TIME, `minGapMs` to
  * `maxGapMs` apart (jittered); a challenged phrase is asked again later, at
  * most `retries` more times, after a back-off of `backoffMs` times the number
- * of challenges in a row.
+ * of challenges in a row — never more than `maxBackoffMs` (Phase 21
+ * close-out). The whole run gets `budgetPerPhraseMs` per probed phrase: once
+ * that time is spent no further query is sent.
  */
 export interface PlagiarismPacing {
   readonly minGapMs: number;
   readonly maxGapMs: number;
   readonly retries: number;
   readonly backoffMs: number;
+  readonly maxBackoffMs: number;
+  readonly budgetPerPhraseMs: number;
 }
 
-/** The live pacing (measured: six queries 4 s apart got four answers; six in a five-wide burst got one). */
-export const DDG_PACING: PlagiarismPacing = Object.freeze({ minGapMs: 2_500, maxGapMs: 5_000, retries: 2, backoffMs: 10_000 });
+/**
+ * The live pacing (measured: six queries 4 s apart got four answers; six in a
+ * five-wide burst got one). On 2026-10-01 DuckDuckGo challenged about two
+ * queries in three from this environment, and the uncapped back-off (10 s
+ * times the challenges in a row) kept a 17-phrase check running past five
+ * minutes with no word; the cap and the budget bound it at about 3.5 min
+ * (17 phrases) and 6 min (the default 30).
+ */
+export const DDG_PACING: PlagiarismPacing = Object.freeze({ minGapMs: 2_500, maxGapMs: 5_000, retries: 2, backoffMs: 10_000, maxBackoffMs: 30_000, budgetPerPhraseMs: 12_000 });
+
+/** The reason a phrase the time budget left unasked carries (counted as unanswered by plagiarismCoverage). */
+export function budgetSpentReason(budgetMs: number): string {
+  return `not queried — the check's time budget (${minutesLabel(budgetMs)}) ran out while DuckDuckGo refused queries; retry later`;
+}
+
+/** `about 4 min` style: whole minutes, at least 1. */
+function minutesLabel(ms: number): string {
+  return `${Math.max(1, Math.round(ms / 60_000))} min`;
+}
 
 let pacingForTest: Partial<PlagiarismPacing> | null = null;
 
@@ -483,7 +509,11 @@ export async function runPlagiarism(draftMd: string, opts: PlagiarismOptions = {
     return phrases.map((p) => ({ phrase: p.phrase, matches: [], skipped, location: p.location }));
   }
   const pace: PlagiarismPacing = { ...DDG_PACING, ...(pacingForTest ?? {}), ...(opts.pacing ?? {}) };
-  out(`pensmith: plagiarism check: ${phrases.length} distinctive phrase(s), one query at a time (DuckDuckGo refuses bursts) — about ${Math.max(1, Math.round((phrases.length * (pace.minGapMs + pace.maxGapMs)) / 2 / 60_000))} min\n`);
+  const budgetMs = phrases.length * pace.budgetPerPhraseMs;
+  out(
+    `pensmith: plagiarism check: ${phrases.length} distinctive phrase(s), one query at a time (DuckDuckGo refuses bursts) — about ` +
+      `${minutesLabel((phrases.length * (pace.minGapMs + pace.maxGapMs)) / 2)}, at most ${minutesLabel(budgetMs)} if DuckDuckGo keeps refusing\n`,
+  );
   // Coverage first: every section's first phrase, then every section's
   // second, … — so a run cut short by refusals still checked each section.
   const bySection = new Map<string, number[]>();
@@ -500,18 +530,38 @@ export async function runPlagiarism(draftMd: string, opts: PlagiarismOptions = {
     }
   }
   const results: PlagiarismResult[] = phrases.map((p) => ({ phrase: p.phrase, matches: [], location: p.location }));
+  // The last refusal of a phrase that is waiting for its retry: what it
+  // reports if the time budget runs out first.
+  const pendingError = new Map<number, string>();
+  const started = Date.now();
   let streak = 0;
   for (let n = 0; n < queue.length; n += 1) {
     const item = queue[n] as { index: number; attempt: number };
-    if (n > 0) await sleep(streak > 0 ? pace.backoffMs * streak : jitter(pace.minGapMs, pace.maxGapMs));
+    const wait = n === 0 ? 0 : streak > 0 ? Math.min(pace.maxBackoffMs, pace.backoffMs * streak) : jitter(pace.minGapMs, pace.maxGapMs);
+    if (Date.now() - started + wait > budgetMs) {
+      // The time budget is spent: no further query. Each phrase still in the
+      // queue reports its last refusal, or that it was never asked.
+      const unasked = budgetSpentReason(budgetMs);
+      let left = 0;
+      for (const rest of queue.slice(n)) {
+        const p = phrases[rest.index] as { phrase: string; location: PhraseLocation };
+        results[rest.index] = { phrase: p.phrase, matches: [], location: p.location, error: pendingError.get(rest.index) ?? unasked };
+        left += 1;
+      }
+      out(`pensmith: plagiarism check stopped at its time budget (${minutesLabel(budgetMs)}): DuckDuckGo kept refusing queries; ${left} phrase(s) left unanswered\n`);
+      break;
+    }
+    await sleep(wait);
     const p = phrases[item.index] as { phrase: string; location: PhraseLocation };
     const r = await queryPhrase(p.phrase);
     const challenged = r.challenged === true;
     streak = challenged ? streak + 1 : 0;
     if (challenged && item.attempt < pace.retries) {
+      pendingError.set(item.index, r.error ?? 'DuckDuckGo refused the query (its bot challenge) — retry later');
       queue.push({ index: item.index, attempt: item.attempt + 1 });
       continue;
     }
+    pendingError.delete(item.index);
     results[item.index] = { phrase: p.phrase, matches: r.matches, location: p.location, ...(r.error !== undefined ? { error: r.error } : {}) };
   }
   return results;
