@@ -1017,8 +1017,18 @@ export const LOCATOR_TERMS: ReadonlyArray<readonly [RegExp, string]> = [
 export const LOCATOR_VALUE_RE = /^[^\s.,;&\-–—]+(?:\.[^\s.,;&\-–—]+)*/u;
 
 /** A citation item's locator: its value, its CSL label and the suffix text after it. */
+/**
+ * The label of a delimited locator whose braces open with no locator term
+ * (`[@k {33}]`, `[@k, {iv}]`): pandoc's citeproc prints it with NO label
+ * (pLocatorLabelDelimited; review round 3 — APA `(Kuhn, 1962, 33)`, MLA
+ * `(Kuhn, 33)`), unlike a bare `33`, which is a page. No CSL term has this
+ * name, so citeproc-js prints the locator alone, as pandoc does.
+ */
+export const IMPLICIT_LOCATOR_LABEL = 'none';
+
 export interface LocatorSplit {
   readonly locator: string;
+  /** A CSL locator label (`page`, `chapter`, …) or IMPLICIT_LOCATOR_LABEL. */
   readonly label: string;
   /** The suffix after the locator (`, emphasis added`), as written. */
   readonly rest: string;
@@ -1084,7 +1094,8 @@ function delimitedLocator(text: string): { inner: string; length: number } | nul
  * tests/locator-oracle.test.ts checks it): after an optional comma and
  * optional white space,
  *   - `{label value}` — a delimited locator: the longest locator term the
- *     braces open with (else `page`) and the rest of their text;
+ *     braces open with and the rest of their text — with no term, no label
+ *     (IMPLICIT_LOCATOR_LABEL), as pandoc prints it;
  *   - a locator term and one or more words that are numbers or roman numerals
  *     (`p. 5`, `p.5`, `chap. iv`, `pp. 33, 35`, `vol. 2` — `, p. 5` after it
  *     is suffix);
@@ -1103,7 +1114,7 @@ export function splitLocator(suffix: string, terms: ReadonlyArray<readonly [RegE
     const term = locatorTerm(inner, terms);
     const value = (term !== null ? inner.slice(term.length) : inner).trim().replace(/\s+/gu, ' ');
     if (value === '') return null;
-    return { locator: value, label: term?.label ?? 'page', rest: text.slice(delimited.length) };
+    return { locator: value, label: term?.label ?? IMPLICIT_LOCATOR_LABEL, rest: text.slice(delimited.length) };
   }
   const term = locatorTerm(text, terms);
   if (term !== null) {

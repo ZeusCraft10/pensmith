@@ -10,8 +10,10 @@
 // and the edge cases: roman numerals, ranges, lists, a trailing comment) and
 // fast-check-generated suffixes through pandoc (`-t plain`) and through the
 // built-in export (exportDraft, md, no pandoc), in chicago-author-date (no
-// `p.` for a page) and apa (labels every locator), and requires the same
-// citation text for every one. Required with CI=true (pandoc on PATH).
+// `p.` for a page), apa (labels every locator), ieee, harvard and mla (a
+// comma before a non-page locator), and requires the same citation text for
+// every one — braced locators included (`{33}` prints no label; review round
+// 3). Required with CI=true (pandoc on PATH).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,6 +41,9 @@ const FIXED = [
   // em dash (never a range), `number` / `issue`, and the en-GB and style-locale terms.
   ', 727--733', ', pp. 727--733', ', 33ff.', ', 33ff., emphasis added', ', 33—35', ', pp. 33---35', ', number 3', ', issue 3',
   ', ch. 2', ', sect. 3', ', chs. 2-3', ', secs. 2--3', ', p. 5.', ', 100-104', ', 7-9',
+  // Review round 3: a braced (delimited) locator with no label prints no
+  // label — pandoc's pLocatorLabelDelimited — while a braced label is read.
+  ' {33}', ', {33 and 34}', ', {p. 33}', ', {iv}', ' {chap. 3}', ', {33}, emphasis added',
 ];
 
 const TERMS = ['', 'p. ', 'pp. ', 'p.', 'page ', 'pages ', 'chap. ', 'chapter ', 'sec. ', 'section ', '§', '§ ', 'para. ', 'vol. ', 'fig. ', 'figure ', 'line ', 'note ', 'col. ', 'pt. ', 'part ', 'bk. ', 'book '];
@@ -97,7 +102,7 @@ test('carry-over 3: [@k 33] is page 33 and the built-in export prints it as pand
 // chicago-author-date (no `p.`), apa (labels every locator), and — review
 // round 1 — ieee (a suffix outside its brackets, `Ch.`) and harvard (en-GB:
 // its own locator terms). The note style's locators are in the goldens.
-for (const style of ['chicago-author-date', 'apa', 'ieee', 'harvard']) {
+for (const style of ['chicago-author-date', 'apa', 'ieee', 'harvard', 'mla']) {
   test(`D-21-04: every locator suffix renders as pandoc renders it (${style}; ${FIXED.length} fixed + ${GENERATED} generated, seed ${SEED})`, async (t) => {
     if (!requirePandoc(t, 'locator oracle')) return;
     const suffixes = [...FIXED, ...fc.sample(SUFFIX, { seed: SEED, numRuns: GENERATED })];
