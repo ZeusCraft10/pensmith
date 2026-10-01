@@ -16,7 +16,10 @@
 // `<link rel="independent-parent">` (a dependent style would need its parent
 // fetched — nothing is fetched at export). An unknown name is EXIT_USAGE
 // listing the 8 styles and the path form; a bad `.csl` is EXIT_USAGE with the
-// validator's reason. Pure reads; nothing is written.
+// validator's reason. Pure reads; nothing is written. A `.csl` file prints its
+// own text in every citation of the export, so one config.toml names is used
+// only once the user approved it for the paper — done checks that right after
+// resolving (style-approvals.ts assertCslStyleApproved; review round 2).
 
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, resolve, basename } from 'node:path';

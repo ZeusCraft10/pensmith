@@ -198,6 +198,11 @@ test('review r2: a reply in the skill\'s four-part output format is judged by it
   assert.equal(r.text, DRAFT, 'the final rewrite (here the section as sent) is what is kept');
   assert.equal(finalRewriteOf('3. Final rewrite: The text {{cite_0_0}}.\n\n4. A brief summary of changes made\n- x'), 'The text {{cite_0_0}}.');
   assert.equal(finalRewriteOf('Plain reply {{cite_0_0}}.'), 'Plain reply {{cite_0_0}}.', 'a reply with no label is judged whole');
+  // The skill's process steps label the final version with its step-8 prompt line.
+  assert.equal(
+    finalRewriteOf('Draft rewrite:\n\nA draft {{cite_0_0}}.\n\nWhat makes the below so obviously AI generated?\n- Repetitive phrasing\n\nNow make it not obviously AI generated.\n\nThe final text {{cite_0_0}}.\n\nChanges made: varied sentence openings.'),
+    'The final text {{cite_0_0}}.',
+  );
   assert.equal(finalRewriteOf('Final version of the protocol was approved {{cite_0_0}}.'), 'Final version of the protocol was approved {{cite_0_0}}.', 'prose that starts with the words is not a label');
 });
 

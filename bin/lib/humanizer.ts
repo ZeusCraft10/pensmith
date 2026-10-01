@@ -142,8 +142,13 @@ export function joinDraftSections(preamble: string, sections: readonly DraftSect
   return [preamble, ...sections.flatMap((s) => [s.heading, s.body])].join('\n');
 }
 
-/** A reply line that labels the final rewrite (`3. Final rewrite`, `**Final rewrite:**`, `## Final version`), with any text after the label. */
-const FINAL_LABEL_RE = /^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?[ \t]*(?:\d+[.)][ \t]*)?(?:\*\*|__)?[ \t]*final (?:rewrite|version)[ \t]*(?:\*\*|__)?[ \t]*(?::[ \t]*(?:\*\*|__)?[ \t]*(.*))?$/im;
+/**
+ * A reply line that labels the final rewrite, with any text after the label:
+ * `3. Final rewrite`, `**Final rewrite:**`, `## Final version`, or the
+ * skill's own step-8 prompt line that introduces its final version (quoted
+ * from the published skill, "Now make it not obviously AI generated.").
+ */
+const FINAL_LABEL_RE = /^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?[ \t]*(?:\d+[.)][ \t]*)?(?:\*\*|__)?[ \t]*(?:prompt:[ \t]*)?["\u201C]?(?:final (?:rewrite|version)|now make it not obviously ai[- ]generated)[.!]?["\u201D]?[ \t]*(?:\*\*|__)?[ \t]*(?::[ \t]*(?:\*\*|__)?[ \t]*(.*))?$/im;
 
 /** A reply line that labels a summary of the changes (the part after the final rewrite). */
 const SUMMARY_LABEL_RE = /^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?[ \t]*(?:\d+[.)][ \t]*)?(?:\*\*|__)?[ \t]*(?:a )?(?:brief )?(?:summary of (?:the )?changes|changes made)\b/im;
