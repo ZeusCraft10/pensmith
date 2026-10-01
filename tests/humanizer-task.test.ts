@@ -1,337 +1,162 @@
-// tests/humanizer-task.test.ts — Phase 12 Wave 0 RED-by-skip scaffold for GEN-05.
+// tests/humanizer-task.test.ts — done's humanizer on the real user path
+// (DONE-03; Phase 21 EXP-14, EXP-15, EXP-16; D-21-18, D-21-19): the BUILT CLI
+// in a temp paper whose sections `pensmith verify` judged, the RUN-21 mock LLM
+// named in the global runtime.json, and the fixture humanizer skill installed
+// in the sandbox home (never the developer's real one).
 //
-// Extends the behavioral contract of tests/humanizer-wrap.test.ts (DONE-03) with
-// the injectable TaskRunner seam that Wave 2 / Plan 04 adds to bin/lib/exporter.ts.
-// DO NOT modify tests/humanizer-wrap.test.ts — this is a NEW file.
-//
-// Behavioral contract (all skip-guarded until __setTaskRunnerForTest exists):
-//   (1) Call-through — inject a deterministic TaskRunner returning
-//       { output: '<humanized prose>' }, call runHumanizer(draft, tmpDir), assert it
-//       returns a path ending in FINAL.md, the file is written under paperDir(tmpDir)
-//       (NOT cwd+'/FINAL.md' — Pitfall 8), and its content equals the injected output.
-//   (2) Null-runner clean skip — inject null (Tier-2), assert runHumanizer returns
-//       null AND prints the 'humanizer skill present but no Task transport' banner
-//       AND never throws.
-//   (3) Honesty-framing integrity — assert that the banner/skip copy in exporter.ts
-//       does NOT contain the word 'undetectable' (locked-framing regression guard;
-//       renderHonestyReport framing also checked).
-//
-// RED-by-skip stance: every behavioral test SKIPS until taskSeamWired() returns
-// true (a source-grep of bin/lib/exporter.ts confirms `__setTaskRunnerForTest` is
-// present). Until Wave 2 / Plan 04 lands, the suite reports SKIPS with ZERO failures.
-//
-// CRITICAL path resolution (T-12-W0-01 / Phase-11 local-vs-CI bug): ALL paths
-// resolved via fileURLToPath(new URL(..., import.meta.url)) — NEVER via
-// import.meta.url.pathname or a file:// regex strip. The repo path contains spaces
-// ("OneDrive - Roanoke College") which cause %20-encoded readFileSync paths to
-// throw.
-//
-// Offline mode (T-12-W0-02): PENSMITH_NO_LLM=1 set at module top; no live calls.
-// The injectable TaskRunner is the sole invocation point — no real Task transport.
+// Replaces the Phase-6 Task-transport scaffold (`__setTaskRunnerForTest`, the
+// `no Task transport` banner): the humanizer is now a real model call through
+// complete() with the `humanizer` model slug. One paper walks through every
+// outcome in turn, each asserting what done leaves behind:
+//   - no skill → `humanizer skill not found at ~/.claude/skills/humanizer/SKILL.md
+//     — skipping`, exit 0, the compiled draft exported, FINAL.md = DRAFT.md;
+//   - `--raw` → zero humanizer requests, `humanizer skipped (--raw)`, the after
+//     score `N/A (humanize skipped with --raw)`;
+//   - a reply that drops a citation or adds `[@fake2099, p. 3]` → exit 4,
+//     every reason, no export written, FINAL.md byte-identical;
+//   - a provider failure (HTTP 500) → `humanizer failed: …`, the compiled draft
+//     exported, the after score `N/A (humanizer failed: …)`;
+//   - the cost cap → exit 5, nothing exported, FINAL.md byte-identical;
+//   - the stub skill reply → the request's system prompt is the SKILL.md body
+//     (cache_control-marked), FINAL.md differs from DRAFT.md with every
+//     citation kept, the export holds the humanized text, the record says so;
+//   - after a section redo, verify and recompile, a second done rewrites
+//     FINAL.md and the export with the new text (EXP-15).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { withPipelinePaper, THREE_SECTIONS } from './helpers/pipeline-paper.js';
+import { splitDraftSections } from '../bin/lib/humanizer.js';
+import { maskForRewrite } from '../bin/lib/rewrite-guard.js';
+import { findCitations } from '../bin/lib/citation-token.js';
+import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 
-// ---- Offline gate (T-12-W0-02) -------------------------------------------------
-process.env['PENSMITH_NO_LLM'] = '1';
+const SKILL_BODY = parseFrontmatter(readFileSync(fileURLToPath(new URL('./fixtures/humanizer-skill/SKILL.md', import.meta.url)), 'utf8')).body.trim();
 
-// ---- Path helpers (T-12-W0-01) -------------------------------------------------
-// Use fileURLToPath everywhere — the repo path contains spaces that URL-encode as
-// %20, breaking readFileSync if .pathname is used instead.
-
-function repoPath(rel: string): string {
-  return fileURLToPath(new URL('../' + rel, import.meta.url));
+function read(file: string): string | null {
+  return existsSync(file) ? readFileSync(file, 'utf8') : null;
 }
 
-// Absolute source + module URLs for exporter.ts (mirrors humanizer-wrap.test.ts pattern).
-const exporterSrcPath = repoPath('bin/lib/exporter.ts');
-const exporterModUrl = new URL('../bin/lib/exporter.js', import.meta.url);
+function exportFiles(paper: string): string[] {
+  const dir = join(paper, 'export');
+  return existsSync(dir) ? readdirSync(dir).sort() : [];
+}
 
-// honesty.ts — for the framing-integrity assertion (test 3).
-const honestySrcPath = repoPath('bin/lib/honesty.ts');
+/** The masked text of compiled section `i` — what the humanizer request carries for it. */
+function maskedSection(draft: string, i: number): string {
+  const s = splitDraftSections(draft).sections[i]!;
+  return maskForRewrite(s.body.replace(/^\n+|\n+$/g, ''), { namespace: i }).masked;
+}
 
-// ---- Skip-guard predicate -------------------------------------------------------
-// taskSeamWired() returns true ONLY when bin/lib/exporter.ts contains the token
-// `__setTaskRunnerForTest` (the injectable seam added by Wave 2 / Plan 04).
-// File existence alone is insufficient — exporter.ts already exists from earlier plans.
+const citationsOf = (t: string): string[] => findCitations(t).map((c) => c.text).sort();
 
-function taskSeamWired(): boolean {
-  if (!fs.existsSync(exporterSrcPath)) return false;
-  try {
-    return fs.readFileSync(exporterSrcPath, 'utf8').includes('__setTaskRunnerForTest');
-  } catch {
-    return false;
+test('EXP-14 / EXP-15 (built CLI, mock LLM): every humanizer outcome on one paper — skipped, raw, rejected, failed, capped, accepted, and a second done after a redo', async () => {
+  await withPipelinePaper({ sections: THREE_SECTIONS }, async (p) => {
+    const paper = join(p.root, '.paper');
+    const mock = p.sb.mock!;
+    await p.verifyAll();
+    const c = await p.cli(['compile', '--yolo', '--no-smooth']);
+    assert.equal(c.status, 0, c.stdout + c.stderr);
+    const draft = readFileSync(join(paper, 'DRAFT.md'), 'utf8');
+
+    // (a) No skill installed: skipped with the exact line, the compiled draft exported.
+    let r = await p.cli(['done', '--yolo', '--format', 'md']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /pensmith done: humanizer skill not found at ~\/\.claude\/skills\/humanizer\/SKILL\.md — skipping/);
+    assert.equal(mock.callCount('humanizer'), 0);
+    assert.equal(read(join(paper, 'FINAL.md')), draft, 'FINAL.md is the compiled draft');
+    assert.match(read(join(paper, 'VERIFICATION.md')) ?? '', /after humanize\):  N\/A \(humanizer not installed\)/);
+    const rawFinal = read(join(paper, 'FINAL.md'));
+
+    p.installHumanizerSkill();
+
+    // (b) --raw: no humanizer request at all.
+    r = await p.cli(['done', '--yolo', '--raw', '--format', 'md']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /pensmith done: humanizer skipped \(--raw\)/);
+    assert.equal(mock.callCount('humanizer'), 0, '--raw sends no humanizer request');
+    assert.match(read(join(paper, 'VERIFICATION.md')) ?? '', /after humanize\):  N\/A \(humanize skipped with --raw\)/);
+
+    // (c, d) A reply that drops a citation, or adds one: refused, nothing exported, FINAL.md untouched.
+    const exportsBefore = exportFiles(paper).map((f) => [f, statSync(join(paper, 'export', f)).mtimeMs] as const);
+    const m0 = maskedSection(draft, 0);
+    for (const [what, reply, reason] of [
+      ['a dropped citation', m0.replace(/\s*\{\{cite_0_0\}\}/, ''), /placeholder|citation set changed/],
+      ['an added citation', `${m0.trimEnd()} A later survey agrees [@fake2099, p. 3].`, /citation set changed|adds/],
+    ] as const) {
+      mock.reset();
+      mock.script('humanizer', { text: reply });
+      r = await p.cli(['done', '--yolo', '--format', 'md']);
+      assert.equal(r.status, 4, `${what}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stdout, /GATE-04 BLOCKED — the humanized text failed re-verification; nothing was exported and FINAL\.md was not changed/, what);
+      assert.match(r.stdout, reason, what);
+      assert.match(r.stdout, /`pensmith done --raw` exports the compiled draft without the humanizer/, what);
+      assert.equal(read(join(paper, 'FINAL.md')), rawFinal, `${what}: FINAL.md byte-identical`);
+      assert.deepEqual(exportFiles(paper).map((f) => [f, statSync(join(paper, 'export', f)).mtimeMs] as const), exportsBefore, `${what}: no export written`);
+    }
+
+    // (e) A provider failure: `humanizer failed: …`, the compiled draft exported.
+    mock.reset();
+    mock.fail({ kind: 'http', status: 500, message: 'upstream exploded' }, { slug: 'humanizer', times: 20 });
+    r = await p.cli(['done', '--yolo', '--format', 'md']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /pensmith done: humanizer failed: .+ — exporting the compiled draft/);
+    assert.equal(read(join(paper, 'FINAL.md')), draft);
+    assert.match(read(join(paper, 'VERIFICATION.md')) ?? '', /after humanize\):  N\/A \(humanizer failed: /);
+
+    // (f) The cost cap refuses the first humanizer call: exit 5, nothing exported or rewritten.
+    mock.reset();
+    const finalBytes = read(join(paper, 'FINAL.md'));
+    const exportsNow = exportFiles(paper).map((f) => [f, statSync(join(paper, 'export', f)).mtimeMs] as const);
+    r = await p.cli(['done', '--yolo', '--format', 'md'], { PENSMITH_COST_CAP_USD: '0.000001' });
+    assert.equal(r.status, 5, r.stdout + r.stderr);
+    assert.equal(mock.callCount('humanizer'), 0, 'refused before the request');
+    assert.equal(read(join(paper, 'FINAL.md')), finalBytes);
+    assert.deepEqual(exportFiles(paper).map((f) => [f, statSync(join(paper, 'export', f)).mtimeMs] as const), exportsNow);
+
+    // (g) Accepted: the stub skill reply keeps every citation; FINAL.md and the export hold it.
+    mock.reset();
+    r = await p.cli(['done', '--yolo', '--format', 'md']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(mock.callCount('humanizer'), THREE_SECTIONS.length, 'one request per section');
+    const body = mock.bodiesFor('humanizer')[0]!;
+    assert.match(JSON.stringify(body['system']), /cache_control/, 'the system prompt is cache_control-marked');
+    assert.ok(JSON.stringify(body['system']).includes(JSON.stringify(SKILL_BODY).slice(1, -1)), 'the system prompt is the SKILL.md body');
+    const finalMd = read(join(paper, 'FINAL.md')) ?? '';
+    assert.notEqual(finalMd, draft, 'FINAL.md differs from DRAFT.md');
+    assert.deepEqual(citationsOf(finalMd), citationsOf(draft), 'every citation kept, as written');
+    assert.equal(read(join(paper, 'DRAFT.md')), draft, 'DRAFT.md untouched');
+    const exported = read(join(paper, 'export', 'DRAFT.md')) ?? '';
+    assert.match(exported, /Put simply:/, 'the export derives from the humanized FINAL.md');
+    assert.match(read(join(paper, 'VERIFICATION.md')) ?? '', /^Text checked: \.paper\/FINAL\.md/m);
+    const record = JSON.parse(read(join(paper, 'DONE-RECORD.json')) ?? '{}') as Record<string, unknown>;
+    assert.equal(record['humanized'], true);
+
+    // (h) EXP-15: redo §2, verify, recompile — the next done rewrites FINAL.md and the export.
+    writeFileSync(
+      join(p.sectionDir(2, 'measurement'), 'DRAFT.md'),
+      'Measurement in quantum physics limits what an observer can record about a system [@aspelmeyer2009].\n\n' +
+        'Careful experimental design keeps that influence small enough to report honestly [@aspelmeyer2009].\n',
+    );
+    const v = await p.cli(['verify', '2']);
+    assert.equal(v.status, 0, v.stdout + v.stderr);
+    const c2 = await p.cli(['compile', '--yolo', '--no-smooth']);
+    assert.equal(c2.status, 0, c2.stdout + c2.stderr);
+    mock.reset();
+    r = await p.cli(['done', '--yolo', '--format', 'md']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(read(join(paper, 'FINAL.md')) ?? '', /limits what an observer can record/);
+    assert.match(read(join(paper, 'export', 'DRAFT.md')) ?? '', /limits what an observer can record/);
+    rmSync(join(paper, 'export'), { recursive: true, force: true });
+  });
+});
+
+test('EXP-14: the Task-transport banner and seam are gone from done and the humanizer', () => {
+  for (const rel of ['../bin/cli/done.ts', '../bin/lib/humanizer.ts', '../bin/lib/honesty.ts']) {
+    const src = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+    assert.doesNotMatch(src, /no Task transport|TaskRunner|__setTaskRunnerForTest/, rel);
   }
-}
-
-const SEAM_WIRED = taskSeamWired();
-
-// ---- Sandbox helpers (T-12-W0-03) -----------------------------------------------
-// Each test writes into a fresh tmpdir with HOME/LOCALAPPDATA/XDG_DATA_HOME overridden
-// so FINAL.md writes land in the sandbox, not the real home dir.
-
-function mkPaperRoot(): string {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-humanizer-task-'));
-  process.env.LOCALAPPDATA = tmp;
-  process.env.XDG_DATA_HOME = tmp;
-  process.env.HOME = tmp;
-  // Create the .paper directory structure that runHumanizer / paperDir() needs.
-  fs.mkdirSync(path.join(tmp, '.paper'), { recursive: true });
-  return tmp;
-}
-
-// ---- TaskRunner type (mirrors the seam type declared in Plan 04) ---------------
-type TaskRunner = (skill: string, input: Record<string, string>) => Promise<{ output: string }>;
-
-// ================================================================================
-// Tests (all RED-by-skip until SEAM_WIRED === true)
-// ================================================================================
-
-test(
-  'humanizer-task: call-through — injected TaskRunner → FINAL.md written under paperDir(tmpDir), not cwd (GEN-05)',
-  { skip: !SEAM_WIRED },
-  async () => {
-    // Inject a deterministic TaskRunner that returns a predictable output string.
-    // runHumanizer must:
-    //   a) call the runner.
-    //   b) write FINAL.md under paperDir(tmpDir) — NOT cwd+'/FINAL.md' (Pitfall 8).
-    //   c) return the FINAL.md path (string, not null).
-    //   d) The FINAL.md content must equal the runner's output.
-    const root = mkPaperRoot();
-
-    const mod = await import(exporterModUrl.href) as {
-      runHumanizer: (draftMd: string, paperRoot?: string) => Promise<string | null>;
-      __setTaskRunnerForTest: (fn: TaskRunner | null) => void;
-    };
-
-    assert.ok(
-      typeof mod.runHumanizer === 'function',
-      'exporter.ts must export runHumanizer',
-    );
-    assert.ok(
-      typeof mod.__setTaskRunnerForTest === 'function',
-      'exporter.ts must export __setTaskRunnerForTest (GEN-05 seam)',
-    );
-
-    const fakeOutput = '# Humanized Draft\n\nThis prose has been improved for clarity.\n';
-    const injectedRunner: TaskRunner = () =>
-      Promise.resolve({ output: fakeOutput });
-
-    mod.__setTaskRunnerForTest(injectedRunner);
-    let result: string | null = null;
-    try {
-      result = await mod.runHumanizer('# Original Draft\n\nSome prose.\n', root);
-    } finally {
-      // Always restore the seam to null in a finally block.
-      mod.__setTaskRunnerForTest(null);
-    }
-
-    // (c) must return a path (not null).
-    assert.ok(
-      result !== null,
-      'runHumanizer with an injected TaskRunner must return a FINAL.md path (not null)',
-    );
-
-    // (b) path must end with FINAL.md.
-    assert.ok(
-      result!.endsWith('FINAL.md'),
-      `returned path must end with FINAL.md (got: ${String(result)})`,
-    );
-
-    // (b) path must be under the paper root — NOT cwd (Pitfall 8).
-    const cwd = process.cwd();
-    assert.ok(
-      result!.startsWith(root) || result!.includes('.paper'),
-      `FINAL.md must be written under paperDir(root), not cwd. root=${root}, cwd=${cwd}, got=${String(result)}`,
-    );
-    assert.ok(
-      !result!.startsWith(path.join(cwd, 'FINAL.md')),
-      `FINAL.md must NOT be at cwd+FINAL.md (Pitfall 8). got=${String(result)}`,
-    );
-
-    // (d) content must equal the runner's output.
-    assert.ok(
-      fs.existsSync(result!),
-      `FINAL.md must exist at the returned path: ${String(result)}`,
-    );
-    const written = fs.readFileSync(result!, 'utf8');
-    assert.equal(
-      written,
-      fakeOutput,
-      `FINAL.md content must equal the TaskRunner output. expected=${JSON.stringify(fakeOutput)}, got=${JSON.stringify(written)}`,
-    );
-  },
-);
-
-test(
-  'humanizer-task: null-runner clean skip — prints banner, returns null, never throws (GEN-05)',
-  { skip: !SEAM_WIRED },
-  async () => {
-    // Injecting null (the Tier-2 / no-transport state) must:
-    //   a) NOT throw.
-    //   b) Return null (so the export proceeds on DRAFT.md).
-    //   c) Print the 'humanizer skill present but no Task transport' banner to stdout
-    //      (or the equivalent clean-skip message).
-    // The isHumanizerSkillPresent() check comes before the Task check; on this machine
-    // the humanizer skill is absent, so runHumanizer returns null via the absent-skill
-    // path. The seam is still exercised — it just takes the absent-skill branch first.
-    // Both paths must: not throw + return null.
-    const root = mkPaperRoot();
-
-    const mod = await import(exporterModUrl.href) as {
-      runHumanizer: (draftMd: string, paperRoot?: string) => Promise<string | null>;
-      __setTaskRunnerForTest: (fn: TaskRunner | null) => void;
-    };
-
-    assert.ok(typeof mod.runHumanizer === 'function', 'must export runHumanizer');
-    assert.ok(typeof mod.__setTaskRunnerForTest === 'function', 'must export __setTaskRunnerForTest');
-
-    // Capture stdout to check the banner.
-    const stdoutLines: string[] = [];
-    const origWrite = process.stdout.write.bind(process.stdout);
-    // Tee, never swallow: the node:test reporter writes its TAP lines to this
-    // same stdout, and a swallowed line silently drops a test from the count.
-    (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
-      stdoutLines.push(s);
-      return origWrite(s);
-    };
-
-    mod.__setTaskRunnerForTest(null);
-    let result: string | null | undefined;
-    let threw = false;
-    try {
-      result = await mod.runHumanizer('# Draft\n\nSome prose.\n', root);
-    } catch {
-      threw = true;
-    } finally {
-      // Always restore seam to null.
-      mod.__setTaskRunnerForTest(null);
-      (process.stdout as unknown as { write: typeof origWrite }).write = origWrite;
-    }
-
-    // (a) must not throw.
-    assert.equal(threw, false, 'runHumanizer with null runner must never throw');
-
-    // (b) must return null.
-    assert.equal(result, null, 'null runner must cause runHumanizer to return null');
-
-    // (c) a banner must be printed to stdout (skip message).
-    const stdoutText = stdoutLines.join('');
-    assert.ok(
-      stdoutText.length > 0,
-      'runHumanizer null-runner path must print a banner to stdout (skip signal)',
-    );
-    // The banner must contain one of the acceptable skip phrases.
-    const hasSkipPhrase =
-      stdoutText.includes('humanizer skill not found') ||
-      stdoutText.includes('no Task transport') ||
-      stdoutText.includes('skipping humanize step');
-    assert.ok(
-      hasSkipPhrase,
-      `stdout banner must contain a skip phrase ("humanizer skill not found", "no Task transport", or "skipping humanize step"). Got: ${stdoutText.slice(0, 400)}`,
-    );
-  },
-);
-
-test(
-  'humanizer-task: honesty-framing integrity — exporter.ts banner must NOT contain "undetectable" (GEN-05 locked-framing guard)',
-  { skip: !SEAM_WIRED },
-  async () => {
-    // Locked-framing regression guard (PRD §3 non-negotiable): the humanizer is
-    // framed as "improves prose / readability", NEVER as making output "undetectable".
-    // This test scans the skip-path banner copy in bin/lib/exporter.ts for the
-    // forbidden word 'undetectable'.
-    //
-    // Also checks bin/lib/honesty.ts renderHonestyReport framing for the same token.
-    // If either file contains 'undetectable' in an affirmative claim, this test fails.
-
-    // Check exporter.ts source.
-    assert.ok(fs.existsSync(exporterSrcPath), `exporter.ts must exist at: ${exporterSrcPath}`);
-    const exporterSrc = fs.readFileSync(exporterSrcPath, 'utf8');
-
-    // The word 'undetectable' must NOT appear in the banner/skip copy (which lives
-    // in the runHumanizer function). We scan the entire file but note that any use
-    // of "undetectable" in a test file comment or in the honesty framing is a regression.
-    assert.ok(
-      !exporterSrc.toLowerCase().includes('undetectable'),
-      `exporter.ts must NOT contain the word "undetectable" in any banner or framing copy (PRD §3 non-negotiable). ` +
-        `Found at position: ${exporterSrc.toLowerCase().indexOf('undetectable')}`,
-    );
-
-    // Check honesty.ts renderHonestyReport framing.
-    if (fs.existsSync(honestySrcPath)) {
-      const honestySrc = fs.readFileSync(honestySrcPath, 'utf8');
-
-      // The framing note in honesty.ts is allowed to MENTION "undetectable" in a
-      // disclaimer context ("does not promise to make output undetectable" is the
-      // honest framing). The check here is that no affirmative claim appears
-      // (i.e., no "makes output undetectable" or "evades detection").
-      // We check for patterns that would indicate a forbidden affirmative claim.
-      const affirmativeForbidden = [
-        'makes output undetectable',
-        'evades detection',
-        'bypass detection',
-        'fool detectors',
-        'undetectable output',
-      ];
-      for (const pattern of affirmativeForbidden) {
-        assert.ok(
-          !honestySrc.toLowerCase().includes(pattern),
-          `honesty.ts must NOT contain affirmative detection-avoidance framing: "${pattern}" (PRD §3 non-negotiable)`,
-        );
-      }
-
-      // The framing must contain "improves" somewhere (positive honest framing).
-      assert.ok(
-        honestySrc.includes('improves'),
-        'honesty.ts framing must include "improves" (honest framing: "improves readability")',
-      );
-    }
-  },
-);
-
-// ---- Consistency check: verify predicate resolves to a meaningful value ---------
-// This test ALWAYS runs (no skip-guard) to confirm path resolution works on this
-// machine. Documents whether SEAM_WIRED is true or false (expected: false in Wave 0).
-
-test('humanizer-task: taskSeamWired() resolves correctly (path sanity — T-12-W0-01)', () => {
-  // exporterSrcPath must resolve to a real absolute path (no %20 — fileURLToPath decodes).
-  assert.ok(
-    !exporterSrcPath.includes('%20'),
-    `exporterSrcPath must not contain %20 (fileURLToPath decodes spaces): ${exporterSrcPath}`,
-  );
-
-  // exporter.ts must exist (it pre-exists from Phase 6).
-  assert.ok(
-    fs.existsSync(exporterSrcPath),
-    `exporter.ts must exist at: ${exporterSrcPath}`,
-  );
-
-  // Log the predicate state for skip-message clarity.
-  const reason = (() => {
-    try {
-      const src = fs.readFileSync(exporterSrcPath, 'utf8');
-      return src.includes('__setTaskRunnerForTest')
-        ? 'wired — __setTaskRunnerForTest present in exporter.ts'
-        : 'not yet wired — __setTaskRunnerForTest absent from exporter.ts (Wave 0 RED-by-skip)';
-    } catch {
-      return 'not yet wired — could not read exporter.ts';
-    }
-  })();
-
-  // Always-pass — documenting the state.
-  assert.ok(
-    typeof SEAM_WIRED === 'boolean',
-    `taskSeamWired() returns a boolean (${String(SEAM_WIRED)}): ${reason}`,
-  );
-
-  // Verify the pathToFileURL import is also available (used in humanizer-wrap.test.ts pattern).
-  assert.ok(
-    typeof pathToFileURL === 'function',
-    'pathToFileURL must be importable from node:url (spaced-path safe)',
-  );
 });

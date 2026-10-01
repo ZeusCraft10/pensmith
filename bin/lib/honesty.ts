@@ -47,7 +47,7 @@
 
 import { readFileSync } from 'node:fs';
 import { pluginReferencePath } from './paths.js';
-import { fetch as httpFetch } from './http.js';
+import { fetch as httpFetch, RateLimitExhaustedError } from './http.js';
 import { networkMode } from './http-mock.js';
 import { out } from './output-sink.js';
 import { assertBudget, appendCost } from './budget.js';
@@ -381,6 +381,10 @@ export async function measureHonesty(text: string, opts: HonestyOptions = {}): P
   try {
     resp = await httpFetch(spec.url, { method: 'POST', source: 'generic', noCache: true, headers: req.headers, body: req.body });
   } catch (e) {
+    // http.ts retries a 429 / 5xx and then throws with the last status.
+    const status = (e as { status?: unknown }).status;
+    if (e instanceof RateLimitExhaustedError || status === 429) return none('unavailable', 'rate limited');
+    if (typeof status === 'number') return none('unavailable', `${spec.label} answered HTTP ${status}`);
     const msg = ((e as Error).message.split('\n')[0] ?? '').replace(key, '***');
     return none('unavailable', `network: ${msg}`);
   }

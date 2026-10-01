@@ -1,88 +1,185 @@
-// tests/humanizer-wrap.test.ts — Phase 6 Wave 0 RED scaffold for DONE-03.
+// tests/humanizer-wrap.test.ts — the Tier-2 humanizer module (DONE-03; Phase
+// 21 EXP-14, D-21-18), in process.
 //
-// Mirrors tests/known-bad-pass2.test.ts RED-by-skip stance: behavioral tests
-// SKIP-guard on the not-yet-created bin/lib/exporter.ts (which is where the Wave-2
-// runHumanizer wrap lives) so the suite reports skips with ZERO failures. Plan
-// 06-02 lands the wrap and these turn GREEN.
-//
-// On THIS machine isHumanizerSkillPresent() is false (no ~/.claude/skills/humanizer/),
-// so DONE-03's skip-clean path is the path under test:
-//   runHumanizer(draftMd) must (1) NOT throw, (2) return null (or the unchanged
-//   draft signal) so export proceeds on DRAFT.md, and (3) print a stdout banner
-//   containing 'humanizer skill not found'.
+// Replaces the Phase-6 RED-by-skip scaffold around exporter.ts runHumanizer
+// (the Task-transport seam, deleted in the Phase 21 integration pass): the
+// humanizer is now bin/lib/humanizer.ts, which reads the user's skill through
+// paths.ts humanizerSkillPath (under a test context only a home inside
+// os.tmpdir() counts, so no test ever reads the developer's real skill),
+// sends its body as the system prompt with the hash-pinned contract, the voice
+// and the masked, fenced section text, rewrites the compiled draft one `##`
+// section at a time (the title and headings never reach the model) and
+// validates every reply through the rewrite guard. The model call is injected
+// here; tests/humanizer-task.test.ts drives the real transport (mock LLM)
+// through the built CLI.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, parse } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  HUMANIZER_SLUG,
+  humanizeDraft,
+  humanizerContract,
+  humanizerRequest,
+  joinDraftSections,
+  loadHumanizerSkill,
+  splitDraftSections,
+  type HumanizerRequest,
+} from '../bin/lib/humanizer.js';
 import { isHumanizerSkillPresent } from '../bin/lib/ecosystem-presence.js';
+import { humanizerSkillPath } from '../bin/lib/paths.js';
+import { slugSpec } from '../bin/lib/llm-models.js';
+import { FENCE_OPEN, unfence } from '../bin/lib/untrusted-fence.js';
 
-// The Wave-2 runHumanizer wrap is exported from bin/lib/exporter.ts (the
-// done-orchestrator humanize step). Pin the symbol name `runHumanizer`.
-//
-// NOTE: bin/lib/exporter.ts is created by Plan 06-04 (zeroTracePatch/zeroTracePdf/
-// exportDraft) BEFORE Plan 06-05 adds runHumanizer to it. So file existence alone
-// is NOT a sufficient skip guard — between 06-04 and 06-05 the file exists but
-// runHumanizer does not. The behavioral test below additionally guards on the
-// runHumanizer export actually being present in source, so it stays RED-by-skip
-// (its intended Wave-0 state) until 06-05 lands the wrap — mirroring how
-// export-gate.test.ts guards on its own owner module (bin/cli/done.ts).
-const exporterSrcPath = fileURLToPath(new URL('../bin/lib/exporter.ts', import.meta.url));
-const exporterModUrl = new URL('../bin/lib/exporter.js', import.meta.url);
+/** The masked section a humanizer request carries (its fenced `<text>` block). */
+function maskedOf(content: string): string {
+  const inner = /<text>\n([\s\S]*)\n<\/text>$/.exec(content)?.[1] ?? '';
+  return unfence(inner) ?? '';
+}
 
-function runHumanizerExported(): boolean {
-  if (!existsSync(exporterSrcPath)) return false;
+const FIXTURE = fileURLToPath(new URL('./fixtures/humanizer-skill/SKILL.md', import.meta.url));
+const CONTRACT_FILE = fileURLToPath(new URL('../plugin/references/humanizer-contract.md', import.meta.url));
+
+/** Run `fn` with HOME (and USERPROFILE) at a fresh temp home, the fixture skill installed when `install`. */
+function withHome<T>(install: boolean, fn: (home: string) => T): T {
+  const home = mkdtempSync(join(tmpdir(), 'pensmith-home-'));
+  if (install) {
+    mkdirSync(join(home, '.claude', 'skills', 'humanizer'), { recursive: true });
+    copyFileSync(FIXTURE, join(home, '.claude', 'skills', 'humanizer', 'SKILL.md'));
+  }
+  const saved = { HOME: process.env['HOME'], USERPROFILE: process.env['USERPROFILE'] };
+  process.env['HOME'] = home;
+  process.env['USERPROFILE'] = home;
   try {
-    return /export\s+(?:async\s+)?function\s+runHumanizer\b/.test(
-      readFileSync(exporterSrcPath, 'utf8'),
-    );
-  } catch {
-    return false;
+    return fn(home);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
 }
 
-test('humanizer-wrap: machine baseline — isHumanizerSkillPresent() is false (DONE-03 skip-clean path under test)', () => {
-  // Documents the test precondition; if the humanizer is later installed this
-  // flips and the behavioral assertions below would need a present-path variant.
-  assert.equal(isHumanizerSkillPresent(), false,
-    'this RED scaffold exercises the absent-humanizer path (machine baseline)');
-});
+const DRAFT = [
+  '# Deep Learning and Measurement',
+  '',
+  '## Learning Representations',
+  '',
+  'Neural networks with many layers learn representations of raw data at several levels of abstraction [@lecun2015].',
+  '',
+  'These layered models now set the pace for speech and image recognition across the field [@lecun2015, p. 437].',
+  '',
+  '## Measurement in Physics',
+  '',
+  'As the authors put it, "measurement in quantum physics shapes what an observer is able to record" [@aspelmeyer2009].',
+  '',
+].join('\n');
 
-// RED-by-skip module-presence consistency (mirrors known-bad-pass2).
-test('humanizer-wrap: module presence is consistent with Wave-0 RED state (DONE-03)', () => {
-  if (existsSync(exporterSrcPath)) {
-    assert.ok(true, 'bin/lib/exporter.ts present — behavioral tests active');
-  } else {
-    assert.ok(!existsSync(exporterSrcPath), 'Wave-0: bin/lib/exporter.ts absent (RED-by-skip)');
+test('EXP-14: the skill is found only under a temp home in a test context — never the developer\'s real one', () => {
+  withHome(true, (home) => {
+    assert.equal(humanizerSkillPath(), join(home, '.claude', 'skills', 'humanizer', 'SKILL.md'));
+    assert.equal(isHumanizerSkillPresent(), true);
+    const skill = loadHumanizerSkill();
+    assert.ok(skill);
+    assert.ok(skill.body.startsWith('# Humanizer (pensmith test fixture)'), 'the frontmatter is stripped');
+    assert.doesNotMatch(skill.body, /^name: humanizer/m);
+  });
+  withHome(false, () => {
+    assert.equal(loadHumanizerSkill(), null, 'no SKILL.md → null');
+    assert.equal(isHumanizerSkillPresent(), false);
+  });
+  // A home outside os.tmpdir() (here the filesystem root) is refused under a
+  // test context, so the developer's real ~/.claude is never read.
+  const saved = { HOME: process.env['HOME'], USERPROFILE: process.env['USERPROFILE'] };
+  process.env['HOME'] = parse(tmpdir()).root;
+  process.env['USERPROFILE'] = parse(tmpdir()).root;
+  try {
+    assert.equal(humanizerSkillPath(), null);
+    assert.equal(loadHumanizerSkill(), null);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
 });
 
-test('humanizer-wrap: runHumanizer absent-skill → no throw, returns null, banner "humanizer skill not found" (DONE-03)',
-  { skip: !runHumanizerExported() },
-  async () => {
-    const mod = await import(exporterModUrl.href) as {
-      runHumanizer: (draftMd: string) => Promise<string | null>;
-    };
-    const stdoutLines: string[] = [];
-    const origWrite = process.stdout.write.bind(process.stdout);
-    // Tee, never swallow: the node:test reporter writes its TAP lines to this
-    // same stdout, and a swallowed line silently drops a test from the count.
-    (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
-      stdoutLines.push(s);
-      return origWrite(s);
-    };
-    let result: string | null;
-    try {
-      result = await mod.runHumanizer('# Draft\n\nSome prose to humanize.\n');
-    } finally {
-      (process.stdout as unknown as { write: typeof origWrite }).write = origWrite;
-    }
-    // (1) no throw (reached here) + (2) returns null so export proceeds on DRAFT.md
-    assert.equal(result, null, 'absent humanizer must return null (unchanged-draft signal)');
-    // (3) banner present.
-    assert.ok(
-      stdoutLines.some((l) => l.includes('humanizer skill not found')),
-      'must print a banner containing "humanizer skill not found"',
-    );
-  },
-);
+test('EXP-14 (S-06): `humanizer` is a model slug of verb done with no prompt template', () => {
+  const spec = slugSpec(HUMANIZER_SLUG);
+  assert.equal(spec.verb, 'done');
+  assert.equal(spec.tier, 'generation');
+  assert.equal(spec.template, false);
+});
+
+test('EXP-14: the request — system = the skill body; user = the pinned contract verbatim, the voice, the masked section fenced', () => {
+  withHome(true, () => {
+    const skill = loadHumanizerSkill();
+    assert.ok(skill);
+    const req: HumanizerRequest = humanizerRequest(skill, 'Masked text {{cite_0_0}}.', 'academic');
+    assert.equal(req.slug, 'humanizer');
+    assert.equal(req.system, skill.body);
+    assert.equal(req.messages.length, 1);
+    const content = req.messages[0]!.content;
+    const md = readFileSync(CONTRACT_FILE, 'utf8').replace(/\r\n/g, '\n');
+    assert.ok(content.startsWith(md.slice(md.indexOf('## Contract\n') + '## Contract\n'.length).trim()), 'the contract, verbatim, first');
+    assert.equal(humanizerContract(), md.slice(md.indexOf('## Contract\n') + '## Contract\n'.length).trim());
+    assert.match(content, /<preserve_voice>\nacademic\n<\/preserve_voice>/);
+    assert.ok(content.includes(`<text>\n${FENCE_OPEN}\n`), 'the section text is fenced (FEED-05)');
+    assert.equal(maskedOf(content), 'Masked text {{cite_0_0}}.');
+  });
+});
+
+test('EXP-14: split/join round-trips the compiled draft; the title and the headings are never sent', async () => {
+  const { preamble, sections } = splitDraftSections(DRAFT);
+  assert.equal(preamble, '# Deep Learning and Measurement\n');
+  assert.deepEqual(sections.map((s) => s.heading), ['## Learning Representations', '## Measurement in Physics']);
+  assert.equal(joinDraftSections(preamble, sections), DRAFT);
+  const sent: string[] = [];
+  const skill = { path: '/fixture/SKILL.md', body: 'Improve the prose.' };
+  const r = await humanizeDraft({
+    draft: DRAFT,
+    skill,
+    call: async (req) => {
+      const text = req.messages[0]!.content;
+      sent.push(text);
+      return maskedOf(text).replace('learn representations', 'build up representations').replace('shapes what', 'shapes what');
+    },
+  });
+  assert.equal(r.sectionsSent, 2);
+  assert.deepEqual(r.rejected, []);
+  for (const s of sent) {
+    assert.doesNotMatch(s, /Deep Learning and Measurement|## Learning|## Measurement/, 'no title or heading reaches the model');
+    assert.doesNotMatch(s, /@lecun2015|@aspelmeyer2009/, 'citations are placeholders');
+    assert.doesNotMatch(s, /measurement in quantum physics shapes what an observer/, 'the quoted passage is a placeholder');
+  }
+  assert.match(r.text, /build up representations of raw data/);
+  assert.ok(r.text.includes('[@lecun2015, p. 437]') && r.text.includes('"measurement in quantum physics shapes what an observer is able to record" [@aspelmeyer2009]'));
+  assert.ok(r.text.startsWith('# Deep Learning and Measurement\n\n## Learning Representations\n'));
+});
+
+test('EXP-14: a reply that drops a placeholder, adds a citation or touches the structure is rejected with its reason', async () => {
+  const skill = { path: '/fixture/SKILL.md', body: 'Improve the prose.' };
+  const cases: Array<[string, (masked: string) => string, RegExp]> = [
+    ['a dropped citation', (m) => m.replace(/\s*\{\{cite_0_0\}\}/, ''), /placeholder|citation set changed/],
+    ['an added citation', (m) => `${m.trimEnd()} A later survey agrees [@fake2099, p. 3].`, /citation set changed|adds/],
+    ['an empty reply', () => '', /empty/],
+  ];
+  for (const [what, edit, reason] of cases) {
+    const r = await humanizeDraft({ draft: DRAFT, skill, call: async (req, i) => (i === 0 ? edit(maskedOf(req.messages[0]!.content)) : maskedOf(req.messages[0]!.content)) });
+    assert.equal(r.rejected.length, 1, `${what}: ${JSON.stringify(r.rejected)}`);
+    assert.match(r.rejected[0]!, /^§1 \(Learning Representations\): /, what);
+    assert.match(r.rejected[0]!, reason, what);
+    assert.ok(r.text.includes('learn representations of raw data at several levels of abstraction [@lecun2015].'), `${what}: the rejected section is kept as compiled`);
+  }
+});
+
+test('EXP-14: a model error propagates to the caller (done reports "humanizer failed: …" or the cost cap)', async () => {
+  const skill = { path: '/fixture/SKILL.md', body: 'Improve the prose.' };
+  await assert.rejects(
+    humanizeDraft({ draft: DRAFT, skill, call: async () => { throw new Error('HTTP 500 from the provider'); } }),
+    /HTTP 500/,
+  );
+});

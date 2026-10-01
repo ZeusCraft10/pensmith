@@ -172,6 +172,8 @@ const DROPPED_ENV = new Set([
   'ANTHROPIC_API_KEY',
   'OPENAI_API_KEY',
   'GPTZERO_API_KEY',
+  'ORIGINALITY_API_KEY',
+  'SAPLING_API_KEY',
 ]);
 
 export async function openChainSandbox(opts: ChainSandboxOptions = {}): Promise<ChainSandbox> {
@@ -192,6 +194,8 @@ export async function openChainSandbox(opts: ChainSandboxOptions = {}): Promise<
     out['XDG_DATA_HOME'] = data;
     out['LOCALAPPDATA'] = data;
     out['HOME'] = data;
+    // Windows reads the home (the humanizer skill, EXP-14) from USERPROFILE.
+    out['USERPROFILE'] = data;
     out['ANTHROPIC_API_KEY'] = 'sk-test-e2e-chain-0001';
     out['PENSMITH_COST_CAP_USD'] = '1000';
     for (const [k, v] of Object.entries({ ...(opts.env ?? {}), ...extra })) {

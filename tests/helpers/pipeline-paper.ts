@@ -11,7 +11,7 @@
 // spawned asynchronously, so the in-process mock LLM can answer it.
 
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withLlmSandbox, type LlmSandbox, type SandboxOptions } from './llm-sandbox.js';
@@ -40,7 +40,16 @@ export interface PipelinePaper {
   cli(args: readonly string[], env?: Record<string, string | undefined>, input?: string): Promise<{ status: number | null; stdout: string; stderr: string }>;
   /** `pensmith verify N` for every section; throws naming the first that fails. */
   verifyAll(): Promise<void>;
+  /**
+   * Install the fixture humanizer skill (tests/fixtures/humanizer-skill/SKILL.md)
+   * at `<sandbox home>/.claude/skills/humanizer/SKILL.md` — the sandbox home
+   * (HOME, and USERPROFILE for Windows) lies inside os.tmpdir(), the only home
+   * paths.ts humanizerSkillPath accepts under a test context. Returns its path.
+   */
+  installHumanizerSkill(): string;
 }
+
+export const HUMANIZER_SKILL_FIXTURE = fileURLToPath(new URL('../fixtures/humanizer-skill/SKILL.md', import.meta.url));
 
 export interface PipelinePaperOptions {
   sections: PipelineSection[];
@@ -125,7 +134,7 @@ export async function withPipelinePaper<T>(o: PipelinePaperOptions, fn: (p: Pipe
     seed(sb.root, o);
     const cli: PipelinePaper['cli'] = (args, env = {}, input) =>
       new Promise((resolve, reject) => {
-        const child = spawn(process.execPath, [CLI_BIN, ...args], { cwd: sb.root, env: sb.spawnEnv(env), stdio: ['pipe', 'pipe', 'pipe'] });
+        const child = spawn(process.execPath, [CLI_BIN, ...args], { cwd: sb.root, env: sb.spawnEnv({ USERPROFILE: sb.dataDir, ...env }), stdio: ['pipe', 'pipe', 'pipe'] });
         let stdout = '';
         let stderr = '';
         const timer = setTimeout(() => child.kill('SIGKILL'), 120_000);
@@ -145,6 +154,13 @@ export async function withPipelinePaper<T>(o: PipelinePaperOptions, fn: (p: Pipe
           const r = await cli(['verify', String(s.n)]);
           if (r.status !== 0) throw new Error(`verify ${s.n} exited ${String(r.status)}:\n${r.stdout}\n${r.stderr}`);
         }
+      },
+      installHumanizerSkill(): string {
+        const dir = join(sb.dataDir, '.claude', 'skills', 'humanizer');
+        mkdirSync(dir, { recursive: true });
+        const file = join(dir, 'SKILL.md');
+        copyFileSync(HUMANIZER_SKILL_FIXTURE, file);
+        return file;
       },
     };
     return fn(paper);

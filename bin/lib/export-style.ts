@@ -34,7 +34,7 @@ export interface ExportStyle {
   readonly source: ExportStyleSource;
   /** How the terminal names it: the key, or the file name with the style's title. */
   readonly name: string;
-  /** How the terminal names the source: `--style`, `config.toml [project] citation_style`, `INTAKE.md`, `the <discipline> preset`. */
+  /** How the terminal names the source: `--style`, `config.toml [project] citation_style`, `INTAKE.md`, `the <discipline> discipline preset` or `the default preset (no discipline set)`. */
   readonly from: string;
   /** `in-text` or `note` for a local file (the bundled keys: unset). */
   readonly cslClass?: 'in-text' | 'note';
@@ -232,5 +232,6 @@ export function resolveExportStyle(paperRoot: string, flag?: string): ExportStyl
   });
   const style = resolved.citationStyle;
   if (style.source === 'intake') return { style: style.value, name: style.value, source: 'intake', from: 'INTAKE.md' };
-  return { style: style.value, name: style.value, source: 'preset', from: `the ${resolved.slug.value} preset` };
+  const presetFrom = resolved.slug.source === 'preset' ? 'the default preset (no discipline set)' : `the ${resolved.slug.value} discipline preset`;
+  return { style: style.value, name: style.value, source: 'preset', from: presetFrom };
 }
