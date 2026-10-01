@@ -154,6 +154,24 @@ function listMarker(line: string): ListMarker | null {
   return null;
 }
 
+/**
+ * pandoc's compactify over a list's items: when the last item ends with a
+ * paragraph and no other paragraph is in the list's items, that paragraph is
+ * plain; when no item holds a paragraph the list stays as it is; otherwise
+ * every plain block of every item becomes a paragraph (the list is loose).
+ */
+function compactify(items: Block[][]): Block[][] {
+  if (items.length === 0) return items;
+  const others = items.slice(0, -1).flat();
+  const final = items[items.length - 1] as Block[];
+  const last = final[final.length - 1];
+  if (last?.t === 'para' && ![...final.slice(0, -1), ...others].some((b) => b.t === 'para')) {
+    return [...items.slice(0, -1), [...final.slice(0, -1), { t: 'plain', children: last.children }]];
+  }
+  if (!items.flat().some((b) => b.t === 'para')) return items;
+  return items.map((blocks) => blocks.map((b) => (b.t === 'plain' ? ({ t: 'para', children: b.children } as Block) : b)));
+}
+
 /** The parse state for one container's lines. */
 class BlockParser {
   private readonly literal: Set<string>;
@@ -166,15 +184,14 @@ class BlockParser {
   parse(lines: readonly string[], inListItem = false): Block[] {
     const out: Block[] = [];
     let i = 0;
-    // pandoc needs a blank line before a heading, block quote or indented code block (except at the start).
-    let afterBlank = true;
     while (i < lines.length) {
       const line = lines[i] as string;
       if (isBlank(line)) {
-        afterBlank = true;
         i++;
         continue;
       }
+      // pandoc needs a blank line before a heading, a block quote or an indented code block (except at the start).
+      const afterBlank = i === 0 || isBlank(lines[i - 1] as string);
       const fence = FENCE_RE.exec(line);
       if (fence !== null) {
         const marker = fence[1] as string;
@@ -189,7 +206,6 @@ class BlockParser {
         }
         out.push({ t: 'code', text: body.join('\n') });
         i = Math.min(j + 1, lines.length);
-        afterBlank = false;
         continue;
       }
       const atx = ATX_RE.exec(line);
@@ -197,13 +213,11 @@ class BlockParser {
         const text = (atx[2] as string).replace(/[ \t]+#+[ \t]*$/, '').replace(/^#+$/, '');
         out.push({ t: 'heading', level: (atx[1] as string).length, children: parseInlines(text, this.literal) });
         i++;
-        afterBlank = false;
         continue;
       }
       if (HR_RE.test(line)) {
         out.push({ t: 'hr' });
         i++;
-        afterBlank = false;
         continue;
       }
       if (QUOTE_RE.test(line) && afterBlank) {
@@ -217,7 +231,6 @@ class BlockParser {
         }
         out.push({ t: 'quote', blocks: this.parse(body) });
         i = j;
-        afterBlank = false;
         continue;
       }
       const marker = listMarker(line);
@@ -225,7 +238,6 @@ class BlockParser {
         const r = this.parseList(lines, i, marker);
         out.push(r.block);
         i = r.next;
-        afterBlank = false;
         continue;
       }
       if (/^ {4}/.test(detab(line)) && (afterBlank || out.length === 0)) {
@@ -240,7 +252,6 @@ class BlockParser {
         while (body.length > 0 && body[body.length - 1] === '') body.pop();
         out.push({ t: 'code', text: body.join('\n') });
         i = j;
-        afterBlank = false;
         continue;
       }
       if (line.includes('|') && i + 1 < lines.length && TABLE_SEP_RE.test(lines[i + 1] as string) && (lines[i + 1] as string).includes('-')) {
@@ -248,7 +259,6 @@ class BlockParser {
         if (r !== null) {
           out.push(r.block);
           i = r.next;
-          afterBlank = false;
           continue;
         }
       }
@@ -267,13 +277,13 @@ class BlockParser {
         const level = (para[1] as string).trim().startsWith('=') ? 1 : 2;
         out.push({ t: 'heading', level, children: parseInlines((para[0] as string).trim(), this.literal) });
         i = j;
-        afterBlank = false;
         continue;
       }
       this.noteLiteralBlocks(para);
-      out.push({ t: 'para', children: parseInlines(para.join('\n'), this.literal) });
+      // In a list item a paragraph not followed by a blank line is plain text (pandoc's para / plain).
+      const plain = inListItem && !(j < lines.length && isBlank(lines[j] as string));
+      out.push({ t: plain ? 'plain' : 'para', children: parseInlines(para.join('\n'), this.literal) });
       i = j;
-      afterBlank = false;
     }
     return out;
   }
@@ -291,13 +301,14 @@ class BlockParser {
   private parseList(lines: readonly string[], from: number, first: ListMarker): { block: Block; next: number } {
     const items: Block[][] = [];
     let i = from;
-    let loose = false;
     let marker: ListMarker | null = first;
     while (marker !== null && i < lines.length) {
+      // An item's lines (its content column removed), with the blank lines
+      // after it, as pandoc's list-item reader collects them: a paragraph of
+      // the item followed by a blank line is a paragraph, else plain text.
       const body: string[] = [((lines[i] as string).length > marker.content ? detab(lines[i] as string).slice(marker.content) : '')];
       let j = i + 1;
       let sawBlank = false;
-      let blankInside = false;
       for (; j < lines.length; j++) {
         const l = detab(lines[j] as string);
         if (isBlank(l)) {
@@ -307,35 +318,30 @@ class BlockParser {
         }
         const indent = /^ */.exec(l)?.[0].length ?? 0;
         if (indent >= marker.content) {
-          if (sawBlank) blankInside = true;
           sawBlank = false;
           body.push(l.slice(marker.content));
           continue;
         }
         const next = listMarker(l);
-        if (next !== null && next.ordered === first.ordered && next.indent < marker.content) break;
+        // A list marker left of the content column ends the item (a sibling, or a list of another kind).
+        if (next !== null && next.indent < marker.content) break;
         if (sawBlank) break;
         // A lazy continuation line of the item's paragraph.
         body.push(l.trimStart());
       }
-      while (body.length > 0 && body[body.length - 1] === '') body.pop();
-      if (blankInside) loose = true;
       items.push(this.parse(body, true));
       i = j;
-      // The next item: a marker of the same kind right after (a blank line between items makes the list loose).
+      // The next item: a marker of the same kind (blank lines between items allowed).
       let k = i;
       while (k < lines.length && isBlank(lines[k] as string)) k++;
       const next = k < lines.length ? listMarker(detab(lines[k] as string)) : null;
       if (next === null || next.ordered !== first.ordered || (next.ordered && next.style !== first.style) || (!next.ordered && next.bullet !== first.bullet) || next.indent >= marker.content) {
         break;
       }
-      if (k > i) loose = true;
       i = k;
       marker = next;
     }
-    const finalItems = items.map((blocks) =>
-      loose ? blocks : blocks.map((b) => (b.t === 'para' ? ({ t: 'plain', children: b.children } as Block) : b)),
-    );
+    const finalItems = compactify(items);
     const block: Block = first.ordered
       ? { t: 'ordered', start: first.start ?? 1, style: first.style ?? 'decimal', items: finalItems }
       : { t: 'bullets', items: finalItems };
