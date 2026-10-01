@@ -630,6 +630,7 @@ export async function projectEstimate(args: {
         : { step: 'compile', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' },
     );
   }
+  // `unexported` (FINAL.md humanized, `pensmith export` left): the export makes no model call.
   const finalState = outlineOnly ? 'current' : finalMdState(root);
   if (finalState === 'absent' || finalState === 'stale') {
     rows.push(row(rt, root, 'done', doneCalls, stubbed));

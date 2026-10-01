@@ -1,10 +1,13 @@
-// tests/outline-record.test.ts — DONE-RECORD.json v2 (GRND-11, D-21-25; S-20).
+// tests/outline-record.test.ts — DONE-RECORD.json v3 (v2: GRND-11, D-21-25;
+// v3: Phase 21 review round 1, `exported` and `previous_annotated_sha256`; S-20).
 //
-//   - a v1 record (every record an older pensmith wrote) reads as a draft
-//     record through the versioned reader (migrations/done-record/v1_to_v2.ts),
-//     and the migration is pure and idempotent;
-//   - draft-mode done writes v2 with no `mode` (draft-mode records are
-//     otherwise unchanged); an outline record round-trips and is never read as
+//   - a v1 or v2 record (every record an older pensmith wrote) reads as a
+//     draft record through the versioned reader (migrations/done-record/
+//     v1_to_v2.ts, v2_to_v3.ts: a v2 draft record was written by an export,
+//     `exported: true`), and the migrations are pure and idempotent;
+//   - draft-mode done writes v3 with no `mode`; `pensmith humanize` writes
+//     `exported: false`, which finalMdState reads as `unexported`; an
+//     outline record round-trips and is never read as
 //     a draft record (finalMdState ignores it);
 //   - a record a newer pensmith wrote is `newer`: never read as this version's
 //     and never overwritten (both writers refuse, the file is byte-identical);
@@ -26,6 +29,8 @@ import {
   writeOutlineDoneRecord,
 } from '../bin/lib/done-record.js';
 import { migrate } from '../bin/lib/migrations/done-record/v1_to_v2.js';
+import { migrate as migrateV3 } from '../bin/lib/migrations/done-record/v2_to_v3.js';
+import { outlineDoneState } from '../bin/lib/done-record.js';
 import { OutlineDoneRecordSchema } from '../bin/lib/schemas/done-record.js';
 import { PensmithError } from '../bin/lib/exit-codes.js';
 
@@ -39,12 +44,12 @@ function paper(): string {
 
 const V1 = { $schemaVersion: 1, done_at: '2026-01-01T00:00:00.000Z', compiled_draft_sha256: sha('draft'), final_sha256: sha('final'), humanized: false };
 
-test('DONE-RECORD v1 → v2: a v1 record reads as a draft record; the migration is pure and idempotent', () => {
+test('DONE-RECORD v1 → v3: a v1 record reads as an exported draft record; the migration is pure and idempotent', () => {
   const root = paper();
   writeFileSync(join(root, '.paper', 'DONE-RECORD.json'), JSON.stringify(V1));
   const read = readDoneRecordFile(root);
   assert.equal(read.kind, 'draft');
-  assert.deepEqual(readDoneRecord(root), { ...V1, $schemaVersion: 2 });
+  assert.deepEqual(readDoneRecord(root), { ...V1, $schemaVersion: 3, exported: true });
   assert.equal(readOutlineDoneRecord(root), null);
   const input = { ...V1 };
   const once = migrate(input);
@@ -56,12 +61,53 @@ test('DONE-RECORD v1 → v2: a v1 record reads as a draft record; the migration 
   assert.equal(finalMdState(root), 'current');
 });
 
-test('DONE-RECORD v2: draft-mode done writes v2 with no mode; an outline record round-trips and is never a draft record', async () => {
+test('DONE-RECORD v2 → v3: a v2 draft record gains exported: true, a v2 outline record keeps its fields; pure and idempotent', () => {
+  const v2draft = { ...V1, $schemaVersion: 2 };
+  assert.deepEqual(migrateV3(v2draft), { ...V1, $schemaVersion: 3, exported: true });
+  assert.deepEqual(v2draft, { ...V1, $schemaVersion: 2 }, 'the input is not mutated');
+  const v2outline = { $schemaVersion: 2, mode: 'outline', done_at: V1.done_at, outline_sha256: sha('o'), bib_sha256: sha('b'), annotated_sha256: sha('a'), outline_exports: ['export/OUTLINE.md'] };
+  assert.deepEqual(migrateV3(v2outline), { ...v2outline, $schemaVersion: 3 });
+  const once = migrateV3(v2draft);
+  assert.deepEqual(migrateV3(once), once);
+  const root = paper();
+  writeFileSync(join(root, '.paper', 'DONE-RECORD.json'), JSON.stringify(v2outline));
+  assert.equal(readOutlineDoneRecord(root)?.$schemaVersion, 3);
+});
+
+test('DONE-RECORD v3 (review r1): `pensmith humanize` records exported: false — FINAL.md is `unexported` until an export renders it', async () => {
+  const root = paper();
+  writeFileSync(join(root, '.paper', 'DRAFT.md'), 'draft');
+  writeFileSync(join(root, '.paper', 'FINAL.md'), 'humanized');
+  await writeDoneRecord(root, { doneAt: V1.done_at, compiledDraftSha256: sha('draft'), finalSha256: sha('humanized'), humanized: true, exported: false });
+  assert.equal(finalMdState(root), 'unexported');
+  await writeDoneRecord(root, { doneAt: V1.done_at, compiledDraftSha256: sha('draft'), finalSha256: sha('humanized'), humanized: true, exported: true });
+  assert.equal(finalMdState(root), 'current');
+  await writeDoneRecord(root, { doneAt: V1.done_at, compiledDraftSha256: sha('older draft'), finalSha256: sha('humanized'), humanized: true, exported: false });
+  assert.equal(finalMdState(root), 'stale', 'a recompile since: done again');
+});
+
+test('DONE-RECORD v3 (review r1): a done stopped between its outline record and the annotated bibliography leaves done\'s earlier text — stale, never edited', async () => {
+  const root = paper();
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), 'outline');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), 'bib');
+  writeFileSync(join(root, '.paper', 'ANNOTATED-BIBLIOGRAPHY.md'), 'older annotated');
+  mkdirSync(join(root, '.paper', 'export'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'export', 'OUTLINE.md'), 'x');
+  await writeOutlineDoneRecord(root, { doneAt: V1.done_at, outlineSha256: sha('outline'), bibSha256: sha('bib'), annotatedSha256: sha('new annotated'), previousAnnotatedSha256: sha('older annotated'), exports: ['export/OUTLINE.md'] });
+  assert.equal(outlineDoneState(root).state, 'stale');
+  writeFileSync(join(root, '.paper', 'ANNOTATED-BIBLIOGRAPHY.md'), 'new annotated');
+  assert.equal(outlineDoneState(root).state, 'current');
+  writeFileSync(join(root, '.paper', 'ANNOTATED-BIBLIOGRAPHY.md'), 'typed by hand');
+  assert.equal(outlineDoneState(root).state, 'edited');
+});
+
+test('DONE-RECORD v3: draft-mode done writes v3 with no mode; an outline record round-trips and is never a draft record', async () => {
   const root = paper();
   await writeDoneRecord(root, { doneAt: V1.done_at, compiledDraftSha256: V1.compiled_draft_sha256, finalSha256: V1.final_sha256, humanized: true });
   const draft = JSON.parse(readFileSync(join(root, '.paper', 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
-  assert.deepEqual(Object.keys(draft), ['$schemaVersion', 'done_at', 'compiled_draft_sha256', 'final_sha256', 'humanized']);
-  assert.equal(draft['$schemaVersion'], 2);
+  assert.deepEqual(Object.keys(draft), ['$schemaVersion', 'done_at', 'compiled_draft_sha256', 'final_sha256', 'humanized', 'exported']);
+  assert.equal(draft['$schemaVersion'], 3);
+  assert.equal(draft['exported'], true);
 
   await writeOutlineDoneRecord(root, {
     doneAt: V1.done_at,
@@ -80,16 +126,16 @@ test('DONE-RECORD v2: draft-mode done writes v2 with no mode; an outline record 
   assert.equal(finalMdState(root), 'edited', 'a FINAL.md no draft-mode done recorded is never "complete"');
 });
 
-test('DONE-RECORD v2: a record a newer pensmith wrote is never read as this version\'s and never overwritten', async () => {
+test('DONE-RECORD v3: a record a newer pensmith wrote is never read as this version\'s and never overwritten', async () => {
   const root = paper();
   const file = join(root, '.paper', 'DONE-RECORD.json');
-  const newer = JSON.stringify({ $schemaVersion: 3, mode: 'something-new' });
+  const newer = JSON.stringify({ $schemaVersion: 4, mode: 'something-new' });
   writeFileSync(file, newer);
-  assert.deepEqual(readDoneRecordFile(root), { kind: 'newer', version: 3 });
+  assert.deepEqual(readDoneRecordFile(root), { kind: 'newer', version: 4 });
   assert.equal(readDoneRecord(root), null);
   await assert.rejects(
     writeDoneRecord(root, { doneAt: V1.done_at, compiledDraftSha256: V1.compiled_draft_sha256, finalSha256: V1.final_sha256, humanized: false }),
-    (e: unknown) => e instanceof PensmithError && /written by a newer pensmith \(record v3; this one reads v2\)/.test(e.message),
+    (e: unknown) => e instanceof PensmithError && /written by a newer pensmith \(record v4; this one reads v3\)/.test(e.message),
   );
   await assert.rejects(
     writeOutlineDoneRecord(root, { doneAt: V1.done_at, outlineSha256: sha('o'), bibSha256: sha('b'), annotatedSha256: sha('a'), exports: ['export/OUTLINE.md'] }),
@@ -100,8 +146,8 @@ test('DONE-RECORD v2: a record a newer pensmith wrote is never read as this vers
   assert.deepEqual(readDoneRecordFile(root), { kind: 'invalid' });
 });
 
-test('DONE-RECORD v2: the outline record\'s export names are validated (no other path can reach the router\'s words)', () => {
-  const base = { $schemaVersion: 2, mode: 'outline', done_at: V1.done_at, outline_sha256: sha('o'), bib_sha256: sha('b'), annotated_sha256: sha('a') };
+test('DONE-RECORD v3: the outline record\'s export names are validated (no other path can reach the router\'s words)', () => {
+  const base = { $schemaVersion: 3, mode: 'outline', done_at: V1.done_at, outline_sha256: sha('o'), bib_sha256: sha('b'), annotated_sha256: sha('a') };
   for (const ok of ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.docx', 'export/OUTLINE.dry-run.pdf', 'export/ANNOTATED-BIBLIOGRAPHY.tex']) {
     assert.equal(OutlineDoneRecordSchema.safeParse({ ...base, outline_exports: [ok] }).success, true, ok);
   }

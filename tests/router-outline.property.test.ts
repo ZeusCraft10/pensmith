@@ -131,7 +131,7 @@ function writePaper(s: PaperState): string {
     'stale-bib': JSON.stringify(outlineRecord),
     draft: JSON.stringify({ $schemaVersion: 2, ...draftRecord }),
     v1: JSON.stringify({ $schemaVersion: 1, ...draftRecord }),
-    newer: JSON.stringify({ $schemaVersion: 3, mode: 'outline' }),
+    newer: JSON.stringify({ $schemaVersion: 4, mode: 'outline' }),
     junk: '{ not json',
   };
   const body = records[s.record];

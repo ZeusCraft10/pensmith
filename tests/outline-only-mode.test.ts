@@ -23,7 +23,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openChainSandbox, type ChainSandbox } from './helpers/e2e-chain.js';
 import { scanExportFile } from '../bin/lib/export/zero-trace.js';
@@ -89,7 +89,7 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   assert.match(outlineMd, /^## (References|Bibliography)$/m, 'the listed sources are a References list');
   assert.doesNotMatch(outlineMd, /\[@/, 'every citation rendered in the style');
   const record = JSON.parse(readFileSync(join(paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
-  assert.equal(record['$schemaVersion'], 2);
+  assert.equal(record['$schemaVersion'], 3);
   assert.equal(record['mode'], 'outline');
   assert.deepEqual(record['outline_exports'], ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md']);
 
@@ -115,6 +115,18 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   const record2 = JSON.parse(readFileSync(join(paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
   assert.deepEqual(record2['outline_exports'], ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md', 'export/OUTLINE.docx', 'export/ANNOTATED-BIBLIOGRAPHY.docx']);
   assert.match((await sb.run(['status'])).stdout, /\.paper\/export\/OUTLINE\.docx/);
+
+  // Review round 1: an earlier export removed since is not carried into the
+  // record — the routed done re-exports and the paper is complete again (it
+  // looped at `done` forever).
+  rmSync(join(exportDir, 'OUTLINE.docx'));
+  assert.match((await sb.run(['status'])).stdout, /next: done/, 'a recorded export is gone: done again');
+  const redo = await sb.run(['--yolo']);
+  assert.equal(redo.status, 0, `${redo.stdout}\n${redo.stderr}`);
+  assert.match(redo.stderr, /^pensmith: ran done; next: status \(done/m);
+  const record3 = JSON.parse(readFileSync(join(paper, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
+  assert.deepEqual(record3['outline_exports'], ['export/OUTLINE.md', 'export/ANNOTATED-BIBLIOGRAPHY.md', 'export/ANNOTATED-BIBLIOGRAPHY.docx']);
+  assert.match((await sb.run(['status'])).stdout, /^ {2}current: complete$/m);
 
   // An edited annotated bibliography is attention; done refuses to replace it.
   appendFileSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md'), '\nMy own note.\n');

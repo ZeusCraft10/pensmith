@@ -868,12 +868,15 @@ export const doneCommand = defineCommand({
         if (!humanized) return { ok: true, humanized: false };
         // D-21-19: FINAL.md is the finished paper; an export is a rendering of it.
         await atomicWriteFile(finalMdPath, exportedText);
-        await writeDoneRecord(paperRoot, { doneAt: new Date().toISOString(), compiledDraftSha256: sha(draftMd), finalSha256: sha(exportedText), humanized: true });
+        // Not exported yet (DONE-RECORD v3 `exported: false`): the router names
+        // `pensmith export` until an export renders this FINAL.md.
+        await writeDoneRecord(paperRoot, { doneAt: new Date().toISOString(), compiledDraftSha256: sha(draftMd), finalSha256: sha(exportedText), humanized: true, exported: false });
         writeOut('pensmith done: wrote .paper/FINAL.md (humanized; `pensmith export` renders it)\n');
         return { ok: true, humanized: true };
       }
-    } else if (finalMdState(paperRoot) === 'current') {
-      // --only export of done's own, current FINAL.md (D-21-23).
+    } else if (finalMdState(paperRoot) === 'current' || finalMdState(paperRoot) === 'unexported') {
+      // --only export of done's own, current FINAL.md (D-21-23) — the humanized
+      // text `pensmith humanize` wrote included.
       let finalMd: string | null = null;
       try {
         finalMd = readFileSync(finalMdPath, 'utf8');
@@ -1021,6 +1024,7 @@ export const doneCommand = defineCommand({
       compiledDraftSha256: sha(draftMd),
       finalSha256: sha(exportedText),
       humanized,
+      exported: true,
     });
 
     writeOut(`pensmith done: exported ${result.outputPath}\n`);

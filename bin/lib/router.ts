@@ -98,7 +98,7 @@ import { RETRY_ONLINE_VERDICTS } from './verify/verdicts.js';
 import { isResearchDone } from './research-sentinel.js';
 import { ACCEPTABLE_QUOTE_VERDICT } from './verify/verdicts.js';
 import { readCompileInputs, fileSha256 } from './compile-inputs.js';
-import { editedAnnotatedReason, editedFinalReason, finalMdState, newerDoneRecordReason, outlineDoneState } from './done-record.js';
+import { editedAnnotatedReason, editedFinalReason, finalMdState, newerDoneRecordReason, outlineDoneState, readDoneRecordFile, unexportedFinalReason } from './done-record.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -722,8 +722,16 @@ export async function resolveNextAction(
     // write — edited or written by hand — is attention, because done neither
     // exports nor replaces it (it refuses, naming the same remedy). done
     // writes the record on every export, so this never loops.
+    // A DONE-RECORD.json a newer pensmith wrote: done refuses to overwrite it
+    // (exit 1) on every run, so routing there would loop — attention, as the
+    // outline route reports it (review round 1).
+    const doneRecord = readDoneRecordFile(paperRoot);
+    if (doneRecord.kind === 'newer') return { verb: 'status', reason: 'attention', detail: newerDoneRecordReason(paperRoot, doneRecord.version) };
     const finalState = finalMdState(paperRoot);
     if (finalState === 'edited') return { verb: 'status', reason: 'attention', detail: editedFinalReason(paperRoot) };
+    // `pensmith humanize` wrote FINAL.md and nothing exported it: export/ may
+    // hold an older text, so the paper is not complete (review round 1).
+    if (finalState === 'unexported') return { verb: 'status', reason: 'attention', detail: unexportedFinalReason(paperRoot) };
     if (finalState !== 'current') {
       // VRFY-27: done exports only a compiled draft whose COMPILE-INPUTS.json
       // proves it is the one compile wrote. With no usable record (a draft an

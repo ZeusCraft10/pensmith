@@ -122,3 +122,34 @@ test('GRND-11: the annotated bibliography — the reference in the style, tier, 
   assert.match(ieee, /^\\\[1\\\] T\. S\. Kuhn, /m, 'a numeric style numbers the sources in outline order');
   assert.match(ieee, /^\\\[2\\\] A\. Lindqvist and E\. Berg, /m);
 });
+
+// Review round 1 (carry-over 4): a free-text value from LIBRARY.json — the
+// source evaluator's `why_relevant`, an abstract — that carries an attribution,
+// a direct quote or an identifier no section verified never reaches the
+// export: it is left out, and done says so. The references stay (verified).
+test('GRND-11 (review r1): a why_relevant or abstract holding an author-date or numbered attribution, a quote or a DOI is left out and named', async () => {
+  const outline = parseOutline(OUTLINE);
+  const entries = parseBibEntries(BIB).entries;
+  const omitted: string[] = [];
+  const md = await annotatedBibliographyMarkdown({
+    title: outline.paper_title,
+    sources: listedSources(outline),
+    entries,
+    library: new Map([
+      ['kuhn1962', libEntry({ citekey: 'kuhn1962', why_relevant: 'Smith et al. (2019) showed this review underpins every later benchmark; see also Jones (2021, p. 4).', abstract: 'A study of paradigms. It extends earlier work [3] on revolutions.' })],
+      ['berg2012', libEntry({ citekey: 'berg2012', why_relevant: 'It measures trust in Chinese firms directly.', abstract: 'Trust grew with "the opening of every coastal market to foreign capital" between 1990 and 2000. See doi:10.9999/other.2001 for the data.' })],
+    ]),
+    style: 'apa',
+    onOmitted: (l) => omitted.push(l),
+  });
+  assert.doesNotMatch(md, /Smith et al\. \(2019\)|Jones \(2021|\[3\]|10\.9999\/other|opening of every coastal market/, 'no unverified attribution, quote or identifier is exported');
+  assert.match(md, /^- \*\*Why it is relevant:\*\* left out — it holds an attribution, a quotation or an identifier no section verified$/m);
+  assert.match(md, /^- \*\*Summary \(abstract excerpt\):\*\* left out — it holds an attribution, a quotation or an identifier no section verified$/m);
+  assert.match(md, /^- \*\*Why it is relevant:\*\* It measures trust in Chinese firms directly\.$/m, 'a clean value is kept');
+  assert.match(md, /Kuhn, T\. S\. \(1962\)/, 'the verified reference stays');
+  assert.equal(omitted.length, 3, omitted.join('\n'));
+  assert.match(omitted[0] ?? '', /^the annotated bibliography leaves out kuhn1962's abstract excerpt: it holds UNSUPPORTED-FORM `\[3\]`, which no section verified$/);
+  assert.match(omitted.join('\n'), /kuhn1962's "why it is relevant" note: it holds UNSUPPORTED-FORM `Smith et al\. \(2019\)`/);
+  assert.match(omitted.join('\n'), /berg2012's abstract excerpt: it holds a direct quote/);
+  assert.deepEqual(extractCitedKeysForVerification(md), []);
+});

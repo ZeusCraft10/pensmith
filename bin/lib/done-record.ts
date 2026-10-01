@@ -16,8 +16,13 @@
 //   - `absent`:  no FINAL.md — done has not run for this paper;
 //   - `current`: FINAL.md is done's text and DRAFT.md is the compiled draft
 //                done judged (the record's, or — with no record — FINAL.md
-//                itself: the export was the compiled draft) — the paper is
-//                complete;
+//                itself: the export was the compiled draft), and an export
+//                rendered it — the paper is complete;
+//   - `unexported`: FINAL.md is the humanized text `pensmith humanize` wrote
+//                of the current compiled draft, and nothing has exported it
+//                yet (the record's `exported: false`, v3; review round 1) —
+//                export/ may hold an older text, so the paper is not complete:
+//                the router names `pensmith export` (unexportedFinalReason);
 //   - `stale`:   FINAL.md is done's text of an older compiled draft (a
 //                recompile since), or FINAL.md is byte-for-byte the compiled
 //                draft with no record — done replaces it, and nothing written
@@ -42,7 +47,9 @@
 //                hold the recorded bytes and every recorded export is there —
 //                the outline-only paper is complete;
 //   - `stale`:   the outline or the bibliography changed since (or an export
-//                is gone) — done exports again;
+//                is gone, or a done stopped between writing its record and
+//                the annotated bibliography — the file is then done's earlier
+//                text, `previous_annotated_sha256`) — done exports again;
 //   - `edited`:  ANNOTATED-BIBLIOGRAPHY.md is not the text done wrote (edited
 //                or written by hand) — done never replaces it: it refuses and
 //                the router reports attention, naming the remedy;
@@ -60,6 +67,7 @@ import { fileSha256 } from './compile-inputs.js';
 import { EXIT_ERROR, PensmithError } from './exit-codes.js';
 import { paperDir } from './paths.js';
 import { migrate as v1ToV2 } from './migrations/done-record/v1_to_v2.js';
+import { migrate as v2ToV3 } from './migrations/done-record/v2_to_v3.js';
 import {
   DONE_RECORD_SCHEMA_VERSION,
   DoneRecordFileSchema,
@@ -86,8 +94,8 @@ export type DoneRecordRead =
   | { readonly kind: 'outline'; readonly record: OutlineDoneRecord };
 
 /**
- * Read DONE-RECORD.json through the versioned reader: a v1 record is migrated
- * in memory (v1_to_v2), a record from a newer pensmith is `newer` (never
+ * Read DONE-RECORD.json through the versioned reader: a v1 or v2 record is
+ * migrated in memory (v1_to_v2, v2_to_v3), a record from a newer pensmith is `newer` (never
  * read as this version's), anything that does not parse is `invalid`.
  * Never throws.
  */
@@ -101,6 +109,7 @@ export function readDoneRecordFile(paperRoot: string): DoneRecordRead {
   const version = typeof value === 'object' && value !== null ? (value as Record<string, unknown>)['$schemaVersion'] : undefined;
   if (typeof version === 'number' && Number.isInteger(version) && version > DONE_RECORD_SCHEMA_VERSION) return { kind: 'newer', version };
   if (version === 1) value = v1ToV2(value);
+  if (version === 1 || version === 2) value = v2ToV3(value);
   const parsed = DoneRecordFileSchema.safeParse(value);
   if (!parsed.success) return { kind: 'invalid' };
   return parsed.data.mode === 'outline'
@@ -137,7 +146,14 @@ export function assertDoneRecordWritable(paperRoot: string): void {
 /** Write the record of an export done just made (done's session lock is held). A newer record is never overwritten. */
 export async function writeDoneRecord(
   paperRoot: string,
-  r: { readonly doneAt: string; readonly compiledDraftSha256: string; readonly finalSha256: string; readonly humanized: boolean },
+  r: {
+    readonly doneAt: string;
+    readonly compiledDraftSha256: string;
+    readonly finalSha256: string;
+    readonly humanized: boolean;
+    /** False only for `pensmith humanize` (`done --only humanize`): FINAL.md written, nothing exported. Default true. */
+    readonly exported?: boolean;
+  },
 ): Promise<void> {
   assertDoneRecordWritable(paperRoot);
   const record: DoneRecord = DoneRecordSchema.parse({
@@ -146,11 +162,12 @@ export async function writeDoneRecord(
     compiled_draft_sha256: r.compiledDraftSha256,
     final_sha256: r.finalSha256,
     humanized: r.humanized,
+    exported: r.exported ?? true,
   });
   await atomicWriteFile(doneRecordPath(paperRoot), JSON.stringify(record, null, 2) + '\n');
 }
 
-export type FinalMdState = 'absent' | 'current' | 'stale' | 'edited';
+export type FinalMdState = 'absent' | 'current' | 'unexported' | 'stale' | 'edited';
 
 /**
  * The sha256 the paper-level `.paper/VERIFICATION.md` names as the text done
@@ -175,7 +192,10 @@ export function finalMdState(paperRoot: string): FinalMdState {
   if (finalSha === '') return 'edited'; // present but unreadable: never replaced, never "complete"
   const draftSha = fileSha256(join(dir, 'DRAFT.md'));
   const record = readDoneRecord(paperRoot);
-  if (record !== null && record.final_sha256 === finalSha) return record.compiled_draft_sha256 === draftSha ? 'current' : 'stale';
+  if (record !== null && record.final_sha256 === finalSha) {
+    if (record.compiled_draft_sha256 !== draftSha) return 'stale';
+    return record.exported ? 'current' : 'unexported';
+  }
   // Review round 2: done's export with no record of it — a paper an older
   // pensmith finished (recompiled since or not), or a done stopped after its
   // export and before the record. The text done checked and exported is named
@@ -184,6 +204,15 @@ export function finalMdState(paperRoot: string): FinalMdState {
   // replaced by the next done.
   if (verificationCheckedSha256(paperRoot) === finalSha) return finalSha === draftSha ? 'current' : 'stale';
   return finalSha === draftSha ? 'stale' : 'edited';
+}
+
+/** The router's attention detail for an `unexported` FINAL.md (the humanized text no export has rendered yet). */
+export function unexportedFinalReason(paperRoot: string): string {
+  const dir = basename(paperDir(paperRoot));
+  return (
+    `${dir}/FINAL.md holds the humanized text \`pensmith humanize\` wrote, and no export has rendered it yet — ` +
+    '`pensmith export` exports it (`pensmith done` humanizes the compiled draft again and exports that)'
+  );
 }
 
 /**
@@ -220,6 +249,8 @@ export async function writeOutlineDoneRecord(
     readonly outlineSha256: string;
     readonly bibSha256: string;
     readonly annotatedSha256: string;
+    /** The sha256 of done's own annotated bibliography this record replaces (written after the record), when there is one. */
+    readonly previousAnnotatedSha256?: string;
     /** The export files, relative to the paper folder (`export/OUTLINE.md`, …). */
     readonly exports: readonly string[];
   },
@@ -232,6 +263,7 @@ export async function writeOutlineDoneRecord(
     outline_sha256: r.outlineSha256,
     bib_sha256: r.bibSha256,
     annotated_sha256: r.annotatedSha256,
+    ...(r.previousAnnotatedSha256 !== undefined && r.previousAnnotatedSha256 !== r.annotatedSha256 ? { previous_annotated_sha256: r.previousAnnotatedSha256 } : {}),
     outline_exports: [...r.exports],
   });
   await atomicWriteFile(doneRecordPath(paperRoot), JSON.stringify(record, null, 2) + '\n');
@@ -256,6 +288,9 @@ export function outlineDoneState(paperRoot: string): OutlineDoneRead {
   const annotated = annotatedBibliographyPath(paperRoot);
   if (existsSync(annotated)) {
     const sha = fileSha256(annotated);
+    // done writes its record before the file: the text of done's earlier run,
+    // left by a done stopped between the two, is done's own — written again.
+    if (record !== null && sha !== '' && sha !== record.annotated_sha256 && sha === record.previous_annotated_sha256) return { state: 'stale', record };
     // Not the text done wrote (or unreadable): never replaced, never "complete".
     if (record === null || sha === '' || sha !== record.annotated_sha256) return { state: 'edited', record };
   } else {

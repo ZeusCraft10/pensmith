@@ -34,10 +34,24 @@
 //      sources) through exporter.ts exportDraft — the writers, the scrub and
 //      the zero-trace scan of every written file;
 //   6. records the registrar answers as last_verified and the re-checked
-//      retraction statuses (the library writer), then writes
-//      `.paper/ANNOTATED-BIBLIOGRAPHY.md` and the DONE-RECORD v2 outline record
-//      (the sha256 of OUTLINE.md, CITATIONS.bib — as it stands after those
-//      library writes — and the annotated bibliography, with the export files).
+//      retraction statuses (the library writer), then writes the DONE-RECORD
+//      outline record (the sha256 of OUTLINE.md, CITATIONS.bib — as it stands
+//      after those library writes — and the annotated bibliography, with the
+//      export files: this run's, and an earlier run's of the same inputs that
+//      are still there) and only then `.paper/ANNOTATED-BIBLIOGRAPHY.md` — the
+//      record names the text it replaces (`previous_annotated_sha256`), so a
+//      done stopped between the two writes leaves a stale paper, never an
+//      "edited" one (review round 1).
+//
+// The annotated bibliography is not prose the gate reads, and nothing in it
+// may carry an attribution no section verified (carry-over 4): the
+// references are the verified entries rendered by the export's engine, the
+// titles are the outline's (gated in step 2), and each free-text value from
+// LIBRARY.json — the abstract excerpt and `why_relevant` (the source
+// evaluator's model output; a shared paper's library may carry any text) — is
+// read by the gate's text scanners, the quote reader and the identifier
+// reader first: a value holding an author-date or numbered attribution, a
+// direct quote or an identifier is omitted, and done says so.
 //
 // No humanizer, detector score or plagiarism check runs: there is no prose.
 // An annotated bibliography done did not write is never replaced (refused,
@@ -46,7 +60,7 @@
 // style resolution does, D-21-24).
 
 import { createHash } from 'node:crypto';
-import { readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { extractCitedKeysForVerification } from './citation-token.js';
@@ -72,7 +86,9 @@ import { orderedOutlineSections, outlineSectionId, type OutlineDocument } from '
 import { out } from './output-sink.js';
 import { paperDir } from './paths.js';
 import { registeredSectionsSync, sectionRegistryProblem } from './section-registry.js';
-import { gateRefusals, loadBibliography, recheckKeys, recomputeGate } from './verify/gate.js';
+import { gateRefusals, loadBibliography, recheckKeys, recomputeGate, TEXT_SCANNERS } from './verify/gate.js';
+import { extractQuotes } from './quote-extractor.js';
+import { findBareIdentifiers } from './doi.js';
 import { recheckUnknownRetractions } from './done-gate.js';
 
 /** The formats an outline export can be written in (exporter.ts ExportFormat). */
@@ -205,6 +221,24 @@ export interface AnnotatedBibliographyInput {
   /** LIBRARY.json's entries by citekey (tier, abstract, why_relevant). */
   readonly library: ReadonlyMap<string, LibraryEntry>;
   readonly style: string;
+  /** Called once per free-text value left out (uncheckedAttribution), with the line done prints. */
+  readonly onOmitted?: (line: string) => void;
+}
+
+/**
+ * What a free-text value of the annotated bibliography carries that no
+ * section verified — the gate's text findings (an author-date, numbered or
+ * other unsupported attribution, an unparseable citation), a direct quote, a
+ * bare identifier — as a short phrase, or null when it carries none.
+ */
+export function uncheckedAttribution(value: string): string | null {
+  const finding = TEXT_SCANNERS.flatMap((scan) => scan(value))[0];
+  if (finding !== undefined) return `${finding.verdict} \`${finding.text}\``;
+  const quote = extractQuotes(value)[0];
+  if (quote !== undefined) return `a direct quote ("${quote.text.slice(0, 40)}${quote.text.length > 40 ? '…' : ''}")`;
+  const id = findBareIdentifiers(value)[0];
+  if (id !== undefined) return `an identifier (${id.text})`;
+  return null;
 }
 
 /**
@@ -227,10 +261,22 @@ export async function annotatedBibliographyMarkdown(input: AnnotatedBibliography
     lines.push(ref !== undefined ? bibEntryMarkdown(ref) : escapedLine(s.key), '');
     const abstract = abstractExcerpt(lib?.abstract ?? (typeof bibEntry?.['abstract'] === 'string' ? bibEntry['abstract'] : null));
     const why = lib?.why_relevant ?? null;
+    // Carry-over 4: a free-text value that carries an attribution, a quote or
+    // an identifier no section verified is left out, and done says so.
+    const checked = (label: string, value: string | null): { value: string | null; omitted: string | null } => {
+      if (value === null) return { value, omitted: null };
+      const hit = uncheckedAttribution(plainText(value).replace(/\s+/gu, ' '));
+      if (hit === null) return { value, omitted: null };
+      input.onOmitted?.(`the annotated bibliography leaves out ${s.key}'s ${label}: it holds ${hit}, which no section verified`);
+      // The file never repeats what was left out (done's note names it).
+      return { value: null, omitted: 'left out — it holds an attribution, a quotation or an identifier no section verified' };
+    };
+    const a = checked('abstract excerpt', abstract);
+    const w = checked('"why it is relevant" note', why);
     lines.push(
       `- **Type:** ${tierLabel(lib?.tier)}`,
-      `- **Summary (abstract excerpt):** ${abstract !== null ? `“${escapeMarkdownText(abstract)}”` : 'no abstract available'}`,
-      `- **Why it is relevant:** ${why !== null ? escapedLine(why) : 'not recorded'}`,
+      `- **Summary (abstract excerpt):** ${a.value !== null ? `“${escapeMarkdownText(a.value)}”` : (a.omitted ?? 'no abstract available')}`,
+      `- **Why it is relevant:** ${w.value !== null ? escapedLine(w.value) : (w.omitted ?? 'not recorded')}`,
       `- **Supports:** ${s.sections.map((x) => `§${x.id} ${escapedLine(x.title)}`).join('; ')}`,
       '',
     );
@@ -334,7 +380,9 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
   const libraryByKey = new Map((library?.entries ?? []).map((e) => [e.citekey, e] as const));
   const wanted = new Set(keys);
   const entries = gate.bib.entries.filter((e) => wanted.has(String(e['id'])));
-  const annotated = await annotatedBibliographyMarkdown({ title: outline.paper_title, sources, entries, library: libraryByKey, style: opts.style });
+  const omitted: string[] = [];
+  const annotated = await annotatedBibliographyMarkdown({ title: outline.paper_title, sources, entries, library: libraryByKey, style: opts.style, onOmitted: (l) => omitted.push(l) });
+  for (const l of omitted) out(`pensmith done: note — ${l}\n`);
   if (extractCitedKeysForVerification(annotated).length > 0) {
     throw new ExportFormatError('the annotated bibliography would hold a citation the gate did not read — nothing was exported');
   }
@@ -372,7 +420,6 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
       if (!(e instanceof LibraryNotFoundError)) throw e;
     }
   }
-  await atomicWriteFile(annotatedPath, annotated);
   const exportDir = join(dir, 'export');
   const made = [outlineExport.outputPath, annotatedExport.outputPath].map((p) => `export/${basename(p)}`);
   const outlineSha = createHash('sha256').update(outlineBytes).digest('hex');
@@ -385,8 +432,21 @@ export async function runOutlineDone(opts: OutlineDoneOptions): Promise<OutlineD
   const prior = state.record;
   const judgedBibSha = gate.bib.text !== undefined ? sha256(gate.bib.text) : '';
   const same = prior !== null && prior.outline_sha256 === outlineSha && prior.bib_sha256 === judgedBibSha && prior.annotated_sha256 === annotatedSha;
-  const exports = [...new Set([...(same ? prior.outline_exports : []), ...made])];
-  await writeOutlineDoneRecord(paperRoot, { doneAt: new Date().toISOString(), outlineSha256: outlineSha, bibSha256: bibSha, annotatedSha256: annotatedSha, exports });
+  // An earlier export that is gone (cleaned, deleted) is not listed: the
+  // record would never be current again (review round 1).
+  const kept = same ? prior.outline_exports.filter((p) => existsSync(join(dir, p))) : [];
+  const exports = [...new Set([...kept, ...made])];
+  // The record first, naming the text it replaces; then the file (see the header).
+  const previous = existsSync(annotatedPath) ? fileSha256(annotatedPath) : '';
+  await writeOutlineDoneRecord(paperRoot, {
+    doneAt: new Date().toISOString(),
+    outlineSha256: outlineSha,
+    bibSha256: bibSha,
+    annotatedSha256: annotatedSha,
+    ...(previous !== '' ? { previousAnnotatedSha256: previous } : {}),
+    exports,
+  });
+  await atomicWriteFile(annotatedPath, annotated);
 
   out(`pensmith done: outline only — wrote ${folder}/ANNOTATED-BIBLIOGRAPHY.md and exported ${listed(made.map((m) => `${folder}/${m}`))}\n`);
   if (networkMode().dryRun) {

@@ -70,7 +70,8 @@ test('VRFY-26 (built CLI, no humanizer): done leaves FINAL.md = the text it expo
   assert.equal(d.status, EXIT_OK, `${d.stdout}\n${d.stderr}`);
   assert.equal(readFileSync(paperFile(p, 'FINAL.md'), 'utf8'), readFileSync(paperFile(p, 'DRAFT.md'), 'utf8'), 'FINAL.md is the compiled draft done judged');
   const record = JSON.parse(readFileSync(paperFile(p, 'DONE-RECORD.json'), 'utf8')) as Record<string, unknown>;
-  assert.equal(record['$schemaVersion'], 2); // DONE-RECORD v2 (Phase 21, GRND-11): a draft record is v1's fields under v2
+  assert.equal(record['$schemaVersion'], 3); // DONE-RECORD v3 (Phase 21 review round 1): a draft record carries `exported`
+  assert.equal(record['exported'], true, 'an export rendered this FINAL.md');
   assert.equal(record['compiled_draft_sha256'], sha(paperFile(p, 'DRAFT.md')));
   assert.equal(record['final_sha256'], sha(paperFile(p, 'FINAL.md')));
   assert.equal(record['humanized'], false);
@@ -209,18 +210,30 @@ test('review round 2 (built CLI, upgrade path): a FINAL.md an older pensmith exp
 test('Phase 21 integration (built CLI): a DONE-RECORD.json a newer pensmith wrote makes an exporting or humanizing done refuse BEFORE any step — exit 1, nothing exported, FINAL.md and the record untouched; --only score still runs', () => {
   const p = finishedPaper('done-record-newer');
   const recordFile = paperFile(p, 'DONE-RECORD.json');
-  const newer = JSON.stringify({ $schemaVersion: 3, mode: 'something-new' });
+  const newer = JSON.stringify({ $schemaVersion: 4, mode: 'something-new' });
   writeFileSync(recordFile, newer);
   for (const args of [['done', '--yolo', '--format', 'md'], ['export', '--yolo', '--format', 'md'], ['humanize']]) {
     const d = p.cli(args, ENV);
     assert.equal(d.status, 1, `${args.join(' ')}: ${d.stdout}\n${d.stderr}`);
-    assert.match(d.stderr, /^pensmith: \.paper\/DONE-RECORD\.json was written by a newer pensmith \(record v3; this one reads v2\) [-—] upgrade pensmith to finish this paper \(the record is left as it is\)$/m, args.join(' '));
+    assert.match(d.stderr, /^pensmith: \.paper\/DONE-RECORD\.json was written by a newer pensmith \(record v4; this one reads v3\) [-—] upgrade pensmith to finish this paper \(the record is left as it is\)$/m, args.join(' '));
     assert.doesNotMatch(d.stdout + d.stderr, STACK_LINE, 'one line, no stack trace');
     assert.doesNotMatch(d.stdout, /plagiarism check|honesty check|humanizer/, `${args.join(' ')}: no step ran before the refusal`);
     assert.equal(existsSync(join(p.root, '.paper', 'export')), false, `${args.join(' ')}: nothing exported`);
     assert.equal(existsSync(paperFile(p, 'FINAL.md')), false, `${args.join(' ')}: no FINAL.md`);
     assert.equal(readFileSync(recordFile, 'utf8'), newer, `${args.join(' ')}: the record is byte-identical`);
   }
+  // Review round 1: the router reports the newer record as attention (as the
+  // outline route does) instead of sending a bare run to a done that can only
+  // refuse (exit 1) run after run.
+  writeFileSync(paperFile(p, 'FINAL.md'), readFileSync(paperFile(p, 'DRAFT.md')));
+  const st = p.cli(['status'], ENV);
+  assert.match(st.stdout, /current: needs attention/);
+  assert.match(st.stdout, /DONE-RECORD\.json was written by a newer pensmith \(record v4; this one reads v3\)/);
+  assert.doesNotMatch(st.stdout, /next: done/);
+  const bareNewer = p.cli(['--yolo'], ENV);
+  assert.equal(bareNewer.status, EXIT_OK, `${bareNewer.stdout}\n${bareNewer.stderr}`);
+  assert.doesNotMatch(bareNewer.stderr, /ran done/, 'no done that can only refuse');
+  rmSync(paperFile(p, 'FINAL.md'));
   // A step that writes nothing (the score) still runs: the record is only read.
   const score = p.cli(['score'], ENV);
   assert.equal(score.status, EXIT_OK, `${score.stdout}\n${score.stderr}`);

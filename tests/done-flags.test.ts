@@ -145,8 +145,17 @@ test('EXP-21 / EXP-16 / EXP-19 (built CLI): score and plagiarism print and write
     const finalMd = read(join(paper, 'FINAL.md')) ?? '';
     assert.notEqual(finalMd, draft);
     assert.equal(JSON.parse(read(join(paper, 'DONE-RECORD.json')) ?? '{}')['humanized'], true);
+    assert.equal(JSON.parse(read(join(paper, 'DONE-RECORD.json')) ?? '{}')['exported'], false, 'DONE-RECORD v3: nothing exported it yet');
     assert.ok(!existsSync(join(paper, 'export')), 'humanize exports nothing');
     assert.equal(snapshot(paper).get('DRAFT.md'), before.get('DRAFT.md'), 'DRAFT.md untouched');
+    // Review round 1 (carry-over 6): the router never calls the paper complete
+    // before an export renders the humanized FINAL.md — it names `pensmith export`.
+    r = await p.cli(['status']);
+    assert.match(r.stdout, /current: needs attention/);
+    assert.match(r.stdout, /no export has rendered it yet [-—] `pensmith export` exports it/);
+    assert.doesNotMatch(r.stdout, /current: complete/);
+    r = await p.cli(['--yolo']);
+    assert.doesNotMatch(r.stderr, /ran status \(done\)|ran done/, 'a bare run reports the attention, never "done", and never re-humanizes');
 
     // export: the confirmation applies (no terminal, no --yolo → exit 3, nothing exported) ...
     r = await p.cli(['export', '--format', 'md']);
@@ -162,6 +171,8 @@ test('EXP-21 / EXP-16 / EXP-19 (built CLI): score and plagiarism print and write
     assert.match(verification, /^Text checked: \.paper\/FINAL\.md/m);
     assert.match(verification, /plagiarism check skipped \(--only export\)/);
     assert.equal(p.sb.mock!.callCount('humanizer'), THREE_SECTIONS.length, 'export sends no humanizer request');
+    assert.equal(JSON.parse(read(join(paper, 'DONE-RECORD.json')) ?? '{}')['exported'], true, 'the export is recorded');
+    assert.match((await p.cli(['status'])).stdout, /current: complete/, 'complete once the export rendered FINAL.md');
   });
 });
 
