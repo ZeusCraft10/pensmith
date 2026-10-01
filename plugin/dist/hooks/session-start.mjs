@@ -17527,16 +17527,31 @@ var init_research_sentinel = __esm({
   }
 });
 
+// bin/lib/migrations/done-record/v1_to_v2.ts
+function migrate8(input) {
+  const src = typeof input === "object" && input !== null && !Array.isArray(input) ? input : {};
+  return { ...src, $schemaVersion: 2 };
+}
+var init_v1_to_v25 = __esm({
+  "bin/lib/migrations/done-record/v1_to_v2.ts"() {
+    "use strict";
+    __name(migrate8, "migrate");
+  }
+});
+
 // bin/lib/schemas/done-record.ts
-var DONE_RECORD_SCHEMA_VERSION, SHA2562, DoneRecordSchema;
+var DONE_RECORD_SCHEMA_VERSION, SHA2562, OUTLINE_EXPORT_PATH, DoneRecordSchema, OutlineDoneRecordSchema, DoneRecordFileSchema;
 var init_done_record = __esm({
   "bin/lib/schemas/done-record.ts"() {
     "use strict";
     init_zod();
-    DONE_RECORD_SCHEMA_VERSION = 1;
+    DONE_RECORD_SCHEMA_VERSION = 2;
     SHA2562 = /^[0-9a-f]{64}$/;
+    OUTLINE_EXPORT_PATH = /^export\/(?:OUTLINE|ANNOTATED-BIBLIOGRAPHY)(?:\.dry-run)?\.(?:md|docx|pdf|tex)$/;
     DoneRecordSchema = external_exports.object({
       $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
+      /** Absent (every v1 record, and what draft-mode done writes) means draft. */
+      mode: external_exports.literal("draft").optional(),
       done_at: external_exports.string().datetime(),
       /** sha256 of the `.paper/DRAFT.md` bytes done's gate judged. */
       compiled_draft_sha256: external_exports.string().regex(SHA2562),
@@ -17545,6 +17560,20 @@ var init_done_record = __esm({
       /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
       humanized: external_exports.boolean()
     }).strict();
+    OutlineDoneRecordSchema = external_exports.object({
+      $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
+      mode: external_exports.literal("outline"),
+      done_at: external_exports.string().datetime(),
+      /** sha256 of the `.paper/OUTLINE.md` the export was made from. */
+      outline_sha256: external_exports.string().regex(SHA2562),
+      /** sha256 of the `.paper/CITATIONS.bib` the gate judged. */
+      bib_sha256: external_exports.string().regex(SHA2562),
+      /** sha256 of the `.paper/ANNOTATED-BIBLIOGRAPHY.md` done wrote. */
+      annotated_sha256: external_exports.string().regex(SHA2562),
+      /** The export files made from these inputs, relative to the paper folder. */
+      outline_exports: external_exports.array(external_exports.string().regex(OUTLINE_EXPORT_PATH)).min(1)
+    }).strict();
+    DoneRecordFileSchema = external_exports.union([DoneRecordSchema, OutlineDoneRecordSchema]);
   }
 });
 
@@ -17554,13 +17583,26 @@ import { basename as basename2, join as join5 } from "node:path";
 function doneRecordPath(paperRoot) {
   return join5(paperDir(paperRoot), DONE_RECORD_FILE);
 }
-function readDoneRecord(paperRoot) {
+function readDoneRecordFile(paperRoot) {
+  let value;
   try {
-    const parsed = DoneRecordSchema.safeParse(JSON.parse(readFileSync8(doneRecordPath(paperRoot), "utf8")));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
+    value = JSON.parse(readFileSync8(doneRecordPath(paperRoot), "utf8"));
+  } catch (e) {
+    return e.code === "ENOENT" ? { kind: "absent" } : { kind: "invalid" };
   }
+  const version = typeof value === "object" && value !== null ? value["$schemaVersion"] : void 0;
+  if (typeof version === "number" && Number.isInteger(version) && version > DONE_RECORD_SCHEMA_VERSION) return { kind: "newer", version };
+  if (version === 1) value = migrate8(value);
+  const parsed = DoneRecordFileSchema.safeParse(value);
+  if (!parsed.success) return { kind: "invalid" };
+  return parsed.data.mode === "outline" ? { kind: "outline", record: parsed.data } : { kind: "draft", record: parsed.data };
+}
+function readDoneRecord(paperRoot) {
+  const read = readDoneRecordFile(paperRoot);
+  return read.kind === "draft" ? read.record : null;
+}
+function newerDoneRecordReason(paperRoot, version) {
+  return `${basename2(paperDir(paperRoot))}/${DONE_RECORD_FILE} was written by a newer pensmith (record v${version}; this one reads v${DONE_RECORD_SCHEMA_VERSION}) \u2014 upgrade pensmith to finish this paper (the record is left as it is)`;
 }
 function verificationCheckedSha256(paperRoot) {
   try {
@@ -17586,20 +17628,50 @@ function editedFinalReason(paperRoot) {
   const dir = basename2(paperDir(paperRoot));
   return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
 }
-var DONE_RECORD_FILE;
+function annotatedBibliographyPath(paperRoot) {
+  return join5(paperDir(paperRoot), ANNOTATED_BIBLIOGRAPHY_FILE);
+}
+function outlineDoneState(paperRoot) {
+  const read = readDoneRecordFile(paperRoot);
+  if (read.kind === "newer") return { state: "newer", record: null, newerVersion: read.version };
+  const record = read.kind === "outline" ? read.record : null;
+  const annotated = annotatedBibliographyPath(paperRoot);
+  if (existsSync4(annotated)) {
+    const sha = fileSha256(annotated);
+    if (record === null || sha === "" || sha !== record.annotated_sha256) return { state: "edited", record };
+  } else {
+    return { state: record === null ? "absent" : "stale", record };
+  }
+  const dir = paperDir(paperRoot);
+  const current = record.outline_sha256 === fileSha256(join5(dir, "OUTLINE.md")) && record.bib_sha256 === fileSha256(join5(dir, "CITATIONS.bib")) && record.outline_exports.every((p) => existsSync4(join5(dir, p)));
+  return { state: current ? "current" : "stale", record };
+}
+function editedAnnotatedReason(paperRoot) {
+  const dir = basename2(paperDir(paperRoot));
+  return `${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} is not the text \`pensmith done\` wrote (it was edited or written by hand) \u2014 done never replaces your file: move ${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} out of the paper folder (your copy keeps the edit) and run \`pensmith done\``;
+}
+var DONE_RECORD_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
 var init_done_record2 = __esm({
   "bin/lib/done-record.ts"() {
     "use strict";
     init_atomic_write();
     init_compile_inputs2();
+    init_exit_codes();
     init_paths();
+    init_v1_to_v25();
     init_done_record();
     DONE_RECORD_FILE = "DONE-RECORD.json";
     __name(doneRecordPath, "doneRecordPath");
+    __name(readDoneRecordFile, "readDoneRecordFile");
     __name(readDoneRecord, "readDoneRecord");
+    __name(newerDoneRecordReason, "newerDoneRecordReason");
     __name(verificationCheckedSha256, "verificationCheckedSha256");
     __name(finalMdState, "finalMdState");
     __name(editedFinalReason, "editedFinalReason");
+    ANNOTATED_BIBLIOGRAPHY_FILE = "ANNOTATED-BIBLIOGRAPHY.md";
+    __name(annotatedBibliographyPath, "annotatedBibliographyPath");
+    __name(outlineDoneState, "outlineDoneState");
+    __name(editedAnnotatedReason, "editedAnnotatedReason");
   }
 });
 
@@ -17729,6 +17801,30 @@ function compiledDraftStale(pDir, sections, paperRoot) {
   const count = compiledSectionCount(pDir);
   return count !== null && count !== sections.length;
 }
+function listed(items) {
+  return items.length <= 1 ? items[0] ?? "" : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+function outlineOnlyDoneDetail(exports) {
+  return `${OUTLINE_ONLY_PREFIX}${listed(exports)}${OUTLINE_ONLY_SUFFIX}`;
+}
+function isOutlineOnlyDoneDetail(detail) {
+  if (!detail.startsWith(OUTLINE_ONLY_PREFIX) || !detail.endsWith(OUTLINE_ONLY_SUFFIX)) return false;
+  const names = detail.slice(OUTLINE_ONLY_PREFIX.length, detail.length - OUTLINE_ONLY_SUFFIX.length);
+  return new RegExp(`^${OUTLINE_EXPORT_NAME}(?:(?:, | and )${OUTLINE_EXPORT_NAME})*$`).test(names);
+}
+function outlineModeDecision(paperRoot) {
+  const read = outlineDoneState(paperRoot);
+  switch (read.state) {
+    case "current":
+      return { verb: "status", reason: "done", detail: outlineOnlyDoneDetail(read.record?.outline_exports ?? []) };
+    case "edited":
+      return { verb: "status", reason: "attention", detail: editedAnnotatedReason(paperRoot) };
+    case "newer":
+      return { verb: "status", reason: "attention", detail: newerDoneRecordReason(paperRoot, read.newerVersion ?? 0) };
+    default:
+      return { verb: "done" };
+  }
+}
 async function resolveNextAction(paperRoot, opts = {}) {
   try {
     let state;
@@ -17762,7 +17858,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
     if (sections.length === 0) return { verb: "outline" };
     const registry = sectionRegistryProblem(paperRoot);
     if (registry !== null) return { verb: "status", reason: "attention", detail: registry };
-    if (opts.stopAfterOutline) return { verb: "status", reason: "done", detail: OUTLINE_ONLY_DONE };
+    if (opts.stopAfterOutline) return outlineModeDecision(paperRoot);
     const unverifiablePast = [];
     for (const { n, slug, suffix } of sortBySectionId(sections)) {
       const id = suffix !== void 0 ? { n, slug, suffix } : { n, slug };
@@ -17859,7 +17955,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
     return { verb: "status", reason: "attention" };
   }
 }
-var OUTLINE_ONLY_DONE;
+var OUTLINE_ONLY_PREFIX, OUTLINE_ONLY_SUFFIX, OUTLINE_EXPORT_NAME, OUTLINE_ONLY_DONE;
 var init_router = __esm({
   "bin/lib/router.ts"() {
     "use strict";
@@ -17885,7 +17981,14 @@ var init_router = __esm({
     __name(mtimeOf, "mtimeOf");
     __name(compiledSectionCount, "compiledSectionCount");
     __name(compiledDraftStale, "compiledDraftStale");
-    OUTLINE_ONLY_DONE = 'outline only: the approved outline is .paper/OUTLINE.md (its sources in .paper/LIBRARY.json and CITATIONS.bib) \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
+    OUTLINE_ONLY_PREFIX = "outline only \u2014 complete: ";
+    OUTLINE_ONLY_SUFFIX = ' \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
+    OUTLINE_EXPORT_NAME = "export/(?:OUTLINE|ANNOTATED-BIBLIOGRAPHY)(?:[.]dry-run)?[.](?:md|docx|pdf|tex)";
+    __name(listed, "listed");
+    __name(outlineOnlyDoneDetail, "outlineOnlyDoneDetail");
+    OUTLINE_ONLY_DONE = outlineOnlyDoneDetail(["export/OUTLINE.md", "export/ANNOTATED-BIBLIOGRAPHY.md"]);
+    __name(isOutlineOnlyDoneDetail, "isOutlineOnlyDoneDetail");
+    __name(outlineModeDecision, "outlineModeDecision");
     __name(resolveNextAction, "resolveNextAction");
   }
 });
@@ -17922,7 +18025,7 @@ function nextActionOf(decision, opts = {}) {
       text = `Export the paper: ${run("done")}.`;
       break;
     case "status": {
-      const detail = decision.detail !== void 0 && (quoteDetail || decision.detail === OUTLINE_ONLY_DONE) ? decision.detail : null;
+      const detail = decision.detail !== void 0 && (quoteDetail || isOutlineOnlyDoneDetail(decision.detail)) ? decision.detail : null;
       if (decision.reason === "done") {
         text = decision.detail !== void 0 ? `Nothing more is routed: ${detail ?? "run /pensmith status to see why."}` : "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it).";
       } else if (detail !== null) {
@@ -19515,7 +19618,7 @@ var init_config = __esm({
 });
 
 // bin/lib/migrations/config/v0_to_v1.ts
-function migrate8(input) {
+function migrate9(input) {
   const out2 = { schema_version: 1 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
@@ -19545,12 +19648,12 @@ var init_v0_to_v13 = __esm({
       anthropic: "ANTHROPIC_API_KEY",
       openai: "OPENAI_API_KEY"
     });
-    __name(migrate8, "migrate");
+    __name(migrate9, "migrate");
   }
 });
 
 // bin/lib/migrations/config/v1_to_v2.ts
-function migrate9(input) {
+function migrate10(input) {
   const out2 = { schema_version: 2 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
@@ -19558,15 +19661,15 @@ function migrate9(input) {
   }
   return out2;
 }
-var init_v1_to_v25 = __esm({
+var init_v1_to_v26 = __esm({
   "bin/lib/migrations/config/v1_to_v2.ts"() {
     "use strict";
-    __name(migrate9, "migrate");
+    __name(migrate10, "migrate");
   }
 });
 
 // bin/lib/migrations/config/v2_to_v3.ts
-function migrate10(input) {
+function migrate11(input) {
   const out2 = { schema_version: 3 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
@@ -19577,7 +19680,7 @@ function migrate10(input) {
 var init_v2_to_v32 = __esm({
   "bin/lib/migrations/config/v2_to_v3.ts"() {
     "use strict";
-    __name(migrate10, "migrate");
+    __name(migrate11, "migrate");
   }
 });
 
@@ -19762,7 +19865,7 @@ var init_config2 = __esm({
     init_config();
     init_tutorial();
     init_v0_to_v13();
-    init_v1_to_v25();
+    init_v1_to_v26();
     init_v2_to_v32();
     init_config_text();
     init_disciplines();
@@ -19777,9 +19880,9 @@ var init_config2 = __esm({
       }
     };
     MIGRATIONS = Object.freeze({
-      0: migrate8,
-      1: migrate9,
-      2: migrate10
+      0: migrate9,
+      1: migrate10,
+      2: migrate11
     });
     VERIFY_QUOTES_REFUSAL = "verify_quotes is not configurable: Pass 3 quote verification is a blocking pass (PRD \xA714) \u2014 turning it off would let a quote-NOT_FOUND citation reach the compiled paper. Remove it from [verification].";
     __name(paperConfigPath, "paperConfigPath");

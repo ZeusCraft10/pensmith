@@ -22884,19 +22884,63 @@ function failedCitationStarts(text4, loose) {
   }
   return out2;
 }
-function splitLocator(suffix) {
-  const rest = suffix.replace(/^\s*,?\s*/, "");
-  if (rest === "") return null;
+function locatorTerm(text4) {
+  let best = null;
   for (const [term, label] of LOCATOR_TERMS) {
-    const t = term.exec(rest);
-    if (t === null) continue;
-    const after = rest.slice(t[0].length).trimStart();
-    const v2 = LOCATOR_VALUE_RE.exec(after);
-    if (v2 === null || !new RegExp("\\p{N}|^[ivxlcdm]+$", "iu").test(v2[0])) break;
-    return { locator: v2[0], label, rest: after.slice(v2[0].length) };
+    const t = term.exec(text4);
+    if (t !== null && (best === null || t[0].length > best.length)) best = { label, length: t[0].length };
   }
-  const page = /^,\s*/.test(suffix) ? new RegExp("^\\p{N}+(?:[-\u2013\u2014]\\p{N}+)?", "u").exec(rest) : null;
-  if (page !== null) return { locator: page[0], label: "page", rest: rest.slice(page[0].length) };
+  return best;
+}
+function locatorWords(text4, accept) {
+  const first2 = LOCATOR_VALUE_RE.exec(text4);
+  if (first2 === null || !accept(first2[0])) return null;
+  let value = first2[0];
+  let at = first2[0].length;
+  for (; ; ) {
+    const m3 = /^([,&\-–—]?)(\s*)/u.exec(text4.slice(at));
+    const word = LOCATOR_VALUE_RE.exec(text4.slice(at + m3[0].length));
+    if (m3[0] === "" && word !== null || word === null || !accept(word[0])) break;
+    if (m3[1] === "" && m3[2] !== void 0 && m3[2].includes("\n")) break;
+    value += `${m3[1]}${m3[2] !== "" ? " " : ""}${word[0]}`;
+    at += m3[0].length + word[0].length;
+  }
+  return { value, length: at };
+}
+function delimitedLocator(text4) {
+  if (!text4.startsWith("{")) return null;
+  const stack = [];
+  for (let i = 0; i < text4.length; i++) {
+    const ch = text4[i];
+    if (ch === "{" || ch === "[") stack.push(ch === "{" ? "}" : "]");
+    else if (ch === "}" || ch === "]") {
+      if (stack.pop() !== ch) return null;
+      if (stack.length === 0) return { inner: text4.slice(1, i), length: i + 1 };
+    }
+  }
+  return null;
+}
+function splitLocator(suffix) {
+  const lead = /^,?\s*/u.exec(suffix);
+  const text4 = suffix.slice(lead[0].length);
+  if (text4 === "") return null;
+  const delimited = delimitedLocator(text4);
+  if (delimited !== null) {
+    const inner = delimited.inner.trimStart();
+    const term2 = locatorTerm(inner);
+    const value = (term2 !== null ? inner.slice(term2.length) : inner).trim().replace(/\s+/gu, " ");
+    if (value === "") return null;
+    return { locator: value, label: term2?.label ?? "page", rest: text4.slice(delimited.length) };
+  }
+  const term = locatorTerm(text4);
+  if (term !== null) {
+    const afterTerm = text4.slice(term.length);
+    const gap = /^\s*/u.exec(afterTerm);
+    const words4 = locatorWords(afterTerm.slice(gap[0].length), (w3) => new RegExp("\\p{N}", "u").test(w3) || ROMAN_RE.test(w3));
+    if (words4 !== null) return { locator: words4.value, label: term.label, rest: afterTerm.slice(gap[0].length + words4.length) };
+  }
+  const page = locatorWords(text4, (w3) => new RegExp("\\p{N}", "u").test(w3));
+  if (page !== null) return { locator: page.value, label: "page", rest: text4.slice(page.length) };
   return null;
 }
 function citationItems(c2) {
@@ -22983,7 +23027,7 @@ function renameCitekey(md, from, to) {
   }
   return out2 + clustered.slice(at);
 }
-var MAX_SCRIPT_CHARS, ASCII_ENTITIES, CLUSTER_RE_SOURCE, ALNUM_RE, INTERNAL_PUNCT, EXAMPLE_LABEL_RE, TABLE_RULE_RE, BLANK_LINE_RE, UNMODELLED_RE, FENCE_LINE_RE, FENCE_ATTRS_RE, SPANS_LINES_RE, BACKTICK_TAKER_RE, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_CHARS, GLOBALLY_UNMODELLED_RE, UNPARSEABLE_REASONS, LOCATOR_TERMS, LOCATOR_VALUE_RE;
+var MAX_SCRIPT_CHARS, ASCII_ENTITIES, CLUSTER_RE_SOURCE, ALNUM_RE, INTERNAL_PUNCT, EXAMPLE_LABEL_RE, TABLE_RULE_RE, BLANK_LINE_RE, UNMODELLED_RE, FENCE_LINE_RE, FENCE_ATTRS_RE, SPANS_LINES_RE, BACKTICK_TAKER_RE, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_CHARS, GLOBALLY_UNMODELLED_RE, UNPARSEABLE_REASONS, LOCATOR_TERMS, LOCATOR_VALUE_RE, ROMAN_RE;
 var init_citation_token = __esm({
   "bin/lib/citation-token.ts"() {
     "use strict";
@@ -23102,9 +23146,14 @@ var init_citation_token = __esm({
       [/^(?:vv?\.|verses?\b)/i, "verse"],
       [/^(?:bks?\.|books?\b)/i, "book"],
       [/^(?:fols?\.|folios?\b)/i, "folio"],
-      [/^(?:s\.vv?\.|sub verbo\b)/i, "sub-verbo"]
+      [/^(?:opp?\.|opus\b|opera\b)/i, "opus"],
+      [/^(?:s\.vv?\.|sub verbo\b|sub verbis\b)/i, "sub-verbo"]
     ];
-    LOCATOR_VALUE_RE = /^[\p{N}ivxlcdm]+(?:[-–—][\p{N}ivxlcdm]+)?(?:,\s*[\p{N}]+(?:[-–—][\p{N}]+)?)*/iu;
+    LOCATOR_VALUE_RE = /^[^\s.,;&\-–—]+(?:\.[^\s.,;&\-–—]+)*/u;
+    ROMAN_RE = /^(?=[ivxlcdm])m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/i;
+    __name(locatorTerm, "locatorTerm");
+    __name(locatorWords, "locatorWords");
+    __name(delimitedLocator, "delimitedLocator");
     __name(splitLocator, "splitLocator");
     __name(citationItems, "citationItems");
     __name(replaceCitations, "replaceCitations");
@@ -61432,8 +61481,8 @@ var require_converters = __commonJS({
       },
       DATE_YEAR: {
         keepAll: true,
-        toTarget(...dates) {
-          return CONVERTERS.DATE.toTarget(CONVERTERS.ANY.toTarget(...dates));
+        toTarget(...dates2) {
+          return CONVERTERS.DATE.toTarget(CONVERTERS.ANY.toTarget(...dates2));
         },
         toSource(date3) {
           return [CONVERTERS.DATE.toSource(date3), CONVERTERS.YEAR.toSource(date3)];
@@ -65342,9 +65391,9 @@ var require_prop = __commonJS({
       }) => getLabel(value)).filter((value) => typeof value === "string" && value !== "").join(",");
     }
     __name(parseKeywords, "parseKeywords");
-    function parseDateRange(dates) {
+    function parseDateRange(dates2) {
       return {
-        "date-parts": dates.map((date3) => (0, _date2.parse)(date3.value)).filter((date3) => date3 && date3["date-parts"]).map((date3) => date3["date-parts"][0])
+        "date-parts": dates2.map((date3) => (0, _date2.parse)(date3.value)).filter((date3) => date3 && date3["date-parts"]).map((date3) => date3["date-parts"][0])
       };
     }
     __name(parseDateRange, "parseDateRange");
@@ -66414,7 +66463,7 @@ ${block.text}` : block.text);
   }
   return { entries, problems };
 }
-var import_citation_js, plugins, STYLE_FILENAMES, BibParseError, ENTRY_HEAD_RE, LINE_ENTRY_HEAD_RE;
+var import_citation_js, plugins, STYLE_FILENAMES, BibParseError, ENTRY_HEAD_RE, LINE_ENTRY_HEAD_RE, NAMED_ENTITIES;
 var init_citations = __esm({
   "bin/lib/citations.ts"() {
     "use strict";
@@ -66465,6 +66514,14 @@ var init_citations = __esm({
     __name(bibEntryRawFields, "bibEntryRawFields");
     __name(duplicateKeyLines, "duplicateKeyLines");
     __name(parseBibEntriesRaw, "parseBibEntriesRaw");
+    NAMED_ENTITIES = lookupTable({
+      amp: "&",
+      lt: "<",
+      gt: ">",
+      quot: '"',
+      apos: "'",
+      nbsp: "\xA0"
+    });
   }
 });
 
@@ -66845,6 +66902,8 @@ function toCsl(c2) {
   if (ids.pmid) entry.PMID = ids.pmid;
   if (ids.pmcid) entry.PMCID = ids.pmcid;
   if (ids.arxiv) entry.number = ids.arxiv;
+  const abstract = plain(c2.abstract);
+  if (abstract) entry.abstract = abstract;
   if (c2.retracted === true) entry.note = "RETRACTED";
   return entry;
 }
@@ -67171,6 +67230,90 @@ var init_v2_to_v32 = __esm({
 });
 
 // bin/lib/ris-write.ts
+function oneLine2(value) {
+  if (value === void 0 || value === null) return "";
+  const s2 = String(value).replace(/<[^>]*>/g, "").replace(/&#(\d+);/g, (_m, d3) => String.fromCodePoint(Number(d3))).replace(/&#x([0-9a-f]+);/gi, (_m, h2) => String.fromCodePoint(parseInt(h2, 16))).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+  return s2.replace(/\s+/gu, " ").trim();
+}
+function risName(n2) {
+  const literal2 = oneLine2(n2.literal);
+  if (literal2 !== "") return literal2;
+  const family = [oneLine2(n2["non-dropping-particle"]), oneLine2(n2.family)].filter((p2) => p2 !== "").join(" ");
+  const given = [oneLine2(n2.given), oneLine2(n2["dropping-particle"])].filter((p2) => p2 !== "").join(" ");
+  const suffix = oneLine2(n2.suffix);
+  if (family === "") return given;
+  return [family, given, suffix].filter((p2) => p2 !== "").join(", ");
+}
+function splitPages(page) {
+  const m3 = /^\s*([^\s\-–—]+)\s*(?:-{1,3}|–|—)\s*([^\s\-–—]+)\s*$/u.exec(page);
+  if (m3 !== null) return [m3[1], m3[2]];
+  return [page.trim(), void 0];
+}
+function dates(issued) {
+  const parts = issued?.["date-parts"];
+  const first2 = Array.isArray(parts) ? parts[0] : void 0;
+  if (!Array.isArray(first2) || first2[0] === void 0) {
+    const raw = oneLine2(issued?.raw ?? issued?.literal);
+    const y4 = /\b(\d{4})\b/.exec(raw)?.[1];
+    return y4 !== void 0 ? { year: y4, date: null } : null;
+  }
+  const [y3, m3, d3] = first2.map((p2) => String(p2));
+  if (y3 === void 0 || !/^-?\d+$/.test(y3)) return null;
+  if (m3 === void 0) return { year: y3, date: null };
+  const pad = /* @__PURE__ */ __name((s2) => s2.length === 1 ? `0${s2}` : s2, "pad");
+  return { year: y3, date: `${y3}/${pad(m3)}/${d3 !== void 0 ? pad(d3) : ""}/` };
+}
+function risRecord(item, opts) {
+  const lines2 = [];
+  const tag = /* @__PURE__ */ __name((t, value) => {
+    const v2 = oneLine2(value);
+    if (v2 !== "") lines2.push(`${t}  - ${v2}`);
+  }, "tag");
+  const type = RIS_TYPES[String(item["type"] ?? "")] ?? "GEN";
+  lines2.push(`TY  - ${type}`);
+  tag("ID", item["id"]);
+  for (const a3 of Array.isArray(item["author"]) ? item["author"] : []) tag("AU", risName(a3));
+  const editors = Array.isArray(item["editor"]) ? item["editor"] : [];
+  for (const e2 of editors) tag(EDITED_CONTAINER_TYPES.has(type) ? "A2" : "ED", risName(e2));
+  tag("TI", item["title"]);
+  const container = item["container-title"];
+  if (type === "JOUR") {
+    tag("JO", container);
+    tag("T2", container);
+  } else {
+    tag("T2", container);
+  }
+  tag("T3", item["collection-title"]);
+  const when = dates(item["issued"]);
+  if (when !== null) {
+    tag("PY", when.year);
+    if (when.date !== null) tag("DA", when.date);
+  }
+  tag("VL", item["volume"]);
+  tag("IS", item["issue"]);
+  const page = oneLine2(item["page"]);
+  if (page !== "") {
+    const [sp, ep] = splitPages(page);
+    tag("SP", sp);
+    if (ep !== void 0) tag("EP", ep);
+  }
+  tag("ET", item["edition"]);
+  tag("PB", item["publisher"]);
+  tag("CY", item["publisher-place"]);
+  tag("SN", item["ISBN"] ?? item["ISSN"]);
+  tag("DO", item["DOI"]);
+  const numberIsArxiv = (item["type"] === "preprint" || type === "JOUR") && ARXIV_ID_RE.test(oneLine2(item["number"]));
+  const arxiv = oneLine2(item["eprint"] ?? (numberIsArxiv ? item["number"] : void 0));
+  tag("UR", item["URL"] ?? (arxiv !== "" ? `https://arxiv.org/abs/${arxiv}` : void 0));
+  tag("AB", item["abstract"]);
+  tag("LA", item["language"]);
+  if (opts.notes === true) tag("N1", item["note"]);
+  lines2.push("ER  - ");
+  return lines2.join("\n") + "\n";
+}
+function renderRisFromCsl(items, opts = {}) {
+  return items.map((i) => risRecord(i, opts)).join("");
+}
 function renderRis(sources2) {
   const survivors = [];
   for (const c2 of sources2) {
@@ -67184,19 +67327,71 @@ function renderRis(sources2) {
     return { citekey: c2.citekey, csl };
   });
   entries.sort((a3, b3) => a3.citekey.localeCompare(b3.citekey));
-  if (entries.length === 0) return "";
-  const cite = new import_citation_js.default(entries.map((e2) => e2.csl));
-  return cite.format("ris", {
-    spec: "new",
-    format: "text"
-  });
+  return renderRisFromCsl(entries.map((e2) => e2.csl), { notes: true });
 }
+var RIS_TYPES, ARXIV_ID_RE, EDITED_CONTAINER_TYPES;
 var init_ris_write = __esm({
   "bin/lib/ris-write.ts"() {
     "use strict";
-    init_citations();
     init_atomic_write();
+    init_lookup_table();
     init_bibtex_write();
+    RIS_TYPES = lookupTable({
+      "article-journal": "JOUR",
+      "article-magazine": "MGZN",
+      "article-newspaper": "NEWS",
+      article: "JOUR",
+      bill: "BILL",
+      book: "BOOK",
+      broadcast: "MPCT",
+      chapter: "CHAP",
+      classic: "CLSWK",
+      collection: "GEN",
+      dataset: "DATA",
+      document: "GEN",
+      entry: "CTLG",
+      "entry-dictionary": "DICT",
+      "entry-encyclopedia": "ENCYC",
+      event: "GEN",
+      figure: "FIGURE",
+      graphic: "ART",
+      hearing: "HEAR",
+      interview: "GEN",
+      legal_case: "CASE",
+      legislation: "LEGAL",
+      manuscript: "MANSCPT",
+      map: "MAP",
+      motion_picture: "MPCT",
+      musical_score: "MUSIC",
+      pamphlet: "PAMP",
+      "paper-conference": "CONF",
+      patent: "PAT",
+      performance: "GEN",
+      periodical: "SER",
+      preprint: "GEN",
+      personal_communication: "PCOMM",
+      "post-weblog": "BLOG",
+      post: "ICOMM",
+      regulation: "LEGAL",
+      report: "RPRT",
+      "review-book": "BOOK",
+      review: "JOUR",
+      software: "COMP",
+      song: "SOUND",
+      speech: "SOUND",
+      standard: "STAND",
+      thesis: "THES",
+      treaty: "GEN",
+      webpage: "ELEC"
+    });
+    ARXIV_ID_RE = /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?$/i;
+    EDITED_CONTAINER_TYPES = /* @__PURE__ */ new Set(["CHAP", "CONF", "CPAPER", "BOOK", "EDBOOK", "ENCYC", "DICT"]);
+    __name(oneLine2, "oneLine");
+    __name(risName, "risName");
+    __name(splitPages, "splitPages");
+    __name(dates, "dates");
+    __name(risRecord, "risRecord");
+    __name(renderRisFromCsl, "renderRisFromCsl");
     __name(renderRis, "renderRis");
   }
 });
@@ -78035,7 +78230,7 @@ function asArray(v2) {
 function asRecord(v2) {
   return v2 && typeof v2 === "object" ? v2 : {};
 }
-function oneLine2(s2) {
+function oneLine3(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 var GOAL_VALUES, PROJECT_CONFIG_FRAGMENT, PROJECT_CONFIG_FRAGMENT_DEFAULTS, GOAL_SYNONYMS, TUTORIAL_INTAKE_QUESTION, TutorialSubscriber;
@@ -78086,7 +78281,7 @@ var init_tutorial = __esm({
     __name(asString, "asString");
     __name(asArray, "asArray");
     __name(asRecord, "asRecord");
-    __name(oneLine2, "oneLine");
+    __name(oneLine3, "oneLine");
     TutorialSubscriber = class {
       static {
         __name(this, "TutorialSubscriber");
@@ -78176,15 +78371,15 @@ var init_tutorial = __esm({
         const claimByKey = /* @__PURE__ */ new Map();
         for (const c2 of claims) {
           const key2 = asString(c2?.citekey);
-          const claim = oneLine2(asString(c2?.claim));
+          const claim = oneLine3(asString(c2?.claim));
           if (key2 && claim) claimByKey.set(key2, claim);
         }
         const lines2 = [];
         for (const s2 of sources2) {
           const citekey = asString(s2?.citekey);
           if (!citekey) continue;
-          const claim = oneLine2(asString(s2?.supportedClaim)) || claimByKey.get(citekey) || "";
-          const title = oneLine2(asString(s2?.title));
+          const claim = oneLine3(asString(s2?.supportedClaim)) || claimByKey.get(citekey) || "";
+          const title = oneLine3(asString(s2?.title));
           const year = typeof s2?.year === "number" ? s2.year : void 0;
           const titleSuffix = title ? ` (${title}${year ? `, ${year}` : ""})` : year ? ` (${year})` : "";
           if (claim) {
@@ -78239,7 +78434,7 @@ var init_tutorial = __esm({
       #emitLabeled(key2, header, payload, body) {
         let line = "";
         try {
-          line = oneLine2(body(payload));
+          line = oneLine3(body(payload));
         } catch {
           line = "";
         }
@@ -80039,16 +80234,31 @@ var init_research_sentinel = __esm({
   }
 });
 
+// bin/lib/migrations/done-record/v1_to_v2.ts
+function migrate13(input2) {
+  const src = typeof input2 === "object" && input2 !== null && !Array.isArray(input2) ? input2 : {};
+  return { ...src, $schemaVersion: 2 };
+}
+var init_v1_to_v27 = __esm({
+  "bin/lib/migrations/done-record/v1_to_v2.ts"() {
+    "use strict";
+    __name(migrate13, "migrate");
+  }
+});
+
 // bin/lib/schemas/done-record.ts
-var DONE_RECORD_SCHEMA_VERSION, SHA2562, DoneRecordSchema;
+var DONE_RECORD_SCHEMA_VERSION, SHA2562, OUTLINE_EXPORT_PATH, DoneRecordSchema, OutlineDoneRecordSchema, DoneRecordFileSchema;
 var init_done_record = __esm({
   "bin/lib/schemas/done-record.ts"() {
     "use strict";
     init_zod();
-    DONE_RECORD_SCHEMA_VERSION = 1;
+    DONE_RECORD_SCHEMA_VERSION = 2;
     SHA2562 = /^[0-9a-f]{64}$/;
+    OUTLINE_EXPORT_PATH = /^export\/(?:OUTLINE|ANNOTATED-BIBLIOGRAPHY)(?:\.dry-run)?\.(?:md|docx|pdf|tex)$/;
     DoneRecordSchema = external_exports.object({
       $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
+      /** Absent (every v1 record, and what draft-mode done writes) means draft. */
+      mode: external_exports.literal("draft").optional(),
       done_at: external_exports.string().datetime(),
       /** sha256 of the `.paper/DRAFT.md` bytes done's gate judged. */
       compiled_draft_sha256: external_exports.string().regex(SHA2562),
@@ -80057,6 +80267,20 @@ var init_done_record = __esm({
       /** True when that text is the humanizer's (GATE-04 judged it), false when it is the compiled draft. */
       humanized: external_exports.boolean()
     }).strict();
+    OutlineDoneRecordSchema = external_exports.object({
+      $schemaVersion: external_exports.literal(DONE_RECORD_SCHEMA_VERSION),
+      mode: external_exports.literal("outline"),
+      done_at: external_exports.string().datetime(),
+      /** sha256 of the `.paper/OUTLINE.md` the export was made from. */
+      outline_sha256: external_exports.string().regex(SHA2562),
+      /** sha256 of the `.paper/CITATIONS.bib` the gate judged. */
+      bib_sha256: external_exports.string().regex(SHA2562),
+      /** sha256 of the `.paper/ANNOTATED-BIBLIOGRAPHY.md` done wrote. */
+      annotated_sha256: external_exports.string().regex(SHA2562),
+      /** The export files made from these inputs, relative to the paper folder. */
+      outline_exports: external_exports.array(external_exports.string().regex(OUTLINE_EXPORT_PATH)).min(1)
+    }).strict();
+    DoneRecordFileSchema = external_exports.union([DoneRecordSchema, OutlineDoneRecordSchema]);
   }
 });
 
@@ -80066,13 +80290,26 @@ import { basename as basename3, join as join10 } from "node:path";
 function doneRecordPath(paperRoot) {
   return join10(paperDir(paperRoot), DONE_RECORD_FILE);
 }
-function readDoneRecord(paperRoot) {
+function readDoneRecordFile(paperRoot) {
+  let value;
   try {
-    const parsed = DoneRecordSchema.safeParse(JSON.parse(readFileSync12(doneRecordPath(paperRoot), "utf8")));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
+    value = JSON.parse(readFileSync12(doneRecordPath(paperRoot), "utf8"));
+  } catch (e2) {
+    return e2.code === "ENOENT" ? { kind: "absent" } : { kind: "invalid" };
   }
+  const version2 = typeof value === "object" && value !== null ? value["$schemaVersion"] : void 0;
+  if (typeof version2 === "number" && Number.isInteger(version2) && version2 > DONE_RECORD_SCHEMA_VERSION) return { kind: "newer", version: version2 };
+  if (version2 === 1) value = migrate13(value);
+  const parsed = DoneRecordFileSchema.safeParse(value);
+  if (!parsed.success) return { kind: "invalid" };
+  return parsed.data.mode === "outline" ? { kind: "outline", record: parsed.data } : { kind: "draft", record: parsed.data };
+}
+function readDoneRecord(paperRoot) {
+  const read = readDoneRecordFile(paperRoot);
+  return read.kind === "draft" ? read.record : null;
+}
+function newerDoneRecordReason(paperRoot, version2) {
+  return `${basename3(paperDir(paperRoot))}/${DONE_RECORD_FILE} was written by a newer pensmith (record v${version2}; this one reads v${DONE_RECORD_SCHEMA_VERSION}) \u2014 upgrade pensmith to finish this paper (the record is left as it is)`;
 }
 function verificationCheckedSha256(paperRoot) {
   try {
@@ -80098,20 +80335,50 @@ function editedFinalReason(paperRoot) {
   const dir = basename3(paperDir(paperRoot));
   return `${dir}/FINAL.md is not the text \`pensmith done\` exported (it was edited or written by hand) \u2014 done exports only the compiled draft it checks and never replaces your file: move ${dir}/FINAL.md out of the paper folder (your copy keeps the edit) and run \`pensmith done\`; to keep the edit in the paper itself, make it in the section drafts first (\`pensmith\` re-verifies and recompiles them)`;
 }
-var DONE_RECORD_FILE;
+function annotatedBibliographyPath(paperRoot) {
+  return join10(paperDir(paperRoot), ANNOTATED_BIBLIOGRAPHY_FILE);
+}
+function outlineDoneState(paperRoot) {
+  const read = readDoneRecordFile(paperRoot);
+  if (read.kind === "newer") return { state: "newer", record: null, newerVersion: read.version };
+  const record2 = read.kind === "outline" ? read.record : null;
+  const annotated = annotatedBibliographyPath(paperRoot);
+  if (existsSync9(annotated)) {
+    const sha = fileSha256(annotated);
+    if (record2 === null || sha === "" || sha !== record2.annotated_sha256) return { state: "edited", record: record2 };
+  } else {
+    return { state: record2 === null ? "absent" : "stale", record: record2 };
+  }
+  const dir = paperDir(paperRoot);
+  const current = record2.outline_sha256 === fileSha256(join10(dir, "OUTLINE.md")) && record2.bib_sha256 === fileSha256(join10(dir, "CITATIONS.bib")) && record2.outline_exports.every((p2) => existsSync9(join10(dir, p2)));
+  return { state: current ? "current" : "stale", record: record2 };
+}
+function editedAnnotatedReason(paperRoot) {
+  const dir = basename3(paperDir(paperRoot));
+  return `${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} is not the text \`pensmith done\` wrote (it was edited or written by hand) \u2014 done never replaces your file: move ${dir}/${ANNOTATED_BIBLIOGRAPHY_FILE} out of the paper folder (your copy keeps the edit) and run \`pensmith done\``;
+}
+var DONE_RECORD_FILE, ANNOTATED_BIBLIOGRAPHY_FILE;
 var init_done_record2 = __esm({
   "bin/lib/done-record.ts"() {
     "use strict";
     init_atomic_write();
     init_compile_inputs2();
+    init_exit_codes();
     init_paths();
+    init_v1_to_v27();
     init_done_record();
     DONE_RECORD_FILE = "DONE-RECORD.json";
     __name(doneRecordPath, "doneRecordPath");
+    __name(readDoneRecordFile, "readDoneRecordFile");
     __name(readDoneRecord, "readDoneRecord");
+    __name(newerDoneRecordReason, "newerDoneRecordReason");
     __name(verificationCheckedSha256, "verificationCheckedSha256");
     __name(finalMdState, "finalMdState");
     __name(editedFinalReason, "editedFinalReason");
+    ANNOTATED_BIBLIOGRAPHY_FILE = "ANNOTATED-BIBLIOGRAPHY.md";
+    __name(annotatedBibliographyPath, "annotatedBibliographyPath");
+    __name(outlineDoneState, "outlineDoneState");
+    __name(editedAnnotatedReason, "editedAnnotatedReason");
   }
 });
 
@@ -80246,6 +80513,25 @@ function compiledDraftStale(pDir, sections2, paperRoot) {
   const count = compiledSectionCount(pDir);
   return count !== null && count !== sections2.length;
 }
+function listed(items) {
+  return items.length <= 1 ? items[0] ?? "" : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+function outlineOnlyDoneDetail(exports) {
+  return `${OUTLINE_ONLY_PREFIX}${listed(exports)}${OUTLINE_ONLY_SUFFIX}`;
+}
+function outlineModeDecision(paperRoot) {
+  const read = outlineDoneState(paperRoot);
+  switch (read.state) {
+    case "current":
+      return { verb: "status", reason: "done", detail: outlineOnlyDoneDetail(read.record?.outline_exports ?? []) };
+    case "edited":
+      return { verb: "status", reason: "attention", detail: editedAnnotatedReason(paperRoot) };
+    case "newer":
+      return { verb: "status", reason: "attention", detail: newerDoneRecordReason(paperRoot, read.newerVersion ?? 0) };
+    default:
+      return { verb: "done" };
+  }
+}
 async function resolveNextAction(paperRoot, opts = {}) {
   try {
     let state;
@@ -80279,7 +80565,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
     if (sections2.length === 0) return { verb: "outline" };
     const registry2 = sectionRegistryProblem(paperRoot);
     if (registry2 !== null) return { verb: "status", reason: "attention", detail: registry2 };
-    if (opts.stopAfterOutline) return { verb: "status", reason: "done", detail: OUTLINE_ONLY_DONE };
+    if (opts.stopAfterOutline) return outlineModeDecision(paperRoot);
     const unverifiablePast = [];
     for (const { n: n2, slug, suffix } of sortBySectionId(sections2)) {
       const id = suffix !== void 0 ? { n: n2, slug, suffix } : { n: n2, slug };
@@ -80376,7 +80662,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
     return { verb: "status", reason: "attention" };
   }
 }
-var OUTLINE_ONLY_DONE;
+var OUTLINE_ONLY_PREFIX, OUTLINE_ONLY_SUFFIX, OUTLINE_ONLY_DONE;
 var init_router = __esm({
   "bin/lib/router.ts"() {
     "use strict";
@@ -80403,7 +80689,12 @@ var init_router = __esm({
     __name(mtimeOf, "mtimeOf");
     __name(compiledSectionCount, "compiledSectionCount");
     __name(compiledDraftStale, "compiledDraftStale");
-    OUTLINE_ONLY_DONE = 'outline only: the approved outline is .paper/OUTLINE.md (its sources in .paper/LIBRARY.json and CITATIONS.bib) \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
+    OUTLINE_ONLY_PREFIX = "outline only \u2014 complete: ";
+    OUTLINE_ONLY_SUFFIX = ' \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
+    __name(listed, "listed");
+    __name(outlineOnlyDoneDetail, "outlineOnlyDoneDetail");
+    OUTLINE_ONLY_DONE = outlineOnlyDoneDetail(["export/OUTLINE.md", "export/ANNOTATED-BIBLIOGRAPHY.md"]);
+    __name(outlineModeDecision, "outlineModeDecision");
     __name(resolveNextAction, "resolveNextAction");
   }
 });
@@ -80520,7 +80811,7 @@ var init_intake_brief = __esm({
 });
 
 // bin/lib/intake-overrides.ts
-function oneLine3(s2) {
+function oneLine4(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function escapeRe(s2) {
@@ -80558,7 +80849,7 @@ function styleOverrideFrom(text4) {
       const afterCue = AFTER_CUE.test(after) || !ambiguous && AFTER_EDITION.test(after);
       const strong = BEFORE_STRONG.test(before) || afterCue;
       const weak = !ambiguous && BEFORE_WEAK.test(before);
-      if (strong || weak) found = { style: m3.style, evidence: oneLine3(clause).slice(0, 200) };
+      if (strong || weak) found = { style: m3.style, evidence: oneLine4(clause).slice(0, 200) };
     }
   }
   return found;
@@ -80566,7 +80857,7 @@ function styleOverrideFrom(text4) {
 function sectioningNotesFrom(text4) {
   const out2 = [];
   for (const raw of clausesOf(text4)) {
-    const clause = oneLine3(raw).replace(/^[-*•\d.)\s]+/, "");
+    const clause = oneLine4(raw).replace(/^[-*•\d.)\s]+/, "");
     if (clause.length < 6 || clause.length > 300) continue;
     if (!SECTION_WORDS.test(clause) && !SECTION_NOUN.test(clause)) continue;
     const ordered = SECTION_WORDS.test(clause) && ORDER_CUE.test(clause);
@@ -80637,16 +80928,16 @@ function unlabelled(clause) {
   return TASK_VERB.test(rest) ? rest : null;
 }
 function taskTopicPhrase(t, taskVerbOnly = false) {
-  const clauses = clausesOf(t).filter((c2) => !/^thesis\s+seed\s*:/i.test(c2)).map(unlabelled).filter((c2) => c2 !== null && !INSTRUCTION_ONLY.test(c2) && sectioningNotesFrom(c2).length === 0 && stripRequirementParts(oneLine3(c2).replace(/[.!?]+$/, "")).length > 0);
+  const clauses = clausesOf(t).filter((c2) => !/^thesis\s+seed\s*:/i.test(c2)).map(unlabelled).filter((c2) => c2 !== null && !INSTRUCTION_ONLY.test(c2) && sectioningNotesFrom(c2).length === 0 && stripRequirementParts(oneLine4(c2).replace(/[.!?]+$/, "")).length > 0);
   const sentence = clauses.find((c2) => TASK_VERB.test(c2)) ?? (taskVerbOnly ? "" : clauses[0] ?? "");
-  let s2 = stripRequirementParts(oneLine3(sentence).replace(/[.!?]+$/, ""));
+  let s2 = stripRequirementParts(oneLine4(sentence).replace(/[.!?]+$/, ""));
   s2 = s2.replace(TASK_VERB, "").replace(/^\s*(?:an?|one|your)\s+/i, "").replace(/^\s*(?:(?:short|brief|detailed|critical|formal|well[\s-]researched|original|thoughtful|clear)\s+)*/i, "").replace(new RegExp(String.raw`^\s*${NUMBER_WORDS}(?:\s*(?:-|–|—|to)\s*${NUMBER_WORDS})?[\s-]*(?:word|page)s?\s+`, "i"), "").replace(/^\s*(?:(?:argumentative|persuasive|analytical|expository|research|critical|reflective|comparative|academic|short|term|informative|explanatory)\s+)*/i, "").replace(/^\s*(?:literature\s+review|lit(?:erature)?\s+survey|review|paper|essay|report|study|analysis|article|proposal|memo|primer|summary|brief|piece|assignment|lab\s+report|research\s+paper)s?\s*/i, "").replace(/^\s*in\s+(?:english|plain\s+language|the\s+(?:first|third)\s+person)\s+/i, "").replace(/^\s*(?:on|about|of|regarding|concerning|examining|exploring|discussing|covering|addressing|investigating|into|that\s+(?:examines|explores|discusses|analy[sz]es|argues))\s+/i, "").replace(COURSE_TAIL, "").replace(/[,;:]+$/, "").trim();
   return s2.length >= 3 && !isRequirementPart(s2) ? s2.slice(0, 200) : "";
 }
 function labelledLine(t, labels) {
   const re = new RegExp(String.raw`^\s*(?:paper\s+)?(?:${labels.source})\s*[:–—-]\s*(.+?)\s*$`, "im");
   const v2 = re.exec(t)?.[1];
-  return v2 && oneLine3(v2).length >= 3 ? oneLine3(v2).replace(/[.]+$/, "").slice(0, 200) : "";
+  return v2 && oneLine4(v2).length >= 3 ? oneLine4(v2).replace(/[.]+$/, "").slice(0, 200) : "";
 }
 function topicFromAssignment(text4) {
   const t = text4.replace(/\r\n?/g, "\n");
@@ -80684,7 +80975,7 @@ function disciplineMentionFrom(text4) {
 }
 function thesisSeedFrom(text4) {
   const m3 = new RegExp(`^\\s*${escapeRe(THESIS_SEED_LABEL)}\\s*(.+)$`, "im").exec(text4.replace(/\r\n?/g, "\n"));
-  return m3 ? oneLine3(m3[1] ?? "") : "";
+  return m3 ? oneLine4(m3[1] ?? "") : "";
 }
 function parseIntakeOverrides(assignment, answers = []) {
   let style = styleOverrideFrom(assignment);
@@ -80706,7 +80997,7 @@ var init_intake_overrides = __esm({
     WORDS_PER_PAGE = 300;
     MIN_WORDS = 100;
     MAX_WORDS = 5e4;
-    __name(oneLine3, "oneLine");
+    __name(oneLine4, "oneLine");
     __name(escapeRe, "escapeRe");
     __name(clausesOf, "clausesOf");
     AMBIGUOUS_STYLE_ALIASES = /* @__PURE__ */ new Set(["chicago", "harvard", "vancouver", "turabian", "author date", "notes bibliography", "ama"]);
@@ -82914,11 +83205,11 @@ function proseParagraphs(md) {
   flush();
   return out2;
 }
-function oneLine4(s2) {
+function oneLine5(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function prose(text4) {
-  return oneLine4(replaceCitations(text4, () => " "));
+  return oneLine5(replaceCitations(text4, () => " "));
 }
 function draftSentences(md) {
   const citations = findCitations(md);
@@ -82953,7 +83244,7 @@ function draftSentences(md) {
         paragraph: p2.index,
         start: s2.start,
         end: s2.end,
-        text: oneLine4(text4),
+        text: oneLine5(text4),
         citations: inside.filter((c2) => c2.start >= s2.start && c2.start < s2.end)
       });
     }
@@ -82985,7 +83276,7 @@ var init_draft_text = __esm({
     __name(lines, "lines");
     __name(proseParagraphs, "proseParagraphs");
     BOUNDARY_RE = /[.!?]+["'”’»)\]]*(?=\s|$)/g;
-    __name(oneLine4, "oneLine");
+    __name(oneLine5, "oneLine");
     __name(prose, "prose");
     __name(draftSentences, "draftSentences");
     __name(claimPairs, "claimPairs");
@@ -83782,17 +84073,15 @@ async function buildStatusView(root, opts = { tier: "cli" }) {
     if (suffix !== void 0) row2.suffix = suffix;
     return row2;
   });
+  const outlineOnly = opts.stopAfterOutline ?? readPaperModeSync(root) === "outline";
   let decision;
   try {
-    decision = await resolveNextAction(root, {
-      stopAfterResearch: opts.stopAfterResearch === true,
-      // GRND-02 outline-only mode: read here when the caller did not pass it
-      // (the Tier-1 status resource), so both tiers route the same paper alike.
-      stopAfterOutline: opts.stopAfterOutline ?? readPaperModeSync(root) === "outline"
-    });
+    decision = await resolveNextAction(root, { stopAfterResearch: opts.stopAfterResearch === true, stopAfterOutline: outlineOnly });
   } catch {
     decision = { verb: "status", reason: "attention" };
   }
+  const outlineDone = outlineOnly && decision.verb === "status" && decision.reason === "done" ? outlineDoneState(root) : null;
+  const deliverables = outlineDone?.state === "current" && outlineDone.record !== null ? [ANNOTATED_BIBLIOGRAPHY_FILE, ...outlineDone.record.outline_exports].map((p2) => path16.join(path16.basename(pDir), p2).split(path16.sep).join("/")) : [];
   const current = decision.verb === "plan" || decision.verb === "write" || decision.verb === "verify" ? {
     n: decision.n,
     ...decision.suffix !== void 0 ? { suffix: decision.suffix } : {},
@@ -83834,7 +84123,9 @@ async function buildStatusView(root, opts = { tier: "cli" }) {
     nextLine: `next: ${next}`,
     attention: decision.verb === "status" && decision.reason === "attention" && decision.detail ? decision.detail : null,
     note: decision.verb === "status" && decision.reason === "done" && decision.detail ? decision.detail : null,
-    problem
+    problem,
+    mode: outlineOnly ? "outline" : "draft",
+    deliverables
   };
 }
 function renderStatusView(view) {
@@ -83849,6 +84140,7 @@ function renderStatusView(view) {
   } else if (view.paperId) {
     lines2.push(`  id: ${view.paperId}`);
   }
+  if (view.mode === "outline") lines2.push("  mode: outline only");
   lines2.push(`  ${view.currentLine}`);
   lines2.push("  sections:");
   if (view.sections.length === 0) lines2.push("    (none yet)");
@@ -83857,6 +84149,10 @@ function renderStatusView(view) {
   lines2.push(`  ${view.nextLine}`);
   if (view.attention !== null) lines2.push(`  attention: ${view.attention}`);
   if (view.note !== null) lines2.push(`  note: ${view.note}`);
+  if (view.deliverables.length > 0) {
+    lines2.push("  deliverables:");
+    for (const d3 of view.deliverables) lines2.push(`    ${d3}`);
+  }
   return lines2.join("\n");
 }
 function fmtValue(v2) {
@@ -83932,6 +84228,7 @@ var init_status_view = __esm({
     init_llm_models();
     init_prompt_loader();
     init_estimator();
+    init_done_record2();
     __name(unverifiableStatus, "unverifiableStatus");
     GLYPHS = Object.freeze({
       unicode: Object.freeze({ verified: "\u2713", "in-progress": "\u231B", pending: "\u233D", attention: "!" }),
@@ -111134,7 +111431,7 @@ function article(service) {
   if (/^(?:eu|uni(?!n)|one\b)/i.test(service)) return "a";
   return /^[aeiou]/i.test(service) ? "an" : "a";
 }
-function oneLine5(s2, max = 160) {
+function oneLine6(s2, max = 160) {
   const line = (s2.split(/\r?\n/).find((l2) => l2.trim().length > 0) ?? "").trim().replace(/\s+/g, " ");
   return line.length > max ? `${line.slice(0, max - 1)}\u2026` : line;
 }
@@ -111167,20 +111464,20 @@ function bodyMessage(body) {
     const o2 = parsed;
     for (const k2 of ["message", "detail", "error", "title"]) {
       const v2 = o2[k2];
-      if (typeof v2 === "string" && v2.trim().length > 0) return oneLine5(v2);
+      if (typeof v2 === "string" && v2.trim().length > 0) return oneLine6(v2);
       if (k2 === "error" && typeof v2 === "object" && v2 !== null) {
         const m3 = v2["message"];
-        if (typeof m3 === "string" && m3.trim().length > 0) return oneLine5(m3);
+        if (typeof m3 === "string" && m3.trim().length > 0) return oneLine6(m3);
       }
       if (k2 === "message" && Array.isArray(v2)) {
         const first2 = v2.find((x3) => typeof x3 === "object" && x3 !== null);
         const m3 = first2?.["message"];
-        if (typeof m3 === "string" && m3.trim().length > 0) return oneLine5(m3);
+        if (typeof m3 === "string" && m3.trim().length > 0) return oneLine6(m3);
       }
     }
     return null;
   }
-  if (!t.startsWith("<") && t.length <= 200) return oneLine5(t);
+  if (!t.startsWith("<") && t.length <= 200) return oneLine6(t);
   return null;
 }
 function statusReason(res) {
@@ -111286,7 +111583,7 @@ var init_registrar_response = __esm({
     init_retry();
     init_search_failure();
     __name(article, "article");
-    __name(oneLine5, "oneLine");
+    __name(oneLine6, "oneLine");
     __name(parseJsonBody, "parseJsonBody");
     __name(jsonShape, "jsonShape");
     __name(validator, "validator");
@@ -112668,8 +112965,8 @@ function failureOf(ex) {
 }
 async function search4(query, opts = {}) {
   const limit = opts.limit ?? 20;
-  const dates = typeof opts.fromYear === "number" && Number.isInteger(opts.fromYear) ? `&datetype=pdat&mindate=${opts.fromYear}&maxdate=3000` : "";
-  const esearchUrl = `${BASE6}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmode=json&retmax=${limit}${dates}`;
+  const dates2 = typeof opts.fromYear === "number" && Number.isInteger(opts.fromYear) ? `&datetype=pdat&mindate=${opts.fromYear}&maxdate=3000` : "";
+  const esearchUrl = `${BASE6}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmode=json&retmax=${limit}${dates2}`;
   const ex1 = await get2(esearchUrl, ESEARCH);
   const fail1 = failureOf(ex1);
   if (fail1 !== null || ex1.kind !== "ok") {
@@ -115766,11 +116063,11 @@ function exitCodeForResult(result) {
 function isCittyUsageError(e2) {
   return e2 instanceof Error && e2.name === "CLIError";
 }
-function oneLine6(s2) {
+function oneLine7(s2) {
   return s2.replace(/\s*\r?\n\s*/g, " ").trim();
 }
 function classifyFailure(e2) {
-  if (isPensmithError(e2)) return { code: e2.exitCode, message: oneLine6(e2.message), unexpected: false };
+  if (isPensmithError(e2)) return { code: e2.exitCode, message: oneLine7(e2.message), unexpected: false };
   if (e2 instanceof PromptAbortedError) {
     return { code: EXIT_APPROVAL, message: `no answer for "${e2.id}" (input ended) \u2014 nothing was changed`, unexpected: false };
   }
@@ -115778,10 +116075,10 @@ function classifyFailure(e2) {
     return { code: EXIT_APPROVAL, message: `no answer for "${e2.id}" within ${e2.timeoutMs} ms \u2014 nothing was changed`, unexpected: false };
   }
   if (isCittyUsageError(e2)) {
-    return { code: EXIT_USAGE, message: oneLine6(stripAnsi(e2.message)), unexpected: false };
+    return { code: EXIT_USAGE, message: oneLine7(stripAnsi(e2.message)), unexpected: false };
   }
   const msg = e2 instanceof Error ? e2.message : String(e2);
-  return { code: EXIT_ERROR, message: oneLine6(msg) || "unexpected error", unexpected: true };
+  return { code: EXIT_ERROR, message: oneLine7(msg) || "unexpected error", unexpected: true };
 }
 function failureLine(message) {
   return /^pensmith[\s:]/.test(message) ? message : `pensmith: ${message}`;
@@ -115819,7 +116116,7 @@ var init_verb_outcome = __esm({
     __name(exitCodeName, "exitCodeName");
     __name(exitCodeForResult, "exitCodeForResult");
     __name(isCittyUsageError, "isCittyUsageError");
-    __name(oneLine6, "oneLine");
+    __name(oneLine7, "oneLine");
     __name(classifyFailure, "classifyFailure");
     __name(failureLine, "failureLine");
     __name(runClassified, "runClassified");
@@ -116067,11 +116364,11 @@ function markerLines(text4, marker) {
   }
   return out2;
 }
-function oneLine7(s2) {
+function oneLine8(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function excerpt(text4, max) {
-  const flat = oneLine7(text4);
+  const flat = oneLine8(text4);
   if (flat.length <= max) return flat;
   const cut = flat.slice(0, max);
   const at = cut.lastIndexOf(" ");
@@ -116108,14 +116405,14 @@ function formatReference(e2) {
   const names = e2.authors.map(displayAuthor).filter((a3) => a3.length > 0);
   const who = names.length === 0 ? e2.editors.length > 0 ? `${e2.editors.slice(0, MAX_LISTED_AUTHORS).map(displayAuthor).join("; ")} (Ed${e2.editors.length > 1 ? "s" : ""}.)` : "Anonymous" : names.length > MAX_LISTED_AUTHORS ? `${names.slice(0, MAX_LISTED_AUTHORS).join("; ")}; et al.` : names.join("; ");
   const parts = [`${who} (${e2.year ?? "n.d."}).`];
-  parts.push(`${oneLine7(e2.title ?? "(untitled)").replace(/[.]+$/, "")}.`);
+  parts.push(`${oneLine8(e2.title ?? "(untitled)").replace(/[.]+$/, "")}.`);
   const where = [];
-  if (e2.venue) where.push(oneLine7(e2.venue));
+  if (e2.venue) where.push(oneLine8(e2.venue));
   if (e2.volume) where.push(e2.issue ? `${e2.volume}(${e2.issue})` : e2.volume);
   else if (e2.issue) where.push(`(${e2.issue})`);
   if (e2.pages) where.push(e2.pages);
   if (where.length > 0) parts.push(`${where.join(", ")}.`);
-  if (e2.publisher && e2.publisher !== e2.venue) parts.push(`${oneLine7(e2.publisher)}.`);
+  if (e2.publisher && e2.publisher !== e2.venue) parts.push(`${oneLine8(e2.publisher)}.`);
   const id = identifierText(e2);
   if (id) parts.push(id);
   return parts.join(" ");
@@ -116138,13 +116435,13 @@ function renderSourcesBlock(entries) {
     const tags = provenanceTags(e2);
     if (tags.length > 0) facts.push(`Tags: ${tags.join(", ")}`);
     lines2.push(`  - ${facts.join(" \xB7 ")}`);
-    if (e2.why_relevant) lines2.push(`  - Why relevant: ${oneLine7(e2.why_relevant)}`);
+    if (e2.why_relevant) lines2.push(`  - Why relevant: ${oneLine8(e2.why_relevant)}`);
     if (e2.abstract) lines2.push(`  - Abstract: ${excerpt(e2.abstract, ABSTRACT_CHARS)}`);
     if (e2.retraction_status === "retracted") {
-      lines2.push(`  - Retraction: RETRACTED${e2.retraction_details ? ` \u2014 ${oneLine7(e2.retraction_details)}` : ""}`);
+      lines2.push(`  - Retraction: RETRACTED${e2.retraction_details ? ` \u2014 ${oneLine8(e2.retraction_details)}` : ""}`);
     } else if (e2.retraction_status === "unknown") {
       lines2.push(
-        isNoRetractionDataReason(e2.retraction_details) ? `  - Retraction: retraction status unknown (${oneLine7(e2.retraction_details ?? "")}; reported at verify, never shown as clear)` : e2.retraction_details ? `  - Retraction: retraction status unknown (${oneLine7(e2.retraction_details)}; it is re-checked at verify and done)` : "  - Retraction: retraction status unknown (the lookup failed; it is re-checked at verify and done)"
+        isNoRetractionDataReason(e2.retraction_details) ? `  - Retraction: retraction status unknown (${oneLine8(e2.retraction_details ?? "")}; reported at verify, never shown as clear)` : e2.retraction_details ? `  - Retraction: retraction status unknown (${oneLine8(e2.retraction_details)}; it is re-checked at verify and done)` : "  - Retraction: retraction status unknown (the lookup failed; it is re-checked at verify and done)"
       );
     }
     if (!e2.hydrated) {
@@ -116215,7 +116512,7 @@ var init_research_md = __esm({
       "bib-import": "imported",
       v1: "imported"
     });
-    __name(oneLine7, "oneLine");
+    __name(oneLine8, "oneLine");
     __name(excerpt, "excerpt");
     __name(provenanceTags, "provenanceTags");
     __name(displayAuthor, "displayAuthor");
@@ -116232,24 +116529,24 @@ var init_research_md = __esm({
 function safeSnippet(s2) {
   return s2.replace(/[\r\n]+/g, " ").replace(/\*/g, "\\*");
 }
-function oneLine8(s2) {
+function oneLine9(s2) {
   return s2.replace(/\s*[\r\n]+\s*/g, " ").replace(/\*/g, "\\*").trim();
 }
 function renderQuoteRow(row2) {
   const lev = Number.isFinite(row2.levRatio) && !UNCOMPARED_QUOTE_VERDICTS.has(row2.verdict) ? row2.levRatio.toFixed(3) : "n/a";
   const accepted = row2.accepted ? ` \u2014 accepted by you ${row2.accepted.at} (${row2.accepted.via === "flag" ? "--accept-quote" : "at the prompt"})` : "";
-  return `- ${row2.key} [${row2.id}] ("${safeSnippet(row2.snippet)}\u2026"): **${row2.verdict}** \u2014 lev=${lev} \u2014 ${oneLine8(row2.reason)}${accepted}`;
+  return `- ${row2.key} [${row2.id}] ("${safeSnippet(row2.snippet)}\u2026"): **${row2.verdict}** \u2014 lev=${lev} \u2014 ${oneLine9(row2.reason)}${accepted}`;
 }
 function renderGateRow(row2) {
   switch (row2.kind) {
     case "pass1":
-      return renderPass1VerdictRow(row2.key, row2.verdict, row2.titleJW, row2.authorJW, oneLine8(row2.reason));
+      return renderPass1VerdictRow(row2.key, row2.verdict, row2.titleJW, row2.authorJW, oneLine9(row2.reason));
     case "text":
-      return renderPass1VerdictRow(row2.key, row2.verdict, Number.NaN, Number.NaN, oneLine8(`\`${row2.text.replace(/`/g, "'").slice(0, 80)}\`: ${row2.reason}`));
+      return renderPass1VerdictRow(row2.key, row2.verdict, Number.NaN, Number.NaN, oneLine9(`\`${row2.text.replace(/`/g, "'").slice(0, 80)}\`: ${row2.reason}`));
     case "pass3":
       return renderQuoteRow(row2);
     case "draft":
-      return `- ${DRAFT_ROW_KEY}: **${row2.verdict}** \u2014 ${oneLine8(row2.reason)}`;
+      return `- ${DRAFT_ROW_KEY}: **${row2.verdict}** \u2014 ${oneLine9(row2.reason)}`;
   }
 }
 function orderedLabels(present, vocabulary) {
@@ -116355,7 +116652,7 @@ function renderVerificationMd(doc) {
     DRAFT_CHECKS_HEADING,
     "",
     ...draft.map(renderGateRow),
-    ...(doc.notes ?? []).map(oneLine8),
+    ...(doc.notes ?? []).map(oneLine9),
     ...draft.length === 0 && (doc.notes ?? []).length === 0 ? ["_(no draft findings)_"] : [],
     "",
     ...accepted.length > 0 ? [accepted, ""] : [],
@@ -116422,13 +116719,13 @@ function summaryMismatches(md) {
   const out2 = [];
   const check3 = /* @__PURE__ */ __name((pass, labels) => {
     const counts = countBy(labels);
-    const listed = doc.summary.filter((s2) => s2.pass === pass);
-    for (const s2 of listed) {
+    const listed2 = doc.summary.filter((s2) => s2.pass === pass);
+    for (const s2 of listed2) {
       const n2 = counts.get(s2.verdict) ?? 0;
       if (n2 !== s2.count) out2.push(`${pass} ${s2.verdict}: the Summary says ${s2.count}, the rows hold ${n2}`);
     }
     for (const [label2, n2] of counts) {
-      if (!listed.some((s2) => s2.verdict === label2)) out2.push(`${pass} ${label2}: ${n2} row(s) missing from the Summary`);
+      if (!listed2.some((s2) => s2.verdict === label2)) out2.push(`${pass} ${label2}: ${n2} row(s) missing from the Summary`);
     }
   }, "check");
   const label = /* @__PURE__ */ __name((r2) => r2.accepted && r2.verdict === "UNVERIFIABLE-QUOTE" ? ACCEPTED_QUOTE_LABEL : r2.verdict, "label");
@@ -116453,7 +116750,7 @@ var init_verification_md = __esm({
     NO_CITATIONS_NOTE = "Note: DRAFT.md cites no sources ([@citekey]) \u2014 Pass 1 and Pass 3 had nothing to check.";
     ACCEPTED_QUOTE_LABEL = "UNVERIFIABLE-QUOTE (accepted)";
     __name(safeSnippet, "safeSnippet");
-    __name(oneLine8, "oneLine");
+    __name(oneLine9, "oneLine");
     UNCOMPARED_QUOTE_VERDICTS = /* @__PURE__ */ new Set(["UNVERIFIABLE-QUOTE", "UNVERIFIABLE-NETWORK", "UNATTRIBUTED"]);
     __name(renderQuoteRow, "renderQuoteRow");
     __name(renderGateRow, "renderGateRow");
@@ -116487,7 +116784,7 @@ var init_dist4 = __esm({
 });
 
 // bin/lib/plan-render.ts
-function oneLine9(s2) {
+function oneLine10(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function frontmatterObject(fields, extra) {
@@ -116497,12 +116794,12 @@ function frontmatterObject(fields, extra) {
   };
   if (fields.suffix !== void 0) out2["suffix"] = fields.suffix;
   out2["slug"] = fields.slug;
-  out2["title"] = oneLine9(fields.title) || fields.slug;
-  if (fields.purpose !== void 0 && oneLine9(fields.purpose).length > 0) out2["purpose"] = oneLine9(fields.purpose);
+  out2["title"] = oneLine10(fields.title) || fields.slug;
+  if (fields.purpose !== void 0 && oneLine10(fields.purpose).length > 0) out2["purpose"] = oneLine10(fields.purpose);
   if (fields.role !== void 0) out2["role"] = fields.role;
   out2["depends_on"] = [...fields.depends_on];
   if (fields.word_target !== void 0 && fields.word_target > 0) out2["word_target"] = fields.word_target;
-  if (fields.voice !== void 0 && oneLine9(fields.voice).length > 0) out2["voice"] = oneLine9(fields.voice);
+  if (fields.voice !== void 0 && oneLine10(fields.voice).length > 0) out2["voice"] = oneLine10(fields.voice);
   out2["assigned_sources"] = [...new Set(fields.assigned_sources)];
   if (fields.wave !== void 0) out2["wave"] = fields.wave;
   if (extra.stub === true) out2["stub"] = true;
@@ -116517,21 +116814,21 @@ function withMarker(heading, marker) {
 function renderPlanBody(plan, wordTarget, opts = {}) {
   const lines2 = [...withMarker("## Claims", opts.marker)];
   plan.claims.forEach((c2, i) => {
-    lines2.push(`${i + 1}. ${oneLine9(c2.claim)}`);
+    lines2.push(`${i + 1}. ${oneLine10(c2.claim)}`);
     lines2.push(`   - Sources: ${c2.sources.length > 0 ? [...new Set(c2.sources)].join(", ") : "(none)"}`);
-    lines2.push(`   - Evidence: ${oneLine9(c2.evidence) || "(none)"}`);
-    lines2.push(`   - Counterexamples: ${oneLine9(c2.counterexamples) || "(none)"}`);
+    lines2.push(`   - Evidence: ${oneLine10(c2.evidence) || "(none)"}`);
+    lines2.push(`   - Counterexamples: ${oneLine10(c2.counterexamples) || "(none)"}`);
   });
   lines2.push("", "## Structure", "");
   const paragraphs2 = [...plan.structure].sort((a3, b3) => a3.paragraph - b3.paragraph);
   paragraphs2.forEach((p2, i) => {
     const claims = p2.claims.length > 0 ? `claims ${[...new Set(p2.claims)].join(", ")}` : "claims none";
-    lines2.push(`${i + 1}. ${oneLine9(p2.purpose)} \u2014 ${claims}`);
+    lines2.push(`${i + 1}. ${oneLine10(p2.purpose)} \u2014 ${claims}`);
   });
   lines2.push("", "## Word target", "");
   lines2.push(wordTarget !== void 0 && wordTarget > 0 ? `${wordTarget} words` : "(not set)");
   lines2.push("", "## Voice", "");
-  lines2.push(oneLine9(plan.voice) || "(no voice direction)");
+  lines2.push(oneLine10(plan.voice) || "(no voice direction)");
   lines2.push("");
   return lines2.join("\n");
 }
@@ -116600,7 +116897,7 @@ function parsePlanBody(body) {
   const sections2 = bodySections(body);
   const wordLines = (sections2.get("word target") ?? []).join("\n");
   const wm = /(\d+)\s+words?/i.exec(wordLines);
-  const voice = oneLine9((sections2.get("voice") ?? []).join(" "));
+  const voice = oneLine10((sections2.get("voice") ?? []).join(" "));
   return {
     claims: parsePlanClaims(body),
     structure: parsePlanStructure(body),
@@ -116623,7 +116920,7 @@ var init_plan_render = __esm({
     "use strict";
     init_frontmatter();
     init_plan_frontmatter();
-    __name(oneLine9, "oneLine");
+    __name(oneLine10, "oneLine");
     __name(frontmatterObject, "frontmatterObject");
     __name(withMarker, "withMarker");
     __name(renderPlanBody, "renderPlanBody");
@@ -119248,8 +119545,8 @@ async function enrichOpenAccess(targets, opts = {}) {
     }
   }
   if (unconfirmed > 0) {
-    const listed = checkOffline !== null && firstUnconfirmed !== null && firstUnconfirmed.endsWith(`not checked (${checkOffline})`) ? `${unconfirmed} link(s) Unpaywall lists were not checked (${checkOffline}), so they count as abstract-only` : `${unconfirmed} link(s) Unpaywall lists did not answer with a PDF (${firstUnconfirmed ?? "no PDF"}), so they count as abstract-only`;
-    problem = problem === null ? listed : `${problem}; ${listed}`;
+    const listed2 = checkOffline !== null && firstUnconfirmed !== null && firstUnconfirmed.endsWith(`not checked (${checkOffline})`) ? `${unconfirmed} link(s) Unpaywall lists were not checked (${checkOffline}), so they count as abstract-only` : `${unconfirmed} link(s) Unpaywall lists did not answer with a PDF (${firstUnconfirmed ?? "no PDF"}), so they count as abstract-only`;
+    problem = problem === null ? listed2 : `${problem}; ${listed2}`;
   }
   return { asked: todo.length, answered, found, unconfirmed, problem };
 }
@@ -119376,12 +119673,12 @@ function clip(text4, max) {
   if (code >= 55296 && code <= 56319) end -= 1;
   return text4.slice(0, end);
 }
-function oneLine10(s2) {
+function oneLine11(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function textOrNull(v2, max) {
   if (typeof v2 !== "string") return null;
-  const t = oneLine10(v2);
+  const t = oneLine11(v2);
   if (t.length === 0) return null;
   return max === void 0 ? t : clip(t, max);
 }
@@ -119398,7 +119695,7 @@ function authorsOf(v2) {
   const out2 = [];
   for (const a3 of v2) {
     if (typeof a3 !== "string") continue;
-    const t = oneLine10(a3);
+    const t = oneLine11(a3);
     if (t.length > 0) out2.push(t);
     if (out2.length === MAX_AUTHORS) break;
   }
@@ -119491,7 +119788,7 @@ var init_source_context = __esm({
     MAX_ABSTRACT_CHARS = 800;
     __name(fullTextAvailable2, "fullTextAvailable");
     __name(clip, "clip");
-    __name(oneLine10, "oneLine");
+    __name(oneLine11, "oneLine");
     __name(textOrNull, "textOrNull");
     __name(yearOf4, "yearOf");
     __name(tierOf, "tierOf");
@@ -120189,12 +120486,12 @@ var init_research_orchestrator = __esm({
 // bin/lib/section-research.ts
 import { existsSync as existsSync19, readFileSync as readFileSync25 } from "node:fs";
 import path22 from "node:path";
-function oneLine11(s2) {
+function oneLine12(s2) {
   return s2.replace(/\s+/g, " ").trim();
 }
 function sectionQueries(query, title) {
-  const q3 = oneLine11(query);
-  const joined = oneLine11(`${q3} ${title}`);
+  const q3 = oneLine12(query);
+  const joined = oneLine12(`${q3} ${title}`);
   return q3.toLowerCase() === joined.toLowerCase() || title.trim() === "" ? [q3] : [q3, joined];
 }
 function knownEntryFor(entries, view) {
@@ -120217,7 +120514,7 @@ function knownEntryFor(entries, view) {
   return entries.find((e2) => sameDoiVersionFamily(e2, view) || sameWorkVersion(e2, view)) ?? null;
 }
 function excerpt2(text4, max) {
-  const flat = oneLine11(text4 ?? "");
+  const flat = oneLine12(text4 ?? "");
   if (flat.length <= max) return flat;
   const cut = flat.slice(0, max);
   const at = cut.lastIndexOf(" ");
@@ -120271,7 +120568,7 @@ async function runSectionResearch(opts) {
   const verb = opts.verb ?? "plan";
   const label = `pensmith ${verb} --research`;
   const { out: out2, err } = opts.io;
-  const rawQuery = oneLine11(opts.query);
+  const rawQuery = oneLine12(opts.query);
   if (rawQuery.length === 0) throw new PensmithError(`${label}: the query is empty`, EXIT_USAGE);
   if (!opts.yolo && !canPrompt()) {
     await runGate("plan-research", { yolo: false, detail: `section ${id}: nothing was searched, sent or written` });
@@ -120287,12 +120584,12 @@ async function runSectionResearch(opts) {
     );
   }
   const plan = await loadFrontmatterDoc("plan", planPath);
-  const title = typeof plan.frontmatter["title"] === "string" && plan.frontmatter["title"].trim() ? oneLine11(plan.frontmatter["title"]) : opts.slug;
+  const title = typeof plan.frontmatter["title"] === "string" && plan.frontmatter["title"].trim() ? oneLine12(plan.frontmatter["title"]) : opts.slug;
   const doc = readIntakeBrief(opts.root);
   const redact = doc?.brief.pii_redaction === true || config2.project?.pii_redaction === true;
-  const query = redact ? oneLine11(redactPii(rawQuery)) : rawQuery;
+  const query = redact ? oneLine12(redactPii(rawQuery)) : rawQuery;
   const discipline = resolveDiscipline({ discipline: { intake: doc?.brief.discipline, config: config2.project?.discipline_preset } }).slug.value;
-  const briefTopic = oneLine11(doc?.brief.topic ?? "");
+  const briefTopic = oneLine12(doc?.brief.topic ?? "");
   const topic = briefTopic ? `${briefTopic} \u2014 ${title}` : title;
   const queries = sectionQueries(query, title);
   out2(`${label}: section ${id} "${title}" \u2014 ${queries.length} quer${queries.length === 1 ? "y" : "ies"}${redact ? " (PII-redacted)" : ""}`);
@@ -120381,7 +120678,7 @@ async function runSectionResearch(opts) {
   const notAdded = [
     ...final.map((i, index) => ({ i, key: realKeys[index] })).filter(({ key: key2 }, index) => withheld.has(key2) && realKeys.indexOf(key2) === index).map(({ i, key: key2 }) => `[@${key2}] ${formatReference(i.view)} \u2014 not assigned: the citation verifier would not pass a citation of it (${withheld.get(key2)})`),
     ...pass.kept.filter((k2) => !selected.has(k2.candidate.citekey)).map((k2) => `[@${k2.candidate.citekey}] ${formatReference(k2.view)} \u2014 deselected`),
-    ...pass.rejected.filter((r2) => !selected.has(r2.candidate.citekey)).map((r2) => `[@${r2.candidate.citekey}] ${formatReference(r2.view)} \u2014 evaluator: ${oneLine11(r2.reason ?? "rejected")}`),
+    ...pass.rejected.filter((r2) => !selected.has(r2.candidate.citekey)).map((r2) => `[@${r2.candidate.citekey}] ${formatReference(r2.view)} \u2014 evaluator: ${oneLine12(r2.reason ?? "rejected")}`),
     ...pass.excluded.map((x3) => `[@${x3.candidate.citekey}] ${formatReference(x3.view)} \u2014 policy: ${x3.exclusion?.reason ?? "excluded"}`)
   ];
   const retracted = candidates.map((c2, i) => ({ c: c2, key: realKeys[i] })).filter(({ c: c2 }) => c2.retracted === true || c2.retraction_status === "retracted");
@@ -120395,7 +120692,7 @@ async function runSectionResearch(opts) {
     `- Added to this section's assigned_sources: ${added.length > 0 ? added.join(", ") : assignable.length > 0 ? "(none new \u2014 already assigned)" : '(none \u2014 see "Not added")'}`,
     `- New to LIBRARY.json: ${newToLibrary.length > 0 ? newToLibrary.join(", ") : "(none)"}`,
     ...retracted.length > 0 ? [`- RETRACTED (kept in LIBRARY.json, not assigned \u2014 Pass 1 blocks a citation of it): ${retracted.map((r2) => r2.key).join(", ")}`] : [],
-    ...unknown2.length > 0 ? [`- Retraction status unknown (a failed lookup is re-checked at verify and done; an agency with no retraction data stays unknown): ${unknown2.map((u) => `${u.key}${u.reason ? ` \u2014 ${oneLine11(u.reason)}` : ""}`).join("; ")}`] : [],
+    ...unknown2.length > 0 ? [`- Retraction status unknown (a failed lookup is re-checked at verify and done; an agency with no retraction data stays unknown): ${unknown2.map((u) => `${u.key}${u.reason ? ` \u2014 ${oneLine12(u.reason)}` : ""}`).join("; ")}`] : [],
     ...notAdded.length > 0 ? ["- Not added:", ...notAdded.map((x3) => `  - ${x3}`)] : []
   ];
   await appendSectionLog(logPath, `# Research log \u2014 section ${id}: ${title}
@@ -120472,7 +120769,7 @@ var init_section_research = __esm({
         this.name = "SectionResearchError";
       }
     };
-    __name(oneLine11, "oneLine");
+    __name(oneLine12, "oneLine");
     __name(sectionQueries, "sectionQueries");
     __name(knownEntryFor, "knownEntryFor");
     __name(excerpt2, "excerpt");
@@ -132804,7 +133101,7 @@ function checkDraft(text4, opts) {
     out2.push({ kind: "unassigned-citekey", citekey: key2, message: `citekey ${key2} not assigned to section ${opts.section}` });
   }
   for (const f2 of [...findUnparseableCitations(draft), ...findUnsupportedForms(draft)].sort((a3, b3) => a3.line - b3.line)) {
-    out2.push({ kind: "uncheckable-citation-form", citekey: textRowKey(f2.line), message: `line ${f2.line}: \`${oneLine12(f2.text)}\` (${f2.verdict})` });
+    out2.push({ kind: "uncheckable-citation-form", citekey: textRowKey(f2.line), message: `line ${f2.line}: \`${oneLine13(f2.text)}\` (${f2.verdict})` });
   }
   if (opts.fullText !== void 0) {
     for (const q3 of quotesWithoutFullText(draft, opts.fullText, opts.quoteMinWords !== void 0 ? { minWords: opts.quoteMinWords } : {})) {
@@ -132813,7 +133110,7 @@ function checkDraft(text4, opts) {
   }
   return out2;
 }
-function oneLine12(text4) {
+function oneLine13(text4) {
   const t = text4.replace(/\s+/g, " ").trim();
   return t.length > 80 ? `${t.slice(0, 79)}\u2026` : t;
 }
@@ -132868,7 +133165,7 @@ var init_draft_containment = __esm({
     init_verdicts();
     init_full_text();
     __name(checkDraft, "checkDraft");
-    __name(oneLine12, "oneLine");
+    __name(oneLine13, "oneLine");
     __name(describeForms, "describeForms");
     __name(unassignedKeys, "unassignedKeys");
     __name(describeQuotes, "describeQuotes");
@@ -133923,17 +134220,17 @@ async function doiHandleExists(doi) {
 }
 async function fallbackDoiVerdict(c2, record2, who, label, fb) {
   const wanted = normalizeDoi(fb.doi) ?? fb.doi.toLowerCase();
-  const listed = typeof record2.doi === "string" ? normalizeDoi(record2.doi) : null;
+  const listed2 = typeof record2.doi === "string" ? normalizeDoi(record2.doi) : null;
   const m3 = /* @__PURE__ */ __name(() => {
     const r2 = matchWork(c2.work, record2);
     return { titleJW: r2.titleJW, authorJW: r2.authorJW };
   }, "m");
-  if (listed !== null && listed === wanted) return null;
-  if (listed !== null) {
+  if (listed2 !== null && listed2 === wanted) return null;
+  if (listed2 !== null) {
     return row(
       c2.ck,
       "MIS-CITED",
-      `the entry's DOI ${fb.doi} is not the DOI ${who}'s record of ${label} lists (${listed}) \u2014 correct the entry's DOI (the export prints it)`,
+      `the entry's DOI ${fb.doi} is not the DOI ${who}'s record of ${label} lists (${listed2}) \u2014 correct the entry's DOI (the export prints it)`,
       m3(),
       record2.last_verified
     );
@@ -147648,9 +147945,9 @@ function verifyReply(result) {
   const pass4 = Array.isArray(r2.pass4) ? r2.pass4.reduce((s2, p2) => s2 + (typeof p2.orphanCount === "number" ? p2.orphanCount : 0), 0) : null;
   const freshness = Array.isArray(r2.freshness) ? r2.freshness : null;
   const blocking = rows.filter((row2) => blocksCompile(row2.verdict, isAccepted(row2)));
-  const listed = blocking.slice(0, MAX_REPLY_ROWS).map((row2) => bounded(renderGateRow(row2)));
-  if (blocking.length > listed.length) {
-    listed.push(`\u2026 and ${blocking.length - listed.length} more blocking row(s): VERIFICATION.md lists every row.`);
+  const listed2 = blocking.slice(0, MAX_REPLY_ROWS).map((row2) => bounded(renderGateRow(row2)));
+  if (blocking.length > listed2.length) {
+    listed2.push(`\u2026 and ${blocking.length - listed2.length} more blocking row(s): VERIFICATION.md lists every row.`);
   }
   return {
     summary: {
@@ -147662,7 +147959,7 @@ function verifyReply(result) {
       summary: summaryRows({ rows, freshness, pass2Verdicts: pass2 !== null && pass2.length > 0 ? pass2 : null, pass4Orphans: pass4 }),
       blocking_rows: blocking.length
     },
-    rows: listed,
+    rows: listed2,
     message: typeof r2.message === "string" && r2.message.trim() !== "" ? r2.message : null
   };
 }
@@ -147957,11 +148254,11 @@ function buildServer(paperRoot) {
   return server;
 }
 __name(buildServer, "buildServer");
-function oneLine13(e2) {
+function oneLine14(e2) {
   const msg = e2 instanceof Error ? e2.message : String(e2);
   return msg.replace(/\s*\r?\n\s*/g, " ").trim() || "unexpected error";
 }
-__name(oneLine13, "oneLine");
+__name(oneLine14, "oneLine");
 async function main() {
   setOutputSink(process.stderr);
   disablePrompts();
@@ -147969,7 +148266,7 @@ async function main() {
   try {
     await migrateLegacyLayout(paperRoot);
   } catch (e2) {
-    process.stderr.write(`pensmith (mcp): ${oneLine13(e2)}
+    process.stderr.write(`pensmith (mcp): ${oneLine14(e2)}
 `);
   }
   const server = buildServer(paperRoot);
@@ -147979,7 +148276,7 @@ async function main() {
 __name(main, "main");
 if (isMainModule(import.meta.url)) {
   main().catch((e2) => {
-    process.stderr.write(`pensmith (mcp): could not start \u2014 ${oneLine13(e2)}
+    process.stderr.write(`pensmith (mcp): could not start \u2014 ${oneLine14(e2)}
 `);
     process.exit(1);
   });
