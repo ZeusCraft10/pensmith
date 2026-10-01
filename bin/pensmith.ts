@@ -96,7 +96,7 @@ import { argvFlagValue, runtimeFlagsFromArgv, setRuntimeOverride } from './lib/r
 import { isProviderName, PROVIDER_NAMES } from './lib/llm-models.js';
 import { resolveNextAction, type RouterDecision } from './lib/router.js';
 import { sameSectionId, sectionIdOf, sectionLabel, type SectionId } from './lib/section-id.js';
-import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
+import { renderLearningEndState } from './cli/goal.js';
 import { routeOptionsFor } from './cli/route-options.js';
 import { out as writeOut } from './lib/output-sink.js';
 
@@ -1211,14 +1211,20 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   // the router's next action is not the requested verb, no section is ready for
   // it — tell the user the real next step instead of running a command they did
   // not ask for. It runs that one verb (never the bare chain).
+  // The same routing options as bare / next / status (review round 3: an
+  // outline-only paper's `pensmith plan` planned §1 — a paid call — while
+  // status said the paper was complete).
   const paperRoot = projectRoot();
-  const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
-  const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
+  const routeOptions = routeOptionsFor(paperRoot);
+  const decision = await resolveNextAction(paperRoot, routeOptions);
   if (decision.verb !== verb) {
     const at =
       'n' in decision && 'slug' in decision ? ` (section ${decision.n} ${decision.slug})` : '';
+    const outlineOnly = routeOptions.stopAfterOutline
+      ? 'this paper is outline only ([project] mode = "outline"): no section is planned, drafted or verified unless you name it — '
+      : `no section is ready to ${verb} right now — `;
     process.stderr.write(
-      `pensmith ${verb}: no section is ready to ${verb} right now — the next step is ` +
+      `pensmith ${verb}: ${outlineOnly}the next step is ` +
       `\`pensmith ${decision.verb}\`${at}. Pass a section number ` +
       `(e.g. \`pensmith ${verb} 2\`) to ${verb} a specific section.\n`,
     );

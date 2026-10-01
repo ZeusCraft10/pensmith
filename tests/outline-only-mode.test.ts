@@ -145,6 +145,15 @@ test('GRND-11 (built CLI): an outline-only paper runs research, outline and done
   assert.match(refused.stdout, /never replaces your file/);
   assert.match(readFileSync(join(paper, 'ANNOTATED-BIBLIOGRAPHY.md'), 'utf8'), /My own note\./, 'the edit is kept');
 
+  // Review round 3: `plan` / `verify` with no number route as bare / status
+  // do — an outline-only paper names no section (no planner call).
+  for (const verb of ['plan', 'verify']) {
+    const r = await sb.run([verb, '--yolo']);
+    assert.equal(r.status, 1, `${verb}: ${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, new RegExp(`pensmith ${verb}: this paper is outline only \\(\\[project\\] mode = "outline"\\): no section is planned, drafted or verified unless you name it`));
+  }
+  assert.equal(sb.mock.requests.some((r) => r.slug === 'section-planner'), false, 'no planner call without a section number');
+
   // An explicit section verb still runs (the outline-only route is routing only).
   const plan = await sb.run(['plan', '1', '--yolo']);
   assert.equal(plan.status, 0, plan.stderr);
