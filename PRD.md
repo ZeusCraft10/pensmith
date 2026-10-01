@@ -550,10 +550,10 @@ Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/Open
 
 ## 10. Per-project config (`.paper/config.toml`)
 
-`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 3` (v2 since Phase 19: `[verification] send_byo_passages` and the `books` / `nber` values of `[sources] allowed_databases`; v3 since Phase 20: `[verification] quote_min_words`). An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
+`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 4` (v2 since Phase 19: `[verification] send_byo_passages` and the `books` / `nber` values of `[sources] allowed_databases`; v3 since Phase 20: `[verification] quote_min_words`; v4 since Phase 21: `[humanizer] honesty_consent`, the `[compile]` table, `[verification] plagiarism_max_phrases` and a local `.csl` path as `[project] citation_style`). An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
 
 ```toml
-schema_version = 3                   # MANDATORY — see §14 NFRs
+schema_version = 4                   # MANDATORY — see §14 NFRs
 
 [project]
 # `pensmith new` writes mode, goal, class, discipline_preset, citation_style,
@@ -565,7 +565,7 @@ assignment_prompt = "@./assignment.pdf"
 mode = "draft"                       # draft | outline
 goal = "draft"                       # draft | learning | both (the §7.13 intake choices)
 length_target_words = 2500
-citation_style = "APA"               # APA | MLA | Chicago (Notes-Bibliography) | Chicago (Author-Date) | IEEE | AMA | Vancouver | Harvard — or a CSL key (intake writes one, e.g. chicago-notes-bib) or an alias ("APA 7", "Chicago")
+citation_style = "APA"               # APA | MLA | Chicago (Notes-Bibliography) | Chicago (Author-Date) | IEEE | AMA | Vancouver | Harvard — or a CSL key (intake writes one, e.g. chicago-notes-bib) or an alias ("APA 7", "Chicago") — or a path to a local .csl file ("styles/my-journal.csl", relative to the project root, or absolute; checked as CSL 1.0 when done uses it). Unset: the intake brief's style, else the discipline preset's (§8). `done --style` wins over all (§7.9)
 discipline_preset = "psychology"
 due_date = "2026-05-20"
 counterargument_required = true
@@ -589,7 +589,8 @@ send_byo_passages = false           # Pass 2 may send your own PDFs' passages ne
 quote_min_words = 5                  # Pass 3 checks every direct quote of at least this many words (1–5: a paper may only lower the floor)
 flag_threshold = "low"               # low | medium | high
 recheck_after_days = 30
-plagiarism_check = true              # free distinctive-phrase check
+plagiarism_check = true              # free distinctive-phrase check (§7.17)
+plagiarism_max_phrases = 30          # phrases done sends to the search: at least one per body paragraph, up to this many
 citation_density_min = 1             # per ¶
 citation_density_max = 3             # per ¶
 # verify_quotes is NOT a key: Pass 3 quote verification is a blocking pass (§14).
@@ -598,8 +599,13 @@ citation_density_max = 3             # per ¶
 [humanizer]
 enabled = true
 preserve_voice = "academic"          # academic | formal | casual
-honesty_score = true                 # show GPTZero score
-honesty_backend = "gptzero"          # gptzero | originality | sapling
+honesty_score = true                 # show the AI-detection score (§7.11)
+honesty_backend = "gptzero"          # gptzero | originality | sapling (key: GPTZERO_API_KEY / ORIGINALITY_API_KEY / SAPLING_API_KEY)
+honesty_consent = true               # example — unset: not asked yet. Your answer to "send the paper to the detector?", asked once in a terminal and recorded here (true or false); --yolo never answers it, and without it a non-interactive run sends nothing
+
+[compile]
+smooth_transitions = true            # rewrite the N-1 section boundaries for flow (§7.8); citations and quotes are masked and checked
+contradiction_pairs = 20             # cross-section claim pairs one compile sends to the claim-consistency judge (0: the offline heuristic only)
 
 [style]
 match_past_writing = false           # written by intake from the style-match answer (§7.18)

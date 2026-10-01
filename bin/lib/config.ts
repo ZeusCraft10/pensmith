@@ -36,6 +36,8 @@ import { SLUGS, canonicalSlug } from './llm-models.js';
 import {
   CONFIG_TABLES,
   CURRENT_CONFIG_VERSION,
+  DEFAULT_CONTRADICTION_PAIRS,
+  DEFAULT_PLAGIARISM_MAX_PHRASES,
   DEFAULT_QUOTE_MIN_WORDS,
   DEFAULT_RECHECK_AFTER_DAYS,
   PaperConfigSchema,
@@ -46,6 +48,7 @@ import { PROJECT_CONFIG_FRAGMENT, PROJECT_CONFIG_FRAGMENT_DEFAULTS } from './tut
 import { migrate as v0ToV1 } from './migrations/config/v0_to_v1.js';
 import { migrate as v1ToV2 } from './migrations/config/v1_to_v2.js';
 import { migrate as v2ToV3 } from './migrations/config/v2_to_v3.js';
+import { migrate as v3ToV4 } from './migrations/config/v3_to_v4.js';
 import { editTomlText } from './config-text.js';
 import { isDisciplineSlug, presetFor } from './disciplines.js';
 
@@ -64,6 +67,7 @@ const MIGRATIONS: Readonly<Record<number, (raw: Record<string, unknown>) => Reco
   0: v0ToV1,
   1: v1ToV2,
   2: v2ToV3,
+  3: v3ToV4,
 });
 
 export const VERIFY_QUOTES_REFUSAL =
@@ -555,9 +559,12 @@ const DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({
   'verification.recheck_after_days': DEFAULT_RECHECK_AFTER_DAYS,
   'verification.send_byo_passages': false,
   'verification.plagiarism_check': true,
+  'verification.plagiarism_max_phrases': DEFAULT_PLAGIARISM_MAX_PHRASES,
   'humanizer.enabled': true,
   'humanizer.honesty_score': true,
   'humanizer.honesty_backend': 'gptzero',
+  'compile.smooth_transitions': true,
+  'compile.contradiction_pairs': DEFAULT_CONTRADICTION_PAIRS,
   'style.match_past_writing': false,
   'budget.cost_cap_usd': 5,
   'network.contact_email_env': 'PENSMITH_CONTACT_EMAIL',

@@ -1,7 +1,7 @@
 // tests/config.test.ts — CONF-01 (D-17-31): the .paper/config.toml loader.
 //
 // bin/lib/config.ts is the only reader and writer. It migrates an older file
-// and writes it back with the current schema_version (3), refuses a newer one, warns once
+// and writes it back with the current schema_version (4), refuses a newer one, warns once
 // per unknown key, refuses verify_quotes (PRD §14) and a paper-level
 // endpoint / api_key_env (naming the global runtime.json), and `status
 // --config` prints every effective value with its source.
@@ -43,15 +43,15 @@ test('CONF-01: a v0 file (no schema_version) is migrated and written back once',
     sb.writePaperConfig('[project]\ngoal = "learning"\npii_redaction = true\n\n[verification]\nverify_quotes = true\nplagiarism_check = false\n\n[runtime]\nendpoint = ""\napi_key_env = "ANTHROPIC_API_KEY"\n');
     const file = path.join(sb.paper, 'config.toml');
     const { value: cfg, stderr } = await captureStderr(() => loadPaperConfig(sb.root));
-    assert.equal(cfg.schema_version, 3);
+    assert.equal(cfg.schema_version, 4);
     assert.equal(cfg.project?.pii_redaction, true);
     assert.equal(cfg.verification?.plagiarism_check, false);
     const written = fs.readFileSync(file, 'utf8');
-    assert.match(written, /^schema_version = 3\n/);
+    assert.match(written, /^schema_version = 4\n/);
     assert.ok(!/verify_quotes/.test(written), 'the retired verify_quotes = true is dropped');
     assert.ok(!/endpoint|api_key_env/.test(written), 'the v0 template no-op runtime keys are dropped');
     assert.match(written, /pii_redaction = true/);
-    assert.match(stderr, /migrated from schema v0 to v3/);
+    assert.match(stderr, /migrated from schema v0 to v4/);
     // A second read of the now-current file writes nothing.
     const before = fs.statSync(file).mtimeMs;
     const again = await captureStderr(() => loadPaperConfig(sb.root));
@@ -67,7 +67,7 @@ test('CONF-01: a newer schema_version is refused with an upgrade message and nev
     const file = path.join(sb.paper, 'config.toml');
     const before = fs.readFileSync(file, 'utf8');
     await assert.rejects(loadPaperConfig(sb.root), (e: unknown) =>
-      e instanceof ConfigError && e.exitCode === 1 && /schema_version 99, newer than this pensmith supports \(3\); upgrade pensmith/.test(e.message));
+      e instanceof ConfigError && e.exitCode === 1 && /schema_version 99, newer than this pensmith supports \(4\); upgrade pensmith/.test(e.message));
     assert.throws(() => readPaperConfigSync(sb.root), ConfigError);
     assert.equal(tryReadPaperConfigSync(sb.root), null, 'read-only callers degrade to "no config"');
     await assert.rejects(updatePaperConfig(sb.root, () => undefined), ConfigError, 'the writer refuses too');
@@ -131,9 +131,9 @@ test('CONF-01: unknown keys are warned about but never deleted — a migration w
     const file = path.join(sb.paper, 'config.toml');
     const { stderr } = await captureStderr(() => loadPaperConfig(sb.root));
     assert.match(stderr, /unknown key "baseURL" \(ignored\)/);
-    assert.match(stderr, /migrated from schema v0 to v3/);
+    assert.match(stderr, /migrated from schema v0 to v4/);
     const migrated = fs.readFileSync(file, 'utf8');
-    assert.match(migrated, /^schema_version = 3\n/);
+    assert.match(migrated, /^schema_version = 4\n/);
     for (const kept of [/baseURL = "https:\/\/example\.org\/"/, /title = "My site"/, /favourite = 3/, /\[params\]\ntheme = "dark"/]) {
       assert.match(migrated, kept, `the migration write-back keeps ${String(kept)}`);
     }
@@ -151,7 +151,7 @@ test('CONF-01: updatePaperConfig is the single writer (the current schema_versio
     await updatePaperConfig(sb.root, (raw) => { rawTable(raw, 'project')['title'] = 'First'; });
     await updatePaperConfig(sb.root, (raw) => { rawTable(raw, 'budget')['cost_cap_usd'] = 3; });
     const text = fs.readFileSync(path.join(sb.paper, 'config.toml'), 'utf8');
-    assert.match(text, /^schema_version = 3\n/);
+    assert.match(text, /^schema_version = 4\n/);
     const cfg = readPaperConfigSync(sb.root).config;
     assert.equal(cfg.project?.title, 'First');
     assert.equal(cfg.budget?.cost_cap_usd, 3);
@@ -181,7 +181,7 @@ test('CONF-01 / RUN-26: `pensmith status --config` prints values, runtime and pe
     const r = sb.runCli(['status', '--config', '--model', 'claude-sonnet-5'], { env: { ANTHROPIC_API_KEY: 'sk-test-config-0001' } });
     assert.equal(r.status, 0, r.stderr);
     const out = r.stdout;
-    assert.match(out, /pensmith status --config \(\.paper\/config\.toml, schema_version 3\)/, 'a v1 file reads as the current version (migrated in memory)');
+    assert.match(out, /pensmith status --config \(\.paper\/config\.toml, schema_version 4\)/, 'a v1 file reads as the current version (migrated in memory)');
     assert.match(out, /project\.citation_style\s+= "MLA"\s+\(config\)/);
     assert.match(out, /humanizer\.enabled\s+= true\s+\(default\)/);
     assert.match(out, /provider\s+= anthropic\s+\(global\)/);
@@ -219,14 +219,14 @@ const COMMENTED_V0 = [
   '',
 ].join('\n');
 
-test('CONF-01: the v0 → v3 write-back keeps every comment, the layout and TOML dates (only schema_version is added)', async () => {
+test('CONF-01: the v0 → v4 write-back keeps every comment, the layout and TOML dates (only schema_version is added)', async () => {
   await withLlmSandbox({}, async (sb) => {
     sb.writePaperConfig(COMMENTED_V0);
     const file = path.join(sb.paper, 'config.toml');
     await captureStderr(() => loadPaperConfig(sb.root));
     const written = fs.readFileSync(file, 'utf8');
     const expected = COMMENTED_V0
-      .replace('[project]', 'schema_version = 3\n[project]')
+      .replace('[project]', 'schema_version = 4\n[project]')
       .replace('verify_quotes = true # retired\n', '');
     assert.equal(written, expected, 'a line edit, not a re-serialization');
     assert.match(written, /^due_date = 2026-05-20 {10}# submit via Canvas$/m, 'the date stays a TOML date');
@@ -243,26 +243,26 @@ test('CONF-01 / S-20 (Phase 19 review round 3): a v1 file migrates to the curren
     sb.writePaperConfig(v1);
     const file = path.join(sb.paper, 'config.toml');
     const { stderr } = await captureStderr(() => loadPaperConfig(sb.root));
-    assert.match(stderr, /migrated from schema v1 to v3/);
-    assert.equal(fs.readFileSync(file, 'utf8'), v1.replace('schema_version = 1\n', 'schema_version = 3\n'), 'only the version line changed');
+    assert.match(stderr, /migrated from schema v1 to v4/);
+    assert.equal(fs.readFileSync(file, 'utf8'), v1.replace('schema_version = 1\n', 'schema_version = 4\n'), 'only the version line changed');
     // The v2 keys and values validate; a newer version is refused.
     sb.writePaperConfig('schema_version = 2\n[sources]\nallowed_databases = ["books", "nber", "crossref"]\n[verification]\nsend_byo_passages = true\n');
     const cfg = readPaperConfigSync(sb.root).config;
     assert.deepEqual(cfg.sources?.allowed_databases, ['books', 'nber', 'crossref']);
     assert.equal(cfg.verification?.send_byo_passages, true);
-    sb.writePaperConfig('schema_version = 4\n');
-    assert.throws(() => readPaperConfigSync(sb.root), /schema_version 4, newer than this pensmith supports \(3\); upgrade pensmith/);
+    sb.writePaperConfig('schema_version = 5\n');
+    assert.throws(() => readPaperConfigSync(sb.root), /schema_version 5, newer than this pensmith supports \(4\); upgrade pensmith/);
   });
 });
 
-test('CONF-01 / S-20 (Phase 20, VRFY-18): a v2 file migrates to v3 by its version line alone; quote_min_words is 1–5 (a paper may only lower the floor)', async () => {
+test('CONF-01 / S-20 (Phase 20, VRFY-18): a v2 file migrates to the current version by its version line alone; quote_min_words is 1–5 (a paper may only lower the floor)', async () => {
   await withLlmSandbox({}, async (sb) => {
     const v2 = COMMENTED_V0.replace('[project]', 'schema_version = 2\n[project]').replace('verify_quotes = true # retired\n', '');
     sb.writePaperConfig(v2);
     const file = path.join(sb.paper, 'config.toml');
     const { stderr } = await captureStderr(() => loadPaperConfig(sb.root));
-    assert.match(stderr, /migrated from schema v2 to v3/);
-    assert.equal(fs.readFileSync(file, 'utf8'), v2.replace('schema_version = 2\n', 'schema_version = 3\n'), 'only the version line changed');
+    assert.match(stderr, /migrated from schema v2 to v4/);
+    assert.equal(fs.readFileSync(file, 'utf8'), v2.replace('schema_version = 2\n', 'schema_version = 4\n'), 'only the version line changed');
     assert.equal(readPaperConfigSync(sb.root).config.verification?.quote_min_words, undefined, 'absent: the default applies');
     for (const n of [1, 3, 5]) {
       sb.writePaperConfig(`schema_version = 3\n[verification]\nquote_min_words = ${n}\n`);
