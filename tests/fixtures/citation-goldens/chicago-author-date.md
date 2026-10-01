@@ -10,6 +10,12 @@ Several studies agree (Lindqvist and Berg 2012; Okafor 2019). Trust can be measu
 
 Lindqvist and Berg (2012) argue that lending policy follows growth.
 
+## Punctuation and Locators
+
+Anomalies pile up (Kuhn 1962)... Is lending growth-led (Lindqvist and Berg 2012)?! Kuhn wrote of "the essential tension" (Kuhn 1962). He asked "is it a paradigm?" (Kuhn 1962). Lending stalls (in some years (Lindqvist and Berg 2012)).
+
+The pages are cited as a range (Okafor 2019, 33--38), an open run (Okafor 2019, 33ff.). A chapter (Kuhn 1962, chap. 2) and a section (Kuhn 1962, sec. 3).
+
 ## References {#references .unnumbered}
 
 :::::: {#refs .references .csl-bib-body .hanging-indent entry-spacing="0"}

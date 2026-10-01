@@ -35,6 +35,10 @@ const FIXED = [
   ', pp. 33, 35', ', 33, 35', ', xii-xiv', ', emphasis added', ', p.5', ', 5a', ', 33ff', ', chapter 3', ', figs. 2-3', ', para. 4', ', §4',
   ', vol. 2, p. 5', ', 33–35', ', p. 33 n. 2', ', 1:5', ', II', ', line 4', ', note 3', ', 12.4', ', i', ', mix', ', 2nd ed.', ', p', ', 33,35',
   ' p. 7', ', 33 ff.', ', bk. 2', ', col. 3', ', pt. 2', ', fol. 4', ', l. 12', ', n. 5', ', no. 3', ', p. 12, cf. fig. 2',
+  // Review round 1: Pandoc's `--` range, `ff.` before the sentence period, an
+  // em dash (never a range), `number` / `issue`, and the en-GB and style-locale terms.
+  ', 727--733', ', pp. 727--733', ', 33ff.', ', 33ff., emphasis added', ', 33—35', ', pp. 33---35', ', number 3', ', issue 3',
+  ', ch. 2', ', sect. 3', ', chs. 2-3', ', secs. 2--3', ', p. 5.', ', 100-104', ', 7-9',
 ];
 
 const TERMS = ['', 'p. ', 'pp. ', 'p.', 'page ', 'pages ', 'chap. ', 'chapter ', 'sec. ', 'section ', '§', '§ ', 'para. ', 'vol. ', 'fig. ', 'figure ', 'line ', 'note ', 'col. ', 'pt. ', 'part ', 'bk. ', 'book '];
@@ -90,7 +94,10 @@ test('carry-over 3: [@k 33] is page 33 and the built-in export prints it as pand
   assert.deepEqual(splitLocator(' 33'), { locator: '33', label: 'page', rest: '' });
 });
 
-for (const style of ['chicago-author-date', 'apa']) {
+// chicago-author-date (no `p.`), apa (labels every locator), and — review
+// round 1 — ieee (a suffix outside its brackets, `Ch.`) and harvard (en-GB:
+// its own locator terms). The note style's locators are in the goldens.
+for (const style of ['chicago-author-date', 'apa', 'ieee', 'harvard']) {
   test(`D-21-04: every locator suffix renders as pandoc renders it (${style}; ${FIXED.length} fixed + ${GENERATED} generated, seed ${SEED})`, async (t) => {
     if (!requirePandoc(t, 'locator oracle')) return;
     const suffixes = [...FIXED, ...fc.sample(SUFFIX, { seed: SEED, numRuns: GENERATED })];

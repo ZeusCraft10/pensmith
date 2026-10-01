@@ -10,6 +10,12 @@ Several studies agree.[^4] Trust can be measured.[^5] Networks persist.[^6]
 
 Lindqvist and Berg[^7] argue that lending policy follows growth.
 
+## Punctuation and Locators
+
+Anomalies pile up...[^8] Is lending growth-led?![^9] Kuhn wrote of "the essential tension."[^10] He asked "is it a paradigm?"[^11] Lending stalls (in some years).[^12]
+
+The pages are cited as a range,[^13] an open run.[^14] A chapter[^15] and a section.[^16]
+
 ## Bibliography {#bibliography .unnumbered}
 
 :::::: {#refs .references .csl-bib-body .hanging-indent entry-spacing="0"}
@@ -39,3 +45,21 @@ Okafor, Chidi. "Measuring Trust in [NGO]{.nocase} Networks." In *[Handbook of Ci
 [^6]: Okafor, 41.
 
 [^7]: "Economic Growth in [China]{.nocase} and the [World]{.nocase} [Bank's]{.nocase} Lending Policy."
+
+[^8]: Kuhn, *[The Structure of Scientific Revolutions]{.nocase}*.
+
+[^9]: Lindqvist and Berg, "Economic Growth in [China]{.nocase} and the [World]{.nocase} [Bank's]{.nocase} Lending Policy."
+
+[^10]: Kuhn, *[The Structure of Scientific Revolutions]{.nocase}*.
+
+[^11]: Kuhn.
+
+[^12]: Lindqvist and Berg, "Economic Growth in [China]{.nocase} and the [World]{.nocase} [Bank's]{.nocase} Lending Policy."
+
+[^13]: Okafor, "Measuring Trust in [NGO]{.nocase} Networks," 33--38.
+
+[^14]: Okafor, 33ff.
+
+[^15]: Kuhn, *[The Structure of Scientific Revolutions]{.nocase}*, chap. 2.
+
+[^16]: Kuhn, sec. 3.

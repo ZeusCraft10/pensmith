@@ -10,6 +10,12 @@ Several studies agree (2,3). Trust can be measured (3). Networks persist (3).
 
 (2) argue that lending policy follows growth.
 
+## Punctuation and Locators
+
+Anomalies pile up (1)... Is lending growth-led (2)?! Kuhn wrote of "the essential tension" (1). He asked "is it a paradigm?" (1). Lending stalls (in some years (2)).
+
+The pages are cited as a range (3), an open run (3.). A chapter (1) and a section (1).
+
 ## References {#references .unnumbered}
 
 :::::: {#refs .references .csl-bib-body}

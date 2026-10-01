@@ -72,11 +72,12 @@ test('EXP-03: --style bogus is EXIT_USAGE listing the 8 styles and the path form
   usageError(() => resolveExportStyle(paper({ config: '[project]\ncitation_style = "styles/missing.csl"\n' })), /config\.toml \[project\] citation_style: .*missing\.csl cannot be read/);
 });
 
-test('D-21-07: a local .csl file (relative to the project root, or absolute) is accepted when it is an independent CSL 1.0 style', () => {
+test('D-21-07: a local .csl file (relative to the folder --style is typed in, or absolute) is accepted when it is an independent CSL 1.0 style', () => {
   const root = paper();
   mkdirSync(join(root, 'styles'));
   copyFileSync(join(STYLES_DIR, 'apa.csl'), join(root, 'styles', 'my-journal.csl'));
-  const rel = resolveExportStyle(root, 'styles/my-journal.csl');
+  // Typed in the project root (review round 1: a typed path is the typing folder's).
+  const rel = resolveExportStyle(root, 'styles/my-journal.csl', root);
   assert.equal(rel.style, join(root, 'styles', 'my-journal.csl'), 'resolved to an absolute path');
   assert.equal(rel.cslClass, 'in-text');
   assert.match(rel.name, /^my-journal\.csl/);
@@ -105,6 +106,43 @@ test('D-21-07: a malformed, foreign or dependent .csl file is EXIT_USAGE with th
   ];
   for (const [name, body, re] of cases) {
     writeFileSync(join(root, name), body);
-    usageError(() => resolveExportStyle(root, name), re);
+    usageError(() => resolveExportStyle(root, name, root), re);
   }
+});
+
+// Review round 1.
+test('D-21-07 (review r1): --style ./x.csl is the typing folder\'s file; config.toml\'s relative path stays the project root\'s', () => {
+  const root = paper();
+  const elsewhere = mkdtempSync(join(tmpdir(), 'pensmith-style-cwd-'));
+  copyFileSync(join(STYLES_DIR, 'apa.csl'), join(elsewhere, 'other.csl'));
+  const r = resolveExportStyle(root, './other.csl', elsewhere);
+  assert.equal(r.style, join(elsewhere, 'other.csl'));
+  assert.equal(r.source, 'flag');
+  usageError(() => resolveExportStyle(root, './other.csl', root), /--style: .*other\.csl cannot be read/);
+  mkdirSync(join(root, 'styles'));
+  copyFileSync(join(STYLES_DIR, 'mla.csl'), join(root, 'styles', 'cfg.csl'));
+  const cfgRoot = paper({ config: '[project]\ncitation_style = "styles/cfg.csl"\n' });
+  mkdirSync(join(cfgRoot, 'styles'));
+  copyFileSync(join(STYLES_DIR, 'mla.csl'), join(cfgRoot, 'styles', 'cfg.csl'));
+  assert.equal(resolveExportStyle(cfgRoot, undefined, elsewhere).style, join(cfgRoot, 'styles', 'cfg.csl'));
+});
+
+test('EXP-03 (review r1): an INTAKE.md this build cannot read is a one-line error — never the preset\'s style silently', () => {
+  const root = paper();
+  writeFileSync(join(root, '.paper', 'INTAKE.md'), '---\nschema_version: 1\ncitation_style: 42\n---\n\nAn assignment.\n');
+  assert.throws(() => resolveExportStyle(root), (e: unknown) => e instanceof PensmithError && e.exitCode === 1 && /INTAKE\.md.*the export style cannot be read from it: fix INTAKE\.md, or choose the style with --style or config\.toml \[project\] citation_style/.test(e.message));
+  // A flag or config.toml decides before the brief is read.
+  assert.equal(resolveExportStyle(root, 'mla').style, 'mla');
+});
+
+test('EXP-04 (review r1): a .csl whose <style> attributes are single-quoted (or spaced) is read as the note style it is', async () => {
+  const { isNoteStyle, styleLocale } = await import('../bin/lib/citations.js');
+  const root = paper();
+  const text = readFileSync(join(STYLES_DIR, 'chicago-notes-bib.csl'), 'utf8').replace(/<style\b[^>]*>/, (tag) => tag.replace(/="([^"]*)"/g, " = '$1'").replace(' version', ' default-locale = \'en-GB\' version'));
+  assert.match(text, /class = 'note'/);
+  writeFileSync(join(root, 'sq.csl'), text);
+  const r = resolveExportStyle(root, join(root, 'sq.csl'));
+  assert.equal(r.cslClass, 'note');
+  assert.equal(isNoteStyle(r.style), true, 'the renderer sees a note style too');
+  assert.equal(styleLocale(r.style).locale, 'en-GB', 'and its single-quoted default-locale');
 });

@@ -178,6 +178,18 @@ export function cslStyleText(style: string): string {
  * from the sha256 of its bytes, so two files with the same name never collide
  * and an edited file is registered afresh (D-21-07).
  */
+/**
+ * An attribute of a CSL file's root `<style>` element, as an XML parser reads
+ * it: either quote character, white space around `=` (review round 1: a
+ * single-quoted `class='note'` was not seen as a note style). Null when absent.
+ */
+export function cslStyleAttribute(cslString: string, attr: string): string | null {
+  const tag = /<style\b([^>]*)>/.exec(cslString)?.[1];
+  if (tag === undefined) return null;
+  const m = new RegExp(`(?:^|\\s)${attr}\\s*=\\s*(["'])([^"']*)\\1`).exec(tag);
+  return m?.[2] ?? null;
+}
+
 function ensureStyleTemplate(style: string): string {
   registerShippedLocales();
   if (isCslFileStyle(style)) {
@@ -185,7 +197,7 @@ function ensureStyleTemplate(style: string): string {
     const name = `pensmith-csl-${createHash('sha256').update(cslString).digest('hex').slice(0, 24)}`;
     if (!registeredStyles.get(name)) {
       plugins.config.get('@csl').templates.add(name, cslString);
-      if (/<style\b[^>]*\bclass="note"/.test(cslString)) noteStyles.add(name);
+      if (cslStyleAttribute(cslString, 'class') === 'note') noteStyles.add(name);
       registeredStyles.set(name, true);
     }
     fileStyleTemplates.set(style, name);
@@ -195,7 +207,7 @@ function ensureStyleTemplate(style: string): string {
   if (registeredStyles.get(style)) return name;
   const cslString = cslStyleText(style);
   plugins.config.get('@csl').templates.add(name, cslString);
-  if (/<style\b[^>]*\bclass="note"/.test(cslString)) noteStyles.add(name);
+  if (cslStyleAttribute(cslString, 'class') === 'note') noteStyles.add(name);
   registeredStyles.set(style, true);
   return name;
 }
@@ -999,6 +1011,8 @@ export interface RenderedDocument {
   readonly hangingIndent: boolean;
   /** The style's default locale when it is not available (the document was rendered in en-US), else null. */
   readonly localeFallback: string | null;
+  /** The locale's `punctuation-in-quote` (styleLocaleFacts): where a note's moved period goes after a closing quote. */
+  readonly punctuationInQuote: boolean;
 }
 
 /** The plain text of runs. */
@@ -1142,6 +1156,10 @@ function citeprocItem(i: CitationItemInput, flag?: 'suppress-author' | 'author-o
  */
 function citeprocLocator(locator: string, label: string): { locator: string; restore: [string, string] | null } {
   if (!/\p{N}/u.test(locator)) return { locator: `<span class="nocase">${locator}</span>`, restore: null };
+  // A page range written with an en dash (`727–733`, or Pandoc's `727--733`)
+  // is a range to pandoc, which formats it by the style's page-range-format
+  // (Chicago `727–33`); citeproc-js reads only a hyphen as one (review round 1).
+  if (label === 'page') locator = locator.replace(/(\p{N})\s*–\s*(?=\p{N})/gu, '$1-');
   if (!/\d,\d/.test(locator)) return { locator, restore: null };
   const spaced = locator.replace(/(\d),(?=\d)/g, '$1, ');
   return { locator: spaced, restore: label === 'page' ? null : [spaced, locator] };
@@ -1194,11 +1212,136 @@ function registerShippedLocales(): void {
  * names it.
  */
 export function styleLocale(style: string): { locale: string; fallback: string | null } {
-  const wanted = /<style\b[^>]*\bdefault-locale="([A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*)"/.exec(cslStyleText(style))?.[1] ?? 'en-US';
+  const attr = cslStyleAttribute(cslStyleText(style), 'default-locale');
+  const wanted = attr !== null && /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*$/.test(attr) ? attr : 'en-US';
   registerShippedLocales();
   const locales = (plugins.config.get('@csl') as unknown as { locales: { has(k: string): boolean } }).locales;
   if (locales.has(wanted)) return { locale: wanted, fallback: null };
   return { locale: 'en-US', fallback: wanted };
+}
+
+/**
+ * The locator types pandoc's citeproc reads from the terms of the locale in
+ * use (Text.Pandoc.Citeproc.Locator): a suffix opening with one of their
+ * long, short or symbol forms (singular or plural, any case) names its
+ * locator type. Only the locale's own terms count — under en-GB `chap.` is
+ * not a term (en-GB's short form is `ch.`), so `[@k, chap. 2]` keeps `chap. 2`
+ * as suffix text, as pandoc prints it (review round 1).
+ */
+const LOCATOR_LABELS = ['book', 'chapter', 'column', 'figure', 'folio', 'issue', 'line', 'note', 'opus', 'page', 'paragraph', 'part', 'section', 'sub-verbo', 'verse', 'volume'] as const;
+
+/** What the built-in renderer reads from the locale a style renders in. */
+export interface LocaleFacts {
+  /** The locale's `punctuation-in-quote` (en-US true, en-GB false): a period or comma after a closing quotation mark goes inside it. */
+  readonly punctuationInQuote: boolean;
+  /** The locator terms (citation-token.ts splitLocator's table) of the locale. */
+  readonly locatorTerms: ReadonlyArray<readonly [RegExp, string]>;
+  /** Each locator label's printed forms (long, short, symbol; singular and plural). */
+  readonly labelForms: ReadonlyMap<string, readonly string[]>;
+}
+
+function xmlUnescape(s: string): string {
+  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d))).replace(/&amp;/g, '&');
+}
+
+/** The terms of one `<locale>` (or locale file) text: `name|form` → its strings (single, multiple). */
+function localeTerms(xml: string): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const m of xml.matchAll(/<term\b([^>]*?)(?:\/>|>([\s\S]*?)<\/term>)/g)) {
+    const attrs = m[1] as string;
+    const name = /\bname\s*=\s*(["'])([^"']*)\1/.exec(attrs)?.[2];
+    if (name === undefined || m[2] === undefined) continue;
+    const form = /\bform\s*=\s*(["'])([^"']*)\1/.exec(attrs)?.[2] ?? 'long';
+    const inner = m[2];
+    const parts = /<single>/.test(inner)
+      ? [/<single>([\s\S]*?)<\/single>/.exec(inner)?.[1], /<multiple>([\s\S]*?)<\/multiple>/.exec(inner)?.[1]]
+      : [inner];
+    out.set(`${name}|${form}`, parts.filter((x): x is string => x !== undefined).map((x) => xmlUnescape(x).trim()).filter((x) => x !== ''));
+  }
+  return out;
+}
+
+/** The `punctuation-in-quote` of one `<locale>` (or locale file) text, or null when it does not set it. */
+function localePunctuationInQuote(xml: string): boolean | null {
+  const v = /<style-options\b[^>]*\bpunctuation-in-quote\s*=\s*(["'])(true|false)\1/.exec(xml)?.[2];
+  return v === undefined ? null : v === 'true';
+}
+
+function escapeRegExp(t: string): string {
+  return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * A citation's runs with a non-breaking space between each labelled
+ * locator's label and its value (`p.\u00a05`, `Chapter\u00a02`), as pandoc's
+ * citeproc joins them: the first space after a printed form of the label.
+ */
+function nbspAfterLabels(runs: RichRun[], labels: readonly string[], facts: LocaleFacts): RichRun[] {
+  let out = runs;
+  for (const label of labels) {
+    const forms = facts.labelForms.get(label) ?? [];
+    if (forms.length === 0) continue;
+    const re = new RegExp(`(?<![\\p{L}])((?:${forms.map(escapeRegExp).join('|')}))[ \\t]+(?=[\\p{N}\\p{L}])`, 'iu');
+    let done = false;
+    out = out.map((r) => {
+      if (done || !re.test(r.text)) return r;
+      done = true;
+      return { ...r, text: r.text.replace(re, '$1\u00a0') };
+    });
+  }
+  return out;
+}
+
+/** The locale file text for `locale` (the shipped one, else citation-js's), or null. */
+function localeFileText(locale: string): string | null {
+  const file = pluginTemplatePath('csl-locales', `locales-${locale}.xml`);
+  if (existsSync(file)) return readFileSync(file, 'utf8');
+  try {
+    const v = (plugins.config.get('@csl') as unknown as { locales: { get(k: string): unknown } }).locales.get(locale);
+    return typeof v === 'string' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+const localeFactsCache = new Map<string, LocaleFacts>();
+
+/**
+ * The locale facts of `style` (a key or a `.csl` path): its locale file
+ * (styleLocale), then the style's own `<locale>` elements over it — one with
+ * no `xml:lang`, then the language's (`en`), then the exact locale's
+ * (`en-GB`), as CSL merges them.
+ */
+export function styleLocaleFacts(style: string): LocaleFacts {
+  const csl = cslStyleText(style);
+  const { locale } = styleLocale(style);
+  const key = `${locale}\u0000${createHash('sha256').update(csl).digest('hex')}`;
+  const cached = localeFactsCache.get(key);
+  if (cached !== undefined) return cached;
+  // The style's terms ADD to the locale's for the locator map (pandoc keeps
+  // every variant: IEEE's `ch.` and en-US's `chap.` are both chapter terms);
+  // a later layer's punctuation-in-quote overrides.
+  const layers: string[] = [localeFileText(locale) ?? localeFileText('en-US') ?? ''];
+  const inStyle = [...csl.matchAll(/<locale\b([^>]*)>([\s\S]*?)<\/locale>/g)].map((m) => ({ lang: /\bxml:lang\s*=\s*(["'])([^"']*)\1/.exec(m[1] as string)?.[2] ?? '', body: m[2] as string }));
+  const language = locale.split('-')[0] ?? locale;
+  for (const want of ['', language, locale]) for (const l of inStyle) if (l.lang === want && (want !== language || language !== locale)) layers.push(l.body);
+  const terms = new Map<string, string[]>();
+  let pq = false;
+  for (const layer of layers) {
+    for (const [k, v] of localeTerms(layer)) terms.set(k, [...(terms.get(k) ?? []), ...v]);
+    pq = localePunctuationInQuote(layer) ?? pq;
+  }
+  const table: Array<readonly [RegExp, string]> = [];
+  const labelForms = new Map<string, string[]>();
+  for (const label of LOCATOR_LABELS) {
+    const forms = [...new Set(['long', 'short', 'symbol'].flatMap((f) => terms.get(`${label}|${f}`) ?? []))].sort((a, b) => b.length - a.length);
+    labelForms.set(label, forms);
+    const alts = forms.map((t) => `${escapeRegExp(t)}${/[\p{L}\p{N}]$/u.test(t) ? '(?![\\p{L}\\p{N}])' : ''}`);
+    if (alts.length > 0) table.push([new RegExp(`^(?:${alts.join('|')})`, 'iu'), label]);
+  }
+  const facts: LocaleFacts = { punctuationInQuote: pq, locatorTerms: table, labelForms };
+  localeFactsCache.set(key, facts);
+  return facts;
 }
 
 function citeprocEngine(items: ReadonlyArray<Record<string, unknown>>, template: string, locale = 'en-US'): CiteprocEngine {
@@ -1293,6 +1436,7 @@ export async function renderDocumentCitations(
     }
   }
   const { locale, fallback } = styleLocale(style);
+  const facts = styleLocaleFacts(style);
   const order = clusterOrders(items, template, locale, citations, noteStyle);
   const build = (flag: 'suppress-author' | 'author-only'): unknown[] =>
     citations.map((c, n) => {
@@ -1320,6 +1464,7 @@ export async function renderDocumentCitations(
       .filter((r): r is [string, string] => r !== null);
     let rest = printedRuns(passA[n]?.[2] ?? '');
     for (const [from, to] of restores) rest = replaceInRuns(rest, from, to);
+    rest = nbspAfterLabels(rest, c.items.filter((i) => i.locator).map((i) => i.label ?? 'page'), facts);
     if (c.narrative !== true) return noteStyle ? { inline: [], note: rest.length > 0 ? rest : null } : { inline: rest, note: null };
     const author = printedRuns(authors[n] ?? '');
     if (noteStyle) return { inline: author, note: rest.length > 0 ? rest : null };
@@ -1341,5 +1486,5 @@ export async function renderDocumentCitations(
       bibliography.push({ id, label: label !== null && label.length > 0 ? label : null, runs: trimRuns(citeprocHtmlRuns(body)) });
     });
   }
-  return { noteStyle, citations: rendered, bibliography, hangingIndent, localeFallback: fallback };
+  return { noteStyle, citations: rendered, bibliography, hangingIndent, localeFallback: fallback, punctuationInQuote: facts.punctuationInQuote };
 }

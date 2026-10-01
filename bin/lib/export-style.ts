@@ -8,8 +8,9 @@
 // config's style, else its preset's, never raw `[@key]` tokens.
 //
 // A style is one of the 8 bundled CSL keys (any alias config.ts accepts: "APA
-// 7", "Chicago", …) or a path to a local `.csl` file (relative to the project
-// root, or absolute). A file is accepted only when validateCslFile passes:
+// 7", "Chicago", …) or a path to a local `.csl` file (absolute, or relative —
+// to the folder the command was typed in for `--style`, to the project root
+// for config.toml's value). A file is accepted only when validateCslFile passes:
 // well-formed XML, the CSL 1.0 namespace, a `<style>` root whose `class` is
 // `in-text` or `note`, `<citation>` and `<bibliography>` elements, and no
 // `<link rel="independent-parent">` (a dependent style would need its parent
@@ -19,11 +20,12 @@
 
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, resolve, basename } from 'node:path';
-import { EXIT_USAGE, PensmithError } from './exit-codes.js';
+import { EXIT_ERROR, EXIT_USAGE, PensmithError } from './exit-codes.js';
 import { citationStyleKey, CITATION_STYLE_NAMES, isCslPathSpelling } from './schemas/config.js';
 import { CSL_STYLE_KEYS, resolveDiscipline, type CslStyleKey } from './disciplines.js';
 import { tryReadPaperConfigSync } from './config.js';
 import { readIntakeBrief } from './intake-brief.js';
+import { invocationDirectory } from './paths.js';
 
 /** Where the export style came from. */
 export type ExportStyleSource = 'flag' | 'config' | 'intake' | 'preset';
@@ -186,12 +188,17 @@ function usage(message: string): PensmithError {
   return new PensmithError(message, EXIT_USAGE);
 }
 
-/** A style value (a name, an alias or a `.csl` path) → the key or the validated absolute path. Throws EXIT_USAGE. */
-function resolveValue(paperRoot: string, value: string, where: string): Omit<ExportStyle, 'source' | 'from'> {
+/**
+ * A style value (a name, an alias or a `.csl` path) → the key or the
+ * validated absolute path. A relative path is resolved against `base`: the
+ * folder the command was typed in for `--style`, the project root for
+ * config.toml's value. Throws EXIT_USAGE.
+ */
+function resolveValue(base: string, value: string, where: string): Omit<ExportStyle, 'source' | 'from'> {
   const key = citationStyleKey(value);
   if (key !== null) return { style: key, name: key };
   if (isCslPathSpelling(value)) {
-    const file = isAbsolute(value.trim()) ? value.trim() : resolve(paperRoot, value.trim());
+    const file = isAbsolute(value.trim()) ? value.trim() : resolve(base, value.trim());
     const v = validateCslFile(file);
     if (!v.ok) throw usage(`${where}: ${v.reason}`);
     return { style: file, name: `${basename(file)}${v.title.length > 0 ? ` (${v.title})` : ''}`, cslClass: v.cslClass };
@@ -201,14 +208,18 @@ function resolveValue(paperRoot: string, value: string, where: string): Omit<Exp
 
 /**
  * The export style of the paper at `paperRoot` (see the header), with its
- * source. `flag` is done's `--style` value. Throws PensmithError(EXIT_USAGE)
- * for an unknown style or a bad `.csl` file; an unreadable INTAKE.md or
- * config.toml falls through to the next layer only when it is absent — an
- * invalid config.toml throws its own one-line ConfigError.
+ * source. `flag` is done's `--style` value (a relative `.csl` path is the
+ * typing folder's, `flagBase`, default the invocation directory). Throws
+ * PensmithError(EXIT_USAGE) for an unknown style or a bad `.csl` file; an
+ * INTAKE.md or config.toml falls through to the next layer only when it is
+ * absent — an invalid config.toml throws its own one-line ConfigError, and an
+ * INTAKE.md this build cannot read throws its one-line error (EXIT_ERROR,
+ * review round 1: the paper's requested style was silently replaced by the
+ * preset's).
  */
-export function resolveExportStyle(paperRoot: string, flag?: string): ExportStyle {
+export function resolveExportStyle(paperRoot: string, flag?: string, flagBase: string = invocationDirectory()): ExportStyle {
   if (flag !== undefined && flag.trim().length > 0) {
-    return { ...resolveValue(paperRoot, flag, '--style'), source: 'flag', from: '--style' };
+    return { ...resolveValue(flagBase, flag, '--style'), source: 'flag', from: '--style' };
   }
   const config = tryReadPaperConfigSync(paperRoot);
   const configured = config?.project?.citation_style;
@@ -223,8 +234,15 @@ export function resolveExportStyle(paperRoot: string, flag?: string): ExportStyl
       intakeDiscipline = brief.discipline;
       if (brief.citation_style !== '') intakeStyle = brief.citation_style;
     }
-  } catch {
-    // An INTAKE.md this build cannot read gives no style; the next layer decides.
+  } catch (e) {
+    // readIntakeBrief returns null for an absent INTAKE.md; one it cannot read
+    // (invalid, or written by a newer pensmith) may ask for a style — never
+    // replace it with the preset's silently.
+    const why = ((e as Error).message.split('\n')[0] ?? 'INTAKE.md cannot be read').replace(/^pensmith:\s*/, '');
+    throw new PensmithError(
+      `${why} — the export style cannot be read from it: fix INTAKE.md, or choose the style with --style or config.toml [project] citation_style`,
+      EXIT_ERROR,
+    );
   }
   const resolved = resolveDiscipline({
     discipline: { intake: intakeDiscipline, config: config?.project?.discipline_preset },

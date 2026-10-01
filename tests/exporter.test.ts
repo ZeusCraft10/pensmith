@@ -153,7 +153,7 @@ test('exporter (REND-01/02/03, CR-02): the known-good fixture renders offline �
   const md = await exportKnownGood('md');
   assert.ok(!md.includes('[@'), md);
   assert.ok(md.includes('(Vaswani et al., 2017)'), md);
-  assert.ok(md.includes('(Vaswani et al., 2017, p. 2)'), `the locator is kept:\n${md}`);
+  assert.ok(md.includes('(Vaswani et al., 2017, p.\u00a02)'), `the locator is kept:\n${md}`);
   assert.match(md, /\n## References\n\nVaswani, A\., Shazeer, N\., & Parmar, N\. \(2017\)\. Attention is All You Need\./);
   assert.ok(!/pensmith/i.test(md));
 });
@@ -206,13 +206,13 @@ test('exporter (review round 3, carry-over 3): offline md renders every citation
   const body = md.split('## References')[0] as string;
   assert.ok(!/@(?:lindqvist2012|smith2020)/.test(body), `no citation stays raw Pandoc syntax:\n${body}`);
   assert.ok(body.includes('As Lindqvist & Berg (2012) argues'), `a narrative citation is "Author (Year)":\n${body}`);
-  assert.ok(body.includes('(Lindqvist & Berg, 2012, p. 5)'), `the locator is kept:\n${body}`);
-  assert.ok(/see Smith, 2020, Chapter 3/.test(body) && /; 2012\)/.test(body), `prefix, locator label and -@k (year only) are kept:\n${body}`);
-  assert.ok(body.includes('Smith (2020, p. 7)'), `@k [p. 7] is a narrative citation with its locator:\n${body}`);
+  assert.ok(body.includes('(Lindqvist & Berg, 2012, p.\u00a05)'), `the locator is kept:\n${body}`);
+  assert.ok(/see Smith, 2020, Chapter\u00a03/.test(body) && /; 2012\)/.test(body), `prefix, locator label and -@k (year only) are kept:\n${body}`);
+  assert.ok(body.includes('Smith (2020, p.\u00a07)'), `@k [p. 7] is a narrative citation with its locator:\n${body}`);
   assert.ok(body.includes('Braced (Smith, 2020)'), `a braced key renders:\n${body}`);
-  assert.ok(body.includes('(Smith, 2020, pp. 33–35, emphasis added)'), `a bare-number locator is a page range, the rest a suffix:\n${body}`);
+  assert.ok(body.includes('(Smith, 2020, pp.\u00a033–35, emphasis added)'), `a bare-number locator is a page range, the rest a suffix:\n${body}`);
   assert.ok(body.includes('Year only: (2020).'), `a narrative -@k prints the year only:\n${body}`);
-  assert.ok(body.includes('A bare number (Smith, 2020, p. 33).'), `[@k 33] is page 33, as pandoc reads it:\n${body}`);
+  assert.ok(body.includes('A bare number (Smith, 2020, p.\u00a033).'), `[@k 33] is page 33, as pandoc reads it:\n${body}`);
 });
 
 test('exporter (D-21-03, D-21-04): a numeric style numbers sources in first-citation order across the document; a narrative citation prints the number, as pandoc does', async () => {
@@ -222,7 +222,7 @@ test('exporter (D-21-03, D-21-04): a numeric style numbers sources in first-cita
   const ieee = await exportForms('md', 'ieee');
   const [body, refs] = ieee.split('## References') as [string, string];
   assert.ok(body.includes('As \\[1\\] argues'), `a numeric narrative citation prints its number (pandoc):\n${body}`);
-  assert.ok(body.includes('\\[1, p. 5\\]') && body.includes('\\[2, p. 7\\]') && body.includes('Braced \\[2\\]') && body.includes('\\[2, p. 33\\]'), `each source keeps its first-citation number:\n${body}`);
+  assert.ok(body.includes('\\[1, p.\u00a05\\]') && body.includes('\\[2, p.\u00a07\\]') && body.includes('Braced \\[2\\]') && body.includes('\\[2, p.\u00a033\\]'), `each source keeps its first-citation number:\n${body}`);
   assert.ok(/\\\[1\\\] A\. Lindqvist/.test(refs) && /\\\[2\\\] J\. Smith/.test(refs), `the bibliography numbers match:\n${refs}`);
 });
 

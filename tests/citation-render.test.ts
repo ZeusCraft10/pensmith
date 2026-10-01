@@ -330,11 +330,11 @@ test('D-21-03: locators, clusters, narrative and -@k forms render as pandoc rend
     { items: [{ id: B, locator: '2', label: 'chapter' }] },
   ]);
   assert.deepEqual(r.citations.map((c) => runsText(c.inline)), [
-    '(Okafor, 2019, p. 40)',
+    '(Okafor, 2019, p.\u00a040)',
     '(Lindqvist & Berg, 2012; Okafor, 2019)',
     'Lindqvist & Berg (2012)',
     '(2012)',
-    '(Kuhn, 1962, Chapter 2)',
+    '(Kuhn, 1962, Chapter\u00a02)',
   ]);
   const ieee = await renderDocumentCitations(DOC_ENTRIES, 'ieee', [cite(B), { items: [{ id: A }], narrative: true }]);
   assert.equal(runsText(ieee.citations[1]?.inline ?? []), '[2]', 'a numeric narrative citation prints its number, as pandoc does');

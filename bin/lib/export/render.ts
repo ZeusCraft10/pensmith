@@ -10,10 +10,21 @@
 //     one whose rendering opens with a superscript (AMA) drops the white space
 //     before it (`claim^1^.`);
 //   - a note style's citation becomes a footnote: the white space before it
-//     goes, and one punctuation mark right after it moves before the marker
-//     (`claim [@k].` → `claim.[^1]`), unless the text before already ends with
-//     one; a narrative citation keeps its author in the text and the rest of
-//     its citation in the note (`Lindqvist and Berg[^7] argue`);
+//     goes, and the run of punctuation right after it — every Unicode
+//     punctuation character but the en and em dash, as pandoc's mvPunct takes
+//     it (`...`, `?!`, `).`) — moves before the marker (`claim [@k]...` →
+//     `claim...[^1]`), unless a narrative citation's author already ends with
+//     punctuation; with a locale that puts punctuation inside quotes (en-US),
+//     a period or comma that lands after a closing straight quotation mark
+//     goes inside it (`"…here" [@k].` → `"…here."[^1]`), and a period there
+//     after `?` or `!` is dropped (review round 1); a narrative citation keeps
+//     its author in the text and the rest of its citation in the note
+//     (`Lindqvist and Berg[^7] argue`);
+//   - an in-text citation whose rendering ends with a period swallows the
+//     sentence's period right after it (IEEE `[@k, 33ff.].` → `[1, p. 33ff].`,
+//     as pandoc prints it);
+//   - a locator is read with the terms of the style's own locale
+//     (citations.ts styleLocaleFacts: under en-GB `chap.` is not a term);
 //   - a narrative citation followed by a bracketed locator (`@k [p. 5]`)
 //     takes it as its locator, as pandoc reads it.
 // A citation in code stays as written; a key the bibliography lacks stays a
@@ -33,8 +44,10 @@ import {
   type CitationCluster,
   type CitationItem,
 } from '../citation-token.js';
+import { smartText } from './markdown.js';
 import {
   renderDocumentCitations,
+  styleLocaleFacts,
   type CitationItemInput,
   type DocumentCitation,
   type RenderedBibEntry,
@@ -88,17 +101,24 @@ export interface PreparedText {
  */
 const BARE_LOCATOR_RE = /^[ \t]*\[([^[\]@^][^[\]@]*)\](?![({:])/;
 
-/** One citeproc item for a citation item: prefix, key, locator and its label (citation-token.ts splitLocator, D-21-04), suffix. */
-export function toCslItem(item: CitationItem): CitationItemInput {
+/**
+ * One citeproc item for a citation item: prefix, key, locator and its label
+ * (citation-token.ts splitLocator, D-21-04, with `terms` — the style's
+ * locale's locator terms; the en-US table by default), suffix.
+ */
+export function toCslItem(item: CitationItem, terms?: ReadonlyArray<readonly [RegExp, string]>): CitationItemInput {
+  // A prefix or suffix is Markdown text to pandoc: its smart typography
+  // (`--` an en dash, `---` an em dash, `...` an ellipsis, curly quotes)
+  // applies there as in the body (review round 1).
   const base: CitationItemInput = {
     id: item.key,
-    ...(item.prefix ? { prefix: `${item.prefix} ` } : {}),
+    ...(item.prefix ? { prefix: `${smartText(item.prefix)} ` } : {}),
     ...(item.suppressAuthor ? { suppressAuthor: true } : {}),
   };
   if (item.suffix.replace(/^\s*,?\s*/, '') === '') return base;
-  const loc = splitLocator(item.suffix);
-  if (loc !== null) return { ...base, locator: loc.locator, label: loc.label, ...(loc.rest.trim() ? { suffix: loc.rest } : {}) };
-  return { ...base, suffix: item.suffix.startsWith(' ') || item.suffix.startsWith(',') ? item.suffix : ` ${item.suffix}` };
+  const loc = terms !== undefined ? splitLocator(item.suffix, terms) : splitLocator(item.suffix);
+  if (loc !== null) return { ...base, locator: loc.locator, label: loc.label, ...(loc.rest.trim() ? { suffix: smartText(loc.rest) } : {}) };
+  return { ...base, suffix: smartText(item.suffix.startsWith(' ') || item.suffix.startsWith(',') ? item.suffix : ` ${item.suffix}`) };
 }
 
 /** True when `runs` open with a superscript (a superscript style's citation, AMA). */
@@ -106,7 +126,27 @@ function opensWithSuperscript(runs: readonly RichRun[]): boolean {
   return runs[0]?.sup === true;
 }
 
-const NOTE_PUNCT = /^[.,;:!?]/u;
+/**
+ * The punctuation a note marker moves past (pandoc's mvPunct takes every
+ * punctuation character — brackets, quotes, `…`, `%`, `/` included — but not
+ * the en or em dash; checked against pandoc 3.9).
+ */
+const NOTE_PUNCT_RUN = /^[^\P{P}\u2013\u2014]+/u;
+
+/**
+ * The closing straight quotation mark right before `at` (pandoc's smart
+ * reader reads `"…"` and `'…'` as quoted text when an opening mark precedes
+ * it in the paragraph), as its offset and character, or null.
+ */
+function closingQuoteBefore(text: string, at: number, floor: number): { index: number; char: string } | null {
+  const q = text[at - 1];
+  if (q !== '"' && q !== "'") return null;
+  if (at - 2 < floor || /\s/u.test(text[at - 2] ?? ' ')) return null;
+  const para = Math.max(floor, text.lastIndexOf('\n\n', at - 1) + 1);
+  // An opening mark: after white space, an opening bracket or the paragraph's start, before a non-space.
+  const open = new RegExp(`(?:^|[\\s(\\[{])${q === '"' ? '"' : "'"}(?=\\S)`, 'u');
+  return open.test(text.slice(para, at - 1)) ? { index: at - 1, char: q } : null;
+}
 
 /** The plain text of runs (for the punctuation rule). */
 function plain(runs: readonly RichRun[]): string {
@@ -156,8 +196,9 @@ export async function prepareText(
   if (style === null) return empty(unresolved);
   const rendered = found.filter((f) => f.items.some((i) => known.has(i.key)));
   if (rendered.length === 0) return empty(unresolved);
+  const terms = styleLocaleFacts(style).locatorTerms;
   const docCitations: DocumentCitation[] = rendered.map((f) => ({
-    items: f.items.filter((i) => known.has(i.key)).map(toCslItem),
+    items: f.items.filter((i) => known.has(i.key)).map((i) => toCslItem(i, terms)),
     ...(f.c.narrative === true && f.items[0]?.suppressAuthor !== true ? { narrative: true } : {}),
   }));
   const doc = await renderDocumentCitations(entries, style, docCitations);
@@ -181,18 +222,32 @@ export async function prepareText(
       } else {
         start = spaceStart(text, start, floor);
       }
-      // One punctuation mark after the citation moves before the note marker,
-      // unless the text before it already ends with punctuation (pandoc).
-      const before = r.inline.length > 0 ? plain(r.inline) : text.slice(floor, start);
-      const after = unknownTail === '' ? text.slice(end, end + 1) : '';
-      if (NOTE_PUNCT.test(after) && !/[.,;:!?]\s*$/u.test(before)) {
-        parts.push({ kind: 'text', text: after });
-        end += 1;
+      // The punctuation run after the citation moves before the note marker
+      // (see the header), unless a narrative author already ends with
+      // punctuation (pandoc's mvPunct).
+      const run = unknownTail === '' ? (NOTE_PUNCT_RUN.exec(text.slice(end))?.[0] ?? '') : '';
+      const narrativeEnds = r.inline.length > 0 && /\p{P}$/u.test(plain(r.inline));
+      if (run !== '' && !narrativeEnds) {
+        end += run.length;
+        const quote = doc.punctuationInQuote && r.inline.length === 0 && /^[.,]/u.test(run) ? closingQuoteBefore(text, start, floor) : null;
+        if (quote !== null) {
+          // `"…here" [@k].` → `"…here."[^1]` (en-US); `"…here?" [@k].` → `"…here?"[^1]`.
+          start = quote.index;
+          const mark = run[0] as string;
+          const inner = mark === '.' && /[.?!]/u.test(text[quote.index - 1] ?? '') ? '' : mark;
+          parts.push({ kind: 'text', text: `${inner}${quote.char}${run.slice(1)}` });
+        } else {
+          parts.push({ kind: 'text', text: run });
+        }
       }
       parts.push({ kind: 'note', n });
     } else if (r.inline.length > 0) {
       if (opensWithSuperscript(r.inline)) start = spaceStart(text, start, floor);
       parts.push({ kind: 'runs', runs: r.inline });
+      // A rendering that ends with a period in plain text (not a superscript)
+      // swallows the sentence's own (pandoc).
+      const last = r.inline[r.inline.length - 1];
+      if (unknownTail === '' && last !== undefined && last.sup !== true && /\.$/u.test(last.text) && text[end] === '.' && text[end + 1] !== '.') end += 1;
     }
     if (unknownTail !== '') parts.push({ kind: 'text', text: parts.length > 0 ? ` ${unknownTail}` : unknownTail });
     placed.push({ start, end, parts, keys });

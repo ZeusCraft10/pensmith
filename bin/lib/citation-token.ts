@@ -983,7 +983,9 @@ export interface CitationItem {
  * Locator terms Pandoc recognises after a citekey (`[@k, p. 5]`, `[@k, chap. 3]`),
  * with their CSL labels — the en-US locale's locator terms in every form
  * (long, short, symbol; singular and plural), matched without regard to case,
- * as pandoc's citeproc builds its locator map. A suffix that opens with a
+ * as pandoc's citeproc builds its locator map — the en-US terms (the export
+ * passes the terms of the style's own locale: citations.ts styleLocaleFacts;
+ * `number` is not an en-US locator term, `issue` is). A suffix that opens with a
  * number and no term (`[@k 33]`, `[@k, 33]`) is a page (D-21-04).
  * The offline exporter renders locators from this table too.
  */
@@ -996,7 +998,7 @@ export const LOCATOR_TERMS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^(?:paras?\.|paragraphs?\b|¶¶?)/i, 'paragraph'],
   [/^(?:ll?\.|lines?\b)/i, 'line'],
   [/^(?:nn?\.|notes?\b)/i, 'note'],
-  [/^(?:nos?\.|numbers?\b)/i, 'issue'],
+  [/^(?:nos?\.|issues?\b)/i, 'issue'],
   [/^(?:cols?\.|columns?\b)/i, 'column'],
   [/^(?:pts?\.|parts?\b)/i, 'part'],
   [/^(?:vv?\.|verses?\b)/i, 'verse'],
@@ -1026,9 +1028,9 @@ export interface LocatorSplit {
 const ROMAN_RE = /^(?=[ivxlcdm])m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/i;
 
 /** The locator term `text` opens with (the longest match), its label and length, or null. */
-function locatorTerm(text: string): { label: string; length: number } | null {
+function locatorTerm(text: string, terms: ReadonlyArray<readonly [RegExp, string]>): { label: string; length: number } | null {
   let best: { label: string; length: number } | null = null;
-  for (const [term, label] of LOCATOR_TERMS) {
+  for (const [term, label] of terms) {
     const t = term.exec(text);
     if (t !== null && (best === null || t[0].length > best.length)) best = { label, length: t[0].length };
   }
@@ -1047,11 +1049,15 @@ function locatorWords(text: string, accept: (word: string) => boolean): { value:
   let value = first[0];
   let at = first[0].length;
   for (;;) {
-    const m = /^([,&\-–—]?)(\s*)/u.exec(text.slice(at)) as RegExpExecArray;
+    // `--` is Pandoc's smart en dash: a range (`727--733` is pages 727–733,
+    // as pandoc reads it); an em dash (`—`, `---`) never joins a locator
+    // (review round 1, checked against pandoc 3.9).
+    const m = /^(--(?!-)|[,&\-–]?)(\s*)/u.exec(text.slice(at)) as RegExpExecArray;
     const word = LOCATOR_VALUE_RE.exec(text.slice(at + m[0].length));
     if ((m[0] === '' && word !== null) || word === null || !accept(word[0])) break;
     if (m[1] === '' && m[2] !== undefined && m[2].includes('\n')) break;
-    value += `${m[1]}${m[2] !== '' ? ' ' : ''}${word[0]}`;
+    const sep = m[1] === '--' ? '–' : (m[1] as string);
+    value += `${sep}${m[2] !== '' ? ' ' : ''}${word[0]}`;
     at += m[0].length + word[0].length;
   }
   return { value, length: at };
@@ -1087,19 +1093,19 @@ function delimitedLocator(text: string): { inner: string; length: number } | nul
  * Returns the locator, its CSL label and the suffix after it (`, emphasis
  * added`, ` and passim`), or null when the suffix opens with no locator.
  */
-export function splitLocator(suffix: string): LocatorSplit | null {
+export function splitLocator(suffix: string, terms: ReadonlyArray<readonly [RegExp, string]> = LOCATOR_TERMS): LocatorSplit | null {
   const lead = /^,?\s*/u.exec(suffix) as RegExpExecArray;
   const text = suffix.slice(lead[0].length);
   if (text === '') return null;
   const delimited = delimitedLocator(text);
   if (delimited !== null) {
     const inner = delimited.inner.trimStart();
-    const term = locatorTerm(inner);
+    const term = locatorTerm(inner, terms);
     const value = (term !== null ? inner.slice(term.length) : inner).trim().replace(/\s+/gu, ' ');
     if (value === '') return null;
     return { locator: value, label: term?.label ?? 'page', rest: text.slice(delimited.length) };
   }
-  const term = locatorTerm(text);
+  const term = locatorTerm(text, terms);
   if (term !== null) {
     const afterTerm = text.slice(term.length);
     const gap = /^\s*/u.exec(afterTerm) as RegExpExecArray;

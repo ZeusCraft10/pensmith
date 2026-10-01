@@ -51,7 +51,7 @@ test('EXP-08 / EXP-05: the built-in docx is well-formed WordprocessingML with Wo
   assert.match(paras.find((p) => p.includes('A nested point')) ?? '', /<w:ilvl w:val="1"\/>/, 'a nested item is level 2');
   assert.match(xml, /<w:tbl>/);
   assert.match(xml, /<w:i\/><w:iCs\/><\/w:rPr><w:t xml:space="preserve">growth<\/w:t>/, 'emphasis is a run property');
-  assert.match(xml, /\(Lindqvist &amp; Berg, 2012, p\. 150\)/, 'APA in-text citation with its locator');
+  assert.match(xml, /\(Lindqvist &amp; Berg, 2012, p\. 150\)/, 'APA in-text citation with its locator (a non-breaking space after the label, as pandoc joins them)');
   assert.ok(!/footerReference|headerReference/.test(xml), 'no header, no footer');
   const styles = await zip.file('word/styles.xml')!.async('string');
   for (const id of ['Normal', 'Heading1', 'Heading2', 'Quote', 'Bibliography', 'FootnoteText', 'FootnoteReference', 'SourceCode', 'VerbatimChar']) assert.match(styles, new RegExp(`w:styleId="${id}"`));

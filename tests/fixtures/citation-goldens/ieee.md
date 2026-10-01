@@ -10,6 +10,12 @@ Several studies agree \[2\], \[3\]. Trust can be measured \[3, p. 40\]. Networks
 
 \[2\] argue that lending policy follows growth.
 
+## Punctuation and Locators
+
+Anomalies pile up \[1\]... Is lending growth-led \[2\]?! Kuhn wrote of "the essential tension" \[1\]. He asked "is it a paradigm?" \[1\]. Lending stalls (in some years \[2\]).
+
+The pages are cited as a range \[3, pp. 33--38\], an open run \[3, p. 33ff\]. A chapter \[1, Ch. 2\] and a section \[1, Sec. 3\].
+
 ## References {#references .unnumbered}
 
 :::::: {#refs .references .csl-bib-body entry-spacing="0"}

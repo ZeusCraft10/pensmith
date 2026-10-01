@@ -482,6 +482,15 @@ export function workingDirectory(): string {
 }
 
 /**
+ * The folder the user typed the command in, as is (absolute; never folded
+ * to a project root, never a paper root): the base of a relative path the
+ * user typed on the command line (`done --style ./my.csl`; review round 1).
+ */
+export function invocationDirectory(): string {
+  return path.resolve(process.cwd());
+}
+
+/**
  * Resolves the project root to an absolute, normalized path. With an explicit
  * argument it resolves that path; with none it returns the active paper root
  * (setActivePaperRoot), falling back to the process working directory when no

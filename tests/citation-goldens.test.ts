@@ -115,11 +115,20 @@ for (const style of STYLES) {
   });
 }
 
-test('D-21-05: the fixture covers B, A, B, [A; C], a p. locator, a bare-number locator and a narrative citation over an article, a book and a chapter', () => {
+test('D-21-05: the fixture covers B, A, B, [A; C], a p. locator, a bare-number locator and a narrative citation over an article, a book and a chapter — and (review round 1) the note punctuation and locator forms', () => {
   const md = readFileSync(join(DIR, 'fixture.md'), 'utf8');
   const order = [...md.matchAll(/@([a-z]+\d{4})/g)].map((m) => m[1]);
-  assert.deepEqual(order, ['kuhn1962', 'lindqvist2012', 'kuhn1962', 'lindqvist2012', 'okafor2019', 'okafor2019', 'okafor2019', 'lindqvist2012']);
+  assert.deepEqual(order, [
+    'kuhn1962', 'lindqvist2012', 'kuhn1962', 'lindqvist2012', 'okafor2019', 'okafor2019', 'okafor2019', 'lindqvist2012',
+    'kuhn1962', 'lindqvist2012', 'kuhn1962', 'kuhn1962', 'lindqvist2012', 'okafor2019', 'okafor2019', 'kuhn1962', 'kuhn1962',
+  ]);
   assert.ok(md.includes('[@lindqvist2012; @okafor2019]') && md.includes(', p. 40]') && md.includes('[@okafor2019 41]') && /^@lindqvist2012 /m.test(md));
+  // A note marker moves past an ellipsis and `?!`, a period goes inside a closing
+  // quote (en-US) and is dropped after `?`, a `).` run moves; a `--` page range,
+  // `33ff.`, and `chap.` / `sec.` (terms in en-US, suffix text in en-GB Harvard).
+  for (const form of ['[@kuhn1962]...', '[@lindqvist2012]?!', '"the essential tension" [@kuhn1962].', '"is it a paradigm?" [@kuhn1962].', '[@lindqvist2012]).', '[@okafor2019, 33--38]', '[@okafor2019, 33ff.].', '[@kuhn1962, chap. 2]', '[@kuhn1962, sec. 3]']) {
+    assert.ok(md.includes(form), form);
+  }
   const bib = readFileSync(join(DIR, 'fixture.bib'), 'utf8');
   assert.ok(/@article\{/.test(bib) && /@book\{/.test(bib) && /@incollection\{/.test(bib));
 });
