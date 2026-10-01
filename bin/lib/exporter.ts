@@ -59,6 +59,7 @@
 // through library.ts, the one writer of CITATIONS.*).
 
 import * as fsp from 'node:fs/promises';
+import * as os from 'node:os';
 import { existsSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import { out as writeOut } from './output-sink.js';
@@ -293,6 +294,19 @@ function firstLine(e: unknown): string {
   return line.length > 160 ? `${line.slice(0, 160)}…` : line;
 }
 
+/** Remove the `.staging-*` folders an interrupted export of an older pensmith left in export/. Never throws. */
+async function removeStaleStaging(exportDir: string): Promise<void> {
+  let names: string[];
+  try {
+    names = await fsp.readdir(exportDir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (/^\.staging-[A-Za-z0-9]{6}$/.test(name)) await fsp.rm(join(exportDir, name), { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 /**
  * exportDraft — export one document in one format (the module header has the
  * steps). Every output goes into a DISTINCT export dir (default
@@ -393,13 +407,18 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     notes.push(...made.glyphs);
   }
 
-  // 4. Write, scrub, scan — in a staging folder inside export/ (review round
-  // 2): only a scanned, clean set replaces the files in export/, so a refused
-  // or failed export leaves the previous export set exactly as it was (it used
-  // to delete the new CITATIONS.* and leave an older document without them).
+  // 4. Write, scrub, scan — in a staging folder (review round 2): only a
+  // scanned, clean set replaces the files in export/, so a refused or failed
+  // export leaves the previous export set exactly as it was (it used to
+  // delete the new CITATIONS.* and leave an older document without them).
+  // The staging folder is in the system temp folder, never in export/ (review
+  // round 3): export/ is what a user zips or uploads, and an export killed
+  // mid-way (Ctrl-C exits before any `finally`) left its unscanned copy there.
+  // Staging folders an older pensmith left in export/ are removed first.
   await fsp.mkdir(exportDir, { recursive: true });
+  await removeStaleStaging(exportDir);
   const outputPath = join(exportDir, `${stem}.${FORMAT_EXT[format]}`);
-  const staging = await fsp.mkdtemp(join(exportDir, '.staging-'));
+  const staging = await fsp.mkdtemp(join(os.tmpdir(), 'pensmith-export-'));
   const staged: string[] = [];
   let bibPath: string | null = null;
   let risPath: string | null = null;

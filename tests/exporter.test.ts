@@ -93,6 +93,20 @@ test('review r3: an MLA export titles its list "Works Cited" (md, LaTeX, docx; t
   assert.equal(referencesHeading('chicago-notes-bib', true), 'Bibliography');
 });
 
+// Review round 3: export/ is the folder a user zips or uploads. Staging is in
+// the system temp folder, and a staging folder an interrupted export left in
+// export/ (an older pensmith staged there; Ctrl-C skips every `finally`) is
+// removed by the next export.
+test('review r3: an export stages outside export/ and removes a stale export/.staging-* folder', async () => {
+  const { root, inputPath } = seedPaper('staging');
+  const exportDir = join(root, '.paper', 'export');
+  mkdirSync(join(exportDir, '.staging-PbiSph'), { recursive: true });
+  writeFileSync(join(exportDir, '.staging-PbiSph', 'DRAFT.pdf'), 'an unscanned copy');
+  await captured(() => exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false, style: 'apa' }));
+  assert.deepEqual(readdirSync(exportDir).filter((f) => f.startsWith('.')), [], 'no staging folder in export/');
+  assert.ok(readdirSync(exportDir).includes('DRAFT.md'));
+});
+
 test('exporter (D-21-02): an unknown format is an ExportFormatError (EXIT_ERROR) and writes nothing', async () => {
   const { root, inputPath } = seedPaper('fmt');
   await assert.rejects(
