@@ -53,7 +53,7 @@ import { DEFAULT_QUOTE_MIN_WORDS } from './schemas/config.js';
 import { networkMode } from './http-mock.js';
 import { resolveRuntime } from './runtime.js';
 import { fenceMarkerCount } from './untrusted-fence.js';
-import { contentTerms } from './claim-consistency.js';
+import { contentTerms } from './content-terms.js';
 
 /** A masked text and how to put the original spans back. */
 export interface RewriteMask {
