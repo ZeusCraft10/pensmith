@@ -42,6 +42,7 @@ import {
   type HttpResponse,
 } from '../../bin/lib/http.js';
 import * as httpModule from '../../bin/lib/http.js';
+import { _setPlagiarismPacingForTest } from '../../bin/lib/plagiarism.js';
 import { pensmithHttpCacheDir } from '../../bin/lib/paths.js';
 import { __setRegistrarSendForTest } from '../../bin/lib/sources/registrar-response.js';
 import { isSourceLookupError, type LookupResult } from '../../bin/lib/sources/lookup.js';
@@ -69,10 +70,13 @@ export async function liveLane<T>(fn: (agent: MockAgentT) => Promise<T>, opts: {
   process.env['PENSMITH_NETWORK_TESTS'] = '1';
   if (opts.contactEmail !== undefined) process.env['PENSMITH_CONTACT_EMAIL'] = opts.contactEmail;
   resetTransportState();
+  // The MockAgent answers DuckDuckGo at once: no live pacing between queries.
+  _setPlagiarismPacingForTest({ minGapMs: 0, maxGapMs: 0, backoffMs: 0 });
   const { agent, restore } = installMockAgent();
   try {
     return await fn(agent);
   } finally {
+    _setPlagiarismPacingForTest(null);
     await restore();
     if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
     else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;

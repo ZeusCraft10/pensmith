@@ -21,6 +21,7 @@ import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import { loadCassetteFile, lookupFixture } from '../bin/lib/http-mock.js';
 import { _resetBucketsForTest } from '../bin/lib/http.js';
 import { honestyFramingNote } from '../bin/lib/honesty.js';
+import { _setPlagiarismPacingForTest } from '../bin/lib/plagiarism.js';
 
 const ISO = /\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/.source;
 
@@ -58,6 +59,8 @@ test('EXP-16 / EXP-14 / EXP-19 (in process, test lane): done scores before (61%)
     process.env['USERPROFILE'] = p.sb.dataDir;
     delete process.env['PENSMITH_OFFLINE'];
     _resetBucketsForTest();
+    // The live pacing waits seconds between DuckDuckGo queries; the mock needs none.
+    _setPlagiarismPacingForTest({ minGapMs: 0, maxGapMs: 0, backoffMs: 0 });
     const { agent, restore } = installMockAgent();
     agent.enableNetConnect(new URL(p.sb.mock!.url).host);
     const replay = (origin: string): void => {
@@ -115,9 +118,22 @@ test('EXP-16 / EXP-14 / EXP-19 (in process, test lane): done scores before (61%)
       assert.match(verification, /^Text checked: \.paper\/FINAL\.md/m);
       assert.doesNotMatch(verification, /duckduckgo\.com\/l\/\?uddg=/);
       assert.match(readFileSync(join(paper, 'export', 'DRAFT.md'), 'utf8'), /Put simply:/, 'the export is the humanized text');
+      // Review round 3: `pensmith export` in another format of the same text
+      // keeps the recorded scores and plagiarism results (no new request).
+      const plagiarismBefore = /## Plagiarism Check \(DONE-02\)[\s\S]*?(?=\n## )/.exec(verification)?.[0] ?? '';
+      assert.ok(plagiarismBefore.length > 0);
+      const again = await captureStdout(() => doneCommand.run!({ args: { yolo: true, format: 'docx', only: 'export' } } as never));
+      assert.equal((again.value as { ok?: boolean }).ok, true, again.out);
+      assert.equal(detector, 2, 'no detector request for the export');
+      const kept = readFileSync(join(paper, 'VERIFICATION.md'), 'utf8');
+      assert.match(kept, beforeLine);
+      assert.match(kept, afterLine);
+      assert.ok(kept.includes(plagiarismBefore), 'the plagiarism section is kept');
+      assert.doesNotMatch(kept, /skipped \(--only export\)/);
     } finally {
       await restore();
       _resetBucketsForTest();
+      _setPlagiarismPacingForTest(null);
       for (const [k, v] of Object.entries(saved)) {
         if (v === undefined) delete process.env[k];
         else process.env[k] = v;

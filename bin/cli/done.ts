@@ -391,6 +391,8 @@ export interface PaperVerificationReport {
   readonly plagiarismResults: readonly PlagiarismResult[];
   /** Why the plagiarism check did not run (`--no-plagiarism-check`, `config`, `offline`, `dry-run`, `--only export`). */
   readonly plagiarismSkipped?: string;
+  /** The plagiarism section an earlier done recorded for this very text, kept verbatim (an `--only export`; keptAdvisorySections). */
+  readonly plagiarismSection?: string;
   readonly pass4Results: readonly Pass4Result[];
   /** Why the whole-paper Pass 4 did not run (`--no-verify`). */
   readonly pass4Skipped?: string;
@@ -460,11 +462,38 @@ export function buildVerificationReport(r: PaperVerificationReport): string {
     '',
     r.honestyReport,
     '',
-    renderPlagiarismSection([...r.plagiarismResults], r.plagiarismSkipped !== undefined ? { skipped: r.plagiarismSkipped } : {}),
+    r.plagiarismSection ?? renderPlagiarismSection([...r.plagiarismResults], r.plagiarismSkipped !== undefined ? { skipped: r.plagiarismSkipped } : {}),
     '',
     pass4,
     '',
   ].join('\n');
+}
+
+/**
+ * The `## Honesty (DONE-04)` body and the `## Plagiarism Check (DONE-02)`
+ * section of the existing `.paper/VERIFICATION.md` when its `Text checked:`
+ * line names exactly `sha256` — the text an `--only export` is about to
+ * export — else null. Never throws.
+ */
+export function keptAdvisorySections(paperRoot: string, sha256: string): { honesty: string; plagiarism: string } | null {
+  let md: string;
+  try {
+    md = readFileSync(join(paperDir(paperRoot), 'VERIFICATION.md'), 'utf8').replace(/\r\n/g, '\n');
+  } catch {
+    return null;
+  }
+  if (/^Text checked: .* \(sha256 ([0-9a-f]{64})\)$/m.exec(md)?.[1] !== sha256) return null;
+  const section = (heading: string): string | null => {
+    const at = md.indexOf(`\n${heading}\n`);
+    if (at === -1) return null;
+    const from = at + 1;
+    const next = md.indexOf('\n## ', from + heading.length);
+    return md.slice(from, next === -1 ? md.length : next).trim();
+  };
+  const honesty = section('## Honesty (DONE-04)');
+  const plagiarism = section('## Plagiarism Check (DONE-02)');
+  if (honesty === null || plagiarism === null) return null;
+  return { honesty: honesty.slice('## Honesty (DONE-04)'.length).trim(), plagiarism };
 }
 
 /** The contradictions compile flagged (COMPILE-REPORT.md `## Contradictions`, EXP-11). Never throws. */
@@ -979,8 +1008,13 @@ export const doneCommand = defineCommand({
       claims = rejudged.claims;
       confirmGate = claims.length > 0 ? 'unsupported-claims' : 'export-confirm';
     }
+    // Review round 3: an `--only export` of the very text an earlier done
+    // checked (VERIFICATION.md's `Text checked:` sha256) keeps that done's
+    // detector scores and plagiarism results — another format of the same
+    // text never erases them.
+    const kept = only === 'export' ? keptAdvisorySections(paperRoot, sha(exportedText)) : null;
     const honestyReport =
-      before !== null ? renderHonestySection(before, after) : `Pensmith honesty check: skipped (--only ${only ?? 'export'})\n\n${honestyFramingNote()}`;
+      before !== null ? renderHonestySection(before, after) : (kept?.honesty ?? `Pensmith honesty check: skipped (--only ${only ?? 'export'})\n\n${honestyFramingNote()}`);
     if (before !== null) writeOut(`${renderHonestySection(before, after)}\n`);
 
     // Whole-paper Pass 4 (DONE-01, VRFY-23) over the exact text to be exported, unless --no-verify.
@@ -1114,6 +1148,7 @@ export const doneCommand = defineCommand({
         honestyReport,
         plagiarismResults,
         ...(plagiarismSkipped !== undefined ? { plagiarismSkipped } : {}),
+        ...(kept !== null ? { plagiarismSection: kept.plagiarism } : {}),
         pass4Results,
         ...(flags.noVerify ? { pass4Skipped: '--no-verify' } : {}),
       }),

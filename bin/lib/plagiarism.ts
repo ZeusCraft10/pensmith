@@ -102,6 +102,13 @@ export interface PlagiarismPacing {
 /** The live pacing (measured: six queries 4 s apart got four answers; six in a five-wide burst got one). */
 export const DDG_PACING: PlagiarismPacing = Object.freeze({ minGapMs: 2_500, maxGapMs: 5_000, retries: 2, backoffMs: 10_000 });
 
+let pacingForTest: Partial<PlagiarismPacing> | null = null;
+
+/** Test seam (like http.ts `_resetBucketsForTest`): the pacing of every run until reset with null. */
+export function _setPlagiarismPacingForTest(p: Partial<PlagiarismPacing> | null): void {
+  pacingForTest = p;
+}
+
 /** What a run checked: answered phrases, refused ones, and the sections no answered phrase covers. */
 export interface PlagiarismCoverage {
   readonly queried: number;
@@ -475,7 +482,7 @@ export async function runPlagiarism(draftMd: string, opts: PlagiarismOptions = {
     out(`pensmith: plagiarism check skipped (${skipped}) — ${phrases.length} distinctive phrase(s) not queried.\n`);
     return phrases.map((p) => ({ phrase: p.phrase, matches: [], skipped, location: p.location }));
   }
-  const pace: PlagiarismPacing = { ...DDG_PACING, ...(opts.pacing ?? {}) };
+  const pace: PlagiarismPacing = { ...DDG_PACING, ...(pacingForTest ?? {}), ...(opts.pacing ?? {}) };
   out(`pensmith: plagiarism check: ${phrases.length} distinctive phrase(s), one query at a time (DuckDuckGo refuses bursts) — about ${Math.max(1, Math.round((phrases.length * (pace.minGapMs + pace.maxGapMs)) / 2 / 60_000))} min\n`);
   // Coverage first: every section's first phrase, then every section's
   // second, … — so a run cut short by refusals still checked each section.
