@@ -48,10 +48,19 @@ smoothing operates only on placeholder-masked text — the model never sees raw
 ## Outputs
 
 - `.paper/DRAFT.md` — the compiled manuscript (EXP-05, D-21-13): `# <paper
-  title>` (OUTLINE.md's H1, else the intake brief's title), then one
+  title>` (OUTLINE.md's H1 — `pensmith outline` writes `[project] title` from
+  config.toml there, else the intake topic in title case, `paper-brief.ts`
+  `titleFromTopic`; edit that first line to retitle the paper), then one
   `## <section title>` per section in OUTLINE order (COMP-02), citation tokens
   preserved for the export. A section draft's own leading heading that repeats
-  its title is dropped. The headings are text no section gate judged, so a
+  its title is dropped, and the draft's own headings are set BELOW its `##`
+  section heading (`compile.ts` `demoteSectionHeadings`, review round 2): every
+  ATX heading outside a fenced code block moves down by the same number of
+  levels — enough that the draft's highest becomes `###`, capped at `######` —
+  and a setext heading becomes the ATX heading of its shifted level; a draft
+  whose headings already start at `###` is unchanged. So no draft heading is a
+  sibling of the section titles in DRAFT.md, in an export or for the
+  humanizer, which splits on `##`. The headings are text no section gate judged, so a
   title that is empty, spans lines or holds a citation, a direct quote, an
   identifier or an unparseable or unsupported citation form is refused, naming
   the fix (retitle it in OUTLINE.md and run `pensmith outline`).
@@ -152,8 +161,10 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    compile invariant).
 
 6. **Title and headings, then concatenate in OUTLINE order** (COMP-02, EXP-05):
-   `# <title>`, then for each section `## <section title>` and its draft (each
-   normalized to exactly one trailing newline), a blank line between. No title
+   `# <title>`, then for each section `## <section title>` and its draft (its
+   repeated title heading dropped, its own headings demoted below `##` — see
+   Outputs — and normalized to exactly one trailing newline), a blank line
+   between. No title
    (an outline without an H1 and a brief without a title), or a title the
    heading check flags (see Outputs), is a refusal naming the fix.
 

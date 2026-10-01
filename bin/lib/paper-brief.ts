@@ -71,7 +71,7 @@ export function readPaperBrief(root: string): PaperBrief {
     topic,
     briefThesis,
     thesis: outlineThesis || briefThesis,
-    title: (project?.title ?? '').trim() || topic,
+    title: (project?.title ?? '').trim() || titleFromTopic(topic),
     discipline,
     paperType: brief?.paper_type ?? 'other',
     counterargument: brief?.counterargument ?? 'auto',
@@ -80,4 +80,38 @@ export function readPaperBrief(root: string): PaperBrief {
     sectioningNotes: brief?.sectioning_notes ?? [],
     assignment,
   };
+}
+
+/** Words a title keeps in lower case unless they open or close it (or follow a colon). */
+const TITLE_SMALL_WORDS: ReadonlySet<string> = new Set(
+  'a an and as at but by down for from in into nor of off on onto or over per so than the till to up upon via vs with yet'.split(' '),
+);
+
+/**
+ * The paper's title when `[project] title` is unset (review round 3: every
+ * export was headed by the intake's lowercase topic phrase): the topic in
+ * title case — each word's first letter capitalised (each part of a
+ * hyphenated word), the short function words lower case unless they open or
+ * close the title or follow a colon, and a word that already holds a capital
+ * (an acronym, `iPhone`, a name the user typed) kept as written. Set
+ * `[project] title` in config.toml — or edit OUTLINE.md's first line — for
+ * any other title. Pure.
+ */
+export function titleFromTopic(topic: string): string {
+  const words = topic.trim().split(/(\s+)/u);
+  const real = words.map((w, i) => ({ w, i })).filter((x) => x.w.trim() !== '');
+  const firstIndex = real[0]?.i ?? -1;
+  const lastIndex = real[real.length - 1]?.i ?? -1;
+  let afterColon = false;
+  return words
+    .map((w, i) => {
+      if (w.trim() === '') return w;
+      const opens = i === firstIndex || afterColon;
+      afterColon = /:$/u.test(w);
+      if (/\p{Lu}/u.test(w)) return w;
+      const bare = w.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+      if (!opens && i !== lastIndex && TITLE_SMALL_WORDS.has(bare)) return w;
+      return w.split('-').map((part) => part.replace(/\p{L}/u, (c) => c.toUpperCase())).join('-');
+    })
+    .join('');
 }

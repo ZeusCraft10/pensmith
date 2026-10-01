@@ -25,8 +25,12 @@ paper's files: `.paper/STATE.json`, each section's PLAN.md frontmatter (read thr
 loader without write-back), each section's DRAFT.md hash (against `verified_against_draft_hash`),
 OUTLINE.md's rows (which must list the sections STATE.json registers), `OUTLINE.rejected.md`,
 `COMPILE-INPUTS.json` (what the compiled draft was made from), `DONE-RECORD.json` (the compiled
-draft and the FINAL.md done exported) and the mtimes of the compiled `DRAFT.md` and the section
-files (the staleness check of a draft compiled with no record). The resolver IGNORES HANDOFF.json (H4) and NEVER returns
+draft and the FINAL.md done exported, whether an export rendered that FINAL.md — `pensmith
+humanize` leaves it unexported — and, for an outline-only paper, the outline record; a record a
+newer pensmith wrote is attention), `FINAL.rejected.md` (a rejected humanization of the current
+compiled draft), `EXPORT.refused.md` (done's refusal of the current compiled draft on the
+zero-trace rule), an outline-only paper's OUTLINE.md stub-outline line, and the mtimes of the
+compiled `DRAFT.md` and the section files (the staleness check of a draft compiled with no record). The resolver IGNORES HANDOFF.json (H4) and NEVER returns
 `{ verb:'resume' }`.
 
 **One invocation completes one step (GRND-18, D-18-28).** A step is one verb — intake,
@@ -123,7 +127,7 @@ without `--yolo` it stops at the first gate it cannot answer (no terminal: exit 
    - `{ verb:'compile' }` → run compile
    - `{ verb:'done' }` → run done (export; the export confirmation gate unless `--yolo`)
    - `{ verb:'status', reason:'done' }` → mode-specific end-state termination (its detail, when present — e.g. an outline-only paper's `outline only — complete: export/OUTLINE.md and export/ANNOTATED-BIBLIOGRAPHY.md …` — is printed)
-   - `{ verb:'status', reason:'attention' }` → print the attention terminus and its detail (STATE.json or a section corrupt, a rejected, unreadable or missing outline, a refused draft, an unchanged draft that failed verification or could not be verified)
+   - `{ verb:'status', reason:'attention' }` → print the attention terminus and its detail (STATE.json or a section corrupt, a rejected, unreadable or missing outline, a refused draft, an unchanged draft that failed verification or could not be verified, a FINAL.md or annotated bibliography done did not write, a humanized FINAL.md not exported yet — naming `pensmith export` — a rejected humanization of the current compiled draft — naming `pensmith done --raw` / `pensmith done`, never a re-billed humanizer — a compiled draft done refused on the zero-trace rule, a DONE-RECORD a newer pensmith wrote, or an outline-only paper whose outline the stubbed model wrote — naming `pensmith outline --force`)
 
 4. **Dispatch** each verb via `dispatchVerb(verb, verbArgs)` forwarding `yolo` + other global flags (C3-HIGH-2); the chain is `runNextStep` in `bin/pensmith.ts`, shared by bare `pensmith`, `next` and `resume`.
 
