@@ -80,6 +80,14 @@ decision for it.
   command is typed in; config.toml's relative path is the project root's) that
   is a well-formed, independent CSL 1.0 style. An unknown name or a bad file
   is EXIT_USAGE with the reason. done prints `style: <name> (from <source>)`.
+  A `.csl` file prints its own literal text in every citation, note and
+  bibliography entry, after the gate, so one that config.toml names (a paper
+  file that travels with a shared paper) is used only once this user approved
+  it for this paper — the `csl-style` gate, recorded in the pensmith data dir
+  and bound to the file's real path and sha256 (an edited file is asked about
+  again; `bin/lib/style-approvals.ts`). `--yolo` never answers it; without a
+  terminal done refuses (exit 3) before any step, naming `--style` — a style
+  typed with `--style`, and the 8 bundled ones, never ask.
 - `--raw` — skip the humanizer (`humanizer skipped (--raw)`; no request is sent).
 - `--no-verify` — skip ONLY the whole-paper Pass 4 audit, with a warning; the
   blocking re-verification always runs. `--no-verify --raw` without `--yolo` is
@@ -404,7 +412,12 @@ decision for it.
   renders only keys the checked text cites, the bibliography holds exactly the
   rendered keys, and the export bibliography exactly the cited keys — a note
   built from a citation carries nothing the gate did not check, or the export
-  is refused before anything is written.
+  is refused before anything is written. One qualification: a user-supplied
+  `.csl` file's own literal text is not gated (a bundled style prints only the
+  cited entries' fields). That is why a config.toml `.csl` needs the user's
+  approval (above), and the exporter refuses an export whose rendered
+  citations, notes or bibliography print a DOI, arXiv id or PMID that none of
+  the cited entries holds (`assertRenderedIdentifiers`).
 - **The bibliography** (EXP-01, EXP-02): `export/CITATIONS.bib` holds only the
   cited entries, and `export/CITATIONS.ris` is rendered from the same parsed
   entries (same keys; one `TAG  - value` per line, never wrapped; `AU  -

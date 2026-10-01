@@ -50,7 +50,9 @@ export type GateId =
   // Phase 20 (VRFY-20, VRFY-22; D-20-26): accepting an uncheckable quote, and
   // exporting with UNSUPPORTED claims.
   | 'quote-accept'
-  | 'unsupported-claims';
+  | 'unsupported-claims'
+  // Phase 21 review round 2 (EXP-03): a citation-style file a paper's config.toml names.
+  | 'csl-style';
 
 export interface GateDef {
   readonly id: GateId;
@@ -96,6 +98,8 @@ export const GATES: readonly GateDef[] = Object.freeze([
   { id: 'quote-accept', label: 'Accept these quotes whose source text cannot be checked?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'VRFY-20', summary: 'accepting a quote whose source text cannot be checked' },
   // VRFY-22: done's confirmation when Pass 2 judged claims UNSUPPORTED; the decision is recorded in .paper/VERIFICATION.md.
   { id: 'unsupported-claims', label: 'Export the paper with these UNSUPPORTED claims?', yolo: 'skip', yoloChoice: 'export and record them as auto-accepted', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'VRFY-22', summary: 'the UNSUPPORTED-claims confirmation' },
+  // EXP-03 (review round 2): a .csl file prints its own text in every citation and reference of the export — a paper's config.toml can name one, only the user can approve it (style-approvals.ts).
+  { id: 'csl-style', label: "Use the citation style file this paper's config.toml names? Its text is printed in every citation and reference of the export.", yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'EXP-03', summary: "using a citation style file a paper's config names" },
 ] satisfies GateDef[]);
 
 /**

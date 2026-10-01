@@ -41,7 +41,14 @@
 // rendered bibliography holds exactly the rendered keys, and that the export
 // bib holds exactly the cited keys the bibliography has; a mismatch is a
 // PensmithError and nothing is written. Note-style footnotes are produced
-// after the gate but hold nothing the gate did not judge.
+// after the gate but hold nothing the gate did not judge. One qualification
+// (review round 2): a user-supplied `.csl` file is code for the engine, and
+// its literal text (a `<text value="…"/>`, a macro) is printed in every
+// citation, note and bibliography entry without passing the gate — so a
+// `.csl` file config.toml names is used only once the user approved it
+// (style-approvals.ts, the `csl-style` gate), and assertRenderedIdentifiers
+// refuses an export whose rendered citations print a DOI, arXiv id or PMID
+// that none of the cited entries holds.
 // tests/exporter-invariant.property.test.ts checks that the export's text
 // with the rendered citations, notes and bibliography removed equals the
 // gated text with its citation tokens removed.
@@ -58,6 +65,8 @@ import { isPandocPresent } from './ecosystem-presence.js';
 import { paperDir, projectRoot, dryRunWorkspaceActive } from './paths.js';
 import { planExportCitations, writeExportCitations, type ExportCitationsPlan } from './library.js';
 import { extractCitedKeysForVerification } from './citation-token.js';
+import { findBareIdentifiers } from './doi.js';
+import type { RichRun } from './citations.js';
 import { EXIT_ERROR, PensmithError } from './exit-codes.js';
 import { prepareText, type PreparedText } from './export/render.js';
 import { writeMarkdown } from './export/md-writer.js';
@@ -176,6 +185,49 @@ export function assertRenderedKeys(prep: PreparedText, gatedKeys: readonly strin
   throw new PensmithError(`export refused: ${why} — nothing was exported`, EXIT_ERROR);
 }
 
+/** Every identifier (`doi:…`, `arxiv:…`, `pmid:…`, canonical) the cited entries' own fields hold. */
+function entryIdentifiers(entries: ReadonlyArray<Record<string, unknown>>): Set<string> {
+  const out = new Set<string>();
+  for (const e of entries) {
+    for (const v of Object.values(e)) {
+      if (typeof v !== 'string' && typeof v !== 'number') continue;
+      const t = String(v).trim();
+      for (const probe of [t, `doi:${t}`, `arXiv:${t}`, `PMID:${t}`]) for (const b of findBareIdentifiers(probe)) out.add(`${b.kind}:${b.id}`);
+    }
+  }
+  return out;
+}
+
+/** The text and the link targets of rich runs. */
+function runsAndLinks(runs: readonly RichRun[]): string {
+  return [runs.map((r) => r.text).join(''), ...runs.flatMap((r) => (r.href !== undefined ? [r.href] : []))].join('\n');
+}
+
+/**
+ * D-21-12, defence in depth (review round 2): every identifier the rendered
+ * citations, notes and bibliography print must be one of the cited entries'
+ * own. A bundled style prints only those; a `.csl` file can print any literal
+ * text (`<text value="doi:10.9999/…"/>`), which no gate read — a DOI, arXiv id
+ * or PMID it adds refuses the export. Throws a PensmithError (nothing is
+ * written yet).
+ */
+export function assertRenderedIdentifiers(prep: PreparedText, entries: ReadonlyArray<Record<string, unknown>>): void {
+  const own = entryIdentifiers(entries);
+  const texts: string[] = [];
+  for (const p of prep.placed) for (const part of p.parts) if (part.kind === 'runs') texts.push(runsAndLinks(part.runs));
+  for (const n of prep.notes) texts.push(runsAndLinks(n));
+  for (const e of prep.bibliography) texts.push(runsAndLinks([...(e.label ?? []), ...e.runs]));
+  for (const t of texts) {
+    const foreign = findBareIdentifiers(t).find((b) => !own.has(`${b.kind}:${b.id}`));
+    if (foreign !== undefined) {
+      throw new PensmithError(
+        `export refused: the citation style printed an identifier no cited source holds (${foreign.text}) — a style's own text is not checked by the verifier, so nothing was exported; use a bundled style or another .csl file`,
+        EXIT_ERROR,
+      );
+    }
+  }
+}
+
 /** The note for characters pdfLaTeX prints as `?` in a .tex (XeTeX / LuaTeX print them with a font that has them). */
 function latexUnprintableNote(doc: ExportDocument): string[] {
   const chars = pdfTexUnprintable(documentChars(doc));
@@ -257,6 +309,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   // 2. The citations, rendered and placed; the D-21-12 invariant.
   const prep = await prepareText(text, plan.entries, opts.style ?? null);
   assertRenderedKeys(prep, gatedKeys, plan);
+  assertRenderedIdentifiers(prep, plan.entries);
   const localeNote = prep.localeFallback !== null ? [`the style's locale ${prep.localeFallback} is not bundled: the built-in renderer used en-US terms`] : [];
   if (prep.unprinted.length > 0) notes.push(`the style prints nothing for a citation of ${prep.unprinted.join(', ')} (no printed form) — it was left out of the text, as pandoc leaves it out`);
 

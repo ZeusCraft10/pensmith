@@ -302,6 +302,19 @@ export function pensmithOwnSourceApprovalsPath(
 }
 
 /**
+ * `<data dir>/style-approvals.json` — the citation-style files (`.csl`) a
+ * paper's config.toml names that the user approved for that paper, by real
+ * path and sha256 (style-approvals.ts, EXP-03; never in `.paper/`, which
+ * travels with a shared paper).
+ */
+export function pensmithStyleApprovalsPath(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return path.join(pensmithDataDir(platform, env), 'style-approvals.json');
+}
+
+/**
  * `<data dir>/detector-consent.json` — the user's answers to "send the paper
  * to the AI detector?", per paper and per detector (detector-consent.ts,
  * EXP-17; never in `.paper/`, which travels with a shared paper).

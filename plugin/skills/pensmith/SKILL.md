@@ -98,8 +98,9 @@ printed when it stopped, and say how the acceptance will be recorded.
 `--yolo` never answers the cost cap, the estimate confirmation, detector
 consent, the active-paper choice, reading a PDF folder outside the paper,
 pulling a Zotero collection a paper's config names, attaching a PDF whose
-first page does not show the work or accepting a quote whose source text
-cannot be checked. `pensmith new --answers <file.toml>` answers intake up front.
+first page does not show the work, accepting a quote whose source text
+cannot be checked or using a citation style file a paper's config names.
+`pensmith new --answers <file.toml>` answers intake up front.
 
 ## A bare /pensmith, "continue", "what's next?"
 

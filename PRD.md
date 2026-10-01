@@ -468,10 +468,13 @@ For power users / batch processing / CI testing:
 | `pdf-attach-unmatched` | Attach this PDF although its first page does not show the work's title and first author? | never | refuse: 3 | 3 | SRC-13 |
 | `quote-accept` | Accept these quotes whose source text cannot be checked? | never | skip: 0 | 0 | VRFY-20 |
 | `unsupported-claims` | Export the paper with these UNSUPPORTED claims? | skip: export and record them as auto-accepted | refuse: 3 | 3 | VRFY-22 |
+| `csl-style` | Use the citation style file this paper's config.toml names? Its text is printed in every citation and reference of the export. | never | refuse: 3 | 3 | EXP-03 |
 
 `quote-accept` (VRFY-20) is asked by `pensmith verify N` in a terminal when the section has quotes no source text could be checked against (UNVERIFIABLE-QUOTE): a multi-select of those quotes plus "accept all". The verify that `pensmith write N` chains asks it too, so the single-command flow (a bare `pensmith` runs `write N` for a section) offers it where the draft is written; wave mode (`pensmith write` with no section) drafts in parallel and asks nothing *(amended in review round 3 of Phase 20, D-20-22)*. It is a verification decision, so `--yolo` never answers it; without a terminal it is skipped and the section stays unverifiable (verify exits 4), and declining leaves it so. `verify N --accept-quote <id>` records one quote per flag. `unsupported-claims` (VRFY-22) replaces the planned `unsupported-confirm`: when Pass 2 judged claims UNSUPPORTED, `done` lists each one with its evidence and asks it instead of the generic `export-confirm`; the answer is recorded in `.paper/VERIFICATION.md` (`Confirmed by user <time>`, or `Auto-accepted under --yolo <time>`).
 
-Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent persisted in `config.toml` (EXP-17) is the only way that gate is answered without asking.
+`csl-style` (EXP-03, Phase 21 review round 2): a `.csl` file prints its own literal text in every citation, note and bibliography entry of the export, after the gate. A paper's `config.toml` may name one, but `done` uses it only once this user approved it for this paper — recorded in the pensmith data dir, bound to the file's real path and sha256, so an edited file is asked about again; a `--style` value the user types and the 8 bundled styles never ask. `--yolo` never answers it; without a terminal `done` refuses (exit 3) naming `--style`.
+
+Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent recorded in the pensmith data dir for this paper and detector (EXP-17; never `config.toml`, which can only opt out) is the only way that gate is answered without asking.
 
 ### 7.21 Health check (`/pensmith doctor`)
 

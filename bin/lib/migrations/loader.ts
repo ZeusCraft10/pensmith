@@ -51,7 +51,8 @@ export interface LoadOptions<TSchema extends z.ZodTypeAny> {
     | 'session-log'
     | 'runtime-config'
     | 'own-source-approvals'
-    | 'detector-consent';
+    | 'detector-consent'
+    | 'style-approvals';
   currentVersion: number;
   migrations?: Record<number, Migration>;
   writeBack?: boolean; // default false

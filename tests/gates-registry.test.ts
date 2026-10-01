@@ -59,6 +59,8 @@ const NEVER: ReadonlySet<GateId> = new Set([
   'pdf-attach-unmatched',
   // VRFY-20 (S-04): accepting an uncheckable quote is a verification decision.
   'quote-accept',
+  // EXP-03 (Phase 21 review round 2): a .csl file a paper's config names prints its own text in the export.
+  'csl-style',
 ]);
 
 // ---------------------------------------------------------------------------

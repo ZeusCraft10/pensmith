@@ -68,6 +68,7 @@ import { EXIT_BLOCKED, EXIT_ERROR, EXIT_USAGE, PensmithError } from '../lib/exit
 import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { sectionRegistryProblem } from '../lib/section-registry.js';
 import { compileRecordProblems, fileSha256, readCompileInputs } from '../lib/compile-inputs.js';
+import { assertCslStyleApproved } from '../lib/style-approvals.js';
 import { assertDoneRecordWritable, clearHumanizeRejection, editedFinalReason, finalMdState, FINAL_REJECTED_FILE, readDoneRecord, writeDoneRecord, writeHumanizeRejection } from '../lib/done-record.js';
 import { loadBibliography, type AcceptedQuote, type ByoQuote, type GateResult, type LoadedBibliography } from '../lib/verify/gate.js';
 import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
@@ -704,6 +705,7 @@ export const doneCommand = defineCommand({
       }
       const outlineStyle = resolveExportStyle(paperRoot, flags.style);
       writeOut(`pensmith done: style: ${outlineStyle.name} (from ${outlineStyle.from})\n`);
+      await assertCslStyleApproved(paperRoot, outlineStyle, warnLine);
       const outlineFormat = (args as Record<string, unknown>)['format'] === undefined ? 'md' : flags.format;
       return runOutlineDone({ paperRoot, format: outlineFormat, style: outlineStyle.style, yolo: flags.yolo });
     }
@@ -717,6 +719,10 @@ export const doneCommand = defineCommand({
     if (exporting) {
       style = resolveExportStyle(paperRoot, flags.style);
       writeOut(`pensmith done: style: ${style.name} (from ${style.from})\n`);
+      // A .csl file config.toml names prints its own text in every citation
+      // and reference: used only once this user approved it for this paper
+      // (style-approvals.ts; review round 2) — before any step.
+      await assertCslStyleApproved(paperRoot, style, warnLine);
     }
     if (flags.noVerify && exporting) {
       process.stderr.write(
@@ -1074,6 +1080,11 @@ export const doneCommand = defineCommand({
     return { ok: true, ...result };
   },
 });
+
+/** One warning line on stderr. */
+function warnLine(line: string): void {
+  process.stderr.write(`${line}\n`);
+}
 
 /** `{ maxPhrases }` from `[verification] plagiarism_max_phrases`, when set (the default is plagiarism.ts's). */
 function maxPhrasesOpt(paperRoot: string): { maxPhrases?: number } {
