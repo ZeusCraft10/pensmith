@@ -205,3 +205,94 @@ with `pensmith verify N`, and records no claim or decision for it.
 
 8. **Shell fallback** (TIER-06 equivalence path): `pensmith done [--yolo]
    [--format docx|pdf|latex|md] [--raw]`.
+
+### Export writers and zero trace
+
+(Phase 21: EXP-01 … EXP-09, D-21-02 … D-21-12.)
+
+- **The requested format is always produced** (EXP-09). `md` is always the
+  built-in Markdown writer — never pandoc, so its bytes never depend on what is
+  installed. `docx`, `pdf` and `latex` use pandoc when it is on PATH (a PDF also
+  needs a TeX engine: the first of pdflatex, xelatex, lualatex or tectonic), and
+  otherwise the built-in writer of that format: a real `.docx` (Word styles,
+  numbered lists, page footnotes), a real PDF (an embedded subset of the OFL
+  Liberation Serif family shipped in `templates/fonts/`, footnotes at the foot
+  of the page, page numbers) or a standalone LaTeX article that compiles under
+  pdfLaTeX and XeTeX. A pandoc failure falls back to the built-in writer of the
+  same format, never to Markdown. stdout names the writer —
+  `pensmith export: DRAFT.docx — pandoc docx writer` or
+  `… — built-in docx writer — pandoc not found` — and a `note —` line names
+  anything the built-in writer wrote as text (it reads a Markdown subset).
+- **Citations are rendered in the paper's style by one citeproc engine over the
+  whole document** (D-21-03): notes numbered across the document for a note
+  style, numbers in first-citation order for a numeric style, and every form the
+  gate accepts — clusters, locators (`[@k, p. 5]`, and `[@k 33]` as page 33, as
+  pandoc reads it), prefixes and suffixes, `[-@k]`, `@{k}` and narrative `@k`.
+  Titles are case-protected, so "China" stays capitalised in every style
+  (D-21-06). A `.csl` file path works wherever a style key does (D-21-07). On
+  the pandoc path pandoc runs in a fresh temporary directory on neutral names
+  only (`input.md`, `references.json`, `style.csl`, `out.<ext>`, D-21-09), so
+  nothing it records can name a local path.
+- **Nothing is rendered that the gate did not read** (D-21-12): the exporter
+  renders only keys the checked text cites, the bibliography holds exactly the
+  rendered keys, and the export bibliography exactly the cited keys — a note
+  built from a citation carries nothing the gate did not check, or the export
+  is refused before anything is written.
+- **The bibliography** (EXP-01, EXP-02): `export/CITATIONS.bib` holds only the
+  cited entries, and `export/CITATIONS.ris` is rendered from the same parsed
+  entries (same keys; one `TAG  - value` per line, never wrapped; `AU  -
+  Family, Given`; page ranges as `SP`/`EP`; a journal article's journal as
+  `JO`). A text that cites keys none of which the bibliography holds is an
+  error (EXIT_ERROR) that writes nothing.
+- **Zero trace is checked, not assumed** (D-21-08): every docx and PDF is
+  scrubbed (the docx core and app properties blanked, `docProps/custom.xml`
+  removed, ZIP dates fixed; the PDF `/Info` emptied, its XMP and pdfTeX's
+  `/PTEX.*` keys removed), then EVERY written file — the document and both
+  bibliography files — is scanned (`bin/lib/export/zero-trace.ts`): a pensmith
+  name, an offline or stub marker, a generator comment, a local home path, an
+  author or producer field, an XMP packet or a metadata-bearing embedded image
+  is a finding. Any finding, or a scrub that fails, deletes everything the
+  export wrote and refuses with `ZeroTraceError` (EXIT_ERROR) — never a
+  Markdown fallback.
+
+### Outline-only mode
+
+(GRND-11, D-21-25 — amends the GRND-02 stop.) A paper whose intake chose
+"outline only" (`[project] mode = "outline"`) never plans, drafts or verifies a
+section: once the outline is approved the router names `done`, and done runs
+the outline export (`bin/lib/outline-export.ts` `runOutlineDone`) instead of
+steps 0–7:
+
+1. The listed sources are the citekeys the outline assigns (section order, each
+   once). The outline document — title, thesis, each section's heading with its
+   role, word target, purpose and its sources as one citation — is checked by
+   the same gate core, with the listed keys allowed: every listed source is
+   Pass-1 re-verified at its registrar, every `unknown` retraction status is
+   re-checked live, and any blocking row (a FABRICATED, MIS-CITED or RETRACTED
+   source, an unreadable or unsupported citation form) refuses with
+   EXIT_BLOCKED (4), writing nothing.
+2. The `export-confirm` gate (`--yolo` skips it; without a terminal it refuses
+   with exit 3).
+3. `.paper/ANNOTATED-BIBLIOGRAPHY.md`: per source, its reference in the paper's
+   style, its tier, the abstract's leading sentences up to 60 words labelled
+   "Summary (abstract excerpt)" (no model call; "no abstract available" without
+   one), why it is relevant (the research evaluator's reason) and the sections
+   it supports. Every value read from the library is escaped: the file holds no
+   citation and no markup.
+4. `export/OUTLINE.<ext>` (its citations rendered, a References list, and
+   `export/CITATIONS.bib` / `.ris` of the listed sources) and
+   `export/ANNOTATED-BIBLIOGRAPHY.<ext>`, through the same writers, scrub and
+   scan. A routed done (bare `/pensmith`) exports Markdown; `pensmith done
+   --format docx` adds the `.docx` pair.
+5. `DONE-RECORD.json` v2 records the outline export: the sha256 of OUTLINE.md,
+   CITATIONS.bib and ANNOTATED-BIBLIOGRAPHY.md and the files exported. The
+   router reports `status (done)` — `outline only — complete:
+   export/OUTLINE.md and export/ANNOTATED-BIBLIOGRAPHY.md` — while they hold
+   those bytes, and routes to done again when the outline or its sources change.
+   An ANNOTATED-BIBLIOGRAPHY.md done did not write (edited by hand) is never
+   replaced: done refuses (exit 4) and the router reports attention, naming the
+   remedy (move it out of the paper folder).
+
+No humanizer, detector score or plagiarism check runs in outline mode: there is
+no prose. To go on to a full draft, set `mode = "draft"` under `[project]` in
+`.paper/config.toml`, or run a section yourself (`pensmith plan 1`).

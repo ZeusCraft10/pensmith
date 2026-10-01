@@ -50,8 +50,12 @@ the message and the command that fixes it, so the summary does not repeat it.
 State machine: `new → research → outline → (plan → write → verify per section) → compile → done`.
 The resolver reads the configured paper mode and may halt early for mode-specific termination
 states (`{ verb:'status', reason:'done' }` or `{ verb:'status', reason:'attention' }`): an
-outline-only paper (`[project] mode = "outline"`, GRND-02) stops at `status (done)` once its
-outline is approved, with a detail saying how to go on to a draft. An
+outline-only paper (`[project] mode = "outline"`, GRND-02, GRND-11) never routes a section:
+once its outline is approved the router names `done` — the outline export (an annotated
+bibliography and OUTLINE / ANNOTATED-BIBLIOGRAPHY exports, every listed source re-verified) —
+until DONE-RECORD.json's outline record matches OUTLINE.md, CITATIONS.bib and
+ANNOTATED-BIBLIOGRAPHY.md, then stops at `status (done)` with a detail naming the exported
+files and how to go on to a draft (a hand-edited ANNOTATED-BIBLIOGRAPHY.md is attention). An
 attention decision carries a detail naming the command that fixes it (a rejected outline:
 `pensmith outline`; an OUTLINE.md that cannot be read, or is missing while sections are
 registered: fix or restore it, or `pensmith outline --force`; a section whose draft was
@@ -118,7 +122,7 @@ without `--yolo` it stops at the first gate it cannot answer (no terminal: exit 
    - `{ verb:'verify', n, slug }` → verify section N
    - `{ verb:'compile' }` → run compile
    - `{ verb:'done' }` → run done (export; the export confirmation gate unless `--yolo`)
-   - `{ verb:'status', reason:'done' }` → mode-specific end-state termination (its detail, when present — e.g. the outline-only stop — is printed)
+   - `{ verb:'status', reason:'done' }` → mode-specific end-state termination (its detail, when present — e.g. an outline-only paper's `outline only — complete: export/OUTLINE.md and export/ANNOTATED-BIBLIOGRAPHY.md …` — is printed)
    - `{ verb:'status', reason:'attention' }` → print the attention terminus and its detail (STATE.json or a section corrupt, a rejected, unreadable or missing outline, a refused draft, an unchanged draft that failed verification or could not be verified)
 
 4. **Dispatch** each verb via `dispatchVerb(verb, verbArgs)` forwarding `yolo` + other global flags (C3-HIGH-2); the chain is `runNextStep` in `bin/pensmith.ts`, shared by bare `pensmith`, `next` and `resume`.

@@ -64,11 +64,23 @@
 // remains the SOLE source whose body contains `from 'citation-js'`.
 //
 // =====================================================================
-//   Inline cite resolution is NOT this file's job (D-21)
+//   Whole-document rendering (Phase 21: D-21-03 … D-21-07)
 // =====================================================================
-// DRAFT.md uses Pandoc `[@citekey]` tokens. Inline citation rendering
-// happens at compile time via Pandoc. citations.ts renders only the
-// reference list (bibliography). Phase 6 compile verb wires Pandoc.
+// DRAFT.md uses Pandoc citations (`[@k]`, clusters, locators, `[-@k]`,
+// `@{k}`, narrative `@k`). The export renders them here, offline, by ONE
+// citeproc engine over the whole document — renderDocumentCitations: every
+// citation in order (notes numbered across the document, numeric styles in
+// first-citation order, narrative = author-only + suppress-author, affixed
+// cluster items as sort barriers, a digit-led suffix as a page locator) and
+// the bibliography of exactly the cited keys, as rich-text runs the writers
+// in bin/lib/export/ lay out. It follows pandoc's citeproc output (checked
+// by tests/citation-goldens.test.ts for the 8 bundled styles). Titles are
+// case-protected (caseProtectTitle / caseProtectItems, D-21-06) so a proper
+// noun keeps its capitals in every style, on both export paths. A style is a
+// bundled key or an absolute `.csl` path (ensureStyleTemplate registers a
+// file by its content hash, D-21-07); the style's default locale is honoured
+// from the shipped CSL locales (`templates/csl-locales/`, en-US and en-GB).
+// Placement in the text is bin/lib/export/render.ts's job.
 
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
