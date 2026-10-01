@@ -494,7 +494,7 @@ The close-out re-ran the gate and the user path on the final code and updated th
 **Defect found and fixed: the plagiarism check could stall for many minutes (EXP-19).** In the live lane, DuckDuckGo challenged about two queries in three, and the back-off grew without bound: it was 10 s times the challenges in a row, and a challenged phrase was asked up to twice more. A 17-phrase `pensmith plagiarism` and the plagiarism step of a live `pensmith done` each ran past the driver's five-minute limit with no output after the start line; with every query refused, the waits would sum to hours. `plagiarism.ts` now:
 - caps each back-off wait at 30 s (`maxBackoffMs`);
 - gives the run 12 s per phrase (`budgetPerPhraseMs`; about 6 min for the default 30). Once the budget is spent, no further query goes out. Each phrase still waiting keeps its last refusal, or carries `not queried — the check's time budget (N min) ran out while DuckDuckGo refused queries; retry later`, so the coverage line reports the run INCOMPLETE;
-- names the bound in its start line (`about 1 min, at most 4 min if DuckDuckGo keeps refusing`) and prints a line when it stops at the budget.
+- names the bound in its start line (for 17 phrases: `about 1 min, at most 3 min if DuckDuckGo keeps refusing`) and prints a line when it stops at the budget.
 
 done.md step 2 and the README say so, and plugin.json was re-stamped; no bundle changed. Test: `plagiarism` (close-out): against a DuckDuckGo that refuses every query, the run stops within its budget, every wait is capped, unasked phrases say so, and the coverage is INCOMPLETE. Making either the cap or the budget a no-op fails the test.
 
@@ -504,11 +504,11 @@ done.md step 2 and the README say so, and plugin.json was re-stamped; no bundle 
 - prebuild and build clean; the build left nothing in `git status --porcelain`. Lint, typecheck, `validate:manifests` and `bundle:check` (plugin version `0.1.0-dev+bcb7e05066a7`) all pass.
 - `test:tier-contract`: 63/63.
 - `CI=true npm test`: 3147 tests, 3146 pass, 0 skipped, 0 todo. The one failure is the root-only atomic-write case. HARDEN-03 ran 1000 drafts against pandoc 3.9, and the real-data-dir fingerprint was unchanged.
-- `e2e-smoke`: 17 PASS.
+- `e2e-smoke`: 17 PASS. `plugin:smoke` (Claude Code 2.1.286) passes every check at the new stamp; a fresh clone installs `0.1.0-dev+bcb7e05066a7`.
 
 Before the fix, at `e800683`, the same gate gave 3146 tests with 3145 passing (the same failure), tier-contract 63/63, `e2e-smoke` 17 PASS, and `plugin:smoke` (Claude Code 2.1.286) with all checks passing.
 
-**User path.** The integration pass's acceptance drivers (s1–s6) were re-run on the final code, together with a new `s7-rounds` driver for the review-round behaviour: @@ACCEPT_SCORE@@ checks pass (21-VERIFICATION §4). Where a review round deliberately changed the behaviour, the expectation was updated, and 21-VERIFICATION §4 names each change and the round that made it. These are consent recorded in the data dir, the non-breaking space after a locator label, the goldens normalisation and the "Works Cited" heading, the three-place skill search line, the service's own reason in an unavailable score, and tectonic `--only-cached`. The one product defect the re-run found, the unbounded plagiarism back-off, is described above. Every other failure in the first run was an expectation the review rounds had changed.
+**User path.** The integration pass's acceptance drivers (s1–s6) were re-run on the final code, together with a new `s7-rounds` driver for the review-round behaviour: 165 of 165 checks pass (21-VERIFICATION §4). Where a review round deliberately changed the behaviour, the expectation was updated, and 21-VERIFICATION §4 names each change and the round that made it. These are consent recorded in the data dir, the non-breaking space after a locator label, the goldens normalisation and the "Works Cited" heading, the three-place skill search line, the service's own reason in an unavailable score, and tectonic `--only-cached`. The one product defect the re-run found, the unbounded plagiarism back-off, is described above. Every other failure in the first run was an expectation the review rounds had changed.
 
 **Requirements.** 21 of 22 are Complete and ticked in REQUIREMENTS.md, and the Coverage line now reads 125 Complete. EXP-09 stays Pending (partial), with its CI-compile bullet handed to HARDEN-04; that hand-off is also noted on HARDEN-04's acceptance. All 8 ROADMAP success criteria are met. The ROADMAP Phase 21 box stays unticked because EXP-09 is open; the progress row, the phase's Plans/Status lines and the footer are updated. STATE.md records the closed phase. The Phase 21 pending todos (the EXP-04 note style, the DONE-RECORD inheritance and the Phase 19 EXP-03 follow-ups) are closed, and the EXP-09 CI leg, the 23b merge and the keyed detector runs are added.
 
@@ -517,5 +517,5 @@ Before the fix, at `e800683`, the same gate gave 3146 tests with 3145 passing (t
 - **CI-06.** The first CI run of this code on macOS and Windows, with the pandoc-dependent suites.
 - **HARDEN-02 / maintainer.** Keyed GPTZero, Originality.ai (Enterprise) and Sapling scores.
 - **BRDTH-02 (Phase 25).** Stripping image metadata on embed. The scanner already refuses it.
-- **Phase 23b merge.** Follow §4 and the round 1–3 merge notes.
+- **Phase 23b merge.** Follow §4, the round 1–3 merge notes and the close-out note above.
 - **Phase 22.** It rebuilds compile and export outputs after a revision. The router's staleness rules (COMPILE-INPUTS v3, DONE-RECORD v4, `FINAL.rejected.md`, `EXPORT.refused.md`) are the inputs it must keep current.
