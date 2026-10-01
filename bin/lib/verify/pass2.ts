@@ -210,6 +210,11 @@ export interface Pass2Options {
   fullText?: FullTextProvider;
   /** `[verification] fetch_full_text`; read from the paper's config.toml when omitted (default true). */
   fetchFullText?: boolean;
+  /**
+   * Judge only the pairs this keeps (done: the cited sentences a rewrite
+   * changed — rewritten-claims.ts, review round 3). Omitted: every pair.
+   */
+  only?: (pair: { readonly citekey: string; readonly claimSentence: string }) => boolean;
 }
 
 /** The source text of one pair, assembled lazily per source and claim. */
@@ -309,7 +314,7 @@ export async function runPass2(
   bibByCitekey: ReadonlyMap<string, Pass2BibEntry>,
   opts: Pass2Options,
 ): Promise<Pass2Result[]> {
-  const pairs = collectClaimPairs(draftMd);
+  const pairs = collectClaimPairs(draftMd).filter((p) => opts.only === undefined || opts.only(p));
   if (pairs.length === 0) return [];
   const useFullText = opts.fullText !== undefined && (opts.fetchFullText ?? fetchFullTextSetting(opts.root));
   const texts = new SourceTexts(bibByCitekey, opts, useFullText);
@@ -390,6 +395,11 @@ export async function runPass2(
 /** A value as a table cell: one line, no pipes, no HTML tag, at most `max` characters. */
 function cell(text: string, max: number): string {
   return clampText(text.replace(/</g, '‹').replace(/>/g, '›'), max);
+}
+
+/** A claim sentence as its Pass-2 table cell holds it (what parseSectionPass2Rows reads back). */
+export function pass2SentenceCell(sentence: string): string {
+  return cell(sentence, PASS2_SENTENCE_CHARS);
 }
 
 /**

@@ -431,9 +431,15 @@ export interface UnsupportedClaim {
   /** `1`, `1a`. */
   readonly section: string;
   readonly slug: string;
-  /** Its 1-based row in the section's Pass-2 table (0: the table could not be read). */
+  /** Its 1-based row in the section's Pass-2 table (0: the table could not be read, or `rewritten`). */
   readonly row: number;
   readonly result: Pass2Result;
+  /**
+   * True when done judged it on the text it exports — a cited sentence the
+   * humanizer rewrote (rewritten-claims.ts, review round 3) — not a section
+   * record's row.
+   */
+  readonly rewritten?: boolean;
 }
 
 /**

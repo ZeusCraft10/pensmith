@@ -190,3 +190,53 @@ test('review r1: a reply that echoes the untrusted-data fence, adds "pensmith" o
   const chatterFenced = validateRewrite({ original, mask, rewritten: `Here is the improved text:\n\n${FENCE_OPEN}\n${p1}\n\n${p2}\n${FENCE_CLOSE}` });
   assert.equal(chatterFenced.ok, false);
 });
+
+// Review round 3: a citation's own claim surviving, whole, in a sentence that
+// no longer carries it is positive evidence of a move — onto a new sentence
+// the model wrote, onto an uncited sentence with one content word, or onto a
+// clause appended after the claim — and a claim negated under its citation is
+// no paraphrase.
+test('review r3: a citation moved onto a new sentence, a one-word sentence or an appended clause is rejected', () => {
+  const claim = 'Vaccines reduce mortality in older adults [@a].';
+  const moved = [
+    'Vaccines reduce mortality in older adults. Results vary [@a].',
+    'Vaccines reduce mortality in older adults. It is false [@a].',
+    'Vaccines reduce mortality in older adults. Others disagree [@a].',
+    'Vaccines reduce mortality in older adults; smoking causes cancer [@a].',
+  ];
+  for (const r of moved) assert.match(compareRewrite(claim, r)[0] ?? '', /^a citation moved off its claim \(\[@a\] now sits on/, r);
+  const original = 'Influenza vaccination reduces winter mortality among adults over sixty-five [@a].\n\nCoverage remains uneven across regions.';
+  const invented = 'Influenza vaccination reduces winter mortality among adults over sixty-five. Several independent cohort studies across Europe later found the effect disappears entirely after adjusting for frailty [@a].\n\nCoverage remains uneven across regions.';
+  assert.match(compareRewrite(original, invented)[0] ?? '', /moved off its claim/);
+  const mask = maskForRewrite(original);
+  const masked = mask.masked.replace('sixty-five {{cite_0_0}}.', 'sixty-five. Several independent cohort studies across Europe later found the effect disappears entirely after adjusting for frailty {{cite_0_0}}.');
+  const v = validateRewrite({ original, mask, rewritten: masked });
+  assert.equal(v.ok, false);
+  assert.match(v.reasons[0] ?? '', /moved off its claim/);
+});
+
+test('review r3: a claim negated under its citation is rejected; contrastive and idiomatic negations are not', () => {
+  const claim = 'Vaccines reduce mortality in older adults [@a].';
+  assert.match(compareRewrite(claim, 'Vaccines do not reduce mortality in older adults [@a].')[0] ?? '', /^a citation's claim was negated/);
+  assert.match(compareRewrite(claim, "Vaccines don't reduce mortality in older adults [@a].")[0] ?? '', /claim was negated/);
+  assert.match(compareRewrite(claim, 'Vaccines never reduce mortality in older adults [@a].')[0] ?? '', /claim was negated/);
+  // Not negations: "not only … but", a negation the claim already had, and a
+  // negated uncited sentence merged into the claim's sentence.
+  const pass: ReadonlyArray<readonly [string, string]> = [
+    ['Vaccination not only reduces mortality in older adults but also cuts hospital stays [@a].', 'Vaccination reduces mortality in older adults and cuts hospital stays [@a].'],
+    ['Vaccination reduces mortality in older adults and cuts hospital stays [@a].', 'Vaccination not only reduces mortality in older adults but also cuts hospital stays [@a].'],
+    ['The decline reflected the downturn rather than the policy [@a].', 'The decline reflected the downturn, not the policy [@a].'],
+    ['Sleep was studied in adults. No effect was seen in children. The results showed improved memory [@a].', 'Sleep improved memory in adults, but no effect was seen in children [@a]. Sleep was studied.'],
+    ['Rising temperatures had no measurable effect on transmission [@a].', 'Transmission showed no measurable effect from rising temperatures [@a].'],
+  ];
+  for (const [o, r] of pass) assert.deepEqual(compareRewrite(o, r), [], r);
+});
+
+test('review r3: semicolon clauses — a citation that keeps its clause passes; one moved onto the other clause is rejected', () => {
+  const o = 'Sleep consolidates memory; stress impairs recall [@a].';
+  assert.deepEqual(compareRewrite(o, 'Stress impairs recall [@a]; sleep consolidates memory.'), []);
+  assert.deepEqual(compareRewrite(o, 'Stress impairs recall, while sleep consolidates memory [@a].'), []);
+  assert.match(compareRewrite(o, 'Sleep consolidates memory [@a]; stress impairs recall.')[0] ?? '', /moved (?:to another claim|off its claim)/);
+  // An entity's semicolon is no clause break.
+  assert.deepEqual(compareRewrite('Smith &amp; Jones showed that sleep consolidates memory [@a].', 'Smith &amp; Jones found sleep consolidates memory [@a].'), []);
+});

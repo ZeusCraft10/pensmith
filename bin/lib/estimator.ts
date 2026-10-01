@@ -34,7 +34,9 @@
 // `claim-consistency` call (two or more sections, `[compile]
 // contradiction_pairs` > 0); done makes one `humanizer` call per section when
 // the user's humanizer skill is installed and `[humanizer] enabled` is not
-// false (compileCallsFor, humanizerCallsFor).
+// false (compileCallsFor, humanizerCallsFor), and then judges the claim support
+// of the citing sentences the humanizer changed (at most one `claim-support`
+// call per citing pair of the paper; review round 3).
 //
 // NO network and NO LLM call: this module reads files only (STATE.json,
 // PLAN.md frontmatter, SESSION.log, config files, the assignment text). It
@@ -609,16 +611,28 @@ export async function projectEstimate(args: {
 
   // done runs Pass 4 over the whole exported paper (VRFY-23): one orphan-label call per paragraph at most.
   const compiled = readText(path.join(pDir, 'DRAFT.md'));
-  const paperParagraphs =
+  const paperWork: AdvisoryWork =
     compiled !== null
-      ? draftAdvisoryWork(compiled).paragraphs
+      ? draftAdvisoryWork(compiled)
       : sections.length > 0
-        ? sections.reduce((sum, s) => sum + sectionWork(formatSectionId(sectionIdOf(s.n, s.suffix)), s.n, s.slug).paragraphs, 0)
-        : sectionCount * plannedAdvisoryWork(defaultWords, 0, perParagraph).paragraphs;
+        ? sections.reduce(
+            (sum, s) => {
+              const w = sectionWork(formatSectionId(sectionIdOf(s.n, s.suffix)), s.n, s.slug);
+              return { pairs: sum.pairs + w.pairs, paragraphs: sum.paragraphs + w.paragraphs };
+            },
+            { pairs: 0, paragraphs: 0 },
+          )
+        : { pairs: sectionCount * plannedAdvisoryWork(defaultWords, 0, perParagraph).pairs, paragraphs: sectionCount * plannedAdvisoryWork(defaultWords, 0, perParagraph).paragraphs };
+  const paperParagraphs = paperWork.paragraphs;
   // D-21-27: compile smooths each boundary and judges the cross-section
   // claims; done humanizes each section (when the skill is installed).
   const compileCalls = outlineOnly ? [] : compileCallsFor(root, sectionCount);
-  const doneCalls: Array<[string, number]> = outlineOnly ? [] : [...humanizerCallsFor(root, sectionCount), ['orphan-label', paperParagraphs]];
+  // A humanized text's changed citing sentences are judged again (Pass 2,
+  // review round 3): at most one claim-support call per citing pair.
+  const humanizerCalls = outlineOnly ? [] : humanizerCallsFor(root, sectionCount);
+  const doneCalls: Array<[string, number]> = outlineOnly
+    ? []
+    : [...humanizerCalls, ...(humanizerCalls.length > 0 && paperWork.pairs > 0 ? [['claim-support', paperWork.pairs] as [string, number]] : []), ['orphan-label', paperParagraphs]];
   if (outlineOnly) {
     if (outlineDoneState(root).state !== 'current') {
       rows.push({ step: 'done', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls (outline only)' });

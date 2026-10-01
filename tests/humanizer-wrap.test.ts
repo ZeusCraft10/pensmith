@@ -233,3 +233,23 @@ test('review r1: a reply that swaps the citations of two claims is rejected; the
   assert.match(r.rejected[0]!, /a citation moved to another claim/);
   assert.equal(r.text, draft, 'the section is kept as compiled');
 });
+
+// Review round 3: the reviewer's end-to-end case — the reply keeps the claim
+// and puts its citation on a sentence it invented. The section is kept.
+test('review r3: a reply that moves a citation onto an invented sentence is rejected; the compiled section is kept', async () => {
+  const skill = { path: '/fixture/SKILL.md', body: 'Improve the prose.' };
+  const r = await humanizeDraft({
+    draft: DRAFT,
+    skill,
+    call: async (req, i) => {
+      const masked = maskedOf(req.messages[0]!.content);
+      return i === 0
+        ? masked.replace('abstraction {{cite_0_0}}.', 'abstraction. A 2023 replication across forty laboratories later showed these representations collapse entirely on out-of-distribution inputs {{cite_0_0}}.')
+        : masked;
+    },
+  });
+  assert.equal(r.rejected.length, 1, JSON.stringify(r.rejected));
+  assert.match(r.rejected[0]!, /a citation moved off its claim/);
+  assert.ok(r.text.includes('learn representations of raw data at several levels of abstraction [@lecun2015].'));
+  assert.ok(!r.text.includes('forty laboratories'));
+});

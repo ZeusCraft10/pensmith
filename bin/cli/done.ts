@@ -79,6 +79,7 @@ import { isOutlinePaper, runOutlineDone } from '../lib/outline-export.js';
 import { readPaperConfigSync, tryReadPaperConfigSync } from '../lib/config.js';
 import { readReportContradictions } from '../lib/compile-report.js';
 import { acceptHumanized, humanizeDraft, loadHumanizerSkill, HUMANIZER_SKILL_DISPLAY } from '../lib/humanizer.js';
+import { rejudgeRewrittenClaims } from '../lib/rewritten-claims.js';
 import { modelStepSkipReason } from '../lib/rewrite-guard.js';
 import { assertLlmConfigured, complete, isFatalLlmError, MissingApiKeyError, RuntimeConfigError } from '../lib/anthropic.js';
 import {
@@ -408,7 +409,7 @@ export function buildVerificationReport(r: PaperVerificationReport): string {
         '|---------|-----|-------|----------|',
         ...r.decisions.map(
           (d) =>
-            `| §${d.claim.section} (${d.claim.slug}) | ${d.claim.row > 0 ? `Pass-2 row ${d.claim.row}` : 'Pass-2 table'} [@${cell(d.claim.result.citekey, 60)}] | ${cell(d.claim.result.claimSentence, 160)} | ${d.decision} |`,
+            `| §${d.claim.section} (${d.claim.slug}) | ${d.claim.rewritten === true ? 'humanized text' : d.claim.row > 0 ? `Pass-2 row ${d.claim.row}` : 'Pass-2 table'} [@${cell(d.claim.result.citekey, 60)}] | ${cell(d.claim.result.claimSentence, 160)} | ${d.decision} |`,
         ),
       ]
     : ['_(no UNSUPPORTED claims to decide)_'];
@@ -482,7 +483,7 @@ function writeExportFindings(
   if (claims.length > 0) {
     writeOut(`pensmith done: ${claims.length} claim(s) Pass 2 judged UNSUPPORTED by the cited source (VRFY-22):\n`);
     for (const c of claims) {
-      writeOut(`  - §${c.section} [@${c.result.citekey}] "${cell(c.result.claimSentence, 160)}" — ${cell(c.result.rationale, 200)}\n`);
+      writeOut(`  - §${c.section}${c.rewritten === true ? ' (humanized)' : ''} [@${c.result.citekey}] "${cell(c.result.claimSentence, 160)}" — ${cell(c.result.rationale, 200)}\n`);
       writeOut(`      evidence: ${c.result.evidence.trim().length > 0 ? `"${cell(c.result.evidence, 200)}"` : '(none quoted)'}\n`);
     }
   }
@@ -825,10 +826,10 @@ export const doneCommand = defineCommand({
 
     // The UNSUPPORTED claims of the registered sections (VRFY-22): with any,
     // the confirmation is the `unsupported-claims` gate, else `export-confirm`.
-    const claims = readUnsupportedClaims(paperRoot, sections);
+    let claims = readUnsupportedClaims(paperRoot, sections);
     const unjudged = unjudgedClaimSections(paperRoot, sections);
     const contradictions = compiledContradictions(paperRoot);
-    const confirmGate = claims.length > 0 ? 'unsupported-claims' : 'export-confirm';
+    let confirmGate: 'unsupported-claims' | 'export-confirm' = claims.length > 0 ? 'unsupported-claims' : 'export-confirm';
 
     // RUN-09 / RUN-28: the export confirmation needs an answer. Without a
     // terminal (and without --yolo) refuse NOW — EXIT_APPROVAL, before the
@@ -937,6 +938,20 @@ export const doneCommand = defineCommand({
         exportGate = regate.gate;
         humanized = readDoneRecord(paperRoot)?.humanized ?? true;
       }
+    }
+    // Review round 3: a humanized text's changed cited sentences are judged
+    // again (Pass 2, advisory) — the confirmation lists what the export says,
+    // never only the section records' verdicts on the sentences it replaced.
+    if (exportedText !== draftMd) {
+      const rejudged = await rejudgeRewrittenClaims({ paperRoot, compiled: draftMd, text: exportedText, claims, bib, sections, sectionIds });
+      if (rejudged.changedPairs > 0) {
+        writeOut(
+          `pensmith done: claim support (Pass 2, advisory) re-judged ${rejudged.changedPairs} citing sentence(s) the humanizer changed — ` +
+            `${rejudged.claims.filter((c) => c.rewritten === true).length} UNSUPPORTED\n`,
+        );
+      }
+      claims = rejudged.claims;
+      confirmGate = claims.length > 0 ? 'unsupported-claims' : 'export-confirm';
     }
     const honestyReport =
       before !== null ? renderHonestySection(before, after) : `Pensmith honesty check: skipped (--only ${only ?? 'export'})\n\n${honestyFramingNote()}`;

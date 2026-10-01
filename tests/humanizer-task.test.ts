@@ -30,6 +30,7 @@ import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync 
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withPipelinePaper, THREE_SECTIONS } from './helpers/pipeline-paper.js';
+import { RECORDED_BIB } from './helpers/gate-paper.js';
 import { splitDraftSections } from '../bin/lib/humanizer.js';
 import { maskForRewrite } from '../bin/lib/rewrite-guard.js';
 import { findCitations } from '../bin/lib/citation-token.js';
@@ -177,6 +178,40 @@ test('EXP-14 / EXP-15 (built CLI, mock LLM): every humanizer outcome on one pape
     assert.match(read(join(paper, 'FINAL.md')) ?? '', /limits what an observer can record/);
     assert.match(read(join(paper, 'export', 'DRAFT.md')) ?? '', /limits what an observer can record/);
     rmSync(join(paper, 'export'), { recursive: true, force: true });
+  });
+});
+
+// Review round 3: the rewrite guard keeps citations on their claims; whether a
+// reworded claim still says what its source supports is Pass 2's judgment.
+// done judges every citing sentence the humanizer changed and lists the
+// UNSUPPORTED ones at the confirmation and in .paper/VERIFICATION.md.
+test('review r3 (built CLI, mock LLM): a citing sentence the humanizer changed is judged again — an UNSUPPORTED rewrite is listed and recorded', async () => {
+  const bib = RECORDED_BIB.replace(
+    '@article{lecun2015,\n',
+    '@article{lecun2015,\n  abstract = {Deep learning allows computational models that are composed of multiple processing layers to learn representations of data with multiple levels of abstraction.},\n',
+  );
+  await withPipelinePaper({ sections: THREE_SECTIONS, bib }, async (p) => {
+    const paper = join(p.root, '.paper');
+    const mock = p.sb.mock!;
+    await p.verifyAll();
+    const c = await p.cli(['compile', '--yolo', '--no-smooth']);
+    assert.equal(c.status, 0, c.stdout + c.stderr);
+    const draft = readFileSync(join(paper, 'DRAFT.md'), 'utf8');
+    p.installHumanizerSkill();
+    const m0 = maskedSection(draft, 0);
+    const reworded = m0.replace('at several levels of abstraction {{cite_0_0}}', 'at several levels of abstraction, and they now outperform people at every task {{cite_0_0}}');
+    assert.notEqual(reworded, m0);
+    mock.reset();
+    mock.script('humanizer', { text: reworded }, { text: maskedSection(draft, 1) }, { text: maskedSection(draft, 2) });
+    mock.script('claim-support', { data: { verdict: 'UNSUPPORTED', rationale: 'The abstract says nothing about outperforming people.', evidence: '' } });
+    const r = await p.cli(['done', '--yolo', '--format', 'md']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(mock.callCount('claim-support'), 1, 'only the changed citing sentence is judged');
+    assert.match(r.stdout, /claim support \(Pass 2, advisory\) re-judged 1 citing sentence\(s\) the humanizer changed — 1 UNSUPPORTED/);
+    assert.match(r.stdout, /§1 \(humanized\) \[@lecun2015\] "[^"]*outperform people at every task/);
+    const record = read(join(paper, 'VERIFICATION.md')) ?? '';
+    assert.match(record, /\| §1 \(learning\) \| humanized text \[@lecun2015\] \| [^|]*outperform people[^|]* \| Auto-accepted under --yolo /);
+    assert.match(read(join(paper, 'export', 'DRAFT.md')) ?? '', /outperform people at every task/);
   });
 });
 

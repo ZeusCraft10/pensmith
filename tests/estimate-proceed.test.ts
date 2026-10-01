@@ -109,7 +109,8 @@ test('D-21-27: the §15 paper with the humanizer skill installed — compile smo
     fs.copyFileSync(new URL('./fixtures/humanizer-skill/humanizer-skill.md', import.meta.url), path.join(skillDir, 'SKILL.md'));
     const r = await sb.runTsx(null, ['--estimate'], { env: { USERPROFILE: sb.dataDir } });
     assert.equal(r.status, 0, r.stderr);
-    // 3 sections: 2 smoother + 1 claim-consistency at compile; 3 humanizer + the Pass-4 audit at done.
+    // 3 sections: 2 smoother + 1 claim-consistency at compile; 3 humanizer, the claim-support re-judging of
+    // the citing sentences they change (review round 3) and the Pass-4 audit at done.
     assert.match(r.stdout, /^  compile\s+3\s.*claude-opus-5, claude-haiku-4-5$/m);
     const doneRow = /^  done\s+(\d+)\s/m.exec(r.stdout);
     assert.ok(doneRow && Number(doneRow[1]) >= 4, `done counts the 3 humanizer calls: ${r.stdout}`);

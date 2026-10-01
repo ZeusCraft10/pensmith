@@ -33,10 +33,16 @@
 //        - every citation stays on its claim (citationAnchorProblem): the
 //          sentence that holds it in the rewrite is not, on positive evidence,
 //          the rewrite of ANOTHER original claim while its own claim is gone
-//          from it (review round 2: a reworded claim is not a move), and
-//          citations that shared a sentence keep their order — a swap of two
-//          citations between claims passes every multiset check but would
-//          leave a citation on a claim Pass 2 never judged;
+//          from it (review round 2: a reworded claim is not a move); its own
+//          claim does not survive in a sentence that no longer carries it
+//          (review round 3: a citation moved onto a sentence the model
+//          invented, onto a one-word sentence, or onto a clause appended after
+//          its claim); its claim is not negated under it; and citations that
+//          shared a sentence keep their order — a swap of two citations
+//          between claims passes every multiset check but would leave a
+//          citation on a claim Pass 2 never judged. A claim reworded in
+//          place is judged again by done (Pass 2 over every cited sentence
+//          the rewrite changed — done.ts), not here;
 //        - boundaryAdditions finds nothing new the gate would check: no text
 //          finding (an unparseable or unsupported citation form, TEXT_SCANNERS),
 //          no direct quote, no bare identifier (VRFY-25).
@@ -260,8 +266,14 @@ function addedArtifact(original: string, rewritten: string): string | null {
   return null;
 }
 
-/** Sentence breaks: a blank line, or sentence-final punctuation (closing quotes and brackets included) and whitespace. */
-const SENTENCE_BREAK_RE = /\n[ \t]*\n|(?<=[.!?\u2026]["'\u201d\u2019)\]]*)\s+/u;
+/**
+ * Claim breaks: a blank line, sentence-final punctuation (closing quotes and
+ * brackets included) and whitespace, or a semicolon and whitespace — two
+ * independent clauses a semicolon joins are two claims (review round 3: a
+ * citation moved onto a clause appended after its claim, `…; smoking causes
+ * cancer [@a]`). An HTML entity's `;` (`&amp;`) is no break.
+ */
+const SENTENCE_BREAK_RE = /\n[ \t]*\n|(?<=[.!?\u2026]["'\u201d\u2019)\]]*)\s+|(?<=(?<!&#?[A-Za-z0-9]{1,31});)\s+/u;
 
 /** A citation slot written into the text while it is split into sentences (no sentence punctuation, never in prose). */
 const SLOT_RE = /\uE000(\d+)\uE001/g;
@@ -298,7 +310,7 @@ function anchorView(text: string): AnchorView {
       o.sentence = si;
       cites.add(o.cite);
     }
-    const plain = piece.replace(SLOT_RE, ' ').replace(/\s+/g, ' ').trim();
+    const plain = piece.replace(SLOT_RE, ' ').replace(/\s+/g, ' ').replace(/ (?=[.,;:!?])/g, '').trim();
     return { terms: new Set(contentTerms(plain)), cites, text: plain };
   });
   return { sentences, occ: found };
@@ -317,6 +329,20 @@ const CLAIM_KEPT = 0.5;
 
 /** The fewest content terms another claim must share with a sentence to be read as living in it (one shared word is a topic, not a claim). */
 const MIN_SHARED_TERMS = 2;
+
+/**
+ * A negation word: `not`, `no`, `never`, a `n't` contraction, `cannot`,
+ * `without`, `fails to`, `lacks`, `rather than`, … — never the contrastive or
+ * idiomatic `not only` / `not just` / `not merely` / `no doubt` / `no matter`
+ * / `no less`, which a humanizer adds and removes without changing a claim.
+ */
+const NEGATION_RE =
+  /(?<![\p{L}\p{N}])(?:not(?!\s+(?:only|just|merely|simply|least|to\s+mention)(?![\p{L}\p{N}]))|no(?!\s+(?:doubt|matter|less|more\s+than|sooner)(?![\p{L}\p{N}]))|never|none|nothing|nobody|nowhere|neither|nor|cannot|without|fail(?:s|ed|ing)?\s+to|unable|lack(?:s|ed|ing)?|absen(?:t|ce)|rather\s+than|instead\s+of|[\p{L}]+n['\u2019]t)(?![\p{L}\p{N}])/iu;
+
+/** True when the sentence holds a negation (NEGATION_RE). */
+function negated(sentence: string): boolean {
+  return NEGATION_RE.test(sentence);
+}
 
 /** How many of `of`'s terms `n` holds. */
 function sharedTerms(of: ReadonlySet<string>, n: ReadonlySet<string>): number {
@@ -338,6 +364,13 @@ function sharedTerms(of: ReadonlySet<string>, n: ReadonlySet<string>): number {
  *     sentence's terms and at least two of them: the citation now sits on
  *     that claim (two citations swapped between claims, or a citation moved
  *     onto an uncited sentence).
+ *   - the inverse (review round 3): a citation moved when its OWN claim
+ *     still lives — half of its terms, two of them — in a rewritten sentence
+ *     that no longer carries it, while the sentence that holds it keeps under
+ *     half of that claim (a sentence the model invented, "Results vary [@a].",
+ *     a clause appended after a semicolon: semicolons split claims here);
+ *   - a negation (NEGATION_RE) in the sentence that holds a citation, where
+ *     its claim lives, that no original sentence living there had;
  *   - citations that changed order across sentences must show that their
  *     claims travelled with them (the new sentence keeps half of the claim's
  *     terms, or is its home): two reworded claims that swapped citations.
@@ -372,6 +405,41 @@ export function citationAnchorProblem(original: string, rewritten: string): stri
       return !s.cites.has(o.cite) && j === o.sentence && cov >= CLAIM_KEPT && shared >= MIN_SHARED_TERMS && cov > own;
     });
     if (usurped) return `a citation moved to another claim (${o.cite} now sits on "${quoteOf(n.text)}")`;
+  }
+  // The inverse (review round 3): the citation's OWN claim survives — at least
+  // half of its terms and two of them — in a rewritten sentence that no longer
+  // carries the citation, while the sentence that holds it now keeps under
+  // half of that claim. That is the positive evidence of a move whether the
+  // citation went onto a new sentence the model wrote, onto an uncited
+  // sentence with one content word ("Results vary [@a]."), or onto a clause
+  // appended after its claim.
+  for (const o of b.occ) {
+    const n = b.sentences[o.sentence];
+    if (n === undefined) continue;
+    let own = -1;
+    for (const s of a.sentences) if (s.cites.has(o.cite) && s.terms.size > 0) own = Math.max(own, coverage(s.terms, n.terms));
+    if (own === -1 || own >= CLAIM_KEPT) continue;
+    for (let i = 0; i < a.sentences.length; i += 1) {
+      const s = a.sentences[i] as AnchorSentence;
+      if (!s.cites.has(o.cite)) continue;
+      const [j, cov, shared] = home[i] as readonly [number, number, number];
+      const left = b.sentences[j];
+      if (j === o.sentence || left === undefined || cov < CLAIM_KEPT || shared < MIN_SHARED_TERMS || left.cites.has(o.cite)) continue;
+      return `a citation moved off its claim (${o.cite} now sits on "${quoteOf(n.text)}" while its claim "${quoteOf(left.text)}" no longer carries it)`;
+    }
+  }
+  // A claim negated under its citation (review round 3): the sentence that
+  // holds the citation is its claim (half of its terms, two of them) with a
+  // negation no original sentence living there had. A reworded claim keeps
+  // its polarity; "not only … but" and the other contrastive or idiomatic
+  // uses are no negation (NEGATION_RE).
+  for (const o of b.occ) {
+    const n = b.sentences[o.sentence];
+    if (n === undefined || !negated(n.text)) continue;
+    const lives = a.sentences.filter((s) => s.terms.size > 0 && coverage(s.terms, n.terms) >= CLAIM_KEPT && sharedTerms(s.terms, n.terms) >= MIN_SHARED_TERMS);
+    if (lives.some((s) => s.cites.has(o.cite)) && !lives.some((s) => negated(s.text))) {
+      return `a citation's claim was negated (${o.cite} now sits on "${quoteOf(n.text)}")`;
+    }
   }
   // Citations that changed order across sentences (a citation now comes before
   // one it followed) moved with their claims only on positive evidence: the
