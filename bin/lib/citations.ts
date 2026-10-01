@@ -984,6 +984,8 @@ export interface RenderedDocument {
   readonly bibliography: readonly RenderedBibEntry[];
   /** The style asks for hanging-indent bibliography paragraphs. */
   readonly hangingIndent: boolean;
+  /** The style's default locale when it is not available (the document was rendered in en-US), else null. */
+  readonly localeFallback: string | null;
 }
 
 /** The plain text of runs. */
@@ -1114,19 +1116,101 @@ function citeprocItem(i: CitationItemInput, flag?: 'suppress-author' | 'author-o
 /** The citeproc engine (citation-js's CSL plugin) for `template`, over `items`, emitting HTML. */
 interface CiteprocEngine {
   rebuildProcessorState(citations: unknown[], mode: string, uncited: unknown[]): Array<[string, number, string]>;
+  registry?: { citationreg?: { citationById?: Record<string, { sortedItems?: Array<[unknown, Record<string, unknown>]> }> } };
   makeBibliography(): [{ entry_ids: string[][]; hangingindent?: unknown; 'second-field-align'?: unknown }, string[]] | false;
   opt: { development_extensions: Record<string, unknown> };
 }
 
-function citeprocEngine(items: ReadonlyArray<Record<string, unknown>>, template: string): CiteprocEngine {
+/** The locales a style may ask for by `default-locale` that the plugin ships (citation-js bundles en-US and a few others). */
+const SHIPPED_LOCALES = new Set(['en-GB']);
+
+/**
+ * The locale a style renders in, as pandoc picks it: the style's
+ * `default-locale` (Cite Them Right Harvard is en-GB: single quotes,
+ * punctuation outside them), else en-US. A locale neither citation-js nor the
+ * plugin (templates/csl-locales/) has falls back to en-US, and `fallback`
+ * names it.
+ */
+export function styleLocale(style: string): { locale: string; fallback: string | null } {
+  const wanted = /<style\b[^>]*\bdefault-locale="([A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*)"/.exec(cslStyleText(style))?.[1] ?? 'en-US';
+  const locales = (plugins.config.get('@csl') as unknown as { locales: { has(k: string): boolean; add(k: string, v: string): void } }).locales;
+  if (locales.has(wanted)) return { locale: wanted, fallback: null };
+  if (SHIPPED_LOCALES.has(wanted)) {
+    const file = pluginTemplatePath('csl-locales', `locales-${wanted}.xml`);
+    if (existsSync(file)) {
+      locales.add(wanted, readFileSync(file, 'utf8'));
+      return { locale: wanted, fallback: null };
+    }
+  }
+  return { locale: 'en-US', fallback: wanted === 'en-US' ? null : wanted };
+}
+
+function citeprocEngine(items: ReadonlyArray<Record<string, unknown>>, template: string, locale = 'en-US'): CiteprocEngine {
   const util = (Cite as unknown as { util: { downgradeCsl(items: unknown): unknown } }).util;
   const data = util.downgradeCsl(items.map((i) => ({ ...i }))) as unknown[];
   const engine = (plugins.config.get('@csl') as unknown as { engine(d: unknown[], t: string, l: string, f: string): CiteprocEngine }).engine(
-    data, template, 'en-US', 'html',
+    data, template, locale, 'html',
   );
   // Links for the DOIs and URLs a style prints (each writer decides how to show them).
   engine.opt.development_extensions['wrap_url_and_doi'] = true;
   return engine;
+}
+
+/** True when a citation item carries text of its own around the reference (a prefix, or a suffix that is not a locator). */
+function hasAffix(i: CitationItemInput): boolean {
+  return (i.prefix ?? '').trim() !== '' || (i.suffix ?? '').trim() !== '';
+}
+
+/**
+ * The item order of each citation whose items are not all plain, as pandoc's
+ * citeproc orders it: an item with a prefix or a suffix stays where it was
+ * written, and each run of plain items between such items is sorted by the
+ * style's citation sort (`[see @b; @a]` keeps `see B` first; `[@b; @a; see @c]`
+ * sorts A and B and keeps `see C` last). The sort keys are citeproc-js's own:
+ * a probe pass sorts each such citation whole, and every run takes its
+ * items' relative order from it. Citations that need no special order are
+ * absent from the map (citeproc sorts them itself).
+ */
+function clusterOrders(
+  items: ReadonlyArray<Record<string, unknown>>,
+  template: string,
+  locale: string,
+  citations: readonly DocumentCitation[],
+  noteStyle: boolean,
+): Map<number, number[]> {
+  const out = new Map<number, number[]>();
+  const affixed = citations.map((c, n) => (c.items.length > 1 && c.items.some(hasAffix) ? n : -1)).filter((n) => n !== -1);
+  if (affixed.length === 0) return out;
+  const probe = citeprocEngine(items, template, locale);
+  probe.rebuildProcessorState(
+    citations.map((c, n) => ({
+      citationID: `c${n}`,
+      citationItems: c.items.map((i, k) => ({ ...citeprocItem(i), 'x-index': k })),
+      properties: { noteIndex: noteStyle ? n + 1 : 0 },
+    })),
+    'html',
+    [],
+  );
+  for (const n of affixed) {
+    const c = citations[n] as DocumentCitation;
+    const sorted = probe.registry?.citationreg?.citationById?.[`c${n}`]?.sortedItems?.map((x) => Number(x[1]['x-index']));
+    const rank = new Map<number, number>((sorted ?? c.items.map((_i, k) => k)).map((k, r) => [k, r] as const));
+    const order: number[] = [];
+    let run: number[] = [];
+    const flush = (): void => {
+      order.push(...run.sort((a, b) => (rank.get(a) ?? a) - (rank.get(b) ?? b)));
+      run = [];
+    };
+    c.items.forEach((item, k) => {
+      if (hasAffix(item)) {
+        flush();
+        order.push(k);
+      } else run.push(k);
+    });
+    flush();
+    out.set(n, order);
+  }
+  return out;
 }
 
 /**
@@ -1152,21 +1236,27 @@ export async function renderDocumentCitations(
       if (!known.has(i.id)) throw new Error(`renderDocumentCitations: no bibliography entry for "${i.id}"`);
     }
   }
+  const { locale, fallback } = styleLocale(style);
+  const order = clusterOrders(items, template, locale, citations, noteStyle);
   const build = (flag: 'suppress-author' | 'author-only'): unknown[] =>
-    citations.map((c, n) => ({
-      citationID: `c${n}`,
-      citationItems: c.items.map((i, k) => citeprocItem(i, c.narrative === true && k === 0 ? flag : undefined)),
-      properties: { noteIndex: noteStyle ? n + 1 : 0 },
-    }));
+    citations.map((c, n) => {
+      const ord = order.get(n);
+      const list = ord !== undefined ? ord.map((k) => c.items[k] as CitationItemInput) : c.items;
+      return {
+        citationID: `c${n}`,
+        citationItems: list.map((i, k) => citeprocItem(i, c.narrative === true && k === 0 ? flag : undefined)),
+        properties: { noteIndex: noteStyle ? n + 1 : 0, ...(ord !== undefined ? { unsorted: true } : {}) },
+      };
+    });
   // The author-only pass first (only when a narrative citation needs it): its
   // positions are the same as the main pass's, so a narrative citation's name
   // takes the first or subsequent form pandoc gives it.
   const authors: string[] = [];
   if (citations.some((c) => c.narrative === true)) {
-    const passB = citeprocEngine(items, template).rebuildProcessorState(build('author-only'), 'html', []);
+    const passB = citeprocEngine(items, template, locale).rebuildProcessorState(build('author-only'), 'html', []);
     passB.forEach((r, n) => (authors[n] = r[2]));
   }
-  const engine = citeprocEngine(items, template);
+  const engine = citeprocEngine(items, template, locale);
   const passA = engine.rebuildProcessorState(build('suppress-author'), 'html', []);
   const rendered: RenderedCitation[] = citations.map((c, n) => {
     const rest = printedRuns(passA[n]?.[2] ?? '');
@@ -1191,5 +1281,5 @@ export async function renderDocumentCitations(
       bibliography.push({ id, label: label !== null && label.length > 0 ? label : null, runs: trimRuns(citeprocHtmlRuns(body)) });
     });
   }
-  return { noteStyle, citations: rendered, bibliography, hangingIndent };
+  return { noteStyle, citations: rendered, bibliography, hangingIndent, localeFallback: fallback };
 }

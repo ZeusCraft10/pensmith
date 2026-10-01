@@ -76,6 +76,8 @@ export interface PreparedText {
   readonly renderedKeys: readonly string[];
   /** Cited keys the bibliography lacks (left as written). */
   readonly unresolved: readonly string[];
+  /** The style's default locale when it is not available (rendered in en-US), else null. */
+  readonly localeFallback: string | null;
 }
 
 /**
@@ -128,7 +130,7 @@ export async function prepareText(
   style: string | null,
 ): Promise<PreparedText> {
   const empty = (unresolved: string[] = []): PreparedText => ({
-    text, placed: [], notes: [], bibliography: [], referencesTitle: 'References', hangingIndent: false, noteStyle: false, renderedKeys: [], unresolved,
+    text, placed: [], notes: [], bibliography: [], referencesTitle: 'References', hangingIndent: false, noteStyle: false, renderedKeys: [], unresolved, localeFallback: null,
   });
   const known = new Set(entries.map((e) => String(e['id'] ?? '')));
   // The citations in order, each with its items and the span it covers.
@@ -205,5 +207,6 @@ export async function prepareText(
     noteStyle: doc.noteStyle,
     renderedKeys,
     unresolved,
+    localeFallback: doc.localeFallback,
   };
 }

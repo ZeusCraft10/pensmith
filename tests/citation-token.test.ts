@@ -91,12 +91,15 @@ test('VRFY-09: citationItems returns key, prefix, suffix, locator, label, suppre
   });
 });
 
-test('VRFY-09: splitLocator reads the locator terms Pandoc knows; a bare number is a page only after a comma', () => {
+test('VRFY-09 / D-21-04: splitLocator reads the locator terms Pandoc knows; a suffix that opens with a number is a page, comma or not', () => {
   assert.deepEqual(splitLocator(', pp. 33–35, emphasis added'), { locator: '33–35', label: 'page', rest: ', emphasis added' });
   assert.deepEqual(splitLocator(', chap. iv'), { locator: 'iv', label: 'chapter', rest: '' });
   assert.deepEqual(splitLocator(' § 3'), { locator: '3', label: 'section', rest: '' });
   assert.deepEqual(splitLocator(', 12'), { locator: '12', label: 'page', rest: '' });
-  assert.equal(splitLocator(' 12'), null, 'no comma: not a page');
+  // Carry-over 3 (Phase 21): pandoc reads [@k 12] as page 12 — the offline exporter does too.
+  assert.deepEqual(splitLocator(' 12'), { locator: '12', label: 'page', rest: '' }, 'no comma: still a page, as in pandoc');
+  assert.equal(splitLocator(', iv'), null, 'a roman numeral with no term is suffix text, as in pandoc');
+  assert.deepEqual(splitLocator(', 33 and passim'), { locator: '33', label: 'page', rest: ' and passim' });
   assert.equal(splitLocator(', emphasis added'), null);
   assert.deepEqual(splitLocator(', p. x'), { locator: 'x', label: 'page', rest: '' }, 'a roman numeral is a value');
   assert.equal(splitLocator(', p. abc'), null, 'a term needs a value');

@@ -319,6 +319,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   // 2. The citations, rendered and placed; the D-21-12 invariant.
   const prep = await prepareText(text, plan.entries, opts.style ?? null);
   assertRenderedKeys(prep, gatedKeys, plan);
+  const localeNote = prep.localeFallback !== null ? [`the style's locale ${prep.localeFallback} is not bundled: the built-in renderer used en-US terms`] : [];
 
   // 3. The writer, and the document's bytes (still nothing written).
   const pandoc = format !== 'md' && (opts.pandocPresent ?? isPandocPresent());
@@ -354,6 +355,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     }
   }
   if (bytes === null) {
+    notes.push(...localeNote);
     const made = await builtIn(format, prep, withBibliography);
     bytes = made.bytes;
     for (const l of made.literal) notes.push(`${l} (the built-in writer reads a Markdown subset)`);
