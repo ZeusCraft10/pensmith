@@ -21,6 +21,8 @@ The pages are cited as a range (Okafor, 2019, pp. 33--38), an open run (Okafor, 
 A prefixed note (see also Okafor, 2019). An abbreviation (e.g., Lindqvist & Berg, 2012). A suffix after a title (Okafor, 2019, emphasis added). A wrapped claim (Kuhn, 1962). A hard break (Lindqvist & Berg, 2012)\
 on the next line. An ampersand run (Okafor, 2019)&more.
 
+Emphasis in affixes (*see* Kuhn, 1962, p. 33, *emphasis added*), and a range (see Okafor, 2019, pp. 33--35 and *passim*).
+
 ## References {#references .unnumbered}
 
 :::::: {#refs .references .csl-bib-body .hanging-indent entry-spacing="0" line-spacing="2"}

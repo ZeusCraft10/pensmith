@@ -57,9 +57,37 @@ function runMarkdown(r: RichRun): string {
   return lead + s + trail;
 }
 
-/** Runs as Markdown text. */
+/**
+ * Runs as Markdown text. Adjacent superscript (or subscript) runs are ONE
+ * `^…^` (`~…~`) span with their emphasis nested inside and every inner space
+ * escaped — as pandoc writes them (review round 3: an AMA citation whose
+ * affix is italic was split into `^*see*^ ^1(p33),^`).
+ */
 export function runsMarkdown(runs: readonly RichRun[]): string {
-  return runs.map(runMarkdown).join('');
+  let out = '';
+  for (let i = 0; i < runs.length; ) {
+    const r = runs[i] as RichRun;
+    const mark = r.sup === true ? '^' : r.sub === true ? '~' : null;
+    if (mark === null) {
+      out += runMarkdown(r);
+      i += 1;
+      continue;
+    }
+    const group: RichRun[] = [];
+    while (i < runs.length && (mark === '^' ? (runs[i] as RichRun).sup === true : (runs[i] as RichRun).sub === true && (runs[i] as RichRun).sup !== true)) {
+      const plain: RichRun = { ...(runs[i] as RichRun) };
+      delete (plain as { sup?: boolean }).sup;
+      delete (plain as { sub?: boolean }).sub;
+      group.push(plain);
+      i += 1;
+    }
+    const inner = group.map(runMarkdown).join('');
+    const lead = /^\s*/u.exec(inner)?.[0] ?? '';
+    const trail = /\s*$/u.exec(inner.slice(lead.length))?.[0] ?? '';
+    const core = inner.slice(lead.length, inner.length - trail.length);
+    out += core === '' ? inner : `${lead}${mark}${core.replace(/ /g, '\\ ')}${mark}${trail}`;
+  }
+  return out;
 }
 
 /** The note label of note `n`: `[^n]`, or `[^cite-n]` when the text already uses footnote labels. */

@@ -21,6 +21,8 @@ The pages are cited as a range,[^13] an open run.[^14] A chapter[^15] and a sect
 A prefixed note.[^17] An abbreviation.[^18] A suffix after a title.[^19] A wrapped claim.[^20] A hard break[^21]\
 on the next line. An ampersand run&[^22]more.
 
+Emphasis in affixes,[^23] and a range.[^24]
+
 ## Bibliography {#bibliography .unnumbered}
 
 :::::: {#refs .references .csl-bib-body .hanging-indent entry-spacing="0"}
@@ -80,3 +82,7 @@ Okafor, Chidi. "Measuring Trust in [NGO]{.nocase} Networks." In *[Handbook of Ci
 [^21]: Lindqvist and Berg, "Economic Growth in [China]{.nocase} and the [World]{.nocase} [Bank's]{.nocase} Lending Policy."
 
 [^22]: Okafor, "Measuring Trust in [NGO]{.nocase} Networks."
+
+[^23]: *See* Kuhn, *[The Structure of Scientific Revolutions]{.nocase}*, 33, *emphasis added*.
+
+[^24]: See Okafor, "Measuring Trust in [NGO]{.nocase} Networks," 33--35 and *passim*.

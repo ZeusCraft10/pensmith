@@ -21,6 +21,8 @@ The pages are cited as a range \[3, pp. 33--38\], an open run \[3, p. 33ff\]. A 
 A prefixed note see also \[3\]. An abbreviation e.g., \[2\]. A suffix after a title \[3\], emphasis added. A wrapped claim \[1\]. A hard break \[2\]\
 on the next line. An ampersand run \[3\]&more.
 
+Emphasis in affixes *see* \[1, p. 33\], *emphasis added*, and a range see \[3, pp. 33--35\] and *passim*.
+
 ## References {#references .unnumbered}
 
 :::::: {#refs .references .csl-bib-body entry-spacing="0"}

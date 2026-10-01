@@ -21,6 +21,8 @@ The pages are cited as a range (3), an open run (3.). A chapter (1) and a sectio
 A prefixed note (see also 3). An abbreviation (e.g., 2). A suffix after a title (3, emphasis added). A wrapped claim (1). A hard break (2)\
 on the next line. An ampersand run (3)&more.
 
+Emphasis in affixes (*see* 1, *emphasis added*), and a range (see 3 and *passim*).
+
 ## References {#references .unnumbered}
 
 :::::: {#refs .references .csl-bib-body}

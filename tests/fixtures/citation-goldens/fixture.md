@@ -21,3 +21,5 @@ The pages are cited as a range [@okafor2019, 33--38], an open run [@okafor2019, 
 A prefixed note [see also @okafor2019]. An abbreviation [e.g., @lindqvist2012]. A suffix after a title [@okafor2019, emphasis added]. A wrapped claim
 [@kuhn1962]. A hard break [@lindqvist2012]\
 on the next line. An ampersand run [@okafor2019]&more.
+
+Emphasis in affixes [*see* @kuhn1962, p. 33, *emphasis added*], and a range [see @okafor2019, pp. 33-35 and *passim*].

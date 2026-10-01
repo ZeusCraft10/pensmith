@@ -142,14 +142,16 @@ for (const style of STYLES) {
   });
 }
 
-test('D-21-05: the fixture covers B, A, B, [A; C], a p. locator, a bare-number locator and a narrative citation over an article, a book and a chapter — and (review rounds 1 and 2) the note punctuation, locator, prefix, suffix and line-break forms', () => {
+test('D-21-05: the fixture covers B, A, B, [A; C], a p. locator, a bare-number locator and a narrative citation over an article, a book and a chapter — and (review rounds 1–3) the note punctuation, locator, prefix, suffix, affix-emphasis and line-break forms', () => {
   const md = readFileSync(join(DIR, 'fixture.md'), 'utf8');
   const order = [...md.matchAll(/@([a-z]+\d{4})/g)].map((m) => m[1]);
   assert.deepEqual(order, [
     'kuhn1962', 'lindqvist2012', 'kuhn1962', 'lindqvist2012', 'okafor2019', 'okafor2019', 'okafor2019', 'lindqvist2012',
     'kuhn1962', 'lindqvist2012', 'kuhn1962', 'kuhn1962', 'lindqvist2012', 'okafor2019', 'okafor2019', 'kuhn1962', 'kuhn1962',
-    'okafor2019', 'lindqvist2012', 'okafor2019', 'kuhn1962', 'lindqvist2012', 'okafor2019',
+    'okafor2019', 'lindqvist2012', 'okafor2019', 'kuhn1962', 'lindqvist2012', 'okafor2019', 'kuhn1962', 'okafor2019',
   ]);
+  // Review round 3: emphasis inside a prefix and a suffix (pandoc reads affixes as Markdown).
+  assert.ok(md.includes('[*see* @kuhn1962, p. 33, *emphasis added*]') && md.includes('and *passim*]'));
   // Review round 2: a note opening with a prefix is capitalised, a suffix's comma
   // goes inside a closing quote (en-US), a soft line break before a note goes, a
   // hard line break stays after the marker, a run stops at what is not punctuation.

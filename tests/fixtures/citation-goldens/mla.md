@@ -21,6 +21,8 @@ The pages are cited as a range (Okafor 33--38), an open run (Okafor 33ff.). A ch
 A prefixed note (see also Okafor). An abbreviation (e.g., Lindqvist and Berg). A suffix after a title (Okafor, emphasis added). A wrapped claim (Kuhn). A hard break (Lindqvist and Berg)\
 on the next line. An ampersand run (Okafor)&more.
 
+Emphasis in affixes (*see* Kuhn 33, *emphasis added*), and a range (see Okafor 33--35 and *passim*).
+
 ## Works Cited {#works-cited .unnumbered}
 
 :::::: {#refs .references .csl-bib-body .hanging-indent entry-spacing="0" line-spacing="2"}

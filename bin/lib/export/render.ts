@@ -46,7 +46,7 @@ import {
   type CitationCluster,
   type CitationItem,
 } from '../citation-token.js';
-import { smartText } from './markdown.js';
+import { parseInlines, smartText, type Inline } from './markdown.js';
 import {
   cslStyleText,
   renderDocumentCitations,
@@ -112,16 +112,65 @@ const BARE_LOCATOR_RE = /^[ \t]*\[([^[\]@^][^[\]@]*)\](?![({:])/;
 export function toCslItem(item: CitationItem, terms?: ReadonlyArray<readonly [RegExp, string]>): CitationItemInput {
   // A prefix or suffix is Markdown text to pandoc: its smart typography
   // (`--` an en dash, `---` an em dash, `...` an ellipsis, curly quotes)
-  // applies there as in the body (review round 1).
+  // applies there as in the body (review round 1), and so does its inline
+  // markup — `*passim*` is italic (review round 3): citeproc-js reads the
+  // affix's `<i>` / `<b>` / `<sup>` / `<sub>` (affixHtml).
   const base: CitationItemInput = {
     id: item.key,
-    ...(item.prefix ? { prefix: `${smartText(item.prefix)} ` } : {}),
+    ...(item.prefix ? { prefix: `${affixHtml(item.prefix)} ` } : {}),
     ...(item.suppressAuthor ? { suppressAuthor: true } : {}),
   };
   if (item.suffix.replace(/^\s*,?\s*/, '') === '') return base;
   const loc = terms !== undefined ? splitLocator(item.suffix, terms) : splitLocator(item.suffix);
-  if (loc !== null) return { ...base, locator: loc.locator, label: loc.label, ...(loc.rest.trim() ? { suffix: smartText(loc.rest) } : {}) };
-  return { ...base, suffix: smartText(item.suffix.startsWith(' ') || item.suffix.startsWith(',') ? item.suffix : ` ${item.suffix}`) };
+  if (loc !== null) return { ...base, locator: loc.locator, label: loc.label, ...(loc.rest.trim() ? { suffix: affixHtml(loc.rest) } : {}) };
+  return { ...base, suffix: affixHtml(item.suffix.startsWith(' ') || item.suffix.startsWith(',') ? item.suffix : ` ${item.suffix}`) };
+}
+
+/** The inline nodes of an affix as the HTML-like markup citeproc-js reads in a prefix or suffix. */
+function inlinesHtml(nodes: readonly Inline[]): string {
+  return nodes
+    .map((n): string => {
+      switch (n.t) {
+        // citeproc-js escapes `&`, `<` and `>` of affix text itself.
+        case 'text':
+          return smartText(n.text);
+        case 'code':
+          return n.text;
+        case 'break':
+          return ' ';
+        case 'note':
+          return '';
+        case 'emph':
+          return `<i>${inlinesHtml(n.children)}</i>`;
+        case 'strong':
+          return `<b>${inlinesHtml(n.children)}</b>`;
+        case 'sup':
+          return `<sup>${inlinesHtml(n.children)}</sup>`;
+        case 'sub':
+          return `<sub>${inlinesHtml(n.children)}</sub>`;
+        case 'smallcaps':
+          return `<span style="font-variant:small-caps;">${inlinesHtml(n.children)}</span>`;
+        default:
+          return inlinesHtml(n.children);
+      }
+    })
+    .join('');
+}
+
+/**
+ * A citation prefix or suffix as citeproc-js must receive it to print what
+ * pandoc prints: pandoc reads an affix as Markdown inlines, so `*see*`,
+ * `**note**`, `^2^` and `~2~` are emphasis, strong, superscript and subscript
+ * (review round 3: the built-in writers printed the asterisks), with the
+ * body's smart typography; its leading and trailing white space is kept. An
+ * affix with no inline markup is smartText alone.
+ */
+export function affixHtml(affix: string): string {
+  if (!/[*_^~`\\[]/.test(affix)) return smartText(affix);
+  const lead = /^\s*/u.exec(affix)?.[0] ?? '';
+  const trail = /\s*$/u.exec(affix.slice(lead.length))?.[0] ?? '';
+  const core = affix.slice(lead.length, affix.length - trail.length);
+  return `${lead}${inlinesHtml(parseInlines(core))}${trail}`;
 }
 
 /**
