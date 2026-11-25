@@ -66,6 +66,27 @@ test('buildResearchDonePayload: merges LIBRARY.json sources + RESEARCH.md claims
   assert.deepEqual(claimKeys, ['jones2019', 'smith2021'], 'claims from RESEARCH.md');
 });
 
+test('buildResearchDonePayload: reads the sources of the LIBRARY.json research writes', async () => {
+  // research writes { $schemaVersion, entries }, not the bare list the
+  // fixture holds; the sources must come from either.
+  const { buildResearchDonePayload } = (await import(GOAL_MOD.href)) as GoalMod;
+  const { writeFileSync } = fs;
+  for (const library of [
+    { $schemaVersion: 1, entries: JSON.parse(fs.readFileSync(path.join(FIXTURE, 'LIBRARY.json'), 'utf8')) },
+    {
+      $schemaVersion: 2,
+      bibtex_preamble: [],
+      entries: [{ id: 'smith2021', type: 'article-journal', title: 'Sub-Quadratic Attention Scaling in Transformers', issued: { 'date-parts': [[2021]] }, custom: { added_at: '2026-06-01T00:00:00.000Z' } }],
+    },
+  ]) {
+    const root = seedLearningPaper();
+    writeFileSync(path.join(root, '.paper', 'LIBRARY.json'), JSON.stringify(library));
+    const payload = buildResearchDonePayload(root);
+    const smith = payload.sources.find((s) => s.citekey === 'smith2021');
+    assert.deepEqual(smith, { citekey: 'smith2021', title: 'Sub-Quadratic Attention Scaling in Transformers', year: 2021 }, `v${library.$schemaVersion}`);
+  }
+});
+
 test('renderLearningEndState (H2): writes TUTORIAL.md with ≥1 per-claim line, no section written', async () => {
   const { renderLearningEndState } = (await import(GOAL_MOD.href)) as GoalMod;
   const root = seedLearningPaper();

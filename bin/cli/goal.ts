@@ -24,6 +24,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { paperDir } from '../lib/paths.js';
+import { readLibrarySync } from '../lib/library.js';
 import { readProjectConfig } from '../lib/project-config.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
 
@@ -82,7 +83,7 @@ export function parseResearchClaims(researchMd: string): Map<string, string> {
 }
 
 /**
- * Build the research.done payload from LIBRARY.json (SourceCandidate[]) +
+ * Build the research.done payload from LIBRARY.json (the library's items) +
  * RESEARCH.md (per-source `supports:` claim lines). The shape matches the
  * TutorialSubscriber's research.done reader: `{ sources: [{citekey,title,year}],
  * claims: [{citekey,claim}] }`. Best-effort — a missing/malformed file yields an
@@ -94,28 +95,13 @@ export function buildResearchDonePayload(
   const pDir = paperDir(paperRoot);
 
   // LIBRARY.json → the curated source list (citekey + light metadata).
-  let sources: ResearchDoneSource[] = [];
-  try {
-    const libPath = path.join(pDir, 'LIBRARY.json');
-    if (existsSync(libPath)) {
-      const raw = JSON.parse(readFileSync(libPath, 'utf8'));
-      if (Array.isArray(raw)) {
-        sources = raw
-          .map((s): ResearchDoneSource | null => {
-            const rec = s as Record<string, unknown>;
-            const citekey = typeof rec.citekey === 'string' ? rec.citekey : '';
-            if (!citekey) return null;
-            const out: ResearchDoneSource = { citekey };
-            if (typeof rec.title === 'string') out.title = rec.title;
-            if (typeof rec.year === 'number') out.year = rec.year;
-            return out;
-          })
-          .filter((s): s is ResearchDoneSource => s !== null);
-      }
-    }
-  } catch {
-    sources = [];
-  }
+  const sources: ResearchDoneSource[] = (readLibrarySync(paperRoot)?.entries ?? []).map((item) => {
+    const out: ResearchDoneSource = { citekey: item.id };
+    if (item.title) out.title = item.title;
+    const year = (item.issued as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
+    if (typeof year === 'number') out.year = year;
+    return out;
+  });
 
   // RESEARCH.md → the per-citekey supported claim.
   let researchMd = '';
