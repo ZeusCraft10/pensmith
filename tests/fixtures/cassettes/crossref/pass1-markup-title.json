@@ -1,0 +1,572 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1128/iai.66.9.4305-4312.1998",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              2,
+              8
+            ]
+          ],
+          "date-time": "2026-02-08T03:47:43Z",
+          "timestamp": 1770522463698,
+          "version": "3.49.0"
+        },
+        "reference-count": 62,
+        "publisher": "American Society for Microbiology",
+        "issue": "9",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  1998,
+                  9,
+                  1
+                ]
+              ],
+              "date-time": "1998-09-01T00:00:00Z",
+              "timestamp": 904608000000
+            },
+            "content-version": "tdm",
+            "delay-in-days": 0,
+            "URL": "https://journals.asm.org/non-commercial-tdm-license"
+          }
+        ],
+        "content-domain": {
+          "domain": [
+            "journals.asm.org"
+          ],
+          "crossmark-restriction": true
+        },
+        "short-container-title": [
+          "Infect Immun"
+        ],
+        "published-print": {
+          "date-parts": [
+            [
+              1998,
+              9
+            ]
+          ]
+        },
+        "abstract": "<jats:title>ABSTRACT</jats:title>\n          <jats:p>\n            Raw sequence data representing the majority of a bacterial genome can be obtained at a tiny fraction of the cost of a completed sequence. To demonstrate the utility of such a resource, 870 single-stranded M13 clones were sequenced from a shotgun library of the\n            <jats:italic>Salmonella typhi</jats:italic>\n            Ty2 genome. The sequence reads averaged over 400 bases and sampled the genome with an average spacing of once every 5,000 bases. A total of 339,243 bases of unique sequence was generated (approximately 7% representation). The sample of 870 sequences was compared to the complete\n            <jats:italic>Escherichia coli</jats:italic>\n            K-12 genome and to the rest of the GenBank database, which can also be considered a collection of sampled sequences. Despite the incomplete\n            <jats:italic>S. typhi</jats:italic>\n            data set, interesting categories could easily be discerned. Sixteen percent of the sequences determined from\n            <jats:italic>S. typhi</jats:italic>\n            had close homologs among known\n            <jats:italic>Salmonella</jats:italic>\n            sequences (\n            <jats:italic>P</jats:italic>\n            &lt; 1\n            <jats:italic>e</jats:italic>\n            <jats:sup>−40</jats:sup>\n            in BlastX or BlastN), reflecting the proportion of these genomes that have been sequenced previously; 277 sequences (32%) had no apparent orthologs in the complete\n            <jats:italic>E. coli</jats:italic>\n            K-12 genome (\n            <jats:italic>P</jats:italic>\n            &gt; 1\n            <jats:italic>e</jats:italic>\n            <jats:sup>−20</jats:sup>\n            ), of which 155 sequences (18%) had no close similarities to any sequence in the database (\n            <jats:italic>P</jats:italic>\n            &gt; 1\n            <jats:italic>e</jats:italic>\n            <jats:sup>−5</jats:sup>\n            ). Eight of the 277 sequences had similarities to genes in other strains of\n            <jats:italic>E. coli</jats:italic>\n            or plasmids, and six sequences showed evidence of novel phage lysogens or sequence remnants of phage integrations, including a member of the lambda family (\n            <jats:italic>P</jats:italic>\n            &lt; 1\n            <jats:italic>e</jats:italic>\n            <jats:sup>−15</jats:sup>\n            ). Twenty-three sample sequences had a significantly closer similarity a sequence in the database from organisms other than the\n            <jats:italic>E. coli/Salmonella</jats:italic>\n            clade (which includes\n            <jats:italic>Shigella</jats:italic>\n            and\n            <jats:italic>Citrobacter</jats:italic>\n            ). These sequences are new candidate lateral transfer events to the\n            <jats:italic>S. typhi</jats:italic>\n            lineage or deletions on the\n            <jats:italic>E. coli</jats:italic>\n            K-12 lineage. Eleven putative junctions of insertion/deletion events greater than 100 bp were observed in the sample, indicating that well over 150 such events may distinguish\n            <jats:italic>S. typhi</jats:italic>\n            from\n            <jats:italic>E. coli</jats:italic>\n            K-12. The need for automatic methods to more effectively exploit sample sequences is discussed.\n          </jats:p>",
+        "DOI": "10.1128/iai.66.9.4305-4312.1998",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2020,
+              3,
+              9
+            ]
+          ],
+          "date-time": "2020-03-09T19:45:54Z",
+          "timestamp": 1583783154000
+        },
+        "page": "4305-4312",
+        "update-policy": "https://doi.org/10.1128/asmj-crossmark-policy-page",
+        "source": "Crossref",
+        "is-referenced-by-count": 22,
+        "title": [
+          "Comparison of Sample Sequences of the\n            <i>Salmonella typhi</i>\n            Genome to the Sequence of the Complete\n            <i>Escherichia coli</i>\n            K-12 Genome"
+        ],
+        "prefix": "10.1128",
+        "volume": "66",
+        "author": [
+          {
+            "given": "Michael",
+            "family": "McClelland",
+            "sequence": "first",
+            "affiliation": [
+              {
+                "name": "<!--label omitted: 1-->Sidney Kimmel Cancer Center, San Diego, California 92121,1 and"
+              }
+            ],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Richard K.",
+            "family": "Wilson",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "<!--label omitted: 2-->Genome Sequencing Center, Washington University School of Medicine, St. Louis, Missouri 631082"
+              }
+            ],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          }
+        ],
+        "member": "235",
+        "reference": [
+          {
+            "key": "e_1_3_2_2_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1093/nar/14.17.6901"
+          },
+          {
+            "key": "e_1_3_2_3_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/iai.61.5.1707-1714.1993"
+          },
+          {
+            "key": "e_1_3_2_4_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1093/nar/25.17.3389"
+          },
+          {
+            "key": "e_1_3_2_5_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1111/j.1348-0421.1996.tb01105.x"
+          },
+          {
+            "key": "e_1_3_2_6_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1111/j.1365-2958.1992.tb00852.x"
+          },
+          {
+            "key": "e_1_3_2_7_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1126/science.277.5331.1453"
+          },
+          {
+            "key": "e_1_3_2_8_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1111/j.1365-2958.1994.tb01295.x"
+          },
+          {
+            "key": "e_1_3_2_9_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1111/j.1365-2958.1995.mmi_18030533.x"
+          },
+          {
+            "key": "e_1_3_2_10_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.179.6.1985-1991.1997"
+          },
+          {
+            "key": "e_1_3_2_11_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/aem.62.11.4121-4128.1996"
+          },
+          {
+            "key": "e_1_3_2_12_2",
+            "unstructured": "Brenner\nD. J.\nEnterobacteriaceae\nBergey’s manual of systematic bacteriology.\nKrieg\nN. R.\nHolt\nJ. G.\n1984\n408\n420\nWilliams & Wilkins\nBaltimore Md"
+          },
+          {
+            "key": "e_1_3_2_13_2",
+            "first-page": "91",
+            "article-title": "Cloning and characterization of the ColE7 plasmid",
+            "volume": "137",
+            "author": "Chak K. F.",
+            "year": "1991",
+            "unstructured": "Chak K. F. Kuo W. S. Lu F. M. James R. Cloning and characterization of the ColE7 plasmid.J. Gen. Microbiol.137199191100",
+            "journal-title": "J. Gen. Microbiol."
+          },
+          {
+            "key": "e_1_3_2_14_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.174.20.6699-6702.1992"
+          },
+          {
+            "key": "e_1_3_2_15_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.177.19.5411-5418.1995"
+          },
+          {
+            "key": "e_1_3_2_16_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.172.5.2224-2229.1990"
+          },
+          {
+            "key": "e_1_3_2_17_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/iai.62.8.3289-3298.1994"
+          },
+          {
+            "key": "e_1_3_2_18_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1126/science.7542800"
+          },
+          {
+            "key": "e_1_3_2_19_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1046/j.1365-2958.1997.3101672.x"
+          },
+          {
+            "key": "e_1_3_2_20_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.179.4.1105-1111.1997"
+          },
+          {
+            "key": "e_1_3_2_21_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1073/pnas.87.23.9454"
+          },
+          {
+            "key": "e_1_3_2_22_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/0378-1119(88)90020-0"
+          },
+          {
+            "key": "e_1_3_2_23_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1111/j.1365-2958.1991.tb00741.x"
+          },
+          {
+            "key": "e_1_3_2_24_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/S0968-0004(98)01184-0"
+          },
+          {
+            "key": "e_1_3_2_25_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1093/nar/26.1.50"
+          },
+          {
+            "key": "e_1_3_2_26_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/BF00273581"
+          },
+          {
+            "key": "e_1_3_2_27_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/mr.54.4.502-539.1990"
+          },
+          {
+            "key": "e_1_3_2_28_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1111/j.1365-2583.1995.tb00007.x"
+          },
+          {
+            "key": "e_1_3_2_29_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/0882-4010(91)90004-T"
+          },
+          {
+            "key": "e_1_3_2_30_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1093/oxfordjournals.molbev.a025569"
+          },
+          {
+            "key": "e_1_3_2_31_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/0888-7543(88)90007-9"
+          },
+          {
+            "key": "e_1_3_2_32_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1093/genetics/142.1.11"
+          },
+          {
+            "key": "e_1_3_2_33_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1006/plas.1995.1033"
+          },
+          {
+            "key": "e_1_3_2_34_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1093/nar/19.25.7207"
+          },
+          {
+            "key": "e_1_3_2_35_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1073/pnas.92.4.1018"
+          },
+          {
+            "key": "e_1_3_2_36_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/BF00330202"
+          },
+          {
+            "key": "e_1_3_2_37_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1073/pnas.91.9.3510"
+          },
+          {
+            "key": "e_1_3_2_38_2",
+            "unstructured": "Miller W. Personal communication."
+          },
+          {
+            "key": "e_1_3_2_39_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1038/347692a0"
+          },
+          {
+            "key": "e_1_3_2_40_2",
+            "unstructured": "Ostendorf\nT.\nCherepanov\nP.\nJekel\nM.\nde Vries\nJ.\nWackernagel\nW.\nS. marcescens Sr 41 urf dam and dod genes.\n1994 GenBank accession no. X78412"
+          },
+          {
+            "key": "e_1_3_2_41_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.175.24.7918-7930.1993"
+          },
+          {
+            "key": "e_1_3_2_42_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1111/j.1365-2958.1993.tb02673.x"
+          },
+          {
+            "key": "e_1_3_2_43_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.178.1.111-120.1996"
+          },
+          {
+            "key": "e_1_3_2_44_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/S0021-9258(17)31719-2"
+          },
+          {
+            "key": "e_1_3_2_45_2",
+            "unstructured": "Riley\nM.\nSanderson\nK. E.\nComparative genetics of Escherichia coli and Salmonella typhimurium The bacterial chromosome.\nDrlica\nK.\nRiley\nM.\n1990\n85\n95\nAmerican Society for Microbiology\nWashington D.C"
+          },
+          {
+            "key": "e_1_3_2_46_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/0014-5793(90)81437-S"
+          },
+          {
+            "key": "e_1_3_2_47_2",
+            "unstructured": "Sanderson\nK. E.\nLiu\nS.-L.\nHessel\nA.\nRudd\nK. E.\nThe genetic map of Salmonella typhimurium edition VIII\nEscherichia coli and Salmonella: cellular and molecular biology\n2nd ed.\nNeidhardt\nF. C.\nCurtiss\nR.\nIII\nIngraham\nJ. L.\nLin\nE. C. C.\nLow\nK. B.\nMagasanik\nB.\nReznikoff\nW. S.\nRiley\nM.\nSchaechter\nM.\nUmbarger\nH. E.\n1996\n1903\n1999\nASM Press\nWashington D.C"
+          },
+          {
+            "key": "e_1_3_2_48_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/0022-2836(82)90546-0"
+          },
+          {
+            "key": "e_1_3_2_49_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.176.16.4949-4957.1994"
+          },
+          {
+            "key": "e_1_3_2_50_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1093/nar/25.1.37"
+          },
+          {
+            "key": "e_1_3_2_51_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/S0378-1119(97)00307-7"
+          },
+          {
+            "key": "e_1_3_2_52_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/BF02100192"
+          },
+          {
+            "key": "e_1_3_2_53_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.177.14.4187-4189.1995"
+          },
+          {
+            "key": "e_1_3_2_54_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1126/science.8023158"
+          },
+          {
+            "key": "e_1_3_2_55_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1006/plas.1995.0006"
+          },
+          {
+            "key": "e_1_3_2_56_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.177.15.4199-4206.1995"
+          },
+          {
+            "key": "e_1_3_2_57_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1038/368032a0"
+          },
+          {
+            "key": "e_1_3_2_58_2",
+            "unstructured": "Wilson\nR. K.\nMardis\nE. R.\nShotgun sequencing\nGenome analysis: a laboratory manual.\nBirren\nB.\nGreen\nE.\nKlapholz\nS.\nMyers\nR.\nRoskams\nJ.\n1997\n396\n454\nCold Spring Harbor Laboratory Press\nCold Spring Harbor N.Y"
+          },
+          {
+            "key": "e_1_3_2_59_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.170.8.3633-3639.1988"
+          },
+          {
+            "key": "e_1_3_2_60_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1006/viro.1995.1461"
+          },
+          {
+            "key": "e_1_3_2_61_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1128/jb.178.11.3335-3338.1996"
+          },
+          {
+            "key": "e_1_3_2_62_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/0378-1119(86)90131-9"
+          },
+          {
+            "key": "e_1_3_2_63_2",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1139/m94-170"
+          }
+        ],
+        "container-title": [
+          "Infection and Immunity"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "https://journals.asm.org/doi/pdf/10.1128/IAI.66.9.4305-4312.1998",
+            "content-type": "application/pdf",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://journals.asm.org/doi/pdf/10.1128/IAI.66.9.4305-4312.1998",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2022,
+              3,
+              5
+            ]
+          ],
+          "date-time": "2022-03-05T00:42:05Z",
+          "timestamp": 1646440925000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://journals.asm.org/doi/10.1128/IAI.66.9.4305-4312.1998"
+          }
+        },
+        "subtitle": [],
+        "editor": [
+          {
+            "given": "J. G.",
+            "family": "Cannon",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "editor",
+                "vocabulary": "crossref"
+              }
+            ]
+          }
+        ],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              1998,
+              9
+            ]
+          ]
+        },
+        "references-count": 62,
+        "aliases": [
+          "10.1128/.66.9.4305-4312.1998"
+        ],
+        "journal-issue": {
+          "issue": "9",
+          "published-print": {
+            "date-parts": [
+              [
+                1998,
+                9
+              ]
+            ]
+          }
+        },
+        "alternative-id": [
+          "10.1128/IAI.66.9.4305-4312.1998"
+        ],
+        "URL": "https://doi.org/10.1128/iai.66.9.4305-4312.1998",
+        "relation": {},
+        "ISSN": [
+          "0019-9567",
+          "1098-5522"
+        ],
+        "issn-type": [
+          {
+            "value": "0019-9567",
+            "type": "print"
+          },
+          {
+            "value": "1098-5522",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              1998,
+              9
+            ]
+          ]
+        },
+        "assertion": [
+          {
+            "value": "1997-12-12",
+            "order": 0,
+            "name": "received",
+            "label": "Received",
+            "group": {
+              "name": "publication_history",
+              "label": "Publication History"
+            }
+          },
+          {
+            "value": "1998-06-04",
+            "order": 1,
+            "name": "accepted",
+            "label": "Accepted",
+            "group": {
+              "name": "publication_history",
+              "label": "Publication History"
+            }
+          },
+          {
+            "value": "1998-09-01",
+            "order": 2,
+            "name": "published",
+            "label": "Published",
+            "group": {
+              "name": "publication_history",
+              "label": "Publication History"
+            }
+          }
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

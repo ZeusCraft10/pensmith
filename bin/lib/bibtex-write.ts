@@ -33,6 +33,7 @@
 import { Cite } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { generateCitekey } from './citekey.js';
+import { normalizeDoi } from './doi.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
 interface CslAuthor {
@@ -87,7 +88,9 @@ function toCsl(c: SourceCandidate): CslEntry | null {
   if (typeof c.year === 'number') {
     entry.issued = { 'date-parts': [[c.year]] };
   }
-  if (c.doi) entry.DOI = c.doi;
+  // DOIs are case-insensitive and come as bare DOIs, `doi:` strings or
+  // doi.org links; the bib holds the one canonical form.
+  if (c.doi) entry.DOI = normalizeDoi(c.doi) ?? c.doi;
   if (asExt.isbn) entry.ISBN = asExt.isbn;
   if (asExt.arxivId) entry.number = asExt.arxivId;
   if (c.retracted === true) entry.note = 'RETRACTED';

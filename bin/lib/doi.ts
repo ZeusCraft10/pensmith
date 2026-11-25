@@ -120,6 +120,17 @@ export function isDoi(s: string): boolean {
   return normalizeDoi(s) !== null;
 }
 
+/**
+ * Whether two strings name the same DOI. DOIs are case-insensitive and come
+ * with or without a `doi:` / doi.org prefix, so a raw string comparison calls
+ * `10.1109/MCSE.2011.37` and Crossref's `10.1109/mcse.2011.37` different works.
+ * Every DOI equality check goes through here.
+ */
+export function sameDoi(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = typeof a === 'string' ? normalizeDoi(a) : null;
+  return na !== null && na === (typeof b === 'string' ? normalizeDoi(b) : null);
+}
+
 // arXiv new format (post-2007): YYMM.NNNNN[vV]
 //   - YY = 00..99, MM = 01..12 — we accept any 4-digit prefix; the
 //     authoritative arXiv API will reject impossible months. We're a
@@ -227,6 +238,43 @@ export function normalizePmcid(input: string): string | null {
  */
 export function isPmcid(s: string): boolean {
   return normalizePmcid(s) !== null;
+}
+
+/** Whether the check digit of a 10- or 13-character ISBN body is right. */
+function isbnCheckDigitOk(body: string): boolean {
+  if (/^\d{9}[\dX]$/.test(body)) {
+    let sum = 0;
+    for (let i = 0; i < 10; i++) sum += (body[i] === 'X' ? 10 : Number(body[i])) * (10 - i);
+    return sum % 11 === 0;
+  }
+  if (/^\d{13}$/.test(body)) {
+    let sum = 0;
+    for (let i = 0; i < 13; i++) sum += Number(body[i]) * (i % 2 === 0 ? 1 : 3);
+    return sum % 10 === 0;
+  }
+  return false;
+}
+
+/**
+ * Normalize an ISBN: drop an `ISBN` label, hyphens and spaces, and uppercase
+ * the X check digit. Returns null unless the result is a 10- or 13-digit ISBN
+ * whose check digit is right, so a mistyped or invented ISBN never reaches a
+ * registry looking real.
+ *
+ *   - 'ISBN 978-0-262-03384-8' → '9780262033848'
+ *   - '0-262-03384-4'          → '0262033844'
+ *   - '978-0-262-03384-9'      → null (wrong check digit)
+ */
+export function normalizeIsbn(input: string): string | null {
+  if (typeof input !== 'string') return null;
+  const body = input.trim().replace(/^isbn(?:-1[03])?:?\s*/i, '').replace(/[\s-]/g, '').toUpperCase();
+  return isbnCheckDigitOk(body) ? body : null;
+}
+
+/** Whether `s` looks like an ISBN (10 or 13 digits after dropping separators), right check digit or not. */
+export function looksLikeIsbn(s: string): boolean {
+  const body = s.trim().replace(/^isbn(?:-1[03])?:?\s*/i, '').replace(/[\s-]/g, '').toUpperCase();
+  return /^(?:\d{9}[\dX]|\d{13})$/.test(body);
 }
 
 // ---------------------------------------------------------------------------

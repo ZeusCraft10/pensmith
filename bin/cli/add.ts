@@ -34,7 +34,7 @@ import { extractPdfText } from '../lib/pdf-text.js';
 import { search as crossrefSearch, fetchById as crossrefFetchById } from '../lib/sources/crossref.js';
 import { writeBibtex } from '../lib/bibtex-write.js';
 import { parseBibtex } from '../lib/citations.js';
-import { normalizeDoi, isDoi, verifyDoi } from '../lib/doi.js';
+import { normalizeDoi, isDoi, sameDoi, verifyDoi } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
@@ -76,8 +76,7 @@ async function fetchExactDoi(
 ): Promise<{ candidate: SourceCandidate | null; mismatch?: string }> {
   const hit = await crossrefFetchById(doi);
   if (!hit) return { candidate: null };
-  const got = hit.doi ? normalizeDoi(hit.doi) : null;
-  if (got !== doi) return { candidate: null, mismatch: hit.doi ?? '(no DOI)' };
+  if (!sameDoi(hit.doi, doi)) return { candidate: null, mismatch: hit.doi ?? '(no DOI)' };
   return { candidate: hit };
 }
 

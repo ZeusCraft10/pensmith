@@ -38,6 +38,7 @@ import {
 } from '../citation-grammar.js';
 import { isOfflineMode } from '../network-mode.js';
 import { oneLine } from './verdict-rows.js';
+import { sameDoi } from '../doi.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
@@ -219,8 +220,9 @@ async function verdictForCitekey(
   // Multi-DOI redirect handling — the claimed DOI may have redirected to a
   // different canonical DOI; strict-match (≥0.98 title / ≥0.95 author) lets
   // it pass with a diagnostic, otherwise MIS-CITED.
+  // DOIs are case-insensitive: Crossref reports them lowercased.
   const actualDoi: string = actual.doi ?? claimed.DOI;
-  if (actualDoi !== claimed.DOI) {
+  if (!sameDoi(actualDoi, claimed.DOI)) {
     if (titleJW >= 0.98 && authorJW >= 0.95) {
       return {
         citekey: ck, verdict: 'OK', titleJW, authorJW,
