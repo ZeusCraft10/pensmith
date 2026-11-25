@@ -90,6 +90,12 @@ export const Schema = z.object({
   entries: z.array(LibraryItemSchema).default([]),
   /** The @string and @preamble blocks of a bibliography read in, written back first. */
   bibtex_preamble: z.array(z.string()).default([]),
+  /**
+   * When research last ran, a run that found nothing included. `pensmith add`
+   * writes this file too, so the router reads research as done from this, not
+   * from the file being there.
+   */
+  researched_at: z.string().optional(),
 });
 
 export type Library = z.infer<typeof Schema>;

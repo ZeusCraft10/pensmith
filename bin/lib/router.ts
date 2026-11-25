@@ -111,6 +111,29 @@ export function readSectionState(planPath: string): SectionStateRead {
 }
 
 /**
+ * Whether research has run for the paper whose `.paper/` folder is `pDir`:
+ * the legacy RESEARCH.md exists, or LIBRARY.json records a research run.
+ * `pensmith add` writes LIBRARY.json too, so the file being there is not
+ * enough; a v1 library (or the older bare list) was written only by research.
+ * Null when LIBRARY.json is there but cannot be read. Never throws.
+ */
+export function researchDone(pDir: string): boolean | null {
+  if (existsSync(join(pDir, 'RESEARCH.md'))) return true;
+  const file = join(pDir, 'LIBRARY.json');
+  if (!existsSync(file)) return false;
+  try {
+    const lib: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    if (Array.isArray(lib)) return true;
+    if (!lib || typeof lib !== 'object') return null;
+    const { $schemaVersion: version, researched_at: at } = lib as { $schemaVersion?: unknown; researched_at?: unknown };
+    if (typeof version !== 'number' || version < 2) return true;
+    return typeof at === 'string';
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Behavior options for resolveNextAction. opts is a plain, FEATURE-AGNOSTIC
  * behavior surface — NOT a workflow-mode token. `stopAfterResearch` is a
  * dependency-injected flag the CLI caller sets; the router never reads any
@@ -120,7 +143,7 @@ export function readSectionState(planPath: string): SectionStateRead {
  */
 export interface ResolveOptions {
   /**
-   * When true AND RESEARCH.md exists, halt at the research stage and return the
+   * When true AND research has run, halt at the research stage and return the
    * existing `{ verb:'status', reason:'done' }` terminal instead of advancing to
    * outline. The CLI caller decides when to set this; the router stays agnostic.
    */
@@ -165,24 +188,19 @@ export async function resolveNextAction(
 
     const pDir = paperDir(paperRoot);
 
-    // "Research done" sentinel (audit M1): the research verb writes LIBRARY.json
-    // (+ CITATIONS.bib) — its canonical output per workflows/research.md §Outputs —
-    // NOT RESEARCH.md (a later curated-notes artifact written by `revise
-    // --research` / learning mode). Gating on RESEARCH.md alone left bare
-    // `pensmith`/next/resume looping on `research` forever after a real research
-    // run. Accept EITHER so the canonical output advances the pipeline while the
-    // legacy RESEARCH.md still counts.
-    const researchDone =
-      existsSync(join(pDir, 'LIBRARY.json')) || existsSync(join(pDir, 'RESEARCH.md'));
-
-    // H4 PINNED ORDERING: HANDOFF.json is NOT read here. existsSync never throws.
-    if (!researchDone) return { verb: 'research' };
+    // H4 PINNED ORDERING: HANDOFF.json is NOT read here.
+    const researched = researchDone(pDir);
+    if (researched === null) {
+      process.stderr.write(`[pensmith] LIBRARY.json at ${pDir} cannot be read; research cannot be told to have run.\n`);
+      return { verb: 'status', reason: 'attention' };
+    }
+    if (!researched) return { verb: 'research' };
 
     // DI HARD-STOP (feature-agnostic): once research is done, a caller that
     // requested stopAfterResearch halts here — reuse the existing status/done
     // terminal rather than widening RouterDecision. The caller is responsible
     // for any stage-appropriate end-state message it wants to print.
-    if (opts.stopAfterResearch && researchDone) {
+    if (opts.stopAfterResearch) {
       return { verb: 'status', reason: 'done' };
     }
 

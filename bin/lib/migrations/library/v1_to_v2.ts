@@ -77,5 +77,6 @@ export function migrate(input: unknown, now: string = new Date().toISOString()):
     seen.add(item.id);
     items.push(item);
   }
-  return { $schemaVersion: 2, entries: items, bibtex_preamble: [] };
+  // Only research wrote a v1 library, so research has run.
+  return { $schemaVersion: 2, entries: items, bibtex_preamble: [], researched_at: now };
 }

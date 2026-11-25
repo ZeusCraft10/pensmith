@@ -59,10 +59,20 @@ function writePaperFile(root: string, name: string): void {
   writeFileSync(join(pDir, name), `# ${name}\n`);
 }
 
+/** A LIBRARY.json a research run wrote (one that found nothing). */
+function writeResearchedLibrary(root: string): void {
+  const pDir = join(root, '.paper');
+  mkdirSync(pDir, { recursive: true });
+  writeFileSync(
+    join(pDir, 'LIBRARY.json'),
+    JSON.stringify({ $schemaVersion: 2, entries: [], bibtex_preamble: [], researched_at: new Date().toISOString() }),
+  );
+}
+
 test('audit #10: `verify` (no N) does NOT silently run a different verb when none is ready', () => {
   const root = freshRoot();
   writeState(root, []);               // no sections
-  writePaperFile(root, 'LIBRARY.json'); // research done; next action = outline
+  writeResearchedLibrary(root);       // research done; next action = outline
   // No OUTLINE.md → the router's next action is `outline`, NOT `verify`.
 
   const res = runCli(['verify'], root, { PENSMITH_NO_LLM: '1' });
@@ -78,7 +88,7 @@ test('audit #10: `verify` (no N) does NOT silently run a different verb when non
 test('audit #10: `plan` (no N) runs plan for the next pending section', () => {
   const root = freshRoot();
   writeState(root, [{ n: 1, slug: 'intro' }]); // one registered section, no PLAN.md yet
-  writePaperFile(root, 'LIBRARY.json');         // research done
+  writeResearchedLibrary(root);                 // research done
   writePaperFile(root, 'OUTLINE.md');           // outline present → next action = plan(1)
 
   const res = runCli(['plan', '--yolo'], root, { PENSMITH_NO_LLM: '1' });

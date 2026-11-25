@@ -28,7 +28,7 @@ import path from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { z } from 'zod';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { addToLibrary } from '../lib/library.js';
+import { mergeCandidates, updateLibrary } from '../lib/library.js';
 import { paperDir } from '../lib/paths.js';
 import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
@@ -297,7 +297,12 @@ export const researchCommand = defineCommand({
     // The orchestrator marked each candidate its own record shows as
     // retracted; the library keeps the flag, and CITATIONS.bib carries it as
     // note = {RETRACTED}.
-    const merged = await addToLibrary(process.cwd(), finalCandidates, { preference: sourcePreferenceFor(discipline) });
+    // The run is recorded even when it found nothing: it is how the router
+    // knows research is done (`pensmith add` writes the library too).
+    const merged = await updateLibrary(process.cwd(), (lib, at) => {
+      lib.researched_at = at;
+      return mergeCandidates(lib, finalCandidates, at, { preference: sourcePreferenceFor(discipline) });
+    });
     const added = merged.works.filter((w) => w.status === 'added').length;
 
     process.stdout.write(

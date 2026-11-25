@@ -46,7 +46,7 @@ import { withLock } from './lock.js';
 import { loadAndMigrate } from './migrations/loader.js';
 import { loadState, StateNotFoundError } from './state.js';
 import { Schema as StateSchema, type State } from './schemas/state.js';
-import { readSectionState } from './router.js';
+import { readSectionState, researchDone } from './router.js';
 import { paperDir, sectionPlan, pensmithGlobalLibraryIndexPath } from './paths.js';
 import {
   GlobalLibrarySchema,
@@ -375,14 +375,12 @@ export function deriveLibraryStatus(
     const state = stateRead.state;
     const pDir = paperDir(folderPath);
 
-    // (2) STATE.json present — walk the on-disk stage probes. existsSync never
-    //     throws (returns false on any error). "Research done" keys on LIBRARY.json
-    //     (the research verb's canonical output) OR the legacy RESEARCH.md — see
-    //     router.ts (audit M1); gating on RESEARCH.md alone mislabelled every
-    //     post-research paper as 'intake'.
-    const researchDone =
-      existsSync(join(pDir, 'LIBRARY.json')) || existsSync(join(pDir, 'RESEARCH.md'));
-    if (!researchDone) return { status: 'intake' };
+    // (2) STATE.json present — walk the on-disk stage probes, which never
+    //     throw. "Research done" is the router's own test (researchDone): a
+    //     research run recorded in LIBRARY.json, or the legacy RESEARCH.md.
+    const researched = researchDone(pDir);
+    if (researched === null) return { status: 'unknown' };
+    if (!researched) return { status: 'intake' };
     if (!existsSync(join(pDir, 'OUTLINE.md'))) return { status: 'research' };
 
     const sections = Array.isArray(state.sections) ? state.sections : [];
