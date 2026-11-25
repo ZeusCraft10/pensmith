@@ -97,7 +97,7 @@ export const compileCommand = defineCommand({
 
     if (result.refused) {
       process.stdout.write(
-        `pensmith compile: REFUSED — ${(result.refuseReasons ?? []).length} blocking citation issue(s). No DRAFT.md written.\n`,
+        `pensmith compile: REFUSED — ${(result.refuseReasons ?? []).length} blocking issue(s). No DRAFT.md written.\n`,
       );
       for (const r of result.refuseReasons ?? []) process.stdout.write(`  - ${r}\n`);
       if (result.staleDraftPath) {

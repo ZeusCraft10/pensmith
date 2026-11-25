@@ -287,6 +287,21 @@ function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
   return true;
 }
 
+/**
+ * `plan`/`verify` typed without a section number run for the router's next
+ * section only when the router's next step is that verb. Otherwise say what the
+ * next step is instead of running a command the user did not ask for.
+ */
+function refuseSectionVerb(verb: Ux02Verb, decision: RouterDecision): number {
+  const at = 'n' in decision && 'slug' in decision ? ` (section ${decision.n} ${decision.slug})` : '';
+  process.stderr.write(
+    `pensmith ${verb}: no section is ready to ${verb} right now — the next step is ` +
+    `\`pensmith ${decision.verb}\`${at}. Pass a section number ` +
+    `(e.g. \`pensmith ${verb} 2\`) to ${verb} a specific section.\n`,
+  );
+  return EXIT_REFUSED;
+}
+
 /** The decision's section (n, slug) as verb args, when it has one. */
 function decisionArgs(decision: RouterDecision): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -319,10 +334,7 @@ async function runDryRun(argv: string[], verb: Ux02Verb | null): Promise<number>
   const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
   const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
   if (verb !== null && verb !== 'next' && verb !== 'resume' && decision.verb !== verb) {
-    process.stderr.write(
-      `pensmith ${verb}: no section is ready to ${verb} right now — the next step is \`pensmith ${decision.verb}\`.\n`,
-    );
-    return EXIT_REFUSED;
+    return refuseSectionVerb(verb, decision);
   }
   if (decision.verb === 'status' || decision.verb === 'resume') {
     const why = decision.verb === 'status' && decision.reason === 'done'
@@ -450,14 +462,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   // requested verb, no section is ready for it — tell the user the real next step
   // instead of running a command they did not ask for.
   if (verb !== null && decision.verb !== verb) {
-    const at =
-      'n' in decision && 'slug' in decision ? ` (section ${decision.n} ${decision.slug})` : '';
-    process.stderr.write(
-      `pensmith ${verb}: no section is ready to ${verb} right now — the next step is ` +
-      `\`pensmith ${decision.verb}\`${at}. Pass a section number ` +
-      `(e.g. \`pensmith ${verb} 2\`) to ${verb} a specific section.\n`,
-    );
-    process.exitCode = EXIT_REFUSED;
+    process.exitCode = refuseSectionVerb(verb, decision);
     return;
   }
 
@@ -468,9 +473,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
     return;
   }
 
-  const verbArgs: Record<string, unknown> = {};
-  if ('n' in decision) verbArgs.n = decision.n;
-  if ('slug' in decision) verbArgs.slug = decision.slug;
+  const verbArgs: Record<string, unknown> = decisionArgs(decision);
   if ('reason' in decision) verbArgs.reason = decision.reason;
   await dispatchVerb(decision.verb, {
     args: verbArgs,

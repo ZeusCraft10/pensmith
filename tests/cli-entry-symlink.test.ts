@@ -21,6 +21,9 @@ const REPO = fileURLToPath(new URL('..', import.meta.url));
 const BUILT = resolve(REPO, 'dist/bin/pensmith.js');
 const SOURCE = resolve(REPO, 'bin/pensmith.ts');
 const TSX_LOADER = import.meta.resolve('tsx');
+// npm installs bins on Windows as .cmd shims, not symlinks, and creating a
+// symlink there needs extra privileges; the defect is POSIX-only.
+const POSIX_ONLY = { skip: process.platform === 'win32' ? 'symlinked bins are POSIX-only' : false };
 
 function isolatedEnv(): Record<string, string> {
   const home = mkdtempSync(join(tmpdir(), 'pensmith-link-home-'));
@@ -53,7 +56,7 @@ test('entry: the built CLI exists (run npm run build first)', () => {
   assert.ok(existsSync(BUILT), `expected ${BUILT} — run npm run build first`);
 });
 
-test('entry: the built CLI prints its version through a file symlink', () => {
+test('entry: the built CLI prints its version through a file symlink', POSIX_ONLY, () => {
   const dir = mkdtempSync(join(tmpdir(), 'pensmith-link-'));
   const link = join(dir, 'pensmith');
   symlinkSync(BUILT, link);
@@ -62,7 +65,7 @@ test('entry: the built CLI prints its version through a file symlink', () => {
   assert.equal(r.stdout.trim(), VERSION, `no output through the symlink: stdout=${JSON.stringify(r.stdout)}`);
 });
 
-test('entry: the built CLI runs a verb through an npm-link style chain (linked package dir + linked bin)', () => {
+test('entry: the built CLI runs a verb through an npm-link style chain (linked package dir + linked bin)', POSIX_ONLY, () => {
   const bin = npmLinkLayout();
   const cwd = mkdtempSync(join(tmpdir(), 'pensmith-link-cwd-'));
   const v = run([bin, '--version'], cwd);
@@ -72,7 +75,7 @@ test('entry: the built CLI runs a verb through an npm-link style chain (linked p
   assert.match(s.stdout, /no active paper/, `status through npm link printed ${JSON.stringify(s.stdout + s.stderr)}`);
 });
 
-test('entry: the TypeScript source runs through a symlink too', () => {
+test('entry: the TypeScript source runs through a symlink too', POSIX_ONLY, () => {
   const dir = mkdtempSync(join(tmpdir(), 'pensmith-link-src-'));
   const link = join(dir, 'pensmith.ts');
   symlinkSync(SOURCE, link);

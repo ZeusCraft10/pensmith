@@ -58,7 +58,7 @@ const NOT_A_VERB_HINTS: Readonly<Record<string, string>> = {
   plagiarism: 'the plagiarism check runs inside `pensmith done`',
 };
 
-export function isVerb(word: string): word is Ux02Verb {
+function isVerb(word: string): word is Ux02Verb {
   return (UX02_VERBS as readonly string[]).includes(word);
 }
 
@@ -69,7 +69,7 @@ export function canonicalVerb(word: string): Ux02Verb | null {
 }
 
 /** Verbs and aliases close enough to `word` to be what the user meant. */
-export function suggestVerbs(word: string): string[] {
+function suggestVerbs(word: string): string[] {
   const lower = word.toLowerCase();
   const names = [...UX02_VERBS, ...Object.keys(VERB_ALIASES)];
   return names
@@ -89,7 +89,8 @@ export function unknownVerbMessage(word: string): string {
     const close = suggestVerbs(word);
     if (close.length > 0) lines.push(`  Did you mean ${close.map((v) => `\`pensmith ${v}\``).join(' or ')}?`);
   }
-  lines.push(`  Commands: ${UX02_VERBS.join(', ')} (aliases: intake = new, export = done).`);
+  const aliases = Object.entries(VERB_ALIASES).map(([alias, verb]) => `${alias} = ${verb}`).join(', ');
+  lines.push(`  Commands: ${UX02_VERBS.join(', ')} (aliases: ${aliases}).`);
   lines.push('  Run `pensmith` with no command to take the next step, or `pensmith --help` for usage.');
   return lines.join('\n');
 }

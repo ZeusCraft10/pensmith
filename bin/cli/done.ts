@@ -572,7 +572,11 @@ function canAskInTerminal(): boolean {
  * The machine-readable description of a pending export decision, printed as
  * one JSON line when there is no terminal to ask in. Nothing is exported.
  */
-export function pendingExportDecision(issues: GateIssues, format: string): Record<string, unknown> {
+export function pendingExportDecision(
+  issues: GateIssues,
+  format: string,
+  source = '.paper/DRAFT.md',
+): Record<string, unknown> {
   const orphanClaims = issues.orphanClaims.reduce((sum, r) => sum + r.orphanCount, 0);
   const count = issues.unsupported.length + orphanClaims + issues.plagiarismHits.length;
   return {
@@ -580,7 +584,7 @@ export function pendingExportDecision(issues: GateIssues, format: string): Recor
     gate: 'export',
     needs_confirmation: true,
     summary:
-      `Export .paper/DRAFT.md as ${format}? ` +
+      `Export ${source} as ${format}? ` +
       (issues.hasIssues ? `${count} advisory issue(s) to review first.` : 'No advisory issues were found.'),
     options: ['export', 'cancel'],
     default: 'cancel',
@@ -734,7 +738,8 @@ export const doneCommand = defineCommand({
       process.stderr.write(
         'pensmith done: exporting needs your confirmation and there is no terminal to ask in. Nothing was exported.\n',
       );
-      process.stdout.write(`${JSON.stringify(pendingExportDecision(issues, format))}\n`);
+      const source = finalPath !== null ? '.paper/FINAL.md' : '.paper/DRAFT.md';
+      process.stdout.write(`${JSON.stringify(pendingExportDecision(issues, format, source))}\n`);
       process.exitCode = EXIT_NEEDS_ANSWER;
       return { ok: false, pending: true };
     }

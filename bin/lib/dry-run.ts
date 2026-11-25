@@ -6,7 +6,7 @@
 // chokepoint (atomic-write.ts) also refuses every write during a dry run, so a
 // path that slips past the dispatcher still cannot change a file.
 
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { resolveSectionSlug } from './section-slug.js';
 import type { Ux02Verb } from './verbs.js';
@@ -41,7 +41,8 @@ function sectionNumber(args: Record<string, unknown>): number | null {
 
 /** Describe `target` as it would run in `paperRoot`. Reads files only. */
 export function describeStep(target: DryRunTarget, paperRoot: string): DryRunStep {
-  const rel = (p: string): string => relative(paperRoot, p) || p;
+  // Paths are shown relative to the paper folder, with forward slashes on every OS.
+  const rel = (p: string): string => (relative(paperRoot, p) || p).split(sep).join('/');
   const paper = (name: string): string => rel(join(paperDir(paperRoot), name));
   const { verb, args } = target;
   const n = sectionNumber(args);
