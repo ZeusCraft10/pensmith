@@ -30,9 +30,9 @@
 //   6. --yolo retries the same path up to 2 more times; when every proposal
 //      is invalid it writes a RETRY_EXHAUSTED verdict to VERIFICATION.md.
 //
-// --research appends the query's findings to the project-level
-// .paper/RESEARCH.md, merges new entries into .paper/CITATIONS.bib (with a
-// non-standard `from_section: <N>` annotation), and appends a provenance row
+// --research merges the query's findings into the library (.paper/LIBRARY.json,
+// which writes CITATIONS.bib; each records the section as its provenance),
+// appends them to the project-level .paper/RESEARCH.md, and appends a provenance row
 // to sections/<N>/RESEARCH-LOG.md (query, adapter, hit count, citekeys added,
 // ISO timestamp). RESEARCH-LOG.md is the only section-level file --research
 // creates; no other section's files are touched.
@@ -57,8 +57,7 @@ import {
   type Quote,
 } from './citation-grammar.js';
 import { oneLine, parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
-import { parseBibtex } from './citations.js';
-import { writeBibtex } from './bibtex-write.js';
+import { addToLibrary } from './library.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
 import { assignedSourcesFrom } from './plan-status.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
@@ -447,16 +446,38 @@ async function applyProposal(draftPath: string, planPath: string, patched: strin
 }
 
 // ---------------------------------------------------------------------------
-// --research: project RESEARCH.md + bib merge + section RESEARCH-LOG.md.
+// --research: library merge + project RESEARCH.md + section RESEARCH-LOG.md.
 // ---------------------------------------------------------------------------
 
 async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<void> {
   const query = opts.research ?? '';
   const root = opts.paperRoot;
   const now = new Date().toISOString();
-  const citekeysAdded = hits.map((h) => h.citekey);
 
-  // 1. Append to project-level .paper/RESEARCH.md (append, never overwrite).
+  // 1. Merge the hits into the library, which writes CITATIONS.bib from it.
+  //    A work it already holds keeps its key; a new one may get a suffixed
+  //    key, so RESEARCH.md and the log below name the keys the library gave.
+  const candidates: SourceCandidate[] = hits.map((h) => ({
+    source: h.source ?? 'openalex',
+    id: h.doi ?? h.citekey,
+    title: h.title,
+    authors: h.authors.length > 0 ? h.authors : ['Unknown'],
+    ...(h.year !== undefined ? { year: h.year } : {}),
+    ...(h.doi !== undefined ? { doi: h.doi } : {}),
+    retracted: false,
+    last_verified: now,
+    citekey: h.citekey,
+    raw: {},
+  } as SourceCandidate));
+  const merged = await addToLibrary(root, candidates, { via: { source: 'revise --research', section: opts.n } });
+  const keyOf = new Map<SourceCandidate, string>();
+  for (const w of merged.works) for (const c of w.candidates) keyOf.set(c, w.citekey);
+  const listed = hits
+    .map((h, i) => ({ h, key: keyOf.get(candidates[i]!) }))
+    .filter((x): x is { h: ResearchHit; key: string } => x.key !== undefined);
+  const citekeysAdded = [...new Set(listed.map((x) => x.key))];
+
+  // 2. Append to project-level .paper/RESEARCH.md (append, never overwrite).
   const researchPath = `${paperDir(root)}/RESEARCH.md`;
   const prior = existsSync(researchPath) ? readFileSync(researchPath, 'utf8') : '';
   const block = [
@@ -465,62 +486,10 @@ async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<
     '',
     `Query: ${query}`,
     '',
-    ...hits.map((h) => `- [@${h.citekey}] ${h.title} (${(h.authors ?? []).join('; ')}${h.year ? `, ${h.year}` : ''})`),
+    ...listed.map(({ h, key }) => `- [@${key}] ${h.title} (${(h.authors ?? []).join('; ')}${h.year ? `, ${h.year}` : ''})`),
     '',
   ].join('\n');
   await atomicWriteFile(researchPath, prior + block);
-
-  // 2. Merge new entries into .paper/CITATIONS.bib (from_section annotation).
-  const bibPath = `${paperDir(root)}/CITATIONS.bib`;
-  const existingBib = existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '';
-  const existingEntries = existingBib.trim().length > 0 ? await parseBibtex(existingBib) : [];
-  const existingKeys = new Set(existingEntries.map((e) => String((e as { id?: string }).id ?? '')));
-
-  const newCandidates: SourceCandidate[] = hits
-    .filter((h) => !existingKeys.has(h.citekey))
-    .map((h) => ({
-      source: h.source ?? 'openalex',
-      id: h.doi ?? h.citekey,
-      title: h.title,
-      authors: h.authors.length > 0 ? h.authors : ['Unknown'],
-      ...(h.year !== undefined ? { year: h.year } : {}),
-      ...(h.doi !== undefined ? { doi: h.doi } : {}),
-      retracted: false,
-      last_verified: now,
-      citekey: h.citekey,
-      raw: {},
-    } as SourceCandidate));
-
-  if (newCandidates.length > 0) {
-    // Re-render the union through the citation-js + atomic-write chokepoints.
-    // We hand writeBibtex the merged candidate set so collisions resolve and
-    // the file stays git-diff-stable. The from_section provenance is recorded
-    // as a non-standard trailing comment block (standard parsers ignore `%`).
-    const mergedExisting: SourceCandidate[] = existingEntries.map((e) => {
-      const x = e as { id?: string; title?: string | string[]; author?: Array<{ family?: string; given?: string }>; DOI?: string };
-      const title = Array.isArray(x.title) ? (x.title[0] ?? '') : (x.title ?? '');
-      const authors = (x.author ?? []).map((a) => {
-        const fam = String(a?.family ?? '').trim();
-        const giv = String(a?.given ?? '').trim();
-        return giv ? `${fam}, ${giv}` : fam;
-      }).filter(Boolean);
-      return {
-        source: 'crossref',
-        id: x.DOI ?? String(x.id ?? ''),
-        title: title || String(x.id ?? 'untitled'),
-        authors: authors.length > 0 ? authors : ['Unknown'],
-        ...(x.DOI !== undefined ? { doi: x.DOI } : {}),
-        retracted: false,
-        last_verified: now,
-        citekey: String(x.id ?? ''),
-        raw: {},
-      } as SourceCandidate;
-    });
-    await writeBibtex([...mergedExisting, ...newCandidates], bibPath);
-    const rendered = readFileSync(bibPath, 'utf8');
-    const provenance = newCandidates.map((c) => `% from_section: ${opts.n}  citekey: ${c.citekey}`).join('\n');
-    await atomicWriteFile(bibPath, `${rendered}${rendered.endsWith('\n') ? '' : '\n'}${provenance}\n`);
-  }
 
   // 3. Append a provenance row to sections/<N>/RESEARCH-LOG.md (the ONLY
   //    section-level file --research writes).

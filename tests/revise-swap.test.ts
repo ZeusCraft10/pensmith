@@ -294,6 +294,13 @@ test('revise --research: section-scoped append, sibling untouched (PLAN-03 / D-0
   assert.match(log, /mechanism robustness follow-up/, 'RESEARCH-LOG.md must record the query');
   assert.match(log, /wu2021/, 'RESEARCH-LOG.md must record the added citekey');
 
+  // The work is in the library, and CITATIONS.bib is written from it.
+  const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<{ id: string; custom: { provenance: Array<{ source: string; section?: number }> } }> };
+  const item = lib.entries.find((e) => e.id === 'wu2021');
+  assert.ok(item, 'the hit is in LIBRARY.json');
+  assert.ok(item.custom.provenance.some((p) => p.source === 'revise --research' && p.section === 2), JSON.stringify(item.custom.provenance));
+  assert.match(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'), /@article\{wu2021,/);
+
   // Sibling section untouched (content AND mtime).
   assert.equal(readFileSync(siblingDraft, 'utf8'), siblingBefore, 'sibling DRAFT.md content must be unchanged');
   assert.equal(statSync(siblingDraft).mtimeMs, siblingMtimeBefore, 'sibling DRAFT.md mtime must be unchanged');
