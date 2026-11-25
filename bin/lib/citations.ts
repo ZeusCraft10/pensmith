@@ -245,11 +245,15 @@ const TITLE_CSL_FIELDS: ReadonlySet<string> = new Set([
   'title', 'title-short', 'container-title', 'container-title-short', 'collection-title', 'event-title',
 ]);
 
+// A capital letter other than A-Z.
+const NON_ASCII_CAPITAL = /(?![A-Z])[\p{Lu}\p{Lt}]/u;
+
 /**
  * Pandoc lowercases title words that are not in braces when a style asks
- * for sentence case. citation-js braces a word with a capital A-Z; a word
- * whose capital is any other letter (Łódź, Ελλάδα, России) is marked as
- * no-case here, which citation-js writes as braces too.
+ * for sentence case. citation-js braces only the A-Z part of a word (its
+ * pattern stops at any other letter, so ÉCOLE becomes É{COLE}). A word with
+ * any other capital (Łódź, Ελλάδα, России, ÉCOLE) is marked as no-case here,
+ * which citation-js writes as braces round the whole word.
  */
 function protectTitleCase(s: string): string {
   return s
@@ -257,9 +261,7 @@ function protectTitleCase(s: string): string {
     .map((part, i) =>
       i % 2 === 1
         ? part
-        : part.replace(/[\p{L}\p{M}\p{N}]+/gu, (w) =>
-            !/[A-Z]/.test(w) && /\p{Lu}|\p{Lt}/u.test(w) ? `<span class="nocase">${w}</span>` : w,
-          ),
+        : part.replace(/[\p{L}\p{M}\p{N}]+/gu, (w) => (NON_ASCII_CAPITAL.test(w) ? `<span class="nocase">${w}</span>` : w)),
     )
     .join('');
 }

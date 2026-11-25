@@ -25,16 +25,18 @@ const BIB = [
   '@article{ar2016, author = {علي, أحمد}, title = {المد والجزر}, journal = {J}, year = {2016}}',
   // Latin letters with diacritics and LaTeX's special characters must survive too.
   '@article{pl2015, author = {Łukasz, Żółć and {World Health Organization}}, title = {Pływy w Łodzi \\& Tides: 100\\% of \\#1 \\_data \\$5}, journal = {A \\& B}, year = {2015}, doi = {10.1000/a_b}, url = {https://example.org/a_b%20c}}',
+  // A word whose first capital is not A-Z but which also has A-Z capitals.
+  '@article{fr2014, author = {Dupont, Marie}, title = {Les Grandes ÉCOLE et ÖVP}, journal = {Revue}, year = {2014}}',
   '',
 ].join('\n');
 
-const DRAFT = 'Tides shape coasts [@zh2019; @ru2018; @gr2017; @ar2016; @pl2015].\n';
+const DRAFT = 'Tides shape coasts [@zh2019; @ru2018; @gr2017; @ar2016; @pl2015; @fr2014].\n';
 
 function paper(): string {
   return compiledPaper({
     title: 'Tides',
     bib: BIB,
-    sections: [{ slug: 'intro', title: 'Introduction', draft: DRAFT, sources: ['zh2019', 'ru2018', 'gr2017', 'ar2016', 'pl2015'] }],
+    sections: [{ slug: 'intro', title: 'Introduction', draft: DRAFT, sources: ['zh2019', 'ru2018', 'gr2017', 'ar2016', 'pl2015', 'fr2014'] }],
   });
 }
 
@@ -77,7 +79,7 @@ test('done --format docx with real Pandoc cites and lists non-Latin works in ful
     assert.ok(cite.includes(family), `the citation does not name ${family}: (${cite})\n${text}`);
   }
   // Capitals inside a title stay capitals in a sentence-case style (APA), in any script.
-  for (const title of ['潮汐', 'Приливы и отливы в России', 'Παλίρροιες της Ελλάδας', 'المد والجزر', 'Pływy w Łodzi & Tides: 100% of #1 _data $5']) {
+  for (const title of ['潮汐', 'Приливы и отливы в России', 'Παλίρροιες της Ελλάδας', 'المد والجزر', 'Pływy w Łodzi & Tides: 100% of #1 _data $5', 'Les Grandes ÉCOLE et ÖVP']) {
     assert.ok(text.includes(title), `the reference list does not show ${title}:\n${text}`);
   }
 });

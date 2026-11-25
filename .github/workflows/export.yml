@@ -45,4 +45,5 @@ jobs:
           tests/export-failures.test.ts
           tests/export-trace-scan.test.ts
           tests/export-bibliography.test.ts
+          tests/export-non-latin.test.ts
           tests/exporter.test.ts
