@@ -66,7 +66,7 @@ import { fileURLToPath } from 'node:url';
 // destructure) but FAILS under real Node ESM with
 // "does not provide an export named 'plugins'". We bind via the class
 // to stay portable across both runtimes.
-import Cite from 'citation-js';
+import Cite, { type BibtexRecord } from 'citation-js';
 const plugins = Cite.plugins;
 
 // CYCLE-3 NEW-H-1: re-export Cite so downstream Plan 04 / Plan 09
@@ -281,6 +281,21 @@ function escapeBibtexValue(v: unknown): unknown {
 }
 
 /**
+ * One entry as citation-js writes it, less the copy of the URL it puts in
+ * `howpublished` for a work with no publisher. That copy is a text field,
+ * which citation-js does not escape with ASCII-only output off, so a `_`,
+ * `%`, `&` or `#` in the URL stopped BibTeX, and Pandoc (which reads `%` as
+ * a comment) listed a cut-off second copy of the address. `url` holds it.
+ */
+function writeBibtexRecord({ type, label, properties }: BibtexRecord): string {
+  const fields = Object.entries(properties)
+    .filter(([name, value]) => !(name === 'howpublished' && value === properties['url']))
+    .map(([name, value]) => `\t${name} = {${value}},\n`)
+    .join('');
+  return `@${type}{${label},\n${fields}}\n`;
+}
+
+/**
  * BibTeX for CSL-JSON `entries`, keyed by each entry's `citation-key` (or
  * `id`). Text in any script is kept as UTF-8.
  */
@@ -298,7 +313,8 @@ export function formatBibtex(entries: ReadonlyArray<Record<string, unknown>>): s
   const asciiOnly = config.asciiOnly;
   config.asciiOnly = false;
   try {
-    return new Cite(prepared, { forceType: '@csl/list+object' }).format('bibtex', { format: 'text' });
+    const records = new Cite(prepared, { forceType: '@csl/list+object' }).format('bibtex', { format: 'object' });
+    return records.map(writeBibtexRecord).join('') + '\n';
   } finally {
     config.asciiOnly = asciiOnly;
   }

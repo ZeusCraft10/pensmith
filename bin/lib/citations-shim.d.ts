@@ -11,6 +11,8 @@
 //     so a whole document's citations render in one citeproc session.
 //   - `plugins.config.get('@bibtex').format.asciiOnly`, so formatBibtex can
 //     write UTF-8 BibTeX instead of dropping non-Latin text.
+//   - `format('bibtex', { format: 'object' })`, the entries before they are
+//     written out, so formatBibtex can leave out a field.
 //
 // Widening this shim is a chokepoint-bypass smell — new fields go via
 // the citations.ts wrapper API, not by widening global typings.
@@ -60,9 +62,17 @@ declare module 'citation-js' {
     };
   }
 
+  /** One BibTeX entry with every field value already written as BibTeX. */
+  export interface BibtexRecord {
+    type: string;
+    label: string;
+    properties: Record<string, string>;
+  }
+
   export class Cite {
     constructor(input?: string | object | object[], options?: { forceType?: string });
     readonly data: CiteData[];
+    format(name: 'bibtex', options: { format: 'object' }): BibtexRecord[];
     format(name: string, options?: CiteFormatOptions): string;
     // The `plugins` registry hangs off the class (citation-js@0.7
     // exposes it as a static-like property on the default export).
