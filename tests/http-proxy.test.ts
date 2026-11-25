@@ -34,6 +34,8 @@ interface FakeProxy {
   requestLines: string[];
   /** TCP connections the proxy accepted. */
   connections: () => number;
+  /** Connections that carried a CONNECT and are still open. */
+  openConnects: () => number;
   close: () => Promise<void>;
 }
 
@@ -54,27 +56,37 @@ function onHead(sock: net.Socket, cb: (head: string) => void): void {
 
 /**
  * `onConnect` picks how each CONNECT is handled; a function lets a test change
- * behaviour between attempts (the n-th CONNECT is passed, counting from 1).
+ * behaviour between attempts (the n-th CONNECT is passed, counting from 1) or
+ * by tunnel target (`host:port`). `answerAfterMs` delays the tunnelled answer.
  */
 async function startFakeProxy(
-  opts: { onConnect?: ConnectBehaviour | ((n: number) => ConnectBehaviour) } = {},
+  opts: {
+    onConnect?: ConnectBehaviour | ((n: number, target: string) => ConnectBehaviour);
+    answerAfterMs?: (target: string) => number;
+  } = {},
 ): Promise<FakeProxy> {
   const requestLines: string[] = [];
   const sockets = new Set<net.Socket>();
+  const connectSockets = new Set<net.Socket>();
   let accepted = 0;
   let connects = 0;
   const server = net.createServer((sock) => {
     accepted += 1;
     sockets.add(sock);
-    sock.on('close', () => sockets.delete(sock));
+    sock.on('close', () => {
+      sockets.delete(sock);
+      connectSockets.delete(sock);
+    });
     sock.on('error', () => { /* client may hang up mid-test */ });
     onHead(sock, (head) => {
       const line = head.split('\r\n')[0] ?? '';
       requestLines.push(line);
       if (line.startsWith('CONNECT ')) {
         connects += 1;
+        connectSockets.add(sock);
+        const target = line.split(' ')[1] ?? '';
         const pick = opts.onConnect ?? 'tunnel';
-        const behaviour = typeof pick === 'function' ? pick(connects) : pick;
+        const behaviour = typeof pick === 'function' ? pick(connects, target) : pick;
         if (behaviour === 'refuse') {
           sock.end('HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n');
           return;
@@ -87,7 +99,9 @@ async function startFakeProxy(
         sock.write('HTTP/1.1 200 Connection Established\r\n\r\n');
         onHead(sock, (inner) => {
           requestLines.push(`tunnel: ${inner.split('\r\n')[0] ?? ''}`);
-          sock.end(CANNED);
+          const delay = opts.answerAfterMs?.(target) ?? 0;
+          if (delay === 0) sock.end(CANNED);
+          else setTimeout(() => { if (!sock.destroyed) sock.end(CANNED); }, delay);
         });
         return;
       }
@@ -100,6 +114,7 @@ async function startFakeProxy(
     url: `http://127.0.0.1:${port}`,
     requestLines,
     connections: () => accepted,
+    openConnects: () => connectSockets.size,
     close: () => new Promise<void>((resolve) => {
       for (const s of sockets) s.destroy();
       server.close(() => resolve());
@@ -186,6 +201,15 @@ test('http proxy: the SSRF guard still blocks private targets when a proxy is se
   }
 });
 
+async function waitFor(cond: () => boolean, withinMs: number): Promise<boolean> {
+  const until = Date.now() + withinMs;
+  while (!cond()) {
+    if (Date.now() > until) return false;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return true;
+}
+
 // A request through a broken proxy must settle on its own. The guard below only
 // keeps a regression from hanging the whole test run; it is far above the
 // per-attempt timeout the requests ask for.
@@ -219,6 +243,10 @@ test('http proxy: a proxy that accepts the CONNECT and never answers fails withi
     assert.equal(r.outcome, 'error', `the request must reject, not ${r.outcome} (after ${r.ms} ms)`);
     assert.match(String(r.error), /deadline/i);
     assert.ok(r.ms < 2_500, `rejected after ${r.ms} ms; timeoutMs was 500`);
+    // The abandoned CONNECT must be closed too. Left open it would wait out the
+    // proxy connection's own 300 s timeout and keep the CLI process alive.
+    assert.ok(await waitFor(() => proxy.openConnects() === 0, 1_000),
+      `${proxy.openConnects()} CONNECT connection(s) still open after the deadline`);
   } finally {
     await proxy.close();
   }
@@ -252,6 +280,77 @@ test('http proxy: after a stalled tunnel the retry goes out on a fresh connectio
     );
     assert.equal(r.outcome, 'ok', `the retry must succeed; got ${r.outcome} ${String(r.error ?? '')}`);
     assert.equal(proxy.requestLines.filter((l) => l.startsWith('CONNECT ')).length, 2);
+  } finally {
+    await proxy.close();
+  }
+});
+
+// The options bin/lib/anthropic.ts sends to the provider: a billed generation.
+function providerPost(url: string, timeoutMs: number): ReturnType<typeof httpFetch> {
+  return httpFetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ prompt: 'draft section 3' }),
+    source: 'generic',
+    noCache: true,
+    untrusted: false,
+    timeoutMs,
+  });
+}
+
+const tunnelled = (proxy: FakeProxy, method: string): string[] =>
+  proxy.requestLines.filter((l) => l.startsWith(`tunnel: ${method} `));
+
+test('http proxy: a POST whose tunnel the proxy never opened is retried, since nothing reached the server', async () => {
+  const proxy = await startFakeProxy({ onConnect: (n) => (n === 1 ? 'stall' : 'tunnel') });
+  try {
+    const r = await withProxyEnv({ HTTP_PROXY: proxy.url, http_proxy: proxy.url, NO_PROXY: '', no_proxy: '' }, () =>
+      settleWithin(providerPost(`http://${PROBE_HOST}/v1/messages`, 500)),
+    );
+    assert.equal(r.outcome, 'ok', `the retry must succeed; got ${r.outcome} ${String(r.error ?? '')}`);
+    assert.equal(proxy.requestLines.filter((l) => l.startsWith('CONNECT ')).length, 2);
+    assert.equal(tunnelled(proxy, 'POST').length, 1, 'the POST reached the server once');
+  } finally {
+    await proxy.close();
+  }
+});
+
+test('http proxy: a POST that reached the server through the tunnel is not re-sent after its deadline', async () => {
+  const proxy = await startFakeProxy({ answerAfterMs: () => 3_000 });
+  try {
+    const r = await withProxyEnv({ HTTP_PROXY: proxy.url, http_proxy: proxy.url, NO_PROXY: '', no_proxy: '' }, () =>
+      settleWithin(providerPost(`http://${PROBE_HOST}/v1/messages`, 400)),
+    );
+    assert.equal(r.outcome, 'error', `the request must fail at its deadline, not ${r.outcome}`);
+    assert.match(String(r.error), /deadline/i);
+    assert.equal(tunnelled(proxy, 'POST').length, 1,
+      `the provider received the same POST ${tunnelled(proxy, 'POST').length} times`);
+  } finally {
+    await proxy.close();
+  }
+});
+
+test('http proxy: a stalled tunnel to one host leaves requests to other hosts alone', async () => {
+  const STALLED_HOST = 'pensmith-proxy-stalled.invalid';
+  const proxy = await startFakeProxy({
+    onConnect: (_n, target) => (target.startsWith(`${STALLED_HOST}:`) ? 'stall' : 'tunnel'),
+    answerAfterMs: () => 700,
+  });
+  try {
+    const [late, fine] = await withProxyEnv({ HTTP_PROXY: proxy.url, http_proxy: proxy.url, NO_PROXY: '', no_proxy: '' }, () =>
+      Promise.all([
+        settleWithin(httpFetch(`http://${STALLED_HOST}/works/late`, {
+          source: 'crossref', noCache: true, noRetry: true, timeoutMs: 300,
+        })),
+        settleWithin(httpFetch(`http://${PROBE_HOST}/works/fine`, {
+          source: 'openalex', noCache: true, timeoutMs: 5_000,
+        })),
+      ]),
+    );
+    assert.equal(late.outcome, 'error');
+    assert.match(String(late.error), /deadline/i);
+    assert.equal(fine.outcome, 'ok', `the other request must succeed; got ${fine.outcome} ${String(fine.error ?? '')}`);
+    assert.deepEqual(tunnelled(proxy, 'GET'), ['tunnel: GET /works/fine HTTP/1.1'],
+      'the other request reached its server exactly once');
   } finally {
     await proxy.close();
   }

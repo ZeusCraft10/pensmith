@@ -29,8 +29,10 @@
 // =================================================================
 // Retryable status codes: 429, 500, 502, 503, 504
 // Retryable error codes:  ETIMEDOUT, ECONNRESET, ENOTFOUND, EAI_AGAIN, plus the
-//                         undici socket/connect codes and a missed deadline
-//                         (see RETRYABLE_ERR_CODES)
+//                         undici socket/connect codes (see RETRYABLE_ERR_CODES)
+// Missed deadline:        retried for GET and HEAD, and for any method whose
+//                         proxy never opened the tunnel. A POST that may have
+//                         reached the server is not sent again.
 // Backoff:                full-jitter via bin/lib/retry.ts (NOT p-retry's
 //                         bounded multiplicative jitter — see retry.ts header)
 // 4xx OTHER than 429 are NOT retried (they are application errors).
@@ -101,19 +103,6 @@ function dispatcherForRequest(): Dispatcher {
   return proxyAgent.agent;
 }
 
-/**
- * Drop our proxy-aware agent after a request on it missed its deadline, so the
- * next request (the retry included) opens fresh connections. Destroying it is
- * the only way to stop a tunnel that is still being set up: undici does not
- * abort a request that is waiting for its connection. A dispatcher we did not
- * create (a test MockAgent, a host application's agent) is left alone.
- */
-function retireDispatcher(dispatcher: Dispatcher, reason: Error): void {
-  if (proxyAgent?.agent !== dispatcher) return;
-  proxyAgent = null;
-  void dispatcher.destroy(reason).catch(() => { /* already torn down */ });
-}
-
 /** The proxy closed or broke the connection while a tunnel was being opened. */
 export class ProxyTunnelError extends Error {
   readonly code = 'PENSMITH_PROXY_TUNNEL';
@@ -138,28 +127,68 @@ function asTunnelError(err: unknown): unknown {
 type ConnectCallback = (err: Error | null, data: Dispatcher.ConnectData) => void;
 type ConnectFn = (o: Dispatcher.ConnectOptions, cb?: ConnectCallback) => Promise<Dispatcher.ConnectData> | void;
 
+// The CONNECT requests the proxy has not answered yet, numbered in the order
+// they were sent. A request waiting for its tunnel cannot be aborted on its own
+// (undici only aborts a request once it has a connection), so when one misses
+// its deadline, the CONNECT it is waiting on is aborted instead. That touches
+// nothing else: no other request is queued on a connection that is still being
+// opened, and tunnels that are already open are left as they are.
+let tunnelSeq = 0;
+const openingTunnels = new Map<number, AbortController>();
+
 /** The connection pool to the proxy itself, which carries the CONNECT requests. */
 function proxyClientFactory(origin: URL, opts: object): Dispatcher {
   const pool = new Pool(origin, opts as Pool.Options);
   const connect = pool.connect.bind(pool) as ConnectFn;
   const guarded: ConnectFn = (o, cb) => {
+    const id = ++tunnelSeq;
+    const controller = new AbortController();
+    openingTunnels.set(id, controller);
+    const settled = (): void => { openingTunnels.delete(id); };
+    const signal = o.signal instanceof AbortSignal
+      ? AbortSignal.any([o.signal, controller.signal])
+      : controller.signal;
+    const params: Dispatcher.ConnectOptions = { ...o, signal };
     if (typeof cb === 'function') {
-      return connect(o, (err, data) => cb(err ? (asTunnelError(err) as Error) : null, data));
+      return connect(params, (err, data) => {
+        settled();
+        cb(err ? (asTunnelError(err) as Error) : null, data);
+      });
     }
-    return (connect(o) as Promise<Dispatcher.ConnectData>).catch((err: unknown) => {
-      throw asTunnelError(err);
-    });
+    return (connect(params) as Promise<Dispatcher.ConnectData>).then(
+      (data) => { settled(); return data; },
+      (err: unknown) => { settled(); throw asTunnelError(err); },
+    );
   };
   Object.assign(pool, { connect: guarded });
   return pool;
 }
 
+/** The CONNECTs numbered first..last that the proxy has still not answered. */
+function tunnelsStillOpening(first: number, last: number): AbortController[] {
+  const out: AbortController[] = [];
+  for (let id = first; id <= last; id++) {
+    const c = openingTunnels.get(id);
+    if (c) out.push(c);
+  }
+  return out;
+}
+
 /** No response headers arrived within the request's timeout. */
 export class HttpDeadlineError extends Error {
   readonly code = 'PENSMITH_HTTP_DEADLINE';
-  constructor(url: string, timeoutMs: number) {
-    super(`http: no response from ${new URL(url).host} within ${timeoutMs} ms (deadline exceeded)`);
+  /**
+   * False only when the request was still waiting for the proxy to open its
+   * tunnel, so none of it reached the server and sending it again is safe.
+   */
+  readonly mayHaveReachedServer: boolean;
+  constructor(url: string, timeoutMs: number, mayHaveReachedServer: boolean) {
+    const host = new URL(url).host;
+    super(mayHaveReachedServer
+      ? `http: no response from ${host} within ${timeoutMs} ms (deadline exceeded)`
+      : `http: the proxy did not open a tunnel to ${host} within ${timeoutMs} ms (deadline exceeded)`);
     this.name = 'HttpDeadlineError';
+    this.mayHaveReachedServer = mayHaveReachedServer;
   }
 }
 
@@ -168,20 +197,25 @@ export class HttpDeadlineError extends Error {
  * undici's headersTimeout starts only once a connection exists, and through a
  * proxy the CONNECT runs on the proxy pool's own 300 s default, so a stalled
  * proxy would otherwise hold the request (and the CLI process) for minutes.
+ *
+ * `tunnels` are the CONNECTs this request started. On expiry the request is
+ * aborted, and so is any of those CONNECTs the proxy has not answered. Other
+ * requests are not touched.
  */
 async function withDeadline<T>(
   pending: Promise<T>,
   url: string,
   timeoutMs: number,
-  dispatcher: Dispatcher,
   abort: AbortController,
+  tunnels: { first: number; last: number },
 ): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
-      const err = new HttpDeadlineError(url, timeoutMs);
+      const stuck = tunnelsStillOpening(tunnels.first, tunnels.last);
+      const err = new HttpDeadlineError(url, timeoutMs, stuck.length === 0);
       abort.abort(err);
-      retireDispatcher(dispatcher, err);
+      for (const t of stuck) t.abort(err);
       reject(err);
     }, timeoutMs);
   });
@@ -761,12 +795,24 @@ const RETRYABLE_ERR_CODES: ReadonlySet<string> = new Set([
   'EAI_AGAIN',
   'UND_ERR_SOCKET',
   'UND_ERR_CONNECT_TIMEOUT',
-  // Missed deadline, or a proxy that hung up mid-tunnel: retried on a fresh agent.
-  'PENSMITH_HTTP_DEADLINE',
+  // The proxy hung up before the tunnel opened, so nothing reached the server.
   'PENSMITH_PROXY_TUNNEL',
-  // Another request's deadline tore down the shared agent under this one.
-  'UND_ERR_DESTROYED',
 ]);
+
+// Methods that are safe to send twice. A missed deadline on anything else (a
+// POST to an LLM provider is a billed generation) is not retried unless the
+// request provably never reached the server.
+const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
+
+function isRetryable(err: unknown, method: string): boolean {
+  const e = err as { status?: number; code?: string } | null;
+  if (!e) return false;
+  if (typeof e.status === 'number' && RETRYABLE_STATUSES.has(e.status)) return true;
+  if (err instanceof HttpDeadlineError) {
+    return !err.mayHaveReachedServer || IDEMPOTENT_METHODS.has(method);
+  }
+  return typeof e.code === 'string' && RETRYABLE_ERR_CODES.has(e.code);
+}
 
 // ============================================================
 //   Public: fetch
@@ -837,21 +883,25 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       // SSRF pre-flight: throws on private IP / bad scheme / resolver error.
       await checkSsrf(url);
     }
-    const dispatcher = dispatcherForRequest();
     const abort = new AbortController();
     const reqInit: Parameters<typeof request>[1] = {
       method,
       headers,
       headersTimeout: timeoutMs,
       bodyTimeout: timeoutMs,
-      dispatcher,
+      dispatcher: dispatcherForRequest(),
       signal: abort.signal,
     };
     if (opts.body !== undefined) {
       reqInit.body = opts.body;
     }
+    // undici dispatches a request with no body or a string body synchronously,
+    // so a CONNECT sent while request() runs is the tunnel this request waits on.
+    const firstTunnel = tunnelSeq + 1;
+    const pending = request(url, reqInit);
+    const tunnels = { first: firstTunnel, last: tunnelSeq };
     const { statusCode, headers: rh, body } = await withDeadline(
-      request(url, reqInit), url, timeoutMs, dispatcher, abort,
+      pending, url, timeoutMs, abort, tunnels,
     );
     // Read the raw bytes ONCE (audit #29). `text` is the UTF-8 decode for text
     // consumers (byte-identical to the prior body.text()); `bodyBytes` preserves
@@ -909,13 +959,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
         maxAttempts: 5,
         baseMs: 200,
         capMs: 30_000,
-        retryOn: (err) => {
-          const e = err as { status?: number; code?: string } | null;
-          if (!e) return false;
-          if (typeof e.status === 'number' && RETRYABLE_STATUSES.has(e.status)) return true;
-          if (typeof e.code === 'string' && RETRYABLE_ERR_CODES.has(e.code)) return true;
-          return false;
-        },
+        retryOn: (err) => isRetryable(err, method),
       });
 
   // --- 5. Cache write (GET, success or definite 404) ---
