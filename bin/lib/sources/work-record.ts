@@ -11,7 +11,10 @@
 //   unavailable  no answer: a timeout, a 429 or 5xx after retries, a proxy or
 //                DNS failure, or a response that could not be read.
 // Treating "unavailable" as "not found" is what made rate limits and outages
-// read as fabricated references.
+// read as fabricated references. askRegistry below holds that rule, so an
+// adapter only says which answers are "found" and which are "no such work".
+
+import { fetch as httpFetch, type FetchOptions, type HttpResponse } from '../http.js';
 
 /**
  * A personal or corporate name as a registry gives it. Structured registries
@@ -37,7 +40,11 @@ export interface WorkRecord {
   registry: RegistryName;
   /** The DOI the registry reports for the work, when it has one. */
   doi?: string;
-  /** Main title as the registry gives it; it may hold HTML, MathML or entities. */
+  /**
+   * Main title as the registry gives it; it may hold HTML, MathML or entities.
+   * When the registry keeps the subtitle in its own field, this is only the
+   * main title: wholeTitle() gives the work's whole title.
+   */
   title: string;
   subtitle?: string;
   /** Translated or alternative titles the work is also known by. */
@@ -65,9 +72,19 @@ export type Lookup =
        * "cannot confirm", not "invented".
        */
       authoritative: boolean;
-      detail?: string;
     }
   | { kind: 'unavailable'; registry: RegistryName; detail: string };
+
+/** The work's whole title: the main title and, when the registry keeps one apart, its subtitle. */
+export function wholeTitle(r: Pick<WorkRecord, 'title' | 'subtitle'>): string {
+  return r.subtitle ? `${r.title}: ${r.subtitle}` : r.title;
+}
+
+/** No answer from `registry`, and why. */
+export const unavailable = (registry: RegistryName, detail: string): Lookup => ({ kind: 'unavailable', registry, detail });
+
+/** A status that says the registry holds no such record. */
+export const isGone = (status: number): boolean => status === 404 || status === 410;
 
 /** Why a request got no answer, in a few words, without the URL. */
 export function unavailableDetail(err: unknown): string {
@@ -76,6 +93,44 @@ export function unavailableDetail(err: unknown): string {
   if (e && typeof e.code === 'string') return e.code;
   if (e && typeof e.name === 'string' && e.name !== 'Error') return e.name;
   return 'no response';
+}
+
+/**
+ * Ask `registry` at `url`, and let `read` recognise its "found" and "no such
+ * work" answers. Everything else is unavailable: a request that throws, and a
+ * response `read` returns null for or fails on ("unreadable response" for a
+ * 200, `HTTP <status>` otherwise). A case an adapter does not handle thus
+ * fails toward "no answer", never toward "not found".
+ */
+export async function askRegistry(
+  registry: RegistryName,
+  url: string,
+  opts: FetchOptions,
+  read: (res: HttpResponse) => Lookup | null,
+): Promise<Lookup> {
+  let res: HttpResponse;
+  try {
+    res = await httpFetch(url, opts);
+  } catch (err) {
+    return unavailable(registry, unavailableDetail(err));
+  }
+  let answer: Lookup | null;
+  try {
+    answer = read(res);
+  } catch {
+    answer = null;
+  }
+  return answer ?? unavailable(registry, res.status === 200 ? 'unreadable response' : `HTTP ${res.status}`);
+}
+
+/**
+ * The query parameter (`?mailto=…`, `&email=…`) that carries
+ * PENSMITH_CONTACT_EMAIL to a registry's polite pool, or '' when no address is
+ * configured, so nothing identifying is sent.
+ */
+export function contactParam(name: 'mailto' | 'email', sep: '?' | '&'): string {
+  const email = process.env['PENSMITH_CONTACT_EMAIL']?.trim();
+  return email ? `${sep}${name}=${encodeURIComponent(email)}` : '';
 }
 
 /** A year between 1500 and 2100 from a number or the start of a date string. */
@@ -117,7 +172,8 @@ interface CslName {
   'dropping-particle'?: unknown;
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+/** A trimmed string, or '' for anything else. */
+export const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
 /**
  * A CSL-JSON (or Crossref) name. Crossref writes an organization as `name`,
@@ -144,13 +200,28 @@ export function cslNames(v: unknown): WorkName[] {
 }
 
 /**
+ * A display name ("Vaswani, Ashish", "Ashish Vaswani") as a WorkName: family
+ * and given when it has a comma after the family name, else unstructured text.
+ */
+export function nameFromDisplay(s: string): WorkName {
+  const comma = s.indexOf(',');
+  if (comma <= 0) return { text: s };
+  const family = s.slice(0, comma).trim();
+  const given = s.slice(comma + 1).trim();
+  return given ? { family, given } : { family };
+}
+
+/**
  * A WorkRecord from a CSL-JSON item, the format DOI content negotiation
- * returns for every registration agency that supports it.
+ * returns for every registration agency that supports it, or from a Crossref
+ * `message`, which is CSL-shaped. A few keys have two spellings: the Crossref
+ * REST API sends `published` and `short-container-title`, CSL has
+ * `original-date` and `container-title-short`. Both are read.
  */
 export function recordFromCsl(registry: RegistryName, item: Record<string, unknown>): WorkRecord | null {
   const title = firstString(item['title']);
   if (!title) return null;
-  const years = ['issued', 'published-print', 'published-online', 'original-date']
+  const years = ['issued', 'published-print', 'published-online', 'published', 'original-date']
     .map((k) => cslDateYear(item[k]))
     .filter((y): y is number => y !== undefined);
   const type = str(item['type']);
@@ -160,7 +231,11 @@ export function recordFromCsl(registry: RegistryName, item: Record<string, unkno
     authors: cslNames(item['author']),
     editors: cslNames(item['editor']),
     years: [...new Set(years)],
-    venues: [...allStrings(item['container-title']), ...allStrings(item['container-title-short'])],
+    venues: [
+      ...allStrings(item['container-title']),
+      ...allStrings(item['container-title-short']),
+      ...allStrings(item['short-container-title']),
+    ],
     journalArticle: type === 'article-journal' || type === 'journal-article',
     raw: item,
   };

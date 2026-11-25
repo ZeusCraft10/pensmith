@@ -17,7 +17,7 @@
 
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
@@ -27,7 +27,7 @@ import { lookupDoi as doiOrgLookup } from '../../bin/lib/sources/doi-content.js'
 import { lookupIsbn } from '../../bin/lib/sources/openlibrary.js';
 import { fetchById as arxivFetchById, lookupArxiv, search as arxivSearch } from '../../bin/lib/sources/arxiv.js';
 import { lookupPmid } from '../../bin/lib/sources/pubmed.js';
-import { runPass1, type Pass1Result } from '../../bin/lib/verify/pass1.js';
+import { pass1Verdict } from '../lib/bib-fixture.js';
 
 const ENV_KEYS = ['PENSMITH_TEST_CASSETTES', 'PENSMITH_OFFLINE', 'PENSMITH_CONTACT_EMAIL', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'HOME'];
 const savedEnv: Record<string, string | undefined> = {};
@@ -135,13 +135,9 @@ test('Pass 1: a valid ISBN Open Library does not list is UNRESOLVED, not FABRICA
   agent.get('https://openlibrary.org')
     .intercept({ path: (p) => p.startsWith('/api/books?') && p.includes('9780306406157'), method: 'GET' })
     .reply(200, '{}', { headers: { 'content-type': 'application/json' } });
-  const root = mkdtempSync(path.join(tmpdir(), 'pensmith-isbn-unlisted-'));
-  mkdirSync(path.join(root, '.paper'), { recursive: true });
-  const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
-  writeFileSync(bibPath, '@book{doe1990,\n  title = {An Unlisted Monograph},\n  author = {Doe, Jane},\n  year = {1990},\n  isbn = {978-0-306-40615-7}\n}\n');
-  const [r] = await runPass1('# S\n\nA claim [@doe1990].\n', bibPath);
-  assert.equal(r?.verdict, 'UNRESOLVED', r?.reason);
-  assert.match(r!.reason, /Open Library has no record of ISBN 978-0-306-40615-7/);
+  const r = await pass1Verdict('@book{doe1990,\n  title = {An Unlisted Monograph},\n  author = {Doe, Jane},\n  year = {1990},\n  isbn = {978-0-306-40615-7}\n}\n');
+  assert.equal(r.verdict, 'UNRESOLVED', r.reason);
+  assert.match(r.reason, /Open Library has no record of ISBN 978-0-306-40615-7/);
 });
 
 // ---------------------------------------------------------------------------
@@ -270,18 +266,6 @@ test('PubMed: an error about the request rather than the PMID is unavailable, no
   assert.match(r.kind === 'unavailable' ? r.detail : '', /API rate limit exceeded/);
 });
 
-/** The Pass-1 verdict for the one entry of `bib`, cited once. */
-async function pass1For(bib: string): Promise<Pass1Result> {
-  const key = /^@\w+\{([^,]+),/m.exec(bib)![1]!;
-  const root = mkdtempSync(path.join(tmpdir(), 'pensmith-pass1-live-'));
-  mkdirSync(path.join(root, '.paper'), { recursive: true });
-  const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
-  writeFileSync(bibPath, bib);
-  const [r] = await runPass1(`# S\n\nA claim [@${key}].\n`, bibPath);
-  assert.ok(r, `no verdict for ${key}`);
-  return r;
-}
-
 const arxivOnly = (eprint: string): string =>
   `@misc{roe2025,\n  title = {Tidal Heating in Icy Moons},\n  author = {Roe, Jane},\n  year = {2025},\n  eprint = {${eprint}},\n  archivePrefix = {arXiv}\n}\n`;
 const pmidOnly = (pmid: string): string =>
@@ -289,7 +273,7 @@ const pmidOnly = (pmid: string): string =>
 
 test('Pass 1: an arXiv-only entry arXiv has no record of is FABRICATED', async () => {
   arxivAnswers('2501.99999', 200, ARXIV_EMPTY_FEED);
-  const r = await pass1For(arxivOnly('2501.99999'));
+  const r = await pass1Verdict(arxivOnly('2501.99999'));
   assert.equal(r.verdict, 'FABRICATED', r.reason);
   assert.match(r.reason, /arXiv:2501\.99999 is not registered \(arXiv has no record of it\)/);
 });
@@ -298,35 +282,35 @@ test('Pass 1: an arXiv-only entry is UNRESOLVED, not FABRICATED, when arXiv does
   agent.get('https://export.arxiv.org')
     .intercept({ path: (p) => p.startsWith('/api/query?id_list='), method: 'GET' })
     .replyWithError(new Error('socket hang up'));
-  const r = await pass1For(arxivOnly('2501.99999'));
+  const r = await pass1Verdict(arxivOnly('2501.99999'));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
   assert.match(r.reason, /arXiv:2501\.99999 could not be checked \(arXiv: /);
 });
 
 test('Pass 1: a PMID-only entry PubMed has no record of is FABRICATED', async () => {
   pubmedAnswers('39999999', 200, pubmedNoSuchId('39999999'));
-  const r = await pass1For(pmidOnly('39999999'));
+  const r = await pass1Verdict(pmidOnly('39999999'));
   assert.equal(r.verdict, 'FABRICATED', r.reason);
   assert.match(r.reason, /PMID 39999999 is not registered \(PubMed has no record of it\)/);
 });
 
 test('Pass 1: a PMID-only entry is UNRESOLVED, not FABRICATED, when PubMed does not answer', { timeout: 60_000 }, async () => {
   pubmedAnswers('39999998', 503, 'Service Unavailable');
-  const r = await pass1For(pmidOnly('39999998'));
+  const r = await pass1Verdict(pmidOnly('39999998'));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
   assert.match(r.reason, /PMID 39999998 could not be checked \(PubMed: HTTP 503\)/);
 });
 
 test('Pass 1: an arXiv-only entry is UNRESOLVED, not FABRICATED, when arXiv refuses with a 403', async () => {
   arxivAnswers('2501.99999', 403, 'Forbidden', PLAIN);
-  const r = await pass1For(arxivOnly('2501.99999'));
+  const r = await pass1Verdict(arxivOnly('2501.99999'));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
   assert.match(r.reason, /arXiv:2501\.99999 could not be checked \(arXiv: HTTP 403\)/);
 });
 
 test('Pass 1: a PMID-only entry is UNRESOLVED, not FABRICATED, when PubMed refuses with a 403', async () => {
   pubmedAnswers('39999996', 403, 'Forbidden', PLAIN);
-  const r = await pass1For(pmidOnly('39999996'));
+  const r = await pass1Verdict(pmidOnly('39999996'));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
   assert.match(r.reason, /PMID 39999996 could not be checked \(PubMed: HTTP 403\)/);
 });

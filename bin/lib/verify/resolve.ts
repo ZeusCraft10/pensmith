@@ -17,14 +17,14 @@
 //   - otherwise, some registry gave no answer (timeout, 429, 5xx) → unavailable
 //     (UNRESOLVED: blocking, and worth retrying).
 
-import { looksLikeIsbn, normalizeArxiv, normalizeDoi, normalizeIsbn, normalizePmid } from '../doi.js';
+import { doiFromLink, isbnsIn, looksLikeIsbn, normalizeArxiv, normalizeDoi, normalizeIsbn, normalizePmid } from '../doi.js';
 import { lookupDoi as crossrefLookup } from '../sources/crossref.js';
 import { lookupDoi as dataciteLookup } from '../sources/datacite.js';
 import { lookupDoi as doiOrgLookup } from '../sources/doi-content.js';
 import { lookupArxiv } from '../sources/arxiv.js';
 import { lookupPmid } from '../sources/pubmed.js';
 import { lookupIsbn } from '../sources/openlibrary.js';
-import type { Lookup, RegistryName, WorkRecord } from '../sources/work-record.js';
+import { str, type Lookup, type RegistryName, type WorkRecord } from '../sources/work-record.js';
 
 export type WorkIdKind = 'doi' | 'arxiv' | 'pmid' | 'isbn';
 
@@ -57,26 +57,10 @@ export type IdResolution =
     };
 
 const ARXIV_URL = /arxiv\.org\/(?:abs|pdf)\/([^\s?#]+?)(?:\.pdf)?(?:[?#]|$)/i;
-const DOI_URL = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.[^\s?#]+)/i;
-// A 13- or 10-digit ISBN with its separators, inside text such as
-// "0-262-03384-4 (hbk)" or "ISBN 978-0-262-03384-8".
-const ISBN_SHAPE = /(?<![\dX])(?:(?:\d[\s-]?){12}\d|(?:\d[\s-]?){9}[\dX])(?![\dX])/i;
-
-/** The DOI a doi.org or dx.doi.org link names, or ''. */
-function doiFromUrl(url: string): string {
-  const m = DOI_URL.exec(url);
-  if (!m) return '';
-  try {
-    return decodeURIComponent(m[1]!);
-  } catch {
-    return m[1]!;
-  }
-}
 
 /** The arXiv ID registries are asked for: normalizeArxiv's form without its `arxiv:` prefix. */
 function arxivQueryId(raw: string): string | null {
-  const n = normalizeArxiv(raw.replace(/^arxiv:\s*/i, 'arXiv:'));
-  return n === null ? null : n.replace(/^arxiv:/, '');
+  return normalizeArxiv(raw)?.replace(/^arxiv:/, '') ?? null;
 }
 
 /**
@@ -86,19 +70,18 @@ function arxivQueryId(raw: string): string | null {
  */
 export function workIdentifiers(csl: Record<string, unknown>, fields: Record<string, string> = {}): WorkId[] {
   const ids: WorkId[] = [];
-  const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
-  const url = text(csl['URL']) || text(fields['url']);
+  const url = str(csl['URL']) || str(fields['url']);
   // An entry may give its DOI only as a doi.org link, which the reference list prints.
-  const doi = text(csl['DOI']) || text(fields['doi']) || doiFromUrl(url);
+  const doi = str(csl['DOI']) || str(fields['doi']) || doiFromLink(url);
   if (doi) ids.push({ kind: 'doi', raw: doi, value: normalizeDoi(doi), shown: `DOI ${doi}` });
 
   const eprintType = (fields['archiveprefix'] ?? fields['eprinttype'] ?? '').trim().toLowerCase();
-  const eprint = text(fields['eprint']);
+  const eprint = str(fields['eprint']);
   const arxivRaw = [
     eprintType === 'arxiv' ? eprint : '',
-    text(fields['arxiv']),
-    text(fields['arxivid']),
+    str(fields['arxiv']),
+    str(fields['arxivid']),
     eprintType === '' && arxivQueryId(eprint) !== null ? eprint : '',
     ARXIV_URL.exec(url)?.[1] ?? '',
   ].find((s) => s !== '');
@@ -107,18 +90,15 @@ export function workIdentifiers(csl: Record<string, unknown>, fields: Record<str
     ids.push({ kind: 'arxiv', raw: arxivRaw, value, shown: `arXiv:${value ?? arxivRaw}` });
   }
 
-  const pmidRaw = text(fields['pmid']) || (eprintType === 'pubmed' ? eprint : '');
+  const pmidRaw = str(fields['pmid']) || (eprintType === 'pubmed' ? eprint : '');
   if (pmidRaw) {
     const value = normalizePmid(pmidRaw);
     ids.push({ kind: 'pmid', raw: pmidRaw, value, shown: `PMID ${value ?? pmidRaw}` });
   }
 
-  // An ISBN field may list several (hardback, paperback, ISBN-10 and -13),
-  // each perhaps with a label or a qualifier such as "(pbk)".
-  const isbnRaw = (text(csl['ISBN']) || text(fields['isbn'])).split(/[,;]|\s(?=[\dXx-]{10,}\b)/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => ISBN_SHAPE.exec(s)?.[0] ?? s);
+  // The first valid ISBN of those the field lists, else the first that has
+  // an ISBN's shape (a check-digit typo is then reported as one).
+  const isbnRaw = isbnsIn(str(csl['ISBN']) || str(fields['isbn']));
   const isbn = isbnRaw.find((s) => normalizeIsbn(s) !== null) ?? isbnRaw.find(looksLikeIsbn) ?? isbnRaw[0];
   if (isbn) ids.push({ kind: 'isbn', raw: isbn, value: normalizeIsbn(isbn), shown: `ISBN ${isbn}` });
 

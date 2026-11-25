@@ -19,8 +19,12 @@
 //        verbatim (so '10.1234/résumé' round-trips identically)
 //     5. validate against /^10\.\d{4,9}\/\S+$/  → return canonical OR null
 //
+//   doiFromLink(url)  ──→  string
+//     - the DOI a doi.org / dx.doi.org link names (one of the URL forms in
+//       DOI_PREFIXES), percent-decoded, query and fragment cut; '' otherwise
+//
 //   normalizeArxiv(input)  ──→  string | null
-//     - strip 'arxiv:' prefix (case-insensitive)
+//     - strip 'arxiv:' / 'arXiv: ' prefix (case-insensitive, optional space)
 //     - new format: YYMM.NNNNN[vV]    → canonical 'arxiv:NNNN.NNNNN[vN]'
 //     - old format: <subj-class>/YYMMNNN  → canonical '<subj-class>/YYMMNNN'
 //        (subject classes preserve dotted-case; only the arxiv: prefix is
@@ -121,6 +125,23 @@ export function isDoi(s: string): boolean {
 }
 
 /**
+ * The DOI a doi.org or dx.doi.org link names, percent-decoded and without its
+ * query or fragment, or '' when `url` is not such a link. An entry may give
+ * its DOI only this way, in its `url` field.
+ */
+export function doiFromLink(url: string): string {
+  const lower = url.toLowerCase();
+  const prefix = DOI_PREFIXES.find((p) => p.includes('://') && lower.startsWith(p));
+  const m = prefix ? /^10\.[^\s?#]+/.exec(url.slice(prefix.length)) : null;
+  if (!m) return '';
+  try {
+    return decodeURIComponent(m[0]);
+  } catch {
+    return m[0];
+  }
+}
+
+/**
  * Whether two strings name the same DOI. DOIs are case-insensitive and come
  * with or without a `doi:` / doi.org prefix, so a raw string comparison calls
  * `10.1109/MCSE.2011.37` and Crossref's `10.1109/mcse.2011.37` different works.
@@ -136,7 +157,7 @@ export function sameDoi(a: string | null | undefined, b: string | null | undefin
 //     authoritative arXiv API will reject impossible months. We're a
 //     normalizer, not a validator of arXiv's own bookkeeping.
 //   - NNNNN = 4..5 digits, optional 'v<digit>' suffix.
-const ARXIV_NEW = /^(?:arxiv:)?(\d{4}\.\d{4,5}(?:v\d+)?)$/i;
+const ARXIV_NEW = /^(?:arxiv:\s*)?(\d{4}\.\d{4,5}(?:v\d+)?)$/i;
 
 // arXiv old format subject classes (D-17). Pre-April-2007 archive names.
 // Some have dotted subclasses (e.g. 'cs.CL'). We list the major archives
@@ -161,6 +182,7 @@ const ARXIV_OLD_CLASSES: ReadonlySet<string> = new Set([
  *
  *   - 'arXiv:2103.00020'    → 'arxiv:2103.00020'
  *   - 'arXiv:2103.00020v2'  → 'arxiv:2103.00020v2'
+ *   - 'arXiv: 2103.00020'   → 'arxiv:2103.00020' (a space after the colon is dropped)
  *   - '2103.00020'          → 'arxiv:2103.00020'
  *   - 'cs.CL/0301012'       → 'cs.CL/0301012' (subject-class case preserved)
  *   - 'arxiv:cs.CL/0301012' → 'cs.CL/0301012'
@@ -183,7 +205,7 @@ export function normalizeArxiv(input: string): string | null {
   // Old format: optional 'arxiv:' prefix + <class>/YYMMNNN
   // The 'arxiv:' prefix is case-insensitive; the subject class is NOT —
   // 'cs.CL' is the canonical capitalization.
-  const stripped = s.replace(/^arxiv:/i, '');
+  const stripped = s.replace(/^arxiv:\s*/i, '');
   const slashIdx = stripped.indexOf('/');
   if (slashIdx < 0) return null;
   const cls = stripped.slice(0, slashIdx);
@@ -268,14 +290,35 @@ function isbnCheckDigitOk(body: string): boolean {
  */
 export function normalizeIsbn(input: string): string | null {
   if (typeof input !== 'string') return null;
-  const body = input.trim().replace(/^isbn(?:-1[03])?:?\s*/i, '').replace(/[\s-]/g, '').toUpperCase();
+  const body = isbnBody(input);
   return isbnCheckDigitOk(body) ? body : null;
+}
+
+/** `s` without an `ISBN` / `ISBN-10` / `ISBN-13` label, spaces and hyphens; X uppercased. */
+function isbnBody(s: string): string {
+  return s.trim().replace(/^isbn(?:-1[03])?:?\s*/i, '').replace(/[\s-]/g, '').toUpperCase();
 }
 
 /** Whether `s` looks like an ISBN (10 or 13 digits after dropping separators), right check digit or not. */
 export function looksLikeIsbn(s: string): boolean {
-  const body = s.trim().replace(/^isbn(?:-1[03])?:?\s*/i, '').replace(/[\s-]/g, '').toUpperCase();
-  return /^(?:\d{9}[\dX]|\d{13})$/.test(body);
+  return /^(?:\d{9}[\dX]|\d{13})$/.test(isbnBody(s));
+}
+
+// A 13- or 10-digit ISBN with its separators, inside text such as
+// "0-262-03384-4 (hbk)" or "ISBN 978-0-262-03384-8".
+const ISBN_SHAPE = /(?<![\dX])(?:(?:\d[\s-]?){12}\d|(?:\d[\s-]?){9}[\dX])(?![\dX])/i;
+
+/**
+ * The ISBNs an ISBN field lists. A field may list several (hardback,
+ * paperback, ISBN-10 and -13), each perhaps with a label or a qualifier such
+ * as "(pbk)"; each is given as written, cut to its ISBN when it has an
+ * ISBN-shaped span, for normalizeIsbn to read.
+ */
+export function isbnsIn(field: string): string[] {
+  return field.split(/[,;]|\s(?=[\dXx-]{10,}\b)/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => ISBN_SHAPE.exec(s)?.[0] ?? s);
 }
 
 // ---------------------------------------------------------------------------

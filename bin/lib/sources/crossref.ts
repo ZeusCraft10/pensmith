@@ -20,15 +20,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import {
-  allStrings,
-  cslDateYear,
-  cslNames,
-  firstString,
-  unavailableDetail,
-  type Lookup,
-  type WorkRecord,
-} from './work-record.js';
+import { askRegistry, contactParam, cslDateYear, isGone, recordFromCsl, type Lookup } from './work-record.js';
 
 const BASE = 'https://api.crossref.org';
 
@@ -46,12 +38,6 @@ interface CrossrefItem {
   author?: CrossrefName[];
   issued?: { 'date-parts'?: number[][] };
   abstract?: string;
-}
-
-/** `?mailto=` (or `&mailto=`) when a contact address is configured, else nothing. */
-function mailto(sep: '?' | '&'): string {
-  const email = process.env['PENSMITH_CONTACT_EMAIL']?.trim();
-  return email ? `${sep}mailto=${encodeURIComponent(email)}` : '';
 }
 
 function parseYear(item: CrossrefItem): number | undefined {
@@ -98,38 +84,12 @@ function toCandidate(item: CrossrefItem): SourceCandidate | null {
   };
 }
 
-/** A WorkRecord from a Crossref `message`. */
-function toRecord(msg: Record<string, unknown>): WorkRecord | null {
-  const title = firstString(msg['title']);
-  if (!title) return null;
-  const years = ['issued', 'published-print', 'published-online', 'published']
-    .map((k) => cslDateYear(msg[k]))
-    .filter((y): y is number => y !== undefined);
-  const rec: WorkRecord = {
-    registry: 'Crossref',
-    title,
-    authors: cslNames(msg['author']),
-    editors: cslNames(msg['editor']),
-    years: [...new Set(years)],
-    venues: [...allStrings(msg['container-title']), ...allStrings(msg['short-container-title'])],
-    journalArticle: msg['type'] === 'journal-article',
-    raw: msg,
-  };
-  const doi = firstString(msg['DOI']);
-  if (doi) rec.doi = doi;
-  const subtitle = firstString(msg['subtitle']);
-  if (subtitle) rec.subtitle = subtitle;
-  const alt = allStrings(msg['original-title']);
-  if (alt.length > 0) rec.altTitles = alt;
-  return rec;
-}
-
 export async function search(
   query: string,
   opts: { limit?: number } = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
-  const url = `${BASE}/works?query=${encodeURIComponent(query)}&rows=${limit}${mailto('&')}`;
+  const url = `${BASE}/works?query=${encodeURIComponent(query)}&rows=${limit}${contactParam('mailto', '&')}`;
   try {
     const res = await httpFetch(url, {
       source: 'crossref',
@@ -148,31 +108,15 @@ export async function search(
  * any other status, a thrown transport error, or a body that does not parse is
  * `unavailable`, because none of them says anything about the DOI.
  */
-export async function lookupDoi(doi: string): Promise<Lookup & { item?: CrossrefItem }> {
-  const url = `${BASE}/works/${encodeURIComponent(doi)}${mailto('?')}`;
-  let res;
-  try {
-    res = await httpFetch(url, { source: 'crossref' });
-  } catch (err) {
-    return { kind: 'unavailable', registry: 'Crossref', detail: unavailableDetail(err) };
-  }
-  if (res.status === 404 || res.status === 410) {
-    return { kind: 'not_found', registry: 'Crossref', authoritative: true };
-  }
-  if (res.status !== 200) {
-    return { kind: 'unavailable', registry: 'Crossref', detail: `HTTP ${res.status}` };
-  }
-  let msg: Record<string, unknown> | undefined;
-  try {
-    msg = (JSON.parse(res.body) as { message?: Record<string, unknown> })?.message;
-  } catch {
-    msg = undefined;
-  }
-  const record = msg ? toRecord(msg) : null;
-  if (!msg || !record) {
-    return { kind: 'unavailable', registry: 'Crossref', detail: 'unreadable response' };
-  }
-  return { kind: 'found', registry: 'Crossref', record, item: msg as CrossrefItem };
+export async function lookupDoi(doi: string): Promise<Lookup> {
+  const url = `${BASE}/works/${encodeURIComponent(doi)}${contactParam('mailto', '?')}`;
+  return askRegistry('Crossref', url, { source: 'crossref' }, (res) => {
+    if (isGone(res.status)) return { kind: 'not_found', registry: 'Crossref', authoritative: true };
+    if (res.status !== 200) return null;
+    const msg = (JSON.parse(res.body) as { message?: Record<string, unknown> } | null)?.message;
+    const record = msg ? recordFromCsl('Crossref', msg) : null;
+    return record ? { kind: 'found', registry: 'Crossref', record } : null;
+  });
 }
 
 /**
@@ -181,5 +125,5 @@ export async function lookupDoi(doi: string): Promise<Lookup & { item?: Crossref
  */
 export async function fetchById(doi: string): Promise<SourceCandidate | null> {
   const r = await lookupDoi(doi);
-  return r.kind === 'found' && r.item ? toCandidate(r.item) : null;
+  return r.kind === 'found' ? toCandidate(r.record.raw as CrossrefItem) : null;
 }

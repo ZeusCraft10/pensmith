@@ -32,8 +32,9 @@
 // sibling papers that differ by one word through, and blocked real ones whose
 // registry title carried <i> tags or whose surname had a particle.
 
+import { levenshtein } from '../fuzzy.js';
 import { nfkcNormalize } from '../normalize.js';
-import type { WorkName, WorkRecord } from '../sources/work-record.js';
+import { wholeTitle, type WorkName, type WorkRecord } from '../sources/work-record.js';
 
 /** What a bibliography entry says about the work it cites. */
 export interface ClaimedWork {
@@ -87,6 +88,9 @@ export function stripMarkup(s: string): string {
   );
 }
 
+/** `s` as plain text: markup removed, NFKC-normalized. */
+const plain = (s: string): string => nfkcNormalize(stripMarkup(s));
+
 const GREEK: Readonly<Record<string, string>> = {
   α: 'alpha', β: 'beta', γ: 'gamma', δ: 'delta', ε: 'epsilon', ζ: 'zeta', η: 'eta', θ: 'theta',
   ι: 'iota', κ: 'kappa', λ: 'lambda', μ: 'mu', ν: 'nu', ξ: 'xi', ο: 'omicron', π: 'pi', ρ: 'rho',
@@ -96,25 +100,16 @@ const GREEK: Readonly<Record<string, string>> = {
 // Scripts written without spaces between words: each character is a token, so
 // two titles in them are compared character by character.
 const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/u;
+// One unspaced character, or a run of anything else.
+const UNSPACED_PARTS = new RegExp(`${UNSPACED.source}|[^${UNSPACED.source.slice(1, -1)}]+`, 'gu');
 
 /** Lowercase word and number tokens of `s`, markup and punctuation removed. */
 function tokens(s: string): string[] {
-  let t = nfkcNormalize(stripMarkup(s)).toLowerCase();
+  let t = plain(s).toLowerCase();
   t = t.replace(/[αβγδεζηθικλμνξοπρσςτυφχψω]/g, (c) => ` ${GREEK[c] ?? c} `);
   t = t.replace(/&/g, ' and ').replace(/['’`]/g, '');
-  const out: string[] = [];
-  for (const word of t.split(/[^\p{L}\p{N}]+/u)) {
-    if (!word) continue;
-    if (UNSPACED.test(word)) {
-      // Split runs of unspaced script into characters; keep Latin runs whole.
-      for (const part of word.match(new RegExp(`${UNSPACED.source}|[^${UNSPACED.source.slice(1, -1)}]+`, 'gu')) ?? []) {
-        out.push(part);
-      }
-    } else {
-      out.push(word);
-    }
-  }
-  return out;
+  // Runs of unspaced script split into characters; Latin runs stay whole.
+  return t.split(/[^\p{L}\p{N}]+/u).filter(Boolean).flatMap((w) => w.match(UNSPACED_PARTS) ?? []);
 }
 
 const ROMAN = /^(?=[ivxl]+$)l?x{0,3}(?:ix|iv|v?i{0,3})$/;
@@ -174,23 +169,6 @@ function wordKey(word: string): string {
     .replace(/ae|oe/g, 'e');
   if (k.length > 3 && k.endsWith('s') && !k.endsWith('ss')) k = k.slice(0, -1);
   return k;
-}
-
-/** Optimal-string-alignment distance (Levenshtein plus adjacent swaps), capped at 2. */
-function osa(a: string, b: string): number {
-  if (a === b) return 0;
-  if (Math.abs(a.length - b.length) > 1) return 2;
-  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i]);
-  for (let j = 1; j <= b.length; j++) d[0]![j] = j;
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      let v = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, d[i - 2]![j - 2]! + 1);
-      d[i]![j] = v;
-    }
-  }
-  return Math.min(2, d[a.length]![b.length]!);
 }
 
 /**
@@ -253,11 +231,14 @@ const SKIP_B = 2;
  * they are articles.
  */
 function alignTitles(a: string[], b: string[]): TitleAlignment {
-  const ka = a.map(wordKey);
-  const kb = b.map(wordKey);
-  const content = (t: string): boolean => !TITLE_STOPWORDS.has(t);
   const n = a.length;
   const m = b.length;
+  const ka = a.map(wordKey);
+  const kb = b.map(wordKey);
+  // The keys of each word joined with the next one.
+  const ka2 = a.map((w, i) => (i + 1 < n ? wordKey(w + a[i + 1]!) : ''));
+  const kb2 = b.map((w, j) => (j + 1 < m ? wordKey(w + b[j + 1]!) : ''));
+  const content = (t: string): boolean => !TITLE_STOPWORDS.has(t);
   // dp[f][i][j]: fewest unmatched words aligning a[i..] with b[j..], when the
   // stopwords skipped since the last match are those flagged in f.
   const dp: number[][][] = [0, 1, 2, 3].map(() => Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0)));
@@ -269,9 +250,16 @@ function alignTitles(a: string[], b: string[]): TitleAlignment {
   };
   for (let i = n; i >= 0; i--) {
     for (let j = m; j >= 0; j--) {
+      if (i === n && j === m) continue;
+      // Matching words resets the flags, so it costs the same whatever f is.
+      let pair = Infinity;
+      if (i < n && j < m) {
+        if (sameWord(ka[i]!, kb[j]!)) pair = Math.min(pair, dp[0]![i + 1]![j + 1]!);
+        if (j + 1 < m && sameWord(ka[i]!, kb2[j]!)) pair = Math.min(pair, dp[0]![i + 1]![j + 2]!);
+        if (i + 1 < n && sameWord(ka2[i]!, kb[j]!)) pair = Math.min(pair, dp[0]![i + 2]![j + 1]!);
+      }
       for (let f = 0; f < 4; f++) {
-        if (i === n && j === m) continue;
-        let best = Infinity;
+        let best = pair;
         if (i < n) {
           const [c, g] = skip(a[i]!, f, SKIP_A, SKIP_B);
           best = Math.min(best, dp[g]![i + 1]![j]! + c);
@@ -279,11 +267,6 @@ function alignTitles(a: string[], b: string[]): TitleAlignment {
         if (j < m) {
           const [c, g] = skip(b[j]!, f, SKIP_B, SKIP_A);
           best = Math.min(best, dp[g]![i]![j + 1]! + c);
-        }
-        if (i < n && j < m) {
-          if (sameWord(ka[i]!, kb[j]!)) best = Math.min(best, dp[0]![i + 1]![j + 1]!);
-          if (j + 1 < m && sameWord(ka[i]!, wordKey(b[j]! + b[j + 1]!))) best = Math.min(best, dp[0]![i + 1]![j + 2]!);
-          if (i + 1 < n && sameWord(wordKey(a[i]! + a[i + 1]!), kb[j]!)) best = Math.min(best, dp[0]![i + 2]![j + 1]!);
         }
         dp[f]![i]![j] = best;
       }
@@ -300,7 +283,7 @@ function titleNumbers(t: string[]): string {
 
 /** The part of a title before its subtitle separator, when it has one of at least `minWords` words. */
 function mainTitle(title: string, minWords: number): string | null {
-  const s = nfkcNormalize(stripMarkup(title));
+  const s = plain(title);
   const m = /\s*:\s|\s+-\s+|[?!]\s+/.exec(s);
   if (!m || m.index === 0) return null;
   const main = s.slice(0, m.index);
@@ -316,7 +299,7 @@ export function matchTitle(claimed: string, record: Pick<WorkRecord, 'title' | '
   // The record's whole titles. A subtitle kept in a field of its own
   // (Crossref, DataCite, Open Library) belongs to the whole title, so the
   // bare `title` is only the record's main title.
-  const recordTitles = [record.subtitle ? `${record.title}: ${record.subtitle}` : record.title, ...(record.altTitles ?? [])];
+  const recordTitles = [wholeTitle(record), ...(record.altTitles ?? [])];
   // A one-word main title ("BERT") is too little to stand for a whole title
   // the entry cut short; the entry's own main title may be one word.
   const recordMains = [
@@ -339,9 +322,10 @@ export function matchTitle(claimed: string, record: Pick<WorkRecord, 'title' | '
     if (tc.length === 0 || tr.length === 0) continue;
     const { unmatched, content } = alignTitles(tc, tr);
     const score = content === 0 ? 1 : Math.max(0, 1 - unmatched / content);
-    if (unmatched === 0 && titleNumbers(tc) === titleNumbers(tr)) return { ok: true, score: 1 };
+    const sameNumbers = titleNumbers(tc) === titleNumbers(tr);
+    if (unmatched === 0 && sameNumbers) return { ok: true, score: 1 };
     // A number mismatch caps the score: the words alone may all agree.
-    best = Math.max(best, titleNumbers(tc) === titleNumbers(tr) ? score : Math.min(score, 0.5));
+    best = Math.max(best, sameNumbers ? score : Math.min(score, 0.5));
   }
   return { ok: false, score: best };
 }
@@ -426,8 +410,9 @@ function nameKey(n: WorkName): NameKey | null {
   return surnameKey(kept.join(' '), text);
 }
 
+/** Two name tokens are the same name: equal, or in names of six letters or more one edit or one swap apart. */
 function sameNameToken(a: string, b: string): boolean {
-  return a === b || (a.length >= 6 && b.length >= 6 && osa(a, b) <= 1);
+  return a === b || (a.length >= 6 && b.length >= 6 && (levenshtein(a, b) <= 1 || oneSlip(a, b)));
 }
 
 const within = (xs: string[], ys: string[]): boolean => xs.length > 0 && xs.every((x) => ys.some((y) => sameNameToken(x, y)));
@@ -548,7 +533,7 @@ export function matchWork(claimed: ClaimedWork, record: WorkRecord): WorkMatch {
 
   const title = matchTitle(claimed.title, record);
   if (!title.ok) {
-    const theirs = nfkcNormalize(stripMarkup(record.subtitle ? `${record.title}: ${record.subtitle}` : record.title));
+    const theirs = plain(wholeTitle(record));
     problems.push(`the title is not the one ${record.registry} gives ("${theirs}")`);
   }
 
@@ -561,7 +546,7 @@ export function matchWork(claimed: ClaimedWork, record: WorkRecord): WorkMatch {
   const venue = claimed.venue?.trim();
   if (venue && record.journalArticle && record.venues.length > 0 && !PREPRINT_VENUE.test(venue)
     && !record.venues.some((v) => venuesMatch(venue, v))) {
-    problems.push(`the journal "${venue}" is not "${nfkcNormalize(stripMarkup(record.venues[0]!))}", the journal ${record.registry} gives`);
+    problems.push(`the journal "${venue}" is not "${plain(record.venues[0]!)}", the journal ${record.registry} gives`);
   }
 
   return { ok: problems.length === 0, problems, notes, titleScore: title.score, authorScore };

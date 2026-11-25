@@ -187,12 +187,22 @@ export async function parseBib(bibtex: string): Promise<Array<Record<string, unk
     }
     return data;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    // Re-throw with a clearer prefix so the caller can distinguish
-    // "your BibTeX is bad" from other failures further upstream.
-    throw new Error(`parseBib: invalid BibTeX — ${msg}`);
+    throw invalidBib(err);
   }
 }
+
+/**
+ * The error for BibTeX that does not parse, with a clearer prefix so the
+ * caller can distinguish "your BibTeX is bad" from other failures further
+ * upstream.
+ */
+function invalidBib(err: unknown): Error {
+  const msg = err instanceof Error ? err.message : String(err);
+  return new Error(`parseBib: invalid BibTeX — ${msg}`);
+}
+
+/** Whether BibTeX source has at least one entry (`@type{` or `@type(`). */
+const HAS_BIB_ENTRY = /^\s*@\s*\w+\s*[{(]/m;
 
 /**
  * `parseBib`, except that a bibliography with no entries at all (empty, or
@@ -202,7 +212,7 @@ export async function parseBib(bibtex: string): Promise<Array<Record<string, unk
  * cannot be parsed still throws.
  */
 export async function parseBibOrEmpty(bibtex: string): Promise<Array<Record<string, unknown>>> {
-  if (!/^\s*@\s*\w+\s*[{(]/m.test(bibtex)) return [];
+  if (!HAS_BIB_ENTRY.test(bibtex)) return [];
   return parseBib(bibtex);
 }
 
@@ -222,7 +232,7 @@ export async function parseBibByCitekey<T = Record<string, unknown>>(bibtex: str
  * read throws, as parseBib does.
  */
 export async function parseBibFieldsByCitekey(bibtex: string): Promise<Map<string, Record<string, string>>> {
-  if (!/^\s*@\s*\w+\s*[{(]/m.test(bibtex)) return new Map();
+  if (!HAS_BIB_ENTRY.test(bibtex)) return new Map();
   let entries: unknown;
   try {
     entries = plugins.input.chain(bibtex, {
@@ -231,8 +241,7 @@ export async function parseBibFieldsByCitekey(bibtex: string): Promise<Map<strin
       generateGraph: false,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`parseBib: invalid BibTeX — ${msg}`);
+    throw invalidBib(err);
   }
   const out = new Map<string, Record<string, string>>();
   for (const e of Array.isArray(entries) ? entries : []) {

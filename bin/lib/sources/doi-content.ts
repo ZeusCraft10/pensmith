@@ -15,7 +15,7 @@
 // never "found" and never "not found".
 
 import { fetch as httpFetch } from '../http.js';
-import { recordFromCsl, unavailableDetail, type Lookup, type WorkRecord } from './work-record.js';
+import { isGone, recordFromCsl, unavailable, unavailableDetail, type Lookup, type WorkRecord } from './work-record.js';
 
 const CSL_JSON = 'application/vnd.citationstyles.csl+json';
 
@@ -43,14 +43,14 @@ export async function lookupDoi(doi: string): Promise<Lookup> {
     try {
       res = await httpFetch(url, { source: 'doi', headers: { accept: CSL_JSON } });
     } catch (err) {
-      return { kind: 'unavailable', registry: 'doi.org', detail: unavailableDetail(err) };
+      return unavailable('doi.org', unavailableDetail(err));
     }
-    if (res.status === 404 || res.status === 410) {
+    if (isGone(res.status)) {
       // doi.org itself: the DOI was never registered. An agency's 404 after
       // doi.org redirected there is only a gap in that agency's metadata.
       return hop === 0
         ? { kind: 'not_found', registry: 'doi.org', authoritative: true }
-        : { kind: 'unavailable', registry: 'doi.org', detail: 'the registration agency has no metadata for this DOI' };
+        : unavailable('doi.org', 'the registration agency has no metadata for this DOI');
     }
     if (res.status >= 300 && res.status < 400) {
       const next = res.headers['location'];
@@ -58,19 +58,15 @@ export async function lookupDoi(doi: string): Promise<Lookup> {
       try {
         target = new URL(next ?? '', url);
       } catch {
-        return { kind: 'unavailable', registry: 'doi.org', detail: 'redirect without a usable location' };
+        return unavailable('doi.org', 'redirect without a usable location');
       }
       if (target.protocol !== 'https:' || !AGENCY_METADATA_HOSTS.has(target.hostname)) {
-        return {
-          kind: 'unavailable',
-          registry: 'doi.org',
-          detail: 'the DOI is registered, but its agency offers no metadata pensmith can read',
-        };
+        return unavailable('doi.org', 'the DOI is registered, but its agency offers no metadata pensmith can read');
       }
       url = target.href;
       continue;
     }
-    if (res.status !== 200) return { kind: 'unavailable', registry: 'doi.org', detail: `HTTP ${res.status}` };
+    if (res.status !== 200) return unavailable('doi.org', `HTTP ${res.status}`);
     let record: WorkRecord | null = null;
     try {
       const item = JSON.parse(res.body) as unknown;
@@ -80,9 +76,7 @@ export async function lookupDoi(doi: string): Promise<Lookup> {
     } catch {
       record = null;
     }
-    return record
-      ? { kind: 'found', registry: 'doi.org', record }
-      : { kind: 'unavailable', registry: 'doi.org', detail: 'unreadable response' };
+    return record ? { kind: 'found', registry: 'doi.org', record } : unavailable('doi.org', 'unreadable response');
   }
-  return { kind: 'unavailable', registry: 'doi.org', detail: 'too many redirects' };
+  return unavailable('doi.org', 'too many redirects');
 }

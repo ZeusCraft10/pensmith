@@ -9,7 +9,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync } from 'node:fs';
 import { join, relative, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,8 @@ import { sameDoi, normalizeIsbn } from '../bin/lib/doi.js';
 import { writeBibtex } from '../bin/lib/bibtex-write.js';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
+import { bibFile } from './lib/bib-fixture.js';
+import { filesUnder } from './lib/files.js';
 
 test('sameDoi: case, a doi: prefix and a doi.org link do not make two DOIs different', () => {
   assert.ok(sameDoi('10.1109/MCSE.2011.37', '10.1109/mcse.2011.37'));
@@ -29,10 +31,7 @@ test('sameDoi: case, a doi: prefix and a doi.org link do not make two DOIs diffe
 
 test('Pass 1: an uppercase DOI Crossref reports in lowercase is the same DOI, not a "different work"', async () => {
   // Recorded Crossref record: DOI 10.1128/iai.66.9.4305-4312.1998.
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-doi-case-'));
-  mkdirSync(join(root, '.paper'), { recursive: true });
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-  writeFileSync(bibPath,
+  const bibPath = bibFile(
     '@article{mcclelland1998,\n' +
     '  title = {Comparison of Sample Sequences of the Salmonella typhi Genome to the Sequence of the Complete Escherichia coli K-12 Genome},\n' +
     '  author = {McClelland, Michael and Wilson, Richard K.},\n  year = {1998},\n  journal = {Infection and Immunity},\n' +
@@ -105,19 +104,6 @@ function rawDoiComparisons(file: string, text: string): string[] {
   return out;
 }
 
-function sourceFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, e.name);
-    if (e.isDirectory()) {
-      if (e.name !== 'node_modules' && e.name !== 'dist') out.push(...sourceFiles(full));
-    } else if (EXTS.has(extname(e.name))) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
 test('the DOI-equality detector flags raw comparisons and leaves presence checks alone', () => {
   assert.deepEqual(rawDoiComparisons('p.ts', 'if (actualDoi !== claimed.DOI) {}\nif (a.doi === b) {}\nx = r["DOI"] == y;'), [
     'actualDoi !== claimed.DOI', 'a.doi === b', 'r["DOI"] == y',
@@ -128,7 +114,7 @@ test('the DOI-equality detector flags raw comparisons and leaves presence checks
 test('no code outside bin/lib/doi.ts compares DOIs as raw strings (use sameDoi or normalizeDoi)', () => {
   const offenders: string[] = [];
   for (const root of ROOTS) {
-    for (const file of sourceFiles(join(REPO, root))) {
+    for (const file of filesUnder(join(REPO, root), { keep: (n) => EXTS.has(extname(n)), skipDirs: ['node_modules', 'dist'] })) {
       const rel = relative(REPO, file).split('\\').join('/');
       if (rel === 'bin/lib/doi.ts') continue;
       for (const cmp of rawDoiComparisons(file, readFileSync(file, 'utf8'))) offenders.push(`${rel}: ${cmp}`);

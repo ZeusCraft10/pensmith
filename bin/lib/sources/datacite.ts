@@ -6,8 +6,7 @@
 // Dryad, and most dataset and software DOIs. Pass 1 asks it after Crossref
 // answers 404. No key or contact address is needed.
 
-import { fetch as httpFetch } from '../http.js';
-import { unavailableDetail, yearOf, type Lookup, type WorkName, type WorkRecord } from './work-record.js';
+import { askRegistry, isGone, nameFromDisplay, yearOf, type Lookup, type WorkName, type WorkRecord } from './work-record.js';
 
 const BASE = 'https://api.datacite.org';
 
@@ -39,15 +38,8 @@ function creatorName(c: DataciteCreator): WorkName | null {
   const name = c.name?.trim();
   if (c.nameType === 'Organizational') return name ? { literal: name } : null;
   if (family) return given ? { family, given } : { family };
-  if (!name) return null;
   // A personal name with no parts: "Family, Given" when it has a comma.
-  const comma = name.indexOf(',');
-  if (comma > 0) {
-    const f = name.slice(0, comma).trim();
-    const g = name.slice(comma + 1).trim();
-    return g ? { family: f, given: g } : { family: f };
-  }
-  return { text: name };
+  return name ? nameFromDisplay(name) : null;
 }
 
 function toRecord(a: DataciteAttributes, raw: unknown): WorkRecord | null {
@@ -78,24 +70,11 @@ function toRecord(a: DataciteAttributes, raw: unknown): WorkRecord | null {
 /** Ask DataCite for `doi`: found, not_found (404) or unavailable. */
 export async function lookupDoi(doi: string): Promise<Lookup> {
   const url = `${BASE}/dois/${encodeURIComponent(doi)}`;
-  let res;
-  try {
-    res = await httpFetch(url, { source: 'datacite', headers: { accept: 'application/vnd.api+json' } });
-  } catch (err) {
-    return { kind: 'unavailable', registry: 'DataCite', detail: unavailableDetail(err) };
-  }
-  if (res.status === 404 || res.status === 410) {
-    return { kind: 'not_found', registry: 'DataCite', authoritative: true };
-  }
-  if (res.status !== 200) return { kind: 'unavailable', registry: 'DataCite', detail: `HTTP ${res.status}` };
-  let record: WorkRecord | null = null;
-  try {
+  return askRegistry('DataCite', url, { source: 'datacite', headers: { accept: 'application/vnd.api+json' } }, (res) => {
+    if (isGone(res.status)) return { kind: 'not_found', registry: 'DataCite', authoritative: true };
+    if (res.status !== 200) return null;
     const body = JSON.parse(res.body) as { data?: { attributes?: DataciteAttributes } };
-    record = body.data?.attributes ? toRecord(body.data.attributes, body.data) : null;
-  } catch {
-    record = null;
-  }
-  return record
-    ? { kind: 'found', registry: 'DataCite', record }
-    : { kind: 'unavailable', registry: 'DataCite', detail: 'unreadable response' };
+    const record = body.data?.attributes ? toRecord(body.data.attributes, body.data) : null;
+    return record ? { kind: 'found', registry: 'DataCite', record } : null;
+  });
 }

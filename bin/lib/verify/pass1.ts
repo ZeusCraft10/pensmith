@@ -38,8 +38,8 @@ import {
 } from '../citation-grammar.js';
 import { isOfflineMode } from '../network-mode.js';
 import { oneLine } from './verdict-rows.js';
-import { sameDoi } from '../doi.js';
-import { cslDateYear, cslNames, firstString, type WorkName, type WorkRecord } from '../sources/work-record.js';
+import { normalizeDoi, sameDoi } from '../doi.js';
+import { cslDateYear, cslNames, firstString, nameFromDisplay, type WorkName, type WorkRecord } from '../sources/work-record.js';
 import { matchWork, type ClaimedWork } from './work-match.js';
 import { registryList, resolveId, workIdentifiers, type IdResolution, type WorkId } from './resolve.js';
 
@@ -108,9 +108,13 @@ function missDetail(id: WorkId, r: Exclude<IdResolution, { kind: 'found' }>): st
   return `${id.shown} could not be checked (${failed})${said}`;
 }
 
-/** The live Retraction Watch query, under the claimed DOI and the record's own. */
+/**
+ * The live Retraction Watch query, under the claimed DOI and the record's own.
+ * Each DOI is asked once, in its normalized form, however it is spelled.
+ */
 async function liveRetraction(dois: Array<string | undefined>): Promise<string | null> {
-  for (const d of [...new Set(dois.filter((x): x is string => typeof x === 'string' && x.length > 0))]) {
+  const asked = new Set(dois.filter((x): x is string => typeof x === 'string' && x.length > 0).map((d) => normalizeDoi(d) ?? d));
+  for (const d of asked) {
     const hit = await retractionWatchFetchById(d);
     if (hit !== null) {
       return `cited work appears in Retraction Watch (live re-query at verify time)` +
@@ -120,15 +124,13 @@ async function liveRetraction(dois: Array<string | undefined>): Promise<string |
   return null;
 }
 
-/** The verdict for an entry whose identifier `id` led to `record`. */
-async function verdictForRecord(ck: string, entry: BibEntry, id: WorkId, record: WorkRecord): Promise<Pass1Result> {
+/** The verdict for an entry claiming `work`, whose identifier `id` led to `record`. */
+async function verdictForRecord(ck: string, work: ClaimedWork, id: WorkId, record: WorkRecord): Promise<Pass1Result> {
   // A work can be listed in Retraction Watch under the claimed DOI or under
   // the canonical DOI the registry gives, so both are queried.
-  if (id.kind === 'doi' || record.doi) {
-    const retracted = await liveRetraction([id.kind === 'doi' ? id.raw : undefined, record.doi]);
-    if (retracted) return result(ck, 'MIS-CITED', retracted);
-  }
-  const m = matchWork(claimedWork(entry), record);
+  const retracted = await liveRetraction([id.kind === 'doi' ? id.raw : undefined, record.doi]);
+  if (retracted) return result(ck, 'MIS-CITED', retracted);
+  const m = matchWork(work, record);
   const source = `the ${record.registry} record for ${id.shown}`;
   const notes = m.notes.length > 0 ? ` (${m.notes.join('; ')})` : '';
   // A registry may answer an alias DOI with the work's canonical DOI.
@@ -197,7 +199,7 @@ async function verdictForCitekey(
         `${missDetail(unchecked.id, unchecked.r)}; ${id.shown} was found, but every identifier the entry ` +
         'prints must be confirmed — re-run verify later');
     }
-    return verdictForRecord(ck, claimed, id, r.record);
+    return verdictForRecord(ck, work, id, r.record);
   }
 
   const detail = misses.map((x) => missDetail(x.id, x.r)).join('; ');
@@ -301,20 +303,12 @@ export async function runFreshnessForDraft(
   draftMd: string,
   citationsBibPath: string,
 ): Promise<FreshnessResult[]> {
-  const bib = await readBib(citationsBibPath);
+  // Only the DOIs are read, so the raw BibTeX fields readBib adds are not needed.
+  const entries = await parseBibByCitekey<BibEntry>(readFileSync(citationsBibPath, 'utf8'));
   // The same keys runPass1 checks, so the advisory probe covers what the gate sees.
   return probeFreshnessAll(
-    pass1CitedKeys(draftMd).map((ck) => ({ citekey: ck, doi: bib.entries.get(ck)?.DOI ?? null })),
+    pass1CitedKeys(draftMd).map((ck) => ({ citekey: ck, doi: entries.get(ck)?.DOI ?? null })),
   );
-}
-
-/** A "Family, Given" (or display-order) name string as a WorkName. */
-function nameFromString(s: string): WorkName {
-  const comma = s.indexOf(',');
-  if (comma < 0) return { text: s };
-  const family = s.slice(0, comma).trim();
-  const given = s.slice(comma + 1).trim();
-  return given ? { family, given } : { family };
 }
 
 /**
@@ -325,25 +319,23 @@ function nameFromString(s: string): WorkName {
 export function runPass1Unit(input: {
   claimed: { title: string; authors: string[]; doi: string | null; retracted?: boolean };
   actual: { title: string; authors: string[]; doi: string | null } | null;
-}): { verdict: Pass1Verdict; titleJW: number; authorJW: number; reason: string } {
-  const strip = ({ verdict, titleJW, authorJW, reason }: Pass1Result) => ({ verdict, titleJW, authorJW, reason });
-  if (!input.claimed.doi) {
-    return strip(result('', 'UNRESOLVED', 'no identifier in the claimed citation to look the work up by'));
-  }
-  if (input.claimed.retracted) return strip(result('', 'MIS-CITED', 'cited a retracted work'));
-  if (!input.actual) return strip(result('', 'FABRICATED', `DOI ${input.claimed.doi} is not registered`));
+}): Omit<Pass1Result, 'citekey'> {
+  const unit = (verdict: Pass1Verdict, reason: string, titleJW = 0, authorJW = 0) => ({ verdict, titleJW, authorJW, reason });
+  if (!input.claimed.doi) return unit('UNRESOLVED', 'no identifier in the claimed citation to look the work up by');
+  if (input.claimed.retracted) return unit('MIS-CITED', 'cited a retracted work');
+  if (!input.actual) return unit('FABRICATED', `DOI ${input.claimed.doi} is not registered`);
   const record: WorkRecord = {
     registry: 'Crossref',
     title: input.actual.title ?? '',
-    authors: (input.actual.authors ?? []).map(nameFromString),
+    authors: (input.actual.authors ?? []).map(nameFromDisplay),
     years: [],
     venues: [],
     journalArticle: false,
     raw: input.actual,
     ...(input.actual.doi ? { doi: input.actual.doi } : {}),
   };
-  const m = matchWork({ title: input.claimed.title ?? '', authors: (input.claimed.authors ?? []).map(nameFromString) }, record);
+  const m = matchWork({ title: input.claimed.title ?? '', authors: (input.claimed.authors ?? []).map(nameFromDisplay) }, record);
   return m.ok
-    ? strip(result('', 'OK', 'matches the record', m.titleScore, m.authorScore))
-    : strip(result('', 'MIS-CITED', m.problems.join('; '), m.titleScore, m.authorScore));
+    ? unit('OK', 'matches the record', m.titleScore, m.authorScore)
+    : unit('MIS-CITED', m.problems.join('; '), m.titleScore, m.authorScore);
 }

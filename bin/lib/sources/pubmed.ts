@@ -17,7 +17,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { unavailableDetail, yearOf, type Lookup, type WorkName, type WorkRecord } from './work-record.js';
+import { askRegistry, unavailable, type Lookup, type WorkName, type WorkRecord } from './work-record.js';
 
 const BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
 
@@ -136,18 +136,10 @@ export async function search(
   }
 }
 
+/** The PubMed article with `pmid` as a research candidate, or null when PubMed has none or could not be asked. */
 export async function fetchById(pmid: string): Promise<SourceCandidate | null> {
-  const url = `${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`;
-  try {
-    const res = await httpFetch(url, { source: 'pubmed' });
-    if (res.status !== 200) return null;
-    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
-    const records = recordsFromEsummary(body as EsummaryResponse, [pmid]);
-    const first = records[0];
-    return first ? toCandidate(first) : null;
-  } catch {
-    return null;
-  }
+  const r = await lookupPmid(pmid);
+  return r.kind === 'found' ? toCandidate(r.record.raw as PubmedRecord) : null;
 }
 
 /** A PubMed author: "Vaswani A" (surname, then initials) or a collective name. */
@@ -165,36 +157,26 @@ function pubmedName(a: PubmedAuthor): WorkName | null {
  */
 export async function lookupPmid(pmid: string): Promise<Lookup> {
   const url = `${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`;
-  let res;
-  try {
-    res = await httpFetch(url, { source: 'pubmed' });
-  } catch (err) {
-    return { kind: 'unavailable', registry: 'PubMed', detail: unavailableDetail(err) };
-  }
-  if (res.status !== 200) return { kind: 'unavailable', registry: 'PubMed', detail: `HTTP ${res.status}` };
-  let rec: PubmedRecord | undefined;
-  try {
+  return askRegistry('PubMed', url, { source: 'pubmed' }, (res) => {
+    if (res.status !== 200) return null;
     const body = JSON.parse(res.body) as EsummaryResponse & { error?: string };
-    if (typeof body.error === 'string') return { kind: 'unavailable', registry: 'PubMed', detail: body.error.slice(0, 120) };
-    rec = recordsFromEsummary(body, [pmid])[0];
-  } catch {
-    rec = undefined;
-  }
-  if (rec?.error) return { kind: 'not_found', registry: 'PubMed', authoritative: true };
-  const title = String(rec?.title ?? '').trim();
-  if (!rec || !title) return { kind: 'unavailable', registry: 'PubMed', detail: 'unreadable response' };
-  const years = [yearOf(parseYear(rec.pubdate)), yearOf(parseYear(rec.epubdate))]
-    .filter((y): y is number => y !== undefined);
-  const record: WorkRecord = {
-    registry: 'PubMed',
-    title,
-    authors: (rec.authors ?? []).map(pubmedName).filter((n): n is WorkName => n !== null),
-    years: [...new Set(years)],
-    venues: [rec.fulljournalname, rec.source].filter((v): v is string => typeof v === 'string' && v.trim() !== ''),
-    journalArticle: true,
-    raw: rec,
-  };
-  const doi = extractDoi(rec);
-  if (doi) record.doi = doi;
-  return { kind: 'found', registry: 'PubMed', record };
+    if (typeof body.error === 'string') return unavailable('PubMed', body.error.slice(0, 120));
+    const rec = recordsFromEsummary(body, [pmid])[0];
+    if (rec?.error) return { kind: 'not_found', registry: 'PubMed', authoritative: true };
+    const title = String(rec?.title ?? '').trim();
+    if (!rec || !title) return null;
+    const years = [parseYear(rec.pubdate), parseYear(rec.epubdate)].filter((y): y is number => y !== undefined);
+    const record: WorkRecord = {
+      registry: 'PubMed',
+      title,
+      authors: (rec.authors ?? []).map(pubmedName).filter((n): n is WorkName => n !== null),
+      years: [...new Set(years)],
+      venues: [rec.fulljournalname, rec.source].filter((v): v is string => typeof v === 'string' && v.trim() !== ''),
+      journalArticle: true,
+      raw: rec,
+    };
+    const doi = extractDoi(rec);
+    if (doi) record.doi = doi;
+    return { kind: 'found', registry: 'PubMed', record };
+  });
 }

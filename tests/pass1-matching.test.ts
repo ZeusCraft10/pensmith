@@ -19,29 +19,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { runPass1, type Pass1Result } from '../bin/lib/verify/pass1.js';
+import { runPass1 } from '../bin/lib/verify/pass1.js';
 import { writeBibtex } from '../bin/lib/bibtex-write.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
-
-function bibFile(bib: string): string {
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-pass1-match-'));
-  mkdirSync(join(root, '.paper'), { recursive: true });
-  const p = join(root, '.paper', 'CITATIONS.bib');
-  writeFileSync(p, bib);
-  return p;
-}
-
-/** The Pass-1 verdict for the one entry of `bib`. */
-async function verdict(bib: string): Promise<Pass1Result> {
-  const key = /^@\w+\{([^,]+),/m.exec(bib)![1]!;
-  const results = await runPass1(`# S\n\nA claim [@${key}].\n`, bibFile(bib));
-  const r = results.find((x) => x.citekey === key);
-  assert.ok(r, `no verdict for ${key}`);
-  return r;
-}
+import { bibFile, pass1Verdict as verdict } from './lib/bib-fixture.js';
 
 function entry(type: string, key: string, fields: Record<string, string>): string {
   return `@${type}{${key},\n${Object.entries(fields).map(([k, v]) => `  ${k} = {${v}}`).join(',\n')}\n}\n`;

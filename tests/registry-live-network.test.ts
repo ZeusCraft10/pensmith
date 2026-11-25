@@ -10,9 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as net from 'node:net';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { bibFile } from './lib/bib-fixture.js';
 import { withNetworkEnv } from './lib/net-harness.js';
 import { fetch as httpFetch } from '../bin/lib/http.js';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
@@ -56,10 +54,7 @@ async function startHangUpProxy(): Promise<HangUpProxy> {
 test('live Pass 1: registries that cannot be reached give UNRESOLVED, never FABRICATED', { timeout: 90_000 }, async () => {
   const proxy = await startHangUpProxy();
   try {
-    const root = mkdtempSync(join(tmpdir(), 'pensmith-pass1-live-'));
-    mkdirSync(join(root, '.paper'), { recursive: true });
-    const bibPath = join(root, '.paper', 'CITATIONS.bib');
-    writeFileSync(bibPath,
+    const bibPath = bibFile(
       '@article{walt2011,\n  title = {The NumPy Array},\n  author = {van der Walt, Stéfan},\n' +
       '  year = {2011},\n  doi = {10.1109/MCSE.2011.37}\n}\n');
     const results = await withNetworkEnv({ HTTPS_PROXY: proxy.url, HTTP_PROXY: proxy.url }, () =>

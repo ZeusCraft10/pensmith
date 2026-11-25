@@ -14,16 +14,13 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
+import { contactParam } from './work-record.js';
 
 const BASE = 'https://api.openalex.org';
 
-// CR-03 fix: read contact email lazily at URL-build time. When
-// PENSMITH_CONTACT_EMAIL is unset, OMIT the &mailto param entirely —
-// http.ts:166 documents the no-contact degradation banner.
-function mailtoParam(prefix: '&' | '?' = '&'): string {
-  const email = process.env['PENSMITH_CONTACT_EMAIL']?.trim();
-  return email ? `${prefix}mailto=${encodeURIComponent(email)}` : '';
-}
+// CR-03 fix: the contact email is read lazily at URL-build time. When
+// PENSMITH_CONTACT_EMAIL is unset, contactParam OMITS the mailto param
+// entirely — http.ts:166 documents the no-contact degradation banner.
 
 interface OpenAlexAuthor {
   author?: { display_name?: string };
@@ -85,7 +82,7 @@ export async function search(
   opts: { limit?: number } = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
-  const url = `${BASE}/works?search=${encodeURIComponent(query)}&per-page=${limit}${mailtoParam('&')}`;
+  const url = `${BASE}/works?search=${encodeURIComponent(query)}&per-page=${limit}${contactParam('mailto', '&')}`;
   try {
     const res = await httpFetch(url, { source: 'openalex' });
     if (res.status !== 200) return [];
@@ -99,7 +96,7 @@ export async function search(
 
 export async function fetchById(id: string): Promise<SourceCandidate | null> {
   // CR-03 fix: if no contact email, omit the query string entirely (?mailto= is the only param here).
-  const mp = mailtoParam('?');
+  const mp = contactParam('mailto', '?');
   const url = `${BASE}/works/${encodeURIComponent(id)}${mp}`;
   try {
     const res = await httpFetch(url, { source: 'openalex' });

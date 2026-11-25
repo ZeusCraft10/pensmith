@@ -12,21 +12,18 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
+import { bibFile } from './lib/bib-fixture.js';
 
 const CORPUS = fileURLToPath(new URL('./fixtures/pass1-known-good.bib', import.meta.url));
 
 test('Pass 1: every entry of the known-good corpus is OK', async () => {
-  const keys = [...readFileSync(CORPUS, 'utf8').matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
+  const corpus = readFileSync(CORPUS, 'utf8');
+  const keys = [...corpus.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
   assert.ok(keys.length >= 13, `the corpus lists ${keys.length} entries`);
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-known-good-'));
-  mkdirSync(join(root, '.paper'), { recursive: true });
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-  copyFileSync(CORPUS, bibPath);
+  const bibPath = bibFile(corpus);
   const draft = `# S\n\n${keys.map((k) => `A claim [@${k}].`).join(' ')}\n`;
   const results = await runPass1(draft, bibPath);
   assert.deepEqual(results.map((r) => r.citekey), keys);

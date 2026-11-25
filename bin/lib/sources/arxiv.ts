@@ -18,7 +18,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { unavailableDetail, yearOf, type Lookup, type WorkRecord } from './work-record.js';
+import { askRegistry, unavailable, yearOf, type Lookup, type WorkRecord } from './work-record.js';
 
 // https only: search terms and IDs must never travel in cleartext.
 const BASE = 'https://export.arxiv.org';
@@ -90,9 +90,12 @@ function parseEntry(entryXml: string): ArxivEntry | null {
   return { id, title, published, updated, authors, doi };
 }
 
+// The id of the error entry arXiv answers a malformed ID with.
+const ARXIV_ERROR = /\/api\/errors/;
+
 /** The error entry arXiv returns for a malformed ID is not a paper. */
 function isErrorEntry(e: ArxivEntry): boolean {
-  return /\/api\/errors/.test(e.id);
+  return ARXIV_ERROR.test(e.id);
 }
 
 function toCandidate(entry: ArxivEntry): SourceCandidate | null {
@@ -170,17 +173,10 @@ export async function search(
   }
 }
 
+/** The arXiv paper with `id` as a research candidate, or null when arXiv has none or could not be asked. */
 export async function fetchById(id: string): Promise<SourceCandidate | null> {
-  const url = `${BASE}/api/query?id_list=${encodeURIComponent(id)}`;
-  try {
-    const res = await httpFetch(url, { source: 'arxiv' });
-    if (res.status !== 200) return null;
-    const body = typeof res.body === 'string' ? res.body : String(res.body ?? '');
-    const results = parseFeed(body);
-    return results[0] ?? null;
-  } catch {
-    return null;
-  }
+  const r = await lookupArxiv(id);
+  return r.kind === 'found' ? toCandidate(r.record.raw as ArxivEntry) : null;
 }
 
 /**
@@ -190,32 +186,24 @@ export async function fetchById(id: string): Promise<SourceCandidate | null> {
  */
 export async function lookupArxiv(id: string): Promise<Lookup> {
   const url = `${BASE}/api/query?id_list=${encodeURIComponent(id)}`;
-  let res;
-  try {
-    res = await httpFetch(url, { source: 'arxiv' });
-  } catch (err) {
-    return { kind: 'unavailable', registry: 'arXiv', detail: unavailableDetail(err) };
-  }
-  const body = typeof res.body === 'string' ? res.body : String(res.body ?? '');
-  if (res.status !== 200 && !(res.status === 400 && /\/api\/errors/.test(body))) {
-    return { kind: 'unavailable', registry: 'arXiv', detail: `HTTP ${res.status}` };
-  }
-  if (body.length > ARXIV_MAX_BODY_BYTES || !/<feed\b/.test(body)) {
-    return { kind: 'unavailable', registry: 'arXiv', detail: 'unreadable response' };
-  }
-  const entry = parseEntries(body)[0];
-  if (!entry) return { kind: 'not_found', registry: 'arXiv', authoritative: true };
-  // A preprint is dated by its first version and by later ones; a
-  // bibliography may give either year.
-  const years = [yearOf(entry.published), yearOf(entry.updated)].filter((y): y is number => y !== undefined);
-  const record: WorkRecord = {
-    registry: 'arXiv',
-    title: entry.title,
-    authors: entry.authors.map((text) => ({ text })),
-    years: [...new Set(years)],
-    venues: [],
-    journalArticle: false,
-    raw: entry,
-  };
-  return { kind: 'found', registry: 'arXiv', record };
+  return askRegistry('arXiv', url, { source: 'arxiv' }, (res) => {
+    const body = res.body;
+    if (res.status !== 200 && !(res.status === 400 && ARXIV_ERROR.test(body))) return null;
+    if (body.length > ARXIV_MAX_BODY_BYTES || !/<feed\b/.test(body)) return unavailable('arXiv', 'unreadable response');
+    const entry = parseEntries(body)[0];
+    if (!entry) return { kind: 'not_found', registry: 'arXiv', authoritative: true };
+    // A preprint is dated by its first version and by later ones; a
+    // bibliography may give either year.
+    const years = [yearOf(entry.published), yearOf(entry.updated)].filter((y): y is number => y !== undefined);
+    const record: WorkRecord = {
+      registry: 'arXiv',
+      title: entry.title,
+      authors: entry.authors.map((text) => ({ text })),
+      years: [...new Set(years)],
+      venues: [],
+      journalArticle: false,
+      raw: entry,
+    };
+    return { kind: 'found', registry: 'arXiv', record };
+  });
 }
