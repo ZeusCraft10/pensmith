@@ -190,6 +190,16 @@ test('normalizeArxiv: garbage returns null', () => {
   assert.equal(normalizeArxiv('arxiv:'), null); // empty body
 });
 
+test('normalizeArxiv: no whitespace between the arxiv: prefix and the ID', () => {
+  // A bibliography's "arXiv: 2103.00020" is accepted by Pass 1, which drops
+  // the space itself (bin/lib/verify/resolve.ts arxivQueryId); the shared
+  // normalizer stays strict.
+  for (const s of ['arXiv: 2103.00020', 'arxiv: cs.CL/0301012', 'arXiv:\t2103.00020v2']) {
+    assert.equal(normalizeArxiv(s), null, s);
+    assert.equal(isArxiv(s), false, s);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // normalizePmid — D-18 spec
 // ---------------------------------------------------------------------------

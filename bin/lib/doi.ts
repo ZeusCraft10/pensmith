@@ -24,7 +24,7 @@
 //       DOI_PREFIXES), percent-decoded, query and fragment cut; '' otherwise
 //
 //   normalizeArxiv(input)  ──→  string | null
-//     - strip 'arxiv:' / 'arXiv: ' prefix (case-insensitive, optional space)
+//     - strip 'arxiv:' prefix (case-insensitive)
 //     - new format: YYMM.NNNNN[vV]    → canonical 'arxiv:NNNN.NNNNN[vN]'
 //     - old format: <subj-class>/YYMMNNN  → canonical '<subj-class>/YYMMNNN'
 //        (subject classes preserve dotted-case; only the arxiv: prefix is
@@ -157,7 +157,7 @@ export function sameDoi(a: string | null | undefined, b: string | null | undefin
 //     authoritative arXiv API will reject impossible months. We're a
 //     normalizer, not a validator of arXiv's own bookkeeping.
 //   - NNNNN = 4..5 digits, optional 'v<digit>' suffix.
-const ARXIV_NEW = /^(?:arxiv:\s*)?(\d{4}\.\d{4,5}(?:v\d+)?)$/i;
+const ARXIV_NEW = /^(?:arxiv:)?(\d{4}\.\d{4,5}(?:v\d+)?)$/i;
 
 // arXiv old format subject classes (D-17). Pre-April-2007 archive names.
 // Some have dotted subclasses (e.g. 'cs.CL'). We list the major archives
@@ -182,7 +182,6 @@ const ARXIV_OLD_CLASSES: ReadonlySet<string> = new Set([
  *
  *   - 'arXiv:2103.00020'    → 'arxiv:2103.00020'
  *   - 'arXiv:2103.00020v2'  → 'arxiv:2103.00020v2'
- *   - 'arXiv: 2103.00020'   → 'arxiv:2103.00020' (a space after the colon is dropped)
  *   - '2103.00020'          → 'arxiv:2103.00020'
  *   - 'cs.CL/0301012'       → 'cs.CL/0301012' (subject-class case preserved)
  *   - 'arxiv:cs.CL/0301012' → 'cs.CL/0301012'
@@ -205,7 +204,7 @@ export function normalizeArxiv(input: string): string | null {
   // Old format: optional 'arxiv:' prefix + <class>/YYMMNNN
   // The 'arxiv:' prefix is case-insensitive; the subject class is NOT —
   // 'cs.CL' is the canonical capitalization.
-  const stripped = s.replace(/^arxiv:\s*/i, '');
+  const stripped = s.replace(/^arxiv:/i, '');
   const slashIdx = stripped.indexOf('/');
   if (slashIdx < 0) return null;
   const cls = stripped.slice(0, slashIdx);

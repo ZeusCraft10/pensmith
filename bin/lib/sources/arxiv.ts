@@ -173,10 +173,22 @@ export async function search(
   }
 }
 
-/** The arXiv paper with `id` as a research candidate, or null when arXiv has none or could not be asked. */
+/**
+ * The first research candidate of arXiv's feed for `id`, read as search()
+ * reads a feed, or null when there is none or arXiv could not be asked.
+ * Pass 1 does not use this: it asks lookupArxiv, which tells "no such paper"
+ * from "no answer".
+ */
 export async function fetchById(id: string): Promise<SourceCandidate | null> {
-  const r = await lookupArxiv(id);
-  return r.kind === 'found' ? toCandidate(r.record.raw as ArxivEntry) : null;
+  const url = `${BASE}/api/query?id_list=${encodeURIComponent(id)}`;
+  try {
+    const res = await httpFetch(url, { source: 'arxiv' });
+    if (res.status !== 200) return null;
+    const body = typeof res.body === 'string' ? res.body : String(res.body ?? '');
+    return parseFeed(body)[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

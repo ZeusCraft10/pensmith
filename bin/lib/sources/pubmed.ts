@@ -136,10 +136,23 @@ export async function search(
   }
 }
 
-/** The PubMed article with `pmid` as a research candidate, or null when PubMed has none or could not be asked. */
+/**
+ * The PubMed article with `pmid` as a research candidate, read as search()
+ * reads an esummary record, or null when there is none or PubMed could not be
+ * asked. Pass 1 does not use this: it asks lookupPmid, which tells "no such
+ * paper" from "no answer".
+ */
 export async function fetchById(pmid: string): Promise<SourceCandidate | null> {
-  const r = await lookupPmid(pmid);
-  return r.kind === 'found' ? toCandidate(r.record.raw as PubmedRecord) : null;
+  const url = `${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`;
+  try {
+    const res = await httpFetch(url, { source: 'pubmed' });
+    if (res.status !== 200) return null;
+    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
+    const first = recordsFromEsummary(body as EsummaryResponse, [pmid])[0];
+    return first ? toCandidate(first) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** A PubMed author: "Vaswani A" (surname, then initials) or a collective name. */

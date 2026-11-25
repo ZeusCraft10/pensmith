@@ -19,7 +19,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runPass1 } from '../bin/lib/verify/pass1.js';
+import { runPass1, runPass1Unit } from '../bin/lib/verify/pass1.js';
 import { writeBibtex } from '../bin/lib/bibtex-write.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
 import { bibFile, pass1Verdict as verdict } from './lib/bib-fixture.js';
@@ -265,4 +265,20 @@ test('Pass 1: a DOI given only as a doi.org link in `url` is looked up as the DO
     assert.equal(r.verdict, 'OK', `${url}: ${r.reason}`);
     assert.match(r.reason, /Crossref record for DOI 10\.1109\/mcse\.2011\.37/);
   }
+});
+
+test('runPass1Unit: a name that starts with a comma is compared as written, not dropped', () => {
+  // ", Smith" once parsed as an empty family name, which the matcher skips:
+  // with no name left to compare, the author check passed. It is now a
+  // display name, as the registry adapters read one.
+  const unit = (claimed: string, actual: string) => runPass1Unit({
+    claimed: { title: 'Attention Is All You Need', authors: [claimed], doi: '10.1/x' },
+    actual: { title: 'Attention Is All You Need', authors: [actual], doi: '10.1/x' },
+  });
+  for (const [claimed, actual] of [[', Smith', 'Jones, Bob'], [',Smith', 'Jones, Bob'], ['Jones, Bob', ', Smith']] as const) {
+    const r = unit(claimed, actual);
+    assert.equal(r.verdict, 'MIS-CITED', `${claimed} vs ${actual}: ${r.reason}`);
+    assert.equal(r.authorJW, 0);
+  }
+  assert.equal(unit(', Smith', ', Smith').verdict, 'OK');
 });

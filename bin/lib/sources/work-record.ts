@@ -213,15 +213,21 @@ export function nameFromDisplay(s: string): WorkName {
 
 /**
  * A WorkRecord from a CSL-JSON item, the format DOI content negotiation
- * returns for every registration agency that supports it, or from a Crossref
- * `message`, which is CSL-shaped. A few keys have two spellings: the Crossref
- * REST API sends `published` and `short-container-title`, CSL has
- * `original-date` and `container-title-short`. Both are read.
+ * returns for every registration agency that supports it, or (registry
+ * 'Crossref') from a Crossref REST `message`, which is CSL-shaped.
+ *
+ * Each source is read under its own key spellings only. A Crossref message
+ * adds its `published` year and `short-container-title` venue; a CSL item adds
+ * `original-date` and `container-title-short`. A CSL item from doi.org may
+ * carry the Crossref spellings too. Reading them would give an entry extra
+ * years and journal names to match, so a MIS-CITED mismatch would pass as OK
+ * (tests/sources/registry-lookups.test.ts pins both paths).
  */
 export function recordFromCsl(registry: RegistryName, item: Record<string, unknown>): WorkRecord | null {
   const title = firstString(item['title']);
   if (!title) return null;
-  const years = ['issued', 'published-print', 'published-online', 'published', 'original-date']
+  const crossref = registry === 'Crossref';
+  const years = ['issued', 'published-print', 'published-online', crossref ? 'published' : 'original-date']
     .map((k) => cslDateYear(item[k]))
     .filter((y): y is number => y !== undefined);
   const type = str(item['type']);
@@ -231,12 +237,10 @@ export function recordFromCsl(registry: RegistryName, item: Record<string, unkno
     authors: cslNames(item['author']),
     editors: cslNames(item['editor']),
     years: [...new Set(years)],
-    venues: [
-      ...allStrings(item['container-title']),
-      ...allStrings(item['container-title-short']),
-      ...allStrings(item['short-container-title']),
-    ],
-    journalArticle: type === 'article-journal' || type === 'journal-article',
+    venues: [...allStrings(item['container-title']), ...allStrings(item[crossref ? 'short-container-title' : 'container-title-short'])],
+    // Crossref types a journal article exactly 'journal-article'; CSL's
+    // type is 'article-journal'.
+    journalArticle: crossref ? item['type'] === 'journal-article' : type === 'article-journal' || type === 'journal-article',
     raw: item,
   };
   const doi = firstString(item['DOI']);

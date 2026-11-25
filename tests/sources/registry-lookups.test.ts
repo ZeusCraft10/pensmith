@@ -14,6 +14,14 @@
 //     not_found, and only that makes an arXiv-only or PMID-only entry
 //     FABRICATED; no answer, or a refusal such as a proxy's 403, is
 //     UNRESOLVED.
+//   - A 200 whose fields are the wrong type is "unavailable" too: Pass 1
+//     reports the entry UNRESOLVED instead of crashing.
+//   - Each source is read under its own key spellings, so a doi.org record
+//     that also carries Crossref's `published` / `short-container-title` (or
+//     a Crossref message carrying CSL's) does not let a mismatch pass.
+//   - Retraction Watch is asked once per DOI, in normalized form.
+//   - arXiv and PubMed fetchById (research candidates, not Pass 1) read a
+//     response as their search() does.
 
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,7 +34,7 @@ import { lookupDoi as crossrefLookup } from '../../bin/lib/sources/crossref.js';
 import { lookupDoi as doiOrgLookup } from '../../bin/lib/sources/doi-content.js';
 import { lookupIsbn } from '../../bin/lib/sources/openlibrary.js';
 import { fetchById as arxivFetchById, lookupArxiv, search as arxivSearch } from '../../bin/lib/sources/arxiv.js';
-import { lookupPmid } from '../../bin/lib/sources/pubmed.js';
+import { fetchById as pubmedFetchById, lookupPmid } from '../../bin/lib/sources/pubmed.js';
 import { pass1Verdict } from '../lib/bib-fixture.js';
 
 const ENV_KEYS = ['PENSMITH_TEST_CASSETTES', 'PENSMITH_OFFLINE', 'PENSMITH_CONTACT_EMAIL', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'HOME'];
@@ -313,4 +321,216 @@ test('Pass 1: a PMID-only entry is UNRESOLVED, not FABRICATED, when PubMed refus
   const r = await pass1Verdict(pmidOnly('39999996'));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
   assert.match(r.reason, /PMID 39999996 could not be checked \(PubMed: HTTP 403\)/);
+});
+
+test('Pass 1: an eprint written "arXiv: <id>" is asked for as <id>', async () => {
+  arxivAnswers('2501.99999', 200, ARXIV_EMPTY_FEED);
+  const r = await pass1Verdict(arxivOnly('arXiv: 2501.99999'));
+  assert.equal(r.verdict, 'FABRICATED', r.reason);
+  assert.match(r.reason, /arXiv:2501\.99999 is not registered \(arXiv has no record of it\)/);
+});
+
+// ---------------------------------------------------------------------------
+//   A 200 that cannot be read is no answer
+// ---------------------------------------------------------------------------
+
+// Open Library's answer with `authors` an object instead of a list.
+const OPEN_LIBRARY_MALFORMED = JSON.stringify({ 'ISBN:9780306406157': { title: 'A Book', authors: { name: 'Doe' } } });
+// esummary's answer with `pubdate` a number instead of a string.
+const pubmedNumericPubdate = (pmid: string): string => JSON.stringify({
+  result: { uids: [pmid], [pmid]: { uid: pmid, title: 'Tidal Heating in Icy Moons', authors: [{ name: 'Roe J' }], pubdate: 2019 } },
+});
+
+test('Open Library: a 200 whose fields are the wrong type is unavailable, and Pass 1 says UNRESOLVED', async () => {
+  agent.get('https://openlibrary.org')
+    .intercept({ path: (p) => p.startsWith('/api/books?') && p.includes('9780306406157'), method: 'GET' })
+    .reply(200, OPEN_LIBRARY_MALFORMED, { headers: JSON_HEADERS })
+    .persist();
+  assert.deepEqual(await lookupIsbn('9780306406157'), { kind: 'unavailable', registry: 'Open Library', detail: 'unreadable response' });
+  const r = await pass1Verdict('@book{doe1990,\n  title = {A Book},\n  author = {Doe, Jane},\n  year = {1990},\n  isbn = {978-0-306-40615-7}\n}\n');
+  assert.equal(r.verdict, 'UNRESOLVED', r.reason);
+  assert.match(r.reason, /ISBN 978-0-306-40615-7 could not be checked \(Open Library: unreadable response\)/);
+});
+
+test('PubMed: a 200 whose fields are the wrong type is unavailable, and Pass 1 says UNRESOLVED', async () => {
+  pubmedAnswers('31452104', 200, pubmedNumericPubdate('31452104'));
+  assert.deepEqual(await lookupPmid('31452104'), { kind: 'unavailable', registry: 'PubMed', detail: 'unreadable response' });
+  const r = await pass1Verdict(pmidOnly('31452104'));
+  assert.equal(r.verdict, 'UNRESOLVED', r.reason);
+  assert.match(r.reason, /PMID 31452104 could not be checked \(PubMed: unreadable response\)/);
+});
+
+// ---------------------------------------------------------------------------
+//   Each source under its own key spellings
+// ---------------------------------------------------------------------------
+
+// The entry claims "Hydro Letters" and 2007; the registry says "Journal of
+// Aqueous Things" and 2010. Only an extra year (2008) or short journal name
+// ("Hydro Lett.") under some key could make them agree.
+const hydroEntry = (doi: string): string =>
+  `@article{hydro,\n  title = {Aqueous Things Revisited},\n  author = {Roe, Jane},\n  journal = {Hydro Letters},\n  year = {2007},\n  doi = {${doi}}\n}\n`;
+const hydroWork = (doi: string, extra: Record<string, unknown>): Record<string, unknown> => ({
+  DOI: doi,
+  title: 'Aqueous Things Revisited',
+  author: [{ family: 'Roe', given: 'Jane' }],
+  'container-title': 'Journal of Aqueous Things',
+  issued: { 'date-parts': [[2010]] },
+  ...extra,
+});
+const BOTH_WRONG = [
+  /the year 2007 is not within a year of 2010, the year (Crossref|doi\.org) gives/,
+  /the journal "Hydro Letters" is not "Journal of Aqueous Things"/,
+];
+
+/** Retraction Watch lists nothing (or only `listed`); each `filter` it is asked with goes into `asked`. */
+function retractionWatchLists(asked: string[], listed?: string): void {
+  agent.get('https://api.labs.crossref.org')
+    .intercept({ path: (p) => p.startsWith('/data/retractions?'), method: 'GET' })
+    .reply((opts) => {
+      const filter = new URL(String(opts.path), 'https://api.labs.crossref.org').searchParams.get('filter') ?? '';
+      asked.push(filter);
+      const items = filter === `record:${listed}`
+        ? [{ doi: listed, title: 'Adherence Matters', authors: [{ family: 'Smith', given: 'John' }], year: 1998, retractedDate: '2001-01-01', reason: 'Fabrication' }]
+        : [];
+      return { statusCode: 200, data: JSON.stringify({ items }), responseOptions: { headers: JSON_HEADERS } };
+    })
+    .persist();
+}
+
+/** Crossref answers `message` for `doi`. */
+function crossrefHolds(doi: string, message: Record<string, unknown>): void {
+  agent.get('https://api.crossref.org')
+    .intercept({ path: (p) => p.toLowerCase().startsWith(`/works/${encodeURIComponent(doi).toLowerCase()}`), method: 'GET' })
+    .reply(200, JSON.stringify({ status: 'ok', message }), { headers: JSON_HEADERS })
+    .persist();
+}
+
+/** Crossref and DataCite have no record of `doi`; doi.org redirects to Crossref's CSL transform, which answers `csl`. */
+function onlyDoiOrgHolds(doi: string, csl: Record<string, unknown>): void {
+  const crossref = agent.get('https://api.crossref.org');
+  crossref.intercept({ path: (p) => p.startsWith(`/works/${encodeURIComponent(doi)}`), method: 'GET' }).reply(404, 'Resource not found.').persist();
+  crossref.intercept({ path: `/v1/works/${doi}/transform`, method: 'GET' })
+    .reply(200, JSON.stringify(csl), { headers: { 'content-type': 'application/vnd.citationstyles.csl+json' } })
+    .persist();
+  agent.get('https://api.datacite.org')
+    .intercept({ path: (p) => p.startsWith(`/dois/${encodeURIComponent(doi)}`), method: 'GET' })
+    .reply(404, JSON.stringify({ errors: [{ status: '404', title: 'The resource you are looking for doesn\'t exist.' }] }), { headers: JSON_HEADERS })
+    .persist();
+  agent.get('https://doi.org')
+    .intercept({ path: `/${doi}`, method: 'GET' })
+    .reply(302, '', { headers: { location: `https://api.crossref.org/v1/works/${doi}/transform` } })
+    .persist();
+}
+
+test('Pass 1: a doi.org record is read under CSL spellings; a Crossref `published` year or `short-container-title` it carries does not excuse a mismatch', async () => {
+  retractionWatchLists([]);
+  const doi = '10.5555/hydro.2010.001';
+  onlyDoiOrgHolds(doi, hydroWork(doi, { type: 'article-journal', published: { 'date-parts': [[2008]] }, 'short-container-title': ['Hydro Lett.'] }));
+  const r = await pass1Verdict(hydroEntry(doi));
+  assert.equal(r.verdict, 'MIS-CITED', r.reason);
+  for (const re of BOTH_WRONG) assert.match(r.reason, re);
+  assert.match(r.reason, /doi\.org record/);
+});
+
+test('Pass 1: a doi.org record\'s own `original-date` and `container-title-short` are read', async () => {
+  retractionWatchLists([]);
+  const doi = '10.5555/hydro.2010.002';
+  onlyDoiOrgHolds(doi, hydroWork(doi, { type: 'article-journal', 'original-date': { 'date-parts': [[2008]] }, 'container-title-short': 'Hydro Lett.' }));
+  const r = await pass1Verdict(hydroEntry(doi));
+  assert.equal(r.verdict, 'OK', r.reason);
+  assert.match(r.reason, /doi\.org record/);
+});
+
+test('Pass 1: a Crossref message is read under Crossref spellings; a CSL `original-date` or `container-title-short` it carries does not excuse a mismatch', async () => {
+  retractionWatchLists([]);
+  const doi = '10.5555/hydro.2010.003';
+  crossrefHolds(doi, hydroWork(doi, { type: 'journal-article', 'original-date': { 'date-parts': [[2008]] }, 'container-title-short': ['Hydro Lett.'] }));
+  const r = await pass1Verdict(hydroEntry(doi));
+  assert.equal(r.verdict, 'MIS-CITED', r.reason);
+  for (const re of BOTH_WRONG) assert.match(r.reason, re);
+  assert.match(r.reason, /Crossref record/);
+});
+
+test('Pass 1: a Crossref message\'s own `published` and `short-container-title` are read', async () => {
+  retractionWatchLists([]);
+  const doi = '10.5555/hydro.2010.004';
+  crossrefHolds(doi, hydroWork(doi, { type: 'journal-article', published: { 'date-parts': [[2008]] }, 'short-container-title': ['Hydro Lett.'] }));
+  const r = await pass1Verdict(hydroEntry(doi));
+  assert.equal(r.verdict, 'OK', r.reason);
+  assert.match(r.reason, /Crossref record/);
+});
+
+// ---------------------------------------------------------------------------
+//   Retraction Watch: one query per DOI, normalized
+// ---------------------------------------------------------------------------
+
+const ADHERENCE = {
+  title: ['Adherence Matters'],
+  author: [{ family: 'Smith', given: 'John' }, { family: 'Doe', given: 'Jane' }],
+  'container-title': ['Journal of Adherence'],
+  issued: { 'date-parts': [[1998]] },
+  type: 'journal-article',
+};
+const adherenceEntry = (doi: string): string =>
+  `@article{smith1998,\n  title = {Adherence Matters},\n  author = {Smith, John and Doe, Jane},\n  journal = {Journal of Adherence},\n  year = {1998},\n  doi = {${doi}}\n}\n`;
+
+test('Pass 1: a DOI written as a doi.org link with trailing punctuation is asked of Retraction Watch as the DOI, and a listing is caught', async () => {
+  const asked: string[] = [];
+  retractionWatchLists(asked, '10.1234/abc');
+  // The registry record carries no DOI of its own, so the entry's spelling is the only one asked.
+  crossrefHolds('10.1234/abc', ADHERENCE);
+  const r = await pass1Verdict(adherenceEntry('https://doi.org/10.1234/abc.'));
+  assert.equal(r.verdict, 'MIS-CITED', r.reason);
+  assert.match(r.reason, /Retraction Watch/);
+  assert.deepEqual(asked, ['record:10.1234/abc']);
+});
+
+test('Pass 1: Retraction Watch is asked once for a DOI the entry and the registry spell in different case', async () => {
+  const asked: string[] = [];
+  retractionWatchLists(asked);
+  crossrefHolds('10.1128/iai.66.9.4305-4312.1998', { ...ADHERENCE, DOI: '10.1128/iai.66.9.4305-4312.1998' });
+  const r = await pass1Verdict(adherenceEntry('10.1128/IAI.66.9.4305-4312.1998'));
+  assert.equal(r.verdict, 'OK', r.reason);
+  assert.deepEqual(asked, ['record:10.1128/iai.66.9.4305-4312.1998']);
+});
+
+// ---------------------------------------------------------------------------
+//   arXiv and PubMed fetchById read a response as search() does
+// ---------------------------------------------------------------------------
+
+const arxivEntryXml = (n: number, title: string, author?: string): string =>
+  `<entry><id>http://arxiv.org/abs/2501.0000${n}v1</id><title>${title}</title>` +
+  `<published>2017-06-12T17:57:34Z</published>${author ? `<author><name>${author}</name></author>` : ''}</entry>`;
+
+test('arXiv: fetchById gives the first entry that is a usable candidate, as search does', async () => {
+  arxivAnswers('2501.00001', 200, `<feed xmlns="http://www.w3.org/2005/Atom">${arxivEntryXml(1, 'First Paper')}${arxivEntryXml(2, 'Second Paper', 'Jane Roe')}</feed>`);
+  assert.equal((await arxivFetchById('2501.00001'))?.title, 'Second Paper');
+  _resetBucketsForTest();
+  arxivAnswers('2501.00003', 200, arxivEntryXml(3, 'Bare Entry', 'Jane Roe'));
+  assert.equal((await arxivFetchById('2501.00003'))?.title, 'Bare Entry');
+});
+
+test('arXiv: fetchById says on stderr why it reads nothing from an oversized feed', async () => {
+  arxivAnswers('2501.00004', 200, `<feed>${' '.repeat(10_000_001)}</feed>`);
+  const written: string[] = [];
+  const write = process.stderr.write;
+  process.stderr.write = ((chunk: string | Uint8Array): boolean => { written.push(String(chunk)); return true; }) as typeof process.stderr.write;
+  let r;
+  try {
+    r = await arxivFetchById('2501.00004');
+  } finally {
+    process.stderr.write = write;
+  }
+  assert.equal(r, null);
+  assert.ok(written.some((w) => /\[arxiv\] feed body exceeds 10000000 bytes/.test(w)), written.join(''));
+});
+
+test('PubMed: fetchById reads the fields a candidate needs, whatever epubdate holds', async () => {
+  pubmedAnswers('31000001', 200, JSON.stringify({
+    result: { uids: ['31000001'], '31000001': { uid: '31000001', title: 'A Valid Article', authors: [{ name: 'Roe J' }], pubdate: '2019 Jul', epubdate: 20190101 } },
+  }));
+  const c = await pubmedFetchById('31000001');
+  assert.deepEqual(c && { source: c.source, id: c.id, title: c.title, authors: c.authors, year: c.year }, {
+    source: 'pubmed', id: '31000001', title: 'A Valid Article', authors: ['Roe J'], year: 2019,
+  });
 });

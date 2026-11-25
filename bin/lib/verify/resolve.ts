@@ -58,9 +58,14 @@ export type IdResolution =
 
 const ARXIV_URL = /arxiv\.org\/(?:abs|pdf)\/([^\s?#]+?)(?:\.pdf)?(?:[?#]|$)/i;
 
-/** The arXiv ID registries are asked for: normalizeArxiv's form without its `arxiv:` prefix. */
+/**
+ * The arXiv ID registries are asked for: normalizeArxiv's form without its
+ * `arxiv:` prefix. A bibliography may write "arXiv: 2103.00020"; the space is
+ * dropped here, so normalizeArxiv itself stays strict.
+ */
 function arxivQueryId(raw: string): string | null {
-  return normalizeArxiv(raw)?.replace(/^arxiv:/, '') ?? null;
+  const n = normalizeArxiv(raw.replace(/^arxiv:\s*/i, 'arXiv:'));
+  return n === null ? null : n.replace(/^arxiv:/, '');
 }
 
 /**
