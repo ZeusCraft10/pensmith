@@ -22,7 +22,9 @@
 //      If ANY refuse reason was collected, REFUSE: do NOT write .paper/DRAFT.md,
 //      and move a DRAFT.md left by an earlier compile aside to DRAFT.stale.md.
 //   2. Concatenate section drafts in OUTLINE order (COMP-02), each normalized to
-//      exactly one trailing '\n', joined with '\n\n'.
+//      exactly one trailing '\n', joined with '\n\n'. The outline's paper title
+//      leads as `# Title` and each section opens with `## <outline title>`
+//      (drafts are written without one).
 //   3. N-1 per-boundary smoothing (COMP-03 / D-12 / D-13): substitute
 //      [@key] → {{cite_K_M}} BEFORE the smoother call (the model never sees raw
 //      tokens); after the call, require output placeholder-set == input set —
@@ -136,6 +138,18 @@ interface LoadedSection {
 /** Normalize a draft to end in exactly one '\n' (§F). */
 function normalizeTrailingNewline(s: string): string {
   return s.replace(/\n+$/, '') + '\n';
+}
+
+/**
+ * `draft` under a `## <title>` heading. A draft that already opens with a
+ * heading keeps it; one that opens with a top-level `# ` heading has all its
+ * headings moved down a level, so the paper title stays the only `# `.
+ */
+function withSectionHeading(draft: string, title: string): string {
+  const body = draft.replace(/^\s+/, '');
+  if (/^#{2,6}\s/.test(body)) return body;
+  if (/^#\s/.test(body)) return body.replace(/^(#{1,5})(?=\s)/gm, '#$1');
+  return title.trim() ? `## ${title.trim()}\n\n${body}` : body;
 }
 
 /** Split markdown into paragraphs (blocks separated by blank lines). */
@@ -453,12 +467,14 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'smoothed', before_chars: beforeChars, after_chars: newTail.length + newHead.length });
     }
 
-    // Build the compiled manuscript (outline order, one blank line between).
-    let cursor = 0;
+    // Build the compiled manuscript (outline order, one blank line between):
+    // the paper title, then each section under its outline title.
+    const title = outline.paper_title.trim();
+    let cursor = title ? `# ${title}\n\n`.length : 0;
     const spans: SectionSpan[] = [];
-    const pieces: string[] = [];
+    const pieces: string[] = title ? [`# ${title}\n\n`] : [];
     for (let i = 0; i < loaded.length; i += 1) {
-      const piece = normalizeTrailingNewline(drafts[i] ?? '');
+      const piece = withSectionHeading(normalizeTrailingNewline(drafts[i] ?? ''), loaded[i]!.outline.title);
       const start = cursor;
       const sep = i < loaded.length - 1 ? '\n' : '';
       const block = piece + sep; // piece already ends with one '\n'; sep adds the blank line
