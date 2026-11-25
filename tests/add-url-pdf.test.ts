@@ -22,7 +22,7 @@ const TSX_LOADER = import.meta.resolve('tsx');
 interface RunResult { status: number | null; stdout: string; stderr: string }
 
 // spawnSync (not execFileSync) so BOTH streams are captured regardless of exit
-// code — `add` writes diagnostics to stderr but exits 0 on a non-fatal failure.
+// code: a refused `add` writes its diagnostic to stderr and exits 2.
 function runCli(args: string[], cwd: string): RunResult {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;

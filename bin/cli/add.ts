@@ -81,19 +81,30 @@ async function fetchExactDoi(
   return { candidate: hit };
 }
 
-function reportMismatch(requested: string, returned: string): void {
+/**
+ * Every refusal exits 2, so `pensmith add <doi> && pensmith verify` stops when
+ * the source was not added.
+ */
+function refuse(): { ok: false } {
+  process.exitCode = 2;
+  return { ok: false };
+}
+
+function reportMismatch(requested: string, returned: string): { ok: false } {
   process.stdout.write(
     `pensmith add: the registry answered ${requested} with a different work (${returned}). ` +
     `Source NOT added. If ${returned} is the work you meant, add that DOI directly.\n`,
   );
+  return refuse();
 }
 
 /** Refusal for a path that needs the network while offline / --dry-run. */
-function reportOffline(what: string): void {
+function reportOffline(what: string): { ok: false } {
   process.stderr.write(
     `pensmith add: ${what} requires network access and is disabled in ` +
     `offline / --dry-run mode. Source NOT added.\n`,
   );
+  return refuse();
 }
 
 /** Scrape a DOI out of an HTML body's citation <meta> tags (best-effort). */
@@ -226,16 +237,10 @@ export const addCommand = defineCommand({
 
     if (isDoi(source)) {
       const norm = normalizeDoi(source);
-      if (isOfflineMode()) {
-        reportOffline('DOI lookup');
-        return { ok: false };
-      }
+      if (isOfflineMode()) return reportOffline('DOI lookup');
       if (norm) {
         const r = await fetchExactDoi(norm);
-        if (r.mismatch !== undefined) {
-          reportMismatch(norm, r.mismatch);
-          return { ok: false };
-        }
+        if (r.mismatch !== undefined) return reportMismatch(norm, r.mismatch);
         candidate = r.candidate;
       }
     } else if (isHttpUrl(source)) {
@@ -244,38 +249,31 @@ export const addCommand = defineCommand({
       // unhandled ENOENT). D-06 chokepoint routes through http.ts checkSsrf
       // (T-08-04-02): the hostname is DNS-resolved and RFC1918/loopback/link-local
       // addresses are blocked before the socket connects (source:'generic').
-      if (isOfflineMode()) {
-        reportOffline('URL ingestion');
-        candidate = null;
-      } else {
-        try {
-          // noCache:true guarantees a live fetch so res.bodyBytes is populated
-          // (audit #29) — a PDF must be read byte-faithfully, never via the
-          // UTF-8-decoded body string.
-          const res = await httpFetch(source, { source: 'generic', noCache: true });
-          const ct = (res.headers['content-type'] ?? '').toLowerCase();
-          if (ct.includes('application/pdf') || source.toLowerCase().endsWith('.pdf')) {
-            const buf = res.bodyBytes ?? Buffer.from(res.body, 'binary');
-            const text = await extractPdfText(buf);
-            const title = extractTitleHeuristic(text);
-            if (title) {
-              const hits = await crossrefSearch(title, { limit: 1 });
-              candidate = hits[0] ?? null;
-            }
-          } else {
-            const doi = scrapeDoiFromHtml(res.body);
-            if (doi) {
-              const r = await fetchExactDoi(doi);
-              if (r.mismatch !== undefined) {
-                reportMismatch(doi, r.mismatch);
-                return { ok: false };
-              }
-              candidate = r.candidate;
-            }
+      if (isOfflineMode()) return reportOffline('URL ingestion');
+      try {
+        // noCache:true guarantees a live fetch so res.bodyBytes is populated
+        // (audit #29) — a PDF must be read byte-faithfully, never via the
+        // UTF-8-decoded body string.
+        const res = await httpFetch(source, { source: 'generic', noCache: true });
+        const ct = (res.headers['content-type'] ?? '').toLowerCase();
+        if (ct.includes('application/pdf') || source.toLowerCase().endsWith('.pdf')) {
+          const buf = res.bodyBytes ?? Buffer.from(res.body, 'binary');
+          const text = await extractPdfText(buf);
+          const title = extractTitleHeuristic(text);
+          if (title) {
+            const hits = await crossrefSearch(title, { limit: 1 });
+            candidate = hits[0] ?? null;
           }
-        } catch {
-          candidate = null;
+        } else {
+          const doi = scrapeDoiFromHtml(res.body);
+          if (doi) {
+            const r = await fetchExactDoi(doi);
+            if (r.mismatch !== undefined) return reportMismatch(doi, r.mismatch);
+            candidate = r.candidate;
+          }
         }
+      } catch {
+        candidate = null;
       }
     } else if (source.toLowerCase().endsWith('.pdf') || fs.existsSync(path.resolve(source))) {
       // BYO LOCAL PDF — bytes-only chokepoint (T-08-04-03 path-traversal mitigation).
@@ -285,10 +283,7 @@ export const addCommand = defineCommand({
         const buf = await fs.promises.readFile(path.resolve(source));
         const text = await extractPdfText(buf); // pdf-parse → pymupdf fallback (08-03)
         const title = extractTitleHeuristic(text);
-        if (title && isOfflineMode()) {
-          reportOffline('looking up the PDF by title');
-          return { ok: false };
-        }
+        if (title && isOfflineMode()) return reportOffline('looking up the PDF by title');
         if (title) {
           const hits = await crossrefSearch(title, { limit: 1 });
           candidate = hits[0] ?? null;
@@ -306,7 +301,7 @@ export const addCommand = defineCommand({
 
     if (!candidate) {
       process.stdout.write(`pensmith add: could not hydrate "${source}". Source NOT added.\n`);
-      return { ok: false };
+      return refuse();
     }
 
     // (2) verifyDoi when a DOI is present — a 404 flags the source unverified but

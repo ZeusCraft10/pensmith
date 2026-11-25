@@ -150,7 +150,7 @@ test('Pitfall 3 / A6: the remap appends the citekey to assigned_sources[] and le
   );
 });
 
-test('add <doi>: a registry record whose DOI differs from the requested DOI is rejected, not added', { skip: !READY }, async () => {
+test('add <doi>: a registry record whose DOI differs from the requested DOI is rejected, not added', async () => {
   // The redirect-audit16 cassette answers /works/10.0000/alias-audit16 with a
   // record whose DOI is 10.0000/retracted — a different work.
   const { root } = await mkProjectWithSection();
@@ -161,12 +161,18 @@ test('add <doi>: a registry record whose DOI differs from the requested DOI is r
     return true;
   }) as typeof process.stdout.write;
   let result: unknown;
+  let exitCode: typeof process.exitCode;
   try {
     result = await runAdd(root, { source: '10.0000/alias-audit16', yolo: true });
   } finally {
     process.stdout.write = origWrite;
+    // The refusal sets the CLI's exit code; read it, then clear it so this test
+    // process itself does not exit non-zero.
+    exitCode = process.exitCode;
+    process.exitCode = undefined;
   }
   assert.deepEqual(result, { ok: false });
+  assert.equal(exitCode, 2, 'a refused source exits 2');
   assert.match(out.join(''), /10\.0000\/retracted/, 'the refusal names the DOI the registry returned');
   assert.ok(
     !fs.existsSync(path.join(root, '.paper', 'CITATIONS.bib')),
