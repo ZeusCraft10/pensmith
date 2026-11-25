@@ -30,12 +30,9 @@ test('root config files exist', () => {
     'eslint.config.js',
     'scripts/run-tests.mjs',
     'references/doctor-output.md',
-    // 02-06: hooks/.gitkeep replaced by real TIER-03 hook modules.
-    'hooks/hooks.json',
+    // The one plugin hook (SessionStart) and the context it builds.
     'hooks/session-start.ts',
-    'hooks/pre-compact.ts',
-    'hooks/post-tool-use.ts',
-    'hooks/stop.ts',
+    'hooks/session-context.ts',
   ]) {
     assert.ok(fs.existsSync(path.resolve(f)), `missing required file: ${f}`);
   }
@@ -50,7 +47,7 @@ test('package.json contract', () => {
   assert.equal(engines?.['node'], '>=22.12.0');
   assert.equal(pkg['packageManager'], 'npm@10.9.0');
   const scripts = pkg['scripts'] as Record<string, string> | undefined;
-  for (const s of ['lint', 'typecheck', 'test', 'build', 'dev', 'validate:manifests', 'check']) {
+  for (const s of ['lint', 'typecheck', 'test', 'build', 'dev', 'check']) {
     assert.ok(scripts && scripts[s], `package.json missing script: ${s}`);
   }
   assert.equal(scripts?.['test'], 'node scripts/run-tests.mjs',

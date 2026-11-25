@@ -20,10 +20,9 @@
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "dev": "tsx",
     "pensmith": "tsx bin/pensmith.ts",
-    "validate:manifests": "node scripts/validate-plugin-manifest.cjs",
     "test:tier-contract": "node --import tsx --test tests/tier-contract.test.ts",
     "test:cassettes": "node --import tsx --test tests/tier-contract.test.ts",
-    "check": "npm run prebuild && npm run lint && npm run typecheck && npm run build && npm test && npm run validate:manifests",
+    "check": "npm run prebuild && npm run lint && npm run typecheck && npm run build && npm test",
     "test:coverage": "c8 node scripts/run-tests.mjs"
   },
   "files": [

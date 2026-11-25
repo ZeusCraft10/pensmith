@@ -1,21 +1,10 @@
 #!/usr/bin/env node
 // scripts/prebuild.mjs
 //
-// Generates two on-disk artifacts before `tsc` runs:
-//
-//   1. bin/lib/version.generated.ts  (WR-01)
-//      Single source of truth for the runtime version, imported by
-//      bin/pensmith.ts so it never drifts from package.json.
-//
-//   2. bin/lib/verbs.json  (WR-03)
-//      Single source of truth for the UX-02 16-verb list. Read by both
-//      scripts/validate-plugin-manifest.cjs (CJS, pre-build) and
-//      bin/lib/verbs.ts (ES module, runtime). Avoids two divergent
-//      hardcoded arrays.
-//
-// Both outputs are listed in .gitignore — they are derived artifacts, not
-// source. Re-run `npm run build` (which runs `prebuild` then `tsc`) to
-// regenerate.
+// Generates bin/lib/version.generated.ts before `tsc` runs: the single source
+// of truth for the runtime version, imported by bin/pensmith.ts so it never
+// drifts from package.json. The output is gitignored (a derived artifact);
+// `npm run build` runs this first.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -24,7 +13,6 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
-// ---- 1. version.generated.ts ----
 const pkg = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const version = String(pkg.version ?? '0.0.0');
 // Defensive: refuse to write a value that isn't semver-ish so a corrupted
@@ -42,27 +30,4 @@ export const VERSION = '${version}';
 `;
 writeFileSync(path.join(repoRoot, 'bin', 'lib', 'version.generated.ts'), versionTs);
 
-// ---- 2. verbs.json ----
-// The verb list lives canonically in bin/lib/verbs.ts (the TS module that
-// bin/pensmith.ts and tests import). We parse it via a simple regex against
-// the export-array literal because the CJS validator runs BEFORE tsc has
-// emitted dist/, so requiring the compiled JS is not an option.
-const verbsTs = readFileSync(path.join(repoRoot, 'bin', 'lib', 'verbs.ts'), 'utf8');
-// Match: export const UX02_VERBS: readonly string[] = [ ...quoted strings... ];
-const arrayMatch = verbsTs.match(/UX02_VERBS\s*[^=]*=\s*\[([\s\S]*?)\]\s*as\s+const/);
-if (!arrayMatch) {
-  console.error('prebuild: cannot locate UX02_VERBS array in bin/lib/verbs.ts');
-  process.exit(1);
-}
-const verbs = Array.from(arrayMatch[1].matchAll(/'([a-z][a-z-]*)'|"([a-z][a-z-]*)"/g))
-  .map((m) => m[1] || m[2]);
-if (verbs.length === 0) {
-  console.error('prebuild: parsed 0 verbs from bin/lib/verbs.ts — refusing to write empty list');
-  process.exit(1);
-}
-writeFileSync(
-  path.join(repoRoot, 'bin', 'lib', 'verbs.json'),
-  JSON.stringify({ verbs, generatedFrom: 'bin/lib/verbs.ts' }, null, 2) + '\n',
-);
-
-console.log(`prebuild: wrote version.generated.ts (${version}) + verbs.json (${verbs.length} verbs)`);
+console.log(`prebuild: wrote version.generated.ts (${version})`);

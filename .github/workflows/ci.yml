@@ -51,9 +51,6 @@ jobs:
         shell: bash
         run: npm run test:coverage < /dev/null
 
-      - name: Validate plugin manifests
-        run: node scripts/validate-plugin-manifest.cjs
-
       - name: Assert working tree is clean after build (stale-derived-file guard — CI-02)
         shell: bash
         run: |

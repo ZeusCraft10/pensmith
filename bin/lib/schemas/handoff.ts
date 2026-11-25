@@ -2,10 +2,11 @@
 //
 // Phase 3 Plan 03-03 Task 3.1.
 //
-// The HANDOFF.json file is the small (≤ 5120-byte) crash-resilient pointer
-// document written by hooks/pre-compact.ts. Its job is to let a new shell
-// pick up where the previous session left off — it carries POINTERS, never
-// content (D-18). PLAN.md per-section is the source of truth.
+// The HANDOFF.json file is the small (≤ 5120-byte) pointer document that
+// `pensmith resume` reads when one exists. Nothing in the plugin writes it any
+// more (the SessionStart hook derives its context from the router), but older
+// workspaces may still carry one. It holds POINTERS, never content (D-18);
+// PLAN.md per-section is the source of truth.
 //
 // D-17 LOCKED shape (CYCLE-3 reviews convergence): snake_case fields, literal
 // numeric schema_version, breadcrumbs capped at 5, every string field bounded
