@@ -18,7 +18,7 @@
 //   User types "2\n" on stdin → returns { id: 'discipline', kind: 'select', value: 'bio' }
 //   For multiselect:  user types "1,3\n"  → returns { value: ['cs', 'history'] }
 //   For text:         user types raw string (blank line keeps default)
-//   For confirm:      user types y/Y/yes/n/N/no (blank line keeps default)
+//   For confirm:      user types y/Y/yes/n/N/no (blank line keeps default; anything else re-asks)
 //
 // Field names match gsd-plugin's --text JSON question schema (id, label,
 // options, default) so an upstream CI fixture can feed identical JSON to

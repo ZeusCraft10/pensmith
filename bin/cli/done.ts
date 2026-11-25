@@ -14,7 +14,8 @@
 // 2/4 never auto-block). Without the gate the Core Value would force compile/
 // export to block automatically. The gate ALWAYS prompts (generic confirm even
 // when clean — PRD §7.9), shows a per-issue summary when UNSUPPORTED / orphan /
-// plagiarism issues exist, and ONLY --yolo skips it.
+// plagiarism issues exist, and ONLY --yolo skips it. The answer defaults to no.
+// With no terminal to ask in, done exits 3 with the pending decision as JSON.
 //
 // Exports go to the exporter's DISTINCT export dir (default `.paper/export/`) —
 // done.ts MUST NOT pass `outputDir=paperDir(paperRoot)`, so the md-fallback
@@ -34,10 +35,10 @@ import { paperDir } from '../lib/paths.js';
 import { parseIntakeMd } from '../lib/intake-parse.js';
 import { resolveStyleName, parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { ask } from '../lib/prompts.js';
+import { ask, PromptAbortedError, PromptTimeoutError, type PromptQuestion } from '../lib/prompts.js';
 import { extractCitekeys } from '../lib/citation-token.js';
 import { parseVerdictRows } from '../lib/verify/verdict-rows.js';
-import { EXIT_REFUSED } from '../lib/exit-codes.js';
+import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -536,6 +537,48 @@ export async function reCheckFinalMd(
 
 const VALID_FORMATS: ReadonlySet<string> = new Set(['docx', 'pdf', 'latex', 'md']);
 
+/** The export confirmation. It defaults to no: exporting needs an explicit yes. */
+export const EXPORT_CONFIRM_QUESTION = {
+  id: 'export-confirm',
+  kind: 'confirm',
+  label: 'Export the paper?',
+  default: false,
+} as const satisfies PromptQuestion;
+
+/**
+ * True when a person at a terminal can see the question and type an answer.
+ * Claude Code's Bash tool, CI and pipes have no terminal: reading stdin there
+ * either crashes on a closed stream or takes whatever text was piped in.
+ */
+function canAskInTerminal(): boolean {
+  return Boolean(process.stdin.isTTY) && Boolean(process.stderr.isTTY);
+}
+
+/**
+ * The machine-readable description of a pending export decision, printed as
+ * one JSON line when there is no terminal to ask in. Nothing is exported.
+ */
+export function pendingExportDecision(issues: GateIssues, format: string): Record<string, unknown> {
+  const orphanClaims = issues.orphanClaims.reduce((sum, r) => sum + r.orphanCount, 0);
+  const count = issues.unsupported.length + orphanClaims + issues.plagiarismHits.length;
+  return {
+    pending: 'export-confirmation',
+    gate: 'export',
+    needs_confirmation: true,
+    summary:
+      `Export .paper/DRAFT.md as ${format}? ` +
+      (issues.hasIssues ? `${count} advisory issue(s) to review first.` : 'No advisory issues were found.'),
+    options: ['export', 'cancel'],
+    default: 'cancel',
+    issues: {
+      unsupported: issues.unsupported.map((r) => r.citekey),
+      orphan_claims: orphanClaims,
+      plagiarism_hits: issues.plagiarismHits.map((r) => r.phrase.replace(/\s+/g, ' ').slice(0, 80)),
+    },
+    how_to_answer: 'Run `pensmith done` in an interactive terminal and answer the prompt there.',
+  };
+}
+
 /** Build the whole-paper `.paper/VERIFICATION.md` report body (a SOURCE
  *  artifact, NOT written into the distinct export dir). */
 function buildVerificationReport(
@@ -657,22 +700,40 @@ export const doneCommand = defineCommand({
       }
     }
 
+    const format: ExportFormat = VALID_FORMATS.has(String(args.format))
+      ? (String(args.format) as ExportFormat)
+      : 'docx';
+
     // 6. DONE-09 export-confirmation gate. Pass-2 UNSUPPORTED is read from the
     //    section VERIFICATION.md files (the load-bearing disk→gate feed, HIGH-3).
     const pass2Results = readSectionUnsupported(paperRoot);
+
+    // With no terminal there is nobody to ask. Report the pending decision and
+    // stop; never read stdin for it and never treat silence as a yes.
+    if (args.yolo !== true && !canAskInTerminal()) {
+      const issues = collectGateIssues({ pass2Results, pass4Results, plagiarismResults });
+      process.stderr.write(
+        'pensmith done: exporting needs your confirmation and there is no terminal to ask in. Nothing was exported.\n',
+      );
+      process.stdout.write(`${JSON.stringify(pendingExportDecision(issues, format))}\n`);
+      process.exitCode = EXIT_NEEDS_ANSWER;
+      return { ok: false, pending: true };
+    }
+
     const gateResult = await runDoneGate({
       pass2Results,
       pass4Results,
       plagiarismResults,
       yolo: args.yolo === true,
       approve: async () => {
-        const answer = await ask({
-          id: 'export-confirm',
-          kind: 'confirm',
-          label: 'Export the paper?',
-          default: true,
-        });
-        return answer.kind === 'confirm' ? answer.value : false;
+        try {
+          const answer = await ask(EXPORT_CONFIRM_QUESTION);
+          return answer.kind === 'confirm' && answer.value === true;
+        } catch (e) {
+          // Ctrl-C, end of input or no answer in time: not a yes.
+          if (e instanceof PromptAbortedError || e instanceof PromptTimeoutError) return false;
+          throw e;
+        }
       },
     });
 
@@ -684,9 +745,6 @@ export const doneCommand = defineCommand({
 
     // 7. DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir. Leave
     //    outputDir UNSET so the md-fallback never overwrites the source DRAFT.md.
-    const format: ExportFormat = VALID_FORMATS.has(String(args.format))
-      ? (String(args.format) as ExportFormat)
-      : 'docx';
 
     // Resolve discipline → CSL style from INTAKE.md (never-throw: missing or
     // unparseable INTAKE.md leaves style undefined; citation rendering is skipped).

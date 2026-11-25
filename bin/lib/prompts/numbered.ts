@@ -228,19 +228,27 @@ export async function askNumbered(
     }
 
     case 'confirm': {
-      const line = await readOneLine(question.id, stdin, timeoutMs);
-      if (line === '') {
-        return { id: question.id, kind: 'confirm', value: question.default ?? false };
+      // Only y/yes/n/no (or a blank line, for the default) count. Anything else
+      // asks again and, after three tries, aborts: an answer like "nope" must
+      // never be read as the default, which for some questions is yes.
+      const maxRetries = 3;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const line = await readOneLine(question.id, stdin, timeoutMs);
+        if (line === '') {
+          return { id: question.id, kind: 'confirm', value: question.default ?? false };
+        }
+        const lower = line.toLowerCase();
+        if (lower === 'y' || lower === 'yes') {
+          return { id: question.id, kind: 'confirm', value: true };
+        }
+        if (lower === 'n' || lower === 'no') {
+          return { id: question.id, kind: 'confirm', value: false };
+        }
+        if (attempt < maxRetries - 1) {
+          writeStderr(stderr, 'Please answer y or n: ');
+        }
       }
-      const lower = line.toLowerCase();
-      if (lower === 'y' || lower === 'yes') {
-        return { id: question.id, kind: 'confirm', value: true };
-      }
-      if (lower === 'n' || lower === 'no') {
-        return { id: question.id, kind: 'confirm', value: false };
-      }
-      // Unrecognised input → use default (lenient)
-      return { id: question.id, kind: 'confirm', value: question.default ?? false };
+      throw new PromptAbortedError(question.id);
     }
   }
 }
