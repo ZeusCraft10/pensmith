@@ -244,3 +244,44 @@ test('Pass 1: an invented DOI next to a real arXiv ID is MIS-CITED: the referenc
   assert.equal(r.verdict, 'MIS-CITED', r.reason);
   assert.match(r.reason, /DOI 10\.1038\/s41586-024-99999-x is not registered/);
 });
+
+test('Pass 1: an ISBN written with a qualifier ("(hbk)") is read as the ISBN', async () => {
+  const r = await verdict(entry('book', 'cormen2009', {
+    title: 'Introduction to Algorithms',
+    author: 'Cormen, Thomas H. and Leiserson, Charles E. and Rivest, Ronald L. and Stein, Clifford',
+    year: '2009',
+    isbn: '978-0-262-03384-8 (hbk), 978-0-262-53305-8 (pbk)',
+  }));
+  assert.equal(r.verdict, 'OK', r.reason);
+  assert.match(r.reason, /Open Library record for ISBN 978-0-262-03384-8/);
+});
+
+test('Pass 1: an ISBN field that is not an ISBN at all is not blamed on its check digit', async () => {
+  const r = await verdict(entry('book', 'cormen2009', {
+    title: 'Introduction to Algorithms', author: 'Cormen, Thomas H.', year: '2009', isbn: 'unknown',
+  }));
+  assert.equal(r.verdict, 'MIS-CITED', r.reason);
+  assert.match(r.reason, /unknown is not a valid ISBN/);
+  assert.doesNotMatch(r.reason, /check digit/);
+});
+
+test('Pass 1: a PMID written "PMID: 22955616" is that PMID', async () => {
+  const r = await verdict(entry('article', 'encode2012', {
+    title: 'An integrated encyclopedia of DNA elements in the human genome',
+    author: '{ENCODE Project Consortium}',
+    year: '2012',
+    journal: 'Nature',
+    pmid: 'PMID: 22955616',
+  }));
+  assert.equal(r.verdict, 'OK', r.reason);
+  assert.match(r.reason, /PubMed record for PMID 22955616\b/);
+});
+
+test('Pass 1: a DOI given only as a doi.org link in `url` is looked up as the DOI', async () => {
+  const { title, author, year, journal } = NUMPY;
+  for (const url of ['https://doi.org/10.1109/mcse.2011.37', 'http://dx.doi.org/10.1109/mcse.2011.37']) {
+    const r = await verdict(entry('article', 'walt2011', { title, author, year, journal, url }));
+    assert.equal(r.verdict, 'OK', `${url}: ${r.reason}`);
+    assert.match(r.reason, /Crossref record for DOI 10\.1109\/mcse\.2011\.37/);
+  }
+});

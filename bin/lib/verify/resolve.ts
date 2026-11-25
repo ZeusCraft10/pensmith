@@ -57,6 +57,21 @@ export type IdResolution =
     };
 
 const ARXIV_URL = /arxiv\.org\/(?:abs|pdf)\/([^\s?#]+?)(?:\.pdf)?(?:[?#]|$)/i;
+const DOI_URL = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.[^\s?#]+)/i;
+// A 13- or 10-digit ISBN with its separators, inside text such as
+// "0-262-03384-4 (hbk)" or "ISBN 978-0-262-03384-8".
+const ISBN_SHAPE = /(?<![\dX])(?:(?:\d[\s-]?){12}\d|(?:\d[\s-]?){9}[\dX])(?![\dX])/i;
+
+/** The DOI a doi.org or dx.doi.org link names, or ''. */
+function doiFromUrl(url: string): string {
+  const m = DOI_URL.exec(url);
+  if (!m) return '';
+  try {
+    return decodeURIComponent(m[1]!);
+  } catch {
+    return m[1]!;
+  }
+}
 
 /** The arXiv ID registries are asked for: normalizeArxiv's form without its `arxiv:` prefix. */
 function arxivQueryId(raw: string): string | null {
@@ -73,7 +88,9 @@ export function workIdentifiers(csl: Record<string, unknown>, fields: Record<str
   const ids: WorkId[] = [];
   const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
-  const doi = text(csl['DOI']) || text(fields['doi']);
+  const url = text(csl['URL']) || text(fields['url']);
+  // An entry may give its DOI only as a doi.org link, which the reference list prints.
+  const doi = text(csl['DOI']) || text(fields['doi']) || doiFromUrl(url);
   if (doi) ids.push({ kind: 'doi', raw: doi, value: normalizeDoi(doi), shown: `DOI ${doi}` });
 
   const eprintType = (fields['archiveprefix'] ?? fields['eprinttype'] ?? '').trim().toLowerCase();
@@ -83,7 +100,7 @@ export function workIdentifiers(csl: Record<string, unknown>, fields: Record<str
     text(fields['arxiv']),
     text(fields['arxivid']),
     eprintType === '' && arxivQueryId(eprint) !== null ? eprint : '',
-    ARXIV_URL.exec(text(csl['URL']) || text(fields['url']))?.[1] ?? '',
+    ARXIV_URL.exec(url)?.[1] ?? '',
   ].find((s) => s !== '');
   if (arxivRaw) {
     const value = arxivQueryId(arxivRaw);
@@ -91,10 +108,17 @@ export function workIdentifiers(csl: Record<string, unknown>, fields: Record<str
   }
 
   const pmidRaw = text(fields['pmid']) || (eprintType === 'pubmed' ? eprint : '');
-  if (pmidRaw) ids.push({ kind: 'pmid', raw: pmidRaw, value: normalizePmid(pmidRaw), shown: `PMID ${pmidRaw}` });
+  if (pmidRaw) {
+    const value = normalizePmid(pmidRaw);
+    ids.push({ kind: 'pmid', raw: pmidRaw, value, shown: `PMID ${value ?? pmidRaw}` });
+  }
 
-  // An ISBN field may list several (hardback, paperback, ISBN-10 and -13).
-  const isbnRaw = (text(csl['ISBN']) || text(fields['isbn'])).split(/[,;]|\s(?=[\dXx-]{10,}\b)/).map((s) => s.trim()).filter(Boolean);
+  // An ISBN field may list several (hardback, paperback, ISBN-10 and -13),
+  // each perhaps with a label or a qualifier such as "(pbk)".
+  const isbnRaw = (text(csl['ISBN']) || text(fields['isbn'])).split(/[,;]|\s(?=[\dXx-]{10,}\b)/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => ISBN_SHAPE.exec(s)?.[0] ?? s);
   const isbn = isbnRaw.find((s) => normalizeIsbn(s) !== null) ?? isbnRaw.find(looksLikeIsbn) ?? isbnRaw[0];
   if (isbn) ids.push({ kind: 'isbn', raw: isbn, value: normalizeIsbn(isbn), shown: `ISBN ${isbn}` });
 
@@ -112,13 +136,15 @@ const INVALID: Readonly<Record<WorkIdKind, string>> = {
   doi: 'is not a valid DOI',
   arxiv: 'is not a valid arXiv ID',
   pmid: 'is not a valid PubMed ID',
-  isbn: 'is not a valid ISBN (its check digit is wrong)',
+  isbn: 'is not a valid ISBN',
 };
 
 /** Ask each registry that can answer for `id`, in turn, until one finds the work. */
 export async function resolveId(id: WorkId): Promise<IdResolution> {
   if (id.value === null) {
-    return { kind: 'not_found', registries: [], authoritative: true, invalid: `${id.raw} ${INVALID[id.kind]}` };
+    // An ISBN of the right length whose check digit fails is a typo; say so.
+    const why = id.kind === 'isbn' && looksLikeIsbn(id.raw) ? `${INVALID.isbn} (its check digit is wrong)` : INVALID[id.kind];
+    return { kind: 'not_found', registries: [], authoritative: true, invalid: `${id.raw} ${why}` };
   }
   const failures: Array<{ registry: RegistryName; detail: string }> = [];
   const said: RegistryName[] = [];

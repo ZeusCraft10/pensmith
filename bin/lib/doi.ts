@@ -27,7 +27,7 @@
 //         normalized away)
 //
 //   normalizePmid(input)   ──→  string | null
-//     - accept digits-only OR 'PMID:digits' (case-insensitive prefix)
+//     - accept digits-only OR 'PMID:digits' / 'PMID: digits' (case-insensitive prefix)
 //     - canonical: bare digits (max 9, the PubMed limit)
 //
 //   normalizePmcid(input)  ──→  string | null
@@ -203,13 +203,14 @@ export function isArxiv(s: string): boolean {
 /**
  * Normalize a PubMed ID (PMID).
  *
- * Accepts bare digits OR a 'PMID:' prefix (case-insensitive). Canonical
- * form is bare digits, max 9 (PubMed's hard upper bound — IDs above 1e9
- * have not been issued at the time of writing).
+ * Accepts bare digits OR a 'PMID:' prefix (case-insensitive, with or without
+ * a space after the colon). Canonical form is bare digits, max 9 (PubMed's
+ * hard upper bound — IDs above 1e9 have not been issued at the time of
+ * writing).
  */
 export function normalizePmid(input: string): string | null {
   if (typeof input !== 'string') return null;
-  const s = input.trim().replace(/^pmid:/i, '');
+  const s = input.trim().replace(/^pmid:\s*/i, '');
   return /^\d+$/.test(s) && s.length >= 1 && s.length <= 9 ? s : null;
 }
 

@@ -200,6 +200,7 @@ test('normalizePmid: bare digits + PMID: prefix in any case', () => {
   assert.equal(normalizePmid('pmid:12345678'), '12345678');
   assert.equal(normalizePmid('Pmid:12345678'), '12345678');
   assert.equal(normalizePmid(' 12345678 '), '12345678'); // whitespace
+  assert.equal(normalizePmid('PMID: 12345678'), '12345678'); // a space after the colon, as bibliographies write it
 });
 
 test('normalizePmid: garbage returns null', () => {
