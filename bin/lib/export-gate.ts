@@ -51,10 +51,16 @@ function fileSha(path: string): string | null {
   }
 }
 
-async function readBib(paperRoot: string): Promise<{ bib: Bib; bibPath: string } | { error: string }> {
+/** The text of .paper/CITATIONS.bib; '' when there is none. */
+export function readBibText(paperRoot: string): string {
+  const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
+  return existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '';
+}
+
+async function readBib(paperRoot: string, bibText?: string): Promise<{ bib: Bib; bibPath: string } | { error: string }> {
   const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
   try {
-    return { bib: await parseBibForPass1(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : ''), bibPath };
+    return { bib: await parseBibForPass1(bibText ?? readBibText(paperRoot)), bibPath };
   } catch (err) {
     return { error: `.paper/CITATIONS.bib could not be read (${err instanceof Error ? err.message : String(err)})` };
   }
@@ -63,11 +69,11 @@ async function readBib(paperRoot: string): Promise<{ bib: Bib; bibPath: string }
 /**
  * Whether the compiled draft (`compiled`: its bytes, or the text read from
  * .paper/DRAFT.md) may be exported: it is the one the last gated compile
- * wrote, from sections and a bibliography that have not changed since, and
- * every section's recorded verdicts pass. Deterministic and offline; never
- * throws.
+ * wrote, from sections and a bibliography (`bibText`, else read from
+ * .paper/CITATIONS.bib) that have not changed since, and every section's
+ * recorded verdicts pass. Deterministic and offline; never throws.
  */
-export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer | string): Promise<ExportBlock> {
+export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer | string, bibText?: string): Promise<ExportBlock> {
   const reasons: string[] = [];
   const warnings: string[] = [];
   const blocked = (): ExportBlock => ({ blocked: reasons.length > 0, reasons, warnings });
@@ -132,7 +138,7 @@ export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer
     warnings.push(...gate.warnings);
   }
 
-  const bib = await readBib(paperRoot);
+  const bib = await readBib(paperRoot, bibText);
   if ('error' in bib) {
     reasons.push(bib.error);
   } else {
@@ -173,15 +179,16 @@ function paperAcknowledgements(paperRoot: string, sections: ReadonlyArray<Pick<M
 /**
  * Pass 1, and Pass 3 unless `pass3` is false (the caller already ran it on
  * these bytes), on the exact text being exported, against CITATIONS.bib as it
- * is now. A blocking verdict is a reason to refuse the export.
+ * is now (`bibText`, else read). A blocking verdict is a reason to refuse the
+ * export.
  */
 export async function recheckExportText(
   paperRoot: string,
   text: string,
-  opts: { pass3?: boolean; label?: string } = {},
+  opts: { pass3?: boolean; label?: string; bibText?: string } = {},
 ): Promise<ExportBlock> {
   const label = opts.label ?? 'the exported text';
-  const bib = await readBib(paperRoot);
+  const bib = await readBib(paperRoot, opts.bibText);
   if ('error' in bib) return { blocked: true, reasons: [bib.error], warnings: [] };
   const manifest = readCompileManifest(paperRoot);
   const acknowledgements = manifest.ok ? paperAcknowledgements(paperRoot, manifest.manifest.sections) : [];

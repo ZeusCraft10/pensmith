@@ -588,6 +588,13 @@ export function formatUnavailable(format: ExportFormat, pandocPresent: boolean):
 export interface ExportOptions {
   /** The manuscript to export (the compiled DRAFT.md or the humanized FINAL.md). */
   inputPath: string;
+  /**
+   * The manuscript's text as the caller already read and checked it, so the
+   * bytes exported are the bytes checked; read from inputPath otherwise.
+   */
+  markdown?: string;
+  /** CITATIONS.bib as the caller already read and checked it; read from the paper folder otherwise. */
+  bibText?: string;
   /** The export folder; defaults to `<paperDir>/export`. */
   outputDir?: string;
   format: ExportFormat;
@@ -644,11 +651,11 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
       `The export folder ${exportDir} holds the manuscript or the paper's own files, which an export would replace. Choose another folder.`,
     );
   }
-  const md = await fsp.readFile(inputPath, 'utf8');
+  const md = opts.markdown ?? await fsp.readFile(inputPath, 'utf8');
 
   // Citations and the works they cite.
   const bibPathSrc = join(paper, 'CITATIONS.bib');
-  const bibText = existsSync(bibPathSrc) ? await fsp.readFile(bibPathSrc, 'utf8') : '';
+  const bibText = opts.bibText ?? (existsSync(bibPathSrc) ? await fsp.readFile(bibPathSrc, 'utf8') : '');
   let entries: CslEntry[] = [];
   try {
     entries = await readBibEntries(bibText);

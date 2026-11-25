@@ -165,3 +165,25 @@ function compiledPaperWithAck(): string {
   assert.equal(c.status, 0, c.out);
   return root;
 }
+
+test('the exporter writes the manuscript and bibliography done checked, not what is on disk by then', async () => {
+  const { exportDraft } = await import('../bin/lib/exporter.js');
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-export-bound-bytes-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  // What done read and checked, then the files as an edit left them afterwards.
+  const checked = '# Paper\n\nAttention suffices [@vaswani2017].\n';
+  writeFileSync(join(root, '.paper', 'DRAFT.md'), `${checked}A sentence added later [@ghost2024].\n`);
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), GHOST);
+  const r = await exportDraft({
+    inputPath: join(root, '.paper', 'DRAFT.md'),
+    markdown: checked,
+    bibText: ATTENTION,
+    format: 'md',
+    paperRoot: root,
+    pandocPresent: false,
+  });
+  const md = readFileSync(r.outputPath, 'utf8');
+  assert.doesNotMatch(md, /added later|ghost2024|superconductivity/i, md);
+  assert.match(md, /Attention Is All You Need/, md);
+  assert.deepEqual(r.citedKeys, ['vaswani2017']);
+});

@@ -55,7 +55,7 @@ import {
 } from '../lib/citation-grammar.js';
 import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
-import { recheckExportText, runExportBlockingGate } from '../lib/export-gate.js';
+import { readBibText, recheckExportText, runExportBlockingGate } from '../lib/export-gate.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -604,8 +604,10 @@ export const doneCommand = defineCommand({
       process.exitCode = EXIT_REFUSED;
       return { ok: false };
     }
-    // One read: the gate, the checks and the export all use these bytes.
+    // One read of the manuscript and of the bibliography: the gate, the
+    // checks and the export all use these bytes.
     const draftMd = draftBytes.toString('utf8');
+    const bibText = readBibText(paperRoot);
 
     // UNCONDITIONAL export blocking gate, BEFORE any advisory, humanizer or
     // export work, for EVERY done invocation (explicit, bare /pensmith, next),
@@ -622,12 +624,12 @@ export const doneCommand = defineCommand({
       process.exitCode = EXIT_REFUSED;
       return { ok: false, blocked: true };
     };
-    const blocking = await runExportBlockingGate(paperRoot, draftBytes);
+    const blocking = await runExportBlockingGate(paperRoot, draftBytes, bibText);
     if (blocking.blocked) {
       return refuseExport('export refused (the compiled draft is not what a gated compile produced, a section is unverified, or text is placeholder)', blocking.reasons);
     }
     for (const w of blocking.warnings) process.stderr.write(`pensmith done: WARN — ${w}.\n`);
-    const recheck = await recheckExportText(paperRoot, draftMd, { label: '.paper/DRAFT.md' });
+    const recheck = await recheckExportText(paperRoot, draftMd, { label: '.paper/DRAFT.md', bibText });
     if (recheck.blocked) {
       return refuseExport('export refused (a citation or quotation in the text being exported does not pass when checked again)', recheck.reasons);
     }
@@ -684,8 +686,9 @@ export const doneCommand = defineCommand({
     // Skip only when no humanizer ran (finalPath === null) — i.e. no humanized artifact exists.
     // --yolo NEVER bypasses this gate (per PRD §14 non-negotiable: verifier gates are unconditional).
     // --yolo belongs ONLY on the advisory runDoneGate (DONE-09) confirmation below.
+    let finalMd: string | null = null;
     if (finalPath !== null) {
-      const finalMd = readFileSync(finalPath, 'utf8');
+      finalMd = readFileSync(finalPath, 'utf8');
       if (isPlaceholderText(finalMd)) {
         process.stdout.write('pensmith done: BLOCKED — the humanized FINAL.md is placeholder text (PENSMITH_NO_LLM), not a paper.\n');
         process.exitCode = EXIT_REFUSED;
@@ -702,7 +705,7 @@ export const doneCommand = defineCommand({
       }
       // FINAL.md is what is exported, so its citations are checked as well
       // (GATE-04 has just run Pass 3 on it).
-      const finalCheck = await recheckExportText(paperRoot, finalMd, { pass3: false, label: '.paper/FINAL.md' });
+      const finalCheck = await recheckExportText(paperRoot, finalMd, { pass3: false, label: '.paper/FINAL.md', bibText });
       if (finalCheck.blocked) {
         return refuseExport('export refused (a citation in the humanized FINAL.md does not pass when checked again)', finalCheck.reasons);
       }
@@ -747,7 +750,15 @@ export const doneCommand = defineCommand({
 
     let result: Awaited<ReturnType<typeof exportDraft>>;
     try {
-      result = await exportDraft({ inputPath: finalPath ?? draftPath, format, paperRoot, pandocPresent: pandoc, style: citation.style });
+      result = await exportDraft({
+        inputPath: finalPath ?? draftPath,
+        markdown: finalMd ?? draftMd,
+        bibText,
+        format,
+        paperRoot,
+        pandocPresent: pandoc,
+        style: citation.style,
+      });
     } catch (err) {
       if (!(err instanceof ExportError)) throw err;
       process.stdout.write(`pensmith done: export failed — ${err.message} Nothing was exported.\n`);
@@ -774,7 +785,7 @@ export const doneCommand = defineCommand({
     // otherwise the compiled draft (the manuscript is final, just not humanized).
     const finalMdPath = join(paperDir(paperRoot), 'FINAL.md');
     if (!existsSync(finalMdPath)) {
-      await atomicWriteFile(finalMdPath, finalPath !== null ? readFileSync(finalPath, 'utf8') : draftMd);
+      await atomicWriteFile(finalMdPath, finalMd ?? draftMd);
     }
 
     process.stdout.write(`pensmith done: exported ${result.outputPath} (${citation.style} citations)\n`);
