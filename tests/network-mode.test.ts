@@ -173,7 +173,7 @@ test('cassette mode: a recorded DOI replays its own record', async () => {
     const hit = await sources.crossref.fetchById('10.1038/nphys1170');
     assert.ok(hit, 'the add-doi cassette records this DOI');
     assert.equal(hit.doi?.toLowerCase(), '10.1038/nphys1170');
-    assert.match(hit.title, /Quantum coherence/);
+    assert.match(hit.title, /Measured measurement/);
     assert.deepEqual(agent.requests, []);
   });
 });

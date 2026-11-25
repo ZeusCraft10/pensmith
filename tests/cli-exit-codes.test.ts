@@ -135,14 +135,14 @@ test('exit codes: a quote nobody could check exits 0 but warns loudly on stderr'
     [{
       n: 1,
       slug: 'intro',
-      draft: 'Engel and Calhoun report that "long-lived quantum coherence was observed in the photosynthetic complex at low temperature" [@engel2009].\n',
+      draft: 'Aspelmeyer reports that "long-lived quantum coherence was observed in the photosynthetic complex at low temperature" [@aspelmeyer2009].\n',
       verification: CLEAN,
       status: 'written',
     }],
     {
       bib:
-        '@article{engel2009, title={Quantum coherence in photosynthetic complexes}, ' +
-        'author={Engel, Gregory and Calhoun, Tessa}, year={2009}, journal={Nature Physics}, doi={10.1038/nphys1170}}\n',
+        '@article{aspelmeyer2009, title={Measured measurement}, ' +
+        'author={Aspelmeyer, Markus}, year={2009}, journal={Nature Physics}, doi={10.1038/nphys1170}}\n',
     },
   );
   const r = runCli(['verify', '1'], root, { PENSMITH_OFFLINE: '0', PENSMITH_TEST_CASSETTES: '1' });

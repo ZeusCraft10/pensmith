@@ -71,8 +71,8 @@ test('OpenAlex: display names are split, and an arXiv DOI gives the arXiv ID', a
 });
 
 test('Crossref: family and given come from the record\'s own fields', async () => {
-  const hits = await crossref.search('Attention Is All You Need', { limit: 1 });
-  assert.equal(hits.length, 1);
+  const hits = await crossref.search('Attention Is All You Need', { limit: 5 });
+  assert.equal(hits[0]!.title, 'Is Attention All You Need?');
   assert.deepEqual(hits[0]!.names?.[0], { family: 'Mineault', given: 'Patrick' });
   assert.equal(hits[0]!.authors[0], 'Mineault, Patrick');
   assert.equal(hits[0]!.csl_type, 'chapter');
