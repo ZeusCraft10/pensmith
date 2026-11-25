@@ -211,6 +211,9 @@ export default [
       // Must import undici MockAgent to prove the arXiv adapter only talks
       // https, and redirect the HTTP cache into a per-test tmpdir.
       'tests/sources/arxiv-https.test.ts',
+      // Fails the first Unpaywall lookup or PDF fetch with a MockAgent to
+      // prove Pass 3 asks again for the next quotation of the same source.
+      'tests/pass3-source-lookup.test.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

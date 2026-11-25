@@ -107,25 +107,6 @@ export function shortQuoteFound(quote: string, sourceText: string): boolean {
   return matchFrom(0, 0);
 }
 
-/** A source's extracted text, and its normalized form once a long quotation needs it. */
-interface SourceText {
-  text: string;
-  normalized?: string;
-}
-
-/** `fn`, called once per key: a later call with the same key shares the first call's promise. */
-function once<T>(fn: (key: string) => Promise<T>): (key: string) => Promise<T> {
-  const calls = new Map<string, Promise<T>>();
-  return (key) => {
-    let p = calls.get(key);
-    if (!p) {
-      p = fn(key);
-      calls.set(key, p);
-    }
-    return p;
-  };
-}
-
 /**
  * Run Pass-3 against every quote in `draftMd`, looking up source PDFs via
  * the bib map.
@@ -138,14 +119,6 @@ export async function runPass3(
 ): Promise<Pass3Result[]> {
   const quotes = extractQuotes(draftMd);
   const results: Pass3Result[] = [];
-  // A source several quotations cite is looked up, fetched and parsed once.
-  const oaPdfUrl = once(async (doi: string) => (await sources.unpaywall.fetchById(doi))?.oa_pdf_url);
-  const sourceText = once(async (url: string): Promise<SourceText> => {
-    const resp = await httpFetch(url, { source: 'unpaywall' });
-    const body = resp.body;
-    const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
-    return { text: await extractPdfText(buf) };
-  });
 
   for (const q of quotes) {
     const snippet = q.text.slice(0, 40);
@@ -179,7 +152,12 @@ export async function runPass3(
       continue;
     }
 
-    const oaUrl = await oaPdfUrl(claimed.DOI);
+    // Looked up and fetched per quotation, never remembered for the run: a
+    // failed lookup or fetch for one quotation must not leave a later
+    // quotation of the same source unchecked. A repeat of a success comes
+    // from the HTTP cache.
+    const oaCandidate = await sources.unpaywall.fetchById(claimed.DOI);
+    const oaUrl = oaCandidate?.oa_pdf_url;
     if (!oaUrl) {
       results.push({
         citekey: q.citekey, quoteSnippet: snippet,
@@ -190,8 +168,10 @@ export async function runPass3(
     }
 
     try {
-      const src = await sourceText(oaUrl);
-      const text = src.text;
+      const resp = await httpFetch(oaUrl, { source: 'unpaywall' });
+      const body = resp.body;
+      const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+      const text = await extractPdfText(buf);
       if (text.replace(/\s/g, '').length < 50) {
         results.push({
           citekey: q.citekey, quoteSnippet: snippet,
@@ -214,8 +194,7 @@ export async function runPass3(
         });
         continue;
       }
-      src.normalized ??= nfkcNormalize(text);
-      const ratio = levenshteinSubstring(nfkcNormalize(q.text), src.normalized);
+      const ratio = levenshteinSubstring(nfkcNormalize(q.text), nfkcNormalize(text));
       if (ratio >= QUOTE_LEV_THRESHOLD) {
         results.push({
           citekey: q.citekey, quoteSnippet: snippet,
