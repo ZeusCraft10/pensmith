@@ -68,10 +68,9 @@ export function canonicalVerb(word: string): Ux02Verb | null {
   return Object.prototype.hasOwnProperty.call(VERB_ALIASES, word) ? (VERB_ALIASES[word] ?? null) : null;
 }
 
-/** Verbs and aliases close enough to `word` to be what the user meant. */
-function suggestVerbs(word: string): string[] {
+/** The names close enough to `word` to be what the user meant, closest first. */
+function closeNames(word: string, names: readonly string[]): string[] {
   const lower = word.toLowerCase();
-  const names = [...UX02_VERBS, ...Object.keys(VERB_ALIASES)];
   return names
     .map((name) => ({ name, d: levenshtein(lower, name) }))
     .filter(({ name, d }) => d <= 2 && d < Math.max(name.length, lower.length) / 2)
@@ -86,11 +85,24 @@ export function unknownVerbMessage(word: string): string {
   if (hint) {
     lines.push(`  ${hint}.`);
   } else {
-    const close = suggestVerbs(word);
+    const close = closeNames(word, [...UX02_VERBS, ...Object.keys(VERB_ALIASES)]);
     if (close.length > 0) lines.push(`  Did you mean ${close.map((v) => `\`pensmith ${v}\``).join(' or ')}?`);
   }
   const aliases = Object.entries(VERB_ALIASES).map(([alias, verb]) => `${alias} = ${verb}`).join(', ');
   lines.push(`  Commands: ${UX02_VERBS.join(', ')} (aliases: ${aliases}).`);
   lines.push('  Run `pensmith` with no command to take the next step, or `pensmith --help` for usage.');
+  return lines.join('\n');
+}
+
+/**
+ * The error text for a flag that bare `pensmith` does not take (no trailing
+ * newline). `options` are the flags it does take.
+ */
+export function unknownOptionMessage(flag: string, options: readonly string[]): string {
+  const lines = [`pensmith: unknown option '${flag}'.`];
+  const close = closeNames(flag, options);
+  if (close.length > 0) lines.push(`  Did you mean ${close.map((o) => `\`${o}\``).join(' or ')}?`);
+  lines.push(`  Without a command, pensmith takes only: ${options.join(', ')}.`);
+  lines.push('  Run `pensmith --help` for usage.');
   return lines.join('\n');
 }

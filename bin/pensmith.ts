@@ -49,10 +49,10 @@
 import { realpathSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineCommand, parseArgs, runMain, type CommandDef } from 'citty';
+import { defineCommand, parseArgs, runMain, type ArgsDef, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
 import { VERSION } from './lib/version.generated.js';
-import { UX02_VERBS, canonicalVerb, unknownVerbMessage, type Ux02Verb } from './lib/verbs.js';
+import { UX02_VERBS, canonicalVerb, unknownOptionMessage, unknownVerbMessage, type Ux02Verb } from './lib/verbs.js';
 import { setMirrorPromptsToStderr } from './lib/session-log.js';
 import { projectEstimate } from './lib/estimator.js';
 import { resolveNextAction, type RouterDecision } from './lib/router.js';
@@ -192,6 +192,25 @@ function buildSubCommands(): Record<string, () => Promise<AnyCommandDef>> {
   return out;
 }
 
+// Five global flags declared so `--help` documents them; the LOAD-BEARING
+// application is the argv pre-parse below (NOT a root run() — H2).
+const ROOT_ARGS = {
+  'dry-run': { type: 'boolean', description: 'Show what the step would read, write and call; run nothing, write nothing, no network.', default: false },
+  offline: { type: 'boolean', description: 'Refuse every network request; lookups report "skipped (offline)" and citations UNRESOLVED.', default: false },
+  estimate: { type: 'boolean', description: 'Project token + USD cost; do not execute.', default: false },
+  yolo: { type: 'boolean', description: 'Skip outline + export approval gates.', default: false },
+  'show-prompts': { type: 'boolean', description: 'Echo every LLM prompt to stderr.', default: false },
+} as const satisfies ArgsDef;
+
+/** Every flag bare `pensmith` (no command word) accepts. */
+const ROOT_OPTIONS: readonly string[] = [
+  ...Object.keys(ROOT_ARGS).map((k) => `--${k}`),
+  '--version',
+  '-v',
+  '--help',
+  '-h',
+];
+
 export const command = defineCommand({
   meta: {
     name: 'pensmith',
@@ -201,15 +220,7 @@ export const command = defineCommand({
     version: VERSION,
     description: 'Pensmith — Tier 2 portable CLI. Section-as-phase academic writing.',
   },
-  // Four global flags declared so `--help` documents them; the LOAD-BEARING
-  // application is the argv pre-parse below (NOT a root run() — H2).
-  args: {
-    'dry-run': { type: 'boolean', description: 'Show what the step would read, write and call; run nothing, write nothing, no network.', default: false },
-    offline: { type: 'boolean', description: 'Refuse every network request; lookups report "skipped (offline)" and citations UNRESOLVED.', default: false },
-    estimate: { type: 'boolean', description: 'Project token + USD cost; do not execute.', default: false },
-    yolo: { type: 'boolean', description: 'Skip outline + export approval gates.', default: false },
-    'show-prompts': { type: 'boolean', description: 'Echo every LLM prompt to stderr.', default: false },
-  },
+  args: ROOT_ARGS,
   // NO run() — bare routing happens in the pre-dispatch wrapper below (H2).
   subCommands: buildSubCommands(),
 });
@@ -368,6 +379,16 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
     }
     // An alias is rewritten to its verb so it takes exactly the verb's arguments.
     if (verb !== word) argv = [...argv.slice(0, wordAt), verb, ...argv.slice(wordAt + 1)];
+  } else {
+    // With no command word, only the root flags mean anything. A typo such as
+    // `--verison` used to be dropped and the next step run in its place.
+    const unknown = argv.find((tok) => !ROOT_OPTIONS.includes(tok));
+    if (unknown !== undefined) {
+      process.stderr.write(`${unknownOptionMessage(unknown, ROOT_OPTIONS)}\n`);
+      process.exitCode = EXIT_REFUSED;
+      return;
+    }
+    argv = argv.map((tok) => (tok === '-v' ? '--version' : tok));
   }
 
   // (a) --show-prompts → mirror prompts to stderr (BEFORE any LLM call).

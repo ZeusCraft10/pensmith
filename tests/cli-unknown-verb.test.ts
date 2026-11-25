@@ -118,3 +118,31 @@ test('no positional: bare `pensmith` with only flags still asks the router', () 
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /pensmith new: wrote INTAKE\.md/);
 });
+
+test('unknown option: a flag pensmith does not have exits 2 instead of starting a paper', () => {
+  for (const [flag, suggestion] of [['--verison', /--version/], ['--yollo', /--yolo/], ['--json', null]] as const) {
+    const dir = emptyDir();
+    const r = runCli([flag], dir, { PENSMITH_NO_LLM: '1' });
+    assert.equal(r.status, 2, `${flag}: stdout=${r.stdout} stderr=${r.stderr}`);
+    assert.match(r.stderr, new RegExp(`unknown option '${flag}'`), flag);
+    if (suggestion) assert.match(r.stderr, suggestion, `${flag}: the error must suggest the closest option`);
+    assertNothingWritten(dir, [], r);
+  }
+});
+
+test('unknown option: an unknown flag next to a real one is still refused', () => {
+  const dir = emptyDir();
+  const r = runCli(['--yolo', '--dryrun'], dir, { PENSMITH_NO_LLM: '1' });
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /unknown option '--dryrun'/);
+  assert.match(r.stderr, /--dry-run/);
+  assertNothingWritten(dir, [], r);
+});
+
+test('option: `-v` prints the version and runs nothing', () => {
+  const dir = emptyDir();
+  const r = runCli(['-v'], dir, { PENSMITH_NO_LLM: '1' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^\d+\.\d+\.\d+/, `-v must print the version: ${r.stdout}`);
+  assertNothingWritten(dir, [], r);
+});
