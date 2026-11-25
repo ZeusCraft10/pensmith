@@ -134,7 +134,7 @@ test('writeBibtex: retracted flag surfaces as note = {RETRACTED} in .bib (D-15)'
   const target = tmpFile();
   const retractedFixture: SourceCandidate[] = [
     {
-      source: 'retraction-watch',
+      source: 'crossref',
       id: '10.0000/retracted-001',
       doi: '10.0000/retracted-001',
       title: 'A Famously Retracted Paper',

@@ -32,7 +32,9 @@ import { parseBibByCitekey } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir } from '../lib/paths.js';
 import {
+  citationWarnings,
   isBlockingVerdict,
+  parseVerdictRowDetails,
   renderPass1VerdictRow,
   renderPass3VerdictRow,
   unattributedWarning,
@@ -143,8 +145,8 @@ export const verifyCommand = defineCommand({
     const pass3 = await runPass3(draftMd, bibByCitekey);
 
     // RSCH-10 freshness probe (D-10, WARN-only). Runs AFTER the blocking
-    // verdict computation and NEVER influences `status` — a stale DOI or a
-    // retraction-watch hit surfaces as an advisory table row, not a block.
+    // verdict computation and NEVER influences `status`: a DOI that no longer
+    // resolves surfaces as an advisory table row, not a block.
     const freshness = await runFreshnessForDraft(draftMd, bibPath);
 
     // Aggregate: any verdict that blocks compile (every Pass-1 verdict other
@@ -228,6 +230,10 @@ export const verifyCommand = defineCommand({
     }
 
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
+    // A work under an expression of concern passes but must not look clean.
+    for (const w of citationWarnings(parseVerdictRowDetails(lines.join('\n')), `section ${n}`)) {
+      process.stderr.write(`pensmith verify: WARN — ${w}.\n`);
+    }
     // What nobody could check does not block yet, but must not look clean.
     if (unattributed > 0) {
       process.stderr.write(`pensmith verify: WARN — ${unattributedWarning(`section ${n}`, unattributed)}; see ${verifPath}.\n`);

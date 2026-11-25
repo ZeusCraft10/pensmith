@@ -6,8 +6,7 @@
 // Unpaywall is a DOI-lookup service — there is no native "search". We expose a
 // `search()` export for protocol compatibility but it always returns [] (the
 // research workflow calls Unpaywall only after another source has supplied a
-// DOI). D-15 keeps retraction-watch fetchById-only as a hard rule; Unpaywall is
-// soft-only: protocol-shaped but inert.
+// DOI). It is protocol-shaped but inert.
 //
 // Polite-pool via `email=` query param (Unpaywall's published etiquette).
 

@@ -19,7 +19,7 @@
 //   - Each source is read under its own key spellings, so a doi.org record
 //     that also carries Crossref's `published` / `short-container-title` (or
 //     a Crossref message carrying CSL's) does not let a mismatch pass.
-//   - Retraction Watch is asked once per DOI, in normalized form.
+//   - OpenAlex is asked once per DOI, in normalized form, whether the work is retracted.
 //   - arXiv and PubMed fetchById (research candidates, not Pass 1) read a
 //     response as their search() does.
 
@@ -382,17 +382,18 @@ const BOTH_WRONG = [
   /the journal "Hydro Letters" is not "Journal of Aqueous Things"/,
 ];
 
-/** Retraction Watch lists nothing (or only `listed`); each `filter` it is asked with goes into `asked`. */
-function retractionWatchLists(asked: string[], listed?: string): void {
-  agent.get('https://api.labs.crossref.org')
-    .intercept({ path: (p) => p.startsWith('/data/retractions?'), method: 'GET' })
+/**
+ * OpenAlex holds every DOI it is asked about; only `retracted` is listed as
+ * retracted. Each DOI it is asked about goes into `asked`.
+ */
+function openAlexLists(asked: string[], retracted?: string): void {
+  agent.get('https://api.openalex.org')
+    .intercept({ path: (p) => p.startsWith('/works/doi:'), method: 'GET' })
     .reply((opts) => {
-      const filter = new URL(String(opts.path), 'https://api.labs.crossref.org').searchParams.get('filter') ?? '';
-      asked.push(filter);
-      const items = filter === `record:${listed}`
-        ? [{ doi: listed, title: 'Adherence Matters', authors: [{ family: 'Smith', given: 'John' }], year: 1998, retractedDate: '2001-01-01', reason: 'Fabrication' }]
-        : [];
-      return { statusCode: 200, data: JSON.stringify({ items }), responseOptions: { headers: JSON_HEADERS } };
+      const doi = decodeURIComponent(new URL(String(opts.path), 'https://api.openalex.org').pathname.slice('/works/doi:'.length));
+      asked.push(doi);
+      const work = { id: 'https://openalex.org/W1', doi: `https://doi.org/${doi}`, title: 'Adherence Matters', is_retracted: doi === retracted };
+      return { statusCode: 200, data: JSON.stringify(work), responseOptions: { headers: JSON_HEADERS } };
     })
     .persist();
 }
@@ -423,7 +424,7 @@ function onlyDoiOrgHolds(doi: string, csl: Record<string, unknown>): void {
 }
 
 test('Pass 1: a doi.org record is read under CSL spellings; a Crossref `published` year or `short-container-title` it carries does not excuse a mismatch', async () => {
-  retractionWatchLists([]);
+  openAlexLists([]);
   const doi = '10.5555/hydro.2010.001';
   onlyDoiOrgHolds(doi, hydroWork(doi, { type: 'article-journal', published: { 'date-parts': [[2008]] }, 'short-container-title': ['Hydro Lett.'] }));
   const r = await pass1Verdict(hydroEntry(doi));
@@ -433,7 +434,7 @@ test('Pass 1: a doi.org record is read under CSL spellings; a Crossref `publishe
 });
 
 test('Pass 1: a doi.org record\'s own `original-date` and `container-title-short` are read', async () => {
-  retractionWatchLists([]);
+  openAlexLists([]);
   const doi = '10.5555/hydro.2010.002';
   onlyDoiOrgHolds(doi, hydroWork(doi, { type: 'article-journal', 'original-date': { 'date-parts': [[2008]] }, 'container-title-short': 'Hydro Lett.' }));
   const r = await pass1Verdict(hydroEntry(doi));
@@ -442,7 +443,7 @@ test('Pass 1: a doi.org record\'s own `original-date` and `container-title-short
 });
 
 test('Pass 1: a Crossref message is read under Crossref spellings; a CSL `original-date` or `container-title-short` it carries does not excuse a mismatch', async () => {
-  retractionWatchLists([]);
+  openAlexLists([]);
   const doi = '10.5555/hydro.2010.003';
   crossrefHolds(doi, hydroWork(doi, { type: 'journal-article', 'original-date': { 'date-parts': [[2008]] }, 'container-title-short': ['Hydro Lett.'] }));
   const r = await pass1Verdict(hydroEntry(doi));
@@ -452,7 +453,7 @@ test('Pass 1: a Crossref message is read under Crossref spellings; a CSL `origin
 });
 
 test('Pass 1: a Crossref message\'s own `published` and `short-container-title` are read', async () => {
-  retractionWatchLists([]);
+  openAlexLists([]);
   const doi = '10.5555/hydro.2010.004';
   crossrefHolds(doi, hydroWork(doi, { type: 'journal-article', published: { 'date-parts': [[2008]] }, 'short-container-title': ['Hydro Lett.'] }));
   const r = await pass1Verdict(hydroEntry(doi));
@@ -461,7 +462,7 @@ test('Pass 1: a Crossref message\'s own `published` and `short-container-title` 
 });
 
 // ---------------------------------------------------------------------------
-//   Retraction Watch: one query per DOI, normalized
+//   OpenAlex retraction cross-check: one query per DOI, normalized
 // ---------------------------------------------------------------------------
 
 const ADHERENCE = {
@@ -474,24 +475,24 @@ const ADHERENCE = {
 const adherenceEntry = (doi: string): string =>
   `@article{smith1998,\n  title = {Adherence Matters},\n  author = {Smith, John and Doe, Jane},\n  journal = {Journal of Adherence},\n  year = {1998},\n  doi = {${doi}}\n}\n`;
 
-test('Pass 1: a DOI written as a doi.org link with trailing punctuation is asked of Retraction Watch as the DOI, and a listing is caught', async () => {
+test('Pass 1: a DOI written as a doi.org link with trailing punctuation is asked of OpenAlex as the DOI, and a retraction there is caught', async () => {
   const asked: string[] = [];
-  retractionWatchLists(asked, '10.1234/abc');
+  openAlexLists(asked, '10.1234/abc');
   // The registry record carries no DOI of its own, so the entry's spelling is the only one asked.
   crossrefHolds('10.1234/abc', ADHERENCE);
   const r = await pass1Verdict(adherenceEntry('https://doi.org/10.1234/abc.'));
-  assert.equal(r.verdict, 'MIS-CITED', r.reason);
-  assert.match(r.reason, /Retraction Watch/);
-  assert.deepEqual(asked, ['record:10.1234/abc']);
+  assert.equal(r.verdict, 'RETRACTED', r.reason);
+  assert.match(r.reason, /OpenAlex/);
+  assert.deepEqual(asked, ['10.1234/abc']);
 });
 
-test('Pass 1: Retraction Watch is asked once for a DOI the entry and the registry spell in different case', async () => {
+test('Pass 1: OpenAlex is asked once for a DOI the entry and the registry spell in different case', async () => {
   const asked: string[] = [];
-  retractionWatchLists(asked);
+  openAlexLists(asked);
   crossrefHolds('10.1128/iai.66.9.4305-4312.1998', { ...ADHERENCE, DOI: '10.1128/iai.66.9.4305-4312.1998' });
   const r = await pass1Verdict(adherenceEntry('10.1128/IAI.66.9.4305-4312.1998'));
   assert.equal(r.verdict, 'OK', r.reason);
-  assert.deepEqual(asked, ['record:10.1128/iai.66.9.4305-4312.1998']);
+  assert.deepEqual(asked, ['10.1128/iai.66.9.4305-4312.1998']);
 });
 
 // ---------------------------------------------------------------------------

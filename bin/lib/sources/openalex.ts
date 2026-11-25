@@ -1,8 +1,9 @@
 // bin/lib/sources/openalex.ts — OpenAlex adapter (RSCH-03, RSCH-04, T-3-13).
 //
 // Endpoints:
-//   search:     GET https://api.openalex.org/works?search=<encoded>&per-page=<limit>
-//   fetchById:  GET https://api.openalex.org/works/<id>
+//   search:           GET https://api.openalex.org/works?search=<encoded>&per-page=<limit>
+//   fetchById:        GET https://api.openalex.org/works/<id>
+//   lookupRetraction: GET https://api.openalex.org/works/doi:<doi>?select=id,doi,title,is_retracted
 //
 // Polite-pool mailto query param (NOT a header — different from Crossref).
 // RESEARCH pitfall #2: the polite-pool slot SUNSETS Feb 2026. Today is
@@ -14,7 +15,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { contactParam } from './work-record.js';
+import { contactParam, isGone, RETRACTION_STATUS_TTL_MS, unavailableDetail } from './work-record.js';
 
 const BASE = 'https://api.openalex.org';
 
@@ -106,4 +107,36 @@ export async function fetchById(id: string): Promise<SourceCandidate | null> {
   } catch {
     return null;
   }
+}
+
+/** OpenAlex's answer to "is the work with this DOI retracted?". */
+export type RetractionAnswer =
+  | { kind: 'found'; retracted: boolean }
+  | { kind: 'not_found' }
+  | { kind: 'unavailable'; detail: string };
+
+/**
+ * Ask OpenAlex whether the work with `doi` is retracted (its `is_retracted`,
+ * which OpenAlex derives from Retraction Watch and the publishers' notices).
+ * Pass 1 asks this as a cross-check when the registry record says nothing.
+ * A 404 means OpenAlex does not hold the DOI; any other answer that is not a
+ * readable 200 is unavailable, and says nothing either way.
+ */
+export async function lookupRetraction(doi: string): Promise<RetractionAnswer> {
+  const url = `${BASE}/works/doi:${encodeURIComponent(doi)}?select=id,doi,title,is_retracted${contactParam('mailto', '&')}`;
+  let res;
+  try {
+    res = await httpFetch(url, { source: 'openalex', cacheTtlMs: RETRACTION_STATUS_TTL_MS });
+  } catch (err) {
+    return { kind: 'unavailable', detail: unavailableDetail(err) };
+  }
+  if (isGone(res.status)) return { kind: 'not_found' };
+  if (res.status !== 200) return { kind: 'unavailable', detail: `HTTP ${res.status}` };
+  try {
+    const retracted = (JSON.parse(res.body) as { is_retracted?: unknown } | null)?.is_retracted;
+    if (typeof retracted === 'boolean') return { kind: 'found', retracted };
+  } catch {
+    // An unreadable body is no answer.
+  }
+  return { kind: 'unavailable', detail: 'unreadable response' };
 }

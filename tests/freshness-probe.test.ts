@@ -5,15 +5,12 @@
 // exercises the locked WARN-only policy:
 //   - DOI HEAD 200            → no WARN
 //   - DOI HEAD 4xx/5xx        → WARN row, advisory only (never blocking)
-//   - retraction-watch hit    → WARN row
 //   - transport error (ECONNREFUSED) → SILENT (network noise, not staleness)
 //
-// All probes run in offline mode (the default — PENSMITH_NETWORK_TESTS unset),
-// reading cassettes under tests/fixtures/cassettes/{doi-head,retraction-watch}/
-// via the same loadCassetteFile() path the retraction-watch adapter uses.
-// retraction-watch.ts is a REAL cassette-backed adapter (fetchById), NOT a
-// Phase-3 stub — so the probe issues a genuine offline lookup, no DEBUG-stub
-// branch needed (RESEARCH §J risk A3 resolved: adapter is live).
+// The probes answer from the committed cassettes under
+// tests/fixtures/cassettes/doi-head/. Retraction is not a freshness probe any
+// more: Pass 1 reads it from the registry record, and it blocks
+// (tests/retraction.test.ts).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,8 +20,6 @@ import { probeFreshness } from '../bin/lib/verify/freshness.js';
 const OK_DOI = '10.1038/s41586-021-03819-2';
 // A DOI whose HEAD cassette returns 404.
 const STALE_DOI = '10.0000/does-not-resolve';
-// A DOI present in the retraction-watch freshness-hit cassette.
-const RETRACTED_DOI = '10.0000/retracted';
 // A DOI with no matching cassette → simulates a transport error / no response.
 const NO_CASSETTE_DOI = '10.0000/no-cassette-at-all';
 
@@ -48,13 +43,6 @@ test('freshness: DOI HEAD 404 produces a WARN row (advisory, not blocking)', asy
   // RSCH-10 / D-10 — freshness is advisory: never escalates to a hard block.
   assert.notEqual(doiWarn?.status, 'FABRICATED');
   assert.notEqual(doiWarn?.status, 'MIS-CITED');
-});
-
-test('freshness: retraction-watch hit produces a WARN row', async () => {
-  const r = await probeFreshness('roe2018', RETRACTED_DOI);
-  const rwWarn = r.warnings.find((w) => w.probe === 'retraction-watch');
-  assert.ok(rwWarn, 'a retracted DOI must emit a retraction-watch WARN');
-  assert.equal(rwWarn?.status, 'WARN');
 });
 
 test('freshness: transport error (no cassette / ECONNREFUSED) is SILENT — no WARN', async () => {

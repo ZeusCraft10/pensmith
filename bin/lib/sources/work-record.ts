@@ -80,6 +80,13 @@ export function wholeTitle(r: Pick<WorkRecord, 'title' | 'subtitle'>): string {
   return r.subtitle ? `${r.title}: ${r.subtitle}` : r.title;
 }
 
+/**
+ * How long a cached answer that carries a work's retraction status is kept: a
+ * day, not the week other registry answers get, because a work can be
+ * retracted long after it was published.
+ */
+export const RETRACTION_STATUS_TTL_MS = 24 * 3_600_000;
+
 /** No answer from `registry`, and why. */
 export const unavailable = (registry: RegistryName, detail: string): Lookup => ({ kind: 'unavailable', registry, detail });
 

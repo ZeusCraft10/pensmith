@@ -2,23 +2,28 @@
 //
 // Deterministic: no LLM. Each cited key gets one verdict from:
 //   - whether the key is in .paper/CITATIONS.bib, with a title and authors;
-//   - whether the entry is flagged retracted (stored, or found by a live
-//     Retraction Watch query);
 //   - whether a registry holds the work its identifiers name: a DOI through
 //     Crossref, DataCite and doi.org, an arXiv ID through arXiv, a PMID through
 //     PubMed, an ISBN through Open Library (bin/lib/verify/resolve.ts);
 //   - whether the entry's title, authors, year and journal match the record
-//     the registry returned (bin/lib/verify/work-match.ts).
+//     the registry returned (bin/lib/verify/work-match.ts);
+//   - whether the work is retracted: recorded so in CITATIONS.bib, said so by
+//     the record itself, or listed so by OpenAlex (bin/lib/verify/retraction.ts).
 //
 // The verdicts:
 //   OK          the registry's record matches the entry;
 //   MIS-CITED   the work exists, but the entry's metadata or one of its
-//               identifiers is wrong, or the work is retracted;
+//               identifiers is wrong;
 //   FABRICATED  the key is not in the bibliography, or every registry that can
 //               answer for the entry's identifiers says no such work exists;
 //   UNRESOLVED  nothing could be confirmed: a registry gave no answer (offline,
 //               timeout, 429 or 5xx), the entry has no identifier to look up,
-//               or the only registry for it does not hold every work.
+//               or the only registry for it does not hold every work;
+//   RETRACTED   the entry matches a work that was retracted, withdrawn or
+//               removed;
+//   EXPRESSION_OF_CONCERN   the entry matches a work its publisher has
+//               published an expression of concern about: it does not block,
+//               and every verb warns.
 // UNRESOLVED blocks like the others; it never passes an unchecked citation and
 // never accuses a real one.
 //
@@ -28,7 +33,8 @@
 import { parseBibByCitekey, parseBibFieldsByCitekey } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
-import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
+import { lookupRetraction } from '../sources/openalex.js';
+import { describeSignal, recordRetraction, withoutRetractionLabel, type RetractionSignal } from './retraction.js';
 import {
   citedKeys,
   findCitations,
@@ -50,7 +56,9 @@ export { renderFreshnessTable } from './freshness.js';
 // UNPARSEABLE: a bracketed citation whose key does not parse. Neither is a
 // citation Pandoc renders from the bibliography, so neither can be checked;
 // both block until rewritten as a `[@key]` citation.
-export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED' | 'UNRESOLVED' | 'RAW_CITATION' | 'UNPARSEABLE';
+export type Pass1Verdict =
+  | 'OK' | 'MIS-CITED' | 'FABRICATED' | 'UNRESOLVED' | 'RAW_CITATION' | 'UNPARSEABLE'
+  | 'RETRACTED' | 'EXPRESSION_OF_CONCERN';
 
 export interface Pass1Result {
   citekey: string;
@@ -108,42 +116,68 @@ function missDetail(id: WorkId, r: Exclude<IdResolution, { kind: 'found' }>): st
   return `${id.shown} could not be checked (${failed})${said}`;
 }
 
+/** What one citation is checked under. */
+interface CiteContext {
+  ck: string;
+}
+
+/** The verdict for a citation of a retracted work. */
+function retractedResult(ctx: CiteContext, what: string, titleJW = 0, authorJW = 0): Pass1Result {
+  return result(ctx.ck, 'RETRACTED', `${what} — cite another source`, titleJW, authorJW);
+}
+
 /**
- * The live Retraction Watch query, under the claimed DOI and the record's own.
- * Each DOI is asked once, in its normalized form, however it is spelled.
+ * Whether the work `record` describes is retracted, by what the record says,
+ * or else by OpenAlex. `note` says when OpenAlex could not be asked; that
+ * never blocks, since the registry's own record was read.
  */
-async function liveRetraction(dois: Array<string | undefined>): Promise<string | null> {
-  const asked = new Set(dois.filter((x): x is string => typeof x === 'string' && x.length > 0).map((d) => normalizeDoi(d) ?? d));
-  for (const d of asked) {
-    const hit = await retractionWatchFetchById(d);
-    if (hit !== null) {
-      return `cited work appears in Retraction Watch (live re-query at verify time)` +
-        (hit.retraction_details ? `: ${hit.retraction_details}` : '');
-    }
+async function retractionOf(record: WorkRecord, id: WorkId): Promise<{ retracted: RetractionSignal[]; concerns: RetractionSignal[]; note: string | null }> {
+  const signals = recordRetraction(record);
+  const retracted = signals.filter((x) => x.kind === 'retracted');
+  const concerns = signals.filter((x) => x.kind === 'concern');
+  let note: string | null = null;
+  const doi = normalizeDoi(record.doi ?? '') ?? (id.kind === 'doi' ? id.value : null);
+  if (retracted.length === 0 && doi) {
+    const oa = await lookupRetraction(doi);
+    if (oa.kind === 'found' && oa.retracted) retracted.push({ kind: 'retracted', what: 'listed as retracted', by: 'OpenAlex' });
+    else if (oa.kind === 'unavailable') note = `OpenAlex could not be asked whether it is retracted (${oa.detail})`;
   }
-  return null;
+  return { retracted, concerns, note };
 }
 
 /** The verdict for an entry claiming `work`, whose identifier `id` led to `record`. */
-async function verdictForRecord(ck: string, work: ClaimedWork, id: WorkId, record: WorkRecord): Promise<Pass1Result> {
-  // A work can be listed in Retraction Watch under the claimed DOI or under
-  // the canonical DOI the registry gives, so both are queried.
-  const retracted = await liveRetraction([id.kind === 'doi' ? id.raw : undefined, record.doi]);
-  if (retracted) return result(ck, 'MIS-CITED', retracted);
-  const m = matchWork(work, record);
+async function verdictForRecord(ctx: CiteContext, work: ClaimedWork, id: WorkId, record: WorkRecord): Promise<Pass1Result> {
+  const ck = ctx.ck;
+  // A "RETRACTED:" label a publisher put on the title is not part of it, on
+  // either side.
+  const m = matchWork(
+    { ...work, title: withoutRetractionLabel(work.title) },
+    { ...record, title: withoutRetractionLabel(record.title) },
+  );
   const source = `the ${record.registry} record for ${id.shown}`;
   const notes = m.notes.length > 0 ? ` (${m.notes.join('; ')})` : '';
   // A registry may answer an alias DOI with the work's canonical DOI.
   const alias = id.kind === 'doi' && record.doi && !sameDoi(record.doi, id.raw) ? record.doi : null;
-  if (m.ok) {
-    return result(ck, 'OK', alias
-      ? `matches ${source}, whose canonical DOI is ${alias}${notes}`
-      : `matches ${source}${notes}`, m.titleScore, m.authorScore);
+  if (!m.ok) {
+    const what = alias
+      ? `the DOI resolves to a different work (canonical: ${alias}): ${m.problems.join('; ')}`
+      : m.problems.join('; ');
+    const retracted = recordRetraction(record).find((x) => x.kind === 'retracted');
+    const also = retracted ? `; that work is also retracted: ${describeSignal(retracted)}` : '';
+    return result(ck, 'MIS-CITED', `${what} — compared with ${source}${also}`, m.titleScore, m.authorScore);
   }
-  const what = alias
-    ? `the DOI resolves to a different work (canonical: ${alias}): ${m.problems.join('; ')}`
-    : m.problems.join('; ');
-  return result(ck, 'MIS-CITED', `${what} — compared with ${source}`, m.titleScore, m.authorScore);
+  const matched = `${alias ? `matches ${source}, whose canonical DOI is ${alias}` : `matches ${source}`}${notes}`;
+  const r = await retractionOf(record, id);
+  if (r.retracted.length > 0) {
+    return retractedResult(ctx, `${matched}, but the work is retracted: ${r.retracted.map(describeSignal).join('; ')}`,
+      m.titleScore, m.authorScore);
+  }
+  if (r.concerns.length > 0) {
+    return result(ck, 'EXPRESSION_OF_CONCERN',
+      `${matched}; an expression of concern was published about it: ${r.concerns.map(describeSignal).join('; ')} — ` +
+      'say so where it is cited, or cite another source', m.titleScore, m.authorScore);
+  }
+  return result(ck, 'OK', r.note ? `${matched}; ${r.note}` : matched, m.titleScore, m.authorScore);
 }
 
 /** Pass-1 deterministic verdict for a single cited key. */
@@ -159,12 +193,24 @@ async function verdictForCitekey(
   if (!work.title || work.authors.length === 0) {
     return result(ck, 'MIS-CITED', 'claimed citation metadata incomplete (empty title or no authors)');
   }
-  // A retraction stored at research time (the boolean on an in-memory
-  // candidate, or the `note = {RETRACTED}` a bib round trip keeps).
-  if (claimed.retracted || claimed.note === 'RETRACTED') {
-    return result(ck, 'MIS-CITED', 'cited a retracted work (per Retraction Watch cross-check at research time)');
+  const ctx: CiteContext = { ck };
+  // A retraction recorded when the source was added (the boolean on an
+  // in-memory candidate, or the `note = {RETRACTED}` a bib round trip keeps)
+  // blocks without a lookup, offline too.
+  if (claimed.retracted === true || claimed.note === 'RETRACTED') {
+    return retractedResult(ctx, 'the work was recorded as retracted in CITATIONS.bib (note = {RETRACTED}) when it was added');
   }
+  return checkIdentifiers(ctx, claimed, fields, work);
+}
 
+/** Look the entry up by its identifiers and compare it with the record found. */
+async function checkIdentifiers(
+  ctx: CiteContext,
+  claimed: BibEntry,
+  fields: Record<string, string> | undefined,
+  work: ClaimedWork,
+): Promise<Pass1Result> {
+  const ck = ctx.ck;
   const ids = workIdentifiers(claimed, fields);
   // Offline (--offline / --dry-run): nothing can be looked up. Saying OK would
   // pass an unchecked citation and FABRICATED would accuse a real one.
@@ -199,7 +245,7 @@ async function verdictForCitekey(
         `${missDetail(unchecked.id, unchecked.r)}; ${id.shown} was found, but every identifier the entry ` +
         'prints must be confirmed — re-run verify later');
     }
-    return verdictForRecord(ck, work, id, r.record);
+    return verdictForRecord(ctx, work, id, r.record);
   }
 
   const detail = misses.map((x) => missDetail(x.id, x.r)).join('; ');
@@ -293,9 +339,9 @@ export async function runPass1(
  *
  * SEPARATE from `runPass1` by design: this never feeds the blocking verdict
  * path. It reads the same cited keys out of the draft, resolves each
- * to its DOI in the bib, and probes freshness (DOI HEAD + retraction-watch)
- * advisory-only. A stale DOI or a retraction hit produces a WARN row; it can
- * NEVER produce a FABRICATED / MIS-CITED verdict (PRD §14 / D-10).
+ * to its DOI in the bib, and probes freshness (a DOI HEAD) advisory-only. A
+ * stale DOI produces a WARN row; it can NEVER produce a blocking verdict
+ * (PRD §14 / D-10). Retraction is checked by runPass1, and blocks.
  *
  * Returns one FreshnessResult per unique citekey, in draft-appearance order.
  */
@@ -322,7 +368,7 @@ export function runPass1Unit(input: {
 }): Omit<Pass1Result, 'citekey'> {
   const unit = (verdict: Pass1Verdict, reason: string, titleJW = 0, authorJW = 0) => ({ verdict, titleJW, authorJW, reason });
   if (!input.claimed.doi) return unit('UNRESOLVED', 'no identifier in the claimed citation to look the work up by');
-  if (input.claimed.retracted) return unit('MIS-CITED', 'cited a retracted work');
+  if (input.claimed.retracted) return unit('RETRACTED', 'cited a retracted work');
   if (!input.actual) return unit('FABRICATED', `DOI ${input.claimed.doi} is not registered`);
   const record: WorkRecord = {
     registry: 'Crossref',

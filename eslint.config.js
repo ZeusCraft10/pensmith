@@ -217,6 +217,9 @@ export default [
       // Answers Pass 1's registry lookups with a MockAgent to check the live
       // request path: mailto, retries, doi.org redirects, Open Library gaps.
       'tests/sources/registry-lookups.test.ts',
+      // Answers Crossref, DataCite and OpenAlex with a MockAgent to check which
+      // registry answers make a citation RETRACTED on the live request path.
+      'tests/sources/retraction-signals.test.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

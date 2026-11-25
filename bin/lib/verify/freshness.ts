@@ -1,10 +1,9 @@
 // bin/lib/verify/freshness.ts — RSCH-10 source-freshness probe (D-10, WARN-only).
 //
-// Advisory side-channel for the verifier. For each resolved citekey the probe:
-//   1. issues an HTTP HEAD against https://doi.org/<doi> (via the bin/lib/http.ts
-//      chokepoint — never a direct undici/fetch), and
-//   2. cross-checks the DOI against the Retraction Watch adapter
-//      (bin/lib/sources/retraction-watch.ts::fetchById).
+// Advisory side-channel for the verifier. For each resolved citekey the probe
+// issues an HTTP HEAD against https://doi.org/<doi> (via the bin/lib/http.ts
+// chokepoint — never a direct undici/fetch). Whether the work is retracted is
+// Pass 1's question (bin/lib/verify/retraction.ts), and it blocks.
 //
 // Offline (--offline / --dry-run) neither probe runs; the result says
 // "skipped (offline)" so the table never implies the source was checked.
@@ -12,7 +11,6 @@
 // WARN-only policy (D-10 / PRD §14):
 //   - DOI HEAD 200            → ok, no warning
 //   - DOI HEAD 4xx/5xx (real HTTP status, after 1 retry) → WARN
-//   - retraction-watch hit    → WARN
 //   - transport error (ECONNREFUSED / ETIMEDOUT / no response) → SILENT
 //     (network noise is not source staleness — optional DEBUG only)
 //
@@ -26,10 +24,9 @@
 import { normalizeDoi } from '../doi.js';
 import { fetch as httpFetch } from '../http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
-import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
 import { Semaphore } from '../budget.js';
 
-export type FreshnessProbe = 'DOI HEAD' | 'retraction-watch';
+export type FreshnessProbe = 'DOI HEAD';
 export type FreshnessStatus = 'WARN';
 
 export interface FreshnessWarning {
@@ -95,22 +92,6 @@ export async function probeFreshness(
       // Transport error (ECONNREFUSED / ETIMEDOUT / DNS) is network noise,
       // NOT source staleness (D-10). Silent — optional DEBUG only.
       debug(`citekey=${citekey} doi=${normalized} HEAD transport error: ${String(err)} — silent`);
-    }
-
-    // --- Retraction Watch cross-check ---
-    try {
-      const hit = await retractionWatchFetchById(normalized);
-      if (hit) {
-        const why = hit.retraction_details ? ` (${hit.retraction_details})` : '';
-        warnings.push({
-          probe: 'retraction-watch',
-          status: 'WARN',
-          detail: `cited work appears in Retraction Watch${why}`,
-        });
-      }
-    } catch (err) {
-      // Same noise policy as the HEAD probe — never block on a probe failure.
-      debug(`citekey=${citekey} doi=${normalized} retraction-watch error: ${String(err)} — silent`);
     }
   }
 

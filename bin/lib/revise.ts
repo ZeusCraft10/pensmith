@@ -5,7 +5,7 @@
 // (WRTE-02 satisfied by this single module). The flow follows 04-RESEARCH §I:
 //
 //   1. Parse sections/<N>/VERIFICATION.md (with the parser compile uses) for
-//      the FIRST failing citation (FABRICATED / MIS-CITED / NOT_FOUND), in
+//      the FIRST failing citation (FABRICATED / MIS-CITED / NOT_FOUND / RETRACTED), in
 //      order of appearance. Other blocking verdicts are named, not repaired.
 //   2. Load PLAN.md frontmatter → assigned_sources + the section voice hint
 //      (WRTE-02 per-section consume point — threaded into the prompt vars).
@@ -49,7 +49,7 @@ import type { SourceCandidate } from './schemas/source-candidate.js';
 const YOLO_RETRY_CAP = 2;
 
 /** The verifier verdicts that --revise repairs. */
-const FAILING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND']);
+const FAILING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'RETRACTED']);
 
 // Strict-JSON contract for the revise-swap LLM response (04-RESEARCH §I).
 const ReviseSwapSchema = z.object({
@@ -144,7 +144,7 @@ interface FailingCitation {
  * Find the FIRST failing citation in VERIFICATION.md (one at a time, in order
  * of appearance), read with the parser compile and done use, so every key
  * compile blocks on is found here too. Returns null when the
- * section has no FABRICATED / MIS-CITED / NOT_FOUND citation.
+ * section has no FABRICATED / MIS-CITED / NOT_FOUND / RETRACTED citation.
  */
 export function firstFailingCitation(verificationMd: string): FailingCitation | null {
   const row = parseVerdictRowDetails(verificationMd)
@@ -451,7 +451,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
         'answers, or give the entry a DOI, arXiv ID, PMID or ISBN if it has none; then verify again.';
       return { ...base, message: `${base.message} ${why}`.trim() };
     }
-    return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation in section ${opts.n}.`.trim() };
+    return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND/RETRACTED citation in section ${opts.n}.`.trim() };
   }
   base.flagged_citekey = failing.citekey;
 

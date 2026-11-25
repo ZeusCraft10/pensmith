@@ -16,10 +16,9 @@ refuses private, loopback and link-local addresses.
 | --- | --- | --- |
 | `api.anthropic.com` | Intake clarifying questions, outline, section plans and drafts, the advisory verifier passes, and citation repair | The prompt for that step: your assignment and intake answers, the outline, the metadata of the sources assigned to the section, and the section draft. Needs `ANTHROPIC_API_KEY`. |
 | `api.openai.com` | The same steps, only if you configure the OpenAI-compatible provider instead | The same prompts. |
-| `api.openalex.org` | Research, adding a source, checking citations | Search terms from your topic, titles and DOIs. |
+| `api.openalex.org` | Research, adding a source, checking citations, and Pass 1's retraction cross-check for a cited DOI whose registry record does not show a retraction | Search terms from your topic, titles and DOIs. |
 | `api.crossref.org` | Research, adding a source, and Pass 1 of the verifier (every cited DOI) | DOIs and title searches. |
 | `api.datacite.org` | Pass 1, for a cited DOI Crossref does not hold (arXiv, Zenodo, figshare and other DataCite DOIs), or when Crossref could not be reached | That DOI. |
-| `api.labs.crossref.org` | The verifier's retraction check | DOIs. |
 | `doi.org` | Pass 1, for a cited DOI neither Crossref nor DataCite holds, or when Crossref or DataCite could not be reached; and re-checking how fresh an earlier verification is | `GET https://doi.org/<doi>` asking for the work's citation metadata. doi.org redirects that request to the DOI's registration agency, and pensmith follows only to the agencies' metadata services: `api.crossref.org`, `data.crosscite.org` and `api.datacite.org` (DataCite), `japanlinkcenter.org` (JaLC) and `data.medra.org` (mEDRA). Freshness re-checks send `HEAD https://doi.org/<doi>`. DOIs written as `dx.doi.org` links are normalised to this host. |
 | `export.arxiv.org` | Research, and Pass 1 for a source cited by its arXiv ID | Search terms and arXiv IDs. At most one request every three seconds, as arXiv asks. |
 | `eutils.ncbi.nlm.nih.gov` | Research (PubMed), and Pass 1 for a source cited by its PubMed ID | Search terms and PubMed IDs. |

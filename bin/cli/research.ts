@@ -297,9 +297,9 @@ export const researchCommand = defineCommand({
       );
     }
 
-    // ── D-15 LOCKED ordering: crossCheckRetractions BEFORE writeBibtex ──
-    // Marks any retracted candidates so writeBibtex persists retracted=true.
-    await crossCheckRetractions(finalCandidates);
+    // crossCheckRetractions runs BEFORE writeBibtex: it marks the candidates
+    // whose own records show a retraction, so the bib carries note = {RETRACTED}.
+    crossCheckRetractions(finalCandidates);
 
     // D-19 + D-20 LOCKED: writeBibtex is the SOLE citation-js writer.
     await writeBibtex(finalCandidates, bibPath);

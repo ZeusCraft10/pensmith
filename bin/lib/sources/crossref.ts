@@ -20,7 +20,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { askRegistry, contactParam, cslDateYear, isGone, recordFromCsl, type Lookup } from './work-record.js';
+import { askRegistry, contactParam, cslDateYear, isGone, recordFromCsl, RETRACTION_STATUS_TTL_MS, type Lookup } from './work-record.js';
 
 const BASE = 'https://api.crossref.org';
 
@@ -107,10 +107,13 @@ export async function search(
  * Ask Crossref for `doi`. A 404 is `not_found` (Crossref does not hold it);
  * any other status, a thrown transport error, or a body that does not parse is
  * `unavailable`, because none of them says anything about the DOI.
+ *
+ * The record's `updated-by` lists the work's retraction notices, so Pass 1
+ * reads its retraction status from this answer, and it is cached for a day.
  */
 export async function lookupDoi(doi: string): Promise<Lookup> {
   const url = `${BASE}/works/${encodeURIComponent(doi)}${contactParam('mailto', '?')}`;
-  return askRegistry('Crossref', url, { source: 'crossref' }, (res) => {
+  return askRegistry('Crossref', url, { source: 'crossref', cacheTtlMs: RETRACTION_STATUS_TTL_MS }, (res) => {
     if (isGone(res.status)) return { kind: 'not_found', registry: 'Crossref', authoritative: true };
     if (res.status !== 200) return null;
     const msg = (JSON.parse(res.body) as { message?: Record<string, unknown> } | null)?.message;

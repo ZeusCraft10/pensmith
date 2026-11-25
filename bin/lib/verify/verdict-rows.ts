@@ -15,15 +15,22 @@
  * not consulted (offline): an unchecked citation never passes. RAW_CITATION is
  * a DOI, arXiv ID, PMID or author-year citation typed as text, and UNPARSEABLE
  * a bracketed citation with no key that parses: neither can be checked until
- * it is written as a `[@key]` citation.
+ * it is written as a `[@key]` citation. RETRACTED is a citation of a retracted
+ * work.
  *
- * UNATTRIBUTED (a long quotation with no citation) does not block. It may be
- * the author's own data or an epigraph, which no source can confirm, so it
- * leaves the section unverifiable and every verb that reads it warns.
+ * Two verdicts do not block, and every verb that reads them warns:
+ * UNATTRIBUTED (a long quotation with no citation, which may be the author's
+ * own data or an epigraph, so the section is unverifiable) and
+ * EXPRESSION_OF_CONCERN.
  */
 const BLOCKING_VERDICTS = new Set([
-  'FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE',
+  'FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'RETRACTED', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE',
 ]);
+
+/** Non-blocking Pass-1 verdicts compile and done warn about, and what each means. */
+const WARNING_VERDICTS: Readonly<Record<string, string>> = {
+  EXPRESSION_OF_CONCERN: 'is a work under an expression of concern',
+};
 
 /** Whether `verdict` blocks compile and export. */
 export function isBlockingVerdict(verdict: string): boolean {
@@ -154,10 +161,27 @@ function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): strin
 export function verdictGate(verificationMd: string, where: string): { reasons: string[]; warnings: string[] } {
   const rows = parseVerdictRowDetails(verificationMd);
   const unattributed = rows.filter((r) => r.verdict === 'UNATTRIBUTED').length;
+  const warnings = citationWarnings(rows, where);
+  if (unattributed > 0) warnings.push(unattributedWarning(where, unattributed));
   return {
     reasons: rows
       .filter((r) => r.blocking)
       .map((r) => `${where}: ${describeVerdictRow(r)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`),
-    warnings: unattributed > 0 ? [unattributedWarning(where, unattributed)] : [],
+    warnings,
   };
+}
+
+/**
+ * A warning for each citation that passes but must not look clean: a work
+ * under an expression of concern. `where` names the section.
+ */
+export function citationWarnings(rows: readonly VerdictRow[], where: string): string[] {
+  return rows
+    .filter((r) => Object.hasOwn(WARNING_VERDICTS, r.verdict))
+    .map((r) => `${where}: ${describeVerdictRow(r)} ${WARNING_VERDICTS[r.verdict]} — ${rowReason(r.detail)}`);
+}
+
+/** A Pass-1 row's reason, without the match scores before it. */
+function rowReason(detail: string): string {
+  return detail.replace(/^titleJW=[\d.]+, authorJW=[\d.]+\s*—\s*/, '');
 }

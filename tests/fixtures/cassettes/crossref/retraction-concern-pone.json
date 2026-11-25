@@ -1,0 +1,890 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1371/journal.pone.0061107",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2025,
+              12,
+              31
+            ]
+          ],
+          "date-time": "2025-12-31T11:12:26Z",
+          "timestamp": 1767179546204,
+          "version": "build-2238731810"
+        },
+        "reference-count": 52,
+        "publisher": "Public Library of Science (PLoS)",
+        "issue": "4",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2013,
+                  4,
+                  12
+                ]
+              ],
+              "date-time": "2013-04-12T00:00:00Z",
+              "timestamp": 1365724800000
+            },
+            "content-version": "unspecified",
+            "delay-in-days": 0,
+            "URL": "http://creativecommons.org/licenses/by/4.0/"
+          }
+        ],
+        "content-domain": {
+          "domain": [
+            "www.plosone.org"
+          ],
+          "crossmark-restriction": false
+        },
+        "short-container-title": [
+          "PLoS ONE"
+        ],
+        "DOI": "10.1371/journal.pone.0061107",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2013,
+              4,
+              12
+            ]
+          ],
+          "date-time": "2013-04-12T17:03:41Z",
+          "timestamp": 1365786221000
+        },
+        "page": "e61107",
+        "update-policy": "https://doi.org/10.1371/journal.pone.corrections_policy",
+        "source": "Crossref",
+        "is-referenced-by-count": 8,
+        "title": [
+          "Impairment of FOS mRNA Stabilization Following Translation Arrest in Granulocytes from Myelodysplastic Syndrome Patients"
+        ],
+        "prefix": "10.1371",
+        "volume": "8",
+        "author": [
+          {
+            "given": "Xiaomin",
+            "family": "Feng",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Yayoi",
+            "family": "Shikama",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Tsutomu",
+            "family": "Shichishima",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Hideyoshi",
+            "family": "Noji",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Kazuhiko",
+            "family": "Ikeda",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Kazuei",
+            "family": "Ogawa",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Hideo",
+            "family": "Kimura",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Yasuchika",
+            "family": "Takeishi",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Junko",
+            "family": "Kimura",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          }
+        ],
+        "member": "340",
+        "published-online": {
+          "date-parts": [
+            [
+              2013,
+              4,
+              12
+            ]
+          ]
+        },
+        "reference": [
+          {
+            "key": "ref1",
+            "doi-asserted-by": "crossref",
+            "first-page": "1649",
+            "DOI": "10.1056/NEJM199905273402107",
+            "article-title": "Myelodysplasia",
+            "volume": "340",
+            "author": "ML Heaney",
+            "year": "1999",
+            "journal-title": "N Engl J Med"
+          },
+          {
+            "key": "ref2",
+            "doi-asserted-by": "crossref",
+            "first-page": "1388",
+            "DOI": "10.1182/blood.V96.4.1388",
+            "article-title": "Intramedullary apoptosis of hematopoietic cells in myelodysplastic syndrome patients can be massive: apoptotic cells recovered from high-density fraction of bone marrow aspirates",
+            "volume": "96",
+            "author": "V Shetty",
+            "year": "2000",
+            "journal-title": "Blood"
+          },
+          {
+            "key": "ref3",
+            "doi-asserted-by": "crossref",
+            "first-page": "1273",
+            "DOI": "10.1182/blood.V98.4.1273",
+            "article-title": "Pseudo Pelger-Huet anomaly in myelodysplastic syndrome: hyposegmented apoptotic neutrophil?",
+            "volume": "98",
+            "author": "VT Shetty",
+            "year": "2001",
+            "journal-title": "Blood"
+          },
+          {
+            "key": "ref4",
+            "doi-asserted-by": "crossref",
+            "first-page": "1120",
+            "DOI": "10.1136/jcp.36.10.1120",
+            "article-title": "Defective neutrophil function and microbicidal mechanisms in the myelodysplastic disorders",
+            "volume": "36",
+            "author": "S Martin",
+            "year": "1983",
+            "journal-title": "J Clin Pathol"
+          },
+          {
+            "key": "ref5",
+            "doi-asserted-by": "crossref",
+            "first-page": "331",
+            "DOI": "10.1016/j.leukres.2011.11.012",
+            "article-title": "Impaired bactericidal and fungicidal activities of neutrophils in patients with myelodysplastic syndrome",
+            "volume": "36",
+            "author": "L Fianchi",
+            "year": "2012",
+            "journal-title": "Leuk Res"
+          },
+          {
+            "key": "ref6",
+            "doi-asserted-by": "crossref",
+            "first-page": "513",
+            "DOI": "10.1016/S0145-2126(97)00009-X",
+            "article-title": "Actin polymerization in neutrophils from patients affected by myelodysplastic syndromes–a flow cytometric study",
+            "volume": "21",
+            "author": "G Carulli",
+            "year": "1997",
+            "journal-title": "Leuk Res"
+          },
+          {
+            "key": "ref7",
+            "doi-asserted-by": "crossref",
+            "first-page": "1172",
+            "DOI": "10.1182/blood.V101.3.1172",
+            "article-title": "Decreased phosphorylation of protein kinase B and extracellular signal-regulated kinase in neutrophils from patients with myelodysplasia",
+            "volume": "101",
+            "author": "GM Fuhler",
+            "year": "2003",
+            "journal-title": "Blood"
+          },
+          {
+            "key": "ref8",
+            "doi-asserted-by": "crossref",
+            "first-page": "257",
+            "DOI": "10.1189/jlb.0504306",
+            "article-title": "Impaired interleukin-8- and GROalpha-induced phosphorylation of extracellular signal-regulated kinase result in decreased migration of neutrophils from patients with myelodysplasia",
+            "volume": "77",
+            "author": "GM Fuhler",
+            "year": "2005",
+            "journal-title": "J Leukoc Biol"
+          },
+          {
+            "key": "ref9",
+            "first-page": "95",
+            "article-title": "Morphology and classification of the myelodysplastic syndromes and their pathologic variants",
+            "volume": "33",
+            "author": "PA Kouides",
+            "year": "1996",
+            "journal-title": "Semin Hematol"
+          },
+          {
+            "key": "ref10",
+            "first-page": "129",
+            "article-title": "The role of Jun, Fos and the AP-1 complex in cell-proliferation and transformation",
+            "volume": "1072",
+            "author": "P Angel",
+            "year": "1991",
+            "journal-title": "Biochim Biophys Acta"
+          },
+          {
+            "key": "ref11",
+            "first-page": "685",
+            "article-title": "AP-1 (Fos/Jun) transcription factors in hematopoietic differentiation and apoptosis",
+            "volume": "12",
+            "author": "DA Liebermann",
+            "year": "1998",
+            "journal-title": "Int J Oncol"
+          },
+          {
+            "key": "ref12",
+            "doi-asserted-by": "crossref",
+            "first-page": "39368",
+            "DOI": "10.1074/jbc.M106111200",
+            "article-title": "Transcriptional regulation of the p67phox gene: role of AP-1 in concert with myeloid-specific transcription factors",
+            "volume": "276",
+            "author": "SL Li",
+            "year": "2001",
+            "journal-title": "J Biol Chem"
+          },
+          {
+            "key": "ref13",
+            "doi-asserted-by": "crossref",
+            "first-page": "8582",
+            "DOI": "10.1016/S0021-9258(17)37234-4",
+            "article-title": "The interleukin-8 AP-1 and kappa B-like sites are genetic end targets of FK506-sensitive pathway accompanied by calcium mobilization",
+            "volume": "269",
+            "author": "S Okamoto",
+            "year": "1994",
+            "journal-title": "J Biol Chem"
+          },
+          {
+            "key": "ref14",
+            "doi-asserted-by": "crossref",
+            "first-page": "815",
+            "DOI": "10.1189/jlb.69.5.815",
+            "article-title": "Peroxynitrite mediates cytokine-induced IL-8 gene expression and production by human leukocytes",
+            "volume": "69",
+            "author": "C Zouki",
+            "year": "2001",
+            "journal-title": "J Leukoc Biol"
+          },
+          {
+            "key": "ref15",
+            "doi-asserted-by": "crossref",
+            "first-page": "576",
+            "DOI": "10.1111/j.1365-2141.2004.04958.x",
+            "article-title": "Gene expression profiling in the myelodysplastic syndromes using cDNA microarray technology",
+            "volume": "125",
+            "author": "A Pellagatti",
+            "year": "2004",
+            "journal-title": "Br J Haematol"
+          },
+          {
+            "key": "ref16",
+            "doi-asserted-by": "crossref",
+            "first-page": "811",
+            "DOI": "10.1189/jlb.0904488",
+            "article-title": "Accumulation of an intron-retained mRNA for granulocyte macrophage-colony stimulating factor receptor common beta chain in neutrophils of myelodysplastic syndromes",
+            "volume": "77",
+            "author": "Y Shikama",
+            "year": "2005",
+            "journal-title": "J Leukoc Biol"
+          },
+          {
+            "key": "ref17",
+            "doi-asserted-by": "crossref",
+            "first-page": "229",
+            "DOI": "10.1016/S0301-472X(98)00048-4",
+            "article-title": "Dominant negative effect of a truncated erythropoietin receptor (EPOR-T) on erythropoietin-induced erythroid differentiation: possible involvement of EPOR-T in ineffective erythropoiesis of myelodysplastic syndrome",
+            "volume": "27",
+            "author": "R Shimizu",
+            "year": "1999",
+            "journal-title": "Exp Hematol"
+          },
+          {
+            "key": "ref18",
+            "doi-asserted-by": "crossref",
+            "first-page": "902",
+            "DOI": "10.1016/j.bbrc.2003.12.178",
+            "article-title": "Identification of a novel splice variant of the human anti-apoptopsis gene survivin",
+            "volume": "314",
+            "author": "A Badran",
+            "year": "2004",
+            "journal-title": "Biochem Biophys Res Commun"
+          },
+          {
+            "key": "ref19",
+            "first-page": "453",
+            "article-title": "When cells stop making sense: effects of nonsense codons on RNA metabolism in vertebrate cells",
+            "volume": "1",
+            "author": "LE Maquat",
+            "year": "1995",
+            "journal-title": "RNA"
+          },
+          {
+            "key": "ref20",
+            "doi-asserted-by": "crossref",
+            "first-page": "434",
+            "DOI": "10.1038/88099",
+            "article-title": "A strategy for disease gene identification through nonsense-mediated mRNA decay inhibition",
+            "volume": "19",
+            "author": "EN Noensie",
+            "year": "2001",
+            "journal-title": "Nat Biotechnol"
+          },
+          {
+            "key": "ref21",
+            "doi-asserted-by": "crossref",
+            "first-page": "525",
+            "DOI": "10.1111/j.1365-2141.2010.08504.x",
+            "article-title": "Impairment of FOS mRNA induction by a translation inhibitor puromycin in granulocytes from myelodysplastic syndrome patients",
+            "volume": "154",
+            "author": "Y Shikama",
+            "year": "2011",
+            "journal-title": "Br J Haematol"
+          },
+          {
+            "key": "ref22",
+            "doi-asserted-by": "crossref",
+            "first-page": "477",
+            "DOI": "10.1016/0896-6273(90)90106-P",
+            "article-title": "The regulation and function of c-fos and other immediate early genes in the nervous system",
+            "volume": "4",
+            "author": "M Sheng",
+            "year": "1990",
+            "journal-title": "Neuron"
+          },
+          {
+            "key": "ref23",
+            "doi-asserted-by": "crossref",
+            "first-page": "213",
+            "DOI": "10.1379/1466-1268(2002)007<0213:VSTROE>2.0.CO;2",
+            "article-title": "Visibly stressed: the role of eIF2, TIA-1, and stress granules in protein translation",
+            "volume": "7",
+            "author": "P Anderson",
+            "year": "2002",
+            "journal-title": "Cell Stress Chaperones"
+          },
+          {
+            "key": "ref24",
+            "doi-asserted-by": "crossref",
+            "first-page": "5018",
+            "DOI": "10.1128/MCB.21.15.5018-5030.2001",
+            "article-title": "Tight binding of the phosphorylated alpha subunit of initiation factor 2 (eIF2alpha) to the regulatory subunits of guanine nucleotide exchange factor eIF2B is required for inhibition of translation initiation",
+            "volume": "21",
+            "author": "T Krishnamoorthy",
+            "year": "2001",
+            "journal-title": "Mol Cell Biol"
+          },
+          {
+            "key": "ref25",
+            "doi-asserted-by": "crossref",
+            "first-page": "1836",
+            "DOI": "10.1038/sj.onc.1206334",
+            "article-title": "Immediate-early gene induction by the stresses anisomycin and arsenite in human osteosarcoma cells involves MAPK cascade signaling to Elk-1, CREB and SRF",
+            "volume": "22",
+            "author": "M Bebien",
+            "year": "2003",
+            "journal-title": "Oncogene"
+          },
+          {
+            "key": "ref26",
+            "doi-asserted-by": "crossref",
+            "first-page": "915",
+            "DOI": "10.1111/j.1471-4159.2004.02938.x",
+            "article-title": "Activation of c-fos by lipopolysaccharide in glial cells via p38 mitogen-activated protein kinase-dependent activation of serum or cyclic AMP/calcium response element",
+            "volume": "92",
+            "author": "A Simi",
+            "year": "2005",
+            "journal-title": "J Neurochem"
+          },
+          {
+            "key": "ref27",
+            "doi-asserted-by": "crossref",
+            "first-page": "1643",
+            "DOI": "10.1093/nar/15.4.1643",
+            "article-title": "Posttranscriptional regulation of c-fos mRNA expression",
+            "volume": "15",
+            "author": "HJ Rahmsdorf",
+            "year": "1987",
+            "journal-title": "Nucleic Acids Res"
+          },
+          {
+            "key": "ref28",
+            "doi-asserted-by": "crossref",
+            "first-page": "1111",
+            "DOI": "10.1016/j.cell.2006.04.031",
+            "article-title": "Relief of microRNA-mediated translational repression in human cells subjected to stress",
+            "volume": "125",
+            "author": "SN Bhattacharyya",
+            "year": "2006",
+            "journal-title": "Cell"
+          },
+          {
+            "key": "ref29",
+            "doi-asserted-by": "crossref",
+            "first-page": "465",
+            "DOI": "10.1016/S0968-0004(00)89102-1",
+            "article-title": "AU-rich elements: characterization and importance in mRNA degradation",
+            "volume": "20",
+            "author": "CY Chen",
+            "year": "1995",
+            "journal-title": "Trends Biochem Sci"
+          },
+          {
+            "key": "ref30",
+            "doi-asserted-by": "crossref",
+            "first-page": "195",
+            "DOI": "10.1038/nrm760",
+            "article-title": "Messenger-RNA-binding proteins and the messages they carry",
+            "volume": "3",
+            "author": "G Dreyfuss",
+            "year": "2002",
+            "journal-title": "Nat Rev Mol Cell Biol"
+          },
+          {
+            "key": "ref31",
+            "doi-asserted-by": "crossref",
+            "first-page": "479",
+            "DOI": "10.1038/nrm2178",
+            "article-title": "RNA-binding proteins: modular design for efficient function",
+            "volume": "8",
+            "author": "BM Lunde",
+            "year": "2007",
+            "journal-title": "Nat Rev Mol Cell Biol"
+          },
+          {
+            "key": "ref32",
+            "doi-asserted-by": "crossref",
+            "first-page": "423",
+            "DOI": "10.1093/jb/mvs010",
+            "article-title": "Sequence requirements for RNA binding by HuR and AUF1",
+            "volume": "151",
+            "author": "A Barker",
+            "year": "2012",
+            "journal-title": "J Biochem"
+          },
+          {
+            "key": "ref33",
+            "doi-asserted-by": "crossref",
+            "first-page": "266",
+            "DOI": "10.1007/PL00000854",
+            "article-title": "HuR and mRNA stability",
+            "volume": "58",
+            "author": "CM Brennan",
+            "year": "2001",
+            "journal-title": "Cell Mol Life Sci"
+          },
+          {
+            "key": "ref34",
+            "doi-asserted-by": "crossref",
+            "first-page": "3168",
+            "DOI": "10.1007/s00018-008-8252-6",
+            "article-title": "Diverse molecular functions of Hu proteins",
+            "volume": "65",
+            "author": "MN Hinman",
+            "year": "2008",
+            "journal-title": "Cell Mol Life Sci"
+          },
+          {
+            "key": "ref35",
+            "doi-asserted-by": "crossref",
+            "first-page": "8144",
+            "DOI": "10.1074/jbc.271.14.8144",
+            "article-title": "Cloning and characterization of HuR, a ubiquitously expressed Elav-like protein",
+            "volume": "271",
+            "author": "WJ Ma",
+            "year": "1996",
+            "journal-title": "J Biol Chem"
+          },
+          {
+            "key": "ref36",
+            "doi-asserted-by": "crossref",
+            "first-page": "3052",
+            "DOI": "10.1093/nar/gkf444",
+            "article-title": "Alternate exon insertion controls selective ubiquitination and degradation of different AUF1 protein isoforms",
+            "volume": "30",
+            "author": "G Laroia",
+            "year": "2002",
+            "journal-title": "Nucleic Acids Res"
+          },
+          {
+            "key": "ref37",
+            "doi-asserted-by": "crossref",
+            "first-page": "195",
+            "DOI": "10.1006/geno.1997.5142",
+            "article-title": "Structure and genomic organization of the human AUF1 gene: alternative pre-mRNA splicing generates four protein isoforms",
+            "volume": "48",
+            "author": "BJ Wagner",
+            "year": "1998",
+            "journal-title": "Genomics"
+          },
+          {
+            "key": "ref38",
+            "doi-asserted-by": "crossref",
+            "first-page": "33029",
+            "DOI": "10.1074/jbc.M305772200",
+            "article-title": "Regulation of A + U-rich element-directed mRNA turnover involving reversible phosphorylation of AUF1",
+            "volume": "278",
+            "author": "GM Wilson",
+            "year": "2003",
+            "journal-title": "J Biol Chem"
+          },
+          {
+            "key": "ref39",
+            "doi-asserted-by": "crossref",
+            "first-page": "1279",
+            "DOI": "10.1093/nar/gkh282",
+            "article-title": "Roles of AUF1 isoforms, HuR and BRF1 in ARE-dependent mRNA turnover studied by RNA interference",
+            "volume": "32",
+            "author": "I Raineri",
+            "year": "2004",
+            "journal-title": "Nucleic Acids Res"
+          },
+          {
+            "key": "ref40",
+            "doi-asserted-by": "crossref",
+            "first-page": "679",
+            "DOI": "10.1089/jir.2008.0028",
+            "article-title": "AUF1 isoform-specific regulation of anti-inflammatory IL10 expression in monocytes",
+            "volume": "28",
+            "author": "S Sarkar",
+            "year": "2008",
+            "journal-title": "J Interferon Cytokine Res"
+          },
+          {
+            "key": "ref41",
+            "doi-asserted-by": "crossref",
+            "first-page": "345",
+            "DOI": "10.1146/annurev.med.051308.132852",
+            "article-title": "Myelodysplastic syndromes",
+            "volume": "61",
+            "author": "BL Scott",
+            "year": "2010",
+            "journal-title": "Annu Rev Med"
+          },
+          {
+            "key": "ref42",
+            "doi-asserted-by": "crossref",
+            "first-page": "393",
+            "DOI": "10.1189/jlb.0507282",
+            "article-title": "Terminally differentiated neutrophils predominantly express Survivin-2 alpha, a dominant-negative isoform of survivin",
+            "volume": "83",
+            "author": "H Hu",
+            "year": "2008",
+            "journal-title": "J Leukoc Biol"
+          },
+          {
+            "key": "ref43",
+            "doi-asserted-by": "crossref",
+            "first-page": "42",
+            "DOI": "10.1186/1471-2199-11-42",
+            "article-title": "Transcripts expressed using a bicistronic vector pIREShyg2 are sensitized to nonsense-mediated mRNA decay",
+            "volume": "11",
+            "author": "Y Shikama",
+            "year": "2010",
+            "journal-title": "BMC Mol Biol"
+          },
+          {
+            "key": "ref44",
+            "doi-asserted-by": "crossref",
+            "first-page": "4835",
+            "DOI": "10.1128/MCB.24.11.4835-4847.2004",
+            "article-title": "Distinct domains of AU-rich elements exert different functions in mRNA destabilization and stabilization by p38 mitogen-activated protein kinase or HuR",
+            "volume": "24",
+            "author": "R Winzen",
+            "year": "2004",
+            "journal-title": "Mol Cell Biol"
+          },
+          {
+            "key": "ref45",
+            "doi-asserted-by": "crossref",
+            "first-page": "182",
+            "DOI": "10.1016/S1046-2023(02)00021-X",
+            "article-title": "Reversible cross-linking combined with immunoprecipitation to study RNA-protein interactions in vivo",
+            "volume": "26",
+            "author": "S Niranjanakumari",
+            "year": "2002",
+            "journal-title": "Methods"
+          },
+          {
+            "key": "ref46",
+            "doi-asserted-by": "crossref",
+            "first-page": "871",
+            "DOI": "10.1083/jcb.200502088",
+            "article-title": "Stress granules and processing bodies are dynamically linked sites of mRNP remodeling",
+            "volume": "169",
+            "author": "N Kedersha",
+            "year": "2005",
+            "journal-title": "J Cell Biol"
+          },
+          {
+            "key": "ref47",
+            "doi-asserted-by": "crossref",
+            "first-page": "8388",
+            "DOI": "10.1128/MCB.01493-07",
+            "article-title": "Functional analysis of KSRP interaction with the AU-rich element of interleukin-8 and identification of inflammatory mRNA targets",
+            "volume": "27",
+            "author": "R Winzen",
+            "year": "2007",
+            "journal-title": "Mol Cell Biol"
+          },
+          {
+            "key": "ref48",
+            "article-title": "Regulation of HuR by DNA Damage Response Kinases",
+            "author": "HH Kim",
+            "year": "2010",
+            "journal-title": "J Nucleic Acids 2010"
+          },
+          {
+            "key": "ref49",
+            "doi-asserted-by": "crossref",
+            "first-page": "2619",
+            "DOI": "10.1091/mbc.E07-02-0167",
+            "article-title": "Involvement of transportin 2-mediated HuR import in muscle cell differentiation",
+            "volume": "18",
+            "author": "K van der Giessen",
+            "year": "2007",
+            "journal-title": "Mol Biol Cell"
+          },
+          {
+            "key": "ref50",
+            "doi-asserted-by": "crossref",
+            "first-page": "3092",
+            "DOI": "10.1038/sj.emboj.7600305",
+            "article-title": "Concurrent versus individual binding of HuR and AUF1 to common labile target mRNAs",
+            "volume": "23",
+            "author": "A Lal",
+            "year": "2004",
+            "journal-title": "EMBO J"
+          },
+          {
+            "key": "ref51",
+            "doi-asserted-by": "crossref",
+            "first-page": "1201",
+            "DOI": "10.1016/S1097-2765(03)00407-6",
+            "article-title": "The Wnt/beta-catenin–&gt;Pitx2 pathway controls the turnover of Pitx2 and other unstable mRNAs",
+            "volume": "12",
+            "author": "P Briata",
+            "year": "2003",
+            "journal-title": "Mol Cell"
+          },
+          {
+            "key": "ref52",
+            "doi-asserted-by": "crossref",
+            "first-page": "4490",
+            "DOI": "10.1182/blood-2010-09-308064",
+            "article-title": "Silencing of c-Fos expression by microRNA-155 is critical for dendritic cell maturation and function",
+            "volume": "117",
+            "author": "I Dunand-Sauthier",
+            "year": "2011",
+            "journal-title": "Blood"
+          }
+        ],
+        "updated-by": [
+          {
+            "DOI": "10.1371/journal.pone.0278805",
+            "type": "expression_of_concern",
+            "label": "Expression of concern",
+            "source": "retraction-watch",
+            "updated": {
+              "date-parts": [
+                [
+                  2023,
+                  1,
+                  11
+                ]
+              ],
+              "date-time": "2023-01-11T00:00:00Z",
+              "timestamp": 1673395200000
+            },
+            "record-id": "44276"
+          },
+          {
+            "DOI": "10.1371/journal.pone.0278805",
+            "type": "expression_of_concern",
+            "label": "Expression of concern",
+            "source": "publisher",
+            "updated": {
+              "date-parts": [
+                [
+                  2023,
+                  1,
+                  11
+                ]
+              ],
+              "date-time": "2023-01-11T00:00:00Z",
+              "timestamp": 1673395200000
+            }
+          }
+        ],
+        "container-title": [
+          "PLoS ONE"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "http://dx.plos.org/10.1371/journal.pone.0061107",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2023,
+              6,
+              30
+            ]
+          ],
+          "date-time": "2023-06-30T19:58:25Z",
+          "timestamp": 1688155105000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://dx.plos.org/10.1371/journal.pone.0061107"
+          }
+        },
+        "subtitle": [],
+        "editor": [
+          {
+            "given": "Imed Eddine",
+            "family": "Gallouzi",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "editor",
+                "vocabulary": "crossref"
+              }
+            ]
+          }
+        ],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2013,
+              4,
+              12
+            ]
+          ]
+        },
+        "references-count": 52,
+        "journal-issue": {
+          "issue": "4",
+          "published-online": {
+            "date-parts": [
+              [
+                2013,
+                4,
+                12
+              ]
+            ]
+          }
+        },
+        "URL": "https://doi.org/10.1371/journal.pone.0061107",
+        "relation": {},
+        "ISSN": [
+          "1932-6203"
+        ],
+        "issn-type": [
+          {
+            "value": "1932-6203",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2013,
+              4,
+              12
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

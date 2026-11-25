@@ -1,12 +1,12 @@
 // bin/lib/research-orchestrator.ts — GEN-03 live-adapter discovery orchestrator.
 //
 // Fans out the searchable adapters (crossref, openalex, arxiv, pubmed,
-// semanticscholar, zotero-mcp — NOT retraction-watch, NOT unpaywall.search),
+// semanticscholar, zotero-mcp — NOT unpaywall.search),
 // aggregates SourceCandidate[], applies DOI + Jaro-Winkler title dedup,
 // then calls the source-evaluator LLM step to tier the results.
 //
 // Load-bearing constraints enforced here:
-//   - 'search' in adapter guard: retraction-watch (fetchById-only) is excluded.
+//   - 'search' in adapter guard: an adapter with no search() is skipped.
 //   - unpaywall excluded by name: its search() always returns [] by design.
 //   - per-query cap 10 (Pitfall 6 budget; T-12-03).
 //   - Per-adapter search() failure → swallowed WARN (ARCH-03).
@@ -21,7 +21,7 @@
 //   T-12-01: defensive Zod safeParse on all LLM JSON outputs.
 //   T-12-02: candidateSources serialized as JSON (structured) for evaluator prompt.
 //   T-12-03: per-query limit cap = 10; dedup BEFORE evaluator.
-//   T-12-04: 'search' in adapter guard (retraction-watch excluded).
+//   T-12-04: 'search' in adapter guard.
 //   T-12-05: no new fetch surface — all network via existing adapter modules.
 //   T-12-06: complete() owns no-leak header path.
 
@@ -282,7 +282,7 @@ export interface ResearchOrchestratorOptions {
  * Fan out the searchable adapters, aggregate, dedup, and evaluate candidates.
  *
  * This function:
- *   1. Selects the searchable adapter set (excludes retraction-watch by guard,
+ *   1. Selects the searchable adapter set (adapters with a search(),
  *      excludes unpaywall by name — its search() always returns []).
  *   2. For each query in the chosen scope, calls adapter.search(query, {limit:10}).
  *   3. Swallows per-adapter errors (non-fatal WARN; ARCH-03).
@@ -369,7 +369,7 @@ export async function runResearchOrchestrator(
   }
 
   // Build the searchable adapter set.
-  // Guard 1: 'search' in adapter — excludes retraction-watch (D-15/T-12-04).
+  // Guard 1: 'search' in adapter (T-12-04).
   // Guard 2: name !== 'unpaywall' — its search() always returns [] by design.
   const searchableEntries = Object.entries(adapterRegistry).filter(
     ([name, adapter]) =>

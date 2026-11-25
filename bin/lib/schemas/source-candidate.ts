@@ -3,7 +3,7 @@
 // Phase 3 wave 2 / Plan 03-03 Task 3.1.
 //
 // This schema is the contract for every adapter's response (crossref, openalex,
-// arxiv, pubmed, semanticscholar, unpaywall, retraction-watch). The
+// arxiv, pubmed, semanticscholar, unpaywall, zotero-mcp). The
 // discriminated union on `source` lets the verifier and library writer dispatch
 // to per-source logic without losing strong typing.
 //
@@ -15,7 +15,8 @@
 //   - year: optional int 1800..2100.
 //   - doi: optional (normalized in bin/lib/doi.ts).
 //   - abstract / oa_pdf_url / retraction_details: optional.
-//   - retracted: boolean default false (wires D-15 surface-twice).
+//   - retracted: boolean default false; research sets it from the candidate's
+//                own record (bin/lib/sources/retraction-cross-check.ts).
 //   - last_verified: REQUIRED ISO datetime.
 //   - citekey: REQUIRED, matches /^[a-z][a-z0-9_-]*$/ (deterministic gen in
 //              bin/lib/citekey.ts, Plan 04).
@@ -46,7 +47,6 @@ export const SourceCandidateSchema = z.discriminatedUnion('source', [
   z.object({ ...BaseFields, source: z.literal('pubmed') }),
   z.object({ ...BaseFields, source: z.literal('semanticscholar') }),
   z.object({ ...BaseFields, source: z.literal('unpaywall') }),
-  z.object({ ...BaseFields, source: z.literal('retraction-watch') }),
   // RSCH-06: Zotero MCP is a normalizable source provider. Items pulled via the
   // injectable Zotero client (bin/lib/sources/zotero-mcp.ts) normalize to this
   // variant so they validate against the locked D-14 schema and flow through the
