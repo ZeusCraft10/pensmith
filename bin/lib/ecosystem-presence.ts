@@ -20,9 +20,8 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
-import { isInsideSyncFolder, paperDir } from './paths.js';
+import { claudeConfigDir, claudeJsonPath, isInsideSyncFolder, paperDir } from './paths.js';
 
 /**
  * Probe whether `pandoc` is on PATH and answers `--version`.
@@ -40,18 +39,6 @@ export function isPandocPresent(): boolean {
   } catch {
     return false;
   }
-}
-
-/** Claude Code's config directory: $CLAUDE_CONFIG_DIR, else ~/.claude. */
-function claudeConfigDir(): string {
-  const env = process.env['CLAUDE_CONFIG_DIR'];
-  return env && env.length > 0 ? env : join(homedir(), '.claude');
-}
-
-/** Claude Code's user config file: $CLAUDE_CONFIG_DIR/.claude.json, else ~/.claude.json. */
-function claudeJsonPath(): string {
-  const env = process.env['CLAUDE_CONFIG_DIR'];
-  return env && env.length > 0 ? join(env, '.claude.json') : join(homedir(), '.claude.json');
 }
 
 function readJson(p: string): unknown {

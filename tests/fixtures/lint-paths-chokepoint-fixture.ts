@@ -1,6 +1,7 @@
 // Red-team fixture for the D-41 paths chokepoint (Phase 1).
-// This file INTENTIONALLY violates the chokepoint by calling os.homedir()
-// and reading process.env.LOCALAPPDATA / process.env.XDG_DATA_HOME directly.
+// This file INTENTIONALLY violates the chokepoint by calling os.homedir(),
+// importing and calling a bare homedir(), and reading process.env.LOCALAPPDATA
+// / process.env.XDG_DATA_HOME / process.env.APPDATA directly.
 // It is ignored by the project ESLint config (eslint.config.js global-ignores)
 // so `npm run lint` over the repo passes. The chokepoint regression test at
 // tests/lint-paths-chokepoint.test.ts (lands Wave 1) runs ESLint
@@ -9,6 +10,8 @@
 // @ts-nocheck — this file is never type-checked or executed.
 
 import os from 'node:os';
+// === D-41 violation: a bare homedir import outside bin/lib/paths.ts ===
+import { homedir } from 'node:os';
 
 // === D-41 violation: direct os.homedir() outside bin/lib/paths.ts ===
 const home = os.homedir();
@@ -23,4 +26,7 @@ const xdgData = process.env.XDG_DATA_HOME;
 // (also enforces "use LOCALAPPDATA not APPDATA" — Pitfall 4)
 const roamingAppData = process.env.APPDATA;
 
-export const _redTeam = { home, localAppData, xdgData, roamingAppData };
+// === D-41 violation: a bare homedir() call outside bin/lib/paths.ts ===
+const bareHome = homedir();
+
+export const _redTeam = { home, localAppData, xdgData, roamingAppData, bareHome };

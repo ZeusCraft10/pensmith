@@ -13,8 +13,9 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { claudeConfigDir } from '../bin/lib/paths.js';
 import {
   isZoteroMcpPresent,
   isHumanizerSkillPresent,
@@ -42,7 +43,7 @@ function freshHome(): { home: string; project: string } {
   process.env['HOME'] = home;
   process.env['USERPROFILE'] = home;
   delete process.env['CLAUDE_CONFIG_DIR'];
-  assert.equal(homedir(), home, 'test setup: homedir() must follow HOME');
+  assert.equal(claudeConfigDir(), path.join(home, '.claude'), 'test setup: the home directory must follow HOME');
   const project = mkdtempSync(path.join(tmpdir(), 'pensmith-eco-project-'));
   return { home, project };
 }

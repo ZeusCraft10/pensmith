@@ -1,7 +1,9 @@
 // bin/lib/paths.ts — cross-platform path-resolution chokepoint (D-40, D-41).
 //
-// Rule: this is the ONLY file in the repo allowed to call os.homedir() or
-// read process.env.LOCALAPPDATA / APPDATA / XDG_DATA_HOME. The eslint
+// Rule: this is the ONLY file in the repo allowed to call os.homedir() (or a
+// bare imported homedir()) or read process.env.LOCALAPPDATA / APPDATA /
+// XDG_DATA_HOME. Claude Code's config locations (claudeConfigDir,
+// claudeJsonPath) are home-directory logic too, so they live here. The eslint
 // chokepoint at eslint.config.js (D-41) enforces it. The forward-declared
 // per-file exemption block in eslint.config.js permits these calls here.
 //
@@ -170,6 +172,26 @@ export function pensmithStyleFingerprintsPath(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
   return path.join(pensmithDataDir(platform, env), 'style-fingerprints.json');
+}
+
+/**
+ * Claude Code's config directory: `$CLAUDE_CONFIG_DIR` when set and non-empty,
+ * else `~/.claude`. Installed plugins (`plugins/installed_plugins.json`) and
+ * user skills (`skills/`) live under it.
+ */
+export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
+  const dir = env['CLAUDE_CONFIG_DIR'];
+  return dir && dir.length > 0 ? dir : path.join(os.homedir(), '.claude');
+}
+
+/**
+ * Claude Code's user config file, which holds user- and local-scope MCP
+ * servers: `$CLAUDE_CONFIG_DIR/.claude.json` when that is set, else
+ * `~/.claude.json` (next to `~/.claude/`, not inside it).
+ */
+export function claudeJsonPath(env: NodeJS.ProcessEnv = process.env): string {
+  const dir = env['CLAUDE_CONFIG_DIR'];
+  return dir && dir.length > 0 ? path.join(dir, '.claude.json') : path.join(os.homedir(), '.claude.json');
 }
 
 /**

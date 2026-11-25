@@ -67,7 +67,7 @@ export default [
       // Selectors esquery forward-slash workaround does not apply here.
       // DO NOT simplify the escapes — see Pitfall B.
       // === D-07 (Phase 1): atomic-write chokepoint — bans direct fs.writeFile / fs.promises.writeFile outside bin/lib/atomic-write.ts ===
-      // === D-41 (Phase 1): paths chokepoint — bans os.homedir() and process.env.{LOCALAPPDATA,APPDATA,XDG_DATA_HOME} outside bin/lib/paths.ts ===
+      // === D-41 (Phase 1): paths chokepoint — bans os.homedir(), a bare homedir import/call, and process.env.{LOCALAPPDATA,APPDATA,XDG_DATA_HOME} outside bin/lib/paths.ts ===
       // NOTE (Pitfall B5): D-41 is enforced via no-restricted-syntax MemberExpression
       // selectors, NOT no-restricted-globals — the latter cannot ban member access
       // patterns like process.env.X (it only bans bare global identifiers).
@@ -83,6 +83,16 @@ export default [
         {
           selector: "MemberExpression[object.name='os'][property.name='homedir']",
           message: 'os.homedir() is a chokepoint (D-41) — use bin/lib/paths.ts',
+        },
+        // A named `import { homedir } from 'node:os'` and its bare call slip past
+        // the member selector above, so ban both forms too.
+        {
+          selector: "ImportSpecifier[imported.name='homedir']",
+          message: 'homedir is a chokepoint (D-41) — import home-directory paths from bin/lib/paths.ts',
+        },
+        {
+          selector: "CallExpression[callee.type='Identifier'][callee.name='homedir']",
+          message: 'homedir() is a chokepoint (D-41) — use bin/lib/paths.ts',
         },
         {
           selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='LOCALAPPDATA']",
