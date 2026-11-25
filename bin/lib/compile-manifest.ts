@@ -13,10 +13,13 @@ import { atomicWriteFile } from './atomic-write.js';
 import { compileManifestPath } from './paths.js';
 
 const HEX64 = z.string().regex(/^[0-9a-f]{64}$/);
+// done joins n and slug into the section's paths, so they must name a folder
+// under .paper/sections (the rule paths.ts's validateSlug applies).
+const SLUG = /^[a-z0-9-]+$/;
 
 const ManifestSectionSchema = z.object({
-  n: z.number().int().min(1),
-  slug: z.string().min(1),
+  n: z.number().int().min(1).max(99),
+  slug: z.string().regex(SLUG),
   draft_sha256: HEX64,
   verification_sha256: HEX64,
   /** compile re-checked the section because it changed after verify. */

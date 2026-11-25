@@ -56,6 +56,7 @@ import {
 import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { readBibText, recheckExportText, runExportBlockingGate } from '../lib/export-gate.js';
+import { readVerificationRecord } from '../lib/verify/verification-record.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -211,7 +212,7 @@ export async function runWholePaperPass4(paperRoot: string): Promise<Pass4Result
 // The export is bound to the bytes the last gated compile wrote and to the
 // sections' recorded verdicts (runExportBlockingGate), and the citations of
 // the exact text being exported are checked again (recheckExportText).
-// Neither --raw nor --yolo skips them: --yolo skips ONLY the advisory DONE-09
+// Neither --raw nor --yolo skips them: --yolo skips only the advisory export
 // confirmation.
 export { runExportBlockingGate, type ExportBlock } from '../lib/export-gate.js';
 
@@ -339,14 +340,17 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
 }
 
 /**
- * Scan each `.paper/sections/<dir>/VERIFICATION.md` for ## Pass-2 UNSUPPORTED
- * rows and return them as Pass2Result[]. Drives the DONE-09 gate's UNSUPPORTED bucket
- * (the load-bearing disk→gate feed, HIGH-3).
+ * The ## Pass-2 UNSUPPORTED rows of each section, as Pass2Result[], for the
+ * export confirmation's UNSUPPORTED bucket. They are read from the advisory
+ * part of the section's recorded verdicts (VERIFICATION.json), so deleting
+ * rows from the rendered VERIFICATION.md hides nothing; a section with no
+ * record is read from its VERIFICATION.md. A record that cannot be read gives
+ * the fail-safe sentinel.
  *
- * Defensive on I/O ONLY: a missing sections dir or an unreadable file is SKIPPED
- * (contributes nothing for that section) and never throws. This is DISTINCT from
- * the fail-safe in parseSectionPass2: missing/absent = clean; present-but-
- * unparseable = a synthetic UNSUPPORTED issue.
+ * Defensive on I/O ONLY: a missing sections dir or an unreadable report is
+ * SKIPPED (contributes nothing for that section) and never throws. This is
+ * DISTINCT from the fail-safe in parseSectionPass2: missing/absent = clean;
+ * present-but-unparseable = a synthetic UNSUPPORTED issue.
  */
 export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
   const sectionsDir = join(paperDir(paperRoot), 'sections');
@@ -358,6 +362,15 @@ export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
   }
   const out: Pass2Result[] = [];
   for (const entry of entries) {
+    const record = readVerificationRecord(join(sectionsDir, entry, 'VERIFICATION.json'));
+    if (record.ok) {
+      out.push(...parseSectionPass2(record.record.advisory_markdown, entry));
+      continue;
+    }
+    if (record.problem === 'unreadable') {
+      out.push(unparseableSentinel(entry));
+      continue;
+    }
     const vPath = join(sectionsDir, entry, 'VERIFICATION.md');
     let md: string;
     try {
@@ -604,11 +617,6 @@ export const doneCommand = defineCommand({
       process.exitCode = EXIT_REFUSED;
       return { ok: false };
     }
-    // One read of the manuscript and of the bibliography: the gate, the
-    // checks and the export all use these bytes.
-    const draftMd = draftBytes.toString('utf8');
-    const bibText = readBibText(paperRoot);
-
     // UNCONDITIONAL export blocking gate, BEFORE any advisory, humanizer or
     // export work, for EVERY done invocation (explicit, bare /pensmith, next),
     // and NOT skipped by --raw or --yolo: the compiled draft must be the one a
@@ -624,6 +632,17 @@ export const doneCommand = defineCommand({
       process.exitCode = EXIT_REFUSED;
       return { ok: false, blocked: true };
     };
+
+    // One read of the manuscript and of the bibliography: the gate, the
+    // checks and the export all use these bytes.
+    const draftMd = draftBytes.toString('utf8');
+    let bibText: string;
+    try {
+      bibText = readBibText(paperRoot);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? (err instanceof Error ? err.message : String(err));
+      return refuseExport('export refused (the bibliography cannot be checked)', [`.paper/CITATIONS.bib could not be read (${code})`]);
+    }
     const blocking = await runExportBlockingGate(paperRoot, draftBytes, bibText);
     if (blocking.blocked) {
       return refuseExport('export refused (the compiled draft is not what a gated compile produced, a section is unverified, or text is placeholder)', blocking.reasons);
@@ -633,6 +652,7 @@ export const doneCommand = defineCommand({
     if (recheck.blocked) {
       return refuseExport('export refused (a citation or quotation in the text being exported does not pass when checked again)', recheck.reasons);
     }
+    for (const w of recheck.warnings) process.stderr.write(`pensmith done: WARN — ${w}.\n`);
 
     // The format, settled before any audit work: a format that cannot be made
     // here is refused now, not after the user has confirmed the export.
@@ -704,7 +724,8 @@ export const doneCommand = defineCommand({
         return { ok: false };
       }
       // FINAL.md is what is exported, so its citations are checked as well
-      // (GATE-04 has just run Pass 3 on it).
+      // (reCheckFinalMd has just run Pass 3 on it). It cites exactly the works
+      // DRAFT.md cites, so its warnings are the ones already printed.
       const finalCheck = await recheckExportText(paperRoot, finalMd, { pass3: false, label: '.paper/FINAL.md', bibText });
       if (finalCheck.blocked) {
         return refuseExport('export refused (a citation in the humanized FINAL.md does not pass when checked again)', finalCheck.reasons);

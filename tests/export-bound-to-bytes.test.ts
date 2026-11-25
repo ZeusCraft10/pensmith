@@ -14,7 +14,8 @@ import assert from 'node:assert/strict';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runCli } from './lib/export-fixture.js';
+import { recheckExportText } from '../bin/lib/export-gate.js';
+import { compiledPaper as recordedPaper, runCli } from './lib/export-fixture.js';
 
 const ATTENTION =
   '@misc{vaswani2017,\n  title = {Attention Is All You Need},\n' +
@@ -90,7 +91,7 @@ test('a citation added to the compiled DRAFT.md after compile is refused with ex
   appendFileSync(join(root, '.paper', 'DRAFT.md'), '\nA striking result was reported [@ghost2024].\n');
   const d = done(root);
   assert.equal(d.status, 2, d.out);
-  assert.match(d.out, /DRAFT\.md/);
+  assert.match(d.out, /\.paper\/DRAFT\.md changed after compile/);
   assert.ok(!existsSync(exported(root)), 'nothing is exported');
   assert.ok(!existsSync(join(root, '.paper', 'FINAL.md')), 'the paper is not marked done');
 });
@@ -103,7 +104,39 @@ test('a cited bibliography entry pointed at another work after compile is refuse
   assert.match(readFileSync(bibPath, 'utf8'), /s41586-024-99999-x/, 'precondition: the entry now names the other DOI');
   const d = done(root);
   assert.equal(d.status, 2, d.out);
-  assert.match(d.out, /vaswani2017/);
+  assert.match(d.out, /the CITATIONS\.bib entry for \[@vaswani2017\] changed after compile/);
+  assert.ok(!existsSync(exported(root)), 'nothing is exported');
+});
+
+// The NumPy paper, which the registry recordings also hold: a real work, so
+// Pass 1 finds the entry consistent with its registry record.
+const NUMPY_AS_VASWANI =
+  '@article{vaswani2017,\n  title = {The NumPy Array: A Structure for Efficient Numerical Computation},\n' +
+  '  author = {van der Walt, Stéfan and Colbert, S. Chris and Varoquaux, Gaël},\n' +
+  '  journal = {Computing in Science \\& Engineering},\n  year = {2011},\n  doi = {10.1109/MCSE.2011.37}\n}\n';
+
+test('a cited entry rewritten to name another real work after compile: only the manifest can tell, and it refuses', async () => {
+  const root = compiledPaper(ATTENTION, 'vaswani2017');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), NUMPY_AS_VASWANI);
+  // Checked again on its own, the citation passes: the entry matches its registry record.
+  const alone = await recheckExportText(root, readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8'));
+  assert.equal(alone.blocked, false, alone.reasons.join('; '));
+
+  const d = done(root);
+  assert.equal(d.status, 2, d.out);
+  assert.match(d.out, /the CITATIONS\.bib entry for \[@vaswani2017\] changed after compile/);
+  assert.doesNotMatch(d.out, /MIS-CITED|FABRICATED/, d.out);
+  assert.ok(!existsSync(exported(root)), 'nothing is exported');
+});
+
+test('a CITATIONS.bib that cannot be read is a refusal (exit 2), not a crash', () => {
+  const root = compiledPaper(ATTENTION, 'vaswani2017');
+  const bibPath = join(root, '.paper', 'CITATIONS.bib');
+  rmSync(bibPath);
+  mkdirSync(bibPath);
+  const d = done(root);
+  assert.equal(d.status, 2, d.out);
+  assert.match(d.out, /\.paper\/CITATIONS\.bib could not be read \(EISDIR\)/);
   assert.ok(!existsSync(exported(root)), 'nothing is exported');
 });
 
@@ -112,7 +145,7 @@ test('a section redone after compile, with no recompile, is refused with exit 2'
   appendFileSync(join(secDir(root, 1), 'DRAFT.md'), '\nA sentence added to section 2 after compile.\n');
   const d = done(root);
   assert.equal(d.status, 2, d.out);
-  assert.match(d.out, /compile/);
+  assert.match(d.out, /section 2 \(body\): DRAFT\.md changed after compile/);
   assert.ok(!existsSync(exported(root)), 'the stale compiled draft is not exported');
 });
 
@@ -131,6 +164,20 @@ test('an acknowledged retraction still exports, with a warning', () => {
   const d = done(root);
   assert.equal(d.status, 0, d.out);
   assert.match(d.out, /WARN.*wakefield1998.*retracted/i);
+});
+
+// A PLOS ONE article that came under an expression of concern in 2023.
+const CONCERN =
+  '@article{feng2013,\n  title = {Impairment of FOS mRNA Stabilization Following Translation Arrest in Granulocytes from Myelodysplastic Syndrome Patients},\n' +
+  '  author = {Feng, Xiaomin and Shikama, Yayoi and Shichishima, Tsutomu and Noji, Hideyoshi and Ikeda, Kazuhiko and Ogawa, Kazuei and Kimura, Hideo and Takeishi, Yasuchika and Kimura, Junko},\n' +
+  '  journal = {PLoS ONE},\n  volume = {8},\n  year = {2013},\n  doi = {10.1371/journal.pone.0061107}\n}\n';
+
+test('a work under an expression of concern that the section\'s record does not report: done exports, and says so', async () => {
+  // The record says OK, as a verify run before the notice would have left it.
+  const root = await recordedPaper({ bib: CONCERN, sections: [{ slug: 'intro', title: 'Intro', sources: ['feng2013'], draft: 'FOS stabilization is impaired [@feng2013].\n' }] });
+  const d = done(root);
+  assert.equal(d.status, 0, d.out);
+  assert.match(d.out, /WARN — \.paper\/DRAFT\.md: citation \[@feng2013\] is a work under an expression of concern/);
 });
 
 test('offline, done cannot re-check the citations, so it refuses: UNRESOLVED is never an export', () => {

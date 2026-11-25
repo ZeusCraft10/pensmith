@@ -771,7 +771,7 @@ async function seedDoneFixture(): Promise<string> {
   mkdirSync(sectionDir, { recursive: true });
   writeFileSync(join(sectionDir, 'DRAFT.md'), draft);
   // A verified section whose advisory Pass-2 table carries an UNSUPPORTED row:
-  // UNSUPPORTED feeds the DONE-09 gate and is NOT a blocking verdict.
+  // UNSUPPORTED feeds the export confirmation and is NOT a blocking verdict.
   writeVerificationFixture(sectionDir, {
     n: 1,
     slug: 'intro',

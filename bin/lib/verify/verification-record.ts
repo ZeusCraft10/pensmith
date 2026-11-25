@@ -284,7 +284,7 @@ export function readVerificationRecord(jsonPath: string): ReadVerification {
 }
 
 /** Quote verdicts that mean the quotation could not be checked against its source. */
-const UNCHECKED_QUOTE = new Set<string>(['PDF_UNAVAILABLE', 'TEXT_UNAVAILABLE']);
+export const UNCHECKED_QUOTE: ReadonlySet<string> = new Set<string>(['PDF_UNAVAILABLE', 'TEXT_UNAVAILABLE']);
 
 /**
  * The record as compile and done gate it: a refusal reason for a section verify

@@ -1,5 +1,5 @@
-// tests/export-blocking-gate.test.ts — audit #3/#14 regression, and the export
-// bound to what a gated compile produced.
+// tests/export-blocking-gate.test.ts — done re-asserts the blocking gate, and
+// the export is bound to what a gated compile produced.
 //
 // `pensmith done`/export must re-assert the blocking gate, not trust that
 // compile already gated: `done --raw`, a bare `/pensmith` dispatch, or a
@@ -12,11 +12,16 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runExportBlockingGate } from '../bin/cli/done.js';
+import { readSectionUnsupported, runExportBlockingGate } from '../bin/cli/done.js';
+import { recheckExportText } from '../bin/lib/export-gate.js';
+import { checkCitationsAndQuotes } from '../bin/lib/verify/check-text.js';
+import { parseBibForPass1 } from '../bin/lib/verify/pass1.js';
+import { buildVerificationRecord } from '../bin/lib/verify/verification-record.js';
 import { bibForDrafts } from './lib/bib-fixture.js';
+import { compiledPaper } from './lib/export-fixture.js';
 import {
   fixtureBibHashes,
   writeCompileManifestFixture,
@@ -59,7 +64,7 @@ test('export gate: a clean verified section does NOT block', async () => {
   assert.equal(r.blocked, false, `expected no block; reasons: ${r.reasons.join('; ')}`);
 });
 
-test('export gate (audit #3): a section with a FABRICATED verdict BLOCKS export', async () => {
+test('export gate: a section with a FABRICATED verdict BLOCKS export', async () => {
   const root = await seed([
     { slug: 'intro' },
     { slug: 'body', draft: 'An invented claim [@fakeauthor2099].\n', citations: [{ citekey: 'fakeauthor2099', verdict: 'FABRICATED', reason: 'citekey not in bib' }] },
@@ -72,7 +77,7 @@ test('export gate (audit #3): a section with a FABRICATED verdict BLOCKS export'
   );
 });
 
-test('export gate (audit #14): a DRAFT.md no gated compile produced (no manifest) BLOCKS', async () => {
+test('export gate: a DRAFT.md no gated compile produced (no manifest) BLOCKS', async () => {
   const root = await seed([{ slug: 'intro' }]);
   rmSync(join(root, '.paper', 'COMPILE-MANIFEST.json'));
   const r = await runExportBlockingGate(root);
@@ -80,7 +85,7 @@ test('export gate (audit #14): a DRAFT.md no gated compile produced (no manifest
   assert.ok(r.reasons.some((x) => /not produced by a gated compile/.test(x)), r.reasons.join('; '));
 });
 
-test('export gate (audit #14): a hand-placed DRAFT.md with no sections at all BLOCKS', async () => {
+test('export gate: a hand-placed DRAFT.md with no sections at all BLOCKS', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-exportgate-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
   writeFileSync(join(root, '.paper', 'DRAFT.md'), '# Paper\n\nClaim [@smith2020].\n');
@@ -89,7 +94,7 @@ test('export gate (audit #14): a hand-placed DRAFT.md with no sections at all BL
   assert.ok(r.reasons.some((x) => /not produced by a gated compile/.test(x)), r.reasons.join('; '));
 });
 
-test('export gate (CodeRabbit): a CLEAN section alongside one with no recorded verdicts BLOCKS', async () => {
+test('export gate: a CLEAN section alongside one with no recorded verdicts BLOCKS', async () => {
   const root = await seed([{ slug: 'intro' }, { slug: 'body', record: false }]);
   const r = await runExportBlockingGate(root);
   assert.equal(r.blocked, true);
@@ -99,7 +104,7 @@ test('export gate (CodeRabbit): a CLEAN section alongside one with no recorded v
   );
 });
 
-test('export gate (CodeRabbit): a failed section with NO blocking verdict still BLOCKS (fail-closed)', async () => {
+test('export gate: a failed section with NO blocking verdict still BLOCKS (fail-closed)', async () => {
   const root = await seed([{ slug: 'intro', status: 'failed', reason: 'the draft cites none of its assigned sources' }]);
   const r = await runExportBlockingGate(root);
   assert.equal(r.blocked, true);
@@ -163,4 +168,80 @@ test('export gate: a section added to the outline after compile BLOCKS', async (
   const r = await runExportBlockingGate(root);
   assert.equal(r.blocked, true);
   assert.ok(r.reasons.some((x) => /not the ones compiled/.test(x)), r.reasons.join('; '));
+});
+
+test('export gate: a manifest whose section slug leaves .paper/sections BLOCKS, and nothing outside is read', async () => {
+  const root = await seed([{ slug: 'intro' }]);
+  const manifestPath = join(root, '.paper', 'COMPILE-MANIFEST.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { sections: Array<{ slug: string }> };
+  manifest.sections[0]!.slug = '/../../outside';
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+  const r = await runExportBlockingGate(root);
+  assert.equal(r.blocked, true);
+  assert.ok(r.reasons.some((x) => /COMPILE-MANIFEST\.json does not match its schema/.test(x)), r.reasons.join('; '));
+});
+
+test('export gate: a section DRAFT.md that cannot be read BLOCKS, and the gate does not throw', async () => {
+  const root = await seed([{ slug: 'intro' }]);
+  const draft = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
+  rmSync(draft);
+  mkdirSync(draft);
+  const r = await runExportBlockingGate(root);
+  assert.equal(r.blocked, true);
+  assert.ok(r.reasons.some((x) => /section 1 \(intro\): DRAFT\.md could not be read \(EISDIR\)/.test(x)), r.reasons.join('; '));
+});
+
+test('export confirmation: UNSUPPORTED claims come from the recorded verdicts, so deleting them from VERIFICATION.md hides nothing', async () => {
+  const advisoryMarkdown = [
+    '## Pass-2 (claim support, advisory — LLM-judged)',
+    '',
+    '| Citekey | Claim Sentence | Verdict | Rationale |',
+    '|---------|---------------|---------|-----------|',
+    '| smith2020 | The effect persists across all populations. | **UNSUPPORTED** | Single cohort only. |',
+  ].join('\n');
+  const root = await seed([{ slug: 'intro', advisoryMarkdown }]);
+  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), '# VERIFICATION (Section 1, intro)\n\nStatus: verified\n');
+  const rows = readSectionUnsupported(root);
+  assert.deepEqual(rows.map((r) => [r.citekey, r.verdict]), [['smith2020', 'UNSUPPORTED']]);
+});
+
+// A PLOS ONE article under an expression of concern (2023); the registry
+// recordings hold it, and no open-access PDF of it.
+const CONCERN =
+  '@article{feng2013,\n  title = {Impairment of FOS mRNA Stabilization Following Translation Arrest in Granulocytes from Myelodysplastic Syndrome Patients},\n' +
+  '  author = {Feng, Xiaomin and Shikama, Yayoi and Shichishima, Tsutomu and Noji, Hideyoshi and Ikeda, Kazuhiko and Ogawa, Kazuei and Kimura, Hideo and Takeishi, Yasuchika and Kimura, Junko},\n' +
+  '  journal = {PLoS ONE},\n  volume = {8},\n  year = {2013},\n  doi = {10.1371/journal.pone.0061107}\n}\n';
+const CONCERN_DRAFT =
+  'FOS stabilization is impaired [@feng2013]. As the authors put it, ' +
+  '"the stabilization of FOS mRNA was impaired following translation arrest in granulocytes" [@feng2013, p. 3].\n';
+
+test('re-check: what the sections\' records did not report is a warning (an expression of concern since verify, a quotation with no source text)', async () => {
+  assert.equal(process.env['PENSMITH_TEST_CASSETTES'], '1', 'the test runner replays recordings');
+  // The records say OK: verify ran before the notice, and before the PDF went away.
+  const root = await compiledPaper({ bib: CONCERN, sections: [{ slug: 'intro', title: 'Intro', sources: ['feng2013'], draft: CONCERN_DRAFT }] });
+  const r = await recheckExportText(root, readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8'), { label: '.paper/DRAFT.md' });
+  assert.equal(r.blocked, false, r.reasons.join('; '));
+  assert.equal(r.warnings.length, 2, r.warnings.join('\n'));
+  assert.match(r.warnings[0]!, /^\.paper\/DRAFT\.md: citation \[@feng2013\] is a work under an expression of concern/);
+  assert.match(r.warnings[1]!, /^\.paper\/DRAFT\.md has 1 quotation that could not be checked against the source text: \[@feng2013\] "the stabilization/);
+});
+
+test('re-check: a warning a section\'s record already gave is not repeated', async () => {
+  const root = await compiledPaper({ bib: CONCERN, sections: [{ slug: 'intro', title: 'Intro', sources: ['feng2013'], draft: CONCERN_DRAFT }] });
+  // The section's record as verify would write it now: the same two findings.
+  const dir = join(root, '.paper', 'sections', '01-intro');
+  const bib = await parseBibForPass1(CONCERN);
+  const checked = await checkCitationsAndQuotes(CONCERN_DRAFT, { bib, bibPath: join(root, '.paper', 'CITATIONS.bib') });
+  const record = buildVerificationRecord({
+    section: 1, slug: 'intro', status: 'unverifiable', checked: true, draftBytes: Buffer.from(CONCERN_DRAFT),
+    assignedSources: ['feng2013'], bibEntries: await fixtureBibHashes(CONCERN, CONCERN_DRAFT), pass1: checked.pass1, pass3: checked.pass3,
+  });
+  writeFileSync(join(dir, 'VERIFICATION.json'), `${JSON.stringify(record, null, 2)}\n`);
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
+
+  const gate = await runExportBlockingGate(root);
+  assert.equal(gate.blocked, false, gate.reasons.join('; '));
+  assert.equal(gate.warnings.length, 2, gate.warnings.join('\n'));
+  const r = await recheckExportText(root, readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8'), { label: '.paper/DRAFT.md' });
+  assert.deepEqual(r.warnings, []);
 });

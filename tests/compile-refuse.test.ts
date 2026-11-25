@@ -187,7 +187,7 @@ test('COMP-01: all-clean sections do NOT refuse and DO write DRAFT.md', async ()
 });
 
 // ---------------------------------------------------------------------------
-// GATE-01 — fail closed on missing or unreadable verdicts.
+// Fail closed on missing or unreadable verdicts.
 //
 // A section that was never verified (no VERIFICATION.json), whose record is
 // not JSON, or whose record does not match its schema must NEVER compile, and
@@ -246,7 +246,7 @@ for (const [what, record, phrase] of [
   ['a whitespace-only VERIFICATION.json', '   \n   \n', /could not be read \(VERIFICATION\.json is not JSON\)/],
   ['a VERIFICATION.json with no status', JSON.stringify({ $schemaVersion: 1, section: 1, slug: 'intro', citations: [] }), /does not match its schema/],
 ] as Array<[string, string | null, RegExp]>) {
-  test(`GATE-01: a section with ${what} → runCompile refuses, whatever VERIFICATION.md says`, async () => {
+  test(`compile gate: a section with ${what} → runCompile refuses, whatever VERIFICATION.md says`, async () => {
     const root = seedPaperWithRecord(DRAFT, ['smith2020'], record);
     const result = await runCompile({ paperRoot: root, yolo: true, onWarn: () => {} });
     const reasons = (result.refuseReasons ?? []).join(' ');
@@ -257,7 +257,7 @@ for (const [what, record, phrase] of [
   });
 }
 
-test('GATE-01: a valid record (verified, OK verdict) → compiles', async () => {
+test('compile gate: a valid record (verified, OK verdict) → compiles', async () => {
   const root = seedPaperWithRecord(DRAFT, ['smith2020'], null);
   writeVerificationFixture(join(root, '.paper', 'sections', '01-intro'), { n: 1, slug: 'intro', draft: DRAFT, assignedSources: ['smith2020'] });
   const result = await runCompile({ paperRoot: root, yolo: true, onWarn: () => {} });
@@ -265,7 +265,7 @@ test('GATE-01: a valid record (verified, OK verdict) → compiles', async () => 
   assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), true, 'DRAFT.md is written');
 });
 
-test('GATE-01: a record for another section → refuses', async () => {
+test('compile gate: a record for another section → refuses', async () => {
   const root = seedPaperWithRecord(DRAFT, ['smith2020'], null);
   writeVerificationFixture(join(root, '.paper', 'sections', '01-intro'), { n: 2, slug: 'body', draft: DRAFT, assignedSources: ['smith2020'] });
   const result = await runCompile({ paperRoot: root, yolo: true, onWarn: () => {} });
@@ -273,7 +273,7 @@ test('GATE-01: a record for another section → refuses', async () => {
   assert.match((result.refuseReasons ?? []).join(' '), /record of section 2 \(body\)/);
 });
 
-test('GATE-01 (Pitfall 3): a checked section that is unverifiable (a quote with no source text) compiles, with a warning', async () => {
+test('compile gate: a checked section that is unverifiable (a quote with no source text) compiles, with a warning', async () => {
   const root = seedPaperWithRecord(DRAFT, ['smith2020'], null);
   writeVerificationFixture(join(root, '.paper', 'sections', '01-intro'), {
     n: 1, slug: 'intro', draft: DRAFT, assignedSources: ['smith2020'], status: 'unverifiable',
@@ -285,7 +285,7 @@ test('GATE-01 (Pitfall 3): a checked section that is unverifiable (a quote with 
   assert.ok(warnings.some((w) => /could not be checked against the source text/.test(w)), warnings.join('\n'));
 });
 
-test('GATE-01: a record of a verify that could not check the section (CITATIONS.bib missing) → refuses', async () => {
+test('compile gate: a record of a verify that could not check the section (CITATIONS.bib missing) → refuses', async () => {
   const root = seedPaperWithRecord(DRAFT, ['smith2020'], null);
   writeVerificationFixture(join(root, '.paper', 'sections', '01-intro'), {
     n: 1, slug: 'intro', draft: DRAFT, assignedSources: ['smith2020'], status: 'unverifiable', checked: false,

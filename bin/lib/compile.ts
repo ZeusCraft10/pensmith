@@ -38,7 +38,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { paperDir } from './paths.js';
+import { paperDir, sectionAcknowledgements, sectionDraft, sectionPlan, sectionVerificationRecord } from './paths.js';
 import { loadOutline } from './outline.js';
 import { parseOutline, type ParsedOutlineSection } from './outline-parse.js';
 import { parseFrontmatter } from './frontmatter.js';
@@ -144,8 +144,9 @@ export interface CompileResult {
 interface LoadedSection {
   outline: ParsedOutlineSection;
   slug: string;
-  /** The section folder. */
-  dir: string;
+  /** The section's VERIFICATION.json and ACKNOWLEDGEMENTS.json. */
+  recordPath: string;
+  acknowledgementsPath: string;
   /** Normalized to exactly one trailing '\n'. */
   draft: string;
   draftBytes: Buffer;
@@ -244,14 +245,21 @@ function citationFingerprint(text: string): string[] {
   return [...cites.map((c) => c.raw), ...findRawCitations(text, cites).map((r) => r.raw)].sort();
 }
 
+/** The section's files as compile reads them, or why it cannot. */
 async function loadSection(
   paperRoot: string,
   outlineSection: ParsedOutlineSection,
-): Promise<LoadedSection | null> {
-  const dir = join(paperDir(paperRoot), 'sections', `${String(outlineSection.n).padStart(2, '0')}-${outlineSection.slug}`);
-  const draftPath = join(dir, 'DRAFT.md');
-  const planPath = join(dir, 'PLAN.md');
-  if (!existsSync(draftPath) || !existsSync(planPath)) return null;
+): Promise<LoadedSection | string> {
+  const { n, slug } = outlineSection;
+  let draftPath: string;
+  let planPath: string;
+  try {
+    draftPath = sectionDraft(n, slug, paperRoot);
+    planPath = sectionPlan(n, slug, paperRoot);
+  } catch (err) {
+    return `no section folder for it (${err instanceof Error ? err.message : String(err)})`;
+  }
+  if (!existsSync(draftPath) || !existsSync(planPath)) return 'missing PLAN.md or DRAFT.md';
 
   const draftBytes = readFileSync(draftPath);
   const planMd = readFileSync(planPath, 'utf8');
@@ -262,8 +270,9 @@ async function loadSection(
 
   return {
     outline: outlineSection,
-    slug: outlineSection.slug,
-    dir,
+    slug,
+    recordPath: sectionVerificationRecord(n, slug, paperRoot),
+    acknowledgementsPath: sectionAcknowledgements(n, slug, paperRoot),
     draft: normalizeTrailingNewline(draftBytes.toString('utf8')),
     draftBytes,
     assignedSources,
@@ -360,8 +369,8 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     for (const os of ordered) {
       const where = `section ${os.n} (${os.slug})`;
       const sec = await loadSection(opts.paperRoot, os);
-      if (!sec) {
-        refuseReasons.push(`${where}: missing PLAN.md or DRAFT.md`);
+      if (typeof sec === 'string') {
+        refuseReasons.push(`${where}: ${sec}`);
         continue;
       }
       if (isPlaceholderText(sec.draft)) {
@@ -375,7 +384,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
       // The verdicts verify recorded. A section with none was never
       // verified and never compiles; VERIFICATION.md is only their rendering.
-      const read = readVerificationRecord(join(sec.dir, 'VERIFICATION.json'));
+      const read = readVerificationRecord(sec.recordPath);
       if (!read.ok) {
         refuseReasons.push(
           read.problem === 'missing'
@@ -401,7 +410,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         draftBytes: sec.draftBytes,
         assignedSources: sec.assignedSources,
         bib,
-        acknowledgementsSha256: readAcknowledgements(join(sec.dir, 'ACKNOWLEDGEMENTS.json')).sha256,
+        acknowledgementsSha256: readAcknowledgements(sec.acknowledgementsPath).sha256,
       });
       if (stale.length > 0) {
         warn(`WARN: ${where} stale (${stale.join('; ')}) — re-verifying (Pass 1+3)`);
