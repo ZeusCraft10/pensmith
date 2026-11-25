@@ -25,6 +25,7 @@ import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropi
 import { getProviderApiKey } from '../lib/runtime.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
+import { artifactText } from '../lib/placeholder.js';
 
 export const planCommand = defineCommand({
   meta: {
@@ -141,7 +142,7 @@ export const planCommand = defineCommand({
       scope: 'section',
       scopeId: `plan-${n}`,
     });
-    await atomicWriteFile(targetPath, result.text);
+    await atomicWriteFile(targetPath, artifactText(result));
 
     // Second-loop finding (Theme A): authoritatively mark the section 'writing'
     // so the router (router.ts:201) advances plan -> write instead of looping on

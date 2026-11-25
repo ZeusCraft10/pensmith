@@ -24,6 +24,7 @@ import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { parseOutline } from '../lib/outline-parse.js';
+import { artifactText } from '../lib/placeholder.js';
 import {
   initSection,
   initState,
@@ -236,7 +237,7 @@ export const outlineCommand = defineCommand({
       return { ok: false, mode: 'rejected' };
     }
 
-    await atomicWriteFile(outlinePath, result.text);
+    await atomicWriteFile(outlinePath, artifactText(result));
     process.stdout.write(`pensmith outline: wrote OUTLINE.md to ${outlinePath}\n`);
 
     // Audit #1: register the outline's sections into STATE.json so the router can

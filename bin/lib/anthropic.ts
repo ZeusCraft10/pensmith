@@ -38,6 +38,7 @@ import {
   type BudgetSpec,
 } from './budget.js';
 import { estimateCost } from './pricing.js';
+import { noLlmPlaceholderText } from './placeholder.js';
 
 // Re-export MissingApiKeyError so callers only need one import for the common
 // error case (fail-loud verb handlers).
@@ -71,6 +72,8 @@ export interface CompleteResult {
   inputTokens: number;
   /** Actual output tokens charged by the provider. */
   outputTokens: number;
+  /** True when no model ran (PENSMITH_NO_LLM): `text` is a placeholder, not content. */
+  placeholder?: boolean;
 }
 
 // ============================================================
@@ -330,9 +333,10 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
   if (isNoLlmMode()) {
     const lastContent = opts.messages.at(-1)?.content ?? '';
     return {
-      text: `[PENSMITH_NO_LLM placeholder — ${lastContent.slice(0, 80)}]`,
+      text: noLlmPlaceholderText(lastContent),
       inputTokens: 0,
       outputTokens: 0,
+      placeholder: true,
     };
   }
 

@@ -55,6 +55,9 @@ export const PlanFrontmatterSchema = z.object({
   // Declared explicitly so strict-by-default zod parse does NOT silently
   // strip it on the next loadState round-trip.
   was_current_at_migration: z.boolean().optional(),
+  // Set when the plan came from the PENSMITH_NO_LLM placeholder path rather
+  // than a model (bin/lib/placeholder.ts).
+  placeholder: z.boolean().optional(),
 }).refine(
   (p) => !p.depends_on.includes(p.slug),
   { message: 'depends_on must not contain own slug (D-04 no-self-ref)' },

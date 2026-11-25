@@ -59,6 +59,7 @@ import {
 } from './compile-report.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 import { parseVerdictRows } from './verify/verdict-rows.js';
+import { isPlaceholderText } from './placeholder.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -289,6 +290,13 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       const sec = await loadSection(opts.paperRoot, os);
       if (!sec) {
         refuseReasons.push(`section ${os.n} (${os.slug}): missing PLAN.md or DRAFT.md`);
+        continue;
+      }
+      if (isPlaceholderText(sec.draft)) {
+        refuseReasons.push(
+          `section ${os.n} (${os.slug}): DRAFT.md is placeholder text, not a draft (PENSMITH_NO_LLM) — ` +
+          `re-run 'pensmith write ${os.n}' with a model configured`,
+        );
         continue;
       }
       loaded.push(sec);

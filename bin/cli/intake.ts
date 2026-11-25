@@ -47,6 +47,7 @@ export function __setInterpolateForTest(
 import { paperDir } from '../lib/paths.js';
 import { initState, loadState, StateAlreadyExistsError } from '../lib/state.js';
 import { registerPaperInGlobalLibrary } from '../lib/global-library.js';
+import { artifactText } from '../lib/placeholder.js';
 import {
   buildStyleProfile,
   checkAndRegisterFingerprint,
@@ -518,7 +519,7 @@ export const intakeCommand = defineCommand({
 
     // INTAKE.md carries the redacted text via the model result when PII opt-in
     // is on (raw → .raw.local). The model output is the artifact; no placeholder.
-    await atomicWriteFile(targetPath, result.text);
+    await atomicWriteFile(targetPath, artifactText(result));
     process.stdout.write(`pensmith new: wrote INTAKE.md to ${targetPath}\n`);
     await runSideEffects();
     return { ok: true, path: targetPath, mode: 'real' };

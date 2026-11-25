@@ -42,6 +42,7 @@ import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
+import { artifactText } from '../lib/placeholder.js';
 
 // Phase 11 — the section-draft placeholder constant has been removed. write now
 // calls complete() for real generation (GEN-02). With no key configured:
@@ -236,7 +237,7 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
   });
 
   const targetPath = sectionDraft(n, slug);
-  await atomicWriteFile(targetPath, result.text);
+  await atomicWriteFile(targetPath, artifactText(result));
 
   // Audit #9: mark the section 'written' so the router (router.ts:202) advances
   // to verify instead of re-routing the freshly-drafted section back to plan and

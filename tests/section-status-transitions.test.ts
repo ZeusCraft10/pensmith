@@ -7,7 +7,8 @@
 // section looped on verify — the per-section pipeline could not advance in
 // Tier 2. This drives write then verify offline and asserts the PLAN.md
 // transitions planned -> written -> verified, after which the router reaches
-// compile.
+// compile. Offline, write saves placeholder text, so the test swaps in a real
+// draft before verify (verify refuses placeholder text).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -113,8 +114,14 @@ test('section status (audit #8/#9): write -> "written", verify -> "verified", ro
   });
 
   // #9: write set status -> 'written' and produced the section DRAFT.md.
-  assert.ok(existsSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md')), 'write must produce DRAFT.md');
+  const draftPath = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
+  assert.ok(existsSync(draftPath), 'write must produce DRAFT.md');
   assert.equal(planStatus(planPath).status, 'written', 'write must set PLAN.md status to written');
+
+  // Offline, write saves flagged placeholder text, which verify must refuse.
+  // Stand in for a real model draft before verifying.
+  assert.equal(parseFrontmatter(readFileSync(draftPath, 'utf8')).frontmatter['placeholder'], true);
+  writeFileSync(draftPath, 'The question matters for coastal planning.\n');
 
   await withEnvCwd(root, async () => {
     const vrun = verifyCommand.run as (ctx: { args: Record<string, unknown> }) => Promise<unknown>;

@@ -36,6 +36,7 @@ import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
+import { isPlaceholderText } from '../lib/placeholder.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
@@ -85,6 +86,20 @@ export const verifyCommand = defineCommand({
       process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
       process.exitCode = EXIT_REFUSED;
       return { ok: false, status: 'unverifiable', path: verifPath };
+    }
+    // Placeholder text (PENSMITH_NO_LLM) is not a draft: no verdict on it may
+    // read as clean, so it fails before any pass runs.
+    if (isPlaceholderText(readFileSync(draftPath, 'utf8'))) {
+      const reason =
+        `DRAFT.md is placeholder text from PENSMITH_NO_LLM, not a draft — re-run ` +
+        `\`pensmith write ${n}\` with a model configured.`;
+      await atomicWriteFile(verifPath, `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: failed\nReason: ${reason}\n`);
+      await updatePlanFrontmatter(sectionPlan(n, slug), (fm) => {
+        fm.status = 'failed';
+      });
+      process.stdout.write(`pensmith verify: section ${n} ${reason} Wrote failed VERIFICATION.md to ${verifPath}\n`);
+      process.exitCode = EXIT_REFUSED;
+      return { ok: false, status: 'failed', path: verifPath };
     }
     if (!existsSync(bibPath)) {
       const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: .paper/CITATIONS.bib missing — run \`pensmith research\` first.\n`;

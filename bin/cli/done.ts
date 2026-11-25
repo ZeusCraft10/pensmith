@@ -39,6 +39,7 @@ import { ask, PromptAbortedError, PromptTimeoutError, type PromptQuestion } from
 import { extractCitekeys } from '../lib/citation-token.js';
 import { parseVerdictRows } from '../lib/verify/verdict-rows.js';
 import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
+import { isPlaceholderText } from '../lib/placeholder.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -210,7 +211,9 @@ export interface ExportBlock {
  *   - a section's VERIFICATION.md has no `Status:` line (never verified —
  *     GATE-01 parity with compile.ts:263), or
  *   - there are NO section VERIFICATION.md files at all (a hand-placed/stale
- *     DRAFT.md that was never produced by a gated compile — #14).
+ *     DRAFT.md that was never produced by a gated compile — #14), or
+ *   - the compiled DRAFT.md or a section DRAFT.md is placeholder text that no
+ *     model wrote (PENSMITH_NO_LLM).
  *
  * It is UNCONDITIONAL: neither `--raw` nor `--yolo` bypasses it (per the PRD §14
  * non-negotiable — verifier gates are unconditional; `--yolo` skips ONLY the
@@ -230,18 +233,29 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
     dirNames = [];
   }
 
+  // Placeholder text (PENSMITH_NO_LLM) is not a paper, whatever the verdicts say.
+  const compiledPath = join(paperDir(paperRoot), 'DRAFT.md');
+  if (existsSync(compiledPath) && isPlaceholderText(readFileSync(compiledPath, 'utf8'))) {
+    reasons.push('.paper/DRAFT.md is placeholder text (PENSMITH_NO_LLM), not a draft');
+  }
+
   // A compiled DRAFT.md with NO section directories was not produced by a gated
   // compile — refuse rather than export a hand-placed / stale draft (#14).
   if (dirNames.length === 0) {
     return {
       blocked: true,
       reasons: [
+        ...reasons,
         "no verified sections found under .paper/sections/ — this DRAFT.md was not produced by a gated compile; run 'pensmith compile' first",
       ],
     };
   }
 
   for (const name of dirNames) {
+    const draftPath = join(sectionsDir, name, 'DRAFT.md');
+    if (existsSync(draftPath) && isPlaceholderText(readFileSync(draftPath, 'utf8'))) {
+      reasons.push(`section ${name}: DRAFT.md is placeholder text (PENSMITH_NO_LLM), not a draft`);
+    }
     const vpath = join(sectionsDir, name, 'VERIFICATION.md');
     // A section directory with NO VERIFICATION.md was never verified. It must
     // BLOCK, never be invisible — filtering missing files out would let an
@@ -645,7 +659,7 @@ export const doneCommand = defineCommand({
     const blocking = runExportBlockingGate(paperRoot);
     if (blocking.blocked) {
       process.stdout.write(
-        'pensmith done: BLOCKED — export refused (unresolved blocking citations or unverified sections):\n',
+        'pensmith done: BLOCKED — export refused (blocking citations, unverified sections or placeholder text):\n',
       );
       for (const r of blocking.reasons) process.stdout.write(`  - ${r}\n`);
       process.stdout.write(
@@ -689,6 +703,11 @@ export const doneCommand = defineCommand({
     // --yolo belongs ONLY on the advisory runDoneGate (DONE-09) confirmation below.
     if (finalPath !== null) {
       const finalMd = readFileSync(finalPath, 'utf8');
+      if (isPlaceholderText(finalMd)) {
+        process.stdout.write('pensmith done: BLOCKED — the humanized FINAL.md is placeholder text (PENSMITH_NO_LLM), not a paper.\n');
+        process.exitCode = EXIT_REFUSED;
+        return { ok: false, blocked: true };
+      }
       const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
       const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath);
       if (!gate4.passed) {
