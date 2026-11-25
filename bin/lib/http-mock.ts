@@ -25,30 +25,11 @@ import {
   readFileSync,
   writeFileSync,
   mkdirSync,
-  statSync,
 } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { packageRoot } from './paths.js';
 
-// This file runs from bin/lib/ under tsx and from dist/bin/lib/ after a build,
-// so walk up to the directory that owns package.json instead of using a fixed
-// number of `..` segments.
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // keep walking
-    }
-    const next = dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(dirname(fileURLToPath(import.meta.url)));
+const PKG_ROOT = packageRoot();
 const CASSETTES_ROOT = join(PKG_ROOT, 'tests', 'fixtures', 'cassettes');
 
 // ---------------------------------------------------------------------
