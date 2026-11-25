@@ -232,12 +232,20 @@ function mainTitle(title: string, minWords: number): string | null {
  * only a main title before different subtitles are different works.
  */
 export function matchTitle(claimed: string, record: Pick<WorkRecord, 'title' | 'subtitle' | 'altTitles'>): { ok: boolean; score: number } {
-  const recordFull = record.subtitle ? [`${record.title}: ${record.subtitle}`, record.title] : [record.title];
-  const recordTitles = [...recordFull, ...(record.altTitles ?? [])];
+  // The record's whole titles. A subtitle kept in a field of its own
+  // (Crossref, DataCite, Open Library) belongs to the whole title, so the
+  // bare `title` is only the record's main title.
+  const recordTitles = [record.subtitle ? `${record.title}: ${record.subtitle}` : record.title, ...(record.altTitles ?? [])];
   // A one-word main title ("BERT") is too little to stand for a whole title
   // the entry cut short; the entry's own main title may be one word.
-  const recordMains = recordTitles.map((t) => mainTitle(t, 2)).filter((t): t is string => t !== null);
+  const recordMains = [
+    ...(record.subtitle && tokens(record.title).length >= 2 ? [record.title] : []),
+    ...recordTitles.map((t) => mainTitle(t, 2)).filter((t): t is string => t !== null),
+  ];
   const claimedMain = mainTitle(claimed, 1);
+  // The entry may leave out the record's subtitle (claimed against a record
+  // main title), or the record may lack the entry's (the entry's main title
+  // against a whole record title). Two different subtitles pair neither way.
   const pairs: Array<[string, string]> = [
     ...recordTitles.map((r): [string, string] => [claimed, r]),
     ...recordMains.map((r): [string, string] => [claimed, r]),

@@ -33,7 +33,12 @@ test('titles: a subtitle may be missing on either side, but not replaced by anot
   assert.ok(titleOk('The NumPy array', 'The NumPy Array: A Structure for Efficient Numerical Computation'));
   assert.ok(titleOk('EcoGene: a genome sequence database for Escherichia coli K-12', 'EcoGene'), 'a registry title without the subtitle');
   assert.ok(titleOk('Deep learning: A critical appraisal', 'Deep learning', 'A critical appraisal'), 'Crossref keeps the subtitle in its own field');
+  assert.ok(titleOk('Deep learning', 'Deep learning', 'A critical appraisal'), 'the entry leaves out a subtitle kept in its own field');
   assert.ok(!titleOk('Deep learning: Methods and applications', 'Deep learning: A critical appraisal'));
+  assert.ok(!titleOk('Deep learning: Methods and applications', 'Deep learning', 'A critical appraisal'),
+    'another subtitle, against a subtitle kept in its own field');
+  assert.ok(!titleOk('BERT', 'BERT', 'Pre-training of Deep Bidirectional Transformers'),
+    'a one-word main title is too little, wherever the registry keeps the subtitle');
   assert.ok(!titleOk('BERT', 'BERT: Pre-training of Deep Bidirectional Transformers'), 'a one-word main title is too little');
 });
 

@@ -110,6 +110,26 @@ test('Pass 1: a title that leaves out the subtitle is OK', async () => {
   assert.equal(r.verdict, 'OK', r.reason);
 });
 
+// Crossref keeps many publishers' subtitles in a field of their own. This
+// record is synthetic (the 10.0000 prefix is never registered): none of the
+// recorded works has a non-empty Crossref `subtitle`.
+const SUBTITLED = {
+  author: 'Roe, Jane and Haddad, Omar',
+  year: '2020',
+  journal: 'Journal of Planetary Interiors',
+  doi: '10.0000/pensmith-subtitle-field',
+};
+
+test('Pass 1: a subtitle Crossref keeps in its own field may be left out, but not replaced by another', async () => {
+  const full = await verdict(entry('article', 'roe2020', { ...SUBTITLED, title: 'Tidal heating in icy moons: A laboratory model' }));
+  assert.equal(full.verdict, 'OK', full.reason);
+  const short = await verdict(entry('article', 'roe2020', { ...SUBTITLED, title: 'Tidal heating in icy moons' }));
+  assert.equal(short.verdict, 'OK', short.reason);
+  const other = await verdict(entry('article', 'roe2020', { ...SUBTITLED, title: 'Tidal heating in icy moons: A field survey' }));
+  assert.equal(other.verdict, 'MIS-CITED', other.reason);
+  assert.match(other.reason, /title is not the one Crossref gives \("Tidal heating in icy moons: A laboratory model"\)/);
+});
+
 test('Pass 1: a corporate author (Crossref lists only "The ENCODE Project Consortium") is OK', async () => {
   const r = await verdict(entry('article', 'encode2012', {
     title: 'An integrated encyclopedia of DNA elements in the human genome',

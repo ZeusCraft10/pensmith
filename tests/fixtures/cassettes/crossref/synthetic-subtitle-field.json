@@ -1,0 +1,55 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/pensmith-subtitle-field",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/pensmith-subtitle-field",
+        "type": "journal-article",
+        "title": [
+          "Tidal heating in icy moons"
+        ],
+        "subtitle": [
+          "A laboratory model"
+        ],
+        "short-title": [],
+        "author": [
+          {
+            "given": "Jane",
+            "family": "Roe",
+            "sequence": "first",
+            "affiliation": []
+          },
+          {
+            "given": "Omar",
+            "family": "Haddad",
+            "sequence": "additional",
+            "affiliation": []
+          }
+        ],
+        "container-title": [
+          "Journal of Planetary Interiors"
+        ],
+        "short-container-title": [
+          "J. Planet. Inter."
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2020,
+              3
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]
