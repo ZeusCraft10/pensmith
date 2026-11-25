@@ -122,6 +122,63 @@ test('a quotation that keeps a bracketed number list or a superscript must match
   assert.equal(verdict('the tank holds 10 m2 of water at most', 'The tank holds 10 m3 of water at most.'), 'NOT_FOUND');
 });
 
+// A quotation that kept one marker was compared with every marker of the
+// source, so leaving out another reference marker, as quoting allows, read
+// NOT_FOUND. Each marker the quotation keeps must stand at the same place in
+// the source; the source's others may still be left out.
+test('a quotation that keeps one marker may leave out the others', () => {
+  const interval = 'We prove that the function maps [0, 1] onto itself [7] and is continuous on its domain.';
+  assert.equal(verdict('the function maps [0, 1] onto itself and is continuous', interval), 'OK');
+  assert.equal(verdict('the function maps [0, 1] onto itself [7] and is continuous', interval), 'OK');
+  assert.equal(verdict('the function maps [0, 2] onto itself and is continuous', interval), 'NOT_FOUND');
+  // A kept number must be the one at that place, not one found elsewhere.
+  assert.equal(verdict('the function maps [7] onto itself and is continuous', interval), 'NOT_FOUND');
+  assert.equal(verdict('the function maps onto itself [0, 1] and is continuous', interval), 'NOT_FOUND');
+
+  const cited = 'The drug works well in adults [3] and is safe in children [4].';
+  assert.equal(verdict('the drug works well in adults and is safe in children [4]', cited), 'OK');
+  assert.equal(verdict('the drug works well in adults [3] and is safe in children', cited), 'OK');
+  assert.equal(verdict('the drug works well in adults and is safe in children [3]', cited), 'NOT_FOUND');
+
+  const tank = 'The tank holds 10 m² of water.² It leaks slowly.';
+  assert.equal(verdict('the tank holds 10 m² of water. It leaks slowly', tank), 'OK');
+  assert.equal(verdict('the tank holds 10 m² of water.² It leaks slowly', tank), 'OK');
+  assert.equal(verdict('the tank holds 10 m³ of water. It leaks slowly', tank), 'NOT_FOUND');
+
+  // pdf.js put the footnote number on a line of its own, or ran it into the text.
+  assert.equal(verdict('The drug works well in adults.¹ It is safe in children', 'The drug works well in adults.\n1\nIt is safe in children.'), 'OK');
+  assert.equal(verdict('The drug works well in adults.¹ It is safe in children', 'The drug works well in adults.1 It is safe in children.'), 'OK');
+  assert.equal(verdict('The drug works well in adults.² It is safe in children', 'The drug works well in adults.\n1\nIt is safe in children.'), 'NOT_FOUND');
+
+  // The reason no longer says the kept number is missing when it is there.
+  const r = matchQuote('the function maps [0, 1] onto itself and is not continuous', interval);
+  assert.equal(r.found, false);
+  assert.match(r.reason, /must stand at the same place in the source/);
+});
+
+// "not only A but also B" says B; an ellipsis that leaves out the whole "not
+// only A but also" reverses nothing. A negation the quotation needs is still
+// refused, and the reason names it.
+test('an ellipsis may leave out "not only ... but also", and the reason names a negation it may not leave out', () => {
+  const both = 'The intervention not only reduced pain but also improved quality of life.';
+  assert.equal(verdict('The intervention ... improved quality of life', both), 'OK');
+  assert.equal(verdict('The intervention ... reduced pain', both), 'NOT_FOUND');
+  assert.equal(verdict('The intervention ... only reduced pain but also improved quality of life', both), 'NOT_FOUND');
+  assert.equal(
+    verdict('The drug ... improved quality of life', 'The drug not only failed to reduce pain but did not improve quality of life.'),
+    'NOT_FOUND',
+  );
+  // A restrictive "with no" stays refused: "Patients treated ... improved" for
+  // "Patients treated with no drug improved" says the opposite.
+  assert.equal(verdict('Patients treated ... improved within a week', 'Patients treated with no drug improved within a week.'), 'NOT_FOUND');
+
+  const r = matchQuote('The vaccine was ... safe for adults', 'The vaccine was not found to be safe for adults.');
+  assert.equal(r.found, false);
+  assert.match(r.reason, /would leave out "not"/);
+  const c = matchQuote('The treatment ... reduce mortality in patients', "The treatment didn't reduce mortality in patients.");
+  assert.match(c.reason, /would leave out "didn't"/);
+});
+
 // A bracket is the author's words, so a "[not]" the source lacks reverses it.
 // An ellipsis that leaves out a negation in the same clause as a quoted part
 // reverses it too, however many words it leaves out; a whole clause set off by

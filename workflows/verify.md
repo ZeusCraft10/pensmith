@@ -96,7 +96,8 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
      If `text.replace(/\s/g, '').length < 50` → `verdict = 'TEXT_UNAVAILABLE'` (a scanned PDF).
    - **(d)** Else match: `matchQuote(quote, prepareSource(text))`. Every quoted word must appear in
      order; an ellipsis, a bracketed insertion, a left-out reference marker and PDF extraction
-     noise are allowed, a changed word never is. Found → `'OK'`; else `'NOT_FOUND'`.
+     noise are allowed, a changed word never is. A marker the quotation keeps must stand at the
+     same place in the source. Found → `'OK'`; else `'NOT_FOUND'`.
 
    **Per-source Pass-3 status** (DETERMINISTIC, OpenCode HIGH #2 / Codex HIGH consensus #2 — 4-way discrimination):
    - If any quote has `verdict = 'NOT_FOUND'` → section Pass-3 FAILS for this source.
