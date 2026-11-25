@@ -81,3 +81,21 @@ export async function ask(question: PromptQuestion, opts: AskOptions = {}): Prom
   }
   return askNumbered(question, opts);
 }
+
+/**
+ * Ask a yes/no question where only a clear yes counts. Ctrl-C, end of input,
+ * no answer in time, or three answers that are not y or n all mean no, so a
+ * stray keystroke can never crash the verb or approve anything.
+ */
+export async function confirmOrNo(
+  question: Extract<PromptQuestion, { kind: 'confirm' }>,
+  opts: AskOptions = {},
+): Promise<boolean> {
+  try {
+    const answer = await ask(question, opts);
+    return answer.kind === 'confirm' && answer.value === true;
+  } catch (e) {
+    if (e instanceof PromptAbortedError || e instanceof PromptTimeoutError) return false;
+    throw e;
+  }
+}

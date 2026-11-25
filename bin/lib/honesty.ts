@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { fetch as httpFetch } from './http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
 import { assertBudget, appendCost } from './budget.js';
-import { ask } from './prompts.js';
+import { confirmOrNo } from './prompts.js';
 
 // ============================================================
 //   Public types
@@ -295,13 +295,12 @@ async function scoreWithGptzero(
       return null;
     } else {
       // TTY: show the interactive consent gate (approval-gates default-on).
-      const answer = await ask({
+      consented = await confirmOrNo({
         id: 'honesty-gptzero-consent',
         kind: 'confirm',
         label: 'Send paper text to GPTZero for honesty scoring?',
         default: true,
       });
-      consented = answer.kind === 'confirm' ? answer.value : false;
     }
     if (!consented) {
       process.stdout.write('pensmith: GPTZero honesty scoring declined — skipped.\n');

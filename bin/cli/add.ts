@@ -38,7 +38,7 @@ import { normalizeDoi, isDoi, verifyDoi } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
-import { ask } from '../lib/prompts.js';
+import { confirmOrNo } from '../lib/prompts.js';
 import { paperDir, sectionPlan } from '../lib/paths.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { loadState } from '../lib/state.js';
@@ -337,13 +337,12 @@ export const addCommand = defineCommand({
     //     otherwise remap every section in STATE.json.
     let doRemap = args.remap === true;
     if (!doRemap && args.yolo !== true) {
-      const answer = await ask({
+      doRemap = await confirmOrNo({
         id: 'add-remap',
         kind: 'confirm',
         label: 'Source added. Remap sections to reference it?',
         default: false,
       });
-      doRemap = answer.kind === 'confirm' ? answer.value : false;
     }
 
     if (doRemap) {

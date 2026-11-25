@@ -24,7 +24,7 @@
 //   - args.__dispatch  a spy dispatcher used instead of the real dispatchVerb
 
 import { defineCommand } from 'citty';
-import { ask } from '../lib/prompts.js';
+import { ask, confirmOrNo } from '../lib/prompts.js';
 import { dispatchVerb, type GlobalFlags } from '../pensmith.js';
 import type { Ux02Verb } from '../lib/verbs.js';
 
@@ -78,13 +78,12 @@ export const sketchCommand = defineCommand({
     } else if (args.yolo === true) {
       proceed = true;
     } else {
-      const answer = await ask({
+      proceed = await confirmOrNo({
         id: 'sketch-confirm',
         kind: 'confirm',
         label: 'Proceed to intake with this thesis?',
         default: false,
       });
-      proceed = answer.kind === 'confirm' ? answer.value : false;
     }
 
     if (!proceed) {

@@ -35,7 +35,7 @@ import { paperDir } from '../lib/paths.js';
 import { parseIntakeMd } from '../lib/intake-parse.js';
 import { resolveStyleName, parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { ask, PromptAbortedError, PromptTimeoutError, type PromptQuestion } from '../lib/prompts.js';
+import { confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
 import { extractCitekeys } from '../lib/citation-token.js';
 import { parseVerdictRows } from '../lib/verify/verdict-rows.js';
 import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
@@ -749,16 +749,7 @@ export const doneCommand = defineCommand({
       pass4Results,
       plagiarismResults,
       yolo: args.yolo === true,
-      approve: async () => {
-        try {
-          const answer = await ask(EXPORT_CONFIRM_QUESTION);
-          return answer.kind === 'confirm' && answer.value === true;
-        } catch (e) {
-          // Ctrl-C, end of input or no answer in time: not a yes.
-          if (e instanceof PromptAbortedError || e instanceof PromptTimeoutError) return false;
-          throw e;
-        }
-      },
+      approve: () => confirmOrNo(EXPORT_CONFIRM_QUESTION),
     });
 
     if (gateResult.exported === false && gateResult.gateSkipped !== true) {
