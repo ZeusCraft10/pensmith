@@ -189,6 +189,9 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - `CITATIONS.bib`/`.ris` become derived views. Compile writes its export bibliography separately and never overwrites the canonical store.
 - research and add merge by normalized identifier, and citekeys stay stable across re-runs.
 - add hydrates a PDF from a DOI or arXiv ID found in its text first. Otherwise it accepts a title search hit only above the similarity threshold with author overlap.
+- Carry-overs from T03:
+  - Write the derived `CITATIONS.bib` through `formatBibtex` in `bin/lib/citations.ts`. The research-time writer (`bin/lib/bibtex-write.ts`) still uses citation-js's ASCII-only BibTeX output, which drops Chinese, Cyrillic and Arabic text and turns Greek into math mode. The export path already uses `formatBibtex`.
+  - Wire `sourcePreference` from `templates/presets/disciplines.json` into research's merge-by-identifier ordering, or delete it from the presets and the disciplines schema. It is still unread.
 
 ### T10 — LLM transport on the official SDK
 **Issues:** `anthropic-response-parse-thinking`, `pricing-table-and-model-ids`, `llm-stop-reason-max-tokens`, `llm-timeout-no-streaming`, `budget-scope-cap-lifetime`, `no-session-cost-cap`, `yolo-preflight-whole-paper-estimate`, `openai-reasoning-params`
@@ -217,6 +220,7 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
   - The status enum is disambiguated (`stub` vs `planned`).
 - `STATE.json` and `config.toml` move into `.paper/`, with a migration from the root locations.
 - Prompts in `templates/prompts/` are updated to match the schemas. Trim their process-history cruft.
+- Carry-over from T03: when intake records the clarifier's "Which citation style?" answer, write it as `citation_style` under `[project]` in `.paper/config.toml` (normalized with `normalizeStyleName`). `done` reads that key first (`bin/lib/citation-style.ts`). Today the choice is honoured only through `pensmith new --citation-style`, a hand edit of config.toml, or a `Citation style:` line in INTAKE.md.
 
 ### T12 — Minimal source feed and drafter contract
 **Issues:** `feed-gap-llm-gets-no-sources`, `write-wave-overwrites-verified`, `source-evaluator-unfenced-fail-open`, `revise-swap-prompt-blind`, drafter side of `empty-or-uncited-draft-verified`
@@ -242,6 +246,7 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
   - Error text never suggests `--yolo`. Export confirmation defaults to no.
 - GPTZero: consent once, default no, only with a configured key.
 - Plagiarism: a DuckDuckGo challenge or blocked response gives "incomplete", never "clean". Phrases are sent quoted.
+- Carry-over from T03: on the humanizer path (a wired TaskRunner, which only tests wire in Phase 1), `runHumanizer` writes `.paper/FINAL.md`, the router's done marker, before the export gate and `exportDraft` run. A cancelled, refused or failed export then still leaves the marker. Write the humanized text under a staging name and make it FINAL.md only after a successful export.
 
 ### T14 — Packaging: installable plugin + bundled CLI (parallel worktree)
 **Issues:** `plugin-manifest-uninstallable`, Phase-1 part of `tier1-no-executable-path`, `root-mcp-json-project-scope`, `sessionstart-context-not-delivered`, `hooks-write-into-every-project`, `hooks-no-entrypoint-wrong-state`, `stop-hook-useless`, `handoff-size-bound-rejects`, `mcp-verbs-write-stdout`, `mcp-surface-noop-and-unwired`, `mcp-resources-wrong-root`, `mcp-tools-expose-yolo-and-paperroot`, `skill-descriptions-overtrigger`, `ci-gates-pin-invalid-plugin-format`, `build-ships-compiled-tests`, `package-deps-engines-hygiene`, `ecosystem-presence-wrong-paths`, `docs-inaccurate`

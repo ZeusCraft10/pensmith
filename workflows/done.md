@@ -53,7 +53,7 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
   docx when Pandoc is installed, otherwise md) — carrying ZERO pensmith trace.
   Each run replaces the previous export; nothing from an earlier run stays.
 - `.paper/export/CITATIONS.bib` and `CITATIONS.ris` — the works the paper
-  cites, and only those (DONE-08, CITE-05).
+  cites, and only those.
 - `.paper/VERIFICATION.md` — a SOURCE artifact (not in the export dir) carrying
   the honesty report (DONE-04, framed verbatim), the plagiarism section
   (DONE-02), and the whole-paper Pass-4 orphan summary (DONE-01).
