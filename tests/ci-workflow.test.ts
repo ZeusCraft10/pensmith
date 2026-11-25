@@ -38,6 +38,13 @@ test('CI installs the Claude Code CLI and runs the plugin smoke', () => {
   for (const needle of ["'validate', target, '--strict'", "'marketplace', 'add'", "'install', 'pensmith@pensmith'", "'details', 'pensmith@pensmith'", 'symlinkSync']) {
     assert.ok(smoke.includes(needle), `plugin-smoke.mjs must exercise ${needle}`);
   }
+  // The real marketplace installs the release branch from GitHub, so the
+  // smoke installs the same tree a release commits (release-tree.mjs) from a
+  // throwaway local marketplace whose entry is "./plugin".
+  for (const needle of ['payloadTree(', 'checkoutTree(', "source: './plugin'", 'assertBuilt(']) {
+    assert.ok(smoke.includes(needle), `plugin-smoke.mjs must use ${needle}`);
+  }
+  assert.ok(!/'marketplace', 'add', repoRoot/.test(smoke), 'adding the checkout itself would install the published release, not this build');
 });
 
 test('CI builds the plugin bundle before the tests and the smoke, and never checks in a built one', () => {

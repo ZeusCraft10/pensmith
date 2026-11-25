@@ -58,14 +58,19 @@ function frontmatter(md: string): { data: Record<string, unknown>; body: string 
 // Layout
 // ---------------------------------------------------------------------------
 
-test('the marketplace points at ./plugin and the repo root is not itself a plugin', () => {
+test('the marketplace installs the release branch and the repo root is not itself a plugin', () => {
   const market = readJson<{ name: string; plugins: Array<{ name: string; source: unknown }> }>(
     path.join(repoRoot, '.claude-plugin', 'marketplace.json'),
   );
   assert.equal(market.name, 'pensmith');
   assert.equal(market.plugins.length, 1);
   assert.equal(market.plugins[0]!.name, 'pensmith');
-  assert.equal(market.plugins[0]!.source, './plugin');
+  // plugin/ in this branch has no bundle; the release workflow publishes the
+  // built payload at the root of the release branch, so users get the last
+  // published release, never an unbuilt checkout.
+  assert.deepEqual(market.plugins[0]!.source, { source: 'github', repo: 'ZeusCraft10/pensmith', ref: 'release' });
+  const manifest = readJson<{ repository: string }>(at('.claude-plugin', 'plugin.json'));
+  assert.equal(manifest.repository, 'https://github.com/ZeusCraft10/pensmith', 'the release source is this repository');
   assert.ok(!existsSync(path.join(repoRoot, '.claude-plugin', 'plugin.json')), 'remove the root plugin.json');
   for (const legacy of ['skills/pensmith.md', 'skills/plan-section.md', 'skills/write-section.md', 'skills/verify-section.md', 'hooks/hooks.json']) {
     assert.ok(!existsSync(path.join(repoRoot, legacy)), `legacy plugin file ${legacy} must be gone`);

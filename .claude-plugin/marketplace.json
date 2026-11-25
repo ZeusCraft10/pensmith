@@ -10,7 +10,11 @@
   "plugins": [
     {
       "name": "pensmith",
-      "source": "./plugin",
+      "source": {
+        "source": "github",
+        "repo": "ZeusCraft10/pensmith",
+        "ref": "release"
+      },
       "description": "Plans, drafts and verifies academic papers section by section, checking every citation against live scholarly registries (alpha).",
       "category": "productivity"
     }

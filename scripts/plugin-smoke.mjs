@@ -1,24 +1,33 @@
 #!/usr/bin/env node
 // scripts/plugin-smoke.mjs — install the plugin the way a user does and check
-// what Claude Code ends up with. Needs the Claude Code CLI (`claude`) on PATH.
+// what Claude Code ends up with. Needs the Claude Code CLI (`claude`) on PATH
+// and the built bundle (`npm run bundle`).
 //
 //   1. `claude plugin validate plugin --strict` and `claude plugin validate . --strict`
-//   2. in a throwaway CLAUDE_CONFIG_DIR/HOME: marketplace add <this checkout>,
-//      install pensmith@pensmith, and read `claude plugin details`: it must
-//      list exactly 1 skill, 1 hook and no MCP servers
-//   3. run the installed `pensmith --version`, and on POSIX the checkout's
+//   2. build the tree a release commits to the release branch (the same
+//      payloadTree() scripts/release.mjs publishes), write it out, and
+//      `claude plugin validate --strict` it
+//   3. in a throwaway CLAUDE_CONFIG_DIR/HOME: marketplace add a throwaway local
+//      marketplace whose one entry is "./plugin" (that tree), install
+//      pensmith@pensmith, and read `claude plugin details`: it must list
+//      exactly 1 skill, 1 hook and no MCP servers
+//   4. run the installed `pensmith --version`, and on POSIX the checkout's
 //      plugin/bin/pensmith through a symlink, the way a PATH entry reaches it
-//   4. `npm link` the checkout into a throwaway prefix and run the linked bin
+//   5. `npm link` the checkout into a throwaway prefix and run the linked bin
 //
-// Exits 1 on the first failed check.
+// The real marketplace installs the release branch from GitHub, which holds
+// the last published release; the local marketplace makes the install test
+// this build instead. Exits 1 on the first failed check.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertBuilt, checkoutTree, git, payloadTree } from './release-tree.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const pluginDir = path.join(repoRoot, 'plugin');
 const version = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;
 const isWindows = process.platform === 'win32';
 
@@ -41,20 +50,46 @@ function check(label, ok, detail = '') {
   console.log(`ok   ${label}`);
 }
 
+const unbuilt = (() => {
+  try {
+    assertBuilt(pluginDir);
+    return '';
+  } catch (err) {
+    return err.message;
+  }
+})();
+check('the plugin bundle is built', !unbuilt, unbuilt);
+
 // 1. Validation
 for (const target of ['plugin', '.']) {
   const r = run('claude', ['plugin', 'validate', target, '--strict'], { cwd: repoRoot });
   check(`claude plugin validate ${target} --strict`, r.status === 0, r.out);
 }
 
-// 2. Isolated install
 const sandbox = mkdtempSync(path.join(tmpdir(), 'pensmith-plugin-smoke-'));
 const env = { ...process.env, CLAUDE_CONFIG_DIR: path.join(sandbox, 'config'), HOME: path.join(sandbox, 'home'), USERPROFILE: path.join(sandbox, 'home') };
 mkdirSync(env.CLAUDE_CONFIG_DIR, { recursive: true });
 mkdirSync(env.HOME, { recursive: true });
 try {
-  const add = run('claude', ['plugin', 'marketplace', 'add', repoRoot], { cwd: sandbox, env });
-  check('claude plugin marketplace add <checkout>', add.status === 0, add.out);
+  // 2. The release-shaped tree, built in a throwaway object store so this
+  // checkout's .git is left alone.
+  const objects = path.join(sandbox, 'objects.git');
+  git(['init', '--quiet', '--bare', objects]);
+  const tree = payloadTree(objects, pluginDir);
+  const market = path.join(sandbox, 'marketplace');
+  const releaseDir = path.join(market, 'plugin');
+  mkdirSync(releaseDir, { recursive: true });
+  checkoutTree(objects, tree, releaseDir);
+  const validated = run('claude', ['plugin', 'validate', releaseDir, '--strict'], { cwd: sandbox, env });
+  check('claude plugin validate <release tree> --strict', validated.status === 0, validated.out);
+
+  // 3. Isolated install from a local marketplace: the real entry, pointed at that tree.
+  const manifest = JSON.parse(readFileSync(path.join(repoRoot, '.claude-plugin', 'marketplace.json'), 'utf8'));
+  manifest.plugins = manifest.plugins.map((p) => ({ ...p, source: './plugin' }));
+  mkdirSync(path.join(market, '.claude-plugin'));
+  writeFileSync(path.join(market, '.claude-plugin', 'marketplace.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  const add = run('claude', ['plugin', 'marketplace', 'add', market], { cwd: sandbox, env });
+  check('claude plugin marketplace add <local marketplace of the release tree>', add.status === 0, add.out);
   const install = run('claude', ['plugin', 'install', 'pensmith@pensmith'], { cwd: sandbox, env });
   check('claude plugin install pensmith@pensmith', install.status === 0, install.out);
   const details = run('claude', ['plugin', 'details', 'pensmith@pensmith'], { cwd: sandbox, env });
@@ -73,7 +108,7 @@ try {
   rmSync(sandbox, { recursive: true, force: true });
 }
 
-// 3. The checkout's shim through a symlink (POSIX; Windows uses pensmith.cmd above)
+// 4. The checkout's shim through a symlink (POSIX; Windows uses pensmith.cmd above)
 if (!isWindows) {
   const linkDir = mkdtempSync(path.join(tmpdir(), 'pensmith-link-'));
   const link = path.join(linkDir, 'pensmith');
@@ -83,7 +118,7 @@ if (!isWindows) {
   rmSync(linkDir, { recursive: true, force: true });
 }
 
-// 4. `npm link` from the checkout into a throwaway prefix, then run the linked bin.
+// 5. `npm link` from the checkout into a throwaway prefix, then run the linked bin.
 {
   const prefix = mkdtempSync(path.join(tmpdir(), 'pensmith-npm-prefix-'));
   const npmEnv = { ...process.env, npm_config_prefix: prefix };
