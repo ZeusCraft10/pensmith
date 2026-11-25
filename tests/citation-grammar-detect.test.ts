@@ -15,6 +15,7 @@ import {
   findRawCitations,
   findUnparseableCitations,
 } from '../bin/lib/citation-grammar.js';
+import { extractQuotes } from '../bin/lib/quote-extractor.js';
 
 const raws = (md: string): Array<[string, string]> => findRawCitations(md).map((r) => [r.kind, r.raw]);
 
@@ -207,4 +208,21 @@ test('quotes: a line that only looks like a link reference definition is still r
     assert.deepEqual(quotes(`See [the source][ref].\n\n[ref]: <https://example.org/a> ${t}\n`), [], t);
     assert.deepEqual(quotes(`See [the source][ref].\r\n\r\n  [ref]:https://example.org/a ${t}\r\n`), [], t);
   }
+});
+
+test('quotes: a braced key that wraps a cluster leaves no citation text in the quotation', () => {
+  // findCitations gives both `@{foo [@bar] baz}` and the `[@bar]` inside it,
+  // so the two overlap. Walking them forward put `baz}` back into the
+  // quotation, which Pass 3 then looked for in the source.
+  for (const [md, tail] of [
+    ['He wrote "@{foo [@bar] baz} was a good thing to say here" ok.', 'good thing to say here'],
+    ['Then "@{x [@y] z} tail words here" [@k].', 'words here'],
+  ] as const) {
+    const [q] = findQuotes(md);
+    assert.ok(q, md);
+    assert.doesNotMatch(q.text, /[@{}[\]]/u, md);
+    assert.ok(q.text.endsWith(tail), `${md} -> ${q.text}`);
+  }
+  // Fewer than three quoted words are left, so no source is checked for it.
+  assert.deepEqual(extractQuotes('Then "@{x [@y] z} two words" [@k].'), []);
 });

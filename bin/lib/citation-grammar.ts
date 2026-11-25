@@ -281,7 +281,8 @@ export function citationsOf(md: string, key: string, cites: readonly Citation[] 
 
 /**
  * `md` with each of `cites` replaced by `fn` of it. `cites` must be in
- * document order and not overlap, as findCitations gives them.
+ * document order and not overlap. findCitations can give a braced narrative
+ * key that wraps a cluster (`@{foo [@bar] baz}`), which overlaps it.
  */
 export function replaceCitations(
   md: string,
@@ -621,7 +622,12 @@ function linkTargetRanges(md: string): Array<[number, number]> {
 }
 
 function quoteText(inner: string): string {
-  return replaceCitations(inner, () => '').replace(/\s+/g, ' ').trim().replace(/[\s.,;:]+$/u, '');
+  // Last first, on the text already edited, and not through replaceCitations:
+  // a braced narrative key can wrap a cluster (`@{foo [@bar] baz}`), and
+  // walking overlapping citations forward puts part of one back.
+  let text = inner;
+  for (const c of findCitations(inner).reverse()) text = text.slice(0, c.start) + text.slice(c.end);
+  return text.replace(/\s+/g, ' ').trim().replace(/[\s.,;:]+$/u, '');
 }
 
 interface Line { start: number; end: number; text: string }
