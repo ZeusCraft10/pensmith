@@ -64,6 +64,69 @@ const pdfParsePin = {
   },
 };
 
+// Node prints a DEP0005 warning for every `new Buffer()` called from outside
+// node_modules, and in the bundle nothing is under node_modules any more. Each
+// patch rewrites one bundled package's calls to the Buffer.from / Buffer.alloc
+// call with the same result. Every edit must match exactly once, so a package
+// that changes shape fails the bundle instead of silently warning again.
+const BUFFER_PATCHES = [
+  {
+    // pdf.js copies typed arrays it posts to its in-process worker with
+    // `new value.constructor(...)`. pdf-parse hands it a Buffer, so that is
+    // `new Buffer(buffer)` on every PDF parse. Buffer.from(buffer) copies, like
+    // the constructor did; Buffer.from(arrayBuffer, offset, length) shares the
+    // memory, like the three-argument constructor did.
+    file: /[\\/]pdf-parse[\\/]lib[\\/]pdf\.js[\\/]v1\.10\.100[\\/]build[\\/]pdf\.js$/,
+    edits: [
+      [
+        'result = new value.constructor(buffer, value.byteOffset, value.byteLength);',
+        'result = Buffer.isBuffer(value) ? Buffer.from(buffer, value.byteOffset, value.byteLength) : new value.constructor(buffer, value.byteOffset, value.byteLength);',
+      ],
+      ['result = new value.constructor(value);', 'result = Buffer.isBuffer(value) ? Buffer.from(value) : new value.constructor(value);'],
+      // Node < 8 fallback; a Uint8Array copy either way.
+      ['input = new Buffer(literals);', 'input = Buffer.from(literals);'],
+    ],
+  },
+  {
+    // Fallbacks for runtimes without Buffer.from / Buffer.alloc.
+    file: /[\\/]jszip[\\/]lib[\\/]nodejsUtils\.js$/,
+    edits: [
+      ['return new Buffer(data, encoding);', 'return Buffer.from(data, encoding);'],
+      ['var buf = new Buffer(size);', 'var buf = Buffer.alloc(size);'],
+    ],
+  },
+  {
+    // URL percent-encoding; every argument is a string or a byte array.
+    file: /[\\/]whatwg-url[\\/]lib[\\/]url-state-machine\.js$/,
+    edits: [
+      ['const buf = new Buffer(c);', 'const buf = Buffer.from(c);'],
+      ['const input = new Buffer(str);', 'const input = Buffer.from(str);'],
+      ['return new Buffer(output).toString();', 'return Buffer.from(output).toString();'],
+      ['const buffer = new Buffer(this.buffer);', 'const buffer = Buffer.from(this.buffer);'],
+    ],
+  },
+];
+const noBufferConstructor = {
+  name: 'no-buffer-constructor',
+  setup(b) {
+    for (const patch of BUFFER_PATCHES) {
+      b.onLoad({ filter: patch.file }, (args) => {
+        let src = readFileSync(args.path, 'utf8');
+        for (const [from, to] of patch.edits) {
+          if (src.split(from).length !== 2) {
+            throw new Error(`${args.path} changed shape; update BUFFER_PATCHES in scripts/bundle.mjs (${from})`);
+          }
+          src = src.replace(from, to);
+        }
+        if (src.includes('new Buffer(')) {
+          throw new Error(`${args.path} still calls new Buffer(); add it to BUFFER_PATCHES in scripts/bundle.mjs`);
+        }
+        return { contents: src, loader: 'js' };
+      });
+    }
+  },
+};
+
 const common = {
   absWorkingDir: repoRoot,
   bundle: true,
@@ -81,7 +144,7 @@ const common = {
   // userland package of the same API instead.
   alias: { punycode: 'punycode/' },
   define: { __dirname: '__pensmithDirnameValue', __filename: '__pensmithFilename' },
-  plugins: [pdfParsePin],
+  plugins: [pdfParsePin, noBufferConstructor],
 };
 
 const BUNDLES = [
@@ -101,6 +164,9 @@ async function generate() {
       banner: { js: b.banner },
     });
     const [output] = result.outputFiles;
+    if (output.text.includes('new Buffer(')) {
+      throw new Error(`${b.out} calls new Buffer(), which prints DEP0005 for users; patch it in BUFFER_PATCHES`);
+    }
     files.set(b.out, Buffer.from(output.contents));
   }
   for (const dir of ASSET_DIRS) {

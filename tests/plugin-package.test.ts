@@ -255,6 +255,22 @@ test('the installed CLI finds its runtime assets: doctor reports the install as 
   assert.ok(!existsSync(path.join(cwd, '.paper')), 'doctor must not create a workspace');
 });
 
+test('the installed CLI parses a PDF without printing a Buffer() deprecation warning', () => {
+  // Node prints DEP0005 for `new Buffer()` called from outside node_modules. In
+  // the bundle nothing is under node_modules, so pdf.js copying the Buffer that
+  // pdf-parse hands it (`new value.constructor(value)`) warned on every PDF.
+  const copy = installedCopy();
+  const cwd = mkdtempSync(path.join(tmpdir(), 'pensmith-add-pdf-'));
+  mkdirSync(path.join(cwd, '.paper'));
+  const pdf = path.join(repoRoot, 'tests', 'fixtures', 'pdf', 'byo-text.pdf');
+  const r = runPensmith(copy, ['add', pdf, '--dry-run'], cwd);
+  assert.doesNotMatch(r.stderr, /could not read local PDF/, 'the PDF must actually be parsed');
+  assert.doesNotMatch(r.stderr, /DeprecationWarning|DEP0005/, `stderr: ${r.stderr}`);
+  for (const f of ['dist/pensmith.mjs', 'dist/hook.mjs']) {
+    assert.doesNotMatch(readFileSync(at(f), 'utf8'), /new Buffer\(/, `plugin/${f} must not call the deprecated Buffer constructor`);
+  }
+});
+
 test('the installed hook is silent outside a paper and gives context inside one', () => {
   const copy = installedCopy();
   const hook = path.join(copy, 'dist', 'hook.mjs');
