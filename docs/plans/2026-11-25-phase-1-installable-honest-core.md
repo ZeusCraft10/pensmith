@@ -272,6 +272,32 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - Rewrite README and PRIVACY honestly: alpha status, Phase-1 API-key need, a network host table, install steps that work.
 - Update `CLAUDE.md` with the owner decisions above.
 
+### T14b — Keep the built bundle out of source history; publish via a release branch (controller follow-up to T14)
+**Why:** committing the ~9 MB `plugin/dist` bundle and failing CI whenever it is stale would add megabytes to git history on every source change, and every marketplace install clones that history. The controller removed `plugin/dist` from the unpushed T14 commits; this task finishes the model.
+- `.gitignore` `/plugin/dist/`. `npm run bundle` builds it locally and in CI; nothing in source history contains it.
+- Minify the bundles (esbuild `minify: true`, `keepNames: true`) and keep the legal comments; report the before/after sizes. Everything that passes today must still pass against the minified bundle.
+- Replace `bundle:check` (the stale-committed-bundle gate) with build-then-test: `check` runs `npm run bundle` before the tests. Tests that need the bundle fail loudly if it is missing ("run `npm run bundle`"). They never skip.
+- `.claude-plugin/marketplace.json`: the plugin source becomes `{"source": "github", "repo": "ZeusCraft10/pensmith", "ref": "release"}`, so users always install the last published release. `claude plugin validate . --strict` must still pass.
+- `scripts/plugin-smoke.mjs`:
+  - validate `plugin/` (after the bundle is built) and the root marketplace;
+  - for the isolated install, generate a throwaway local marketplace in a temp dir whose entry uses `"source": "./plugin"`, pointing at a copy of the built `plugin/` payload, so the install exercises exactly what a release ships;
+  - all other checks stay as they are (1 skill, 1 hook, 0 MCP, `--version` installed, through a symlink and through npm link).
+- New `.github/workflows/release.yml`:
+  - triggers on tags `v*`, with `permissions: contents: write`;
+  - fails unless tag == `plugin/.claude-plugin/plugin.json` version == `package.json` version;
+  - runs `npm ci && npm run check`, then `node scripts/plugin-smoke.mjs` (Claude Code CLI pinned as in ci.yml);
+  - then publishes the built `plugin/` payload as the root of the `release` branch: check out or create `release` in a separate worktree, replace its contents with `plugin/` (including `dist/`), and commit `release <tag>` on top of the previous release commit (history kept; no force-push). Push `release`. Optionally create a GitHub Release for the tag.
+- `ci.yml`: drop the committed-bundle step; build the bundle before the tests and the smoke.
+- Docs:
+  - README install: in Claude Code, `/plugin marketplace add ZeusCraft10/pensmith` then `/plugin install pensmith@pensmith` (the latest release). Until the first tag exists, install from a checkout: `npm ci && npm run bundle && claude --plugin-dir plugin`.
+  - CONTRIBUTING: the release steps (bump the version in package.json and plugin.json, tag, push the tag).
+- **Exit:**
+  - `git ls-files plugin/dist` is empty;
+  - `npm run check` is green;
+  - `node scripts/plugin-smoke.mjs` passes;
+  - `claude plugin validate . --strict` passes;
+  - running release.yml's publish step locally into a scratch clone produces a `release`-shaped tree that `claude plugin validate --strict` accepts.
+
 ### T15 — Journey e2e and honest test gates
 **Issues:** Phase-1 part of `no-e2e-or-real-tier-parity-test`, `known-bad-corpus-tests-vacuous`, `vacuous-red-by-skip-tests` (touched areas), `test-env-isolation-leaks`, `section-isolation-tests-vacuous`
 - Journey test: a scripted fake Generator plus HTTP cassettes keyed by request. It drives bare `pensmith` from an empty dir containing `assignment.txt` to an exported docx. It asserts:

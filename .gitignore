@@ -46,3 +46,6 @@ coverage/
 .claude/
 .planning/graphs/
 graphify-out/
+
+# Built plugin payload: produced by `npm run bundle`, published only on the release branch
+/plugin/dist/
