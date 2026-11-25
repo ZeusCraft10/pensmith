@@ -14,7 +14,8 @@
 //
 // Pipeline:
 //   1. Read DRAFT.md for section N
-//   2. Run Pass-1 (deterministic JW + DOI integrity) via runPass1
+//   2. Run Pass-1 (each identifier resolved through its registries, the entry
+//      compared with the record) via runPass1
 //   3. Run Pass-3 (deterministic levenshtein-substring) via runPass3
 //   4. Aggregate to per-source verdicts (OK / UNVERIFIABLE / FAIL)
 //   5. Atomic-write VERIFICATION.md
@@ -177,7 +178,7 @@ export const verifyCommand = defineCommand({
       '',
       `Status: ${status}`,
       '',
-      '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
+      '## Pass-1 (citation integrity, deterministic)',
       '',
       ...pass1.map((r) => renderPass1VerdictRow(r.citekey, r.verdict, r.titleJW, r.authorJW, r.reason)),
       '',

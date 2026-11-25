@@ -23,8 +23,8 @@ It is the most safety-critical verb in the workflow: a single FABRICATED / MIS-C
 NOT_FOUND verdict escaping verify means a fabricated citation lands in the exported paper.
 
 **Phase 3 stance (D-13 LOCKED)**: the verify path is 100% deterministic. The verdict is
-produced by `jaroWinkler` (Pass-1 title/author AND-gate) and `levenshteinSubstring`
-(Pass-3 quote integrity) alone. The dormant fuzzy-judge and quote-checker prompts
+produced by registry lookups and a word-by-word metadata comparison (Pass 1, step 4)
+and `levenshteinSubstring` (Pass-3 quote integrity) alone. The dormant fuzzy-judge and quote-checker prompts
 (Plan 05 hash-pins them) are calibrated for Phase 8 ambiguous-case tie-break only;
 they MUST NOT be referenced, loaded, or executed from this body in Phase 3.
 
@@ -58,22 +58,12 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
    - `<sectionPlan(n, slug)>` = `.paper/sections/<NN>-<slug>/PLAN.md` — for `assigned_sources` and the `verified_against_draft_hash` invalidation check.
    - **`.paper/CITATIONS.bib`** — canonical BibTeX (D-20), parsed through `bin/lib/citations.ts parseBibtex` (D-19 citation-js chokepoint). This file is the **single source of truth** for citation metadata at verify time; `LIBRARY.json` is NOT consulted at verify time.
 
-4. **PASS 1 — Citation Integrity (DETERMINISTIC, VRFY-01)**:
-   - Extract every `[@citekey]` token from DRAFT.md (Pandoc citation regex).
-   - For each citekey, look up the parsed `.paper/CITATIONS.bib` entry → `claimed = {title, authors, doi, retracted}`.
-   - If the citekey is absent from `.paper/CITATIONS.bib` → `verdict = 'FABRICATED'`, `reason = 'citekey ${citekey} not present in .paper/CITATIONS.bib (citation invented by drafter)'`. Skip the rest of step 4 for this citekey.
-   - For each DOI present in claimed: call `sources.crossref.fetchById(doi)` (cassette-backed in CI per Plan 03-04 Task 4.1) → `actual = {title, authors, doi}`.
-   - If `fetchById(doi)` returns null / 404 → `verdict = 'FABRICATED'`, `reason = 'DOI ${doi} did not resolve at Crossref'`.
-   - Compute `titleJW = jaroWinkler(nfkcNormalize(actual.title), nfkcNormalize(claimed.title))` against `TITLE_JW_THRESHOLD = 0.92` (CONTEXT D-11).
-   - Compute `authorJW = jaroWinkler(firstAuthorSurname(actual.authors), firstAuthorSurname(claimed.authors))` against `AUTHOR_JW_THRESHOLD = 0.85` (first-author surname via `bin/lib/author-normalize.ts` per D-11).
-   - **DETERMINISTIC AND-gate verdict** (no LLM): if both `titleJW >= TITLE_JW_THRESHOLD` AND `authorJW >= AUTHOR_JW_THRESHOLD` → `verdict = 'OK'`; otherwise `verdict = 'MIS-CITED'`, `reason = 'titleJW=${...} authorJW=${...} below threshold'`.
-
-4a. **Field-presence sub-gate (DETERMINISTIC, no LLM — Codex MEDIUM #9 / OpenCode MEDIUM #5)**:
-    Run BEFORE finalizing the JW AND-gate verdict:
-    - If `claimed.title.length < 1` OR `claimed.authors[0]?.length < 1` → `verdict = 'MIS-CITED'`, `reason = 'claimed citation metadata incomplete (empty title or no authors)'`.
-    - If `actual.title.length < 1` → `verdict = 'MIS-CITED'`, `reason = 'source API returned empty title — entry may be malformed upstream; manual review recommended'`.
-    - **Retracted-flag handling**: if `claimed.retracted === true` (from the `.paper/CITATIONS.bib` parse, propagated from research-time Retraction Watch cross-check) → `verdict = 'MIS-CITED'`, `reason = 'cited a retracted work (per Retraction Watch cross-check at research time)'`. **Override even if JW thresholds pass** — retraction is a citation-integrity failure regardless of metadata match.
-    - **Multi-DOI redirect handling**: if `fetchById(claimed.doi)` returns a record whose `doi` field DIFFERS from `claimed.doi` (Crossref returns canonical DOI for redirected entries), treat as `'OK'` iff `titleJW >= 0.98` AND `authorJW >= 0.95` (stricter band to account for Crossref publishing two distinct DOIs for the same work). Otherwise `verdict = 'MIS-CITED'`, `reason = 'claimed DOI ${claimed.doi} resolves to a different work (canonical: ${actual.doi})'`.
+4. **PASS 1 — Citation Integrity (DETERMINISTIC, VRFY-01)** — `bin/lib/verify/pass1.ts`, no LLM:
+   - Extract every citation from DRAFT.md through `bin/lib/citation-grammar.ts` (Pandoc clusters, narrative `@key`, suppress-author `-@key`).
+   - A citekey absent from `.paper/CITATIONS.bib` → `FABRICATED`. An entry with an empty title or no authors → `MIS-CITED`. A stored retraction → `MIS-CITED`.
+   - Read the entry's identifiers, most reliable first: DOI (or a doi.org link in `url`), arXiv ID, PMID, ISBN (`bin/lib/verify/resolve.ts`). Ask the registries that hold each: Crossref, then DataCite, then doi.org content negotiation for a DOI; the arXiv API; PubMed esummary; Open Library.
+   - `FABRICATED` only when every registry asked answers "no such work" authoritatively. A registry that gives no answer (offline, timeout, 429, 5xx) → `UNRESOLVED`, which blocks and is retried on the next verify. An entry with no identifier, or a book Open Library does not list → `UNRESOLVED`. A malformed identifier → `MIS-CITED`.
+   - Compare the entry with the record found (`bin/lib/verify/work-match.ts`): the title word by word (markup, case, spelling and a missing subtitle set aside; numbers must match), the first author and every other named author, the year within one, and a journal article's journal. Any mismatch → `MIS-CITED`, with each problem in the reason; otherwise `OK`.
 
 5. **Narrate Pass-1 results into VERIFICATION.md** via TEMPLATE LITERAL (no LLM): for each `pass1Result`, format as a Markdown table row:
    ```text
