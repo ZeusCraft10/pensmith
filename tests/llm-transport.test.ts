@@ -738,6 +738,29 @@ test('T-11-08: OpenAI provider sends correct POST body and Authorization header 
 const VERBS_FOR_INTEGRATION = ['intake', 'research', 'outline', 'plan', 'write', 'revise'] as const;
 type GenerativeVerb = typeof VERBS_FOR_INTEGRATION[number];
 
+// The argv for each case, starting with the command word. `intake` is an alias
+// of `new`, and `revise` is reached as `plan <N> --revise` (there is no
+// `revise` command). These cases used to pass without running the verb at all:
+// an unknown first word fell through to the router.
+const VERB_COMMAND: Record<GenerativeVerb, string[]> = {
+  intake: ['intake'],
+  research: ['research'],
+  outline: ['outline'],
+  plan: ['plan'],
+  write: ['write'],
+  revise: ['plan', '1', '--revise'],
+};
+
+// Output that proves the intended verb ran (its own "pensmith <verb>" prefix).
+const VERB_RAN: Record<GenerativeVerb, RegExp> = {
+  intake: /pensmith new\b/,
+  research: /pensmith research\b/,
+  outline: /pensmith outline\b/,
+  plan: /pensmith plan\b/,
+  write: /pensmith write\b/,
+  revise: /pensmith plan\b/,
+};
+
 // Minimal args needed to make each verb not crash on missing args before reaching the key check
 const VERB_REQUIRED_ARGS: Record<GenerativeVerb, string[]> = {
   intake: [],
@@ -752,7 +775,7 @@ const VERB_REQUIRED_ARGS: Record<GenerativeVerb, string[]> = {
   outline: ['--yolo'],
   plan: ['1'],
   write: ['1'],
-  revise: ['1'],
+  revise: [],
 };
 
 for (const verb of VERBS_FOR_INTEGRATION) {
@@ -787,7 +810,7 @@ for (const verb of VERBS_FOR_INTEGRATION) {
 
       const result = spawnSync(
         process.execPath,
-        [bin, verb, ...VERB_REQUIRED_ARGS[verb]],
+        [bin, ...VERB_COMMAND[verb], ...VERB_REQUIRED_ARGS[verb]],
         {
           cwd: tmpRoot,
           env,
@@ -809,6 +832,8 @@ for (const verb of VERBS_FOR_INTEGRATION) {
         typeof result.stderr === 'string' && result.stderr.length > 0,
         `T-11-05 (${verb}): expected stderr banner, got empty stderr`,
       );
+      assert.match(result.stderr, /no LLM key configured/, `T-11-05 (${verb}): the banner must name the missing key`);
+      assert.match(result.stderr, VERB_RAN[verb], `T-11-05 (${verb}): the intended verb must be the one that refused`);
 
       // stdout must NOT contain 'ok:true' or 'tier2-placeholder'
       assert.equal(
@@ -847,7 +872,7 @@ for (const verb of VERBS_FOR_INTEGRATION) {
     try {
       const result = spawnSync(
         process.execPath,
-        [bin, verb, ...VERB_REQUIRED_ARGS[verb]],
+        [bin, ...VERB_COMMAND[verb], ...VERB_REQUIRED_ARGS[verb]],
         {
           cwd: tmpRoot,
           env: {
@@ -865,6 +890,11 @@ for (const verb of VERBS_FOR_INTEGRATION) {
         result.status,
         0,
         `T-11-06 (${verb}): expected exit code 0 under PENSMITH_NO_LLM=1, got ${result.status}. stderr: ${result.stderr}`,
+      );
+      assert.match(
+        `${result.stdout}${result.stderr}`,
+        VERB_RAN[verb],
+        `T-11-06 (${verb}): the intended verb did not run; stdout: ${result.stdout}`,
       );
 
       // Walk the .paper dir and assert no artifact contains 'tier2-placeholder' or 'mode: tier2-placeholder'

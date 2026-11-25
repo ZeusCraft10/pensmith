@@ -52,7 +52,7 @@ import { fileURLToPath } from 'node:url';
 import { defineCommand, runMain, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
 import { VERSION } from './lib/version.generated.js';
-import { UX02_VERBS, type Ux02Verb } from './lib/verbs.js';
+import { UX02_VERBS, canonicalVerb, unknownVerbMessage, type Ux02Verb } from './lib/verbs.js';
 import { setMirrorPromptsToStderr } from './lib/session-log.js';
 import { projectEstimate } from './lib/estimator.js';
 import { resolveNextAction } from './lib/router.js';
@@ -252,16 +252,15 @@ function configuredCapUsd(): number {
   return Number.isFinite(n) && n > 0 ? n : 5.0;
 }
 
-/** Find the first non-flag argv token that is one of the locked 16 verbs. */
+/** Index of the first argv token that is not a flag (the command word), or -1. */
+function commandWordIndex(argv: string[]): number {
+  return argv.findIndex((tok) => !tok.startsWith('-'));
+}
+
+/** The verb the command word names (aliases resolved), or null when there is none. */
 function firstVerb(argv: string[]): Ux02Verb | null {
-  for (const tok of argv) {
-    if (tok.startsWith('-')) continue;
-    if ((UX02_VERBS as readonly string[]).includes(tok)) return tok as Ux02Verb;
-    // The first non-flag token that is NOT a verb is a positional for an
-    // (implicit) bare invocation; stop scanning.
-    return null;
-  }
-  return null;
+  const i = commandWordIndex(argv);
+  return i === -1 ? null : canonicalVerb(argv[i] ?? '');
 }
 
 // Section-scoped verbs with a REQUIRED positional section number. When invoked
@@ -291,6 +290,22 @@ function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
  * exactly once (explicit verb → runMain; bare → resolveNextAction + dispatchVerb).
  */
 export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<void> {
+  // The first word that is not a flag must name a verb. Anything else used to
+  // fall through to the router and run a different step with the flags dropped.
+  // Only an argv with no command word at all is a bare `pensmith`.
+  const wordAt = commandWordIndex(argv);
+  if (wordAt !== -1) {
+    const word = argv[wordAt] ?? '';
+    const verb = canonicalVerb(word);
+    if (verb === null) {
+      process.stderr.write(`${unknownVerbMessage(word)}\n`);
+      process.exitCode = 2;
+      return;
+    }
+    // An alias is rewritten to its verb so it takes exactly the verb's arguments.
+    if (verb !== word) argv = [...argv.slice(0, wordAt), verb, ...argv.slice(wordAt + 1)];
+  }
+
   // (a) --show-prompts → mirror prompts to stderr (BEFORE any LLM call).
   if (hasFlag(argv, 'show-prompts')) setMirrorPromptsToStderr(true);
 
@@ -343,7 +358,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   // with no subcommand — delegate them so `pensmith --version` prints the semver
   // (preflight contract) instead of falling into the bare router path.
   if (argv.includes('--version') || argv.includes('--help') || argv.includes('-h')) {
-    await runMain(command);
+    await runMain(command, { rawArgs: argv });
     return;
   }
 
@@ -352,7 +367,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
     // Explicit verb (with its required positional, if any) → citty parses
     // --yolo into the subcommand args itself; no manual forwarding needed. NO
     // root run() to fall through into (H2).
-    await runMain(command);
+    await runMain(command, { rawArgs: argv });
     return;
   }
 
