@@ -39,7 +39,7 @@ async function discoverTestFiles(dir) {
   return entries.filter((e) => e.isFile() && e.name.endsWith('.test.ts')).map((e) => path.join(e.parentPath, e.name));
 }
 
-// Explicit test files may be passed (npm run test:tier-contract); otherwise
+// Explicit test files may be passed (npm run test:cassettes); otherwise
 // every tests/**/*.test.ts is run.
 const explicit = process.argv.slice(2).filter((a) => a.endsWith('.test.ts'));
 const files = explicit.length > 0

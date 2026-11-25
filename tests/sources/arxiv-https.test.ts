@@ -33,14 +33,15 @@ const FEED = [
 ].join('\n');
 
 const savedEnv: Record<string, string | undefined> = {};
-const ENV_KEYS = ['PENSMITH_NETWORK_TESTS', 'XDG_DATA_HOME', 'LOCALAPPDATA', 'HOME'];
+const ENV_KEYS = ['PENSMITH_TEST_CASSETTES', 'PENSMITH_OFFLINE', 'XDG_DATA_HOME', 'LOCALAPPDATA', 'HOME'];
 let prevDispatcher: Dispatcher;
 let agent: MockAgent;
 
 beforeEach(() => {
   for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
   // The adapter's live path (not the cassette replay) is the one users run.
-  process.env['PENSMITH_NETWORK_TESTS'] = '1';
+  delete process.env['PENSMITH_TEST_CASSETTES'];
+  delete process.env['PENSMITH_OFFLINE'];
   // A fresh, empty HTTP cache, so a response cached by another run can never
   // answer in place of the request this test makes.
   const data = mkdtempSync(path.join(tmpdir(), 'pensmith-arxiv-https-'));

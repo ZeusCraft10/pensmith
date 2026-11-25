@@ -336,8 +336,10 @@ test('the installed CLI parses a PDF without printing a Buffer() deprecation war
   const cwd = mkdtempSync(path.join(tmpdir(), 'pensmith-add-pdf-'));
   mkdirSync(path.join(cwd, '.paper'));
   const pdf = path.join(repoRoot, 'tests', 'fixtures', 'pdf', 'byo-text.pdf');
-  const r = runPensmith(copy, ['add', pdf, '--dry-run'], cwd);
+  // --offline, not --dry-run: a dry run reads nothing, so it would never reach pdf.js.
+  const r = runPensmith(copy, ['add', pdf, '--offline'], cwd);
   assert.doesNotMatch(r.stderr, /could not read local PDF/, 'the PDF must actually be parsed');
+  assert.match(r.stdout + r.stderr, /offline/, 'add must get past parsing to the (refused) title lookup');
   assert.doesNotMatch(r.stderr, /DeprecationWarning|DEP0005/, `stderr: ${r.stderr}`);
   for (const f of BUNDLES) {
     assert.doesNotMatch(readFileSync(built(f), 'utf8'), /new Buffer\(/, `plugin/${f} must not call the deprecated Buffer constructor`);

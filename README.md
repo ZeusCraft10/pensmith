@@ -27,7 +27,7 @@
 
 Pensmith guides you through a paper-writing workflow: **intake → research → outline → (plan → write → verify, for each section) → compile → done**. It ships as a [Claude Code](https://claude.com/claude-code) plugin and as a Node.js command-line tool; both run the same `pensmith` CLI.
 
-What makes it different from asking a model to write your paper: a section cannot be compiled or exported while it carries a citation the verifier flagged as `FABRICATED` or `MIS-CITED`, or a quote it marked `NOT_FOUND`. That check is deterministic, runs per section, and is not skippable.
+What makes it different from asking a model to write your paper: a section cannot be compiled or exported while it carries a citation the verifier flagged as `FABRICATED` or `MIS-CITED`, a citation it could not check because no registry answered (`UNRESOLVED`), or a quote it marked `NOT_FOUND`. That check is deterministic, runs per section, and is not skippable.
 
 ## Status
 
@@ -65,7 +65,7 @@ After a section is drafted, the verifier runs on that section:
 
 | Pass | What it checks | Verdicts | Blocks compile and export? |
 |------|----------------|---------|-----------|
-| **Pass 1: integrity** | Re-fetches each cited DOI and fuzzy-matches the author **and** title against the published record (a DOI that resolves is necessary but not sufficient) | `FABRICATED`, `MIS-CITED` | Yes |
+| **Pass 1: integrity** | Re-fetches each cited DOI and fuzzy-matches the author **and** title against the published record (a DOI that resolves is necessary but not sufficient) | `FABRICATED`, `MIS-CITED`; `UNRESOLVED` when no registry answered | Yes |
 | **Pass 3: quotes** | Looks for every quoted span in the open-access text of the cited source | `NOT_FOUND` | Yes |
 | **Pass 2 / Pass 4: judgment** | Model-assisted claim support and coherence review | Advisory notes | No |
 
@@ -150,7 +150,7 @@ In this alpha, `pensmith done` skips the humanize step (see [Status](#status)).
 
 **Flags** (on any command where they apply):
 
-- `--dry-run`: run a step without calling a model provider or live registries.
+- `--dry-run`: print what a step would do and run nothing: no model call, no registry lookup, no file written.
 - `--estimate`: print the projected token use and cost, and run nothing.
 - `--show-prompts`: echo every model prompt to stderr.
 - `--yolo`: skip the outline approval and the export confirmation. It never waives a citation verdict, and it refuses to start when the estimated cost is more than half of the cost cap.
