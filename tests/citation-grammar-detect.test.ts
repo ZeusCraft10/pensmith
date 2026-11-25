@@ -187,3 +187,24 @@ test('raw citations: a lifespan or a period after a name is not a citation', () 
     ['author-year', '[Doe, 2018-19]'],
   ]);
 });
+
+test('quotes: a quotation that opens with a capitalised clipped word is still a quotation', () => {
+  const cause = 'Cause and effect cannot be separated in any of the systems we studied here';
+  assert.deepEqual(quotes(`'${cause}' [@smith2020].`), [[cause, ['smith2020']]]);
+  const til = 'Til the end of the trial the effect held in every cohort we studied';
+  assert.deepEqual(quotes(`As they put it, '${til}' [@smith2020].`), [[til, ['smith2020']]]);
+  // `'Tis` and `'Twas` are clipped words whatever their case.
+  assert.deepEqual(quotes(`'Tis noted that '${Q}' [@k].`), [[Q, ['k']]]);
+});
+
+test('quotes: a line that only looks like a link reference definition is still read', () => {
+  const q = 'the effect of the treatment is robust to every baseline we tried here';
+  assert.deepEqual(quotes(`[Translation]: "${q}" [@smith2020].`), [[q, ['smith2020']]]);
+  assert.deepEqual(quotes(`[Note]: see https://example.org/a "${q}" [@smith2020].`), [[q, ['smith2020']]]);
+  // A real definition's title, in any of its three forms, is not a quotation.
+  const title = 'a long link title of well over ten words that nobody would call a quotation';
+  for (const t of [`"${title}"`, `'${title}'`, `(${title})`]) {
+    assert.deepEqual(quotes(`See [the source][ref].\n\n[ref]: <https://example.org/a> ${t}\n`), [], t);
+    assert.deepEqual(quotes(`See [the source][ref].\r\n\r\n  [ref]:https://example.org/a ${t}\r\n`), [], t);
+  }
+});

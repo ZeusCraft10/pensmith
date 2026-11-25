@@ -524,18 +524,27 @@ export interface Quote {
 const CLOSERS: Readonly<Record<string, string>> = { '"': '"”', '“': '”"', "'": "'’", '‘': '’\'' };
 
 // Words clipped with a leading apostrophe ('em, 'tis, rock 'n' roll): the
-// apostrophe is part of the word, not an opening quote mark.
-const CLIPPED_WORD = /^(?:em|tis|twas|til|cause|n|bout|nuff)(?![\p{L}\p{N}])/iu;
+// apostrophe is part of the word, not an opening quote mark. A capital after
+// the mark opens a quotation (`'Cause and effect ...'`, `'Til the end ...'`),
+// except in 'Tis and 'Twas, which open a sentence clipped as well.
+const CLIPPED_WORD = /^(?:em|tis|twas|til|cause|n|bout|nuff|Tis|Twas)(?![\p{L}\p{N}])/u;
+
+// A link reference definition, `[ref]: url "title"`: the label, then one
+// destination (`<...>` or a run of non-space characters that does not open
+// with a quote mark), then an optional title in `"..."`, `'...'` or `(...)`,
+// and nothing else on the line. A line that has more, such as
+// `[Translation]: "..." [@key]`, is ordinary text.
+const LINK_DEFINITION = /^( {0,3}\[[^\]\n]+\]:[ \t]*)(?:<[^<>\n]*>|[^\s"'“‘(<]\S*)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t\r]*$/gm;
 
 /**
  * Character ranges of link and image destinations with their titles
- * (`](url "title")`) and of link reference definitions (`[ref]: url "title"`):
- * a title is not a quotation.
+ * (`](url "title")`) and of the destination and title of each link reference
+ * definition: a title is not a quotation.
  */
 function linkTargetRanges(md: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   for (const m of md.matchAll(/\]\((?:[^()\n]|\([^()\n]*\))*\)/g)) ranges.push([m.index, m.index + m[0].length]);
-  for (const m of md.matchAll(/^ {0,3}\[[^\]\n]+\]:[^\n]*$/gm)) ranges.push([m.index, m.index + m[0].length]);
+  for (const m of md.matchAll(LINK_DEFINITION)) ranges.push([m.index + m[1]!.length, m.index + m[0].length]);
   return ranges;
 }
 
