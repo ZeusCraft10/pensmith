@@ -1,0 +1,12 @@
+[
+  {
+    "scope": "https://arxiv.org",
+    "method": "GET",
+    "path": "/pdf/2109.00022",
+    "status": 200,
+    "responseFile": "arxiv-2109.00022.pdf",
+    "responseHeaders": {
+      "content-type": "application/pdf"
+    }
+  }
+]

@@ -1,0 +1,98 @@
+[
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.0000/pensmith-no-oa-pdf?select=id,doi,best_oa_location,locations",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W0000000001",
+      "doi": "https://doi.org/10.0000/pensmith-no-oa-pdf",
+      "best_oa_location": null,
+      "locations": [
+        {
+          "is_oa": false,
+          "landing_page_url": "https://publisher.example/article/1",
+          "pdf_url": null
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.unpaywall.org",
+    "method": "GET",
+    "path": "/v2/10.0000/pensmith-no-oa-pdf",
+    "status": 200,
+    "response": {
+      "doi": "10.0000/pensmith-no-oa-pdf",
+      "title": "A Note on Visible Islands",
+      "year": 2022,
+      "is_oa": true,
+      "z_authors": [
+        {
+          "given": "Sophie",
+          "family": "Leuchtner"
+        }
+      ],
+      "best_oa_location": {
+        "url": "https://arxiv.org/abs/2109.00022",
+        "url_for_pdf": "https://arxiv.org/pdf/2109.00022",
+        "host_type": "repository",
+        "version": "submittedVersion"
+      },
+      "oa_locations": [
+        {
+          "url": "https://arxiv.org/abs/2109.00022",
+          "url_for_pdf": "https://arxiv.org/pdf/2109.00022",
+          "host_type": "repository",
+          "version": "submittedVersion"
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.0000/pensmith-oa-landing-page?select=id,doi,best_oa_location,locations",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W0000000002",
+      "doi": "https://doi.org/10.0000/pensmith-oa-landing-page",
+      "best_oa_location": {
+        "is_oa": true,
+        "landing_page_url": "https://publisher.example/article/2",
+        "pdf_url": "https://publisher.example/article/2/pdf"
+      },
+      "locations": [
+        {
+          "is_oa": true,
+          "landing_page_url": "https://publisher.example/article/2",
+          "pdf_url": "https://publisher.example/article/2/pdf"
+        },
+        {
+          "is_oa": true,
+          "landing_page_url": "http://arxiv.org/abs/2109.00022",
+          "pdf_url": "https://arxiv.org/pdf/2109.00022"
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://publisher.example",
+    "method": "GET",
+    "path": "/article/2/pdf",
+    "status": 200,
+    "response": "<!doctype html><html><head><title>Sign in to read this article</title></head><body>Institutional login required.</body></html>",
+    "responseHeaders": {
+      "content-type": "text/html; charset=utf-8"
+    }
+  }
+]

@@ -45,3 +45,43 @@ test('audit #29: bodyBytes is byte-faithful for binary content the UTF-8 body co
     setGlobalDispatcher(prev);
   }
 });
+
+test('a binary response is never written to the HTTP cache, which keeps text', async () => {
+  const { mkdtempSync, readdirSync, existsSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { pensmithHttpCacheDir } = await import('../bin/lib/paths.js');
+  const saved = { ...process.env };
+  const home = mkdtempSync(join(tmpdir(), 'pensmith-binary-cache-'));
+  for (const k of ['HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'LOCALAPPDATA']) process.env[k] = home;
+  const prev: Dispatcher = getGlobalDispatcher();
+  const agent = new MockAgent();
+  agent.disableNetConnect();
+  setGlobalDispatcher(agent);
+  try {
+    const pdf = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x35, 0x0a, 0xff, 0x00, 0x80]);
+    const origin = agent.get('https://api.crossref.org');
+    origin.intercept({ path: '/binary-cache-probe', method: 'GET' }).reply(200, pdf, { headers: { 'content-type': 'application/pdf' } }).times(2);
+    origin.intercept({ path: '/text-cache-probe', method: 'GET' }).reply(200, '{"ok":true}', { headers: { 'content-type': 'application/json' } });
+    _resetBucketsForTest();
+
+    const first = await fetch('https://api.crossref.org/binary-cache-probe', { source: 'crossref' });
+    assert.deepEqual([...(first.bodyBytes ?? [])], [...pdf]);
+    const second = await fetch('https://api.crossref.org/binary-cache-probe', { source: 'crossref' });
+    assert.equal(second.cached, false, 'the PDF was fetched again, not read back as text');
+    assert.deepEqual([...(second.bodyBytes ?? [])], [...pdf]);
+
+    // A JSON answer is still cached.
+    await fetch('https://api.crossref.org/text-cache-probe', { source: 'crossref' });
+    const dir = pensmithHttpCacheDir();
+    const files = existsSync(dir) ? readdirSync(dir) : [];
+    assert.equal(files.length, 1, `only the JSON answer is cached: ${files.join(', ')}`);
+    const again = await fetch('https://api.crossref.org/text-cache-probe', { source: 'crossref' });
+    assert.equal(again.cached, true);
+  } finally {
+    setGlobalDispatcher(prev);
+    await agent.close();
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
+});

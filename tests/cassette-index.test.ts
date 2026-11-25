@@ -95,3 +95,18 @@ test('cassette index: an entry with no string method fails every replay, naming 
     );
   }
 });
+
+test('cassette index: a binary body recorded beside its cassette replays byte for byte', () => {
+  const root = cassetteRoot({ 'pdf.json': [entry('/paper.pdf', undefined, { responseFile: 'paper.pdf', responseHeaders: { 'content-type': 'application/pdf' } })] });
+  // Bytes a UTF-8 round trip would not keep.
+  const bytes = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x0a, 0xff, 0x00, 0x80, 0xfe, 0x89]);
+  writeFileSync(join(root, 'adapter', 'paper.pdf'), bytes);
+  const r = _replayFromRootForTest(root, 'GET', `${SCOPE}/paper.pdf`);
+  assert.deepEqual([...(r.bytes ?? [])], [...bytes]);
+  assert.equal(r.headers['content-type'], 'application/pdf');
+});
+
+test('cassette index: a responseFile that names a path outside the folder is refused', () => {
+  const root = cassetteRoot({ 'pdf.json': [entry('/paper.pdf', undefined, { responseFile: '../secret.pdf' })] });
+  assert.throws(() => _replayFromRootForTest(root, 'GET', `${SCOPE}/paper.pdf`), /invalid responseFile/);
+});

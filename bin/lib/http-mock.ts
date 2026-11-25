@@ -14,6 +14,8 @@
 //   [{ scope: 'https://api.crossref.org', method: 'GET', path: '/works?query=...',
 //      status: 200, response: <object for JSON APIs, string for HTML/XML>,
 //      responseHeaders?: { 'content-type': 'application/json' } }]
+// A binary body (a PDF) is a file beside the cassette, named by
+// `responseFile` instead of `response`: bytes do not survive a JSON string.
 //
 // Recording strips sensitive headers (SENSITIVE_HEADERS) and identifying query
 // parameters (contact emails, keys) before anything is written, because the
@@ -42,6 +44,8 @@ export interface Cassette {
   path: string;
   status: number;
   response: unknown;
+  /** A file in the cassette's folder holding the body, for binary responses. */
+  responseFile?: string;
   responseHeaders?: Record<string, string>;
   requestHeaders?: Record<string, string>;
   /** Alternate spelling some recorders use. */
@@ -53,6 +57,8 @@ export interface CassetteReplay {
   status: number;
   headers: Record<string, string>;
   body: string;
+  /** The exact body bytes, for a binary recording. */
+  bytes?: Buffer;
 }
 
 /** Thrown when a request has no recording (or more than one conflicting one). */
@@ -139,10 +145,20 @@ function readCassetteArray(file: string): Cassette[] {
   return parsed as Cassette[];
 }
 
-/** The response a recording replays: lower-cased headers and a string body. */
-function toReplay(c: Cassette): CassetteReplay {
+/**
+ * The response a recording replays: lower-cased headers and a string body,
+ * plus the exact bytes of a `responseFile` read from `dir`.
+ */
+function toReplay(c: Cassette, dir: string, file: string): CassetteReplay {
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(c.responseHeaders ?? {})) headers[k.toLowerCase()] = v;
+  if (c.responseFile !== undefined) {
+    if (typeof c.responseFile !== 'string' || !/^[\w.-]+$/.test(c.responseFile)) {
+      throw new Error(`Cassette ${file} has an invalid responseFile ${JSON.stringify(c.responseFile)}`);
+    }
+    const bytes = readFileSync(join(dir, c.responseFile));
+    return { status: c.status, headers, body: bytes.toString('utf8'), bytes };
+  }
   let body: string;
   if (typeof c.response === 'string') {
     body = c.response;
@@ -183,9 +199,9 @@ function buildIndex(root: string): CassetteIndex {
           throw new Error(`Cassette ${file} has an invalid method ${JSON.stringify(c.method)}`);
         }
         const key = requestKey(c.method, origin, c.path);
-        const raw = JSON.stringify(c.response);
+        const raw = JSON.stringify(c.responseFile !== undefined ? { responseFile: c.responseFile } : c.response);
         if (!byKey.has(key)) {
-          byKey.set(key, toReplay(c));
+          byKey.set(key, toReplay(c, join(root, dir), file));
           rawByKey.set(key, raw);
         } else if (rawByKey.get(key) !== raw) {
           ambiguous.add(key);

@@ -423,8 +423,9 @@ export interface HttpResponse {
   // these bytes and is LOSSY for binary content (e.g. a fetched PDF), so binary
   // consumers (add.ts URL-PDF ingestion) MUST use bodyBytes — `Buffer.from(body,
   // 'binary')` cannot recover bytes already mangled by the UTF-8 decode. Present
-  // only on a LIVE fetch (callOnce); a cached response is text-only and omits it,
-  // so binary fetches should pass noCache:true to guarantee bodyBytes is set.
+  // only on a LIVE fetch (callOnce); a cached response is text-only and omits it.
+  // A binary response is never written to the cache, and binary fetches pass
+  // noCache:true so an old text entry is never read back either.
   bodyBytes?: Buffer;
   cached: boolean;
   cachedAt?: string; // ISO8601
@@ -783,6 +784,14 @@ function isRetryable(err: unknown, method: string): boolean {
   return typeof e.code === 'string' && RETRYABLE_ERR_CODES.has(e.code);
 }
 
+// A body the cache can keep as text: no content type (the registries' plain
+// answers), text/*, or a JSON or XML type such as application/vnd.api+json.
+const TEXT_CONTENT_TYPE = /^\s*(?:text\/|application\/(?:[\w.-]+\+)?(?:json|xml)\b|application\/(?:javascript|x-bibtex|x-research-info-systems)\b)/i;
+
+function isTextContent(contentType: string | undefined): boolean {
+  return !contentType || TEXT_CONTENT_TYPE.test(contentType);
+}
+
 // ============================================================
 //   Public: fetch
 // ============================================================
@@ -931,8 +940,11 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
         retryOn: (err) => isRetryable(err, method),
       });
 
-  // --- 5. Cache write (GET, success or definite 404) ---
-  if (method === 'GET' && !opts.noCache && (response.status === 200 || response.status === 404)) {
+  // --- 5. Cache write (GET, success or definite 404, text only) ---
+  // The cache keeps the UTF-8 text body, which loses the bytes of a binary
+  // response such as a PDF, so a binary response is never written.
+  if (method === 'GET' && !opts.noCache && (response.status === 200 || response.status === 404)
+    && isTextContent(response.headers['content-type'])) {
     await writeCache(key, response).catch(() => {
       // Cache write failures are non-fatal — the response is still returned
       // to the caller. Disk full / read-only FS would otherwise break every
@@ -956,7 +968,7 @@ async function replayFromCassette(method: string, url: string): Promise<HttpResp
     status: r.status,
     headers: r.headers,
     body,
-    bodyBytes: Buffer.from(body, 'utf8'),
+    bodyBytes: method === 'HEAD' ? Buffer.alloc(0) : (r.bytes ?? Buffer.from(body, 'utf8')),
     cached: false,
   };
 }
