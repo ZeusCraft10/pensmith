@@ -7,17 +7,19 @@
 //
 // Not a test file (the runner collects only *.test.ts).
 
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   bibEntryHashes,
   buildVerificationRecord,
   renderVerificationMd,
+  sha256,
   type VerificationRecord,
   type VerificationStatus,
 } from '../../bin/lib/verify/verification-record.js';
 import { parseBibForPass1, pass1CitedKeys, type Pass1Result, type Pass1Verdict } from '../../bin/lib/verify/pass1.js';
 import type { Pass3Result, Pass3Verdict } from '../../bin/lib/verify/pass3.js';
+import { writeCompileManifest } from '../../bin/lib/compile-manifest.js';
 
 export interface CitationSpec {
   citekey: string;
@@ -49,6 +51,8 @@ export interface VerificationSpec {
   /** Cited key → CITATIONS.bib entry hash (fixtureBibHashes); none recorded by default. */
   bibEntries?: Record<string, string | null>;
   acknowledgementsSha256?: string | null;
+  /** The advisory sections VERIFICATION.md shows (freshness, Pass 2, Pass 4). */
+  advisoryMarkdown?: string;
 }
 
 const BLOCKING = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'RETRACTED', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE']);
@@ -77,6 +81,7 @@ export function verificationRecord(spec: VerificationSpec): VerificationRecord {
     acknowledgementsSha256: spec.acknowledgementsSha256 ?? null,
     pass1,
     pass3,
+    ...(spec.advisoryMarkdown !== undefined ? { advisoryMarkdown: spec.advisoryMarkdown } : {}),
   });
 }
 
@@ -91,4 +96,36 @@ export function writeVerificationFixture(dir: string, spec: VerificationSpec): V
 /** The CITATIONS.bib entry hash of each key `draft` cites, as verify records them. */
 export async function fixtureBibHashes(bibText: string, draft: string): Promise<Record<string, string | null>> {
   return bibEntryHashes(pass1CitedKeys(draft), await parseBibForPass1(bibText));
+}
+
+/**
+ * Write .paper/COMPILE-MANIFEST.json for the files as they are now, as compile
+ * does after writing .paper/DRAFT.md: the hashes of the compiled draft, of each
+ * section's DRAFT.md and VERIFICATION.json, and of each cited bibliography entry.
+ */
+export async function writeCompileManifestFixture(paperRoot: string, sections: ReadonlyArray<{ n: number; slug: string }>): Promise<void> {
+  const paper = join(paperRoot, '.paper');
+  const compiled = readFileSync(join(paper, 'DRAFT.md'));
+  const bibPath = join(paper, 'CITATIONS.bib');
+  const bib = await parseBibForPass1(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '');
+  const bibEntries: Record<string, string> = {};
+  for (const [key, hash] of Object.entries(bibEntryHashes(pass1CitedKeys(compiled.toString('utf8')), bib))) {
+    if (hash !== null) bibEntries[key] = hash;
+  }
+  await writeCompileManifest(paperRoot, {
+    $schemaVersion: 1,
+    compiled_at: new Date().toISOString(),
+    draft_sha256: sha256(compiled),
+    sections: sections.map((s) => {
+      const dir = join(paper, 'sections', `${String(s.n).padStart(2, '0')}-${s.slug}`);
+      return {
+        n: s.n,
+        slug: s.slug,
+        draft_sha256: sha256(readFileSync(join(dir, 'DRAFT.md'))),
+        verification_sha256: sha256(readFileSync(join(dir, 'VERIFICATION.json'))),
+        re_verified: false,
+      };
+    }),
+    bib_entries: bibEntries,
+  });
 }

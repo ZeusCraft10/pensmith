@@ -15,12 +15,13 @@ import { join } from 'node:path';
 import { doneCommand } from '../bin/cli/done.js';
 import { __setTaskRunnerForTest } from '../bin/lib/exporter.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeCompileManifestFixture, writeVerificationFixture } from './lib/verification-fixture.js';
 import { noLlmPlaceholderText } from '../bin/lib/placeholder.js';
 
 const DRAFT = 'Tidal barrages change estuary sediment over decades [@real2020].\n';
 
 /** A compiled paper whose one section is verified against its current draft. */
-function compiledPaper(): string {
+async function compiledPaper(): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-done-refusals-'));
   const pdir = join(root, '.paper');
   const sdir = join(pdir, 'sections', '01-intro');
@@ -33,14 +34,15 @@ function compiledPaper(): string {
     join(pdir, 'OUTLINE.md'),
     '| # | slug | title | depends_on | word target | assigned_sources |\n| --- | --- | --- | --- | --- | --- |\n| 1 | intro | Intro | | 300 | real2020 |\n',
   );
-  writeFileSync(join(pdir, 'CITATIONS.bib'), '@article{real2020, title={Real}, author={Doe, Jane}, year={2020}}\n');
+  writeFileSync(join(pdir, 'CITATIONS.bib'), '@article{real2020, title={Real}, author={Doe, Jane}, year={2020}, doi={10.1000/real}}\n');
   writeFileSync(join(sdir, 'DRAFT.md'), DRAFT);
   writeFileSync(
     join(sdir, 'PLAN.md'),
     `---\nsection: 1\nslug: intro\nstatus: verified\nassigned_sources: [real2020]\nverified_against_draft_hash: ${computeDraftHash(Buffer.from(DRAFT), ['real2020'])}\n---\n`,
   );
-  writeFileSync(join(sdir, 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n\n- real2020: **OK** — titleJW=1.00, authorJW=1.00 — ok\n\n## Pass-3\n');
+  writeVerificationFixture(sdir, { n: 1, slug: 'intro', draft: DRAFT, assignedSources: ['real2020'] });
   writeFileSync(join(pdir, 'DRAFT.md'), `# Intro\n\n${DRAFT}`);
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
   return root;
 }
 
@@ -55,7 +57,9 @@ async function runDoneWithHumanizer(root: string, humanized: string): Promise<Do
   let stdout = '';
   process.chdir(root);
   process.env['PENSMITH_NO_LLM'] = '1';
-  process.env['PENSMITH_OFFLINE'] = '1';
+  // done checks the citations it exports against the registries: on the
+  // recorded answers here (the test runner sets PENSMITH_TEST_CASSETTES).
+  delete process.env['PENSMITH_OFFLINE'];
   process.exitCode = undefined;
   __setTaskRunnerForTest(() => Promise.resolve({ output: humanized }));
   // Copy what done prints, and still pass every write on: the test reporter
@@ -82,7 +86,7 @@ async function runDoneWithHumanizer(root: string, humanized: string): Promise<Do
 }
 
 test('done: a humanized FINAL.md that is placeholder text is refused with exit 2, --yolo included', async () => {
-  const root = compiledPaper();
+  const root = await compiledPaper();
   const r = await runDoneWithHumanizer(root, noLlmPlaceholderText('Humanize the paper'));
   assert.equal(r.exitCode, 2, r.stdout);
   assert.match(r.stdout, /BLOCKED — the humanized FINAL\.md is placeholder text/);
@@ -90,7 +94,7 @@ test('done: a humanized FINAL.md that is placeholder text is refused with exit 2
 });
 
 test('done: a humanized FINAL.md that changes the cited keys is refused with exit 2, --yolo included', async () => {
-  const root = compiledPaper();
+  const root = await compiledPaper();
   const r = await runDoneWithHumanizer(root, '# Intro\n\nTidal barrages reshape estuaries [@ghost2021].\n');
   assert.equal(r.exitCode, 2, r.stdout);
   assert.match(r.stdout, /GATE-04 BLOCKED .*citekey-set mismatch/);
@@ -99,7 +103,7 @@ test('done: a humanized FINAL.md that changes the cited keys is refused with exi
 
 test('done: a humanized FINAL.md with the same cited keys exports', async () => {
   // The guard for the two refusals above: the seam and fixture can export.
-  const root = compiledPaper();
+  const root = await compiledPaper();
   const r = await runDoneWithHumanizer(root, '# Intro\n\nOver decades, tidal barrages change estuary sediment [@real2020].\n');
   assert.equal(r.exitCode, undefined, r.stdout);
   assert.match(r.stdout, /pensmith done: exported /);

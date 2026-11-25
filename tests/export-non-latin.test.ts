@@ -19,20 +19,20 @@ import { readBibEntries, type CslEntry } from '../bin/lib/export-bib.js';
 import { compiledPaper, needsTool, runCli } from './lib/export-fixture.js';
 
 const BIB = [
-  '@book{zh2019, author = {张, 伟}, title = {潮汐 Barrages}, publisher = {Press}, year = {2019}}',
-  '@article{ru2018, author = {Иванов, Иван}, title = {Приливы и отливы в России}, journal = {Вестник}, year = {2018}}',
-  '@article{gr2017, author = {Παπαδόπουλος, Γιώργος}, title = {Παλίρροιες της Ελλάδας}, journal = {J}, year = {2017}}',
-  '@article{ar2016, author = {علي, أحمد}, title = {المد والجزر}, journal = {J}, year = {2016}}',
+  '@book{zh2019, author = {张, 伟}, title = {潮汐 Barrages}, publisher = {Press}, year = {2019}, doi = {10.0000/export-fixture-zh2019}}',
+  '@article{ru2018, author = {Иванов, Иван}, title = {Приливы и отливы в России}, journal = {Вестник}, year = {2018}, doi = {10.0000/export-fixture-ru2018}}',
+  '@article{gr2017, author = {Παπαδόπουλος, Γιώργος}, title = {Παλίρροιες της Ελλάδας}, journal = {J}, year = {2017}, doi = {10.0000/export-fixture-gr2017}}',
+  '@article{ar2016, author = {علي, أحمد}, title = {المد والجزر}, journal = {J}, year = {2016}, doi = {10.0000/export-fixture-ar2016}}',
   // Latin letters with diacritics and LaTeX's special characters must survive too.
   '@article{pl2015, author = {Łukasz, Żółć and {World Health Organization}}, title = {Pływy w Łodzi \\& Tides: 100\\% of \\#1 \\_data \\$5}, journal = {A \\& B}, year = {2015}, doi = {10.1000/a_b}, url = {https://example.org/a_b%20c}}',
   // A word whose first capital is not A-Z but which also has A-Z capitals.
-  '@article{fr2014, author = {Dupont, Marie}, title = {Les Grandes ÉCOLE et ÖVP}, journal = {Revue}, year = {2014}}',
+  '@article{fr2014, author = {Dupont, Marie}, title = {Les Grandes ÉCOLE et ÖVP}, journal = {Revue}, year = {2014}, doi = {10.0000/export-fixture-fr2014}}',
   '',
 ].join('\n');
 
 const DRAFT = 'Tides shape coasts [@zh2019; @ru2018; @gr2017; @ar2016; @pl2015; @fr2014].\n';
 
-function paper(): string {
+async function paper(): Promise<string> {
   return compiledPaper({
     title: 'Tides',
     bib: BIB,
@@ -45,7 +45,7 @@ function names(e: CslEntry): string {
 }
 
 test('the exported CITATIONS.bib keeps non-Latin names and titles and LaTeX special characters', async () => {
-  const root = paper();
+  const root = await paper();
   const res = await exportDraft({ inputPath: join(root, '.paper', 'DRAFT.md'), format: 'md', paperRoot: root, pandocPresent: false });
   assert.ok(res.bibPath, 'a bibliography was exported');
   const exportedText = readFileSync(res.bibPath, 'utf8');
@@ -67,8 +67,8 @@ test('the exported CITATIONS.bib keeps non-Latin names and titles and LaTeX spec
   assert.doesNotMatch(exportedText, /\$\\[A-Za-z]+\$/, 'no math-mode letters');
 });
 
-test('done --format docx with real Pandoc cites and lists non-Latin works in full', needsTool('pandoc'), () => {
-  const root = paper();
+test('done --format docx with real Pandoc cites and lists non-Latin works in full', needsTool('pandoc'), async () => {
+  const root = await paper();
   const r = runCli(['done', '--yolo', '--raw', '--format', 'docx'], root);
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
   const plain = spawnSync('pandoc', [join(root, '.paper', 'export', 'DRAFT.docx'), '-t', 'plain', '--wrap=none'], { encoding: 'utf8' });

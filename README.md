@@ -74,6 +74,8 @@ After a section is drafted, the verifier runs on that section:
 
 Text that only looks like a citation is flagged too: `ChatGPT (2022)`, `Wuhan (2019)` or a period in brackets such as `(USSR, 1922–1991)` reads as an author-year citation. Write its bracket as `\(` (`ChatGPT \(2022)`), put an identifier in backticks, or write a handle as `\@name`, and the verifier reads it as text. A lifespan after a name, such as `Darwin (1809–1882)`, is not flagged.
 
+**The verdicts are data, and the export is bound to them.** `pensmith verify` records each section's verdicts in its `VERIFICATION.json`, with the hash of the draft it read, of each cited bibliography entry and of the section's acknowledgements; `VERIFICATION.md` is rendered from that record, so editing the report changes nothing. A draft that is empty, or cites none of the sources its plan assigns, is not verified. `pensmith compile` refuses any section that is not clean, re-checks a section whose draft, sources, cited entries or acknowledgements changed since it was verified, and writes `.paper/COMPILE-MANIFEST.json`. Before it exports, `pensmith done` refuses a compiled draft, section, verdict file or cited bibliography entry that changed after compile, then checks every citation and quote of the exact text it exports against the registries again: a work retracted since, or an acknowledgement withdrawn, blocks the export. Offline (`--offline`) nothing can be checked, so `done` will not export a paper that cites anything.
+
 Edits made after verification are detected with a hash of the draft, so a stale "verified" mark cannot slip through.
 
 ## Install

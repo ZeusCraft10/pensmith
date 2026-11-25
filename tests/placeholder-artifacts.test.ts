@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { complete } from '../bin/lib/anthropic.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeCompileManifestFixture, writeVerificationFixture } from './lib/verification-fixture.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -73,7 +74,7 @@ function paper(draft: string | null, planStatus = 'verified'): string {
   );
   if (draft !== null) {
     writeFileSync(join(sdir, 'DRAFT.md'), draft);
-    writeFileSync(join(sdir, 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n\n## Pass-3\n');
+    writeVerificationFixture(sdir, { n: 1, slug: 'intro', draft });
   }
   return root;
 }
@@ -136,21 +137,24 @@ test('placeholder: compile refuses a placeholder section even when an old VERIFI
   assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')), 'compile must not assemble placeholder text');
 });
 
-test('placeholder: done refuses to export a placeholder draft, even with --yolo', () => {
+test('placeholder: done refuses to export a placeholder draft, even with --yolo', async () => {
   const root = paper('A real opening paragraph about tidal energy.\n');
+  // Compiled as if compile had let it through: the manifest matches this draft.
   writeFileSync(join(root, '.paper', 'DRAFT.md'), `# Paper\n\n${LEGACY_PLACEHOLDER}\n`);
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
   const d = runCli(['done', '--yolo', '--format', 'md'], root);
   assert.equal(d.status, 2, d.stdout + d.stderr);
   assert.match(d.stdout, /placeholder/);
   assert.ok(!existsSync(join(root, '.paper', 'export')), 'nothing may be exported');
 });
 
-test('placeholder: done refuses when a section draft is a placeholder', () => {
+test('placeholder: done refuses when a section draft is a placeholder', async () => {
   const root = paper('---\nplaceholder: true\n---\nSection text.\n');
   writeFileSync(join(root, '.paper', 'DRAFT.md'), '# Paper\n\nSection text.\n');
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
   const d = runCli(['done', '--yolo', '--format', 'md'], root);
   assert.equal(d.status, 2, d.stdout + d.stderr);
-  assert.match(d.stdout, /section 01-intro: DRAFT\.md is placeholder text/);
+  assert.match(d.stdout, /section 1 \(intro\): DRAFT\.md is placeholder text/);
   assert.ok(!existsSync(join(root, '.paper', 'export')));
 });
 

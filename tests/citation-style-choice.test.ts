@@ -24,7 +24,7 @@ const BIB = [
   '',
 ].join('\n');
 
-function paper(extra: { intake?: string; configToml?: string }): string {
+async function paper(extra: { intake?: string; configToml?: string }): Promise<string> {
   return compiledPaper({
     bib: BIB,
     ...extra,
@@ -38,25 +38,25 @@ function exported(root: string): string {
   return readFileSync(join(root, '.paper', 'export', 'DRAFT.md'), 'utf8');
 }
 
-test('config.toml citation_style is honoured over the discipline default', () => {
+test('config.toml citation_style is honoured over the discipline default', async () => {
   // Psychology defaults to APA; the user chose Vancouver.
-  const md = exported(paper({ intake: 'Discipline: psychology\n', configToml: '[project]\ncitation_style = "vancouver"\n' }));
+  const md = exported(await paper({ intake: 'Discipline: psychology\n', configToml: '[project]\ncitation_style = "vancouver"\n' }));
   assert.match(md, /trap sediment \(1\)\. Beds change \(2\)\./, md);
   assert.doesNotMatch(md, /\(Zeta, 2020\)/);
 });
 
-test('a "Citation style:" answer in INTAKE.md is honoured', () => {
-  const md = exported(paper({ intake: 'Discipline: computer science\nCitation style: Chicago (Author-Date)\n' }));
+test('a "Citation style:" answer in INTAKE.md is honoured', async () => {
+  const md = exported(await paper({ intake: 'Discipline: computer science\nCitation style: Chicago (Author-Date)\n' }));
   assert.match(md, /\(Zeta 2020\)/, md);
 });
 
-test('with no choice, the discipline preset from disciplines.json is used (CS → IEEE)', () => {
-  const md = exported(paper({ intake: 'Discipline: computer science\n' }));
+test('with no choice, the discipline preset from disciplines.json is used (CS → IEEE)', async () => {
+  const md = exported(await paper({ intake: 'Discipline: computer science\n' }));
   assert.match(md, /trap sediment \[1\]\. Beds change \[2\]\./, md);
 });
 
-test('an unsupported style is named in a warning and the discipline default is used', () => {
-  const root = paper({ intake: 'Discipline: history\n', configToml: '[project]\ncitation_style = "turabian"\n' });
+test('an unsupported style is named in a warning and the discipline default is used', async () => {
+  const root = await paper({ intake: 'Discipline: history\n', configToml: '[project]\ncitation_style = "turabian"\n' });
   const r = runCli(['done', '--yolo', '--raw', '--format', 'md'], root);
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
   assert.match(r.stderr, /citation style 'turabian' is not supported/);

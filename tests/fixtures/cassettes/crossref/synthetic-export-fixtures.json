@@ -1,0 +1,439 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1000/zeta",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.1000/zeta",
+        "type": "journal-article",
+        "title": [
+          "Tidal Sediment Transport"
+        ],
+        "author": [
+          {
+            "given": "Zed",
+            "family": "Zeta",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2020
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1000/alpha",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.1000/alpha",
+        "type": "journal-article",
+        "title": [
+          "Barrage Effects"
+        ],
+        "author": [
+          {
+            "given": "Al",
+            "family": "Alpha",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2019
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1000/zeta.2020",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.1000/zeta.2020",
+        "type": "journal-article",
+        "title": [
+          "Tidal Sediment Transport"
+        ],
+        "author": [
+          {
+            "given": "Zed",
+            "family": "Zeta",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2020
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1000/alpha.2019",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.1000/alpha.2019",
+        "type": "journal-article",
+        "title": [
+          "Barrage Effects on Estuaries"
+        ],
+        "author": [
+          {
+            "given": "Al",
+            "family": "Alpha",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2019
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1000/a_b",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.1000/a_b",
+        "type": "journal-article",
+        "title": [
+          "Pływy w Łodzi & Tides: 100% of #1 _data $5"
+        ],
+        "author": [
+          {
+            "given": "Żółć",
+            "family": "Łukasz",
+            "sequence": "first",
+            "affiliation": []
+          },
+          {
+            "name": "World Health Organization",
+            "sequence": "additional",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2015
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1000/real",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.1000/real",
+        "type": "journal-article",
+        "title": [
+          "Real"
+        ],
+        "author": [
+          {
+            "given": "Jane",
+            "family": "Doe",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2020
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/export-fixture-zh2019",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/export-fixture-zh2019",
+        "type": "book",
+        "title": [
+          "潮汐 Barrages"
+        ],
+        "author": [
+          {
+            "given": "伟",
+            "family": "张",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2019
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/export-fixture-ru2018",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/export-fixture-ru2018",
+        "type": "journal-article",
+        "title": [
+          "Приливы и отливы в России"
+        ],
+        "author": [
+          {
+            "given": "Иван",
+            "family": "Иванов",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2018
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/export-fixture-gr2017",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/export-fixture-gr2017",
+        "type": "journal-article",
+        "title": [
+          "Παλίρροιες της Ελλάδας"
+        ],
+        "author": [
+          {
+            "given": "Γιώργος",
+            "family": "Παπαδόπουλος",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2017
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/export-fixture-ar2016",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/export-fixture-ar2016",
+        "type": "journal-article",
+        "title": [
+          "المد والجزر"
+        ],
+        "author": [
+          {
+            "given": "أحمد",
+            "family": "علي",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2016
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/export-fixture-fr2014",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/export-fixture-fr2014",
+        "type": "journal-article",
+        "title": [
+          "Les Grandes ÉCOLE et ÖVP"
+        ],
+        "author": [
+          {
+            "given": "Marie",
+            "family": "Dupont",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2014
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/export-fixture-local2021",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/export-fixture-local2021",
+        "type": "journal-article",
+        "title": [
+          "From Disk"
+        ],
+        "author": [
+          {
+            "given": "Jane",
+            "family": "Doe",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2021
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

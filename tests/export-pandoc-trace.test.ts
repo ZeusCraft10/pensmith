@@ -40,7 +40,7 @@ const BIB = [
   '',
 ].join('\n');
 
-function paper(): string {
+async function paper(): Promise<string> {
   return compiledPaper({
     title: 'Tidal Barrages and Sediment',
     bib: BIB,
@@ -62,7 +62,7 @@ async function docxParts(file: string): Promise<Map<string, string>> {
 }
 
 test('done --format docx: no part of the docx names a local path, and custom.xml is gone', needsTool('pandoc'), async () => {
-  const root = paper();
+  const root = await paper();
   const r = runCli(['done', '--yolo', '--raw', '--format', 'docx'], root);
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
   const docx = join(root, '.paper', 'export', 'DRAFT.docx');
@@ -97,7 +97,7 @@ test('done --format docx: no part of the docx names a local path, and custom.xml
 });
 
 test('done --format latex: a standalone .tex that compiles and carries no Pandoc stamp', needsTool('pandoc'), async (t) => {
-  const root = paper();
+  const root = await paper();
   const r = runCli(['done', '--yolo', '--raw', '--format', 'latex'], root);
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
   const texPath = join(root, '.paper', 'export', 'DRAFT.tex');
@@ -121,7 +121,7 @@ test('done --format latex: a standalone .tex that compiles and carries no Pandoc
 });
 
 test('done --format pdf: the info dictionary and every TeX banner are gone', { skip: needsTool('pandoc').skip || needsTool('pdflatex').skip }, async () => {
-  const root = paper();
+  const root = await paper();
   const r = runCli(['done', '--yolo', '--raw', '--format', 'pdf'], root);
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
   const pdfPath = join(root, '.paper', 'export', 'DRAFT.pdf');
@@ -136,8 +136,8 @@ test('done --format pdf: the info dictionary and every TeX banner are gone', { s
   assert.equal(pdf.getPageCount() > 0, true);
 });
 
-test('done --format docx: the export folder holds only the deliverable and the cited bibliography', needsTool('pandoc'), () => {
-  const root = paper();
+test('done --format docx: the export folder holds only the deliverable and the cited bibliography', needsTool('pandoc'), async () => {
+  const root = await paper();
   const r = runCli(['done', '--yolo', '--raw', '--format', 'docx'], root);
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
   assert.deepEqual(readdirSync(join(root, '.paper', 'export')).sort(), ['CITATIONS.bib', 'CITATIONS.ris', 'DRAFT.docx']);

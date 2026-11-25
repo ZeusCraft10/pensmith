@@ -10,21 +10,35 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isBlockingVerdict, verdictGate } from '../bin/lib/verify/verdict-rows.js';
+import { isBlockingVerdict } from '../bin/lib/verify/verdict-rows.js';
+import { verificationGate } from '../bin/lib/verify/verification-record.js';
 import { runExportBlockingGate } from '../bin/cli/done.js';
 import { firstFailingCitation } from '../bin/lib/revise.js';
 import { lookupRetraction } from '../bin/lib/sources/openalex.js';
+import { verificationRecord, writeCompileManifestFixture, writeVerificationFixture, type CitationSpec } from './lib/verification-fixture.js';
 
 const verification = (row: string, status = 'verified'): string =>
   `# VERIFICATION (Section 1, intro)\n\nStatus: ${status}\n\n## Pass-1 (citation integrity, deterministic)\n\n${row}\n`;
 
 const RETRACTED_ROW =
   '- wakefield1998: **RETRACTED** — titleJW=1.00, authorJW=1.00 — retracted (Retraction, 2010-02-06, notice 10.1016/s0140-6736(10)60175-4, per Crossref)';
-const ACKED_ROW =
-  '- wakefield1998: **RETRACTED_ACKNOWLEDGED** — titleJW=1.00, authorJW=1.00 — retracted (Retraction, 2010-02-06, per Crossref); ' +
-  'acknowledged 2026-11-25: "This section is about the retraction itself."';
-const CONCERN_ROW =
-  '- feng2013: **EXPRESSION_OF_CONCERN** — titleJW=1.00, authorJW=1.00 — matches the Crossref record; an expression of concern was published about it';
+
+const RETRACTED: CitationSpec = {
+  citekey: 'wakefield1998', verdict: 'RETRACTED',
+  reason: 'retracted (Retraction, 2010-02-06, notice 10.1016/s0140-6736(10)60175-4, per Crossref)',
+};
+const ACKED: CitationSpec = {
+  citekey: 'wakefield1998', verdict: 'RETRACTED_ACKNOWLEDGED',
+  reason: 'retracted (Retraction, 2010-02-06, per Crossref); acknowledged 2026-11-25: "This section is about the retraction itself."',
+};
+const CONCERN: CitationSpec = {
+  citekey: 'feng2013', verdict: 'EXPRESSION_OF_CONCERN',
+  reason: 'matches the Crossref record; an expression of concern was published about it',
+};
+
+const DRAFT = '# Intro\n\nClaim [@wakefield1998]. Another [@feng2013].\n';
+const record = (citations: CitationSpec[], status?: 'verified'): ReturnType<typeof verificationRecord> =>
+  verificationRecord({ n: 1, slug: 'intro', draft: DRAFT, citations, ...(status ? { status } : {}) });
 
 test('RETRACTED blocks; RETRACTED_ACKNOWLEDGED and EXPRESSION_OF_CONCERN do not', () => {
   assert.equal(isBlockingVerdict('RETRACTED'), true);
@@ -32,15 +46,17 @@ test('RETRACTED blocks; RETRACTED_ACKNOWLEDGED and EXPRESSION_OF_CONCERN do not'
   assert.equal(isBlockingVerdict('EXPRESSION_OF_CONCERN'), false);
 });
 
-test('compile and done: a RETRACTED row is a refusal naming the citation', () => {
-  const g = verdictGate(verification(RETRACTED_ROW), 'section 1');
-  assert.equal(g.reasons.length, 1);
-  assert.match(g.reasons[0]!, /\[@wakefield1998\]/);
-  assert.match(g.reasons[0]!, /RETRACTED/);
+test('compile and done: a RETRACTED verdict is a refusal naming the citation', () => {
+  const g = verificationGate(record([RETRACTED]), 'section 1');
+  assert.equal(g.reasons.length, 2, g.reasons.join('\n'));
+  assert.match(g.reasons.join('\n'), /verify failed this section/);
+  const named = g.reasons.find((r) => r.includes('[@wakefield1998]'));
+  assert.ok(named, g.reasons.join('\n'));
+  assert.match(named, /RETRACTED/);
 });
 
 test('compile and done: an acknowledged retraction and an expression of concern each warn, naming the citation', () => {
-  const g = verdictGate(verification(`${ACKED_ROW}\n${CONCERN_ROW}`), 'section 1');
+  const g = verificationGate(record([ACKED, CONCERN]), 'section 1');
   assert.deepEqual(g.reasons, []);
   assert.equal(g.warnings.length, 2, g.warnings.join('\n'));
   assert.match(g.warnings[0]!, /\[@wakefield1998\].*retracted/i);
@@ -48,23 +64,28 @@ test('compile and done: an acknowledged retraction and an expression of concern 
   assert.match(g.warnings[1]!, /\[@feng2013\].*expression of concern/i);
 });
 
-function exportRoot(verificationMd: string): string {
+/** A compiled one-section paper whose verdicts are `citations`. */
+async function exportRoot(citations: CitationSpec[], status?: 'verified'): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-retraction-export-'));
   const sec = join(root, '.paper', 'sections', '01-intro');
   mkdirSync(sec, { recursive: true });
-  writeFileSync(join(root, '.paper', 'DRAFT.md'), '# Paper\n\nClaim [@wakefield1998].\n');
-  writeFileSync(join(sec, 'VERIFICATION.md'), verificationMd);
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), '# Paper\n\n| # | slug | title | depends_on | word target | assigned_sources |\n| --- | --- | --- | --- | --- | --- |\n| 1 | intro | Intro | | 300 | |\n');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  writeFileSync(join(sec, 'DRAFT.md'), DRAFT);
+  writeVerificationFixture(sec, { n: 1, slug: 'intro', draft: DRAFT, citations, ...(status ? { status } : {}) });
+  writeFileSync(join(root, '.paper', 'DRAFT.md'), `# Paper\n\n${DRAFT}`);
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
   return root;
 }
 
-test('export gate: a RETRACTED row blocks export, even in a section marked verified', () => {
-  const r = runExportBlockingGate(exportRoot(verification(RETRACTED_ROW)));
+test('export gate: a RETRACTED verdict blocks export, even in a section marked verified', async () => {
+  const r = await runExportBlockingGate(await exportRoot([RETRACTED], 'verified'));
   assert.equal(r.blocked, true);
   assert.ok(r.reasons.some((x) => x.includes('[@wakefield1998]')), r.reasons.join('\n'));
 });
 
-test('export gate: an acknowledged retraction exports, with a warning', () => {
-  const r = runExportBlockingGate(exportRoot(verification(ACKED_ROW)));
+test('export gate: an acknowledged retraction exports, with a warning', async () => {
+  const r = await runExportBlockingGate(await exportRoot([ACKED]));
   assert.equal(r.blocked, false, r.reasons.join('\n'));
   assert.ok(r.warnings.some((w) => /wakefield1998.*retracted/i.test(w)), r.warnings.join('\n'));
 });

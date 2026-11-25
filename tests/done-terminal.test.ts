@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { initState, initSection } from '../bin/lib/state.js';
 import { resolveNextAction } from '../bin/lib/router.js';
 import { doneCommand } from '../bin/cli/done.js';
+import { writeCompileManifestFixture, writeVerificationFixture } from './lib/verification-fixture.js';
 
 async function withEnvCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   const prevCwd = process.cwd();
@@ -46,8 +47,10 @@ test('audit #15: Tier-2 done writes FINAL.md so the router reaches the terminal 
   // A verified, compiled paper: section PLAN.md verified, VERIFICATION.md clean,
   // DRAFT.md present, FINAL.md absent.
   writeFileSync(join(root, '.paper', 'sections', '01-intro', 'PLAN.md'), '---\nstatus: verified\nassigned_sources: []\n---\n# intro\n');
-  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n- x: **OK** — titleJW=1.00, authorJW=1.00 — ok\n');
+  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'A grounded claim.\n');
+  writeVerificationFixture(join(root, '.paper', 'sections', '01-intro'), { n: 1, slug: 'intro', draft: 'A grounded claim.\n' });
   writeFileSync(join(root, '.paper', 'DRAFT.md'), '# Paper\n\nA grounded claim.\n');
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
 
   // Precondition: with DRAFT.md present but FINAL.md absent, the router wants done.
   assert.equal((await resolveNextAction(root)).verb, 'done', 'precondition: router should want done');

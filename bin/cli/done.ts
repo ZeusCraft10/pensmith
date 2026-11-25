@@ -53,9 +53,9 @@ import {
   findUnparseableCitations,
   type Citation,
 } from '../lib/citation-grammar.js';
-import { verdictGate } from '../lib/verify/verdict-rows.js';
 import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
-import { isPlaceholderFile, isPlaceholderText } from '../lib/placeholder.js';
+import { isPlaceholderText } from '../lib/placeholder.js';
+import { recheckExportText, runExportBlockingGate } from '../lib/export-gate.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -205,113 +205,15 @@ export async function runWholePaperPass4(paperRoot: string): Promise<Pass4Result
 }
 
 // ---------------------------------------------------------------------------
-// UNCONDITIONAL export blocking gate (audit #3/#14)
+// UNCONDITIONAL export blocking gate (bin/lib/export-gate.ts)
 // ---------------------------------------------------------------------------
 
-export interface ExportBlock {
-  blocked: boolean;
-  reasons: string[];
-  /** What does not block but nothing checked: quotations with no citation. */
-  warnings: string[];
-}
-
-/**
- * Re-assert the Core Value at EXPORT time (audit #3/#14). Before this gate,
- * compile was the ONLY component running the FABRICATED/MIS-CITED/NOT_FOUND
- * refuse-gate; `done` trusted that compile had gated and re-read DRAFT.md without
- * re-checking. That trust is unsound because `done` is independently reachable
- * (explicit `done`, bare `/pensmith` via router.ts:217, `next`), `done --raw`
- * skips GATE-04 entirely (the old re-check only fired when the humanizer ran),
- * and a section can become UNCLEAN after compile but before done — so a
- * FABRICATED/MIS-CITED citation could reach the deliverable.
- *
- * This gate re-scans every `.paper/sections/<*>/VERIFICATION.md` with the SAME
- * tested `parseVerdictRows` parser compile uses, and blocks export when:
- *   - a section carries a blocking verdict row (FABRICATED/MIS-CITED/NOT_FOUND),
- *   - a section's VERIFICATION.md has no `Status:` line (never verified —
- *     GATE-01 parity with compile.ts:263), or
- *   - there are NO section VERIFICATION.md files at all (a hand-placed/stale
- *     DRAFT.md that was never produced by a gated compile — #14), or
- *   - the compiled DRAFT.md or a section DRAFT.md is placeholder text that no
- *     model wrote (PENSMITH_NO_LLM).
- *
- * It is UNCONDITIONAL: neither `--raw` nor `--yolo` bypasses it (per the PRD §14
- * non-negotiable — verifier gates are unconditional; `--yolo` skips ONLY the
- * advisory DONE-09 confirmation). Deterministic, offline, never throws.
- * `compiledText` is the compiled DRAFT.md when the caller has already read it.
- */
-export function runExportBlockingGate(paperRoot: string, compiledText?: string): ExportBlock {
-  const reasons: string[] = [];
-  const warnings: string[] = [];
-  const sectionsDir = join(paperDir(paperRoot), 'sections');
-
-  let dirNames: string[] = [];
-  try {
-    dirNames = readdirSync(sectionsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name)
-      .sort();
-  } catch {
-    dirNames = [];
-  }
-
-  // Placeholder text (PENSMITH_NO_LLM) is not a paper, whatever the verdicts say.
-  const compiledPath = join(paperDir(paperRoot), 'DRAFT.md');
-  if (compiledText !== undefined ? isPlaceholderText(compiledText) : isPlaceholderFile(compiledPath)) {
-    reasons.push('.paper/DRAFT.md is placeholder text (PENSMITH_NO_LLM), not a draft');
-  }
-
-  // A compiled DRAFT.md with NO section directories was not produced by a gated
-  // compile — refuse rather than export a hand-placed / stale draft (#14).
-  if (dirNames.length === 0) {
-    return {
-      blocked: true,
-      reasons: [
-        ...reasons,
-        "no verified sections found under .paper/sections/ — this DRAFT.md was not produced by a gated compile; run 'pensmith compile' first",
-      ],
-      warnings,
-    };
-  }
-
-  for (const name of dirNames) {
-    if (isPlaceholderFile(join(sectionsDir, name, 'DRAFT.md'))) {
-      reasons.push(`section ${name}: DRAFT.md is placeholder text (PENSMITH_NO_LLM), not a draft`);
-    }
-    const vpath = join(sectionsDir, name, 'VERIFICATION.md');
-    // A section directory with NO VERIFICATION.md was never verified. It must
-    // BLOCK, never be invisible — filtering missing files out would let an
-    // unverified section ride alongside a clean one (CodeRabbit #14).
-    if (!existsSync(vpath)) {
-      reasons.push(`section ${name}: missing VERIFICATION.md (section never verified)`);
-      continue;
-    }
-    let md = '';
-    try {
-      md = readFileSync(vpath, 'utf8');
-    } catch {
-      md = '';
-    }
-    // GATE-01 parity: a section with no Status line was never verified.
-    const statusMatch = /^Status:\s*(\S+)/m.exec(md);
-    if (!statusMatch) {
-      reasons.push(`section ${name}: VERIFICATION.md has no Status line (section never verified)`);
-      continue;
-    }
-    // Fail CLOSED on an explicit verifier failure even if no verdict row parses
-    // — an exotic citekey or row-format drift must NOT let a `Status: failed`
-    // section export just because parseVerdictRows() returned nothing.
-    if (statusMatch[1]?.toLowerCase() === 'failed') {
-      reasons.push(`section ${name}: VERIFICATION.md Status is 'failed'`);
-    }
-    // Blocking verdicts — the same gate compile uses.
-    const gate = verdictGate(md, `section ${name}`);
-    reasons.push(...gate.reasons);
-    warnings.push(...gate.warnings);
-  }
-
-  return { blocked: reasons.length > 0, reasons, warnings };
-}
+// The export is bound to the bytes the last gated compile wrote and to the
+// sections' recorded verdicts (runExportBlockingGate), and the citations of
+// the exact text being exported are checked again (recheckExportText).
+// Neither --raw nor --yolo skips them: --yolo skips ONLY the advisory DONE-09
+// confirmation.
+export { runExportBlockingGate, type ExportBlock } from '../lib/export-gate.js';
 
 // ---------------------------------------------------------------------------
 // readSectionUnsupported — the FAIL-SAFE section Pass-2 UNSUPPORTED reader (HIGH-3)
@@ -692,9 +594,9 @@ export const doneCommand = defineCommand({
     const paperRoot = process.cwd();
     const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
 
-    let draftMd: string;
+    let draftBytes: Buffer;
     try {
-      draftMd = readFileSync(draftPath, 'utf8');
+      draftBytes = readFileSync(draftPath);
     } catch {
       process.stdout.write(
         `pensmith done: no compiled draft at ${draftPath} — run 'pensmith compile' first.\n`,
@@ -702,25 +604,33 @@ export const doneCommand = defineCommand({
       process.exitCode = EXIT_REFUSED;
       return { ok: false };
     }
+    // One read: the gate, the checks and the export all use these bytes.
+    const draftMd = draftBytes.toString('utf8');
 
-    // UNCONDITIONAL export blocking gate (audit #3/#14) — re-assert the Core
-    // Value on the section verdicts BEFORE any advisory/humanizer/export work.
-    // Runs for EVERY done invocation (explicit, bare /pensmith, next) and is NOT
-    // skipped by --raw or --yolo. A blocking citation or an unverified section
-    // never reaches the deliverable.
-    const blocking = runExportBlockingGate(paperRoot, draftMd);
-    if (blocking.blocked) {
-      process.stdout.write(
-        'pensmith done: BLOCKED — export refused (blocking citations, unverified sections or placeholder text):\n',
-      );
-      for (const r of blocking.reasons) process.stdout.write(`  - ${r}\n`);
+    // UNCONDITIONAL export blocking gate, BEFORE any advisory, humanizer or
+    // export work, for EVERY done invocation (explicit, bare /pensmith, next),
+    // and NOT skipped by --raw or --yolo: the compiled draft must be the one a
+    // gated compile wrote, from sections, verdicts and bibliography entries
+    // that have not changed since; then every citation and quotation in it is
+    // checked again.
+    const refuseExport = (heading: string, reasons: readonly string[]): { ok: false; blocked: true } => {
+      process.stdout.write(`pensmith done: BLOCKED — ${heading}:\n`);
+      for (const r of reasons) process.stdout.write(`  - ${r}\n`);
       process.stdout.write(
         "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
       );
       process.exitCode = EXIT_REFUSED;
       return { ok: false, blocked: true };
+    };
+    const blocking = await runExportBlockingGate(paperRoot, draftBytes);
+    if (blocking.blocked) {
+      return refuseExport('export refused (the compiled draft is not what a gated compile produced, a section is unverified, or text is placeholder)', blocking.reasons);
     }
     for (const w of blocking.warnings) process.stderr.write(`pensmith done: WARN — ${w}.\n`);
+    const recheck = await recheckExportText(paperRoot, draftMd, { label: '.paper/DRAFT.md' });
+    if (recheck.blocked) {
+      return refuseExport('export refused (a citation or quotation in the text being exported does not pass when checked again)', recheck.reasons);
+    }
 
     // The format, settled before any audit work: a format that cannot be made
     // here is refused now, not after the user has confirmed the export.
@@ -789,6 +699,12 @@ export const doneCommand = defineCommand({
         );
         process.exitCode = EXIT_REFUSED;
         return { ok: false };
+      }
+      // FINAL.md is what is exported, so its citations are checked as well
+      // (GATE-04 has just run Pass 3 on it).
+      const finalCheck = await recheckExportText(paperRoot, finalMd, { pass3: false, label: '.paper/FINAL.md' });
+      if (finalCheck.blocked) {
+        return refuseExport('export refused (a citation in the humanized FINAL.md does not pass when checked again)', finalCheck.reasons);
       }
     }
 

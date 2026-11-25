@@ -60,13 +60,14 @@ function keysInRis(ris: string): string[] {
   return [...ris.matchAll(/^ID {2}- (.+)$/gm)].map((m) => m[1]!.trim()).sort();
 }
 
-test('done: the exported .bib and .ris hold exactly the cited works, with no pensmith fields', () => {
-  const root = compiledPaper({
+test('done: the exported .bib and .ris hold exactly the cited works, with no pensmith fields', async () => {
+  const root = await compiledPaper({
     bib: BIB,
     ris: RESEARCH_RIS,
+    // zeta2020 is recorded as retracted, so each section citing it acknowledges it.
     sections: [
-      { slug: 'intro', title: 'Introduction', draft: 'Barrages trap sediment [@zeta2020, p. 5].\n', sources: ['zeta2020'] },
-      { slug: 'effects', title: 'Effects', draft: 'Beds change [see @alpha2019; @zeta2020].\n', sources: ['alpha2019', 'zeta2020'] },
+      { slug: 'intro', title: 'Introduction', draft: 'Barrages trap sediment [@zeta2020, p. 5].\n', sources: ['zeta2020'], acknowledge: ['zeta2020'] },
+      { slug: 'effects', title: 'Effects', draft: 'Beds change [see @alpha2019; @zeta2020].\n', sources: ['alpha2019', 'zeta2020'], acknowledge: ['zeta2020'] },
     ],
   });
   const r = runCli(['done', '--yolo', '--raw', '--format', 'md'], root);
@@ -86,9 +87,9 @@ test('done: the exported .bib and .ris hold exactly the cited works, with no pen
   assert.match(ris, /^DO {2}- 10\.1000\/zeta\.2020$/m);
 });
 
-test('done: a source added after research (only in CITATIONS.bib) is in the exported .ris too', () => {
+test('done: a source added after research (only in CITATIONS.bib) is in the exported .ris too', async () => {
   // `add` rewrites CITATIONS.bib but not the research-time .ris.
-  const root = compiledPaper({
+  const root = await compiledPaper({
     bib: BIB,
     ris: RESEARCH_RIS,
     sections: [{ slug: 'intro', title: 'Introduction', draft: 'A book on barrages [@alpha2019].\n', sources: ['alpha2019'] }],
@@ -99,8 +100,8 @@ test('done: a source added after research (only in CITATIONS.bib) is in the expo
   assert.deepEqual(keysInRis(ris), ['alpha2019']);
 });
 
-test('done: a citation with no bibliography entry refuses the export (exit 2)', () => {
-  const root = compiledPaper({
+test('done: a citation with no bibliography entry refuses the export (exit 2)', async () => {
+  const root = await compiledPaper({
     bib: BIB,
     sections: [{ slug: 'intro', title: 'Introduction', draft: 'A claim [@ghost2022].\n', sources: [] }],
   });
@@ -112,15 +113,17 @@ test('done: a citation with no bibliography entry refuses the export (exit 2)', 
 // Works with no publisher (a dataset, a web page, an article whose record has
 // none) whose URLs hold the characters LaTeX treats as commands: `_` `%` `&`
 // `#` `~`. Percent-encoding, query strings and fragments are common in URLs.
+// Each carries an ISBN (recorded in the Open Library cassettes) so done can
+// check it; a DOI would be listed in place of the URL.
 const MISC_URL = 'https://ex.org/a_b%20c?x=1&y=2#f';
 const ARTICLE_URL = 'https://ex.org/~p/q_r%20s?x=1&y=2#g';
 const URL_BIB = [
-  `@misc{gauge2021, author = {Doe, Jane}, title = {Tide gauge dataset}, year = {2021}, url = {${MISC_URL}}}`,
-  `@article{tides2020, author = {Roe, Rick}, title = {Tides}, journal = {Coastal Letters}, year = {2020}, url = {${ARTICLE_URL}}}`,
+  `@misc{gauge2021, author = {Doe, Jane}, title = {Tide gauge dataset}, year = {2021}, isbn = {9780000000019}, url = {${MISC_URL}}}`,
+  `@article{tides2020, author = {Roe, Rick}, title = {Tides}, journal = {Coastal Letters}, year = {2020}, isbn = {9780000000026}, url = {${ARTICLE_URL}}}`,
   '',
 ].join('\n');
 
-function urlPaper(style = 'apa'): string {
+async function urlPaper(style = 'apa'): Promise<string> {
   return compiledPaper({
     title: 'Tides',
     bib: URL_BIB,
@@ -131,15 +134,15 @@ function urlPaper(style = 'apa'): string {
   });
 }
 
-function exportedUrlBib(): string {
-  const root = urlPaper();
+async function exportedUrlBib(): Promise<string> {
+  const root = await urlPaper();
   const r = runCli(['done', '--yolo', '--raw', '--format', 'md'], root);
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
   return readFileSync(join(root, '.paper', 'export', 'CITATIONS.bib'), 'utf8');
 }
 
-test('done: the exported .bib writes no LaTeX special character unescaped outside url and doi', () => {
-  const bib = exportedUrlBib();
+test('done: the exported .bib writes no LaTeX special character unescaped outside url and doi', async () => {
+  const bib = await exportedUrlBib();
   const fields = [...bib.matchAll(/^\s*([a-z]+) = \{(.*)\},?$/gm)].map((m) => ({ name: m[1]!, value: m[2]! }));
   assert.ok(fields.length > 0, bib);
   for (const { name, value } of fields) {
@@ -153,8 +156,8 @@ test('done: the exported .bib writes no LaTeX special character unescaped outsid
   }
 });
 
-test('done: the exported .bib typesets with BibTeX', needsTool('pdflatex'), () => {
-  const bib = exportedUrlBib();
+test('done: the exported .bib typesets with BibTeX', needsTool('pdflatex'), async () => {
+  const bib = await exportedUrlBib();
   const dir = mkdtempSync(join(tmpdir(), 'pensmith-bibtex-'));
   writeFileSync(join(dir, 'CITATIONS.bib'), bib);
   writeFileSync(
@@ -175,8 +178,8 @@ test('done: the exported .bib typesets with BibTeX', needsTool('pdflatex'), () =
 
 for (const style of ['apa', 'mla']) {
   for (const format of ['docx', 'latex'] as const) {
-    test(`done --format ${format} (${style}) with real Pandoc lists each work's URL once and in full`, needsTool('pandoc'), () => {
-      const root = urlPaper(style);
+    test(`done --format ${format} (${style}) with real Pandoc lists each work's URL once and in full`, needsTool('pandoc'), async () => {
+      const root = await urlPaper(style);
       const r = runCli(['done', '--yolo', '--raw', '--format', format], root);
       assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
       const file = join(root, '.paper', 'export', format === 'docx' ? 'DRAFT.docx' : 'DRAFT.tex');

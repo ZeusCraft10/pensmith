@@ -37,7 +37,7 @@ const MANUSCRIPT = [
 ].join('\n');
 
 async function exportMd(style: string, format: 'md' | 'latex' = 'md'): Promise<string> {
-  const root = compiledPaper({ bib: BIB, compiled: MANUSCRIPT, sections: [{ slug: 'intro', title: 'Introduction', draft: 'x\n' }] });
+  const root = await compiledPaper({ bib: BIB, compiled: MANUSCRIPT, sections: [{ slug: 'intro', title: 'Introduction', draft: 'x\n' }] });
   const res = await exportDraft({ inputPath: join(root, '.paper', 'DRAFT.md'), format, paperRoot: root, pandocPresent: false, style });
   return readFileSync(res.outputPath, 'utf8');
 }
@@ -90,7 +90,7 @@ test('Chicago notes: citations become footnotes and the list is a Bibliography',
 
 test('Chicago notes: citation notes never take a label the author\'s own footnotes use', async () => {
   const manuscript = '# T\n\n## Intro\n\nA claim.[^1] Another [@zeta2020].\n\nA third [@alpha2019].[^2]\n\n[^1]: My own aside.\n\n[^2]: A second aside.\n';
-  const root = compiledPaper({ bib: BIB, compiled: manuscript, sections: [{ slug: 'intro', title: 'Intro', draft: 'x\n' }] });
+  const root = await compiledPaper({ bib: BIB, compiled: manuscript, sections: [{ slug: 'intro', title: 'Intro', draft: 'x\n' }] });
   const res = await exportDraft({ inputPath: join(root, '.paper', 'DRAFT.md'), format: 'md', paperRoot: root, pandocPresent: false, style: 'chicago-notes-bib' });
   const md = readFileSync(res.outputPath, 'utf8');
   const defined = [...md.matchAll(/^\[\^([^\]]+)\]:/gm)].map((m) => m[1]!);

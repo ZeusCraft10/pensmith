@@ -1,14 +1,14 @@
-// bin/lib/verify/verdict-rows.ts — shared verdict-row render+parse pair (Phase 14, GATE-02).
+// bin/lib/verify/verdict-rows.ts — which verdicts block, and the verdict rows
+// of VERIFICATION.md.
 //
-// PURE module: no I/O, no side effects. Every function is referentially
-// transparent (same input → same output). No node:fs, node:path, or
-// network imports.
+// PURE module: no I/O, no side effects. No node:fs, node:path, or network
+// imports.
 //
-// Purpose: single source of truth for the writer (verify.ts Pass-1/Pass-3 rows)
-// and the parser (compile.ts failing-citekey extraction). Keeping the render
-// templates and the parse regex co-located in one module means any format
-// change will break the round-trip test (tests/verdict-rows.test.ts) rather
-// than silently nulling the blocking set.
+// compile and done gate on the verdicts recorded in VERIFICATION.json
+// (verification-record.ts), never on these rows. The rows are how
+// VERIFICATION.md shows the verdicts; revise reads them back to find the
+// citation it repairs, so the renderers and the parser stay together and the
+// round-trip test (tests/verdict-rows.test.ts) catches any drift.
 
 /**
  * Verdicts that block compile and export. UNRESOLVED means the registry was
@@ -40,9 +40,6 @@ export function isBlockingVerdict(verdict: string): boolean {
 
 /** Blocking verdicts on text that is not a `[@key]` citation, so the row's key is that text. */
 const TEXT_VERDICTS: ReadonlySet<string> = new Set(['RAW_CITATION', 'UNPARSEABLE']);
-
-/** The blocking verdicts as refusal text: `FABRICATED/MIS-CITED/...`. */
-const BLOCKING_VERDICT_LIST = [...BLOCKING_VERDICTS].join('/');
 
 /** The key a Pass-3 row carries for a quotation that cites nothing. */
 export const NO_CITATION_KEY = '(no citation)';
@@ -164,25 +161,6 @@ export function unattributedWarning(where: string, count: number): string {
 /** How a refusal names what a verdict is about: `[@key]`, or the quoted text. */
 export function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): string {
   return TEXT_VERDICTS.has(row.verdict) ? `text "${row.citekey}"` : `citation [@${row.citekey}]`;
-}
-
-/**
- * The verdict rows of a section's VERIFICATION.md as compile and done gate
- * them: a refusal reason for each blocking row, and a warning when quotations
- * have no citation. `where` names the section. The caller checks the Status
- * line itself.
- */
-export function verdictGate(verificationMd: string, where: string): { reasons: string[]; warnings: string[] } {
-  const rows = parseVerdictRowDetails(verificationMd);
-  const unattributed = rows.filter((r) => r.verdict === 'UNATTRIBUTED').length;
-  const warnings = citationWarnings(rows, where);
-  if (unattributed > 0) warnings.push(unattributedWarning(where, unattributed));
-  return {
-    reasons: rows
-      .filter((r) => r.blocking)
-      .map((r) => `${where}: ${describeVerdictRow(r)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`),
-    warnings,
-  };
 }
 
 /**

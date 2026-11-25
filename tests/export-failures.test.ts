@@ -17,7 +17,7 @@ import { compiledPaper, fakePandocPath, pathWithoutPandoc, runCli } from './lib/
 
 const BIB = '@article{zeta2020, author = {Zeta, Zed}, title = {Tidal Sediment Transport}, journal = {J}, year = {2020}, doi = {10.1000/zeta}}\n';
 
-function paper(): string {
+async function paper(): Promise<string> {
   return compiledPaper({
     title: 'Tidal Barrages',
     bib: BIB,
@@ -33,8 +33,8 @@ function exportDir(root: string): string[] {
 const POSIX = process.platform !== 'win32';
 
 for (const format of ['docx', 'pdf'] as const) {
-  test(`done --format ${format} without Pandoc refuses (exit 2), names Pandoc, and writes no Markdown stand-in`, () => {
-    const root = paper();
+  test(`done --format ${format} without Pandoc refuses (exit 2), names Pandoc, and writes no Markdown stand-in`, async () => {
+    const root = await paper();
     const r = runCli(['done', '--yolo', '--raw', '--format', format], root, { PATH: pathWithoutPandoc() });
     assert.equal(r.status, 2, `stdout=${r.stdout}\nstderr=${r.stderr}`);
     assert.match(r.stdout + r.stderr, /Pandoc is not installed/);
@@ -44,16 +44,16 @@ for (const format of ['docx', 'pdf'] as const) {
   });
 }
 
-test('done with no --format and no Pandoc exports Markdown and says so', () => {
-  const root = paper();
+test('done with no --format and no Pandoc exports Markdown and says so', async () => {
+  const root = await paper();
   const r = runCli(['done', '--yolo', '--raw'], root, { PATH: pathWithoutPandoc() });
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
   assert.match(r.stdout + r.stderr, /Pandoc is not installed, so the paper was exported as Markdown/);
   assert.ok(exportDir(root).includes('DRAFT.md'), exportDir(root).join(', '));
 });
 
-test('done --format docx: a Pandoc error is reported with its own message and exits 1', { skip: !POSIX }, () => {
-  const root = paper();
+test('done --format docx: a Pandoc error is reported with its own message and exits 1', { skip: !POSIX }, async () => {
+  const root = await paper();
   const PATH = fakePandocPath('echo "pandoc: Could not parse CSL style: unexpected element" >&2; exit 64');
   const r = runCli(['done', '--yolo', '--raw', '--format', 'docx'], root, { PATH });
   assert.equal(r.status, 1, `stdout=${r.stdout}\nstderr=${r.stderr}`);
@@ -63,8 +63,8 @@ test('done --format docx: a Pandoc error is reported with its own message and ex
   assert.ok(!existsSync(join(root, '.paper', 'FINAL.md')));
 });
 
-test('done --format pdf: a missing TeX engine is a refusal that says so (exit 2)', { skip: !POSIX }, () => {
-  const root = paper();
+test('done --format pdf: a missing TeX engine is a refusal that says so (exit 2)', { skip: !POSIX }, async () => {
+  const root = await paper();
   const PATH = fakePandocPath('echo "pdflatex not found. Please select a different --pdf-engine or install pdflatex" >&2; exit 47');
   const r = runCli(['done', '--yolo', '--raw', '--format', 'pdf'], root, { PATH });
   assert.equal(r.status, 2, `stdout=${r.stdout}\nstderr=${r.stderr}`);
@@ -72,8 +72,8 @@ test('done --format pdf: a missing TeX engine is a refusal that says so (exit 2)
   assert.deepEqual(exportDir(root), []);
 });
 
-test('done --format docx: a file the scrub cannot clean is never left in the export folder', { skip: !POSIX }, () => {
-  const root = paper();
+test('done --format docx: a file the scrub cannot clean is never left in the export folder', { skip: !POSIX }, async () => {
+  const root = await paper();
   // Pandoc "succeeds" but writes something that is not a docx: the metadata
   // scrub cannot run, so the file must not ship.
   const PATH = fakePandocPath(
@@ -85,8 +85,8 @@ test('done --format docx: a file the scrub cannot clean is never left in the exp
   assert.deepEqual(readdirSync(join(root, '.paper')).filter((n) => n.startsWith('.export-')), [], 'no staging folder is left');
 });
 
-test('done: files from an earlier export do not stay next to the new one', () => {
-  const root = paper();
+test('done: files from an earlier export do not stay next to the new one', async () => {
+  const root = await paper();
   const dir = join(root, '.paper', 'export');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'DRAFT.pdf'), 'stale pdf from yesterday');

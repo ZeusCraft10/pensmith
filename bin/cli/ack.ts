@@ -15,10 +15,10 @@ import { defineCommand } from 'citty';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseBibForPass1 } from '../lib/verify/pass1.js';
-import { paperDir, sectionAcknowledgements, sectionVerification } from '../lib/paths.js';
+import { paperDir, sectionAcknowledgements, sectionVerificationRecord } from '../lib/paths.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
-import { parseVerdictRowDetails } from '../lib/verify/verdict-rows.js';
+import { readVerificationRecord } from '../lib/verify/verification-record.js';
 import { recordAcknowledgement, workBinding } from '../lib/verify/acknowledgements.js';
 
 /** Verdicts an acknowledgement of a retraction applies to (a second ack replaces the reason). */
@@ -74,15 +74,20 @@ export const ackCommand = defineCommand({
     const entry = bib.entries.get(citekey);
     if (!entry) return refuse(`[@${citekey}] is not in .paper/CITATIONS.bib, so there is no work to acknowledge.`);
 
-    // Only a citation verify found RETRACTED in this section can be acknowledged.
-    const verifPath = sectionVerification(n, slug);
-    if (!existsSync(verifPath)) {
-      return refuse(`section ${n} has not been verified, so nothing is RETRACTED yet — run \`pensmith verify ${n}\` first.`);
+    // Only a citation verify found RETRACTED in this section can be acknowledged,
+    // as its recorded verdicts (VERIFICATION.json) say.
+    const record = readVerificationRecord(sectionVerificationRecord(n, slug));
+    if (!record.ok) {
+      return refuse(
+        record.problem === 'missing'
+          ? `section ${n} has not been verified, so nothing is RETRACTED yet — run \`pensmith verify ${n}\` first.`
+          : `section ${n}'s recorded verdicts could not be read (${record.detail}) — run \`pensmith verify ${n}\` first.`,
+      );
     }
-    const row = parseVerdictRowDetails(readFileSync(verifPath, 'utf8')).find((r) => r.citekey === citekey);
+    const row = record.record.citations.find((r) => r.citekey === citekey);
     if (!row || !ACKNOWLEDGEABLE.has(row.verdict)) {
       return refuse(
-        `section ${n}'s VERIFICATION.md has no RETRACTED verdict for [@${citekey}]` +
+        `section ${n}'s recorded verdicts have no RETRACTED verdict for [@${citekey}]` +
         `${row ? ` (it is ${row.verdict})` : ''}, so there is nothing to acknowledge — ` +
         `run \`pensmith verify ${n}\` if the bibliography changed since.`,
       );

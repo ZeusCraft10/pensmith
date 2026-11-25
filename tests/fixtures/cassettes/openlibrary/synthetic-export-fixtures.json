@@ -1,0 +1,62 @@
+[
+  {
+    "scope": "https://openlibrary.org",
+    "method": "GET",
+    "path": "/api/books?bibkeys=ISBN:9780306406157&format=json&jscmd=data",
+    "status": 200,
+    "response": {
+      "ISBN:9780306406157": {
+        "title": "Barrage Effects on Estuaries",
+        "authors": [
+          {
+            "name": "Al Alpha"
+          }
+        ],
+        "publish_date": "2019"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://openlibrary.org",
+    "method": "GET",
+    "path": "/api/books?bibkeys=ISBN:9780000000019&format=json&jscmd=data",
+    "status": 200,
+    "response": {
+      "ISBN:9780000000019": {
+        "title": "Tide gauge dataset",
+        "authors": [
+          {
+            "name": "Jane Doe"
+          }
+        ],
+        "publish_date": "2021"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://openlibrary.org",
+    "method": "GET",
+    "path": "/api/books?bibkeys=ISBN:9780000000026&format=json&jscmd=data",
+    "status": 200,
+    "response": {
+      "ISBN:9780000000026": {
+        "title": "Tides",
+        "authors": [
+          {
+            "name": "Rick Roe"
+          }
+        ],
+        "publish_date": "2020"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

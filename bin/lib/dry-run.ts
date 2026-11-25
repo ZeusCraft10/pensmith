@@ -7,7 +7,7 @@
 // path that slips past the dispatcher still cannot change a file.
 
 import { join, relative, sep } from 'node:path';
-import { paperDir, sectionAcknowledgements, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
+import { paperDir, sectionAcknowledgements, sectionDraft, sectionPlan, sectionVerification, sectionVerificationRecord } from './paths.js';
 import { parseSectionNumber, resolveSectionSlug } from './section-slug.js';
 import type { Ux02Verb } from './verbs.js';
 
@@ -35,6 +35,7 @@ const SECTION_FILES = {
   'PLAN.md': sectionPlan,
   'DRAFT.md': sectionDraft,
   'VERIFICATION.md': sectionVerification,
+  'VERIFICATION.json': sectionVerificationRecord,
   'ACKNOWLEDGEMENTS.json': sectionAcknowledgements,
 } as const;
 
@@ -128,8 +129,8 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       return {
         command,
         summary: 'Check every citation and quote in this section against its source.',
-        reads: [sec('DRAFT.md'), paper('CITATIONS.bib'), sec('PLAN.md')],
-        writes: [sec('VERIFICATION.md'), `${sec('PLAN.md')} (status)`],
+        reads: [sec('DRAFT.md'), paper('CITATIONS.bib'), sec('PLAN.md'), sec('ACKNOWLEDGEMENTS.json')],
+        writes: [sec('VERIFICATION.json'), sec('VERIFICATION.md'), `${sec('PLAN.md')} (status)`],
         model: 'claim-support and orphan-claim checks (advisory)',
         network: `${MODEL_PROVIDER}; Crossref and doi.org; open-access PDFs for quotes`,
       };
@@ -137,8 +138,8 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       return {
         command,
         summary: 'Assemble the verified sections into one draft (refused if any section is blocked).',
-        reads: [paper('OUTLINE.md'), '.paper/sections/*/{PLAN,DRAFT,VERIFICATION}.md'],
-        writes: [paper('DRAFT.md'), paper('COMPILE-REPORT.md'), paper('CITATIONS.bib')],
+        reads: [paper('OUTLINE.md'), '.paper/sections/*/{PLAN,DRAFT}.md', '.paper/sections/*/VERIFICATION.json'],
+        writes: [paper('DRAFT.md'), paper('COMPILE-REPORT.md'), paper('COMPILE-MANIFEST.json'), paper('CITATIONS.bib')],
         model: NO_MODEL,
         network: 'registry re-checks for any section changed since it was verified',
       };
@@ -146,10 +147,10 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       return {
         command,
         summary: 'Final audit and export of the compiled draft.',
-        reads: [paper('DRAFT.md'), '.paper/sections/*/VERIFICATION.md'],
+        reads: [paper('DRAFT.md'), paper('COMPILE-MANIFEST.json'), '.paper/sections/*/{DRAFT.md,VERIFICATION.json}', paper('CITATIONS.bib')],
         writes: [`${paper('export')}/ (the exported paper)`, paper('VERIFICATION.md'), paper('FINAL.md')],
         model: 'whole-paper orphan-claim check (advisory)',
-        network: `${MODEL_PROVIDER}; DuckDuckGo phrase search; GPTZero only with a key and your consent`,
+        network: `Crossref and the other registries (every citation is checked again); open-access PDFs for quotes; ${MODEL_PROVIDER}; DuckDuckGo phrase search; GPTZero only with a key and your consent`,
         asks: 'confirm the export',
       };
     case 'add':
@@ -166,7 +167,7 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       return {
         command: typeof args['citekey'] === 'string' ? `${command} ${args['citekey']}` : command,
         summary: 'Record that this section cites a RETRACTED work knowingly, with your reason.',
-        reads: [paper('CITATIONS.bib'), sec('VERIFICATION.md')],
+        reads: [paper('CITATIONS.bib'), sec('VERIFICATION.json')],
         writes: [sec('ACKNOWLEDGEMENTS.json')],
         model: NO_MODEL,
         network: NO_NETWORK,

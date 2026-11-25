@@ -19,6 +19,7 @@ import { askNumbered } from '../bin/lib/prompts/numbered.js';
 import { PromptAbortedError } from '../bin/lib/prompts.js';
 import { EXPORT_CONFIRM_QUESTION } from '../bin/cli/done.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeCompileManifestFixture, writeVerificationFixture } from './lib/verification-fixture.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -63,7 +64,7 @@ test('export confirmation: the question defaults to no, so an empty answer does 
 });
 
 // A compiled paper whose one section is verified against its current draft.
-function cleanCompiledPaper(): string {
+async function cleanCompiledPaper(): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-export-confirm-'));
   const pdir = join(root, '.paper');
   const sdir = join(pdir, 'sections', '01-intro');
@@ -83,8 +84,9 @@ function cleanCompiledPaper(): string {
     join(sdir, 'PLAN.md'),
     `---\nsection: 1\nslug: intro\nstatus: verified\nassigned_sources: []\nverified_against_draft_hash: ${computeDraftHash(Buffer.from(draft), [])}\n---\n`,
   );
-  writeFileSync(join(sdir, 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n\n## Pass-3\n');
+  writeVerificationFixture(sdir, { n: 1, slug: 'intro', draft });
   writeFileSync(join(pdir, 'DRAFT.md'), `# Intro\n\n${draft}`);
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
   return root;
 }
 
@@ -126,8 +128,8 @@ function lastJsonLine(stdout: string): Record<string, unknown> {
   return JSON.parse(line) as Record<string, unknown>;
 }
 
-test('done without a terminal: exits 3 with the pending decision and exports nothing', () => {
-  const root = cleanCompiledPaper();
+test('done without a terminal: exits 3 with the pending decision and exports nothing', async () => {
+  const root = await cleanCompiledPaper();
   const r = runDone(root, undefined);
   assert.equal(r.status, 3, `expected exit 3; stdout=${r.stdout} stderr=${r.stderr}`);
   const pending = lastJsonLine(r.stdout);
@@ -141,16 +143,16 @@ test('done without a terminal: exits 3 with the pending decision and exports not
   assert.ok(!existsSync(join(root, '.paper', 'FINAL.md')), 'the paper must not be marked final');
 });
 
-test('done without a terminal: an answer piped on stdin is not read as a confirmation', () => {
-  const root = cleanCompiledPaper();
+test('done without a terminal: an answer piped on stdin is not read as a confirmation', async () => {
+  const root = await cleanCompiledPaper();
   const r = runDone(root, 'nope\n');
   assert.equal(r.status, 3, `expected exit 3; stdout=${r.stdout} stderr=${r.stderr}`);
   assert.ok(!existsSync(join(root, '.paper', 'export')), "a piped 'nope' must not export the paper");
 });
 
-test('done at a terminal: answering no cancels with exit 2 and exports nothing', () => {
+test('done at a terminal: answering no cancels with exit 2 and exports nothing', async () => {
   for (const answer of ['n\n', 'no\n', '\n']) {
-    const root = cleanCompiledPaper();
+    const root = await cleanCompiledPaper();
     const r = runDone(root, answer, { terminal: true });
     assert.match(r.stderr, /Export the paper\?/, `the question must be asked; stderr=${r.stderr}`);
     assert.match(r.stdout, /export cancelled by user/, `answer ${JSON.stringify(answer)}: ${r.stdout}`);
@@ -160,9 +162,9 @@ test('done at a terminal: answering no cancels with exit 2 and exports nothing',
   }
 });
 
-test('done at a terminal: answers that are not y or n, or no answer at all, cancel with exit 2', () => {
+test('done at a terminal: answers that are not y or n, or no answer at all, cancel with exit 2', async () => {
   for (const input of ['nope\nmaybe\nwhatever\n', '']) {
-    const root = cleanCompiledPaper();
+    const root = await cleanCompiledPaper();
     const r = runDone(root, input, { terminal: true });
     assert.match(r.stdout, /export cancelled by user/, `input ${JSON.stringify(input)}: ${r.stdout}${r.stderr}`);
     assert.equal(r.status, 2, `input ${JSON.stringify(input)}`);
@@ -170,9 +172,9 @@ test('done at a terminal: answers that are not y or n, or no answer at all, canc
   }
 });
 
-test('done at a terminal: answering yes exports', () => {
+test('done at a terminal: answering yes exports', async () => {
   // The guard for the cancel cases above: the same harness can export.
-  const root = cleanCompiledPaper();
+  const root = await cleanCompiledPaper();
   const r = runDone(root, 'y\n', { terminal: true });
   assert.equal(r.status, 0, `stdout=${r.stdout} stderr=${r.stderr}`);
   assert.match(r.stdout, /pensmith done: exported /);

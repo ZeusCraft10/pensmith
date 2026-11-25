@@ -69,7 +69,9 @@ Read the exit status of every pensmith command.
   it cannot check at all (RAW_CITATION for a DOI or "(Author, 2020)"
   typed as text, UNPARSEABLE for a broken `[@key]`), an approval
   was refused, or the input was invalid. Report the reason as pensmith states it. Never
-  edit `DRAFT.md`, `VERIFICATION.md` or the bibliography to make a check pass.
+  edit `DRAFT.md`, `VERIFICATION.md`, `VERIFICATION.json`, the compiled
+  `.paper/DRAFT.md` or the bibliography to make a check pass: compile and
+  done check those files against what verify and compile recorded.
   A flagged citation is fixed with `pensmith plan N --revise`, then write and
   verify again; UNRESOLVED means retry once the registry is reachable, or,
   for an entry with no identifier, tell the user which source needs one. For

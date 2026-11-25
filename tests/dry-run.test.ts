@@ -22,7 +22,7 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { atomicAppendFile, atomicRename, atomicWriteFile, DryRunWriteError } from '../bin/lib/atomic-write.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
-import { writeVerificationFixture } from './lib/verification-fixture.js';
+import { writeCompileManifestFixture, writeVerificationFixture } from './lib/verification-fixture.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -155,9 +155,10 @@ function paperReadyToCompile(): string {
 }
 
 /** paperReadyToCompile with a compiled .paper/DRAFT.md: ready for done. */
-function paperCompiled(): string {
+async function paperCompiled(): Promise<string> {
   const root = paperReadyToCompile();
   writeFileSync(join(root, '.paper', 'DRAFT.md'), `# Tidal Energy\n\n${PLAN_VERIFIED_DRAFT}\n${METHODS_DRAFT}`);
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
   return root;
 }
 
@@ -232,8 +233,8 @@ test('dry run: research, outline, compile and done change nothing where the real
   await assertDryRunChangesNothing(['outline', '--dry-run', '--yolo', '--force'], paperMidway(), [/OUTLINE\.md/]);
   await assertRealRunWrites(['compile'], paperReadyToCompile());
   await assertDryRunChangesNothing(['compile', '--dry-run'], paperReadyToCompile(), [/\.paper\/DRAFT\.md/]);
-  await assertRealRunWrites(['done', '--yolo', '--format', 'md'], paperCompiled());
-  await assertDryRunChangesNothing(['done', '--dry-run', '--yolo', '--format', 'md'], paperCompiled(), [/export/]);
+  await assertRealRunWrites(['done', '--yolo', '--format', 'md'], await paperCompiled());
+  await assertDryRunChangesNothing(['done', '--dry-run', '--yolo', '--format', 'md'], await paperCompiled(), [/export/]);
 });
 
 test('dry run: bare `pensmith`, `next` and `resume` name the step the router would take', async () => {

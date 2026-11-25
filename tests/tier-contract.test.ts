@@ -17,7 +17,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertEquivalent } from './lib/assert-tier-equivalent.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
-import { writeVerificationFixture } from './lib/verification-fixture.js';
+import { writeCompileManifestFixture, writeVerificationFixture } from './lib/verification-fixture.js';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 import { pensmithDataDir } from '../bin/lib/paths.js';
 import { sources } from '../bin/lib/sources/index.js';
@@ -752,34 +752,41 @@ const doneVerbExists = existsSync(new URL(`../${DONE_CASE.verbFile}`, import.met
  * DONE-09 gate HAS Pass-2 data to feed — exercised under --yolo here, which
  * bypasses the prompt while keeping the pipeline path identical).
  */
-function seedDoneFixture(): string {
+async function seedDoneFixture(): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-done-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
+  const draft = 'The transformer relies solely on attention mechanisms [@vaswani2017].\n';
   writeFileSync(
-    join(root, '.paper', 'DRAFT.md'),
-    '# Paper\n\nThe transformer relies solely on attention mechanisms [@vaswani2017].\n',
+    join(root, '.paper', 'OUTLINE.md'),
+    '# Paper\n\n| # | slug | title | depends_on | word target | assigned_sources |\n| --- | --- | --- | --- | --- | --- |\n| 1 | intro | Intro | | 300 | vaswani2017 |\n',
   );
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '@article{vaswani2017, title={Attention}}\n');
+  // A work the registries hold (a recorded DataCite answer): done checks it again.
+  writeFileSync(
+    join(root, '.paper', 'CITATIONS.bib'),
+    '@misc{vaswani2017,\n  title = {Attention Is All You Need},\n' +
+      '  author = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, Lukasz and Polosukhin, Illia},\n' +
+      '  year = {2017},\n  doi = {10.48550/arXiv.1706.03762}\n}\n',
+  );
   const sectionDir = join(root, '.paper', 'sections', '01-intro');
   mkdirSync(sectionDir, { recursive: true });
-  writeFileSync(
-    join(sectionDir, 'VERIFICATION.md'),
-    [
-      '# Section Verification — 01-intro',
-      '',
-      // A verified section carries a Status line (GATE-01 parity); the
-      // unconditional export gate (audit #3/#14) requires it. UNSUPPORTED is an
-      // advisory Pass-2 verdict (pipe table) and is NOT a blocking verdict.
-      'Status: verified',
-      '',
+  writeFileSync(join(sectionDir, 'DRAFT.md'), draft);
+  // A verified section whose advisory Pass-2 table carries an UNSUPPORTED row:
+  // UNSUPPORTED feeds the DONE-09 gate and is NOT a blocking verdict.
+  writeVerificationFixture(sectionDir, {
+    n: 1,
+    slug: 'intro',
+    draft,
+    assignedSources: ['vaswani2017'],
+    advisoryMarkdown: [
       '## Pass-2 (claim support, advisory — LLM-judged)',
       '',
       '| Citekey | Claim Sentence | Verdict | Rationale |',
       '|---------|---------------|---------|-----------|',
       '| smith2020 | The effect persists across all populations. | **UNSUPPORTED** | Single cohort only. |',
-      '',
     ].join('\n'),
-  );
+  });
+  writeFileSync(join(root, '.paper', 'DRAFT.md'), `# Paper\n\n${draft}`);
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
   return root;
 }
 
@@ -794,8 +801,8 @@ test('tier-contract: done — verb file exists (D-24)', () => {
   );
 });
 
-test('tier-contract: done parity — offline run produces a trace-free deliverable in the DISTINCT export dir (D-24)', { skip: !doneVerbExists }, () => {
-  const root = seedDoneFixture();
+test('tier-contract: done parity — a run produces a trace-free deliverable in the DISTINCT export dir (D-24)', { skip: !doneVerbExists }, async () => {
+  const root = await seedDoneFixture();
   const sourceDraftBefore = readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8');
 
   const r = runCliInDir(DONE_CASE.cliArgs, root);

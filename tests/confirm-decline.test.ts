@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { confirmOrNo } from '../bin/lib/prompts.js';
 import { sketchCommand } from '../bin/cli/sketch.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeCompileManifestFixture, writeVerificationFixture } from './lib/verification-fixture.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -129,7 +130,7 @@ test('sketch: an unclear answer to the proceed question cancels and creates noth
   assert.deepEqual(readdirSync(dir), [], 'a declined sketch writes nothing');
 });
 
-test('done at a terminal: an unclear answer to the GPTZero consent question declines it', () => {
+test('done at a terminal: an unclear answer to the GPTZero consent question declines it', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-confirm-done-'));
   const pdir = join(root, '.paper');
   const sdir = join(pdir, 'sections', '01-intro');
@@ -149,8 +150,9 @@ test('done at a terminal: an unclear answer to the GPTZero consent question decl
     join(sdir, 'PLAN.md'),
     `---\nsection: 1\nslug: intro\nstatus: verified\nassigned_sources: []\nverified_against_draft_hash: ${computeDraftHash(Buffer.from(draft), [])}\n---\n`,
   );
-  writeFileSync(join(sdir, 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n\n## Pass-3\n');
+  writeVerificationFixture(sdir, { n: 1, slug: 'intro', draft });
   writeFileSync(join(pdir, 'DRAFT.md'), `# Intro\n\n${draft}`);
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
 
   // The consent question comes first. The input ends before the export
   // question, which then gets no answer in time.
