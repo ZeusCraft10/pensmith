@@ -84,7 +84,9 @@ In Claude Code:
 /plugin install pensmith@pensmith
 ```
 
-Or from a terminal: `claude plugin marketplace add ZeusCraft10/pensmith`, then `claude plugin install pensmith@pensmith`. To install from a local clone, pass the clone's path to `marketplace add` instead. Nothing is built or installed with npm: the plugin ships a bundled CLI.
+Or from a terminal: `claude plugin marketplace add ZeusCraft10/pensmith`, then `claude plugin install pensmith@pensmith`. This installs the latest release: each release publishes the built plugin, with its bundled CLI, on the repository's `release` branch, so nothing is built or installed with npm.
+
+Until the first release is tagged, or to try unreleased changes, run the plugin from a clone instead. The bundle is not committed, so build it first, then start Claude Code with the plugin loaded: `npm ci && npm run bundle && claude --plugin-dir plugin`.
 
 Then set `ANTHROPIC_API_KEY` in the environment you start Claude Code from (see [Status](#status)).
 
@@ -93,7 +95,9 @@ Then set `ANTHROPIC_API_KEY` in the environment you start Claude Code from (see 
 ```bash
 git clone https://github.com/ZeusCraft10/pensmith.git
 cd pensmith
-npm link            # puts `pensmith` on your PATH, using the committed bundle
+npm ci
+npm run bundle      # builds the CLI bundle (it is not committed)
+npm link            # puts `pensmith` on your PATH
 pensmith doctor     # checks Node, pandoc, keys and the install
 ```
 

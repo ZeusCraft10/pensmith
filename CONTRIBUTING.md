@@ -52,6 +52,37 @@ The SessionStart hook (`hooks/session-start.ts`) runs in every project where
 the plugin is enabled. It must stay silent and write nothing unless the
 session's directory has a `.paper/` folder.
 
+## Releasing
+
+Users install the plugin from the `release` branch: the entry in
+`.claude-plugin/marketplace.json` points there. That branch holds only the
+built `plugin/` payload, one commit per release, and its history is kept. To
+cut a release:
+
+1. Set the new version in `package.json` (`npm version --no-git-tag-version
+   <version>` also updates the lockfile) and in
+   `plugin/.claude-plugin/plugin.json`. The two must match. Run
+   `npm run check`: it names any other file that still carries the old
+   version, such as the README's status line. Commit the bump on `main`.
+2. Tag that commit with `v` and the version, and push the tag:
+
+   ```bash
+   git tag v0.3.0-alpha.2
+   git push origin v0.3.0-alpha.2
+   ```
+
+3. `.github/workflows/release.yml` runs on the tag. It fails unless the tag
+   matches both versions, runs `npm ci`, `npm run check` and the plugin smoke,
+   then `node scripts/release.mjs publish <tag>`: that commits the built
+   `plugin/` as `release <tag>` on top of the previous release commit and
+   pushes the `release` branch as a fast-forward, never forced. Last, it
+   creates a GitHub Release for the tag.
+
+To rehearse the publish step without touching GitHub, run it in a scratch
+clone whose `origin` is a scratch bare repository: `npm ci && npm run bundle`,
+tag the checked-out commit, run `node scripts/release.mjs publish <tag>`, and
+check out the bare repository's `release` branch.
+
 ## Architectural chokepoints (Phase 0+)
 
 Lint-enforced chokepoints. Violating them fails CI; add rules rather than

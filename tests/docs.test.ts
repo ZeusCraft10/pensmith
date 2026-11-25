@@ -41,10 +41,10 @@ test('README states the alpha status, the version and the Phase-1 API-key need',
   assert.match(readme, /Node\.js 22\.12|node-%3E%3D22\.12/);
 });
 
-/** The README section under `## <heading>`, up to the next `## ` heading. */
+/** The section of `md` under `## <heading>`, up to the next `## ` heading. */
 function section(md: string, heading: string): string {
   const start = md.indexOf(`\n## ${heading}\n`);
-  assert.ok(start >= 0, `README must have a "## ${heading}" section`);
+  assert.ok(start >= 0, `the document must have a "## ${heading}" section`);
   const rest = md.slice(start + 1);
   const end = rest.indexOf('\n## ', 1);
   return end < 0 ? rest : rest.slice(0, end);
@@ -79,6 +79,40 @@ test('README install steps match the plugin layout', () => {
   assert.match(readme, /plugin install pensmith@pensmith/);
   assert.match(readme, /npm link/);
   assert.ok(!/npm run build[\s\S]{0,200}\/plugin marketplace add/.test(readme), 'installing the plugin needs no build step');
+});
+
+/** The shell commands in fenced code blocks of `md`, comments and blank lines dropped. */
+const commandsIn = (md: string): string[] =>
+  [...md.matchAll(/```[a-z]*\n([\s\S]*?)```/g)]
+    .flatMap((m) => m[1]!.split('\n'))
+    .map((l) => l.replace(/\s+#.*$/, '').trim())
+    .filter((l) => l.length > 0 && !l.startsWith('#'));
+
+test('README installs the latest release, or a checkout only after building its bundle', () => {
+  const install = section(readme, 'Install');
+  // The marketplace entry installs the release branch, the last published release.
+  const cmds = commandsIn(install);
+  const add = cmds.indexOf('/plugin marketplace add ZeusCraft10/pensmith');
+  assert.ok(add >= 0 && cmds[add + 1] === '/plugin install pensmith@pensmith', `marketplace add, then install: ${cmds.join(' | ')}`);
+  assert.match(install, /latest release/i);
+  // A checkout has no bundle (it is never committed), so every checkout path builds it first.
+  assert.match(install, /`npm ci && npm run bundle && claude --plugin-dir plugin`/, 'the plugin from a checkout');
+  const link = cmds.indexOf('npm link');
+  assert.ok(link > 0 && cmds.slice(0, link).includes('npm run bundle'), `npm link needs npm run bundle first: ${cmds.join(' | ')}`);
+  assert.ok(cmds.slice(0, link).includes('npm ci'), 'npm run bundle needs npm ci first');
+  // Adding a checkout's marketplace would install the published release, not that checkout.
+  assert.doesNotMatch(install, /committed bundle|clone's path to `marketplace add`|ships a bundled CLI/i);
+});
+
+test('CONTRIBUTING says how to cut a release', () => {
+  const body = section(read('CONTRIBUTING.md'), 'Releasing');
+  assert.match(body, /package\.json/);
+  assert.match(body, /plugin\/\.claude-plugin\/plugin\.json/);
+  const cmds = commandsIn(body);
+  assert.ok(cmds.some((c) => /^git tag v\S+$/.test(c)), `tag the release: ${cmds.join(' | ')}`);
+  assert.ok(cmds.some((c) => /^git push origin v\S+$/.test(c)), `push the tag: ${cmds.join(' | ')}`);
+  assert.match(body, /release\.yml/);
+  assert.match(body, /`release` branch/);
 });
 
 test('README makes none of the claims the code does not back', () => {
