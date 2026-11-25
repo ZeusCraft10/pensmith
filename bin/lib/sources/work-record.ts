@@ -223,6 +223,13 @@ export function firstString(v: unknown): string | undefined {
   return undefined;
 }
 
+/** The fields of `fields` that have a value, for spreading into a candidate. */
+export function definedFields<T extends Record<string, string | undefined>>(fields: T): Partial<Record<keyof T, string>> {
+  const out: Partial<Record<keyof T, string>> = {};
+  for (const [k, v] of Object.entries(fields)) if (v !== undefined) out[k as keyof T] = v;
+  return out;
+}
+
 /** Every non-empty string of a string or string array. */
 export function allStrings(v: unknown): string[] {
   if (typeof v === 'string') return v.trim() ? [v.trim()] : [];

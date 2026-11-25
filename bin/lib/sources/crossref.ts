@@ -19,8 +19,10 @@
 
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
+import { displayName, nameFromParts, presentNames } from '../author-normalize.js';
+import { arxivFromDoi, normalizeIsbn } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { askRegistry, contactParam, cslDateYear, isGone, recordFromCsl, RETRACTION_STATUS_TTL_MS, type Lookup } from './work-record.js';
+import { askRegistry, contactParam, cslDateYear, definedFields, firstString, isGone, recordFromCsl, RETRACTION_STATUS_TTL_MS, type Lookup } from './work-record.js';
 
 const BASE = 'https://api.crossref.org';
 
@@ -33,12 +35,38 @@ interface CrossrefName {
 
 interface CrossrefItem {
   DOI?: string;
+  type?: string;
   title?: string[] | string;
   subtitle?: string[];
   author?: CrossrefName[];
   issued?: { 'date-parts'?: number[][] };
   abstract?: string;
+  'container-title'?: string[] | string;
+  volume?: string;
+  issue?: string;
+  page?: string;
+  publisher?: string;
+  ISBN?: string[];
 }
+
+/** Crossref's work types as CSL types; an unlisted type is a generic document. */
+const CSL_TYPE: Readonly<Record<string, string>> = {
+  'journal-article': 'article-journal',
+  'book-chapter': 'chapter',
+  'book-section': 'chapter',
+  'book-part': 'chapter',
+  book: 'book',
+  monograph: 'book',
+  'edited-book': 'book',
+  'reference-book': 'book',
+  'proceedings-article': 'paper-conference',
+  'posted-content': 'article',
+  report: 'report',
+  dissertation: 'thesis',
+  dataset: 'dataset',
+  'reference-entry': 'entry',
+  standard: 'standard',
+};
 
 function parseYear(item: CrossrefItem): number | undefined {
   const y = cslDateYear(item.issued);
@@ -53,21 +81,16 @@ function toCandidate(item: CrossrefItem): SourceCandidate | null {
     : String(item.title ?? '');
   if (!title) return null;
 
-  // Authors are "Family, Given" strings. An organization author has only a
-  // name; it is kept as is, so a consortium paper is not dropped.
-  const authors = (item.author ?? [])
-    .map((a) => {
-      const family = String(a.family ?? '').trim();
-      const given = String(a.given ?? '').trim();
-      if (!family) return String(a.name ?? '').trim();
-      return given ? `${family}, ${given}` : family;
-    })
-    .filter(Boolean);
-  if (authors.length === 0) return null;
+  // Crossref gives family and given names; an organization author has only a
+  // name, kept whole so a consortium paper is not dropped.
+  const names = presentNames((item.author ?? []).map((a) => nameFromParts(a.family, a.given, a.name)));
+  if (names.length === 0) return null;
+  const authors = names.map(displayName);
 
   const year = parseYear(item);
-  const base: Partial<SourceCandidate> = { authors, year };
-  const citekey = generateCitekey(base);
+  const citekey = generateCitekey({ authors, year });
+  const isbn = (item.ISBN ?? []).map((i) => normalizeIsbn(i)).find((i): i is string => i !== null);
+  const arxiv = arxivFromDoi(doi);
 
   return {
     source: 'crossref',
@@ -75,14 +98,26 @@ function toCandidate(item: CrossrefItem): SourceCandidate | null {
     doi,
     title,
     authors,
+    names,
     year,
     abstract: item.abstract,
+    ...(arxiv ? { arxiv } : {}),
+    ...(isbn ? { isbn } : {}),
+    csl_type: CSL_TYPE[item.type ?? ''] ?? 'document',
+    ...definedFields({
+      container_title: firstString(item['container-title']),
+      volume: firstString(item.volume),
+      issue: firstString(item.issue),
+      page: firstString(item.page),
+      publisher: firstString(item.publisher),
+    }),
     retracted: false,
     last_verified: new Date().toISOString(),
     citekey,
     raw: item,
   };
 }
+
 
 export async function search(
   query: string,

@@ -29,7 +29,10 @@
 //     NEVER logged, persisted, or interpolated into any string.
 
 import { generateCitekey } from '../citekey.js';
-import type { SourceCandidate } from '../schemas/source-candidate.js';
+import { displayName, nameFromParts, parseDisplayName, presentNames } from '../author-normalize.js';
+import { arxivFromDoi, bareArxivId, normalizeIsbn } from '../doi.js';
+import type { CslName, SourceCandidate } from '../schemas/source-candidate.js';
+import { definedFields } from './work-record.js';
 
 /**
  * A single Zotero creator. The real MCP payload varies by server, so every
@@ -54,6 +57,10 @@ export interface ZoteroItem {
   date?: string;
   year?: number | string;
   DOI?: string;
+  ISBN?: string;
+  url?: string;
+  /** Zotero's free-form "Extra" field; it often holds "arXiv: <id>". */
+  extra?: string;
   abstractNote?: string;
 }
 
@@ -105,16 +112,14 @@ function toCandidate(item: ZoteroItem): SourceCandidate | null {
   const title = String(item.title ?? '').trim();
   if (!title) return null;
 
-  const fromCreators = (item.creators ?? [])
-    .map((c) => {
-      if (c.name) return String(c.name).trim();
-      const parts = [c.firstName, c.lastName].filter(Boolean).map(String);
-      return parts.join(' ').trim();
-    })
-    .filter(Boolean);
-  const fromAuthors = (item.authors ?? []).map((a) => String(a).trim()).filter(Boolean);
-  const authors = fromCreators.length > 0 ? fromCreators : fromAuthors;
-  if (authors.length === 0) return null;
+  // Zotero keeps lastName and firstName apart; a single-field creator (`name`)
+  // is an institution, kept whole.
+  const fromCreators = presentNames((item.creators ?? []).map((c): CslName | null => nameFromParts(c.lastName, c.firstName, c.name)));
+  const names = fromCreators.length > 0
+    ? fromCreators
+    : presentNames((item.authors ?? []).map((a) => parseDisplayName(String(a))));
+  if (names.length === 0) return null;
+  const authors = names.map(displayName);
 
   // Year: prefer a numeric `year`; else parse a 4-digit year out of `date`.
   let year: number | undefined;
@@ -132,6 +137,9 @@ function toCandidate(item: ZoteroItem): SourceCandidate | null {
 
   const doi = item.DOI ? String(item.DOI) : undefined;
   const citekey = generateCitekey({ authors, year });
+  const arxivNote = /\barxiv:\s*(\S+)/i.exec(String(item.extra ?? ''))?.[1] ?? '';
+  const arxivUrl = /arxiv\.org\/abs\/([^\s?#]+)/i.exec(String(item.url ?? ''))?.[1] ?? '';
+  const arxiv = bareArxivId(arxivNote) ?? bareArxivId(arxivUrl) ?? (doi ? arxivFromDoi(doi) : null);
 
   return {
     source: 'zotero-mcp',
@@ -139,7 +147,12 @@ function toCandidate(item: ZoteroItem): SourceCandidate | null {
     doi,
     title,
     authors,
+    names,
     year,
+    ...definedFields({
+      arxiv: arxiv ?? undefined,
+      isbn: normalizeIsbn(String(item.ISBN ?? '')) ?? undefined,
+    }),
     abstract: item.abstractNote,
     retracted: false,
     last_verified: new Date().toISOString(),

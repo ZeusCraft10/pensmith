@@ -24,6 +24,7 @@
 // Standard Stack).
 
 import { nfkcNormalize } from './normalize.js';
+import type { CslName } from './schemas/source-candidate.js';
 
 /**
  * Particle list for surname detection. These tokens, when they appear
@@ -151,4 +152,102 @@ export function firstAuthorSurname(authorString: string): string {
  */
 export function normalizeAuthorList(authors: string[]): string[] {
   return authors.map(firstAuthorSurname);
+}
+
+// ---------------------------------------------------------------------------
+// Structured names (CSL-JSON) from the forms registries write them in.
+// ---------------------------------------------------------------------------
+
+/**
+ * Words that mark a corporate author ("The ENCODE Project Consortium", "WHO
+ * Working Group"). Such a name is kept whole as a CSL `literal`: splitting it
+ * into given and family names would print "Consortium, T. E. P.".
+ */
+const CORPORATE = /\b(?:consortium|collaboration|group|committee|organi[sz]ation|association|institute|team|project|network|society|council|agency|foundation|university|department|initiative|alliance|investigators|developers|working party|task force)\b/i;
+
+/** Generational suffixes written after a name ("Jr.", "III"). */
+const SUFFIX = /^(?:jr|sr|ii|iii|iv)\.?$/i;
+
+/** Initials as PubMed writes them after a surname: "AJ", "S". */
+const PUBMED_INITIALS = /^\p{Lu}{1,4}$/u;
+
+function personName(family: string, given: string, suffix?: string): CslName {
+  const out: CslName = { family };
+  if (given) out.given = given;
+  if (suffix) out.suffix = suffix;
+  return out;
+}
+
+/**
+ * A display name as OpenAlex, arXiv, Semantic Scholar and Zotero's single
+ * field write it, as a CSL name. "Ashish Vaswani" is given then family;
+ * "Vaswani, Ashish" is family first. Lowercase particles stay with the family
+ * name ("Stéfan van der Walt" → family "van der Walt"), as Crossref writes it,
+ * so the citekey and the sort order do not change with the source. A
+ * corporate name is a `literal`. Null for an empty string.
+ */
+export function parseDisplayName(raw: string): CslName | null {
+  const s = raw.replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  if (s.includes(',')) {
+    const [family = '', given = '', suffix = ''] = s.split(',').map((p) => p.trim());
+    if (!family) return parseDisplayName(given);
+    return personName(family, given, suffix || undefined);
+  }
+  if (CORPORATE.test(s)) return { literal: s };
+  const tokens = s.split(' ');
+  if (tokens.length === 1) return { family: s };
+  let end = tokens.length;
+  let suffix: string | undefined;
+  if (end > 2 && SUFFIX.test(tokens[end - 1]!)) {
+    suffix = tokens[end - 1];
+    end -= 1;
+  }
+  // The family name is the last word, extended left through lowercase
+  // particles; at least one word stays as the given name.
+  let start = end - 1;
+  while (start > 1 && PARTICLES.has(tokens[start - 1]!)) start -= 1;
+  return personName(tokens.slice(start, end).join(' '), tokens.slice(0, start).join(' '), suffix);
+}
+
+/**
+ * A PubMed author ("Wakefield AJ", "van der Walt S", "Smith JA Jr") as a CSL
+ * name: the surname, then the initials as given names ("A. J."). A name with
+ * no initials is a family name alone.
+ */
+export function parsePubmedName(raw: string): CslName | null {
+  const tokens = raw.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  if (tokens.length === 0) return null;
+  let suffix: string | undefined;
+  if (tokens.length > 2 && SUFFIX.test(tokens[tokens.length - 1]!)) suffix = tokens.pop();
+  const last = tokens[tokens.length - 1]!;
+  if (tokens.length > 1 && PUBMED_INITIALS.test(last)) {
+    tokens.pop();
+    return personName(tokens.join(' '), [...last].map((c) => `${c}.`).join(' '), suffix);
+  }
+  return personName(tokens.join(' '), '', suffix);
+}
+
+/** A CSL name from a registry's separate family and given fields, or its corporate `name`. */
+export function nameFromParts(family: unknown, given: unknown, corporate?: unknown): CslName | null {
+  const f = typeof family === 'string' ? family.trim() : '';
+  const g = typeof given === 'string' ? given.trim() : '';
+  if (f) return personName(f, g);
+  const lit = typeof corporate === 'string' ? corporate.trim() : '';
+  if (lit) return { literal: lit };
+  // A registry that gives only a given name ("Plato" filed as given) is read as a display name.
+  return g ? parseDisplayName(g) : null;
+}
+
+/** The display string research and the prompts use: "Family, Given", the family name alone, or the corporate name. */
+export function displayName(n: CslName): string {
+  if (n.literal) return n.literal;
+  const family = [n['non-dropping-particle'], n.family].filter(Boolean).join(' ');
+  const given = [n.given, n['dropping-particle']].filter(Boolean).join(' ');
+  return given ? `${family}, ${given}` : family;
+}
+
+/** The names that are not null. */
+export function presentNames(names: ReadonlyArray<CslName | null>): CslName[] {
+  return names.filter((n): n is CslName => n !== null && Boolean(n.family || n.literal));
 }

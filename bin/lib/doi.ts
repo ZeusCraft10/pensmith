@@ -215,6 +215,23 @@ export function normalizeArxiv(input: string): string | null {
 }
 
 /**
+ * The arXiv ID as a library stores it: no `arXiv:` prefix and no version
+ * ("1706.03762", "cs.CL/0301012"), so every version of a preprint is one
+ * work. Null when `input` is not an arXiv ID.
+ */
+export function bareArxivId(input: string): string | null {
+  if (typeof input !== 'string') return null;
+  const n = normalizeArxiv(input.trim().replace(/^arxiv:\s*/i, 'arXiv:'));
+  return n === null ? null : n.replace(/^arxiv:/, '').replace(/v\d+$/, '');
+}
+
+/** The arXiv ID that arXiv's own DOI (10.48550/arXiv.<id>) names, or null for any other DOI. */
+export function arxivFromDoi(doi: string): string | null {
+  const m = /^10\.48550\/arxiv\.(.+)$/.exec(normalizeDoi(doi) ?? '');
+  return m ? bareArxivId(m[1]!) : null;
+}
+
+/**
  * Type-guard form of normalizeArxiv.
  */
 export function isArxiv(s: string): boolean {

@@ -15,6 +15,7 @@
 
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
+import { displayName, nameFromParts, presentNames } from '../author-normalize.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { askOaPdfs, contactParam, type OaPdfAnswer } from './work-record.js';
 
@@ -50,15 +51,9 @@ function toCandidate(item: UnpaywallResponse): SourceCandidate | null {
   const title = String(item.title ?? '').trim();
   if (!title) return null;
 
-  const authors = (item.z_authors ?? [])
-    .map((a) => {
-      const family = String(a.family ?? '').trim();
-      const given = String(a.given ?? '').trim();
-      if (!family) return '';
-      return given ? `${family}, ${given}` : family;
-    })
-    .filter(Boolean);
-  if (authors.length === 0) return null;
+  const names = presentNames((item.z_authors ?? []).map((a) => nameFromParts(a.family, a.given)));
+  if (names.length === 0) return null;
+  const authors = names.map(displayName);
 
   const year =
     typeof item.year === 'number' && item.year >= 1800 && item.year <= 2100
@@ -71,8 +66,7 @@ function toCandidate(item: UnpaywallResponse): SourceCandidate | null {
     ? oaPdf
     : undefined;
 
-  const base: Partial<SourceCandidate> = { authors, year };
-  const citekey = generateCitekey(base);
+  const citekey = generateCitekey({ authors, year });
 
   return {
     source: 'unpaywall',
@@ -80,6 +74,7 @@ function toCandidate(item: UnpaywallResponse): SourceCandidate | null {
     doi,
     title,
     authors,
+    names,
     year,
     oa_pdf_url,
     retracted: false,

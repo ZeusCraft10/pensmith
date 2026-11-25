@@ -7,17 +7,19 @@
 //                  -> .result.<pmid> objects
 //   fetchById:     GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=<pmid>&retmode=json
 //
-// PubMed authors come in surname-first compact form: "Vaswani A" (NO comma).
-// We pass through as-is — bin/lib/author-normalize.ts handles both
-// "Family, Given" AND single-token "Family I" forms.
+// PubMed authors come as a surname and initials, "Wakefield AJ" (no comma);
+// author-normalize.ts parsePubmedName reads them as family "Wakefield", given
+// "A. J.". A collective author is kept whole.
 //
 // RESEARCH pitfall: pubdate is a loose string like "2019 Jul" or "2020 May 12".
 // Year extraction = first 4-digit token only.
 
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
-import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { askRegistry, unavailable, type Lookup, type WorkName, type WorkRecord } from './work-record.js';
+import { displayName, parsePubmedName, presentNames } from '../author-normalize.js';
+import { normalizePmcid } from '../doi.js';
+import type { CslName, SourceCandidate } from '../schemas/source-candidate.js';
+import { askRegistry, definedFields, firstString, unavailable, type Lookup, type WorkName, type WorkRecord } from './work-record.js';
 
 const BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
 
@@ -37,6 +39,9 @@ interface PubmedRecord {
   epubdate?: string;
   source?: string;
   fulljournalname?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
   articleids?: PubmedArticleId[];
   /** Set instead of the fields above when the PMID does not exist. */
   error?: string;
@@ -50,14 +55,23 @@ function parseYear(pubdate: string | undefined): number | undefined {
   return y >= 1800 && y <= 2100 ? y : undefined;
 }
 
-function extractDoi(rec: PubmedRecord): string | undefined {
-  const ids = rec.articleids ?? [];
-  for (const id of ids) {
-    if (id.idtype === 'doi' && typeof id.value === 'string' && id.value) {
-      return id.value;
-    }
+/** The article ID of type `idtype` ('doi', 'pmc'), or undefined. */
+function articleId(rec: PubmedRecord, idtype: string): string | undefined {
+  for (const id of rec.articleids ?? []) {
+    if (id.idtype === idtype && typeof id.value === 'string' && id.value) return id.value;
   }
   return undefined;
+}
+
+function extractDoi(rec: PubmedRecord): string | undefined {
+  return articleId(rec, 'doi');
+}
+
+/** A PubMed author as a CSL name: a collective name whole, a person as surname and initials. */
+function cslName(a: PubmedAuthor): CslName | null {
+  const name = String(a.name ?? '').trim();
+  if (!name) return null;
+  return a.authtype === 'CollectiveName' ? { literal: name } : parsePubmedName(name);
 }
 
 function toCandidate(rec: PubmedRecord): SourceCandidate | null {
@@ -66,16 +80,14 @@ function toCandidate(rec: PubmedRecord): SourceCandidate | null {
   const title = String(rec.title ?? '').trim();
   if (!title) return null;
 
-  const authors = (rec.authors ?? [])
-    .map((a) => String(a.name ?? '').trim())
-    .filter(Boolean);
-  if (authors.length === 0) return null;
+  const names = presentNames((rec.authors ?? []).map(cslName));
+  if (names.length === 0) return null;
+  const authors = names.map(displayName);
 
   const year = parseYear(rec.pubdate);
   const doi = extractDoi(rec);
-
-  const base: Partial<SourceCandidate> = { authors, year };
-  const citekey = generateCitekey(base);
+  const citekey = generateCitekey({ authors, year });
+  const pmcid = normalizePmcid(articleId(rec, 'pmc') ?? '');
 
   return {
     source: 'pubmed',
@@ -83,7 +95,18 @@ function toCandidate(rec: PubmedRecord): SourceCandidate | null {
     doi,
     title,
     authors,
+    names,
     year,
+    pmid,
+    ...(pmcid ? { pmcid } : {}),
+    csl_type: 'article-journal',
+    ...definedFields({
+      // NLM adds a place to some journal names ("Lancet (London, England)").
+      container_title: firstString(rec.fulljournalname?.replace(/\s*\([^()]*\)\s*$/, '')) ?? firstString(rec.source),
+      volume: firstString(rec.volume),
+      issue: firstString(rec.issue),
+      page: firstString(rec.pages),
+    }),
     retracted: false,
     last_verified: new Date().toISOString(),
     citekey,

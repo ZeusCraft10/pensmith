@@ -501,6 +501,6 @@ test('PubMed: fetchById reads the fields a candidate needs, whatever epubdate ho
   }));
   const c = await pubmedFetchById('31000001');
   assert.deepEqual(c && { source: c.source, id: c.id, title: c.title, authors: c.authors, year: c.year }, {
-    source: 'pubmed', id: '31000001', title: 'A Valid Article', authors: ['Roe J'], year: 2019,
+    source: 'pubmed', id: '31000001', title: 'A Valid Article', authors: ['Roe, J.'], year: 2019,
   });
 });

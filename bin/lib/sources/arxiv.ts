@@ -17,6 +17,8 @@
 
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
+import { displayName, parseDisplayName, presentNames } from '../author-normalize.js';
+import { bareArxivId } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { askRegistry, unavailable, yearOf, type Lookup, type WorkRecord } from './work-record.js';
 
@@ -30,6 +32,7 @@ interface ArxivEntry {
   updated: string | undefined;
   authors: string[];
   doi: string | undefined;
+  summary: string | undefined;
 }
 
 // Helper: pull all <tag>…</tag> blocks. `s` flag = . matches \n.
@@ -86,8 +89,10 @@ function parseEntry(entryXml: string): ArxivEntry | null {
   // arxiv:doi is a namespaced tag — the colon escapes fine in a regex literal.
   const doiRaw = extractOne(entryXml, 'arxiv:doi');
   const doi = doiRaw ? decodeXmlEntities(doiRaw) : undefined;
+  const summaryRaw = extractOne(entryXml, 'summary');
+  const summary = summaryRaw ? decodeXmlEntities(summaryRaw).replace(/\s+/g, ' ') : undefined;
 
-  return { id, title, published, updated, authors, doi };
+  return { id, title, published, updated, authors, doi, summary };
 }
 
 // The id of the error entry arXiv answers a malformed ID with.
@@ -112,18 +117,25 @@ function toCandidate(entry: ArxivEntry): SourceCandidate | null {
     }
   }
 
-  // arXiv emits "Given Family" display names. We keep them as-is —
-  // author-normalize handles given-first form.
-  const base: Partial<SourceCandidate> = { authors: entry.authors, year };
-  const citekey = generateCitekey(base);
+  // arXiv has display names only ("Ashish Vaswani"), split here.
+  const names = presentNames(entry.authors.map(parseDisplayName));
+  if (names.length === 0) return null;
+  const authors = names.map(displayName);
+  const citekey = generateCitekey({ authors, year });
+  const arxiv = bareArxivId(/\/abs\/(.+)$/.exec(entry.id)?.[1] ?? '');
 
   return {
     source: 'arxiv',
     id: entry.id,
     doi: entry.doi,
     title: entry.title,
-    authors: entry.authors,
+    authors,
+    names,
     year,
+    ...(arxiv ? { arxiv, url: `https://arxiv.org/abs/${arxiv}` } : {}),
+    ...(entry.summary ? { abstract: entry.summary } : {}),
+    csl_type: 'article',
+    publisher: 'arXiv',
     retracted: false,
     last_verified: new Date().toISOString(),
     citekey,

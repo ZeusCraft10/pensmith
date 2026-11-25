@@ -12,8 +12,10 @@
 
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
+import { displayName, parseDisplayName, presentNames } from '../author-normalize.js';
+import { arxivFromDoi, normalizePmcid, normalizePmid } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { askOaPdfs, askSource, contactParam, isGone, RETRACTION_STATUS_TTL_MS, type OaPdfAnswer } from './work-record.js';
+import { askOaPdfs, askSource, contactParam, definedFields, firstString, isGone, RETRACTION_STATUS_TTL_MS, type OaPdfAnswer } from './work-record.js';
 
 const BASE = 'https://api.openalex.org';
 
@@ -28,9 +30,42 @@ interface OpenAlexWork {
   id?: string;
   doi?: string;
   title?: string;
+  type?: string;
   publication_year?: number;
   authorships?: OpenAlexAuthor[];
   abstract_inverted_index?: Record<string, number[]>;
+  ids?: { pmid?: string; pmcid?: string };
+  biblio?: { volume?: string | null; issue?: string | null; first_page?: string | null; last_page?: string | null };
+  primary_location?: { source?: { display_name?: string | null; type?: string | null; host_organization_name?: string | null } | null } | null;
+}
+
+/** OpenAlex work types as CSL types; an unlisted type is a generic document. */
+const CSL_TYPE: Readonly<Record<string, string>> = {
+  article: 'article-journal',
+  review: 'article-journal',
+  letter: 'article-journal',
+  editorial: 'article-journal',
+  preprint: 'article',
+  book: 'book',
+  'book-chapter': 'chapter',
+  dissertation: 'thesis',
+  dataset: 'dataset',
+  report: 'report',
+  standard: 'standard',
+};
+
+/** The PubMed or PMC ID an OpenAlex `ids` link names ("https://pubmed.ncbi.nlm.nih.gov/9500320"). */
+function idFromLink(link: string | undefined, normalize: (s: string) => string | null): string | undefined {
+  const last = (link ?? '').replace(/\/+$/, '').split('/').pop() ?? '';
+  return normalize(last) ?? undefined;
+}
+
+/** "637-641" from OpenAlex's first and last page. */
+function pages(b: OpenAlexWork['biblio']): string | undefined {
+  const first = firstString(b?.first_page ?? undefined);
+  const last = firstString(b?.last_page ?? undefined);
+  if (!first) return undefined;
+  return last && last !== first ? `${first}-${last}` : first;
 }
 
 function normalizeDoi(doiUrl: string | undefined): string | undefined {
@@ -44,12 +79,10 @@ function toCandidate(item: OpenAlexWork): SourceCandidate | null {
   const title = String(item.title ?? '');
   if (!title) return null;
 
-  // OpenAlex emits "Given Family" display names. We keep them as-is —
-  // bin/lib/author-normalize.ts handles given-first form.
-  const authors = (item.authorships ?? [])
-    .map((a) => String(a.author?.display_name ?? '').trim())
-    .filter(Boolean);
-  if (authors.length === 0) return null;
+  // OpenAlex has display names only ("Ashish Vaswani"), split here.
+  const names = presentNames((item.authorships ?? []).map((a) => parseDisplayName(String(a.author?.display_name ?? ''))));
+  if (names.length === 0) return null;
+  const authors = names.map(displayName);
 
   const year =
     typeof item.publication_year === 'number' &&
@@ -58,9 +91,10 @@ function toCandidate(item: OpenAlexWork): SourceCandidate | null {
       ? item.publication_year
       : undefined;
 
-  const base: Partial<SourceCandidate> = { authors, year };
-  const citekey = generateCitekey(base);
+  const citekey = generateCitekey({ authors, year });
   const doi = normalizeDoi(item.doi);
+  const arxiv = doi ? arxivFromDoi(doi) : null;
+  const venue = item.primary_location?.source;
 
   return {
     source: 'openalex',
@@ -68,7 +102,18 @@ function toCandidate(item: OpenAlexWork): SourceCandidate | null {
     doi,
     title,
     authors,
+    names,
     year,
+    ...(arxiv ? { arxiv } : {}),
+    csl_type: venue?.type === 'conference' ? 'paper-conference' : CSL_TYPE[item.type ?? ''] ?? 'document',
+    ...definedFields({
+      pmid: idFromLink(item.ids?.pmid, normalizePmid),
+      pmcid: idFromLink(item.ids?.pmcid, normalizePmcid),
+      container_title: venue?.type === 'repository' ? undefined : firstString(venue?.display_name ?? undefined),
+      volume: firstString(item.biblio?.volume ?? undefined),
+      issue: firstString(item.biblio?.issue ?? undefined),
+      page: pages(item.biblio),
+    }),
     retracted: false,
     last_verified: new Date().toISOString(),
     citekey,

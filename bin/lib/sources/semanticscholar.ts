@@ -17,8 +17,11 @@
 
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
+import { displayName, parseDisplayName, presentNames } from '../author-normalize.js';
+import { arxivFromDoi, bareArxivId, normalizePmcid, normalizePmid } from '../doi.js';
 import { getS2ApiKey } from '../runtime.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
+import { definedFields } from './work-record.js';
 
 const BASE = 'https://api.semanticscholar.org';
 const FIELDS = 'title,authors,year,externalIds,abstract';
@@ -31,6 +34,7 @@ interface S2ExternalIds {
   DOI?: string;
   ArXiv?: string;
   PubMed?: string;
+  PubMedCentral?: string;
 }
 interface S2Paper {
   paperId?: string;
@@ -77,19 +81,20 @@ function toCandidate(item: S2Paper): SourceCandidate | null {
   const title = String(item.title ?? '').trim();
   if (!title) return null;
 
-  const authors = (item.authors ?? [])
-    .map((a) => String(a.name ?? '').trim())
-    .filter(Boolean);
-  if (authors.length === 0) return null;
+  // Semantic Scholar has display names only ("Ashish Vaswani"), split here.
+  const names = presentNames((item.authors ?? []).map((a) => parseDisplayName(String(a.name ?? ''))));
+  if (names.length === 0) return null;
+  const authors = names.map(displayName);
 
   const year =
     typeof item.year === 'number' && item.year >= 1800 && item.year <= 2100
       ? item.year
       : undefined;
 
-  const doi = item.externalIds?.DOI;
-  const base: Partial<SourceCandidate> = { authors, year };
-  const citekey = generateCitekey(base);
+  const ext = item.externalIds ?? {};
+  const doi = ext.DOI;
+  const citekey = generateCitekey({ authors, year });
+  const pmcid = ext.PubMedCentral ? normalizePmcid(`PMC${ext.PubMedCentral.replace(/^pmc/i, '')}`) : null;
 
   return {
     source: 'semanticscholar',
@@ -97,7 +102,13 @@ function toCandidate(item: S2Paper): SourceCandidate | null {
     doi,
     title,
     authors,
+    names,
     year,
+    ...definedFields({
+      arxiv: (ext.ArXiv ? bareArxivId(ext.ArXiv) : null) ?? (doi ? arxivFromDoi(doi) : null) ?? undefined,
+      pmid: (ext.PubMed ? normalizePmid(ext.PubMed) : null) ?? undefined,
+      pmcid: pmcid ?? undefined,
+    }),
     abstract: item.abstract,
     retracted: false,
     last_verified: new Date().toISOString(),
