@@ -53,7 +53,7 @@ Defaults (the owner may revise these later):
   - No new skip-when-missing guards.
   - Run tests with isolated global state: `export HOME=$(mktemp -d) XDG_DATA_HOME=$(mktemp -d) XDG_CONFIG_HOME=$(mktemp -d) XDG_CACHE_HOME=$(mktemp -d) LOCALAPPDATA=$(mktemp -d)`. T15 makes the runner do this itself.
   - `tests/atomic-write.test.ts`'s chmod test fails only as root (environmental); T15 fixes it.
-- **Before every commit:** `npm run lint && npm run typecheck && npm test` (isolated env) must be green, plus `npm run build`.
+- **Before every commit:** `npm run check` (isolated env) must be green. It runs prebuild, lint, typecheck, build, `npm run bundle` and the tests. A change to the CLI or its runtime assets also needs `node scripts/plugin-smoke.mjs` green.
 - **Dependencies:** no new runtime dependencies unless the task names them. Allowed new dev dependency: `esbuild` (T14). `@anthropic-ai/sdk` and `undici` are already present.
 - **Model IDs:** model IDs appear only as functional configuration values. Never add comments or prose stating which AI model wrote the code.
 - **Commits:** small, imperative conventional-commit subjects (`fix(verify): …`). Every commit message ends with exactly these two lines:

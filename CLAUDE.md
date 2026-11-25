@@ -63,6 +63,14 @@ When asked development questions:
 1. Conceptual ("why did we decide X?") → answer from the PRD and the owner decisions above.
 2. "Is this drifting from the design?" → check against the non-negotiables and owner decisions above.
 
+## Repo layout (v0.3)
+
+- `bin/` is the engine and CLI (TypeScript). `bin/lib/paths.ts` is the only place that resolves the package root (`packageRoot()`) and home directories. `bin/lib/http.ts` is the only egress, and `bin/lib/network-mode.ts` decides live, offline or cassette.
+- `plugin/` is the only installed payload. Git tracks only its hand-written files: the manifest, `skills/pensmith/SKILL.md`, `hooks/hooks.json`, the `bin/` shims and README. `npm run bundle` writes `plugin/dist/` (minified esbuild bundles of the CLI and the SessionStart hook) and copies `templates/`, `references/` and `LICENSE` in. All of that is gitignored. `npm run check` and CI build it before the tests.
+- There is no MCP server. Claude reaches the engine through the bundled `pensmith` CLI on the plugin's `bin/` PATH.
+- The root `.claude-plugin/marketplace.json` installs `{"source":"github","repo":"ZeusCraft10/pensmith","ref":"release"}`. A `v*` tag runs `.github/workflows/release.yml`, which checks that tag, package.json and plugin.json versions are equal, runs `npm run check` and the plugin smoke, and then `scripts/release.mjs publish` commits the built `plugin/` as `release <tag>` on the `release` branch (fast-forward only). Until the first tag is pushed, install from a checkout: `npm ci && npm run bundle && claude --plugin-dir plugin`.
+- `npm run smoke:plugin` runs `claude plugin validate --strict` on `plugin/` and the marketplace, installs the exact release tree from a throwaway local marketplace (1 skill, 1 SessionStart hook, 0 MCP servers), and runs `pensmith --version` installed, through a symlink and through `npm link`.
+
 ## Reference repos to clone if needed
 
 ```bash
