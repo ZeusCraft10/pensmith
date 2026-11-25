@@ -37,6 +37,7 @@ const BUNDLES = ['dist/pensmith.mjs', 'dist/hook.mjs'];
 // Every file git tracks under plugin/. Everything else there is generated.
 const HAND_WRITTEN = [
   '.claude-plugin/plugin.json',
+  'README.md',
   'bin/pensmith',
   'bin/pensmith.cmd',
   'hooks/hooks.json',
@@ -103,6 +104,20 @@ test('the payload has no package.json or lockfile, so no npm install ever runs',
   for (const f of ['package.json', 'package-lock.json', 'node_modules']) {
     assert.ok(!existsSync(at(f)), `plugin/${f} must not exist`);
   }
+});
+
+test('the payload carries its own README, because a release puts plugin/ at the root of the release branch', () => {
+  // On the release branch the repository README is not there, and the plugin
+  // directory refuses a plugin without one.
+  const readme = readFileSync(at('README.md'), 'utf8');
+  assert.ok(readme.split(/\s+/).filter(Boolean).length >= 40, 'at least 40 words on what the plugin does');
+  assert.match(readme, /\/plugin marketplace add ZeusCraft10\/pensmith/);
+  assert.match(readme, /\/plugin install pensmith@pensmith/);
+  assert.match(readme, /Node\.js 22\.12/);
+  assert.match(readme, /ANTHROPIC_API_KEY/, 'say that drafting needs an API key in this alpha');
+  assert.match(readme, /alpha/i);
+  assert.match(readme, /https:\/\/github\.com\/ZeusCraft10\/pensmith\/blob\/main\/PRIVACY\.md/);
+  assert.ok(!/undetectable|evade detection|bypass detect|avoid detection/i.test(readme));
 });
 
 test('there is exactly one skill, at skills/pensmith/SKILL.md', () => {

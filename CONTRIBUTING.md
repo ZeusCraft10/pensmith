@@ -42,7 +42,9 @@ build or `npm install` for it. So:
   install. Tests that need the bundle fail with "run `npm run bundle`" when it
   is missing; `npm run check` builds it before the tests.
 - The rest is written by hand: `.claude-plugin/plugin.json`, the one skill
-  (`skills/pensmith/SKILL.md`), `hooks/hooks.json`, and the `bin/` shims.
+  (`skills/pensmith/SKILL.md`), `hooks/hooks.json`, the `bin/` shims, and
+  `README.md`. On the release branch `plugin/` is the whole repository, so its
+  README is the one people (and the plugin directory) see there.
 - Keep `plugin/` free of `package.json` and lockfiles.
 - Code that locates `templates/` or `references/` must treat a directory with
   `.claude-plugin/plugin.json` as the package root, because the payload has no

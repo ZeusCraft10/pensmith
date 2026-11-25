@@ -6,7 +6,7 @@
 //   1. `claude plugin validate plugin --strict` and `claude plugin validate . --strict`
 //   2. build the tree a release commits to the release branch (the same
 //      payloadTree() scripts/release.mjs publishes), write it out, and
-//      `claude plugin validate --strict` it
+//      `claude plugin validate --strict` it, with no plugin-directory refusals
 //   3. in a throwaway CLAUDE_CONFIG_DIR/HOME: marketplace add a throwaway local
 //      marketplace whose one entry is "./plugin" (that tree), install
 //      pensmith@pensmith, and read `claude plugin details`: it must list
@@ -82,6 +82,9 @@ try {
   checkoutTree(objects, tree, releaseDir);
   const validated = run('claude', ['plugin', 'validate', releaseDir, '--strict'], { cwd: sandbox, env });
   check('claude plugin validate <release tree> --strict', validated.status === 0, validated.out);
+  // On the release branch this tree is the whole repository, so nothing
+  // outside it (such as the root README) can satisfy the plugin directory.
+  check('the plugin directory would not refuse the release tree', !/the plugin directory refuses/.test(validated.out), validated.out);
 
   // 3. Isolated install from a local marketplace: the real entry, pointed at that tree.
   const manifest = JSON.parse(readFileSync(path.join(repoRoot, '.claude-plugin', 'marketplace.json'), 'utf8'));
