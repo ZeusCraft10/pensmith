@@ -1,21 +1,25 @@
 // bin/lib/research-orchestrator.ts — GEN-03 live-adapter discovery orchestrator.
 //
 // Fans out the searchable adapters (crossref, openalex, arxiv, pubmed,
-// semanticscholar, zotero-mcp — NOT unpaywall.search),
-// aggregates SourceCandidate[], applies DOI + Jaro-Winkler title dedup,
-// then calls the source-evaluator LLM step to tier the results.
+// semanticscholar, zotero-mcp — NOT unpaywall.search), aggregates
+// SourceCandidate[], merges the records of one work by identifier (the
+// discipline's sourcePreference picks whose metadata is kept), then calls the
+// source-evaluator LLM step to tier the results.
 //
 // Load-bearing constraints enforced here:
 //   - 'search' in adapter guard: an adapter with no search() is skipped.
 //   - unpaywall excluded by name: its search() always returns [] by design.
 //   - per-query cap 10 (Pitfall 6 budget; T-12-03).
 //   - Per-adapter search() failure → swallowed WARN (ARCH-03).
-//   - DOI dedup: normalizeDoi() map, first-wins (prefer abstract).
-//   - Title dedup: jaroWinkler >= TITLE_JW_THRESHOLD for no-DOI candidates.
+//   - Merge by identifier (DOI, arXiv ID, PMID, PMC ID, ISBN) through
+//     groupCandidates in bin/lib/library.ts, the same rule the library stores
+//     by. A title alone never merges two records: it cannot tell "Attention
+//     is all you need" from "Attention is not all you need". A candidate with
+//     no identifier is dropped with a WARN, since nothing could verify it.
 //   - source-evaluator parse failure → keep ALL deduped candidates + WARN (T-11-10).
 //   - SourceCandidateSchema.safeParse per adapter result element (T-11-10).
 //   - Injectable adapter-registry seam for offline tests.
-//   - Does NOT call crossCheckRetractions, writeBibtex, writeRis — research.ts owns.
+//   - Does NOT mark retractions or write the library — bin/cli/research.ts does.
 //
 // Threat mitigations:
 //   T-12-01: defensive Zod safeParse on all LLM JSON outputs.
@@ -28,9 +32,11 @@
 import { z } from 'zod';
 import { sources } from './sources/index.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
-import { normalizeDoi } from './doi.js';
-import { jaroWinkler, TITLE_JW_THRESHOLD } from './fuzzy.js';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { assignUniqueCitekeys } from './bibtex-write.js';
+import { groupCandidates } from './library.js';
+import { packageRoot } from './paths.js';
 import { complete } from './anthropic.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
 import { escapeTemplateTokens } from './intake-parse.js';
@@ -66,71 +72,22 @@ const EvalVerdictSchema = z.object({
 const EvalResponseSchema = z.array(EvalVerdictSchema);
 
 // ---------------------------------------------------------------------------
-// Dedup helpers
+// Source preference
 // ---------------------------------------------------------------------------
 
 /**
- * DOI-first dedup: first-wins, prefer the record with an abstract.
- * Returns a new array; does not mutate input.
+ * The discipline's `sourcePreference` from templates/presets/disciplines.json
+ * (an unknown discipline uses `other`): which source's record of a work is
+ * kept when several return it. Empty when the presets cannot be read.
  */
-function dedupCandidates(raw: SourceCandidate[]): SourceCandidate[] {
-  // Phase 1: DOI dedup
-  const doiMap = new Map<string, SourceCandidate>();
-  const noDoi: SourceCandidate[] = [];
-
-  for (const c of raw) {
-    if (c.doi) {
-      const key = normalizeDoi(c.doi);
-      if (key) {
-        const existing = doiMap.get(key);
-        if (!existing) {
-          doiMap.set(key, c);
-        } else if (!existing.abstract && c.abstract) {
-          // Prefer the record with an abstract (better metadata).
-          doiMap.set(key, c);
-        }
-        // else: first-wins (existing stays).
-        continue;
-      }
-    }
-    noDoi.push(c);
+export function sourcePreferenceFor(discipline: string): string[] {
+  try {
+    const presets = JSON.parse(readFileSync(path.join(packageRoot(), 'templates', 'presets', 'disciplines.json'), 'utf8')) as Record<string, { sourcePreference?: unknown }>;
+    const pref = (presets[discipline.toLowerCase()] ?? presets['other'])?.sourcePreference;
+    return Array.isArray(pref) ? pref.filter((s): s is string => typeof s === 'string') : [];
+  } catch {
+    return [];
   }
-
-  // Phase 2: title dedup for no-DOI candidates using Jaro-Winkler.
-  const titleDeduped: SourceCandidate[] = [];
-  for (const c of noDoi) {
-    let isDuplicate = false;
-
-    // Check against DOI-deduped set first.
-    for (const existing of doiMap.values()) {
-      // WR-02: skip title comparison when either title is empty/whitespace.
-      // jaroWinkler("","") === 1 >= threshold, which would falsely drop a second
-      // empty-title candidate as a duplicate. DOI dedup still applies above.
-      if (!c.title.trim() || !existing.title.trim()) continue;
-      if (jaroWinkler(c.title, existing.title) >= TITLE_JW_THRESHOLD) {
-        isDuplicate = true;
-        break;
-      }
-    }
-
-    if (!isDuplicate) {
-      // Check against already-accepted no-DOI candidates.
-      for (const accepted of titleDeduped) {
-        // WR-02: same empty-title guard as above.
-        if (!c.title.trim() || !accepted.title.trim()) continue;
-        if (jaroWinkler(c.title, accepted.title) >= TITLE_JW_THRESHOLD) {
-          isDuplicate = true;
-          break;
-        }
-      }
-    }
-
-    if (!isDuplicate) {
-      titleDeduped.push(c);
-    }
-  }
-
-  return [...doiMap.values(), ...titleDeduped];
 }
 
 // ---------------------------------------------------------------------------
@@ -287,12 +244,13 @@ export interface ResearchOrchestratorOptions {
  *   2. For each query in the chosen scope, calls adapter.search(query, {limit:10}).
  *   3. Swallows per-adapter errors (non-fatal WARN; ARCH-03).
  *   4. Validates each result through SourceCandidateSchema.safeParse (T-11-10).
- *   5. Deduplicates via normalizeDoi (DOI) + jaroWinkler >= TITLE_JW_THRESHOLD (title).
+ *   5. Merges the records of one work by identifier (groupCandidates), keeping
+ *      the discipline's preferred source's metadata; drops candidates with none.
  *   6. Calls the source-evaluator LLM step (defensive fallback: keep all on failure).
  *   7. Returns the final SourceCandidate[].
  *
- * Does NOT call crossCheckRetractions, writeBibtex, or writeRis — those
- * chokepoints belong exclusively to bin/cli/research.ts (D-15).
+ * Does NOT mark retractions or write the library: bin/cli/research.ts does,
+ * after the user approves the candidates.
  *
  * @param queries  Array of query strings from the chosen topic-disambiguator scope.
  * @param opts     Orchestrator options including topic/discipline/assignment context.
@@ -430,16 +388,19 @@ export async function runResearchOrchestrator(
     return [];
   }
 
-  // Dedup: DOI first-wins (prefer abstract), then title JW >= threshold.
-  const deduped = dedupCandidates(allRaw);
+  // One candidate per work: records sharing an identifier are merged.
+  const { works, skipped } = groupCandidates(allRaw, sourcePreferenceFor(discipline));
+  if (skipped.length > 0) {
+    process.stderr.write(
+      `pensmith research: WARN — ${skipped.length} candidate(s) had no DOI, arXiv ID, PubMed ID or ISBN ` +
+      `and were left out: nothing could verify them.\n`,
+    );
+  }
 
-  // Audit #21/#31/#32: assign globally-unique citekeys to the deduped set BEFORE
-  // it flows to the evaluator keep-set, the approval gate, LIBRARY.json, and
-  // CITATIONS.bib. The citekey is the primary key all of those filter on; two
-  // same-base-key papers (same first author + year) must not share one, or the
-  // keep-sets prune the wrong rows and LIBRARY.json diverges from the suffixed
-  // bib. Done here (not in each writer) so every downstream consumer agrees.
-  const uniquelyKeyed = assignUniqueCitekeys(deduped);
+  // Citekeys unique across the run: the evaluator keep-set and the approval
+  // gate filter by them. They are provisional; the library gives each work
+  // the key it keeps (an earlier run's key for a work it already holds).
+  const uniquelyKeyed = assignUniqueCitekeys(works);
 
   // Source-evaluator LLM tier step (defensive: keep all on failure).
   const evaluated = await evaluateCandidates(uniquelyKeyed, {

@@ -273,22 +273,46 @@ function groupByIdentity(candidates: SourceCandidate[]): Group[] {
 
 /**
  * One candidate for a group: the preferred source's record, with an abstract
- * or open-access link another record has, and retracted if any record says so.
- * Only the preferred record's own identifiers are printed.
+ * or open-access link another record has, retracted if any record says so,
+ * and the other records' identifiers and sources kept as also_known_as and
+ * merged_from. Only the preferred record's own identifiers are printed.
  */
-function mergedCandidate(members: SourceCandidate[], rank: (s: string) => number): SourceCandidate {
-  const ordered = [...members].sort((a, b) => rank(a.source) - rank(b.source));
-  const base = { ...ordered[0]! };
-  base.abstract ??= ordered.find((m) => m.abstract)?.abstract;
-  if (base.abstract === undefined) delete base.abstract;
+function mergedCandidate(g: Group, rank: (s: string) => number): SourceCandidate {
+  const ordered = [...g.members].sort((a, b) => rank(a.source) - rank(b.source));
+  const base: SourceCandidate = { ...ordered[0]! };
+  const others = ordered.slice(1);
+  if (others.length === 0) return base;
+  const abstract = ordered.find((m) => m.abstract)?.abstract;
+  if (abstract && !base.abstract) base.abstract = abstract;
   const oa = ordered.find((m) => m.oa_pdf_url)?.oa_pdf_url;
-  if (!base.oa_pdf_url && oa) base.oa_pdf_url = oa;
+  if (oa && !base.oa_pdf_url) base.oa_pdf_url = oa;
   const retracted = ordered.find((m) => m.retracted);
   if (retracted) {
     base.retracted = true;
     if (!base.retraction_details && retracted.retraction_details) base.retraction_details = retracted.retraction_details;
   }
+  base.also_known_as = g.keys;
+  base.merged_from = [
+    ...(base.merged_from ?? []),
+    ...others.flatMap((m) => [{ source: m.source, id: m.id }, ...(m.merged_from ?? [])]),
+  ];
   return base;
+}
+
+/**
+ * The works among `candidates`: those sharing an identifier merged into one
+ * (mergedCandidate), in first-seen order, and the candidates with no
+ * identifier, which nothing could verify. research shows the user these
+ * works; mergeCandidates stores them.
+ */
+export function groupCandidates(
+  candidates: SourceCandidate[],
+  preference: readonly string[] = [],
+): { works: SourceCandidate[]; skipped: SourceCandidate[] } {
+  const rank = sourceRank(preference);
+  const skipped = candidates.filter((c) => candidateIdentities(c).length === 0);
+  const groups = groupByIdentity(candidates.filter((c) => candidateIdentities(c).length > 0));
+  return { works: groups.map((g) => mergedCandidate(g, rank)), skipped };
 }
 
 /**
@@ -309,22 +333,23 @@ export function mergeCandidates(lib: Library, candidates: SourceCandidate[], at:
   for (const item of lib.entries) for (const k of itemIdentities(item)) if (!byIdentity.has(k)) byIdentity.set(k, item);
   const taken = new Set(lib.entries.map((e) => e.id.toLowerCase()));
 
-  const provenanceOf = (g: Group): Provenance[] => [
-    ...g.members.map((m) => ({ source: m.source, id: m.id, at })),
+  const provenanceOf = (c: SourceCandidate): Provenance[] => [
+    { source: c.source, id: c.id, at },
+    ...(c.merged_from ?? []).map((m) => ({ ...m, at })),
     ...(opts.via ? [{ ...opts.via, at }] : []),
   ];
 
   const work = new Map<Group, MergedWork>();
   const fresh: Array<{ g: Group; c: SourceCandidate; base: string }> = [];
   for (const g of groups) {
-    const c = mergedCandidate(g.members, rank);
+    const c = mergedCandidate(g, rank);
     const known = g.keys.map((k) => byIdentity.get(k)).find((x): x is LibraryItem => x !== undefined);
     if (!known) {
       fresh.push({ g, c, base: generateCitekey(c) });
       continue;
     }
     known.custom.identities = [...new Set([...known.custom.identities, ...g.keys])];
-    known.custom.provenance.push(...provenanceOf(g));
+    known.custom.provenance.push(...provenanceOf(c));
     if (!known.abstract && c.abstract) known.abstract = c.abstract;
     if (!known.custom.oa_pdf_url && c.oa_pdf_url) known.custom.oa_pdf_url = c.oa_pdf_url;
     if (c.retracted && !known.custom.retracted) {
@@ -338,7 +363,7 @@ export function mergeCandidates(lib: Library, candidates: SourceCandidate[], at:
   fresh.sort((a, b) => (a.base < b.base ? -1 : a.base > b.base ? 1 : a.g.keys[0]! < b.g.keys[0]! ? -1 : 1));
   for (const { g, c, base } of fresh) {
     const citekey = freeCitekey(base, taken);
-    const item = itemFromCandidate(c, citekey, at, { identities: g.keys, provenance: provenanceOf(g) });
+    const item = itemFromCandidate(c, citekey, at, { identities: g.keys, provenance: provenanceOf(c) });
     lib.entries.push(item);
     for (const k of g.keys) byIdentity.set(k, item);
     work.set(g, { citekey, status: 'added', title: item.title, candidates: g.members });
@@ -351,3 +376,4 @@ export function mergeCandidates(lib: Library, candidates: SourceCandidate[], at:
 export function addToLibrary(root: string, candidates: SourceCandidate[], opts: MergeOptions = {}): Promise<MergeResult> {
   return updateLibrary(root, (lib, at) => mergeCandidates(lib, candidates, at, opts));
 }
+

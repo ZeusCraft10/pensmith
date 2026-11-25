@@ -1,0 +1,142 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=citekey+stability+first+run&rows=10",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message": {
+        "total-results": 2,
+        "items": [
+          {
+            "DOI": "10.0000/rerun-a",
+            "type": "journal-article",
+            "title": [
+              "A Fixture Work on Stable Keys"
+            ],
+            "author": [
+              {
+                "family": "Wu",
+                "given": "Wei",
+                "sequence": "first"
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2017
+                ]
+              ]
+            },
+            "container-title": [
+              "Journal of Test Fixtures"
+            ],
+            "volume": "1",
+            "page": "1-10"
+          },
+          {
+            "DOI": "10.0000/rerun-c",
+            "type": "journal-article",
+            "title": [
+              "RETRACTED: A Withdrawn Fixture Study"
+            ],
+            "author": [
+              {
+                "family": "Roe",
+                "given": "Jane",
+                "sequence": "first"
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2019
+                ]
+              ]
+            },
+            "container-title": [
+              "Journal of Test Fixtures"
+            ],
+            "volume": "1",
+            "page": "1-10"
+          }
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=citekey+stability+second+run&rows=10",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message": {
+        "total-results": 2,
+        "items": [
+          {
+            "DOI": "10.0000/rerun-b",
+            "type": "journal-article",
+            "title": [
+              "Another Fixture Work by the Same Author"
+            ],
+            "author": [
+              {
+                "family": "Wu",
+                "given": "Wei",
+                "sequence": "first"
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2017
+                ]
+              ]
+            },
+            "container-title": [
+              "Journal of Test Fixtures"
+            ],
+            "volume": "1",
+            "page": "1-10"
+          },
+          {
+            "DOI": "10.0000/rerun-a",
+            "type": "journal-article",
+            "title": [
+              "A Fixture Work on Stable Keys"
+            ],
+            "author": [
+              {
+                "family": "Wu",
+                "given": "Wei",
+                "sequence": "first"
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2017
+                ]
+              ]
+            },
+            "container-title": [
+              "Journal of Test Fixtures"
+            ],
+            "volume": "1",
+            "page": "1-10"
+          }
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

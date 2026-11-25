@@ -8,8 +8,8 @@
 //   (4) zero-candidate degenerate case writes a real EMPTY LIBRARY.json with WARN;
 //       assert NO literal `tier2-placeholder` / `PLACEHOLDER_LIBRARY` / `_note`
 //       marker appears in the written file.
-//   (5) crossCheckRetractions runs BEFORE writeBibtex (D-15) — assert via call-order
-//       capture on the production chokepoint sequence.
+//   (5) a retracted candidate reaches CITATIONS.bib marked RETRACTED — tested
+//       through the real CLI in tests/research-library-merge.test.ts.
 //
 // RED-by-skip stance: every behavioral test SKIPS until discoverySeamWired() returns
 // true (the research-orchestrator module exists AND the swap-seam block in
@@ -357,47 +357,9 @@ test(
   },
 );
 
-test(
-  'research-discovery: crossCheckRetractions runs BEFORE writeBibtex (D-15 LOCKED ordering)',
-  { skip: !SEAM_WIRED },
-  async () => {
-    // D-15 LOCKED: crossCheckRetractions MUST run before writeBibtex.
-    // This test asserts the ordering by verifying the research.ts chokepoint
-    // sequence is preserved after the swap-seam block is replaced.
-    //
-    // Strategy: check the source of research.ts to confirm the D-15 LOCKED comment
-    // and the crossCheckRetractions call still appear BEFORE writeBibtex. This is a
-    // source-level ordering assertion (the runtime is production code; the ordering
-    // is enforced by code structure, not by a spy here).
-
-    const researchSrc = fs.readFileSync(researchSrcPath, 'utf8');
-
-    const crossCheckIdx = researchSrc.indexOf('crossCheckRetractions(');
-    const writeBibtexIdx = researchSrc.indexOf('writeBibtex(');
-
-    assert.ok(
-      crossCheckIdx !== -1,
-      'research.ts must still call crossCheckRetractions (D-15 LOCKED)',
-    );
-    assert.ok(
-      writeBibtexIdx !== -1,
-      'research.ts must still call writeBibtex (D-19/D-20 LOCKED)',
-    );
-    assert.ok(
-      crossCheckIdx < writeBibtexIdx,
-      `D-15 LOCKED ordering violated: crossCheckRetractions (char ${crossCheckIdx}) must appear BEFORE writeBibtex (char ${writeBibtexIdx}) in research.ts`,
-    );
-
-    // Additionally check the orchestrator module exposes candidates to research.ts
-    // BEFORE the chokepoint sequence (i.e., the orchestrator returns candidates, it
-    // does NOT itself call writeBibtex — that chokepoint belongs to research.ts).
-    const orchSrc = fs.readFileSync(orchestratorSrcPath, 'utf8');
-    assert.ok(
-      !orchSrc.includes('writeBibtex('),
-      'research-orchestrator must NOT call writeBibtex — that chokepoint belongs to research.ts (D-15)',
-    );
-  },
-);
+// The retraction mark reaching CITATIONS.bib (crossCheckRetractions before the
+// library write) is tested by behaviour through the real CLI in
+// tests/research-library-merge.test.ts, not by the order of calls in the source.
 
 // ---- Consistency check: verify predicate resolves to a meaningful value --------
 // This test ALWAYS runs (no skip-guard) so we can confirm the path resolution

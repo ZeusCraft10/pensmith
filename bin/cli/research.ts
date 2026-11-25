@@ -13,13 +13,13 @@
 //   6. Call runResearchOrchestrator (adapter fan-out + dedup + source-evaluator).
 //   7. Candidate approval gate (default-ON): multiselect prune; --yolo → keep all;
 //      zero-candidates → skip gate; non-TTY → ApprovalUnavailableError / exit-3.
-//   8. D-15 LOCKED: crossCheckRetractions BEFORE writeBibtex BEFORE writeRis BEFORE
-//      LIBRARY.json write.
+//   8. Mark the candidates their own records show as retracted, then merge
+//      them into .paper/LIBRARY.json (bin/lib/library.ts), which writes
+//      CITATIONS.bib and CITATIONS.ris from it. A work the library already
+//      holds keeps its citekey, and nothing already in it (a source added with
+//      `pensmith add`, an entry edited by hand) is removed or rewritten.
 //
 // D-12 LOCKED prompt slugs: 'topic-disambiguator' + 'source-evaluator'.
-// D-15 LOCKED ordering: crossCheckRetractions BEFORE writeBibtex.
-// D-19 LOCKED chokepoint: bib output goes through writeBibtex (citation-js).
-// D-20 LOCKED chokepoint: canonical .bib path is `.paper/CITATIONS.bib`.
 // T-11-10: malformed LLM JSON → WARN + fallback, never a crash.
 // T-11-12: key value never logged here — complete() owns the no-leak header path.
 
@@ -28,9 +28,7 @@ import path from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { z } from 'zod';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { atomicWriteFile } from '../lib/atomic-write.js';
-import { writeBibtex } from '../lib/bibtex-write.js';
-import { writeRis } from '../lib/ris-write.js';
+import { addToLibrary } from '../lib/library.js';
 import { paperDir } from '../lib/paths.js';
 import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
 import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
@@ -38,7 +36,7 @@ import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropi
 import { getProviderApiKey } from '../lib/runtime.js';
 import { ask } from '../lib/prompts.js';
 import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
-import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
+import { runResearchOrchestrator, sourcePreferenceFor } from '../lib/research-orchestrator.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../lib/network-mode.js';
 
 // ---------------------------------------------------------------------------
@@ -293,31 +291,19 @@ export const researchCommand = defineCommand({
       process.stderr.write(
         `pensmith research: WARN — 0 candidates remain after discovery ` +
         `(${candidates.length > 0 ? 'all pruned by approval gate' : 'no results from adapters'}); ` +
-        `writing empty LIBRARY.json.\n`,
+        `nothing added to LIBRARY.json.\n`,
       );
     }
 
-    // crossCheckRetractions runs BEFORE writeBibtex: it marks the candidates
-    // whose own records show a retraction, so the bib carries note = {RETRACTED}.
+    // Each candidate's own record says whether it is retracted; the library
+    // keeps the flag, and CITATIONS.bib carries it as note = {RETRACTED}.
     crossCheckRetractions(finalCandidates);
-
-    // D-19 + D-20 LOCKED: writeBibtex is the SOLE citation-js writer.
-    await writeBibtex(finalCandidates, bibPath);
-    // CITE-05: emit CITATIONS.ris alongside CITATIONS.bib at the SAME call site.
-    await writeRis(finalCandidates, risPath);
-
-    // Write a real LIBRARY.json (no placeholder _note strings).
-    // Content: { $schemaVersion: 1, entries: SourceCandidate[] }
-    const libraryContent = JSON.stringify(
-      { $schemaVersion: 1, entries: finalCandidates },
-      null,
-      2,
-    );
-    await atomicWriteFile(libraryPath, libraryContent);
+    const merged = await addToLibrary(process.cwd(), finalCandidates, { preference: sourcePreferenceFor(discipline) });
+    const added = merged.works.filter((w) => w.status === 'added').length;
 
     process.stdout.write(
-      `pensmith research: wrote LIBRARY.json (${finalCandidates.length} candidate(s)) to ${libraryPath}` +
-      ` and .bib/.ris to ${bibPath} / ${risPath}\n`,
+      `pensmith research: ${added} new, ${merged.works.length - added} already in the library; ` +
+      `wrote ${libraryPath} and ${bibPath} / ${risPath}\n`,
     );
     return {
       ok: true,

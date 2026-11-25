@@ -8,7 +8,7 @@
 // its ISBN-13, so two records of one work share a key however each registry
 // spells it.
 
-import { displayName, parseDisplayName, parsePubmedName, presentNames } from './author-normalize.js';
+import { parseDisplayName, parsePubmedName, presentNames } from './author-normalize.js';
 import { arxivFromDoi, bareArxivId, doiFromLink, isbnsIn, normalizeDoi, normalizeIsbn, normalizePmcid, normalizePmid } from './doi.js';
 import type { CslName, SourceCandidate } from './schemas/source-candidate.js';
 import type { LibraryItem, Provenance } from './schemas/library.js';
@@ -51,9 +51,10 @@ export function identityKeys(ids: IdFields): string[] {
   return out;
 }
 
-/** The identity keys of a research candidate. */
+/** The identity keys of a research candidate: its own, then those of records merged into it. */
 export function candidateIdentities(c: SourceCandidate): string[] {
-  return identityKeys({ doi: c.doi, arxiv: c.arxiv, pmid: c.pmid, pmcid: c.pmcid, isbn: c.isbn });
+  const own = identityKeys({ doi: c.doi, arxiv: c.arxiv, pmid: c.pmid, pmcid: c.pmcid, isbn: c.isbn });
+  return [...new Set([...own, ...(c.also_known_as ?? [])])];
 }
 
 /** The identity keys of a library item: its own identifiers and those recorded for it. */
@@ -93,7 +94,7 @@ export function itemFromCandidate(
     custom: {
       identities: [...new Set([...candidateIdentities(c), ...(opts.identities ?? [])])],
       retracted: c.retracted === true,
-      provenance: [...(opts.provenance ?? [{ source: c.source, id: c.id, at }])],
+      provenance: [...(opts.provenance ?? [{ source: c.source, id: c.id, at }, ...(c.merged_from ?? []).map((m) => ({ ...m, at }))])],
       added_at: at,
     },
   };
@@ -181,10 +182,4 @@ export function itemFromBibEntry(
       added_at: at,
     },
   } as LibraryItem;
-}
-
-/** The first author's display name, for messages ("Vaswani, Ashish"). */
-export function firstAuthor(item: LibraryItem): string {
-  const n = item.author?.[0] ?? item.editor?.[0];
-  return n ? displayName(n) : '';
 }

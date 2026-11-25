@@ -14,6 +14,10 @@
 //     work up by. A work with none of them cannot be verified.
 //   - csl_type, container_title, volume, issue, page, publisher, url: the
 //     bibliographic fields the library item keeps (CSL-JSON names them).
+//   - also_known_as / merged_from: when research merged several records of
+//     one work into this one, the identifiers the others had and where they
+//     came from. They find the work again; only this record's own
+//     identifiers are printed in the bibliography.
 //   - retracted: set from the candidate's own record before it is stored
 //     (bin/lib/sources/retraction-cross-check.ts).
 //   - citekey: provisional; the library assigns the one that is kept
@@ -49,6 +53,8 @@ const BaseFields = {
   page: z.string().min(1).optional(),
   publisher: z.string().min(1).optional(),
   url: z.string().url().optional(),
+  also_known_as: z.array(z.string().min(1)).optional(),
+  merged_from: z.array(z.object({ source: z.string().min(1), id: z.string().min(1) })).optional(),
   year: z.number().int().min(1800).max(2100).optional(),
   doi: z.string().optional(),
   abstract: z.string().optional(),
