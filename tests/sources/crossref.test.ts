@@ -35,3 +35,14 @@ test(`${ADAPTER}.fetchById() parses cassette into SourceCandidate | null (RSCH-0
   const result = await adapter.fetchById('10.0000/test');
   assert.ok(result === null || typeof result === 'object', 'fetchById returns object or null');
 });
+
+// Crossref lists the ENCODE paper's only author as an organization (`name`,
+// no `family`). Dropping such authors left the record with none, so
+// `pensmith add 10.1038/nature11247` found nothing to add.
+test(`${ADAPTER}.fetchById() keeps an organization-only author (recorded ENCODE answer)`, async () => {
+  const { fetchById } = await import('../../bin/lib/sources/crossref.js');
+  const c = await fetchById('10.1038/nature11247');
+  assert.ok(c, 'the recorded Crossref record must become a candidate');
+  assert.deepEqual(c.authors, ['The ENCODE Project Consortium']);
+  assert.equal(c.title, 'An integrated encyclopedia of DNA elements in the human genome');
+});

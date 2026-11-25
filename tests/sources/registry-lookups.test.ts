@@ -9,6 +9,10 @@
 //     the DOI exists but gives nothing to compare, and is not followed.
 //   - Open Library holds only part of the world's books, so a valid ISBN it
 //     does not list is UNRESOLVED, never FABRICATED.
+//   - arXiv and PubMed each say "no such paper" in their own way (an empty
+//     feed or an api/errors entry; an esummary `error` entry). Only that is
+//     not_found, and only that makes an arXiv-only or PMID-only entry
+//     FABRICATED; no answer is UNRESOLVED.
 
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,7 +24,9 @@ import { _resetBucketsForTest } from '../../bin/lib/http.js';
 import { lookupDoi as crossrefLookup } from '../../bin/lib/sources/crossref.js';
 import { lookupDoi as doiOrgLookup } from '../../bin/lib/sources/doi-content.js';
 import { lookupIsbn } from '../../bin/lib/sources/openlibrary.js';
-import { runPass1 } from '../../bin/lib/verify/pass1.js';
+import { fetchById as arxivFetchById, lookupArxiv, search as arxivSearch } from '../../bin/lib/sources/arxiv.js';
+import { lookupPmid } from '../../bin/lib/sources/pubmed.js';
+import { runPass1, type Pass1Result } from '../../bin/lib/verify/pass1.js';
 
 const ENV_KEYS = ['PENSMITH_TEST_CASSETTES', 'PENSMITH_OFFLINE', 'PENSMITH_CONTACT_EMAIL', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'HOME'];
 const savedEnv: Record<string, string | undefined> = {};
@@ -135,4 +141,157 @@ test('Pass 1: a valid ISBN Open Library does not list is UNRESOLVED, not FABRICA
   const [r] = await runPass1('# S\n\nA claim [@doe1990].\n', bibPath);
   assert.equal(r?.verdict, 'UNRESOLVED', r?.reason);
   assert.match(r!.reason, /Open Library has no record of ISBN 978-0-306-40615-7/);
+});
+
+// ---------------------------------------------------------------------------
+//   arXiv and PubMed: "no such paper" versus "no answer"
+// ---------------------------------------------------------------------------
+
+const ATOM = { 'content-type': 'application/atom+xml; charset=utf-8' };
+const JSON_HEADERS = { 'content-type': 'application/json' };
+
+// The head of the feed arXiv sends (as in the recorded id_list=1706.03762
+// answer), with no entry: arXiv's answer for an ID it does not hold.
+const ARXIV_EMPTY_FEED = `<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/empty</id>
+  <title>arXiv Query: search_query=&amp;id_list=2501.99999&amp;start=0&amp;max_results=10</title>
+  <opensearch:itemsPerPage>10</opensearch:itemsPerPage>
+  <opensearch:totalResults>0</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+</feed>`;
+
+// arXiv's error feed: one entry whose id is an api/errors link, titled
+// "Error" and "written" by "arXiv api core". It is not a paper.
+const arxivErrorFeed = (id: string): string => `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title type="html">ArXiv Query: search_query=&amp;id_list=${id}&amp;start=0&amp;max_results=10</title>
+  <id>http://arxiv.org/api/errors</id>
+  <opensearch:totalResults xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">1</opensearch:totalResults>
+  <entry>
+    <id>http://arxiv.org/api/errors#incorrect_id_format_for_${id}</id>
+    <title>Error</title>
+    <summary>incorrect id format for ${id}</summary>
+    <updated>2026-11-25T00:00:00-05:00</updated>
+    <author>
+      <name>arXiv api core</name>
+    </author>
+  </entry>
+</feed>`;
+
+/** Answer GET export.arxiv.org/api/query?id_list=<id> (and only that) with `status` and `body`. */
+function arxivAnswers(id: string, status: number, body: string): void {
+  agent.get('https://export.arxiv.org')
+    .intercept({ path: (p) => p === `/api/query?id_list=${encodeURIComponent(id)}`, method: 'GET' })
+    .reply(status, body, { headers: ATOM })
+    .persist();
+}
+
+/** Answer GET eutils esummary for `pmid` (and only that) with `status` and `body`. */
+function pubmedAnswers(pmid: string, status: number, body: string): void {
+  agent.get('https://eutils.ncbi.nlm.nih.gov')
+    .intercept({
+      path: (p) => p.startsWith('/entrez/eutils/esummary.fcgi?') && p.includes(`id=${pmid}&`),
+      method: 'GET',
+    })
+    .reply(status, body, { headers: JSON_HEADERS })
+    .persist();
+}
+
+// esummary's answer for a PMID that does not exist.
+const pubmedNoSuchId = (pmid: string): string => JSON.stringify({
+  header: { type: 'esummary', version: '0.3' },
+  result: { uids: [pmid], [pmid]: { uid: pmid, error: 'cannot get document summary' } },
+});
+
+test('arXiv: an empty feed is not_found', async () => {
+  arxivAnswers('2501.99999', 200, ARXIV_EMPTY_FEED);
+  assert.deepEqual(await lookupArxiv('2501.99999'), { kind: 'not_found', registry: 'arXiv', authoritative: true });
+});
+
+test('arXiv: a 400 whose feed holds an api/errors entry is not_found', async () => {
+  arxivAnswers('2501.9999x', 400, arxivErrorFeed('2501.9999x'));
+  assert.deepEqual(await lookupArxiv('2501.9999x'), { kind: 'not_found', registry: 'arXiv', authoritative: true });
+});
+
+test('arXiv: a 503 that outlasts the retries is unavailable, not not_found', { timeout: 90_000 }, async () => {
+  // Every retry waits for arXiv's one request in three seconds: about 12 s.
+  arxivAnswers('2501.00001', 503, 'Service Unavailable');
+  assert.deepEqual(await lookupArxiv('2501.00001'), { kind: 'unavailable', registry: 'arXiv', detail: 'HTTP 503' });
+});
+
+test('arXiv: search and fetchById do not read the error entry as a paper', async () => {
+  arxivAnswers('2501.9999y', 200, arxivErrorFeed('2501.9999y'));
+  assert.equal(await arxivFetchById('2501.9999y'), null);
+  _resetBucketsForTest();
+  agent.get('https://export.arxiv.org')
+    .intercept({ path: (p) => p.startsWith('/api/query?search_query='), method: 'GET' })
+    .reply(200, arxivErrorFeed('bad'), { headers: ATOM });
+  assert.deepEqual(await arxivSearch('tidal heating'), []);
+});
+
+test('PubMed: an esummary error entry for the PMID is not_found', async () => {
+  pubmedAnswers('39999999', 200, pubmedNoSuchId('39999999'));
+  assert.deepEqual(await lookupPmid('39999999'), { kind: 'not_found', registry: 'PubMed', authoritative: true });
+});
+
+test('PubMed: a 503 that outlasts the retries is unavailable, not not_found', { timeout: 60_000 }, async () => {
+  pubmedAnswers('39999998', 503, 'Service Unavailable');
+  assert.deepEqual(await lookupPmid('39999998'), { kind: 'unavailable', registry: 'PubMed', detail: 'HTTP 503' });
+});
+
+test('PubMed: an error about the request rather than the PMID is unavailable, not not_found', async () => {
+  // E-utilities report a refused request (a rate limit, a bad parameter) as a
+  // top-level `error`; it says nothing about whether the PMID exists.
+  pubmedAnswers('39999997', 200, JSON.stringify({ error: 'API rate limit exceeded', count: '4', limit: '3' }));
+  const r = await lookupPmid('39999997');
+  assert.equal(r.kind, 'unavailable');
+  assert.match(r.kind === 'unavailable' ? r.detail : '', /API rate limit exceeded/);
+});
+
+/** The Pass-1 verdict for the one entry of `bib`, cited once. */
+async function pass1For(bib: string): Promise<Pass1Result> {
+  const key = /^@\w+\{([^,]+),/m.exec(bib)![1]!;
+  const root = mkdtempSync(path.join(tmpdir(), 'pensmith-pass1-live-'));
+  mkdirSync(path.join(root, '.paper'), { recursive: true });
+  const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
+  writeFileSync(bibPath, bib);
+  const [r] = await runPass1(`# S\n\nA claim [@${key}].\n`, bibPath);
+  assert.ok(r, `no verdict for ${key}`);
+  return r;
+}
+
+const arxivOnly = (eprint: string): string =>
+  `@misc{roe2025,\n  title = {Tidal Heating in Icy Moons},\n  author = {Roe, Jane},\n  year = {2025},\n  eprint = {${eprint}},\n  archivePrefix = {arXiv}\n}\n`;
+const pmidOnly = (pmid: string): string =>
+  `@article{roe2019,\n  title = {Tidal Heating in Icy Moons},\n  author = {Roe, Jane},\n  year = {2019},\n  journal = {Icarus},\n  pmid = {${pmid}}\n}\n`;
+
+test('Pass 1: an arXiv-only entry arXiv has no record of is FABRICATED', async () => {
+  arxivAnswers('2501.99999', 200, ARXIV_EMPTY_FEED);
+  const r = await pass1For(arxivOnly('2501.99999'));
+  assert.equal(r.verdict, 'FABRICATED', r.reason);
+  assert.match(r.reason, /arXiv:2501\.99999 is not registered \(arXiv has no record of it\)/);
+});
+
+test('Pass 1: an arXiv-only entry is UNRESOLVED, not FABRICATED, when arXiv does not answer', async () => {
+  agent.get('https://export.arxiv.org')
+    .intercept({ path: (p) => p.startsWith('/api/query?id_list='), method: 'GET' })
+    .replyWithError(new Error('socket hang up'));
+  const r = await pass1For(arxivOnly('2501.99999'));
+  assert.equal(r.verdict, 'UNRESOLVED', r.reason);
+  assert.match(r.reason, /arXiv:2501\.99999 could not be checked \(arXiv: /);
+});
+
+test('Pass 1: a PMID-only entry PubMed has no record of is FABRICATED', async () => {
+  pubmedAnswers('39999999', 200, pubmedNoSuchId('39999999'));
+  const r = await pass1For(pmidOnly('39999999'));
+  assert.equal(r.verdict, 'FABRICATED', r.reason);
+  assert.match(r.reason, /PMID 39999999 is not registered \(PubMed has no record of it\)/);
+});
+
+test('Pass 1: a PMID-only entry is UNRESOLVED, not FABRICATED, when PubMed does not answer', { timeout: 60_000 }, async () => {
+  pubmedAnswers('39999998', 503, 'Service Unavailable');
+  const r = await pass1For(pmidOnly('39999998'));
+  assert.equal(r.verdict, 'UNRESOLVED', r.reason);
+  assert.match(r.reason, /PMID 39999998 could not be checked \(PubMed: HTTP 503\)/);
 });

@@ -159,7 +159,9 @@ function pubmedName(a: PubmedAuthor): WorkName | null {
 
 /**
  * Ask PubMed for the article with `pmid`. esummary answers an unknown PMID
- * with an `error` entry, which is not_found; any other failure is unavailable.
+ * with an `error` entry under that PMID, which is not_found. A top-level
+ * `error` is about the request (a rate limit, a refused parameter), not the
+ * PMID, so it is unavailable like any other failure.
  */
 export async function lookupPmid(pmid: string): Promise<Lookup> {
   const url = `${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`;
@@ -173,7 +175,7 @@ export async function lookupPmid(pmid: string): Promise<Lookup> {
   let rec: PubmedRecord | undefined;
   try {
     const body = JSON.parse(res.body) as EsummaryResponse & { error?: string };
-    if (typeof body.error === 'string') return { kind: 'not_found', registry: 'PubMed', authoritative: true };
+    if (typeof body.error === 'string') return { kind: 'unavailable', registry: 'PubMed', detail: body.error.slice(0, 120) };
     rec = recordsFromEsummary(body, [pmid])[0];
   } catch {
     rec = undefined;
