@@ -241,6 +241,28 @@ const BIBTEX_ESCAPES: Readonly<Record<string, string>> = {
 const RICH_TEXT_TAG = /(<\/?(?:i|b|sc|sup|sub|span)(?:\s[^>]*)?>)/;
 // Fields citation-js writes as they are (identifiers, DOI, URL).
 const VERBATIM_CSL_FIELDS: ReadonlySet<string> = new Set(['id', 'citation-key', 'type', 'DOI', 'URL']);
+const TITLE_CSL_FIELDS: ReadonlySet<string> = new Set([
+  'title', 'title-short', 'container-title', 'container-title-short', 'collection-title', 'event-title',
+]);
+
+/**
+ * Pandoc lowercases title words that are not in braces when a style asks
+ * for sentence case. citation-js braces a word with a capital A-Z; a word
+ * whose capital is any other letter (Łódź, Ελλάδα, России) is marked as
+ * no-case here, which citation-js writes as braces too.
+ */
+function protectTitleCase(s: string): string {
+  return s
+    .split(RICH_TEXT_TAG)
+    .map((part, i) =>
+      i % 2 === 1
+        ? part
+        : part.replace(/[\p{L}\p{M}\p{N}]+/gu, (w) =>
+            !/[A-Z]/.test(w) && /\p{Lu}|\p{Lt}/u.test(w) ? `<span class="nocase">${w}</span>` : w,
+          ),
+    )
+    .join('');
+}
 
 function escapeBibtexText(s: string): string {
   return s
@@ -265,7 +287,12 @@ function escapeBibtexValue(v: unknown): unknown {
 export function formatBibtex(entries: ReadonlyArray<Record<string, unknown>>): string {
   if (entries.length === 0) return '';
   const prepared = entries.map((e) =>
-    Object.fromEntries(Object.entries(e).map(([k, v]) => [k, VERBATIM_CSL_FIELDS.has(k) ? v : escapeBibtexValue(v)])),
+    Object.fromEntries(
+      Object.entries(e).map(([k, v]) => {
+        if (VERBATIM_CSL_FIELDS.has(k)) return [k, v];
+        return [k, escapeBibtexValue(TITLE_CSL_FIELDS.has(k) && typeof v === 'string' ? protectTitleCase(v) : v)];
+      }),
+    ),
   );
   const config = plugins.config.get('@bibtex').format;
   const asciiOnly = config.asciiOnly;

@@ -20,11 +20,11 @@ import { compiledPaper, needsTool, runCli } from './lib/export-fixture.js';
 
 const BIB = [
   '@book{zh2019, author = {张, 伟}, title = {潮汐 Barrages}, publisher = {Press}, year = {2019}}',
-  '@article{ru2018, author = {Иванов, Иван}, title = {Приливы и отливы}, journal = {Вестник}, year = {2018}}',
-  '@article{gr2017, author = {Παπαδόπουλος, Γιώργος}, title = {Παλίρροιες}, journal = {J}, year = {2017}}',
+  '@article{ru2018, author = {Иванов, Иван}, title = {Приливы и отливы в России}, journal = {Вестник}, year = {2018}}',
+  '@article{gr2017, author = {Παπαδόπουλος, Γιώργος}, title = {Παλίρροιες της Ελλάδας}, journal = {J}, year = {2017}}',
   '@article{ar2016, author = {علي, أحمد}, title = {المد والجزر}, journal = {J}, year = {2016}}',
   // Latin letters with diacritics and LaTeX's special characters must survive too.
-  '@article{pl2015, author = {Łukasz, Żółć and {World Health Organization}}, title = {Pływy \\& Tides: 100\\% of \\#1 \\_data \\$5}, journal = {A \\& B}, year = {2015}, doi = {10.1000/a_b}, url = {https://example.org/a_b%20c}}',
+  '@article{pl2015, author = {Łukasz, Żółć and {World Health Organization}}, title = {Pływy w Łodzi \\& Tides: 100\\% of \\#1 \\_data \\$5}, journal = {A \\& B}, year = {2015}, doi = {10.1000/a_b}, url = {https://example.org/a_b%20c}}',
   '',
 ].join('\n');
 
@@ -59,7 +59,7 @@ test('the exported CITATIONS.bib keeps non-Latin names and titles and LaTeX spec
     }
   }
   // The non-Latin text is stored as text, not as LaTeX math or empty braces.
-  for (const s of ['张', '潮汐', 'Иванов', 'Приливы', 'Παπαδόπουλος', 'Παλίρροιες', 'علي', 'المد والجزر', 'Łukasz']) {
+  for (const s of ['张', '潮汐', 'Иванов', 'Приливы', 'России', 'Παπαδόπουλος', 'Παλίρροιες', 'Ελλάδας', 'علي', 'المد والجزر', 'Łukasz', 'Łodzi']) {
     assert.ok(exportedText.includes(s), `${s} is not in the exported .bib:\n${exportedText}`);
   }
   assert.doesNotMatch(exportedText, /\$\\[A-Za-z]+\$/, 'no math-mode letters');
@@ -76,7 +76,8 @@ test('done --format docx with real Pandoc cites and lists non-Latin works in ful
   for (const family of ['张', 'Иванов', 'Παπαδόπουλος', 'علي', 'Łukasz']) {
     assert.ok(cite.includes(family), `the citation does not name ${family}: (${cite})\n${text}`);
   }
-  for (const title of ['潮汐', 'Приливы и отливы', 'Παλίρροιες', 'المد والجزر', 'Pływy & Tides: 100% of #1 _data $5']) {
+  // Capitals inside a title stay capitals in a sentence-case style (APA), in any script.
+  for (const title of ['潮汐', 'Приливы и отливы в России', 'Παλίρροιες της Ελλάδας', 'المد والجزر', 'Pływy w Łodzi & Tides: 100% of #1 _data $5']) {
     assert.ok(text.includes(title), `the reference list does not show ${title}:\n${text}`);
   }
 });
