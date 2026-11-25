@@ -40,13 +40,13 @@ import {
   type ExportFormat,
 } from '../lib/exporter.js';
 import { paperDir } from '../lib/paths.js';
-import { parseBibtex } from '../lib/citations.js';
+import { parseBibOrEmpty } from '../lib/citations.js';
 import { resolveCitationStyle } from '../lib/citation-style.js';
 import { isPandocPresent } from '../lib/ecosystem-presence.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
-import { extractCitekeys } from '../lib/citation-token.js';
-import { BLOCKING_VERDICT_LIST, parseVerdictRows } from '../lib/verify/verdict-rows.js';
+import { citedKeys, findCitations, findRawCitations, findUnparseableCitations } from '../lib/citation-grammar.js';
+import { BLOCKING_VERDICT_LIST, describeVerdictRow, parseVerdictRowDetails } from '../lib/verify/verdict-rows.js';
 import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderFile, isPlaceholderText } from '../lib/placeholder.js';
 
@@ -294,9 +294,9 @@ export function runExportBlockingGate(paperRoot: string, compiledText?: string):
       reasons.push(`section ${name}: VERIFICATION.md Status is 'failed'`);
     }
     // Blocking verdicts — same parser + blocking set compile uses.
-    for (const ck of parseVerdictRows(md)) {
+    for (const row of parseVerdictRowDetails(md).filter((r) => r.blocking)) {
       reasons.push(
-        `section ${name}: citation [@${ck}] has a blocking verdict (${BLOCKING_VERDICT_LIST})`,
+        `section ${name}: ${describeVerdictRow(row)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`,
       );
     }
   }
@@ -464,15 +464,21 @@ export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
 // GATE-04 reCheckFinalMd — re-verify the humanized FINAL.md before export
 // ---------------------------------------------------------------------------
 
+/** The citations of `md` that are not Pandoc citations: raw identifiers and broken brackets. */
+function nonPandocCitations(md: string): string[] {
+  const cites = findCitations(md);
+  return [...findRawCitations(md, cites), ...findUnparseableCitations(md, cites)].map((c) => c.raw);
+}
+
 /**
  * Re-verify the humanized FINAL.md immediately before export (GATE-04).
  *
- * (a) Citekey-set diff: the set of [@key] tokens in finalMd MUST equal the
- *     set in draftMd. Any add/drop/swap is a HARD block.
- * (b) Pass-3 quote re-check on finalMd: absent or empty bib → skip-clean
- *     (no quotes to check); else build bibByCitekey from the FULL CITATIONS.bib
- *     (Pitfall 4 — NOT filtered by DRAFT keys) and run runPass3. Any NOT_FOUND
- *     verdict → HARD block.
+ * (a) Citation diff: the keys FINAL.md cites, in any Pandoc form, MUST equal
+ *     the keys draftMd cites, and FINAL.md must not add a citation typed as
+ *     text or a broken one. Any add/drop/swap is a HARD block.
+ * (b) Pass-3 quote re-check on finalMd against the FULL CITATIONS.bib
+ *     (Pitfall 4 — NOT filtered by DRAFT keys); an absent or empty bib is an
+ *     empty library. Any NOT_FOUND or UNATTRIBUTED quote → HARD block.
  *
  * Never throws. Returns { passed: boolean; reason: string }.
  */
@@ -481,38 +487,45 @@ export async function reCheckFinalMd(
   draftMd: string,
   bibPath: string,
 ): Promise<{ passed: boolean; reason: string }> {
-  // Step (a): citekey-set diff (runs FIRST — Pitfall 5).
-  const finalKeys = new Set(extractCitekeys(finalMd));
-  const draftKeys = new Set(extractCitekeys(draftMd));
+  // Step (a): citation diff (runs FIRST — Pitfall 5).
+  const finalKeys = new Set(citedKeys(findCitations(finalMd)));
+  const draftKeys = new Set(citedKeys(findCitations(draftMd)));
 
   const added = [...finalKeys].filter((k) => !draftKeys.has(k));
   const dropped = [...draftKeys].filter((k) => !finalKeys.has(k));
+  const draftRaw = nonPandocCitations(draftMd);
+  const addedRaw = nonPandocCitations(finalMd).filter((r) => {
+    const i = draftRaw.indexOf(r);
+    if (i === -1) return true;
+    draftRaw.splice(i, 1);
+    return false;
+  });
 
-  if (added.length > 0 || dropped.length > 0) {
+  if (added.length > 0 || dropped.length > 0 || addedRaw.length > 0) {
     const parts: string[] = [];
     if (added.length > 0) parts.push(`added: [${added.join(', ')}]`);
     if (dropped.length > 0) parts.push(`dropped: [${dropped.join(', ')}]`);
+    if (addedRaw.length > 0) parts.push(`added text that is not a [@key] citation: [${addedRaw.join(', ')}]`);
     return {
       passed: false,
       reason: `citekey-set mismatch after humanization — ${parts.join('; ')}`,
     };
   }
 
-  // Step (b): Pass-3 quote re-check only when citekey sets match.
-  // Absent or empty bib → skip-clean (no quotes to check).
-  let bibText: string;
+  // Step (b): Pass-3 quote re-check only when the citations match. An absent
+  // or empty bib is an empty library: a quotation that lost its citation is
+  // still caught.
+  let bibText = '';
   try {
-    if (!existsSync(bibPath)) return { passed: true, reason: '' };
-    bibText = readFileSync(bibPath, 'utf8');
+    if (existsSync(bibPath)) bibText = readFileSync(bibPath, 'utf8');
   } catch {
-    return { passed: true, reason: '' };
+    bibText = '';
   }
-  if (bibText.trim().length === 0) return { passed: true, reason: '' };
 
   // Build bibByCitekey from the FULL CITATIONS.bib (Pitfall 4).
   let bibByCitekey: Map<string, { DOI?: string }>;
   try {
-    const bibEntries = await parseBibtex(bibText);
+    const bibEntries = await parseBibOrEmpty(bibText);
     bibByCitekey = new Map(
       bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
     );
@@ -541,14 +554,14 @@ export async function reCheckFinalMd(
     };
   }
 
-  const notFound = pass3Results.filter((r) => r.verdict === 'NOT_FOUND');
+  const notFound = pass3Results.filter((r) => r.verdict === 'NOT_FOUND' || r.verdict === 'UNATTRIBUTED');
   if (notFound.length > 0) {
     const detail = notFound
-      .map((r) => `[@${r.citekey}] "${r.quoteSnippet}"`)
+      .map((r) => `${r.verdict === 'UNATTRIBUTED' ? 'no citation' : `[@${r.citekey}]`} "${r.quoteSnippet}"`)
       .join('; ');
     return {
       passed: false,
-      reason: `Pass-3 quote NOT_FOUND in humanized FINAL.md: ${detail}`,
+      reason: `Pass-3 quote ${[...new Set(notFound.map((r) => r.verdict))].join('/')} in humanized FINAL.md: ${detail}`,
     };
   }
 
