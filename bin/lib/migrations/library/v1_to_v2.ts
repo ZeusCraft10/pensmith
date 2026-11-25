@@ -1,7 +1,8 @@
 // bin/lib/migrations/library/v1_to_v2.ts — LIBRARY.json v1 → v2.
 //
 // v1 held research candidates as the adapters returned them: display-string
-// authors ("Ashish Vaswani", "Wakefield AJ"), a DOI, and a citekey. v2 holds
+// authors ("Ashish Vaswani", "Wakefield AJ"), a DOI, and a citekey (an arXiv
+// or PubMed candidate's id is its arXiv ID or PMID). v2 holds
 // CSL-JSON items (bin/lib/schemas/library.ts). Each v1 entry becomes an item
 // under the same citekey, its authors read back into name objects the way
 // its adapter writes them. An entry with no title or no citekey (the shape of
@@ -13,6 +14,7 @@
 // the library reads them in from the bibliography the first time it writes
 // (bin/lib/library.ts), keeping each entry's text as it was.
 
+import { bareArxivId, normalizePmid } from '../../doi.js';
 import { itemFromCandidate } from '../../library-item.js';
 import type { LibraryItem } from '../../schemas/library.js';
 import type { SourceCandidate } from '../../schemas/source-candidate.js';
@@ -34,9 +36,15 @@ function migrateEntry(raw: unknown, now: string): LibraryItem | null {
   const source = str(e['source']) ?? 'crossref';
   const authors = Array.isArray(e['authors']) ? e['authors'].filter((a): a is string => typeof a === 'string' && a.trim() !== '') : [];
   const year = typeof e['year'] === 'number' && Number.isInteger(e['year']) ? e['year'] : undefined;
+  // v1 kept no arXiv ID or PMID, but an arXiv or PubMed candidate's own id is one.
+  const id = str(e['id']) ?? citekey;
+  const arxiv = source === 'arxiv' ? bareArxivId(/\/abs\/(.+)$/.exec(id)?.[1] ?? id) : null;
+  const pmid = source === 'pubmed' ? normalizePmid(id) : null;
   const candidate = {
     source,
-    id: str(e['id']) ?? citekey,
+    id,
+    ...(arxiv ? { arxiv } : {}),
+    ...(pmid ? { pmid } : {}),
     title,
     authors,
     ...(year !== undefined ? { year } : {}),

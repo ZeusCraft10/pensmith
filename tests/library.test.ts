@@ -141,17 +141,20 @@ test('a v1 LIBRARY.json (research candidates) migrates to v2 items under the sam
     entries: [
       { source: 'openalex', id: 'https://openalex.org/W1', title: 'Attention Is All You Need', authors: ['Ashish Vaswani', 'Noam Shazeer'], year: 2017, doi: '10.48550/arxiv.1706.03762', retracted: false, last_verified: AT, citekey: 'vaswani2017', raw: { big: true } },
       { source: 'pubmed', id: '9500320', title: 'Ileal-lymphoid-nodular hyperplasia', authors: ['Wakefield AJ'], year: 1998, retracted: true, last_verified: AT, citekey: 'aj1998', raw: null },
+      { source: 'arxiv', id: 'http://arxiv.org/abs/1810.04805v2', title: 'BERT', authors: ['Jacob Devlin'], year: 2018, retracted: false, last_verified: AT, citekey: 'devlin2018', raw: null },
     ],
   };
   fs.writeFileSync(path.join(root, '.paper', 'LIBRARY.json'), JSON.stringify(v1));
   const lib = await loadLibrary(root);
   assert.equal(lib.$schemaVersion, 2);
-  assert.deepEqual(lib.entries.map((e) => e.id), ['vaswani2017', 'aj1998'], 'citekeys a draft may cite are kept');
+  assert.deepEqual(lib.entries.map((e) => e.id), ['vaswani2017', 'aj1998', 'devlin2018'], 'citekeys a draft may cite are kept');
   assert.deepEqual(lib.entries[0]!.author, [{ family: 'Vaswani', given: 'Ashish' }, { family: 'Shazeer', given: 'Noam' }]);
   assert.deepEqual(lib.entries[1]!.author, [{ family: 'Wakefield', given: 'A. J.' }]);
   assert.equal(lib.entries[1]!.custom.retracted, true);
+  assert.equal(lib.entries[1]!.PMID, '9500320', 'a PubMed candidate\'s id is its PMID');
+  assert.equal(lib.entries[2]!.custom.arxiv, '1810.04805', 'an arXiv candidate\'s id is its arXiv ID');
   assert.equal((lib.entries[0] as Record<string, unknown>)['raw'], undefined, 'the adapter payload is not stored');
-  assert.deepEqual(readLibrarySync(root)?.entries.map((e) => e.id), ['vaswani2017', 'aj1998']);
+  assert.deepEqual(readLibrarySync(root)?.entries.map((e) => e.id), ['vaswani2017', 'aj1998', 'devlin2018']);
 });
 
 test('a newer LIBRARY.json than this build supports is refused, not misread', async () => {
