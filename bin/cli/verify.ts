@@ -27,7 +27,7 @@ import { runPass1, runFreshnessForDraft, renderFreshnessTable } from '../lib/ver
 import { runPass3 } from '../lib/verify/pass3.js';
 import { runPass2, renderPass2Section } from '../lib/verify/pass2.js';
 import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
-import { parseBibtex } from '../lib/citations.js';
+import { parseBibOrEmpty } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir } from '../lib/paths.js';
 import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
@@ -109,29 +109,11 @@ export const verifyCommand = defineCommand({
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
 
-    // Empty / no-entry CITATIONS.bib is a valid Tier-2 placeholder state
-    // (research wrote an empty bib because no citations have been authored
-    // yet). parseBib throws on empty input per T-3-04 strict-parse mitigation,
-    // so we short-circuit here to "unverifiable: no citations to verify"
-    // rather than letting verify crash mid-pipeline. The DRAFT.md (read above)
-    // is checked BEFORE the short-circuit so a draft with [@citekey] tokens
-    // against an empty bib still falls through to runPass1 (which will flag
-    // each as FABRICATED) — only the bib-empty + draft-citation-free
-    // intersection gets the short-circuit.
-    const bibText = readFileSync(bibPath, 'utf8');
-    const draftHasCitekeys = /\[@[a-z][a-z0-9_-]*\]/i.test(draftMd);
-    const bibIsEmpty = bibText.trim().length === 0;
-    if (bibIsEmpty && !draftHasCitekeys) {
-      await atomicWriteFile(
-        verifPath,
-        statusOnly('unverifiable', 'CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify (Tier-2 placeholder state).'),
-      );
-      process.stdout.write(`pensmith verify: empty bib + no draft citekeys — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
-      return { ok: false, status: 'unverifiable', path: verifPath };
-    }
-
+    // An empty CITATIONS.bib (research found nothing yet) is an empty library:
+    // Pass 1 still runs, and every key the draft cites is FABRICATED.
+    const bibIsEmpty = readFileSync(bibPath, 'utf8').trim().length === 0;
     const pass1 = await runPass1(draftMd, bibPath);
-    const bibEntries = await parseBibtex(readFileSync(bibPath, 'utf8'));
+    const bibEntries = await parseBibOrEmpty(readFileSync(bibPath, 'utf8'));
     // Widened value type (additive): carries title/author/abstract so Pass 2
     // (claim support) has source metadata. runPass3 reads only DOI, so the
     // widening is backward-compatible with the runPass3 call below.
@@ -153,9 +135,12 @@ export const verifyCommand = defineCommand({
 
     // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
     // any PDF_UNAVAILABLE/TEXT_UNAVAILABLE → status: unverifiable; else verified.
+    // A draft that cites nothing against an empty library has nothing to
+    // check: unverifiable, as before, but recorded like any other verdict.
     const hasFail = pass1.some((r) => r.verdict !== 'OK')
-      || pass3.some((r) => r.verdict === 'NOT_FOUND');
-    const hasUnverifiable = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
+      || pass3.some((r) => r.verdict === 'NOT_FOUND' || r.verdict === 'UNATTRIBUTED');
+    const hasUnverifiable = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE')
+      || (bibIsEmpty && pass1.length === 0 && pass3.length === 0);
     const status: 'verified' | 'failed' | 'unverifiable' = hasFail
       ? 'failed'
       : (hasUnverifiable ? 'unverifiable' : 'verified');
@@ -230,11 +215,11 @@ export const verifyCommand = defineCommand({
       // A blocking verdict: compile and done will refuse this section.
       process.exitCode = EXIT_REFUSED;
     } else if (status === 'unverifiable') {
-      // Does not block yet, but a quote nobody could check must not look clean.
-      process.stderr.write(
-        `pensmith verify: WARN — section ${n} has quote(s) that could not be checked against source text; ` +
-        `see ${verifPath}.\n`,
-      );
+      // Does not block yet, but what nobody could check must not look clean.
+      const what = pass3.length > 0
+        ? 'has quote(s) that could not be checked against source text'
+        : 'cites nothing, and CITATIONS.bib is empty';
+      process.stderr.write(`pensmith verify: WARN — section ${n} ${what}; see ${verifPath}.\n`);
     }
     return { ok: status !== 'failed', status, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
   },

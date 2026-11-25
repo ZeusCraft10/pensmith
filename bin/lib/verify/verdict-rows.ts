@@ -10,12 +10,26 @@
 // change will break the round-trip test (tests/verdict-rows.test.ts) rather
 // than silently nulling the blocking set.
 
-/** Verdicts that block compile and export. UNRESOLVED means the registry was
- *  not consulted (offline) — an unchecked citation never passes. */
-const BLOCKING_VERDICTS = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNRESOLVED']);
+/**
+ * Verdicts that block compile and export. UNRESOLVED means the registry was
+ * not consulted (offline): an unchecked citation never passes. RAW_CITATION is
+ * a DOI, arXiv ID, PMID or author-year citation typed as text, UNPARSEABLE a
+ * bracketed citation with no key that parses, and UNATTRIBUTED a long direct
+ * quotation with no citation: none of them can be checked until it is
+ * written as a `[@key]` citation.
+ */
+const BLOCKING_VERDICTS = new Set([
+  'FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE', 'UNATTRIBUTED',
+]);
 
-/** The blocking verdicts as refusal text: `FABRICATED/MIS-CITED/NOT_FOUND/UNRESOLVED`. */
+/** Verdicts on text that is not a `[@key]` citation, so the row's key is that text. */
+const TEXT_VERDICTS: ReadonlySet<string> = new Set(['RAW_CITATION', 'UNPARSEABLE', 'UNATTRIBUTED']);
+
+/** The blocking verdicts as refusal text: `FABRICATED/MIS-CITED/...`. */
 export const BLOCKING_VERDICT_LIST = [...BLOCKING_VERDICTS].join('/');
+
+/** The key a Pass-3 row carries for a quotation that cites nothing. */
+export const NO_CITATION_KEY = '(no citation)';
 
 /**
  * Render a Pass-1 verdict row (writer side — verify.ts).
@@ -51,40 +65,55 @@ export function renderPass3VerdictRow(
   return `- ${citekey} ("${quoteSnippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}`;
 }
 
-/**
- * Parse all failing citekeys from a VERIFICATION.md body (parser side — compile.ts).
- *
- * Matches list-item verdict rows in two forms:
- *   Pass-1: - citekey: **VERDICT** — titleJW=…, authorJW=… — reason
- *   Pass-3: - citekey ("quote…"): **VERDICT** — lev=… — reason
- *
- * The `^\s*-\s*` anchor excludes pipe-delimited table rows (| citekey | ...) so
- * the Source Freshness table (RSCH-10) does NOT pollute the blocking set (Pitfall 2).
- *
- * Returns only citekeys whose verdict is in BLOCKING_VERDICTS (FABRICATED / MIS-CITED /
- * NOT_FOUND / UNRESOLVED). Safe to call on any string, including ''.
- */
-export function parseVerdictRows(verificationMd: string): string[] {
-  const out: string[] = [];
+/** One verdict row of a VERIFICATION.md body. */
+export interface VerdictRow {
+  /** The citekey, or for RAW_CITATION / UNPARSEABLE / UNATTRIBUTED the text it is about. */
+  citekey: string;
+  verdict: string;
+  /** Everything after the bold verdict, without its leading dash. */
+  detail: string;
+  blocking: boolean;
+}
+
+// `- <key>: **VERDICT** <detail>` (Pass 1) and `- <key> ("<quote>…"): **VERDICT**
+// <detail>` (Pass 3). The key runs up to its delimiter, so every Pandoc key
+// character (`.`, `/`, `:`, `+` ...) is kept. A row is Pass 3 when ` ("` comes
+// before the first `: **`; a quote snippet may itself hold `: **`, so a Pass-3
+// row takes the bold verdict after the last `"): `. The `^\s*-\s*` anchor
+// leaves the pipe tables of the advisory sections alone.
+const PASS3_ROW = /^\s*-\s*(.+?) \(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
+const PASS1_ROW = /^\s*-\s*(.+?):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
+
+/** Every Pass-1 and Pass-3 verdict row in `verificationMd`, in order. Safe on any string. */
+export function parseVerdictRowDetails(verificationMd: string): VerdictRow[] {
+  const out: VerdictRow[] = [];
   for (const line of verificationMd.split(/\r?\n/)) {
-    // `- <citekey>: **VERDICT**` OR `- <citekey> ("quote…"): **VERDICT**`
-    //
-    // FAIL-CLOSED widening (audit #2/#20): the citekey group is `[A-Za-z0-9]...`
-    // (was `[a-z]...`) so a verdict row produced for an UPPERCASE / mixed-case key
-    // — which the broad verifier extractor (extractCitedKeysForVerification) now
-    // emits — is matched and added to the blocking set. Previously such a row was
-    // silently skipped, so a FABRICATED `[@Vaswani2017]` produced a verdict that
-    // never blocked compile. `:`/`(` are deliberately EXCLUDED from the body so the
-    // `[:(]` delimiter stays unambiguous; for an exotic key containing `:` the body
-    // captures a prefix, which is harmless because compile.ts:272 refuses on ANY
-    // matched blocking row (the exact key text is not used for the refuse decision).
-    // The `^\s*-\s*` anchor still excludes pipe-delimited freshness-table rows.
-    const m = /^\s*-\s*([A-Za-z0-9][A-Za-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*/.exec(line);
+    const quote = line.indexOf(' ("');
+    const colon = line.indexOf(': **');
+    const m = (quote !== -1 && (colon === -1 || quote < colon) ? PASS3_ROW : PASS1_ROW).exec(line);
     if (!m) continue;
-    const citekey = m[1];
-    const verdict = m[2];
-    if (citekey === undefined || verdict === undefined) continue;
-    if (BLOCKING_VERDICTS.has(verdict)) out.push(citekey);
+    const verdict = m[2]!;
+    out.push({
+      citekey: m[1]!.trim(),
+      verdict,
+      detail: m[3]!.replace(/^—\s*/, '').trim(),
+      blocking: BLOCKING_VERDICTS.has(verdict),
+    });
   }
   return out;
+}
+
+/**
+ * Parse the failing citekeys from a VERIFICATION.md body (compile and done).
+ * Returns the key of every row whose verdict blocks, in order.
+ */
+export function parseVerdictRows(verificationMd: string): string[] {
+  return parseVerdictRowDetails(verificationMd).filter((r) => r.blocking).map((r) => r.citekey);
+}
+
+/** How a refusal names what a blocking row is about: `[@key]`, or the quoted text. */
+export function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): string {
+  if (!TEXT_VERDICTS.has(row.verdict)) return `citation [@${row.citekey}]`;
+  if (row.verdict === 'UNATTRIBUTED') return 'a quotation with no citation';
+  return `text "${row.citekey}"`;
 }

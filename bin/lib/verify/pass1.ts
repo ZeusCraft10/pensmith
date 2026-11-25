@@ -25,11 +25,17 @@
 import { jaroWinkler, TITLE_JW_THRESHOLD, AUTHOR_JW_THRESHOLD } from '../fuzzy.js';
 import { firstAuthorSurname } from '../author-normalize.js';
 import { sources } from '../sources/index.js';
-import { parseBibtex } from '../citations.js';
+import { parseBibOrEmpty } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
-import { extractCitedKeysForVerification } from '../citation-token.js';
+import {
+  citedKeys,
+  findCitations,
+  findRawCitations,
+  findUnparseableCitations,
+  type RawCitationKind,
+} from '../citation-grammar.js';
 import { isOfflineMode } from '../network-mode.js';
 
 export type { FreshnessResult } from './freshness.js';
@@ -38,7 +44,11 @@ export { renderFreshnessTable } from './freshness.js';
 // UNRESOLVED: the registry was not (or could not be) consulted, so the
 // citation is neither confirmed nor refuted. It blocks like the others; the fix
 // is to re-run verify with network access.
-export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED' | 'UNRESOLVED';
+// RAW_CITATION: a DOI, arXiv ID, PMID or author-year citation typed as text.
+// UNPARSEABLE: a bracketed citation whose key does not parse. Neither is a
+// citation Pandoc renders from the bibliography, so neither can be checked;
+// both block until rewritten as a `[@key]` citation.
+export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED' | 'UNRESOLVED' | 'RAW_CITATION' | 'UNPARSEABLE';
 
 export interface Pass1Result {
   citekey: string;
@@ -235,37 +245,68 @@ async function verdictForCitekey(
 }
 
 /**
- * CYCLE-2 H-4 canonical Pass-1 signature: read draft + bib, return per-citekey
- * verdicts.
- *
- * Workflow:
- *   1. Parse the BibTeX file into a citekey→entry map.
- *   2. Pull every `[@citekey]` token out of the draft (deduplicated).
- *   3. For each, call verdictForCitekey and collect the result.
+ * The bibliography at `citationsBibPath` by citekey. A file with no entries
+ * (research found nothing yet) is an empty library, not an error: every key a
+ * draft cites is then FABRICATED.
+ */
+async function readBib(citationsBibPath: string): Promise<Map<string, BibEntry>> {
+  const entries = await parseBibOrEmpty(readFileSync(citationsBibPath, 'utf8'));
+  return new Map(entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]));
+}
+
+const RAW_FIX: Readonly<Record<RawCitationKind, string>> = {
+  'doi': 'a DOI typed as text',
+  'arxiv': 'an arXiv ID typed as text',
+  'pmid': 'a PubMed ID typed as text',
+  'author-year': 'an author-year citation typed as text',
+};
+
+/**
+ * Every key `draftMd` cites, in first-appearance order, in any Pandoc form:
+ * clusters with prefixes and locators, `-@key`, and narrative `@key`.
+ */
+export function pass1CitedKeys(draftMd: string): string[] {
+  return citedKeys(findCitations(draftMd));
+}
+
+/**
+ * Pass-1 verdicts for a draft: one per cited key, then one per citation that
+ * is not a Pandoc citation (typed as text, or a key that does not parse).
  *
  * 100% deterministic — no LLM, no narration, no side effects beyond the
- * Crossref HTTP read.
+ * registry reads.
  */
 export async function runPass1(
   draftMd: string,
   citationsBibPath: string,
 ): Promise<Pass1Result[]> {
-  const bibText = readFileSync(citationsBibPath, 'utf8');
-  const entries = await parseBibtex(bibText);
-  const bibByCitekey = new Map<string, BibEntry>(
-    entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]),
-  );
-
-  // FAIL-CLOSED extraction (audit #2/#20): use the BROAD verifier-side detector,
-  // not the narrow lowercase-bare `[@key]` regex. Uppercase, locator ([@k, p. 5]),
-  // and multi-cite ([@a; @b]) citations must each produce a verdict — an
-  // unparseable/out-of-namespace citation is "unverifiable", never "absent". A
-  // key not present in the (lowercase-keyed) bib falls through to FABRICATED.
-  const unique = extractCitedKeysForVerification(draftMd);
+  const bibByCitekey = await readBib(citationsBibPath);
+  const cites = findCitations(draftMd);
+  const narrativeOnly = new Set(citedKeys(cites.filter((c) => c.narrative)));
+  for (const k of citedKeys(cites.filter((c) => !c.narrative))) narrativeOnly.delete(k);
 
   const results: Pass1Result[] = [];
-  for (const ck of unique) {
-    results.push(await verdictForCitekey(ck, bibByCitekey.get(ck)));
+  for (const ck of citedKeys(cites)) {
+    const r = await verdictForCitekey(ck, bibByCitekey.get(ck));
+    // `@word` in running text is a citation to Pandoc; when it was meant as
+    // text (a handle), the fix is an escape, not a new source.
+    if (r.verdict === 'FABRICATED' && !bibByCitekey.has(ck) && narrativeOnly.has(ck)) {
+      r.reason += ` — if @${ck} is not a citation, write it as \\@${ck}`;
+    }
+    results.push(r);
+  }
+  for (const raw of findRawCitations(draftMd, cites)) {
+    results.push({
+      citekey: raw.raw, verdict: 'RAW_CITATION', titleJW: 0, authorJW: 0,
+      reason: `${RAW_FIX[raw.kind]}, which nothing checks — cite the work as [@key] from CITATIONS.bib ` +
+        '(add it with `pensmith add` if it is missing), or put it in backticks if it is not a citation',
+    });
+  }
+  for (const u of findUnparseableCitations(draftMd, cites)) {
+    results.push({
+      citekey: u.raw, verdict: 'UNPARSEABLE', titleJW: 0, authorJW: 0,
+      reason: 'a bracketed citation with no key that parses (a citekey starts right after @) — fix the key',
+    });
   }
   return results;
 }
@@ -274,7 +315,7 @@ export async function runPass1(
  * RSCH-10 source-freshness probe for a draft (D-10, WARN-only).
  *
  * SEPARATE from `runPass1` by design: this never feeds the blocking verdict
- * path. It pulls the same `[@citekey]` tokens out of the draft, resolves each
+ * path. It reads the same cited keys out of the draft, resolves each
  * to its DOI in the bib, and probes freshness (DOI HEAD + retraction-watch)
  * advisory-only. A stale DOI or a retraction hit produces a WARN row; it can
  * NEVER produce a FABRICATED / MIS-CITED verdict (PRD §14 / D-10).
@@ -285,21 +326,10 @@ export async function runFreshnessForDraft(
   draftMd: string,
   citationsBibPath: string,
 ): Promise<FreshnessResult[]> {
-  const bibText = readFileSync(citationsBibPath, 'utf8');
-  const entries = await parseBibtex(bibText);
-  const doiByCitekey = new Map<string, string | null>(
-    entries.map((e) => [
-      String((e as BibEntry).id ?? ''),
-      (e as BibEntry).DOI ?? null,
-    ]),
-  );
-
-  // Same broad extraction as runPass1 so the advisory freshness probe covers the
-  // identical citation set the blocking gate sees (no divergence).
-  const unique = extractCitedKeysForVerification(draftMd);
-
+  const bib = await readBib(citationsBibPath);
+  // The same keys runPass1 checks, so the advisory probe covers what the gate sees.
   return probeFreshnessAll(
-    unique.map((ck) => ({ citekey: ck, doi: doiByCitekey.get(ck) ?? null })),
+    pass1CitedKeys(draftMd).map((ck) => ({ citekey: ck, doi: bib.get(ck)?.DOI ?? null })),
   );
 }
 

@@ -3,8 +3,8 @@
 // Deterministic — NO LLM (D-13 LOCKED INVARIANT).
 //
 // Pipeline per quote:
-//   1. Extract quoted-claim ranges from DRAFT.md via bin/lib/quote-extractor.ts
-//      (>= 10 words, with associated [@citekey]).
+//   1. Extract the quotations and the keys they cite from DRAFT.md via
+//      bin/lib/quote-extractor.ts.
 //   2. Resolve citekey -> DOI from .paper/CITATIONS.bib.
 //   3. Look up Unpaywall OA PDF URL for that DOI (HTTP via bin/lib/http.ts).
 //   4. Fetch the PDF bytes and extract text via bin/lib/pdf-text.ts.
@@ -12,10 +12,11 @@
 //   6. Compute levenshteinSubstring(quote, pdfText); compare to QUOTE_LEV_THRESHOLD.
 //
 // Verdict enum:
-//   - OK             — match ratio >= QUOTE_LEV_THRESHOLD
-//   - NOT_FOUND      — match ratio < QUOTE_LEV_THRESHOLD
+//   - OK             — match ratio >= QUOTE_LEV_THRESHOLD (a short quote: found verbatim)
+//   - NOT_FOUND      — match ratio < QUOTE_LEV_THRESHOLD (a short quote: not found verbatim)
 //   - PDF_UNAVAILABLE — no DOI or no Unpaywall OA URL
 //   - TEXT_UNAVAILABLE — PDF parsed but appears image-only (<50 non-WS chars)
+//   - UNATTRIBUTED   — a long quotation that cites nothing, so no source can be checked
 //
 // CYCLE-2 H-4 signature lock:
 //   `runPass3(draftMd, bibByCitekey)` is the canonical entrypoint.
@@ -29,8 +30,9 @@ import { sources } from '../sources/index.js';
 import { fetch as httpFetch } from '../http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
 import { extractQuotes } from '../quote-extractor.js';
+import { NO_CITATION_KEY } from './verdict-rows.js';
 
-export type Pass3Verdict = 'OK' | 'NOT_FOUND' | 'PDF_UNAVAILABLE' | 'TEXT_UNAVAILABLE';
+export type Pass3Verdict = 'OK' | 'NOT_FOUND' | 'PDF_UNAVAILABLE' | 'TEXT_UNAVAILABLE' | 'UNATTRIBUTED';
 
 export interface Pass3Result {
   citekey: string;
@@ -60,6 +62,14 @@ export async function runPass3(
 
   for (const q of quotes) {
     const snippet = q.text.slice(0, 40);
+    if (q.unattributed) {
+      results.push({
+        citekey: NO_CITATION_KEY, quoteSnippet: snippet,
+        verdict: 'UNATTRIBUTED', levRatio: 0,
+        reason: 'a direct quotation with no citation, so no source can be checked — cite its source as [@key, p. N] or remove the quotation marks',
+      });
+      continue;
+    }
     const claimed = bibByCitekey.get(q.citekey);
 
     if (!claimed?.DOI) {
@@ -102,6 +112,16 @@ export async function runPass3(
           citekey: q.citekey, quoteSnippet: snippet,
           verdict: 'TEXT_UNAVAILABLE', levRatio: 0,
           reason: 'PDF appears image-only or scanned (<50 non-whitespace chars)',
+        });
+        continue;
+      }
+      if (q.exact) {
+        // A few words: a fuzzy threshold would accept a changed word.
+        const found = nfkcNormalize(text).toLowerCase().includes(nfkcNormalize(q.text).toLowerCase());
+        results.push({
+          citekey: q.citekey, quoteSnippet: snippet,
+          verdict: found ? 'OK' : 'NOT_FOUND', levRatio: found ? 1 : 0,
+          reason: found ? 'short quote found verbatim' : 'short quote not found verbatim in OA PDF',
         });
         continue;
       }

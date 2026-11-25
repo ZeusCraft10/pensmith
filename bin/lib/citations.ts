@@ -195,6 +195,18 @@ export async function parseBib(bibtex: string): Promise<Array<Record<string, unk
 }
 
 /**
+ * `parseBib`, except that a bibliography with no entries at all (empty, or
+ * only comments) is an empty list rather than an error. Research writes an
+ * empty CITATIONS.bib when it finds nothing; that is a library with no works,
+ * against which every cited key is FABRICATED. A file that has entries but
+ * cannot be parsed still throws.
+ */
+export async function parseBibOrEmpty(bibtex: string): Promise<Array<Record<string, unknown>>> {
+  if (!/^\s*@\s*\w+\s*[{(]/m.test(bibtex)) return [];
+  return parseBib(bibtex);
+}
+
+/**
  * Plan-spec alias for `parseBib`. Both names resolve to the same
  * canonical implementation so the plan's `parseBibtex` reference and the
  * Wave 0 test's `parseBib` import both work.
