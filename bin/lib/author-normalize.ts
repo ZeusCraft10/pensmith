@@ -1,14 +1,11 @@
-// bin/lib/author-normalize.ts — First-author surname extraction (D-11 Pass-1 AND-gate).
+// bin/lib/author-normalize.ts — First-author surname extraction.
 //
-// REVIEWS CONVERGENCE — first-author surname normalization (Codex MEDIUM,
-// OpenCode consensus #4). D-11's Pass-1 AND-gate compares first-author
-// surnames via jaroWinkler at AUTHOR_JW_THRESHOLD=0.85. Without a canonical
-// surname extractor, the gate either over-rejects (false negatives — real
-// citations rejected) or over-accepts (fabrications survive). This module
-// is the single source of truth for "what is the surname of the first
-// author of a citation?"
+// The single answer to "what is the surname of the first author of a
+// citation?", used to build citekeys and the drafter's source list. (Pass 1
+// compares names itself, structured and particle-aware, in
+// bin/lib/verify/work-match.ts.)
 //
-// Author-string forms the extractor must handle (per D-11 + 03-REVIEWS.md):
+// Author-string forms the extractor must handle:
 //   "Vaswani, A."         → "vaswani"        (comma-separated: surname-first)
 //   "A. Vaswani"          → "vaswani"        (initials-prefix: last token is surname)
 //   "Aidan N. Gomez"      → "gomez"          (multi-given-name: last non-initial token)

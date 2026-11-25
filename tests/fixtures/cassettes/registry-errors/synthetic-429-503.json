@@ -1,0 +1,33 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/pensmith-registry-down",
+    "status": 429,
+    "response": "Too Many Requests",
+    "responseHeaders": {
+      "content-type": "text/plain",
+      "retry-after": "1"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.0000/pensmith-registry-down",
+    "status": 503,
+    "response": "Service Unavailable",
+    "responseHeaders": {
+      "content-type": "text/plain"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/10.0000/pensmith-registry-down",
+    "status": 503,
+    "response": "Service Unavailable",
+    "responseHeaders": {
+      "content-type": "text/plain"
+    }
+  }
+]

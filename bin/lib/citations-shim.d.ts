@@ -15,6 +15,9 @@
 //     written out, so formatBibtex can leave out a field.
 //   - `format('ris', { spec: 'new', format: 'text' })`, the RIS2001 output
 //     formatRis returns.
+//   - `plugins.input.chain(text, { target: '@bibtex/entries+list' })`, the
+//     parsed BibTeX entries with their raw fields, so Pass 1 can read the
+//     identifier fields CSL has no slot for (eprint, pmid).
 //
 // Widening this shim is a chokepoint-bypass smell — new fields go via
 // the citations.ts wrapper API, not by widening global typings.
@@ -57,6 +60,9 @@ declare module 'citation-js' {
   }
 
   export interface PluginRegistry {
+    input: {
+      chain(input: string, options: { forceType: string; target: string; generateGraph?: boolean }): unknown;
+    };
     config: {
       get(plugin: '@csl'): CslPluginConfig;
       get(plugin: '@bibtex'): BibtexPluginConfig;

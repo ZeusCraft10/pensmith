@@ -1,0 +1,50 @@
+[
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/10.20651/jslis.62.1_1",
+    "status": 302,
+    "response": "<html><head><title>Handle Redirect</title></head>\n<body><a href=\"https://japanlinkcenter.org/data/10.20651/jslis.62.1_1\">https://japanlinkcenter.org/data/10.20651/jslis.62.1_1</a></body></html>",
+    "responseHeaders": {
+      "content-type": "text/html;charset=utf-8",
+      "location": "https://japanlinkcenter.org/data/10.20651/jslis.62.1_1"
+    }
+  },
+  {
+    "scope": "https://japanlinkcenter.org",
+    "method": "GET",
+    "path": "/data/10.20651/jslis.62.1_1",
+    "status": 200,
+    "response": {
+      "DOI": "10.20651/jslis.62.1_1",
+      "URL": "https://doi.org/10.20651/jslis.62.1_1",
+      "language": "ja",
+      "title": "起業者の情報行動からみた公共図書館のビジネス支援サービス : ある自治体のビジネス相談会の事例に基づく分析",
+      "author": [
+        {
+          "given": "貴之",
+          "family": "滑川"
+        }
+      ],
+      "publisher": "日本図書館情報学会",
+      "issued": {
+        "date-parts": [
+          [
+            2016
+          ]
+        ]
+      },
+      "volume": "62",
+      "number": "1",
+      "page": "1-19",
+      "ISSN": [
+        "13448668",
+        "24324027"
+      ],
+      "container-title": "日本図書館情報学会誌"
+    },
+    "responseHeaders": {
+      "content-type": "application/vnd.citationstyles.csl+json;charset=UTF-8"
+    }
+  }
+]

@@ -1,0 +1,36 @@
+[
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.1038/s41586-024-99999-x",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.20651/jslis.62.1_1",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  }
+]

@@ -213,6 +213,41 @@ export async function parseBibByCitekey<T = Record<string, unknown>>(bibtex: str
 }
 
 /**
+ * The raw BibTeX fields of each entry by citekey, field names lowercased.
+ *
+ * citation-js drops fields CSL has no slot for, among them `eprint`,
+ * `archiveprefix`, `eprinttype` and `pmid`. Those carry a preprint's arXiv ID
+ * and an article's PubMed ID, which Pass 1 resolves a work by, so it reads them
+ * here. A bibliography with no entries gives an empty map; one that cannot be
+ * read throws, as parseBib does.
+ */
+export async function parseBibFieldsByCitekey(bibtex: string): Promise<Map<string, Record<string, string>>> {
+  if (!/^\s*@\s*\w+\s*[{(]/m.test(bibtex)) return new Map();
+  let entries: unknown;
+  try {
+    entries = plugins.input.chain(bibtex, {
+      forceType: '@bibtex/text',
+      target: '@bibtex/entries+list',
+      generateGraph: false,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`parseBib: invalid BibTeX — ${msg}`);
+  }
+  const out = new Map<string, Record<string, string>>();
+  for (const e of Array.isArray(entries) ? entries : []) {
+    const { label, properties } = (e ?? {}) as { label?: unknown; properties?: unknown };
+    if (typeof label !== 'string' || !properties || typeof properties !== 'object') continue;
+    const fields: Record<string, string> = {};
+    for (const [k, v] of Object.entries(properties as Record<string, unknown>)) {
+      if (typeof v === 'string') fields[k.toLowerCase()] = v;
+    }
+    out.set(label, fields);
+  }
+  return out;
+}
+
+/**
  * Plan-spec alias for `parseBib`. Both names resolve to the same
  * canonical implementation so the plan's `parseBibtex` reference and the
  * Wave 0 test's `parseBib` import both work.

@@ -1,0 +1,158 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=22955616&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "22955616": {
+          "uid": "22955616",
+          "pubdate": "2012 Sep 6",
+          "epubdate": "",
+          "source": "Nature",
+          "authors": [
+            {
+              "name": "ENCODE Project Consortium",
+              "authtype": "CollectiveName",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "ENCODE Project Consortium",
+          "title": "An integrated encyclopedia of DNA elements in the human genome.",
+          "sorttitle": "integrated encyclopedia of dna elements in the human genome",
+          "volume": "489",
+          "issue": "7414",
+          "pages": "57-74",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "0410462",
+          "issn": "0028-0836",
+          "essn": "1476-4687",
+          "pubtype": [
+            "Journal Article",
+            "Research Support, American Recovery and Reinvestment Act",
+            "Research Support, N.I.H., Extramural",
+            "Research Support, N.I.H., Intramural",
+            "Research Support, U.S. Gov't, Non-P.H.S."
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "22955616"
+            },
+            {
+              "idtype": "mid",
+              "idtypen": 8,
+              "value": "NIHMS381381"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC3439153"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC3439153;manuscript-id: NIHMS381381;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1038/nature11247"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "nature11247"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2011/11/24 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2012/05/29 00:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2012/09/08 06:00"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2012/09/08 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2012/10/18 06:00"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2013/03/06 00:00"
+            }
+          ],
+          "references": [
+            {
+              "refsource": "Nat Rev Genet. 2012 Oct;13(10):678. doi: 10.1038/nrg3329.",
+              "reftype": "Comment in",
+              "pmid": 22955793,
+              "note": ""
+            },
+            {
+              "refsource": "Nat Methods. 2012 Nov;9(11):1046. doi: 10.1038/nmeth.2238.",
+              "reftype": "Comment in",
+              "pmid": 23281567,
+              "note": ""
+            },
+            {
+              "refsource": "Am J Transplant. 2013 Feb;13(2):245. doi: 10.1111/ajt.12171.",
+              "reftype": "Comment in",
+              "pmid": 23356894,
+              "note": ""
+            }
+          ],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 80,
+          "fulljournalname": "Nature",
+          "elocationid": "doi: 10.1038/nature11247",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2012/09/06 00:00",
+          "sortfirstauthor": "ENCODE Project Consortium",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "22955616"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    }
+  }
+]

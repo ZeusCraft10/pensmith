@@ -1,0 +1,1567 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1103/PhysRevLett.114.191803",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              10,
+              30
+            ]
+          ],
+          "date-time": "2026-10-30T06:40:04Z",
+          "timestamp": 1793342404555,
+          "version": "4.5.0"
+        },
+        "reference-count": 31,
+        "publisher": "American Physical Society (APS)",
+        "issue": "19",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2015,
+                  5,
+                  14
+                ]
+              ],
+              "date-time": "2015-05-14T00:00:00Z",
+              "timestamp": 1431561600000
+            },
+            "content-version": "vor",
+            "delay-in-days": 0,
+            "URL": "http://creativecommons.org/licenses/by/3.0/"
+          }
+        ],
+        "funder": [
+          {
+            "DOI": "10.13039/501100003074",
+            "name": "Agencia Nacional de Promoción Científica y Tecnológica",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003074",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100000923",
+            "name": "Australian Research Council",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100000923",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003413",
+            "name": "Bundesministerium für Wissenschaft, Forschung und Wirtschaft",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003413",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002428",
+            "name": "Austrian Science Fund",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002428",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002661",
+            "name": "Fonds De La Recherche Scientifique - FNRS",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002661",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003130",
+            "name": "Fonds Wetenschappelijk Onderzoek",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003130",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003593",
+            "name": "Conselho Nacional de Desenvolvimento Científico e Tecnológico",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003593",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002322",
+            "name": "Coordenação de Aperfeiçoamento de Pessoal de Nível Superior",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002322",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004586",
+            "name": "Fundação Carlos Chagas Filho de Amparo à Pesquisa do Estado do Rio de Janeiro",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004586",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001807",
+            "name": "Fundação de Amparo à Pesquisa do Estado de São Paulo",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001807",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100005992",
+            "name": "Ministry of Education and Science",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100005992",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100000038",
+            "name": "Natural Sciences and Engineering Research Council of Canada",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100000038",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100000046",
+            "name": "National Research Council Canada",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100000046",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100000196",
+            "name": "Canada Foundation for Innovation",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100000196",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002848",
+            "name": "Comisión Nacional de Investigación Científica y Tecnológica",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002848",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002367",
+            "name": "Chinese Academy of Sciences",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002367",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002855",
+            "name": "Ministry of Science and Technology of the People’s Republic of China",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002855",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001809",
+            "name": "National Natural Science Foundation of China",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001809",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/100007637",
+            "name": "Departamento Administrativo de Ciencia, Tecnologia e Innovacion",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/100007637",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001810",
+            "name": "Research Promotion Foundation",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001810",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001732",
+            "name": "Danish National Research Foundation",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001732",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003554",
+            "name": "Lundbeckfonden",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003554",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100000781",
+            "name": "European Research Council",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100000781",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002341",
+            "name": "Suomen Akatemia",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002341",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004794",
+            "name": "Centre National de la Recherche Scientifique",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004794",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004802",
+            "name": "Georgian National Science Foundation",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004802",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002347",
+            "name": "Bundesministerium für Bildung und Forschung",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002347",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001659",
+            "name": "Deutsche Forschungsgemeinschaft",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001659",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004189",
+            "name": "Max-Planck-Gesellschaft",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004189",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003448",
+            "name": "General Secretariat for Research and Technology",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003448",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002920",
+            "name": "Research Grants Council, University Grants Committee, Hong Kong",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002920",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003549",
+            "name": "Országos Tudományos Kutatási Alapprogramok",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003549",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001502",
+            "name": "Department of Atomic Energy, Government of India",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001502",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001409",
+            "name": "Department of Science and Technology, Ministry of Science and Technology",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001409",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100006115",
+            "name": "Institute for Research in Fundamental Sciences",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100006115",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001602",
+            "name": "Science Foundation Ireland",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001602",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003977",
+            "name": "Israel Science Foundation",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003977",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001740",
+            "name": "Rosenzweig Minerva Research Center for German-Jewish Literature and Cultural History, Hebrew University of Jerusalem",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001740",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001736",
+            "name": "German-Israeli Foundation for Scientific Research and Development",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001736",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100005386",
+            "name": "Israeli Centers for Research Excellence",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100005386",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003941",
+            "name": "Nella and Leon Benoziyo Center for Neurological Diseases, Weizmann Institute of Science",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003941",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004007",
+            "name": "Istituto Nazionale di Fisica Nucleare",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004007",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001700",
+            "name": "Ministry of Education, Culture, Sports, Science, and Technology",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001700",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001691",
+            "name": "Japan Society for the Promotion of Science",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001691",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003822",
+            "name": "Joint Institute for Nuclear Research",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003822",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003621",
+            "name": "Ministry of Science, ICT and Future Planning",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003621",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003725",
+            "name": "National Research Foundation of Korea",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003725",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004386",
+            "name": "Universiti Malaya",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004386",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003141",
+            "name": "Consejo Nacional de Ciencia y Tecnología",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003141",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100005324",
+            "name": "Universidad Autónoma de San Luis Potosí",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100005324",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001712",
+            "name": "Stichting voor Fundamenteel Onderzoek der Materie",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001712",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003246",
+            "name": "Nederlandse Organisatie voor Wetenschappelijk Onderzoek",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003246",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003524",
+            "name": "Ministry of Business, Innovation and Employment",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003524",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004281",
+            "name": "Narodowe Centrum Nauki",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004281",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001871",
+            "name": "Fundação para a Ciência e a Tecnologia",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001871",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002674",
+            "name": "Russian Academy of Sciences",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002674",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100002261",
+            "name": "Russian Foundation for Basic Research",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100002261",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004329",
+            "name": "Javna Agencija za Raziskovalno Dejavnost RS",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004329",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100003329",
+            "name": "Ministerio de Economía y Competitividad",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100003329",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004063",
+            "name": "Knut och Alice Wallenbergs Stiftelse",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004063",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004219",
+            "name": "Paul Scherrer Institut",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004219",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100001711",
+            "name": "Schweizerische Nationalfonds zur Förderung der Wissenschaftlichen Forschung",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001711",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004192",
+            "name": "National Science and Technology Development Agency",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004192",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004410",
+            "name": "Türkiye Bilimsel ve Teknolojik Arastirma Kurumu",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004410",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004742",
+            "name": "National Academy of Sciences of Ukraine",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100004742",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100000271",
+            "name": "Science and Technology Facilities Council",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100000271",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100000288",
+            "name": "Royal Society",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100000288",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100000275",
+            "name": "Leverhulme Trust",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100000275",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/100000015",
+            "name": "U.S. Department of Energy",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/100000015",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/100000001",
+            "name": "National Science Foundation",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/100000001",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          },
+          {
+            "name": "YerPhI"
+          },
+          {
+            "DOI": "10.13039/100011590",
+            "name": "ANAS",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/100011590",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100011724",
+            "name": "SSTC",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100011724",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/100012470",
+            "name": "CERN",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/100012470",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "MSES"
+          },
+          {
+            "name": "CSF"
+          },
+          {
+            "name": "MSMT CR"
+          },
+          {
+            "name": "MPO CR"
+          },
+          {
+            "name": "VSC CR"
+          },
+          {
+            "name": "DNSRC"
+          },
+          {
+            "name": "MoER"
+          },
+          {
+            "name": "ERC IUT"
+          },
+          {
+            "DOI": "10.13039/501100008530",
+            "name": "ERDF",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100008530",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "EPLANET"
+          },
+          {
+            "name": "NSRF"
+          },
+          {
+            "name": "MEC"
+          },
+          {
+            "name": "HIP"
+          },
+          {
+            "name": "CEA"
+          },
+          {
+            "name": "HGF"
+          },
+          {
+            "DOI": "10.13039/100005156",
+            "name": "AvH Foundation",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/100005156",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "NIH"
+          },
+          {
+            "name": "LAS"
+          },
+          {
+            "name": "MOE"
+          },
+          {
+            "DOI": "10.13039/501100008688",
+            "name": "CINVESTAV",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100008688",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "SEP"
+          },
+          {
+            "DOI": "10.13039/501100006319",
+            "name": "CNRST",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100006319",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "BRF"
+          },
+          {
+            "name": "RCN"
+          },
+          {
+            "DOI": "10.13039/501100008689",
+            "name": "PAEC",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100008689",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100004569",
+            "name": "MNiSW",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100004569",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "MSHE"
+          },
+          {
+            "name": "NSC"
+          },
+          {
+            "name": "GRICES"
+          },
+          {
+            "name": "MNE/IFA"
+          },
+          {
+            "name": "MES"
+          },
+          {
+            "name": "MON"
+          },
+          {
+            "DOI": "10.13039/501100008687",
+            "name": "RosAtom",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100008687",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "MSTD"
+          },
+          {
+            "name": "MESTD"
+          },
+          {
+            "name": "MSSR"
+          },
+          {
+            "name": "MIZŠ"
+          },
+          {
+            "name": "DST/NRF"
+          },
+          {
+            "DOI": "10.13039/501100007136",
+            "name": "SEIDI",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100007136",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "CPAN"
+          },
+          {
+            "name": "SRC"
+          },
+          {
+            "name": "ETH Board"
+          },
+          {
+            "DOI": "10.13039/501100003006",
+            "name": "ETH Zurich",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100003006",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "SER"
+          },
+          {
+            "name": "UniZH"
+          },
+          {
+            "name": "Canton of Bern"
+          },
+          {
+            "DOI": "10.13039/501100011723",
+            "name": "Canton of Genève",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100011723",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "name": "Canton of Zurich"
+          },
+          {
+            "name": "MST"
+          },
+          {
+            "name": "ThEPCenter"
+          },
+          {
+            "name": "IPST"
+          },
+          {
+            "name": "STAR"
+          },
+          {
+            "DOI": "10.13039/100010440",
+            "name": "TAEK",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/100010440",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          },
+          {
+            "DOI": "10.13039/501100008690",
+            "name": "SFFR",
+            "doi-asserted-by": "crossref",
+            "id": [
+              {
+                "id": "10.13039/501100008690",
+                "id-type": "DOI",
+                "asserted-by": "crossref"
+              }
+            ]
+          }
+        ],
+        "content-domain": {
+          "domain": [],
+          "crossmark-restriction": false
+        },
+        "short-container-title": [
+          "Phys. Rev. Lett."
+        ],
+        "DOI": "10.1103/physrevlett.114.191803",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2015,
+              5,
+              18
+            ]
+          ],
+          "date-time": "2015-05-18T10:57:46Z",
+          "timestamp": 1431946666000
+        },
+        "source": "Crossref",
+        "is-referenced-by-count": 812,
+        "title": [
+          "Combined Measurement of the Higgs Boson Mass in\n                    <mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\" display=\"inline\">\n                      <mml:mi>p</mml:mi>\n                      <mml:mi>p</mml:mi>\n                    </mml:math>\n                    Collisions at\n                    <mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\" display=\"inline\">\n                      <mml:msqrt>\n                        <mml:mi>s</mml:mi>\n                      </mml:msqrt>\n                      <mml:mo>=</mml:mo>\n                      <mml:mn>7</mml:mn>\n                    </mml:math>\n                    and 8 TeV with the ATLAS and CMS Experiments"
+        ],
+        "prefix": "10.1103",
+        "volume": "114",
+        "author": [
+          {
+            "given": "G.",
+            "family": "Aad",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "B.",
+            "family": "Abbott",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "J.",
+            "family": "Abdallah",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "O.",
+            "family": "Abdinov",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "R.",
+            "family": "Aben",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "M.",
+            "family": "Abolins",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "O. S.",
+            "family": "AbouZeid",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "H.",
+            "family": "Abramowicz",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "H.",
+            "family": "Abreu",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "R.",
+            "family": "Abreu",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Y.",
+            "family": "Abulaiti",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "B. S.",
+            "family": "Acharya",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "L.",
+            "family": "Adamczyk",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "D. L.",
+            "family": "Adams",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "J.",
+            "family": "Adelman",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "S.",
+            "family": "Adomeit",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "T.",
+            "family": "Adye",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "A. A.",
+            "family": "Affolder",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "T.",
+            "family": "Agatonovic-Jovin",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "J. A.",
+            "family": "Aguilar-Saavedra",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "16",
+        "published-online": {
+          "date-parts": [
+            [
+              2015,
+              5,
+              14
+            ]
+          ]
+        },
+        "container-title": [
+          "Physical Review Letters"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "http://link.aps.org/article/10.1103/PhysRevLett.114.191803",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "syndication"
+          },
+          {
+            "URL": "http://harvest.aps.org/v2/journals/articles/10.1103/PhysRevLett.114.191803/fulltext",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2025,
+              1,
+              2
+            ]
+          ],
+          "date-time": "2025-01-02T18:02:30Z",
+          "timestamp": 1735840950000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://link.aps.org/doi/10.1103/PhysRevLett.114.191803"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2015,
+              5,
+              14
+            ]
+          ]
+        },
+        "references-count": 31,
+        "journal-issue": {
+          "issue": "19",
+          "published-print": {
+            "date-parts": [
+              [
+                2015,
+                5
+              ]
+            ]
+          }
+        },
+        "URL": "https://doi.org/10.1103/physrevlett.114.191803",
+        "relation": {},
+        "ISSN": [
+          "0031-9007",
+          "1079-7114"
+        ],
+        "issn-type": [
+          {
+            "value": "0031-9007",
+            "type": "print"
+          },
+          {
+            "value": "1079-7114",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2015,
+              5,
+              14
+            ]
+          ]
+        },
+        "article-number": "191803"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

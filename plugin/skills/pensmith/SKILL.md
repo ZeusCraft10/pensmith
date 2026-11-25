@@ -63,13 +63,15 @@ Read the exit status of every pensmith command.
 - **Exit 1**: unexpected error. Show the user the error text and stop.
 - **Exit 2**: blocked or refused. Common causes: the verifier found a
   citation it could not confirm (FABRICATED, MIS-CITED, quote NOT_FOUND,
-  RETRACTED, or UNRESOLVED when a registry could not be reached), a citation
+  RETRACTED, or UNRESOLVED when a registry could not be reached or the entry
+  has no DOI, arXiv ID, PMID or ISBN to look up), a citation
   it cannot check at all (RAW_CITATION for a DOI or "(Author, 2020)"
   typed as text, UNPARSEABLE for a broken `[@key]`), an approval
   was refused, or the input was invalid. Report the reason as pensmith states it. Never
   edit `DRAFT.md`, `VERIFICATION.md` or the bibliography to make a check pass.
   A flagged citation is fixed with `pensmith plan N --revise`, then write and
-  verify again; UNRESOLVED means retry once the registry is reachable. For
+  verify again; UNRESOLVED means retry once the registry is reachable, or,
+  for an entry with no identifier, tell the user which source needs one. For
   RAW_CITATION and UNPARSEABLE, revise names what to rewrite; show the user
   and let them decide.
 - **Exit 3**: pensmith needs a decision or answers from the user before it

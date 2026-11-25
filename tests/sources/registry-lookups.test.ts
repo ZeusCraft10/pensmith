@@ -8,11 +8,11 @@
 //     agency's metadata host; a redirect to a publisher's landing page proves
 //     the DOI exists but gives nothing to compare, and is not followed.
 //   - Open Library holds only part of the world's books, so a valid ISBN it
-//     does not list is "not found", but not authoritatively.
+//     does not list is UNRESOLVED, never FABRICATED.
 
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
@@ -20,6 +20,7 @@ import { _resetBucketsForTest } from '../../bin/lib/http.js';
 import { lookupDoi as crossrefLookup } from '../../bin/lib/sources/crossref.js';
 import { lookupDoi as doiOrgLookup } from '../../bin/lib/sources/doi-content.js';
 import { lookupIsbn } from '../../bin/lib/sources/openlibrary.js';
+import { runPass1 } from '../../bin/lib/verify/pass1.js';
 
 const ENV_KEYS = ['PENSMITH_TEST_CASSETTES', 'PENSMITH_OFFLINE', 'PENSMITH_CONTACT_EMAIL', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'HOME'];
 const savedEnv: Record<string, string | undefined> = {};
@@ -121,4 +122,17 @@ test('Open Library: a book it does not list is not_found, but not authoritativel
     .intercept({ path: (p) => p.startsWith('/api/books?') && p.includes('9780306406157'), method: 'GET' })
     .reply(200, '{}', { headers: { 'content-type': 'application/json' } });
   assert.deepEqual(await lookupIsbn('9780306406157'), { kind: 'not_found', registry: 'Open Library', authoritative: false });
+});
+
+test('Pass 1: a valid ISBN Open Library does not list is UNRESOLVED, not FABRICATED', async () => {
+  agent.get('https://openlibrary.org')
+    .intercept({ path: (p) => p.startsWith('/api/books?') && p.includes('9780306406157'), method: 'GET' })
+    .reply(200, '{}', { headers: { 'content-type': 'application/json' } });
+  const root = mkdtempSync(path.join(tmpdir(), 'pensmith-isbn-unlisted-'));
+  mkdirSync(path.join(root, '.paper'), { recursive: true });
+  const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
+  writeFileSync(bibPath, '@book{doe1990,\n  title = {An Unlisted Monograph},\n  author = {Doe, Jane},\n  year = {1990},\n  isbn = {978-0-306-40615-7}\n}\n');
+  const [r] = await runPass1('# S\n\nA claim [@doe1990].\n', bibPath);
+  assert.equal(r?.verdict, 'UNRESOLVED', r?.reason);
+  assert.match(r!.reason, /Open Library has no record of ISBN 978-0-306-40615-7/);
 });

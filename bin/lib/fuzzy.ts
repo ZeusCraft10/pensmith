@@ -1,20 +1,14 @@
-// bin/lib/fuzzy.ts — Hand-rolled Jaro-Winkler + Levenshtein primitives (D-11).
+// bin/lib/fuzzy.ts — Hand-rolled Jaro-Winkler + Levenshtein primitives.
 //
-// This module is the SOLE source of truth for the Pass-1 / Pass-3 verifier
-// fuzzy-match contract:
-//
-//   Pass 1 verdict (D-11 AND-gate):
-//     jaroWinkler(actualTitle,  claimedTitle ) >= TITLE_JW_THRESHOLD  (0.92)
-//   AND
-//     jaroWinkler(actualAuthor, claimedAuthor) >= AUTHOR_JW_THRESHOLD (0.85)
-//
-//   BOTH must hold. DOI-resolves-200 is necessary but not sufficient (a
-//   fabricated DOI may "resolve" to an unrelated paper; the AND-gate catches
-//   that). First-author surname comparison runs through
-//   bin/lib/author-normalize.ts before reaching jaroWinkler.
+//   Research dedupe: two candidates without a DOI are the same work when
+//     jaroWinkler(titleA, titleB) >= TITLE_JW_THRESHOLD (0.92).
 //
 //   Pass 3 verdict:
 //     levenshteinSubstring(claimedQuote, extractedPdfText) >= QUOTE_LEV_THRESHOLD (0.95)
+//
+// Pass 1 does not use Jaro-Winkler: a whole-title similarity let sibling
+// papers one word apart through and blocked real ones over markup or a
+// subtitle. Its word-by-word comparison lives in bin/lib/verify/work-match.ts.
 //
 // Hand-rolled per RESEARCH.md "Standard Stack" — no npm dependency added.
 // Algorithm is ~80 LOC for Jaro-Winkler + ~40 LOC for Levenshtein, fully
@@ -34,10 +28,9 @@
 //   - T-3-04 (accent-mark mismatch): nfkcNormalize is applied to BOTH inputs
 //     of jaroWinkler and levenshteinSubstring BEFORE measurement; see Pitfall 5
 //     in 03-RESEARCH.md.
-//   - T-3-11 (threshold drift via copy-paste): TITLE_JW_THRESHOLD,
-//     AUTHOR_JW_THRESHOLD, QUOTE_LEV_THRESHOLD are exported from THIS file as
-//     named constants. Callers MUST import (not duplicate) — D-11's 0.92/0.85
-//     AND-gate has exactly one source of truth.
+//   - Threshold drift via copy-paste: TITLE_JW_THRESHOLD and
+//     QUOTE_LEV_THRESHOLD are exported from THIS file as named constants.
+//     Callers import them rather than duplicate the numbers.
 //
 // Aliases:
 //   `normalizeForFuzzy` is exported as the NFKC + lowercase pre-step used
@@ -48,17 +41,10 @@
 import { nfkcNormalize } from './normalize.js';
 
 /**
- * Pass-1 title fuzzy-match threshold (D-11).
- * jaroWinkler(actualTitle, claimedTitle) MUST be >= this value to PASS.
+ * Title similarity at or above which research treats two DOI-less candidates
+ * as the same work.
  */
 export const TITLE_JW_THRESHOLD = 0.92;
-
-/**
- * Pass-1 author fuzzy-match threshold (D-11).
- * jaroWinkler(actualAuthor, claimedAuthor) MUST be >= this value to PASS.
- * First-author surname comparison only (D-11); see bin/lib/author-normalize.ts.
- */
-export const AUTHOR_JW_THRESHOLD = 0.85;
 
 /**
  * Pass-3 quote integrity threshold (D-11).

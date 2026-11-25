@@ -1,31 +1,31 @@
-// bin/lib/verify/pass1.ts — Pass-1 citation-integrity verifier (D-11, VRFY-02, D-13).
+// bin/lib/verify/pass1.ts — Pass-1 citation-integrity verifier.
 //
-// Deterministic — NO LLM (D-13 LOCKED INVARIANT). Every verdict is a function
-// of:
-//   - whether the citekey appears in .paper/CITATIONS.bib
-//   - whether the entry has a DOI / authors / title (field-presence sub-gate)
-//   - whether the entry is flagged retracted (Retraction Watch cross-check)
-//   - Crossref DOI resolution
-//   - Jaro-Winkler comparison of (claimed title, actual title) >= TITLE_JW_THRESHOLD
-//     AND (claimed first-author surname, actual first-author surname) >= AUTHOR_JW_THRESHOLD
-//     (D-11 AND-gate — BOTH must hold)
+// Deterministic: no LLM. Each cited key gets one verdict from:
+//   - whether the key is in .paper/CITATIONS.bib, with a title and authors;
+//   - whether the entry is flagged retracted (stored, or found by a live
+//     Retraction Watch query);
+//   - whether a registry holds the work its identifiers name: a DOI through
+//     Crossref, DataCite and doi.org, an arXiv ID through arXiv, a PMID through
+//     PubMed, an ISBN through Open Library (bin/lib/verify/resolve.ts);
+//   - whether the entry's title, authors, year and journal match the record
+//     the registry returned (bin/lib/verify/work-match.ts).
 //
-// CYCLE-2 H-2 D-14 author shape lock:
-//   The internal canonical author type is D-14 `string[]` ("Family, Given").
-//   When reading citation-js parsed BibTeX entries (which use { family, given }
-//   objects), we normalize ONCE at the boundary into the D-14 string[] form.
-//   We NEVER `claimed.author[0].family` downstream — the BibTeX shape is
-//   scoped to the normalize step only.
+// The verdicts:
+//   OK          the registry's record matches the entry;
+//   MIS-CITED   the work exists, but the entry's metadata or one of its
+//               identifiers is wrong, or the work is retracted;
+//   FABRICATED  the key is not in the bibliography, or every registry that can
+//               answer for the entry's identifiers says no such work exists;
+//   UNRESOLVED  nothing could be confirmed: a registry gave no answer (offline,
+//               timeout, 429 or 5xx), the entry has no identifier to look up,
+//               or the only registry for it does not hold every work.
+// UNRESOLVED blocks like the others; it never passes an unchecked citation and
+// never accuses a real one.
 //
-// CYCLE-2 H-4 signature lock:
-//   `runPass1(draftMd: string, citationsBibPath: string)` is the canonical
-//   draft-+-bib entrypoint. `runPass1Unit(input)` is the fixture-shape
-//   helper used by tests/known-bad-citations.test.ts in Plan 03-09.
+// The row fields `titleJW` / `authorJW` carry the title and author match
+// scores (0..1) for the record that was compared.
 
-import { jaroWinkler, TITLE_JW_THRESHOLD, AUTHOR_JW_THRESHOLD } from '../fuzzy.js';
-import { firstAuthorSurname } from '../author-normalize.js';
-import { sources } from '../sources/index.js';
-import { parseBibByCitekey } from '../citations.js';
+import { parseBibByCitekey, parseBibFieldsByCitekey } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
@@ -39,13 +39,13 @@ import {
 import { isOfflineMode } from '../network-mode.js';
 import { oneLine } from './verdict-rows.js';
 import { sameDoi } from '../doi.js';
+import { cslDateYear, cslNames, firstString, type WorkName, type WorkRecord } from '../sources/work-record.js';
+import { matchWork, type ClaimedWork } from './work-match.js';
+import { registryList, resolveId, workIdentifiers, type IdResolution, type WorkId } from './resolve.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
 
-// UNRESOLVED: the registry was not (or could not be) consulted, so the
-// citation is neither confirmed nor refuted. It blocks like the others; the fix
-// is to re-run verify with network access.
 // RAW_CITATION: a DOI, arXiv ID, PMID or author-year citation typed as text.
 // UNPARSEABLE: a bracketed citation whose key does not parse. Neither is a
 // citation Pandoc renders from the bibliography, so neither can be checked;
@@ -60,191 +60,159 @@ export interface Pass1Result {
   reason: string;
 }
 
-interface BibAuthor {
-  family?: string;
-  given?: string;
-}
-
-interface BibEntry {
+/** A bibliography entry as citation-js reads it (CSL-JSON). */
+interface BibEntry extends Record<string, unknown> {
   id?: string;
   title?: string | string[];
-  author?: BibAuthor[];
   DOI?: string;
   retracted?: boolean;
-  // D-15 retracted-flag persistence: writeBibtex serializes a retracted source
-  // as BibTeX `note = {RETRACTED}` (bibtex-write.ts:93), and citation-js
-  // preserves `note` verbatim across the round-trip — it does NOT repopulate the
-  // synthetic `retracted` boolean. So a bib-sourced retracted entry arrives here
-  // with `note: 'RETRACTED'` and `retracted: undefined`. compile.ts:482 already
-  // reads `x.note === 'RETRACTED'`; the blocking gate must do the same or the
-  // entire stored-retraction surface (D-15 "surface twice") is silently dead.
+  // writeBibtex records a retracted source as BibTeX `note = {RETRACTED}`;
+  // citation-js keeps the note but has no `retracted` flag to restore.
   note?: string;
 }
 
-/**
- * Normalize a citation-js BibTeX author array into the D-14 `string[]` shape.
- *
- * Output strings are "Family, Given" or "Family" when given-name is missing,
- * matching SourceCandidate.authors (Plan 03-04 adapters). This is the ONLY
- * point in pass1.ts that reads the BibTeX-native `{family, given}` shape;
- * every downstream comparison operates on D-14 string[].
- */
-function normalizeBibAuthors(rawAuthors: BibAuthor[] | undefined): string[] {
-  return (rawAuthors ?? [])
-    .map((a) => {
-      const family = String(a?.family ?? '').trim();
-      const given = String(a?.given ?? '').trim();
-      if (!family) return '';
-      return given ? `${family}, ${given}` : family;
-    })
-    .filter(Boolean);
+interface Bib {
+  entries: Map<string, BibEntry>;
+  /** Raw BibTeX fields, for the identifiers CSL has no slot for. */
+  fields: Map<string, Record<string, string>>;
 }
 
-function bibTitle(claimed: BibEntry): string {
-  if (Array.isArray(claimed.title)) {
-    return claimed.title[0] ?? '';
+/** What the entry says about the work: title, authors (or editors), year, journal. */
+function claimedWork(entry: BibEntry): ClaimedWork {
+  const authors: WorkName[] = cslNames(entry['author']);
+  const claimed: ClaimedWork = {
+    title: firstString(entry.title) ?? '',
+    authors: authors.length > 0 ? authors : cslNames(entry['editor']),
+  };
+  const year = cslDateYear(entry['issued']);
+  if (year !== undefined) claimed.year = year;
+  const venue = firstString(entry['container-title']);
+  if (venue) claimed.venue = venue;
+  return claimed;
+}
+
+function result(citekey: string, verdict: Pass1Verdict, reason: string, titleJW = 0, authorJW = 0): Pass1Result {
+  return { citekey, verdict, titleJW, authorJW, reason };
+}
+
+/** Why an identifier gave no work, in one clause. */
+function missDetail(id: WorkId, r: Exclude<IdResolution, { kind: 'found' }>): string {
+  if (r.kind === 'not_found') {
+    if (r.invalid) return r.invalid;
+    return r.authoritative
+      ? `${id.shown} is not registered (${registryList(r.registries)} ${r.registries.length > 1 ? 'have' : 'has'} no record of it)`
+      : `${registryList(r.registries)} has no record of ${id.shown}`;
   }
-  return claimed.title ?? '';
+  const failed = r.failures.map((f) => `${f.registry}: ${f.detail}`).join('; ');
+  const said = r.registries.length > 0 ? `; ${registryList(r.registries)} had no record of it` : '';
+  return `${id.shown} could not be checked (${failed})${said}`;
 }
 
-/**
- * Pass-1 deterministic verdict for a single citekey.
- *
- * Pure per-key logic — used by both `runPass1` (which iterates citekeys
- * pulled from a DRAFT.md) and `runPass1Unit` (which iterates fixture
- * entries without a DRAFT.md). Centralizes the field-presence sub-gate
- * and the D-11 AND-gate so the two callers never drift.
- */
+/** The live Retraction Watch query, under the claimed DOI and the record's own. */
+async function liveRetraction(dois: Array<string | undefined>): Promise<string | null> {
+  for (const d of [...new Set(dois.filter((x): x is string => typeof x === 'string' && x.length > 0))]) {
+    const hit = await retractionWatchFetchById(d);
+    if (hit !== null) {
+      return `cited work appears in Retraction Watch (live re-query at verify time)` +
+        (hit.retraction_details ? `: ${hit.retraction_details}` : '');
+    }
+  }
+  return null;
+}
+
+/** The verdict for an entry whose identifier `id` led to `record`. */
+async function verdictForRecord(ck: string, entry: BibEntry, id: WorkId, record: WorkRecord): Promise<Pass1Result> {
+  // A work can be listed in Retraction Watch under the claimed DOI or under
+  // the canonical DOI the registry gives, so both are queried.
+  if (id.kind === 'doi' || record.doi) {
+    const retracted = await liveRetraction([id.kind === 'doi' ? id.raw : undefined, record.doi]);
+    if (retracted) return result(ck, 'MIS-CITED', retracted);
+  }
+  const m = matchWork(claimedWork(entry), record);
+  const source = `the ${record.registry} record for ${id.shown}`;
+  const notes = m.notes.length > 0 ? ` (${m.notes.join('; ')})` : '';
+  // A registry may answer an alias DOI with the work's canonical DOI.
+  const alias = id.kind === 'doi' && record.doi && !sameDoi(record.doi, id.raw) ? record.doi : null;
+  if (m.ok) {
+    return result(ck, 'OK', alias
+      ? `matches ${source}, whose canonical DOI is ${alias}${notes}`
+      : `matches ${source}${notes}`, m.titleScore, m.authorScore);
+  }
+  const what = alias
+    ? `the DOI resolves to a different work (canonical: ${alias}): ${m.problems.join('; ')}`
+    : m.problems.join('; ');
+  return result(ck, 'MIS-CITED', `${what} — compared with ${source}`, m.titleScore, m.authorScore);
+}
+
+/** Pass-1 deterministic verdict for a single cited key. */
 async function verdictForCitekey(
   ck: string,
   claimed: BibEntry | undefined,
+  fields: Record<string, string> | undefined,
 ): Promise<Pass1Result> {
   if (!claimed) {
-    return {
-      citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
-      reason: 'citekey not in .paper/CITATIONS.bib (drafter invented)',
-    };
+    return result(ck, 'FABRICATED', 'citekey not in .paper/CITATIONS.bib (drafter invented)');
   }
-  // CYCLE-2 H-2 D-14 author shape lock — normalize ONCE at the boundary.
-  const claimedAuthorsD14 = normalizeBibAuthors(claimed.author);
-  const claimedTitle = bibTitle(claimed);
-
-  // Field-presence sub-gate (REVIEWS amendment OpenCode MEDIUM #5).
-  if (!claimedTitle || claimedAuthorsD14.length === 0) {
-    return {
-      citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
-      reason: 'claimed citation metadata incomplete (empty title or no authors)',
-    };
+  const work = claimedWork(claimed);
+  if (!work.title || work.authors.length === 0) {
+    return result(ck, 'MIS-CITED', 'claimed citation metadata incomplete (empty title or no authors)');
   }
-  // D-15 stored-retraction gate: honor BOTH the synthetic `retracted` boolean
-  // (fixture / in-memory candidate path) AND the round-tripped BibTeX
-  // `note = {RETRACTED}` (the on-disk .paper/CITATIONS.bib path). Without the
-  // `note` check, every bib-sourced retracted work passes Pass-1 (the boolean is
-  // undefined after the citation-js round-trip) and the stored-retraction block
-  // is dead — leaving only the live Retraction Watch re-query. Mirrors
-  // compile.ts:482.
+  // A retraction stored at research time (the boolean on an in-memory
+  // candidate, or the `note = {RETRACTED}` a bib round trip keeps).
   if (claimed.retracted || claimed.note === 'RETRACTED') {
-    return {
-      citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
-      reason: 'cited a retracted work (per Retraction Watch cross-check at research time)',
-    };
+    return result(ck, 'MIS-CITED', 'cited a retracted work (per Retraction Watch cross-check at research time)');
   }
 
+  const ids = workIdentifiers(claimed, fields);
   // Offline (--offline / --dry-run): nothing can be looked up. Saying OK would
-  // pass an unchecked citation and FABRICATED would accuse a real one. This sits
-  // above the no-DOI check because an entry without a DOI (a book, a preprint)
-  // may still be resolvable by other identifiers once the network is back.
+  // pass an unchecked citation and FABRICATED would accuse a real one.
   if (isOfflineMode()) {
-    const what = claimed.DOI ? `DOI ${claimed.DOI}` : 'this entry';
-    return {
-      citekey: ck, verdict: 'UNRESOLVED', titleJW: 0, authorJW: 0,
-      reason: `registry not queried (offline) — re-run verify with network access to check ${what}`,
-    };
+    const what = ids[0]?.shown ?? 'this entry';
+    return result(ck, 'UNRESOLVED', `registry not queried (offline) — re-run verify with network access to check ${what}`);
+  }
+  if (ids.length === 0) {
+    return result(ck, 'UNRESOLVED',
+      'the entry has no DOI, arXiv ID, PMID or ISBN to look the work up by, so nothing can confirm it — ' +
+      'add one to its CITATIONS.bib entry (or re-add the source with `pensmith add`)');
   }
 
-  if (!claimed.DOI) {
-    return {
-      citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
-      reason: 'no DOI in citation entry (cannot verify upstream)',
-    };
-  }
-
-  const actual = await sources.crossref.fetchById(claimed.DOI);
-  if (!actual) {
-    return {
-      citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
-      reason: `DOI ${claimed.DOI} did not resolve via Crossref`,
-    };
-  }
-
-  // GATE-03: live retraction re-query at verify time (Phase 14, Plan 03).
-  // Re-query Retraction Watch on the Crossref-confirmed DOI. A confirmed hit
-  // (non-null) escalates to MIS-CITED (blocking). A transport error or no-hit
-  // (fetchById returns null — never throws) is a silent skip; the verdict falls
-  // through to the normal JW path. No try/catch needed: the adapter already
-  // catches all transport errors and returns null (retraction-watch.ts:122-126).
-  // Placed AFTER the Crossref null-guard so FABRICATED citations (unresolved DOI)
-  // never reach this check (Pitfall 1 — avoids cassette-fallback false positives).
-  // Audit #16: a work can be listed in Retraction Watch under EITHER the claimed
-  // DOI or the canonical DOI Crossref redirected it to. Querying only the claimed
-  // DOI misses a retraction recorded against the canonical record (the original
-  // bug); querying only the canonical DOI would miss one recorded against the
-  // claimed/alias DOI. Check BOTH (deduped) and block on the first hit.
-  const retractionDois = [...new Set(
-    [claimed.DOI, actual.doi].filter((d): d is string => typeof d === 'string' && d.length > 0),
-  )];
-  let liveRetraction: Awaited<ReturnType<typeof retractionWatchFetchById>> = null;
-  for (const d of retractionDois) {
-    const hit = await retractionWatchFetchById(d);
-    if (hit !== null) {
-      liveRetraction = hit;
-      break;
+  // Identifiers are tried most reliable first. The first one a registry
+  // holds is compared; one before it that does not exist is itself an error
+  // in the entry, since the reference list prints it.
+  const misses: Array<{ id: WorkId; r: Exclude<IdResolution, { kind: 'found' }> }> = [];
+  for (const id of ids) {
+    const r = await resolveId(id);
+    if (r.kind !== 'found') {
+      misses.push({ id, r });
+      continue;
     }
-  }
-  if (liveRetraction !== null) {
-    const why = liveRetraction.retraction_details
-      ? `: ${liveRetraction.retraction_details}`
-      : '';
-    return {
-      citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
-      reason: `cited work appears in Retraction Watch (live re-query at verify time)${why}`,
-    };
-  }
-
-  const titleJW = jaroWinkler(actual.title, claimedTitle);
-  const authorJW = jaroWinkler(
-    firstAuthorSurname(actual.authors?.[0] ?? ''),
-    firstAuthorSurname(claimedAuthorsD14[0] ?? ''),
-  );
-
-  // Multi-DOI redirect handling — the claimed DOI may have redirected to a
-  // different canonical DOI; strict-match (≥0.98 title / ≥0.95 author) lets
-  // it pass with a diagnostic, otherwise MIS-CITED.
-  // DOIs are case-insensitive: Crossref reports them lowercased.
-  const actualDoi: string = actual.doi ?? claimed.DOI;
-  if (!sameDoi(actualDoi, claimed.DOI)) {
-    if (titleJW >= 0.98 && authorJW >= 0.95) {
-      return {
-        citekey: ck, verdict: 'OK', titleJW, authorJW,
-        reason: `multi-DOI redirect: ${claimed.DOI} → ${actualDoi}, strict-match OK`,
-      };
+    const bad = misses.find((x) => x.r.kind === 'not_found' && x.r.authoritative);
+    if (bad) {
+      return result(ck, 'MIS-CITED',
+        `${missDetail(bad.id, bad.r)}, although ${id.shown} is (${r.record.registry}) — correct or remove it`);
     }
-    return {
-      citekey: ck, verdict: 'MIS-CITED', titleJW, authorJW,
-      reason: `claimed DOI ${claimed.DOI} resolves to different work (canonical: ${actualDoi})`,
-    };
+    const unchecked = misses[0];
+    if (unchecked) {
+      return result(ck, 'UNRESOLVED',
+        `${missDetail(unchecked.id, unchecked.r)}; ${id.shown} was found, but every identifier the entry ` +
+        'prints must be confirmed — re-run verify later');
+    }
+    return verdictForRecord(ck, claimed, id, r.record);
   }
 
-  if (titleJW >= TITLE_JW_THRESHOLD && authorJW >= AUTHOR_JW_THRESHOLD) {
-    return {
-      citekey: ck, verdict: 'OK', titleJW, authorJW,
-      reason: 'D-11 AND-gate passed',
-    };
+  const detail = misses.map((x) => missDetail(x.id, x.r)).join('; ');
+  if (misses.every((x) => x.r.kind === 'not_found' && x.r.authoritative)) {
+    // An identifier that is not even well formed was never looked up: the
+    // entry is wrong, but nothing says the work is invented.
+    if (misses.every((x) => x.r.kind === 'not_found' && x.r.invalid)) {
+      return result(ck, 'MIS-CITED', `${detail} — correct the identifier`);
+    }
+    return result(ck, 'FABRICATED', `no registry holds a work with this entry's identifiers: ${detail}`);
   }
-  return {
-    citekey: ck, verdict: 'MIS-CITED', titleJW, authorJW,
-    reason: `JW below threshold (title=${titleJW.toFixed(2)}/${TITLE_JW_THRESHOLD}, author=${authorJW.toFixed(2)}/${AUTHOR_JW_THRESHOLD})`,
-  };
+  const retry = misses.some((x) => x.r.kind === 'unavailable')
+    ? ' — re-run verify when the registry answers'
+    : ' — check the identifier, or cite an edition a registry lists';
+  return result(ck, 'UNRESOLVED', `${detail}${retry}`);
 }
 
 /**
@@ -252,8 +220,9 @@ async function verdictForCitekey(
  * (research found nothing yet) is an empty library, not an error: every key a
  * draft cites is then FABRICATED.
  */
-async function readBib(citationsBibPath: string): Promise<Map<string, BibEntry>> {
-  return parseBibByCitekey<BibEntry>(readFileSync(citationsBibPath, 'utf8'));
+async function readBib(citationsBibPath: string): Promise<Bib> {
+  const text = readFileSync(citationsBibPath, 'utf8');
+  return { entries: await parseBibByCitekey<BibEntry>(text), fields: await parseBibFieldsByCitekey(text) };
 }
 
 const RAW_WHAT: Readonly<Record<RawCitationKind, string>> = {
@@ -282,16 +251,16 @@ export async function runPass1(
   draftMd: string,
   citationsBibPath: string,
 ): Promise<Pass1Result[]> {
-  const bibByCitekey = await readBib(citationsBibPath);
+  const bib = await readBib(citationsBibPath);
   const cites = findCitations(draftMd);
   const bracketed = new Set(citedKeys(cites.filter((c) => !c.narrative)));
 
   const results: Pass1Result[] = [];
   for (const ck of citedKeys(cites)) {
-    const r = await verdictForCitekey(ck, bibByCitekey.get(ck));
+    const r = await verdictForCitekey(ck, bib.entries.get(ck), bib.fields.get(ck));
     // `@word` in running text is a citation to Pandoc; when it was meant as
     // text (a handle), the fix is an escape, not a new source.
-    if (r.verdict === 'FABRICATED' && !bibByCitekey.has(ck) && !bracketed.has(ck)) {
+    if (r.verdict === 'FABRICATED' && !bib.entries.has(ck) && !bracketed.has(ck)) {
       r.reason += ` — if @${ck} is not a citation, write it as \\@${ck}`;
     }
     results.push(r);
@@ -335,44 +304,46 @@ export async function runFreshnessForDraft(
   const bib = await readBib(citationsBibPath);
   // The same keys runPass1 checks, so the advisory probe covers what the gate sees.
   return probeFreshnessAll(
-    pass1CitedKeys(draftMd).map((ck) => ({ citekey: ck, doi: bib.get(ck)?.DOI ?? null })),
+    pass1CitedKeys(draftMd).map((ck) => ({ citekey: ck, doi: bib.entries.get(ck)?.DOI ?? null })),
   );
 }
 
+/** A "Family, Given" (or display-order) name string as a WorkName. */
+function nameFromString(s: string): WorkName {
+  const comma = s.indexOf(',');
+  if (comma < 0) return { text: s };
+  const family = s.slice(0, comma).trim();
+  const given = s.slice(comma + 1).trim();
+  return given ? { family, given } : { family };
+}
+
 /**
- * CYCLE-2 H-4 — fixture-shape helper for tests/known-bad-citations.test.ts.
- *
- * Takes a synthetic `{ claimed, actual }` shape directly so unit fixtures
- * can be tested in isolation — no HTTP, no BibTeX parse, no DRAFT.md.
- * Plan 03-09 tests/known-bad-citations.test.ts MUST import this helper,
- * NOT `runPass1`.
+ * Fixture-shape helper for tests/known-bad-citations.test.ts: a synthetic
+ * `{ claimed, actual }` pair with no HTTP, BibTeX or DRAFT.md. It applies the
+ * same comparison as runPass1 (`actual: null` is a DOI no registry holds).
  */
 export function runPass1Unit(input: {
   claimed: { title: string; authors: string[]; doi: string | null; retracted?: boolean };
   actual: { title: string; authors: string[]; doi: string | null } | null;
 }): { verdict: Pass1Verdict; titleJW: number; authorJW: number; reason: string } {
+  const strip = ({ verdict, titleJW, authorJW, reason }: Pass1Result) => ({ verdict, titleJW, authorJW, reason });
   if (!input.claimed.doi) {
-    return { verdict: 'FABRICATED', titleJW: 0, authorJW: 0, reason: 'no DOI in claimed citation' };
+    return strip(result('', 'UNRESOLVED', 'no identifier in the claimed citation to look the work up by'));
   }
-  if (input.claimed.retracted) {
-    return { verdict: 'MIS-CITED', titleJW: 0, authorJW: 0, reason: 'cited a retracted work' };
-  }
-  if (!input.actual) {
-    return { verdict: 'FABRICATED', titleJW: 0, authorJW: 0, reason: `DOI ${input.claimed.doi} did not resolve` };
-  }
-  const titleJW = jaroWinkler(input.actual.title ?? '', input.claimed.title ?? '');
-  // CYCLE-3 MEDIUM REVIEWS CONVERGENCE — defense-in-depth null-safety.
-  // Optional chaining on both `actual?` and `authors?.[0]` prevents the
-  // whole pass from throwing on a single malformed fixture row.
-  const authorJW = jaroWinkler(
-    firstAuthorSurname(input.actual?.authors?.[0] ?? ''),
-    firstAuthorSurname(input.claimed?.authors?.[0] ?? ''),
-  );
-  if (titleJW >= TITLE_JW_THRESHOLD && authorJW >= AUTHOR_JW_THRESHOLD) {
-    return { verdict: 'OK', titleJW, authorJW, reason: 'D-11 AND-gate passed' };
-  }
-  return {
-    verdict: 'MIS-CITED', titleJW, authorJW,
-    reason: `JW below threshold (title=${titleJW.toFixed(2)}/${TITLE_JW_THRESHOLD}, author=${authorJW.toFixed(2)}/${AUTHOR_JW_THRESHOLD})`,
+  if (input.claimed.retracted) return strip(result('', 'MIS-CITED', 'cited a retracted work'));
+  if (!input.actual) return strip(result('', 'FABRICATED', `DOI ${input.claimed.doi} is not registered`));
+  const record: WorkRecord = {
+    registry: 'Crossref',
+    title: input.actual.title ?? '',
+    authors: (input.actual.authors ?? []).map(nameFromString),
+    years: [],
+    venues: [],
+    journalArticle: false,
+    raw: input.actual,
+    ...(input.actual.doi ? { doi: input.actual.doi } : {}),
   };
+  const m = matchWork({ title: input.claimed.title ?? '', authors: (input.claimed.authors ?? []).map(nameFromString) }, record);
+  return m.ok
+    ? strip(result('', 'OK', 'matches the record', m.titleScore, m.authorScore))
+    : strip(result('', 'MIS-CITED', m.problems.join('; '), m.titleScore, m.authorScore));
 }

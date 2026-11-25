@@ -447,8 +447,8 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
       const named = other.map((r) => `${r.citekey} (${r.verdict})`).join('; ');
       const why =
         `Section ${opts.n} has blocking verdict(s) revise cannot repair by swapping or removing a citekey: ${named}. ` +
-        'Rewrite a raw or broken citation as [@key], ' +
-        'or re-run verify with network access for UNRESOLVED; then verify again.';
+        'Rewrite a raw or broken citation as [@key]; for UNRESOLVED, re-run verify once the registry ' +
+        'answers, or give the entry a DOI, arXiv ID, PMID or ISBN if it has none; then verify again.';
       return { ...base, message: `${base.message} ${why}`.trim() };
     }
     return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation in section ${opts.n}.`.trim() };
