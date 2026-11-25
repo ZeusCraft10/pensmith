@@ -1,7 +1,7 @@
 # Privacy
 
 Pensmith is local-only software. There is no pensmith server, no account, and
-No telemetry: no usage analytics, crash reports or remote logging. Your paper
+no telemetry: no usage analytics, crash reports or remote logging. Your paper
 lives in the `.paper/` folder of your project; the shared library index and
 logs live in your user data folder.
 

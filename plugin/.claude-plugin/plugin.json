@@ -1,7 +1,7 @@
 {
   "name": "pensmith",
   "version": "0.3.0-alpha.1",
-  "description": "Alpha. Plans, drafts and verifies academic papers one section at a time; every citation is checked against live scholarly registries before a section can be compiled or exported. Drafting currently needs an Anthropic API key.",
+  "description": "Alpha. Plans, drafts and verifies academic papers one section at a time; every citation is checked against live scholarly registries before a section can be compiled or exported. Drafting currently needs an Anthropic API key. Requires Node.js 22.12+ on PATH (check with node --version).",
   "author": {
     "name": "Akhil Achanta",
     "email": "akhilachanta8@gmail.com"

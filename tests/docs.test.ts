@@ -34,6 +34,39 @@ test('README states the alpha status, the version and the Phase-1 API-key need',
   assert.match(readme, /Node\.js 22\.12|node-%3E%3D22\.12/);
 });
 
+/** The README section under `## <heading>`, up to the next `## ` heading. */
+function section(md: string, heading: string): string {
+  const start = md.indexOf(`\n## ${heading}\n`);
+  assert.ok(start >= 0, `README must have a "## ${heading}" section`);
+  const rest = md.slice(start + 1);
+  const end = rest.indexOf('\n## ', 1);
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
+test('README quick start is one command per surface: /pensmith, and pensmith in a terminal', () => {
+  const qs = section(readme, 'Quick start');
+  const blockLines = [...qs.matchAll(/```[a-z]*\n([\s\S]*?)```/g)]
+    .flatMap((m) => m[1]!.split('\n'))
+    .map((l) => l.replace(/\s+#.*$/, '').trim())
+    .filter((l) => l.length > 0 && !l.startsWith('#'));
+  const inline = [...qs.replace(/```[\s\S]*?```/g, '').matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim());
+  const allowed = new Set(['/pensmith', 'pensmith', 'pensmith next']);
+  assert.deepEqual(blockLines.filter((l) => !allowed.has(l)), [], 'quick-start code blocks hold nothing but the one command');
+  assert.ok(blockLines.length <= 2, `one command per surface, got: ${blockLines.join(' | ')}`);
+  assert.ok(blockLines.includes('/pensmith'), 'the Claude Code command is /pensmith');
+  assert.ok(blockLines.includes('pensmith') || blockLines.includes('pensmith next'), 'the terminal command is pensmith');
+  const others = inline.filter((c) => /^\/?pensmith\b/.test(c) && !allowed.has(c));
+  assert.deepEqual(others, [], 'other commands belong in the command reference');
+});
+
+test('README install section says Node must be on PATH and how to check it', () => {
+  const install = section(readme, 'Install');
+  assert.match(install, /Node\.js 22\.12 or newer/);
+  assert.match(install, /PATH/);
+  assert.match(install, /`node --version`/);
+  assert.match(install, /hook/i, 'say that the session-start hook runs with node');
+});
+
 test('README install steps match the plugin layout', () => {
   assert.match(readme, /plugin marketplace add/);
   assert.match(readme, /plugin install pensmith@pensmith/);
@@ -51,6 +84,7 @@ test('README makes none of the claims the code does not back', () => {
     [/Skills \+ an MCP/i, 'there is no MCP server'],
     [/(lets|allows) research (to )?(pull|read)|research (can |will )?(pulls?|reads?) from (a |your )?Zotero/i,
       'research does not read from Zotero in this alpha'],
+    [/verifier could not confirm/i, 'only FABRICATED, MIS-CITED and quote NOT_FOUND block; an unconfirmed citation does not'],
   ];
   for (const [re, why] of banned) assert.ok(!re.test(readme), `README must not claim ${re}: ${why}`);
 });
@@ -94,4 +128,5 @@ test('PRIVACY.md is a host-by-host table that covers model providers and arbitra
   assert.match(privacy, /open-access/i);
   assert.match(privacy, /local-only/i);
   assert.match(privacy, /No telemetry/i);
+  assert.doesNotMatch(privacy, /, and\s+No telemetry/, 'lower-case "no telemetry" mid-sentence');
 });

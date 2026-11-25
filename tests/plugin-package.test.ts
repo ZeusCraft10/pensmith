@@ -76,6 +76,8 @@ test('plugin.json carries the required metadata and nothing that overrides disco
     assert.ok(!(key in manifest), `plugin.json must not set ${key}`);
   }
   assert.match(String(manifest['description']), /alpha/i, 'the description must say this is an alpha');
+  // The SessionStart hook and the CLI run `node`, which the native installer does not provide.
+  assert.match(String(manifest['description']), /Node\.js 22\.12\+? (or newer )?on (your )?PATH/, 'the description must name the Node requirement');
 });
 
 test('the payload has no package.json or lockfile, so no npm install ever runs', () => {
