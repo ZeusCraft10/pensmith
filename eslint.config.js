@@ -205,6 +205,9 @@ export default [
       // Counts requests with a MockAgent to prove offline and cassette modes
       // never reach the network and live mode does.
       'tests/network-mode.test.ts',
+      // Counts the Crossref requests `add <doi>` sends with a MockAgent, and
+      // points the HTTP cache at a folder that cannot be written.
+      'tests/add-doi-single-fetch.test.ts',
       // Must import undici MockAgent to prove the arXiv adapter only talks
       // https, and redirect the HTTP cache into a per-test tmpdir.
       'tests/sources/arxiv-https.test.ts',

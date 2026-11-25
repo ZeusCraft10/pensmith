@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { inspect } from 'node:util';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
 import { fetch as httpFetch, _resetBucketsForTest } from '../bin/lib/http.js';
 import {
@@ -217,6 +218,27 @@ test('offline mode: http.fetch refuses with a typed error and dispatches nothing
         return true;
       },
     );
+    assert.deepEqual(agent.requests, []);
+  });
+});
+
+test('offline mode: the refusal never carries the refused URL, whose query may hold a contact email', async () => {
+  // Unpaywall asks for ?email=<PENSMITH_CONTACT_EMAIL>. An uncaught refusal is
+  // printed by util.inspect (citty's runMain) and may be serialized to a log,
+  // so the error names the origin only and keeps no `url` property.
+  await inMode({ PENSMITH_OFFLINE: '1' }, async (agent) => {
+    const url = 'https://api.unpaywall.org/v2/10.1/x?email=me%40uni.edu';
+    const err: unknown = await httpFetch(url, { source: 'unpaywall' }).then(
+      () => assert.fail('an offline fetch must be refused'),
+      (e: unknown) => e,
+    );
+    assert.ok(err instanceof OfflineEgressError, `expected OfflineEgressError, got ${String(err)}`);
+    assert.ok(!Object.hasOwn(err, 'url'), `the error keeps the refused URL: ${JSON.stringify(Object.keys(err))}`);
+    for (const [how, text] of [['util.inspect', inspect(err)], ['JSON.stringify', JSON.stringify(err)]] as const) {
+      assert.ok(!text.includes('email='), `${how}(err) echoes the query string: ${text}`);
+      assert.ok(!text.includes('uni.edu'), `${how}(err) echoes the contact address: ${text}`);
+    }
+    assert.match(err.message, /refused request to https:\/\/api\.unpaywall\.org/);
     assert.deepEqual(agent.requests, []);
   });
 });

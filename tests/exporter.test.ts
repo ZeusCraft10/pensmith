@@ -143,6 +143,16 @@ test('exporter (#19): offline LaTeX resolves citations and emits a References se
   assert.match(tex, /\\begin\{document\}/);
 });
 
+test('exporter: offline LaTeX escapes a backslash once, with no escaped braces after it', async () => {
+  // \textbackslash\{\} (the braces escaped a second time) prints a stray "{}"
+  // after every backslash under pdflatex; \textbackslash{} prints the backslash.
+  const { root, inputPath } = seedPaper('backslash', '# Draft\n\nThe files live in C:\\Temp\\file today.\n');
+  const res = await exportDraft({ inputPath, format: 'latex', paperRoot: root, pandocPresent: false });
+  const tex = readFileSync(res.outputPath, 'utf8');
+  assert.ok(tex.includes('C:\\textbackslash{}Temp\\textbackslash{}file'), tex);
+  assert.ok(!tex.includes('\\textbackslash\\{\\}'), tex);
+});
+
 // An export folder on another disk (a USB stick, a synced drive) cannot be
 // reached by rename(2) from the staging folder in .paper/. /dev/shm is a
 // separate tmpfs on Linux; elsewhere there is no second disk to try.
