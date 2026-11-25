@@ -1,42 +1,43 @@
-// bin/lib/revise.ts — single Tier-1/Tier-2 revise chokepoint (Plan 04-04).
+// bin/lib/revise.ts — the one revise path, shared by the plugin and the CLI.
 //
-// D-05 / D-06 (LOCKED): `pensmith revise` (Tier-1 slash) and the Tier-2 CLI
-// BOTH delegate to runRevise — there is NO divergent code path between tiers
-// (WRTE-02 satisfied by this single module). The flow follows 04-RESEARCH §I:
+// `pensmith revise` and `pensmith plan <n> --revise` both call runRevise, so
+// the two tiers cannot diverge. The flow:
 //
-//   1. Parse sections/<N>/VERIFICATION.md (with the parser compile uses) for
-//      the FIRST failing citation (FABRICATED / MIS-CITED / NOT_FOUND / RETRACTED), in
-//      order of appearance. Other blocking verdicts are named, not repaired.
-//   2. Load PLAN.md frontmatter → assigned_sources + the section voice hint
-//      (WRTE-02 per-section consume point — threaded into the prompt vars).
-//   3. Ask the LLM (via the hash-pinned revise-swap prompt) for a citekey swap.
-//      Parse the response with a STRICT zod schema. REJECT if action ∉
-//      {swap,remove} OR replacement_citekey ∉ assigned_sources (T-04-14
-//      LLM-response-injection mitigation — no new citekeys ever enter DRAFT.md).
-//   4. Approval gate (default-on, PRD §19): render a before/after diff and
-//      prompt. Skipped under --yolo. Non-TTY without --yolo → exit code 3.
+//   1. Read sections/<N>/VERIFICATION.md (with the parser compile uses) for the
+//      FIRST failing citation (FABRICATED / MIS-CITED / NOT_FOUND / RETRACTED),
+//      in order of appearance. Other blocking verdicts are named, not repaired.
+//   2. Load the PLAN.md frontmatter: assigned_sources and the section's voice
+//      hint, which go into the prompt.
+//   3. Ask the model (the hash-pinned revise-swap prompt) for a swap or a
+//      remove. The answer is parsed with a strict zod schema and rejected
+//      unless the action is swap or remove and any replacement key is in
+//      assigned_sources, so no new citekey ever enters DRAFT.md.
+//   4. Approval gate (default-on, PRD §19): show the change and ask. Skipped
+//      under --yolo. A non-TTY without --yolo exits 3.
 //   5. On accept: `swap` replaces the flagged key inside each citation that
-//      cites it (prefix and locator kept). `remove` is mechanical too (no LLM
-//      prose rewrite). For a misquotation (a Pass-3 NOT_FOUND row) it deletes
+//      cites it (prefix and locator kept). `remove` is mechanical too (no
+//      model rewrite). For a misquotation (a Pass-3 NOT_FOUND row) it deletes
 //      the quotation, with the sentence or block quote that holds it, and
-//      leaves the work's other citations alone. For a failed citation it deletes
-//      the key from its clusters, or the whole bracketed citation when it is
-//      the only key, and every quotation attributed to that key alone: removing
-//      only the key would leave the quotation in quote marks with nothing to
-//      check it against. A patch that changes nothing is not applied. Write
-//      DRAFT.md via atomicWriteFile; reset PLAN.md verified_against_draft_hash
-//      → null via updateFrontmatter under withLock, so verify must run again.
-//   6. --yolo auto-loop: re-run the SAME path up to 2 retries; on exhaustion
-//      write a RETRY_EXHAUSTED verdict to VERIFICATION.md (D-06).
+//      leaves the work's other citations alone; a quotation that also cites a
+//      work Pass 3 found it in stays, cited to that work. For a failed
+//      citation it deletes the key from its clusters, or the whole bracketed
+//      citation when it is the only key, and every quotation attributed to
+//      that key alone: removing only the key would leave the quotation in
+//      quote marks with nothing to check it against. A patch that changes
+//      nothing is not applied. DRAFT.md is written through atomicWriteFile,
+//      and PLAN.md's verified_against_draft_hash is reset to null under a
+//      lock, so verify must run again.
+//   6. --yolo retries the same path up to 2 more times; when every proposal
+//      is invalid it writes a RETRY_EXHAUSTED verdict to VERIFICATION.md.
 //
-// --research (D-09 / PLAN-03): append the query's findings to the project-level
-// .paper/RESEARCH.md, merge new entries into .paper/CITATIONS.bib (with a
-// non-standard `from_section: <N>` annotation), AND append a provenance row to
-// sections/<N>/RESEARCH-LOG.md (query, adapter, hit-count, citekeys-added,
-// ISO timestamp). RESEARCH-LOG.md is the ONLY section-level file --research
-// creates — NO other section's files are touched (section-as-phase isolation).
+// --research appends the query's findings to the project-level
+// .paper/RESEARCH.md, merges new entries into .paper/CITATIONS.bib (with a
+// non-standard `from_section: <N>` annotation), and appends a provenance row
+// to sections/<N>/RESEARCH-LOG.md (query, adapter, hit count, citekeys added,
+// ISO timestamp). RESEARCH-LOG.md is the only section-level file --research
+// creates; no other section's files are touched.
 //
-// ALL writes route through atomicWriteFile (D-07 chokepoint) — never raw fs.
+// Every write goes through atomicWriteFile, never raw fs.
 
 import { z } from 'zod';
 import { readFileSync, existsSync } from 'node:fs';
@@ -55,13 +56,13 @@ import {
   type Citation,
   type Quote,
 } from './citation-grammar.js';
-import { parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
+import { oneLine, parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
 import { parseBibtex } from './citations.js';
 import { writeBibtex } from './bibtex-write.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
-// --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
+// --yolo retry cap: 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
 
 /** The verifier verdicts that --revise repairs. */
@@ -69,7 +70,7 @@ const FAILING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED'
 /** FAILING_VERDICTS as message text: `FABRICATED/MIS-CITED/...`. */
 const FAILING_VERDICT_LIST = [...FAILING_VERDICTS].join('/');
 
-// Strict-JSON contract for the revise-swap LLM response (04-RESEARCH §I).
+// Strict-JSON contract for the revise-swap model response.
 const ReviseSwapSchema = z.object({
   action: z.enum(['swap', 'remove']),
   flagged_citekey: z.string(),
@@ -106,7 +107,7 @@ export interface ReviseOptions {
   n: number;
   slug: string;
   yolo: boolean;
-  /** Section-scoped additional research query (PLAN-03 / D-09). */
+  /** Section-scoped additional research query. */
   research?: string;
   /**
    * LLM call seam. Returns the raw strict-JSON string the revise-swap prompt
@@ -119,7 +120,7 @@ export interface ReviseOptions {
    * TTY (exit code 3 in a non-TTY without --yolo). Tests inject a boolean.
    */
   approve?: (proposal: ReviseSwapProposal) => Promise<boolean>;
-  /** --research adapter seam (PLAN-03). Default uses bin/lib/sources/*. */
+  /** --research adapter seam. Default uses bin/lib/sources/*. */
   researchAdapter?: (query: string) => Promise<ResearchHit[]>;
 }
 
@@ -130,7 +131,7 @@ export interface ReviseResult {
   accepted: boolean;
   flagged_citekey: string | null;
   replacement_citekey: string | null;
-  /** True iff --yolo exhausted its retry budget (D-06). */
+  /** True iff --yolo exhausted its retry budget. */
   retryExhausted: boolean;
   /** Why a proposal was rejected (membership guard / invalid shape), if any. */
   rejectedReason?: string;
@@ -158,6 +159,8 @@ interface FailingCitation {
   reason: string;
   /** For a misquotation (a Pass-3 row), the start of the quotation. */
   quote?: string;
+  /** For a misquotation, the other cited works Pass 3 found it in. */
+  foundIn?: string[];
 }
 
 /**
@@ -167,11 +170,14 @@ interface FailingCitation {
  * section has no FABRICATED / MIS-CITED / NOT_FOUND / RETRACTED citation.
  */
 export function firstFailingCitation(verificationMd: string): FailingCitation | null {
-  const row = parseVerdictRowDetails(verificationMd)
-    .find((r) => FAILING_VERDICTS.has(r.verdict));
+  const rows = parseVerdictRowDetails(verificationMd);
+  const row = rows.find((r) => FAILING_VERDICTS.has(r.verdict));
   if (!row) return null;
   const failing: FailingCitation = { citekey: row.citekey, reason: `${row.verdict}: ${row.detail}` };
-  if (row.quote !== undefined) failing.quote = row.quote;
+  if (row.quote !== undefined) {
+    failing.quote = row.quote;
+    failing.foundIn = rows.filter((r) => r.verdict === 'OK' && r.quote === row.quote && r.citekey !== row.citekey).map((r) => r.citekey);
+  }
   return failing;
 }
 
@@ -235,23 +241,31 @@ function cut(md: string, s: number, e: number): string {
 /**
  * `md` with quotations attributed to `key` taken out, and the text taken out.
  *
- * With `start` (a misquotation), the quotation that begins with it. When its
- * citation cites other works too, only `key` leaves that citation: the
- * quotation stays, to be checked against the others. Without `start` (the key
- * itself failed), every quotation attributed to `key` alone.
+ * With `misquoted` (a Pass-3 row), the quotation that begins with its `start`.
+ * When its citation also cites a work Pass 3 found it in (`foundIn`), only
+ * `key` leaves that citation and the quotation stays. Otherwise it goes: the
+ * verifier showed it is not in one of its cited works, and keeping it on the
+ * others' word, unchecked, would discard that. Without `misquoted` (the key
+ * itself failed), every quotation attributed to `key` alone; one that cites
+ * other works too stays with them, to be checked against them.
  *
  * An inline quotation goes with its sentence. A block quotation goes with its
  * block, the sentence that introduces it with a colon, and its citation.
  */
-function withoutQuotations(md: string, key: string, start?: string): { text: string; removed: string[] } {
+function withoutQuotations(
+  md: string,
+  key: string,
+  misquoted?: { start: string; foundIn: readonly string[] },
+): { text: string; removed: string[] } {
   const cites = findCitations(md);
   const breaks = paragraphBreaks(md);
   const spans: Array<[number, number]> = [];
   const rewrites: Array<{ s: number; e: number; text: string }> = [];
-  for (const q of quotationsOf(md, key, start, cites)) {
+  for (const q of quotationsOf(md, key, misquoted?.start, cites)) {
     const c = q.citation!;
-    if (c.items.some((i) => i.key !== key)) {
-      if (start !== undefined && !c.narrative) rewrites.push({ s: c.start, e: c.end, text: clusterWithoutKey(c, key) });
+    if (!misquoted && c.items.some((i) => i.key !== key)) continue;
+    if (misquoted && c.items.some((i) => i.key !== key && misquoted.foundIn.includes(i.key))) {
+      if (!c.narrative) rewrites.push({ s: c.start, e: c.end, text: clusterWithoutKey(c, key) });
       continue;
     }
     if (q.kind === 'inline') {
@@ -280,7 +294,7 @@ function withoutQuotations(md: string, key: string, start?: string): { text: str
 }
 
 // ---------------------------------------------------------------------------
-// Voice-hint extraction — WRTE-02 per-section consume point.
+// Voice-hint extraction.
 // The section-planner prompt writes a one-line `Voice: ...` in the ## Brief.
 // ---------------------------------------------------------------------------
 
@@ -356,7 +370,7 @@ function validateProposal(
     if (p.replacement_citekey === flagged) {
       return { ok: false, reason: `swap replaces "${flagged}" with itself, which repairs nothing` };
     }
-    // T-04-14: replacement MUST be drawn from assigned_sources — no new citekeys.
+    // The replacement must be one of assigned_sources: no new citekeys.
     if (!assignedSources.includes(p.replacement_citekey)) {
       return { ok: false, reason: `replacement_citekey "${p.replacement_citekey}" is not in assigned_sources (no new citekeys allowed)` };
     }
@@ -395,7 +409,7 @@ function patchFor(
   }
   // A misquotation: the quotation goes, and the work stays cited where Pass 1 confirmed it.
   if (failing.quote !== undefined) {
-    const { text, removed } = withoutQuotations(draftMd, flagged, failing.quote);
+    const { text, removed } = withoutQuotations(draftMd, flagged, { start: failing.quote, foundIn: failing.foundIn ?? [] });
     if (text === draftMd) {
       return { refused: `the draft no longer holds the quotation "${failing.quote}…" cited to ${flagged} — re-run verify` };
     }
@@ -410,10 +424,19 @@ function patchFor(
   return patched === draftMd ? { refused: 'the remove changed nothing in DRAFT.md' } : { patched, removed };
 }
 
+/** How much deleted text the message shows. */
+const DELETED_SHOWN = 60;
+
+/** `text` on one line, cut to DELETED_SHOWN characters, with an ellipsis only when cut. */
+function excerpt(text: string): string {
+  const one = oneLine(text).trim();
+  return one.length > DELETED_SHOWN ? `${one.slice(0, DELETED_SHOWN).trimEnd()}…` : one;
+}
+
 async function applyProposal(draftPath: string, planPath: string, patched: string): Promise<void> {
   await atomicWriteFile(draftPath, patched);
 
-  // Reset verified_against_draft_hash → null under a per-PLAN.md lock (D-05).
+  // Reset verified_against_draft_hash → null under a per-PLAN.md lock.
   await withLock(planPath, async () => {
     const cur = readFileSync(planPath, 'utf8');
     const next = updateFrontmatter(cur, (fm) => {
@@ -500,7 +523,7 @@ async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<
   }
 
   // 3. Append a provenance row to sections/<N>/RESEARCH-LOG.md (the ONLY
-  //    section-level file --research writes — D-09 / PLAN-03 isolation).
+  //    section-level file --research writes).
   const logPath = sectionResearch(opts.n, opts.slug, root).replace(/RESEARCH\.md$/, 'RESEARCH-LOG.md');
   const priorLog = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '# RESEARCH-LOG (section provenance)\n\n| timestamp | query | adapter | hits | citekeys-added |\n| --- | --- | --- | --- | --- |\n';
   const row = `| ${now} | ${query} | revise --research | ${hits.length} | ${citekeysAdded.join(', ')} |\n`;
@@ -508,7 +531,7 @@ async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// RETRY_EXHAUSTED verdict → VERIFICATION.md (D-06).
+// RETRY_EXHAUSTED verdict → VERIFICATION.md.
 // ---------------------------------------------------------------------------
 
 async function writeRetryExhausted(verifPath: string, flagged: string): Promise<void> {
@@ -627,8 +650,9 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     }
 
     await applyProposal(draftPath, planPath, patch.patched);
-    const deleted = patch.removed.length === 0 ? ''
-      : ` Deleted ${patch.removed.length === 1 ? 'the quotation' : `${patch.removed.length} passages with quotations`} it alone supported: "${patch.removed[0]!.slice(0, 60)}…".`;
+    const what = failing.quote !== undefined ? 'the misquotation'
+      : patch.removed.length === 1 ? 'the quotation it alone supported' : `${patch.removed.length} passages with quotations it alone supported`;
+    const deleted = patch.removed.length === 0 ? '' : ` Deleted ${what}: "${excerpt(patch.removed[0]!)}".`;
     return {
       ...base,
       accepted: true,

@@ -155,3 +155,51 @@ test('revise remove on a NOT_FOUND block quotation introduced by a narrative cit
   assert.equal(res.accepted, true, res.message);
   assert.equal(draftOf(root), '# Intro\n\nOther work disagrees [@jones2019].\n');
 });
+
+// A misquotation that cites two works was kept, attributed to the other one,
+// whatever the verifier said about it there. When the other work had no
+// open-access text, the next verify read PDF_UNAVAILABLE, which does not
+// block: the evidence that the quotation is not in one of its cited works was
+// thrown away. It is kept only where another cited work was found to hold it.
+const COCITED = `# Intro\n\nThe literature is broad [@jones2019]. It is reported that "${FABRICATED_QUOTE}" [@smith2020; @jones2019, p. 2]. Other work disagrees [@jones2019].\n`;
+const pass3Row = (key: string, verdict: string): string =>
+  renderPass3VerdictRow(key, FABRICATED_QUOTE.slice(0, 40), verdict, verdict === 'OK' ? 1 : 0, verdict === 'OK' ? 'quote found word for word' : 'no OA PDF');
+
+test('revise remove deletes a co-cited misquotation that no other cited work was found to hold', async () => {
+  for (const other of ['PDF_UNAVAILABLE', 'TEXT_UNAVAILABLE', 'NOT_FOUND']) {
+    const root = seed(COCITED, ['## Pass-3', '', NOT_FOUND_ROW, pass3Row('jones2019', other)]);
+    const { res, shown } = await revise(root, REMOVE('smith2020'));
+    assert.equal(res.accepted, true, res.message);
+    assert.equal(draftOf(root), '# Intro\n\nThe literature is broad [@jones2019]. Other work disagrees [@jones2019].\n', other);
+    assert.match(shown[0] ?? '', /cured every patient/, 'the gate showed the deleted quotation');
+  }
+});
+
+test('revise remove --yolo deletes a co-cited misquotation whose other work had no open-access text', async () => {
+  const root = seed(COCITED, ['## Pass-3', '', NOT_FOUND_ROW, pass3Row('jones2019', 'PDF_UNAVAILABLE')]);
+  const res = await runRevise({ paperRoot: root, n: 1, slug: 'intro', yolo: true, proposeSwap: () => Promise.resolve(REMOVE('smith2020')) });
+  assert.equal(res.accepted, true, res.message);
+  assert.deepEqual(extractQuotes(draftOf(root)), []);
+});
+
+test('revise remove keeps a co-cited misquotation another cited work was found to hold, and drops the flagged key', async () => {
+  const root = seed(COCITED, ['## Pass-3', '', NOT_FOUND_ROW, pass3Row('jones2019', 'OK')]);
+  const { res } = await revise(root, REMOVE('smith2020'));
+  assert.equal(res.accepted, true, res.message);
+  assert.equal(draftOf(root),
+    `# Intro\n\nThe literature is broad [@jones2019]. It is reported that "${FABRICATED_QUOTE}" [@jones2019, p. 2]. Other work disagrees [@jones2019].\n`);
+});
+
+test('revise remove says what it deleted on one line, with an ellipsis only when it cut the text short', async () => {
+  const short = '# Intro\n\nSmith said "the trial\nwas stopped early" [@smith2020, p. 4]. Other work disagrees [@jones2019].\n';
+  const row = renderPass3VerdictRow('smith2020', 'the trial was stopped early', 'NOT_FOUND', 0, 'quote not found word for word');
+  const root = seed(short, ['## Pass-3', '', row]);
+  const { res } = await revise(root, REMOVE('smith2020'));
+  assert.equal(res.accepted, true, res.message);
+  assert.match(res.message, /Deleted the misquotation: "Smith said "the trial was stopped early" \[@smith2020, p\. 4\]\."\./);
+  assert.doesNotMatch(res.message, /\n/);
+
+  const long = seed(DRAFT, ['## Pass-3', '', NOT_FOUND_ROW]);
+  const { res: res2 } = await revise(long, REMOVE('smith2020'));
+  assert.match(res2.message, /Deleted the misquotation: "Smith reports that "the treatment cured every patient in the…"\./);
+});
