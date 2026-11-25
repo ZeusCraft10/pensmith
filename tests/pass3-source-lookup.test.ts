@@ -19,6 +19,7 @@ import { MockAgent, getGlobalDispatcher, setGlobalDispatcher } from 'undici';
 import { runPass3 } from '../bin/lib/verify/pass3.js';
 import { isBlockingVerdict } from '../bin/lib/verify/verdict-rows.js';
 import { _resetBucketsForTest, _resetWarnedForTest } from '../bin/lib/http.js';
+import { textPdf } from './lib/pdf-fixture.js';
 
 // These tests drive http.ts's live transport against an undici MockAgent with
 // net connect disabled, so they run in live mode, not cassette replay (each
@@ -44,33 +45,6 @@ const DRAFT = [
   '',
 ].join('\n');
 const BIB = new Map([['k', { DOI, title: 'A Paper', author: [{ family: 'Smith', given: 'Ann' }] }]]);
-
-/**
- * An uncompressed, ASCII-only PDF holding `text`. A comment pads it past
- * 4 KB: pdf-parse misreads a smaller one intermittently, and a real OA PDF is
- * never that small.
- */
-function makePdf(text: string): Buffer {
-  const content = `BT /F1 10 Tf 20 700 Td (${text}) Tj ET`;
-  const objs = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 2000 800] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-  ];
-  let out = `%PDF-1.4\n%${'x'.repeat(5000)}\n`;
-  const offsets: number[] = [];
-  objs.forEach((o, i) => {
-    offsets.push(out.length);
-    out += `${i + 1} 0 obj\n${o}\nendobj\n`;
-  });
-  const xref = out.length;
-  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
-  for (const o of offsets) out += `${String(o).padStart(10, '0')} 00000 n \n`;
-  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(out, 'latin1');
-}
 
 const UNPAYWALL_RECORD = JSON.stringify({
   doi: DOI, title: 'A Paper', year: 2020, is_oa: true,
@@ -120,7 +94,7 @@ async function pass3With(failFirst: 'none' | 'unpaywall' | 'pdf'): Promise<{ ver
   }
   oaHost.intercept({ path: '/paper.pdf', method: 'GET' }).reply(() => {
     ok.pdf++;
-    return { statusCode: 200, data: makePdf(SOURCE), responseOptions: { headers: { 'content-type': 'application/pdf' } } };
+    return { statusCode: 200, data: textPdf(SOURCE), responseOptions: { headers: { 'content-type': 'application/pdf' } } };
   }).persist();
 
   try {

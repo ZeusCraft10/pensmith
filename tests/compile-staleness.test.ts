@@ -188,3 +188,31 @@ test('a changed draft is reported with the hashes of the draft verify checked an
   const report = readFileSync(join(root, '.paper', 'COMPILE-REPORT.md'), 'utf8');
   assert.ok(report.includes(`- 1 (intro): DRAFT.md changed since verify (${record.draft_sha256.slice(0, 12)} → ${now.slice(0, 12)}) (re-verify passed)`), report);
 });
+
+test("a record whose draft_hash no longer matches is stale, even when its draft_sha256 was rewritten to the edited draft", async () => {
+  // draft_hash binds the draft and its assigned sources as verify hashed
+  // them. A record edited by hand, or by an agent, so that only draft_sha256
+  // names the new DRAFT.md still describes the text verify checked.
+  const draft = '# Intro\n\nGrounded [@smith2020].\n';
+  const root = seedPaper([{ n: 1, slug: 'intro', draft, assignedSources: ['smith2020'], stale: false }]);
+  const dir = join(root, '.paper', 'sections', '01-intro');
+  const edited = `${draft}A new claim nobody verified [@smith2020].\n`;
+  writeFileSync(join(dir, 'DRAFT.md'), edited);
+  const recordPath = join(dir, 'VERIFICATION.json');
+  const record = JSON.parse(readFileSync(recordPath, 'utf8')) as Record<string, unknown>;
+  writeFileSync(recordPath, `${JSON.stringify({ ...record, draft_sha256: sha256(Buffer.from(edited, 'utf8')) }, null, 2)}\n`);
+
+  const asked: number[] = [];
+  const result = await runCompile({
+    paperRoot: root,
+    yolo: true,
+    onWarn: () => {},
+    reVerify: async ({ n }) => {
+      asked.push(n);
+      return { passed: false, failingCitekeys: ['smith2020'] };
+    },
+  });
+  assert.deepEqual(asked, [1], 'compile re-verifies the edited section');
+  assert.equal(result.refused, true);
+  assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false, 'the unverified text is not compiled');
+});

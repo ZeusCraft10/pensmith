@@ -324,13 +324,16 @@ export interface SectionNow {
  * changed since verify. Empty when they still apply.
  */
 export function verificationStaleness(record: VerificationRecord, now: SectionNow): string[] {
-  const draftNow = sha256(now.draftBytes);
-  if (record.draft_sha256 !== draftNow) {
-    return [`DRAFT.md changed since verify (${(record.draft_sha256 ?? 'none').slice(0, 12)} → ${draftNow.slice(0, 12)})`];
-  }
-  const sorted = (sources: readonly string[]): string => JSON.stringify([...sources].sort());
-  if (sorted(record.assigned_sources) !== sorted(now.assignedSources)) return ["PLAN.md's assigned sources changed since verify"];
   const why: string[] = [];
+  // draft_hash binds the draft and the assigned sources together, as verify
+  // hashed them; draft_sha256 only says which of the two changed.
+  if (record.draft_hash !== computeDraftHash(now.draftBytes, [...now.assignedSources])) {
+    const draftNow = sha256(now.draftBytes);
+    why.push(record.draft_sha256 === draftNow
+      ? "PLAN.md's assigned sources changed since verify"
+      : `DRAFT.md changed since verify (${(record.draft_sha256 ?? 'none').slice(0, 12)} → ${draftNow.slice(0, 12)})`);
+    return why;
+  }
   const current = bibEntryHashes(Object.keys(record.bib_entries), now.bib);
   for (const [key, hash] of Object.entries(record.bib_entries)) {
     if (current[key] !== hash) why.push(`the CITATIONS.bib entry for [@${key}] changed since verify`);

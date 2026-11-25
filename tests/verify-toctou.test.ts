@@ -49,8 +49,8 @@ function seedPaper(): { root: string; draftPath: string; planPath: string; sec: 
   return { root, draftPath, planPath, sec };
 }
 
-/** The registries: Crossref holds roe2019; OpenAlex's open-access lookup is where the draft gets edited. */
-function registries(draftPath: string): void {
+/** The registries: Crossref holds roe2019; `edit` runs while Pass 3 asks OpenAlex for the quotation's source. */
+function registries(edit: () => void): void {
   agent().get('https://api.crossref.org')
     .intercept({ path: (p) => p.toLowerCase().startsWith(`/works/${encodeURIComponent(DOI).toLowerCase()}`), method: 'GET' })
     .reply(200, JSON.stringify({
@@ -66,8 +66,8 @@ function registries(draftPath: string): void {
     .reply((opts) => {
       const path = String(opts.path);
       if (path.includes('best_oa_location')) {
-        // Someone edits the draft while verify waits on the network.
-        writeFileSync(draftPath, EDITED);
+        // Someone edits the paper while verify waits on the network.
+        edit();
         return { statusCode: 200, data: JSON.stringify({ id: 'https://openalex.org/W1', doi: DOI, best_oa_location: null, locations: [] }), responseOptions: { headers: JSON_HEADERS } };
       }
       return { statusCode: 200, data: JSON.stringify({ id: 'https://openalex.org/W1', title: 'Tidal Heating in Icy Moons', is_retracted: false }), responseOptions: { headers: JSON_HEADERS } };
@@ -93,7 +93,7 @@ async function inDir<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 
 test('a draft edited while verify runs is recorded with the hash of the text verify checked, so compile re-verifies it', async () => {
   const { root, draftPath, planPath } = seedPaper();
-  registries(draftPath);
+  registries(() => writeFileSync(draftPath, EDITED));
 
   await inDir(root, async () => {
     const run = verifyCommand.run as (ctx: { args: Record<string, unknown> }) => Promise<unknown>;
@@ -122,7 +122,7 @@ test('a draft edited while verify runs is recorded with the hash of the text ver
 
 test('the verdict file records the hash of the draft its verdicts are about', async () => {
   const { root, draftPath, sec } = seedPaper();
-  registries(draftPath);
+  registries(() => writeFileSync(draftPath, EDITED));
   await inDir(root, async () => {
     const run = verifyCommand.run as (ctx: { args: Record<string, unknown> }) => Promise<unknown>;
     await run({ args: { n: 1, slug: 'intro', yolo: false } });
@@ -131,4 +131,28 @@ test('the verdict file records the hash of the draft its verdicts are about', as
   assert.equal(record['draft_sha256'], createHash('sha256').update(ORIGINAL).digest('hex'));
   const citations = record['citations'] as Array<{ citekey: string }>;
   assert.deepEqual(citations.map((c) => c.citekey), ['roe2019'], 'the verdicts are for the text that was read, without the edit');
+});
+
+test("the record's freshness rows are about the bibliography verify read, not one edited while it ran", async () => {
+  // verify reads CITATIONS.bib once. Here roe2019's DOI changes while Pass 3
+  // waits on the network; the freshness probe after it still asks doi.org
+  // about the DOI the verdicts were checked against.
+  const { root, sec } = seedPaper();
+  const bibPath = join(root, '.paper', 'CITATIONS.bib');
+  registries(() => writeFileSync(bibPath, BIB.replace(DOI, '10.5555/tidal.2')));
+  const heads: string[] = [];
+  agent().get('https://doi.org').intercept({ path: () => true, method: 'HEAD' }).reply((opts) => {
+    const path = String(opts.path);
+    heads.push(path);
+    return { statusCode: path === `/${DOI}` ? 200 : 404, data: '' };
+  }).persist();
+
+  await inDir(root, async () => {
+    const run = verifyCommand.run as (ctx: { args: Record<string, unknown> }) => Promise<unknown>;
+    await run({ args: { n: 1, slug: 'intro', yolo: false } });
+  });
+  assert.match(readFileSync(bibPath, 'utf8'), /10\.5555\/tidal\.2/, 'precondition: the bibliography changed during the run');
+  assert.deepEqual(heads, [`/${DOI}`], 'the probe asks about the DOI verify read');
+  const record = JSON.parse(readFileSync(join(sec, 'VERIFICATION.json'), 'utf8')) as { advisory_markdown: string };
+  assert.match(record.advisory_markdown, /\| roe2019 \| DOI HEAD \| ok \|/, record.advisory_markdown);
 });

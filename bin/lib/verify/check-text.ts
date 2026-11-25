@@ -8,7 +8,6 @@
 import { runPass1, type Bib, type Pass1Result } from './pass1.js';
 import { runPass3, type Pass3Result } from './pass3.js';
 import type { Acknowledgement } from './acknowledgements.js';
-import type { QuoteSource } from './quote-match.js';
 
 export interface CheckedText {
   pass1: Pass1Result[];
@@ -22,8 +21,6 @@ export interface CheckTextOptions {
   section?: number;
   /** False when the caller has already run Pass 3 on this exact text. */
   pass3?: boolean;
-  /** The source texts already read, by PDF link (runPass3), shared with a later check of the same quotations. */
-  sourceTexts?: Map<string, QuoteSource> | undefined;
 }
 
 export async function checkCitationsAndQuotes(text: string, opts: CheckTextOptions): Promise<CheckedText> {
@@ -33,6 +30,6 @@ export async function checkCitationsAndQuotes(text: string, opts: CheckTextOptio
   });
   const pass3 = opts.pass3 === false
     ? []
-    : await runPass3(text, opts.bib.entries as Map<string, { DOI?: string; URL?: string }>, opts.sourceTexts);
+    : await runPass3(text, opts.bib.entries as Map<string, { DOI?: string; URL?: string }>);
   return { pass1, pass3 };
 }
