@@ -315,6 +315,7 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - The known-bad citation and quote corpora run through the real verify pipeline (no test-only twin) and give 10/10 blocking verdicts.
 - `scripts/run-tests.mjs` isolates HOME/XDG/LOCALAPPDATA/tmp itself and sets `PENSMITH_TEST_CASSETTES=1`.
 - Fix the root-only chmod test so it skips when uid is 0.
+- Carry-over (controller, after the T14 merge): in-process tests write `.paper/SESSION.log` and `.paper/COSTS.jsonl` into the repository root, because `paperDir()` defaults to `process.cwd()`. Examples are the state race tests (`paper-rt`, `paper-race`) and the GPTZero cost record (`honesty-gptzero`). Make every such test pass an explicit temp paper root, or chdir into one. Make the runner fail any test that creates `<repo>/.paper`. Check that production writes the session log and the cost ledger under the paper root it was given, not under the cwd.
 
 ## Phase 1 exit criteria (controller verifies before declaring done)
 
