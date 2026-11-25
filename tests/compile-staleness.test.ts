@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { bibForDrafts } from './lib/bib-fixture.js';
 
 interface SectionSpec {
   n: number;
@@ -43,7 +44,7 @@ function seedPaper(specs: SectionSpec[]): string {
     join(root, '.paper', 'OUTLINE.md'),
     ['# Stale Fixture', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', ...rows, ''].join('\n'),
   );
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bibForDrafts(...specs.map((s) => s.draft)));
   for (const s of specs) {
     const dir = join(root, '.paper', 'sections', `${String(s.n).padStart(2, '0')}-${s.slug}`);
     mkdirSync(dir, { recursive: true });

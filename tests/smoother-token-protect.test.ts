@@ -21,6 +21,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile, type SmoothBoundaryInput } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { bibForDrafts } from './lib/bib-fixture.js';
 
 function seedTwoSection(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-token-protect-'));
@@ -37,7 +38,7 @@ function seedTwoSection(): string {
       '',
     ].join('\n'),
   );
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bibForDrafts('[@smith2020] [@jones2019]'));
   const seed = (n: number, slug: string, draft: string, sources: string[]): void => {
     const dir = join(root, '.paper', 'sections', `${String(n).padStart(2, '0')}-${slug}`);
     mkdirSync(dir, { recursive: true });

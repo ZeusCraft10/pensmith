@@ -27,6 +27,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { bibForDrafts } from './lib/bib-fixture.js';
 
 /**
  * Seed a paper root with an OUTLINE.md (locked GFM table) and one or more
@@ -64,8 +65,9 @@ function seedPaper(specs: SectionSpec[]): string {
   ].join('\n');
   writeFileSync(join(root, '.paper', 'OUTLINE.md'), outline);
 
-  // Seed an empty CITATIONS.bib so the bib-regen step has a file to read.
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  // A CITATIONS.bib holding every work the drafts cite: compile refuses a
+  // manuscript that cites a work the bibliography does not hold.
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bibForDrafts(...specs.map((s) => s.draft)));
 
   for (const s of specs) {
     const dir = join(root, '.paper', 'sections', `${String(s.n).padStart(2, '0')}-${s.slug}`);
@@ -250,7 +252,7 @@ function seedPaperWithVerif(
     '',
   ].join('\n');
   writeFileSync(join(root, '.paper', 'OUTLINE.md'), outline);
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bibForDrafts(draft));
 
   const dir = join(root, '.paper', 'sections', `${String(n).padStart(2, '0')}-${slug}`);
   mkdirSync(dir, { recursive: true });

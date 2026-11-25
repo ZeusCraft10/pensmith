@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { runCompile, type ReVerifyInput, type ReVerifyResult } from '../lib/compile.js';
 import { runPass1 } from '../lib/verify/pass1.js';
 import { runPass3 } from '../lib/verify/pass3.js';
-import { parseBibtex } from '../lib/citations.js';
+import { parseBibOrEmpty } from '../lib/citations.js';
 import { sectionDraft, paperDir } from '../lib/paths.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 
@@ -48,8 +48,9 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
     // stale section escape unverified).
     return { passed: false, failingCitekeys: [] };
   }
+  // An empty CITATIONS.bib is an empty library: every cited key is FABRICATED.
   const pass1 = await runPass1(draftMd, bibPath);
-  const bibEntries = await parseBibtex(bibText);
+  const bibEntries = await parseBibOrEmpty(bibText);
   const bibByCitekey = new Map<string, { DOI?: string }>(
     bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
   );
@@ -57,7 +58,7 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
 
   const failing: string[] = [];
   for (const r of pass1) if (r.verdict !== 'OK') failing.push(r.citekey);
-  for (const r of pass3) if (r.verdict === 'NOT_FOUND') failing.push(r.citekey);
+  for (const r of pass3) if (r.verdict === 'NOT_FOUND' || r.verdict === 'UNATTRIBUTED') failing.push(r.citekey);
   return { passed: failing.length === 0, failingCitekeys: [...new Set(failing)] };
 }
 

@@ -25,14 +25,17 @@
 //      exactly one trailing '\n', joined with '\n\n'. The outline's paper title
 //      leads as `# Title` and each section opens with `## <outline title>`
 //      (drafts are written without one).
-//   3. N-1 per-boundary smoothing (COMP-03 / D-12 / D-13): substitute
-//      [@key] → {{cite_K_M}} BEFORE the smoother call (the model never sees raw
-//      tokens); after the call, require output placeholder-set == input set —
-//      any drift REJECTS that boundary (keep original prose) and records a
-//      Transitions-Changed rejection. Then run the consistency scan (COMP-04,
-//      flags only) and citation density (COMP-05, warn-only vs discipline target).
-//   4. Regenerate .paper/CITATIONS.bib (D-19) from the union of compiled
-//      citekeys; atomicWriteFile DRAFT.md + COMPILE-REPORT.md (schema v1, D-14).
+//   3. N-1 per-boundary smoothing (COMP-03 / D-12 / D-13): replace every
+//      citation, in any Pandoc form, with a {{cite_K_M}} placeholder BEFORE the
+//      smoother call (the model never sees a citation); after the call, require
+//      output placeholder-set == input set and no citation the model wrote
+//      itself — any drift REJECTS that boundary (keep original prose) and
+//      records a Transitions-Changed rejection. Then run the consistency scan
+//      (COMP-04, flags only) and citation density (COMP-05, warn-only vs
+//      discipline target).
+//   4. Refuse if the manuscript cites a work CITATIONS.bib does not hold, else
+//      regenerate .paper/CITATIONS.bib (D-19) from the cited works;
+//      atomicWriteFile DRAFT.md + COMPILE-REPORT.md (schema v1, D-14).
 //
 // The smoother + re-verify transports are injectable seams so CI never touches a
 // live model/network. Production callers (bin/cli/compile.ts) wire the real
@@ -47,12 +50,11 @@ import { parseFrontmatter } from './frontmatter.js';
 import { atomicRename, atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { computeDraftHash } from './draft-hash.js';
-import { extractCitekeys, replaceCitekeys } from './citation-token.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
 import { writeBibtex } from './bibtex-write.js';
-import { parseBib } from './citations.js';
-import { codeRanges } from './citation-grammar.js';
+import { parseBibOrEmpty } from './citations.js';
+import { citedKeys, codeRanges, findCitations, findRawCitations } from './citation-grammar.js';
 import {
   renderCompileReport,
   type TransitionEntry,
@@ -61,18 +63,18 @@ import {
   type StalenessEntry,
 } from './compile-report.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
-import { BLOCKING_VERDICT_LIST, parseVerdictRows } from './verify/verdict-rows.js';
+import { BLOCKING_VERDICT_LIST, describeVerdictRow, parseVerdictRowDetails } from './verify/verdict-rows.js';
 import { isPlaceholderText } from './placeholder.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
   /** Title of the section that ENDS at this boundary. */
   sectionATitle: string;
-  /** Last paragraph of section A, with [@key] already → {{cite_K_M}} placeholders. */
+  /** Last paragraph of section A, its citations already {{cite_K_M}} placeholders. */
   tail: string;
   /** Title of the section that STARTS at this boundary. */
   sectionBTitle: string;
-  /** First paragraph of section B, with [@key] already → {{cite_K_M}} placeholders. */
+  /** First paragraph of section B, its citations already {{cite_K_M}} placeholders. */
   head: string;
 }
 
@@ -180,7 +182,7 @@ function lastParaIdx(paras: string[]): number {
   return -1;
 }
 
-/** The placeholder family is disjoint from CITATION_TOKEN_RE by construction. */
+/** A placeholder holds no `@` or bracket, so it never reads as a citation. */
 function makePlaceholder(k: number, m: number): string {
   return `{{cite_${k}_${m}}}`;
 }
@@ -199,28 +201,36 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
 }
 
 /**
- * Substitute every [@key] in `text` with a fresh {{cite_K_M}} placeholder.
- * Returns the substituted text and the placeholder→[@key] restore map.
+ * Replace every citation in `text`, in any Pandoc form (`[see @a, p. 3; @b]`,
+ * `-@a`, `@a [p. 4]`), with a fresh {{cite_K_M}} placeholder. Returns the
+ * masked text and the placeholder→citation restore map.
  */
 function substitutePlaceholders(text: string, k: number): { masked: string; restore: Map<string, string> } {
   const restore = new Map<string, string>();
-  let m = 0;
-  const masked = replaceCitekeys(text, (key) => {
-    const ph = makePlaceholder(k, m);
-    m += 1;
-    restore.set(ph, `[@${key}]`);
-    return ph;
-  });
-  return { masked, restore };
+  let masked = '';
+  let at = 0;
+  for (const c of findCitations(text)) {
+    const ph = makePlaceholder(k, restore.size);
+    restore.set(ph, c.raw);
+    masked += text.slice(at, c.start) + ph;
+    at = c.end;
+  }
+  return { masked: masked + text.slice(at), restore };
 }
 
-/** Restore every {{cite_K_M}} placeholder back to its [@key]. */
+/** Restore every {{cite_K_M}} placeholder back to its citation. */
 function restorePlaceholders(text: string, restore: Map<string, string>): string {
   let out = text;
   for (const [ph, token] of restore) {
     out = out.split(ph).join(token);
   }
   return out;
+}
+
+/** The citations and citation-like text of `text`, as a sorted list to compare. */
+function citationFingerprint(text: string): string[] {
+  const cites = findCitations(text);
+  return [...cites.map((c) => c.raw), ...findRawCitations(text, cites).map((r) => r.raw)].sort();
 }
 
 async function loadSection(
@@ -354,8 +364,8 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       }
 
       // Refuse-gate (COMP-01 / GATE-02): any failing verdict blocks.
-      for (const ck of parseVerdictRows(verificationMd)) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): citation [@${ck}] has a blocking verdict (${BLOCKING_VERDICT_LIST})`);
+      for (const row of parseVerdictRowDetails(verificationMd).filter((r) => r.blocking)) {
+        refuseReasons.push(`section ${os.n} (${os.slug}): ${describeVerdictRow(row)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`);
       }
 
       // Staleness (COMP-01 / D-08): recompute the per-section hash.
@@ -432,7 +442,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         continue;
       }
 
-      // D-13: mask [@key] → {{cite_K_M}} BEFORE the model sees the window.
+      // D-13: mask every citation → {{cite_K_M}} BEFORE the model sees the window.
       const tailMask = substitutePlaceholders(tailRaw, k);
       const headMask = substitutePlaceholders(headRaw, k + 1);
       const inputSet = new Set<string>([...placeholderSet(tailMask.masked), ...placeholderSet(headMask.masked)]);
@@ -460,13 +470,23 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         continue;
       }
 
-      // Accepted: split the smoothed output back into rewritten tail + head and
-      // restore the real [@key] tokens (mask maps merged — placeholders are
-      // unique across the K / K+1 namespaces).
+      // Split the smoothed output back into rewritten tail + head and restore
+      // the real citations (mask maps merged — placeholders are unique across
+      // the K / K+1 namespaces).
       const restore = new Map<string, string>([...tailMask.restore, ...headMask.restore]);
       const parts = smoothed.split(/\n\s*\n/);
       const newTail = restorePlaceholders((parts[0] ?? smoothed), restore);
       const newHead = restorePlaceholders(parts.length > 1 ? parts.slice(1).join('\n\n') : '', restore);
+
+      // The model may also have written a citation of its own (`@key`,
+      // `(Author, 2020)`): the boundary must cite exactly what it cited before.
+      const before = citationFingerprint(`${tailRaw}\n\n${headRaw}`);
+      const after = citationFingerprint(`${newTail}\n\n${newHead}`);
+      if (before.length !== after.length || before.some((c, i) => c !== after[i])) {
+        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — the smoother changed the citations; keeping original prose`);
+        transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+        continue;
+      }
       left[li] = newTail;
       if (newHead.trim().length > 0) right[ri] = newHead;
       drafts[k] = left.join('\n\n');
@@ -507,8 +527,25 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     for (const w of densityReport.warnings) warn(`WARN: citation density — ${w.detail}`);
 
     // ---- Step 4: regen CITATIONS.bib (D-19) + emit DRAFT + REPORT (COMP-07) -
+    // A bracketed citation of a work the bibliography does not hold would
+    // export as a raw token with no reference, so it refuses here. A
+    // narrative `@word` with no entry is text, as the exporter reads it.
     const bibPath = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
-    await regenerateBib(compiled, bibPath);
+    const bibEntries = await parseBibOrEmpty(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '');
+    const inBib = new Set(bibEntries.map((e) => String(e['id'] ?? '')));
+    const compiledCites = findCitations(compiled);
+    const missing = citedKeys(compiledCites.filter((c) => !c.narrative)).filter((key) => !inBib.has(key));
+    if (missing.length > 0) {
+      const reasons = missing.map((key) => `citation [@${key}] has no entry in .paper/CITATIONS.bib — re-run research or \`pensmith add\` it, then verify`);
+      for (const r of reasons) warn(`REFUSE: ${r}`);
+      return refuse(opts.paperRoot, {
+        refused: true,
+        refuseReasons: reasons,
+        sectionsCount: loaded.length,
+        staleResolvedCount: stalenessResolved.length,
+      });
+    }
+    await regenerateBib(new Set(citedKeys(compiledCites)), bibEntries, bibPath);
 
     const draftPath = join(paperDir(opts.paperRoot), 'DRAFT.md');
     await atomicWriteFile(draftPath, compiled);
@@ -538,14 +575,16 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 }
 
 /**
- * Regenerate .paper/CITATIONS.bib from the UNION of citekeys present in the
- * compiled manuscript (D-19 — via bibtex-write.ts / citation-js chokepoint).
- * Metadata is pulled from the existing bib; an uncited entry is dropped.
+ * Regenerate .paper/CITATIONS.bib from the works the compiled manuscript
+ * cites, in any citation form (D-19 — via bibtex-write.ts / citation-js
+ * chokepoint). Metadata is pulled from the existing bib; an uncited entry is
+ * dropped.
  */
-async function regenerateBib(compiled: string, bibPath: string): Promise<void> {
-  const compiledCitekeys = new Set(extractCitekeys(compiled));
-  const existing = existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '';
-  const entries = existing.trim().length > 0 ? await parseBib(existing) : [];
+async function regenerateBib(
+  compiledCitekeys: ReadonlySet<string>,
+  entries: ReadonlyArray<Record<string, unknown>>,
+  bibPath: string,
+): Promise<void> {
 
   const now = new Date().toISOString();
   const candidates: SourceCandidate[] = [];
