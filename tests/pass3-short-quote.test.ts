@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { shortQuoteFound } from '../bin/lib/verify/pass3.js';
 import { extractQuotes } from '../bin/lib/quote-extractor.js';
+import { matchQuote } from '../bin/lib/verify/quote-match.js';
 
 const SOURCE = 'In every cohort we studied, the effect of the treatment is robust to the choice of baseline.';
 
@@ -81,15 +82,45 @@ test('short quote: a faithful ellipsis within one sentence is still found', () =
   assert.equal(shortQuoteFound('the effect, ... is robust', src), true);
 });
 
-test('short quote: the quotation Pass 3 checks exactly is not found when spliced', () => {
+test('short quote: the quotation Pass 3 checks is not found when spliced', () => {
   const [q] = extractQuotes('As reported, "the treatment ... was ineffective" [@smith2020, p. 4].');
   assert.equal(q?.citekey, 'smith2020');
-  assert.equal(q?.exact, true);
   assert.equal(shortQuoteFound(q!.text, SPLICE_SOURCE), false);
 });
 
 test('short quote: an ellipsis is not counted as a quoted word', () => {
-  // Nine words and one ellipsis: a short quotation, checked part by part.
+  // Nine words and one ellipsis: checked part by part when cited, and short of
+  // the ten words that make an uncited quotation unattributed.
   const [q] = extractQuotes('They found "the effect ... is robust to the choice of baseline" [@k].');
-  assert.equal(q?.exact, true);
+  assert.equal(q?.citekey, 'k');
+  assert.equal(shortQuoteFound(q!.text, SOURCE), true);
+  assert.deepEqual(extractQuotes('They found "the effect ... is robust to the choice of baseline".'), []);
+  // Two words and an ellipsis are too few to check.
+  assert.deepEqual(extractQuotes('They found "effect ... robust" [@k].'), []);
+});
+
+// The matcher checks only the quoted words outside a spaced bracket: the
+// bracket is the author's own words. "[The drug] reduced mortality" quotes two
+// words, like the term "reduced mortality", and is left alone the same way.
+// Counting the bracketed words sent it to the matcher, which refused it as
+// too short to check, and that refusal read NOT_FOUND, a blocking verdict on a
+// faithful quotation.
+test('short quote: two quoted words outside brackets are a term, left alone like any two-word quotation', () => {
+  for (const md of [
+    'The trial found that "[The drug] reduced mortality" [@k, p. 2].',
+    'He conceded that "[It] was wrong" [@k].',
+    'They "[the authors] [sic] agreed" [@k].',
+    'They found that "reduced mortality" [@k].',
+  ]) {
+    assert.deepEqual(extractQuotes(md), [], md);
+  }
+  // Three quoted words outside the bracket are checked, and a bracket inside a word keeps its letters.
+  assert.equal(extractQuotes('They found that "[The drug] reduced mortality overall" [@k].')[0]?.citekey, 'k');
+  assert.equal(extractQuotes('They wrote that "[T]he drug helped" [@k].')[0]?.citekey, 'k');
+});
+
+test('short quote: a one-word part around an ellipsis says how to quote it so it can be checked', () => {
+  const r = matchQuote('The drug reduced ... patients', 'The drug reduced mortality in older patients.');
+  assert.equal(r.found, false);
+  assert.match(r.reason, /two or more quoted words on each side of the ellipsis/);
 });

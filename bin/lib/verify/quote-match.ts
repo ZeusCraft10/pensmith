@@ -10,13 +10,20 @@
 //   - word spacing, a bounded number of times per quotation: pdf.js runs words
 //     together ("isto findholesin") and splits them, but a difference that
 //     joins or splits a negation ("not able" / "notable") is never accepted;
-//   - a numeric reference marker ("[12]"), or a footnote number pdf.js put on
-//     a line of its own, which the quotation may leave out;
+//   - a numeric reference marker ("[12]"), a superscript footnote marker, or a
+//     footnote number pdf.js put on a line of its own, which the quotation may
+//     leave out (a quotation that keeps a bracketed number or a superscript is
+//     compared with them, so "[0, 2]" never matches "[0, 1]", nor "m³" "m²");
 //   - an ellipsis, which leaves words out: the parts around it must appear in
 //     order and close together, within one sentence unless both are long, and
-//     it may not leave out a negation with only a word or two around it;
+//     it may not leave out a negation in the same clause as a quoted word
+//     ("was ... safe" for "was not found to be safe"), only a whole clause set
+//     off by punctuation that holds one;
 //   - a bracketed insertion or replacement ("[the authors]", "[T]he", "[sic]"),
-//     which may stand for a few source words, never a negation or a number.
+//     which may stand for a few source words, never a number, and holds a
+//     negation only where those source words do. A bracket at the start or end
+//     of the quotation is the author's own lead-in or close, checked against
+//     nothing, like the words outside the quote marks.
 //
 // Both texts are folded to a key (the words' letters run together, a
 // separator between anything else), so finding a quotation is an exact
@@ -24,8 +31,14 @@
 // That stays close to linear on a book-length source.
 
 import { sentenceEnds } from '../citation-grammar.js';
-import { MIN_SHORT_WORDS } from '../quote-extractor.js';
 
+/**
+ * A quotation of fewer quoted words than this is a term, not a quotation, and
+ * is not checked. Words in a spaced bracket are the author's, not quoted.
+ */
+export const MIN_SHORT_WORDS = 3;
+/** Each part around an ellipsis needs this many quoted words, or it is found almost anywhere. */
+const MIN_PART_WORDS = 2;
 /** The most source text an ellipsis may stand for within one sentence. */
 export const MAX_ELIDED_CHARS = 150;
 /** The most source text an ellipsis between two long parts may stand for, across sentences. */
@@ -34,8 +47,6 @@ export const MAX_ELIDED_PASSAGE_CHARS = 1000;
 export const PASSAGE_PART_WORDS = 5;
 /** The most source words a bracketed insertion may replace. */
 export const MAX_BRACKET_WORDS = 3;
-/** An ellipsis leaving out this many words or fewer may not leave out a negation. */
-const SHORT_OMISSION_WORDS = 3;
 /** How many places in a run of N quoted words may differ in word spacing only: ceil(N / this). */
 const WORDS_PER_SPACING_SLIP = 3;
 /** Candidate placements tried per quotation before giving up, against pathological sources. */
@@ -66,19 +77,25 @@ const SPACED_MARK = /(?<=\p{L})[ \t]+(?=\p{M})/gu;
 const SUPERSCRIPT_MARKER = /(?<=[\p{L}.,;:!?)\]'"’”])[¹²³⁰⁴-⁹]+/gu;
 // A numeric reference marker: [3], [1, 4], [5–7].
 const REFERENCE_MARKER = /\[\s*\d{1,3}(?:\s*[-–,;]\s*\d{1,3})*\s*\]/g;
+// A quotation that keeps one of these is compared with them: the same form
+// may be a bound ("the interval [0, 1]") or a unit ("m²"), not a marker.
+const KEPT_MARKER = /\[\s*\d{1,3}(?:\s*[-–,;]\s*\d{1,3})*\s*\]|[¹²³⁰⁴-⁹]/u;
 // A line holding only a number or two: a footnote marker or page number pdf.js
 // set apart from the running text.
 const NUMBER_LINE = /^[ \t]*\d{1,3}(?:[ \t]*[,–-][ \t]*\d{1,3})*[ \t]*$/gm;
 
-function clean(text: string): string {
-  return text
-    .replace(SOFT_HYPHEN, '')
-    .replace(INVISIBLE, '')
-    .replace(SPACED_MARK, '')
-    .replace(SUPERSCRIPT_MARKER, '')
+/** Whether reference markers and superscripts are dropped from a text, or kept as its numbers. */
+type Markers = 'drop' | 'keep';
+
+/** How a quotation's markers are read: kept when it keeps one, so the source's are kept too. */
+const markersOf = (quote: string): Markers => (KEPT_MARKER.test(quote) ? 'keep' : 'drop');
+
+function clean(text: string, markers: Markers): string {
+  const plain = text.replace(SOFT_HYPHEN, '').replace(INVISIBLE, '').replace(SPACED_MARK, '');
+  return (markers === 'drop' ? plain.replace(SUPERSCRIPT_MARKER, '') : plain)
     .normalize('NFKC')
     .replace(/−/g, '-')
-    .replace(REFERENCE_MARKER, ' ')
+    .replace(REFERENCE_MARKER, (m) => (markers === 'drop' ? ' ' : ` ${m.slice(1, -1)} `))
     .replace(NUMBER_LINE, '');
 }
 
@@ -119,6 +136,22 @@ function tokenize(text: string): Token[] {
     out.push({ key: word ? fold(raw) : raw, word, start: m.index, end: m.index + raw.length, soft });
   }
   return out;
+}
+
+const APOSTROPHE = /^['’]$/;
+
+/** Whether `tokens[i]` of `text` is a negation: "not", "never" ..., or the "t" of "didn't". */
+function isNegation(tokens: readonly Token[], i: number, text: string): boolean {
+  const t = tokens[i]!;
+  if (NEGATIONS.has(t.key)) return true;
+  const prev = tokens[i - 1];
+  return t.key === 't' && prev !== undefined && prev.key.endsWith('n') && APOSTROPHE.test(text.slice(prev.end, t.start));
+}
+
+/** Whether any of `tokens[from..to)` of `text` is a negation. */
+function hasNegation(tokens: readonly Token[], from: number, to: number, text: string): boolean {
+  for (let i = from; i < to; i += 1) if (isNegation(tokens, i, text)) return true;
+  return false;
 }
 
 const SEP = '\u0001';
@@ -193,16 +226,19 @@ function tokensAt(k: Keyed, x: number): Token[] {
 
 /** A source text prepared for matching; prepare it once and match every quotation of it. */
 export interface QuoteSource {
+  readonly raw: string;
   readonly text: string;
   readonly keyed: Keyed;
   /** The token starting and ending at each key offset, or -1. */
   readonly startAt: Int32Array;
   readonly endAt: Int32Array;
   sentenceEnds?: number[];
+  /** The same source with its markers kept, prepared when a quotation keeps one. */
+  kept?: QuoteSource;
 }
 
-export function prepareSource(rawText: string): QuoteSource {
-  const text = clean(rawText);
+export function prepareSource(rawText: string, markers: Markers = 'drop'): QuoteSource {
+  const text = clean(rawText, markers);
   const k = keyed(tokenize(text));
   const startAt = new Int32Array(k.key.length + 1).fill(-1);
   const endAt = new Int32Array(k.key.length + 1).fill(-1);
@@ -210,7 +246,7 @@ export function prepareSource(rawText: string): QuoteSource {
     startAt[k.kStart[i]!] = i;
     endAt[k.kEnd[i]!] = i;
   }
-  return { text, keyed: k, startAt, endAt };
+  return { raw: rawText, text, keyed: k, startAt, endAt };
 }
 
 function sentenceEndBetween(src: QuoteSource, from: number, to: number): boolean {
@@ -230,7 +266,8 @@ interface Piece extends Keyed {
   slips: number;
 }
 
-type Gap = { kind: 'bracket' } | { kind: 'ellipsis'; passage: boolean };
+/** `negation`: the bracket holds one, so the source words it stands for must too. */
+type Gap = { kind: 'bracket'; negation: boolean } | { kind: 'ellipsis'; passage: boolean };
 
 interface Plan {
   pieces: Piece[];
@@ -247,42 +284,76 @@ const WORDLIKE = /[\p{L}\p{N}]/u;
 
 const countWords = (tokens: readonly Token[]): number => tokens.filter((t) => t.word || /\p{N}/u.test(t.key)).length;
 
-/** A quotation's pieces and the gaps between them, or why it cannot be checked. */
-function planQuote(quote: string): Plan | string {
-  const plan: Plan = { pieces: [], gaps: [], ellipsis: false, bracket: false };
-  const parts: Array<{ pieces: Piece[]; words: number }> = [];
-  for (const part of clean(quote).split(ELLIPSIS)) {
-    // Split the part at each bracketed insertion. An editorial note ([sic])
-    // goes; a bracket inside a word ([T]he, help[s]) keeps its letters.
-    const segments: string[] = [];
+interface Part {
+  pieces: Piece[];
+  /** brackets[j] is what the bracket before pieces[j + 1] holds. */
+  brackets: string[];
+  words: number;
+}
+
+/**
+ * A quotation's parts between ellipses, each split into pieces at its
+ * bracketed insertions, and whether it has a bracket that stands for source
+ * words. An editorial note ([sic]) goes; a bracket inside a word ([T]he,
+ * help[s]) keeps its letters.
+ */
+function quoteParts(quote: string, markers: Markers): { parts: Part[]; bracket: boolean } {
+  const parts: Part[] = [];
+  let bracket = false;
+  for (const text of clean(quote, markers).split(ELLIPSIS)) {
+    const part: Part = { pieces: [], brackets: [], words: 0 };
+    // What the brackets since the last piece hold; one between two pieces is a gap.
+    let held = '';
+    const addPiece = (segment: string): void => {
+      const tokens = tokenize(segment);
+      if (tokens.length === 0) return;
+      const words = countWords(tokens);
+      if (part.pieces.length > 0) part.brackets.push(held);
+      held = '';
+      part.pieces.push({ ...keyed(tokens), words, slips: Math.ceil(words / WORDS_PER_SPACING_SLIP) });
+      part.words += words;
+    };
     let cur = '';
     let last = 0;
-    for (const m of part.matchAll(BRACKET)) {
-      cur += part.slice(last, m.index);
+    for (const m of text.matchAll(BRACKET)) {
+      cur += text.slice(last, m.index);
       last = m.index + m[0].length;
-      const before = part[m.index - 1];
-      const after = part[last];
+      const before = text[m.index - 1];
+      const after = text[last];
       if (EDITORIAL_NOTE.test(m[1]!)) cur += ' ';
       else if ((before !== undefined && WORDLIKE.test(before)) || (after !== undefined && WORDLIKE.test(after))) cur += m[1];
       else {
-        segments.push(cur);
+        addPiece(cur);
         cur = '';
-        plan.bracket = true;
+        held += ` ${m[1]!}`;
+        bracket = true;
       }
     }
-    segments.push(cur + part.slice(last));
-    const pieces = segments.map((s) => tokenize(s)).filter((t) => t.length > 0).map((tokens): Piece => {
-      const words = countWords(tokens);
-      return { ...keyed(tokens), words, slips: Math.ceil(words / WORDS_PER_SPACING_SLIP) };
-    });
-    if (pieces.length > 0) parts.push({ pieces, words: pieces.reduce((n, p) => n + p.words, 0) });
+    addPiece(cur + text.slice(last));
+    if (part.pieces.length > 0) parts.push(part);
   }
-  plan.ellipsis = parts.length > 1;
+  return { parts, bracket };
+}
+
+/**
+ * How many quoted words of `quote` the matcher checks: those outside a spaced
+ * bracket ("[the authors]") or an editorial note ("[sic]"). An ellipsis is
+ * not a word.
+ */
+export function checkedWordCount(quote: string): number {
+  return quoteParts(quote, markersOf(quote)).parts.reduce((n, p) => n + p.words, 0);
+}
+
+/** A quotation's pieces and the gaps between them, or why it cannot be checked. */
+function planQuote(quote: string, markers: Markers): Plan | string {
+  const { parts, bracket } = quoteParts(quote, markers);
+  const plan: Plan = { pieces: [], gaps: [], ellipsis: parts.length > 1, bracket };
   if (parts.reduce((n, p) => n + p.words, 0) < MIN_SHORT_WORDS) {
-    return `too few quoted words outside brackets and ellipses to check (fewer than ${MIN_SHORT_WORDS})`;
+    return `cannot be checked: fewer than ${MIN_SHORT_WORDS} quoted words outside brackets and ellipses`;
   }
-  if (plan.ellipsis && parts.some((p) => p.words < 2)) {
-    return 'each part around an ellipsis needs two or more quoted words, or it is found almost anywhere';
+  if (plan.ellipsis && parts.some((p) => p.words < MIN_PART_WORDS)) {
+    return 'cannot be checked: a one-word part around an ellipsis is found almost anywhere — keep ' +
+      'two or more quoted words on each side of the ellipsis, or paraphrase that part';
   }
   parts.forEach((part, i) => {
     if (i > 0) {
@@ -290,7 +361,11 @@ function planQuote(quote: string): Plan | string {
       plan.gaps.push({ kind: 'ellipsis', passage });
     }
     part.pieces.forEach((p, j) => {
-      if (j > 0) plan.gaps.push({ kind: 'bracket' });
+      if (j > 0) {
+        const held = part.brackets[j - 1]!;
+        const tokens = tokenize(held);
+        plan.gaps.push({ kind: 'bracket', negation: hasNegation(tokens, 0, tokens.length, held) });
+      }
       plan.pieces.push(p);
     });
   });
@@ -347,24 +422,37 @@ function placeAt(src: QuoteSource, piece: Piece, h: number): [number, number] | 
   return [first, last];
 }
 
-/** Whether the source words between two pieces may be what a bracket stands for. */
-function bracketFits(src: QuoteSource, prevLast: number, first: number): boolean {
+/**
+ * Whether the source words between two pieces may be what a bracket stands
+ * for: a few words, no number, and a negation exactly when the bracket holds
+ * one ("did [not] reduce" for "did reduce" reverses the source).
+ */
+function bracketFits(src: QuoteSource, prevLast: number, first: number, gap: { negation: boolean }): boolean {
   if (first - prevLast - 1 > MAX_BRACKET_WORDS) return false;
-  for (let t = prevLast + 1; t < first; t += 1) {
-    const tok = src.keyed.tokens[t]!;
-    if (NEGATIONS.has(tok.key) || /\p{N}/u.test(tok.key)) return false;
-  }
-  return true;
+  const tokens = src.keyed.tokens;
+  for (let t = prevLast + 1; t < first; t += 1) if (/\p{N}/u.test(tokens[t]!.key)) return false;
+  return hasNegation(tokens, prevLast + 1, first, src.text) === gap.negation;
 }
 
+// Punctuation that sets a clause off: a comma, a semicolon, a colon, a dash, a
+// parenthesis or a sentence end.
+const CLAUSE_MARK = /[,;:()–—.!?]/;
+
 /**
- * Whether an ellipsis may stand for the source words between two pieces. It
- * may leave out a clause that holds a negation, but not a negation and a word
- * or two around it: "is ... safe" for "is not safe" reverses the source.
+ * Whether an ellipsis may stand for the source words between two pieces. A
+ * negation it leaves out must be in a clause of its own, set off by
+ * punctuation from both quoted parts: "The vaccine, which was not tested in
+ * children, proved safe" may lose its middle clause, but "was ... safe" for
+ * "was not found to be safe" reverses the source.
  */
 function ellipsisFits(src: QuoteSource, prevLast: number, first: number): boolean {
-  if (first - prevLast - 1 > SHORT_OMISSION_WORDS) return true;
-  for (let t = prevLast + 1; t < first; t += 1) if (NEGATIONS.has(src.keyed.tokens[t]!.key)) return false;
+  const tokens = src.keyed.tokens;
+  for (let t = prevLast + 1; t < first; t += 1) {
+    if (!isNegation(tokens, t, src.text)) continue;
+    const before = src.text.slice(tokens[prevLast]!.end, tokens[t]!.start);
+    const after = src.text.slice(tokens[t]!.end, tokens[first]!.start);
+    if (!CLAUSE_MARK.test(before) || !CLAUSE_MARK.test(after)) return false;
+  }
   return true;
 }
 
@@ -398,12 +486,16 @@ function matchPlan(src: QuoteSource, plan: Plan): boolean {
         lastStart = s.kStart[lo - 1]!;
       }
     }
-    for (let h = s.key.indexOf(piece.key, from); h !== -1 && h <= lastStart; h = s.key.indexOf(piece.key, h + 1)) {
+    // Search only as far as a placement can count. Searching on to the end of
+    // the source for each placement of the piece before would cost a scan of
+    // the whole source per candidate, when the piece before is common.
+    const hay = gap ? s.key.slice(0, Math.min(s.key.length, lastStart + piece.key.length)) : s.key;
+    for (let h = hay.indexOf(piece.key, from); h !== -1; h = hay.indexOf(piece.key, h + 1)) {
       if (--budget < 0) return false;
       const at = placeAt(src, piece, h);
       if (!at) continue;
       const [first, last] = at;
-      if (gap?.kind === 'bracket' && !bracketFits(src, prevLast, first)) continue;
+      if (gap?.kind === 'bracket' && !bracketFits(src, prevLast, first, gap)) continue;
       if (gap?.kind === 'ellipsis' && !ellipsisFits(src, prevLast, first)) continue;
       // A later placement lies further on, past the same sentence end.
       if (gap?.kind === 'ellipsis' && !gap.passage && sentenceEndBetween(src, s.tokens[prevLast]!.end, s.tokens[first]!.start)) break;
@@ -422,17 +514,23 @@ export interface QuoteMatch {
 
 /** Whether `quote` appears in `source` (a prepared source, or its raw text). */
 export function matchQuote(quote: string, source: QuoteSource | string): QuoteMatch {
-  const plan = planQuote(quote);
+  const markers = markersOf(quote);
+  const plan = planQuote(quote, markers);
   if (typeof plan === 'string') return { found: false, reason: plan };
-  const src = typeof source === 'string' ? prepareSource(source) : source;
+  const src = typeof source === 'string' ? prepareSource(source, markers)
+    : markers === 'keep' ? (source.kept ??= prepareSource(source.raw, 'keep')) : source;
   if (matchPlan(src, plan)) return { found: true, reason: 'found word for word' };
   const rules: string[] = [];
   if (plan.ellipsis) {
     rules.push(
       `an ellipsis may leave out at most ${MAX_ELIDED_CHARS} characters of one sentence, or ${MAX_ELIDED_PASSAGE_CHARS} ` +
-      `across sentences between parts of ${PASSAGE_PART_WORDS} or more words`,
+      `across sentences between parts of ${PASSAGE_PART_WORDS} or more words, and a negation only in a clause ` +
+      'set off by punctuation',
     );
   }
-  if (plan.bracket) rules.push(`a bracket may stand for at most ${MAX_BRACKET_WORDS} source words, never a negation or a number`);
+  if (plan.bracket) {
+    rules.push(`a bracket may stand for at most ${MAX_BRACKET_WORDS} source words, never a number, and holds a negation only where they do`);
+  }
+  if (markers === 'keep') rules.push('a bracketed number or a superscript the quotation keeps must be in the source');
   return { found: false, reason: `not found word for word${rules.length > 0 ? ` (${rules.join('; ')})` : ''}` };
 }

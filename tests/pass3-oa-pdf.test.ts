@@ -86,6 +86,11 @@ test('pass 3: a DOI written as a link, with a doi: prefix or only in the url fie
   }
 });
 
+test('pass 3: a quotation of two words outside its bracket is left alone, never NOT_FOUND', async () => {
+  const results = await withContactEmail(undefined, () => runPass3(draftQuoting(['[Horton\'s construction] is false', '[It] is false']), new Map([[KEY, { DOI }]])));
+  assert.deepEqual(results, []);
+});
+
 test('pass 3: a DOI field that holds no DOI says so', async () => {
   const results = await runPass3(draftQuoting([FAITHFUL]), new Map([[KEY, { DOI: 'not a doi' }]]));
   assert.equal(results[0]?.verdict, 'PDF_UNAVAILABLE');

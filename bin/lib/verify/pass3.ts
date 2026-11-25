@@ -108,7 +108,7 @@ export async function runPass3(
       continue;
     }
     const match = matchQuote(q.text, got.source);
-    push(match.found ? 'OK' : 'NOT_FOUND', match.found ? `quote ${match.reason} in ${got.url}` : `quote ${match.reason} in the OA PDF ${got.url}`);
+    push(match.found ? 'OK' : 'NOT_FOUND', `quote ${match.reason}, checked against the OA PDF ${got.url}`);
   }
   return results;
 }

@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runPass3Unit, shortQuoteFound } from '../bin/lib/verify/pass3.js';
+import { matchQuote, prepareSource } from '../bin/lib/verify/quote-match.js';
 import { extractPdfText } from '../bin/lib/pdf-text.js';
 
 const verdict = (quote: string, source: string): string => runPass3Unit({ claimedQuote: quote, pdfText: source }).verdict;
@@ -106,6 +107,37 @@ test('a bracketed insertion or replacement, [sic] and a capital in brackets are 
   assert.equal(verdict('the treatment did not reduce mortality [overall], although it shortened the hospital stay', SOURCE), 'NOT_FOUND');
 });
 
+// A bracketed number list and a superscript were dropped from both texts as
+// reference and footnote markers, so a changed bound ("[0, 2]" for "[0, 1]")
+// or unit ("m³" for "m²") passed. A quotation that keeps them is now compared
+// with them.
+test('a quotation that keeps a bracketed number list or a superscript must match it', () => {
+  const interval = 'We show that the solution lies in the interval [0, 1] for every input.';
+  assert.equal(verdict('the solution lies in the interval [0, 2] for every input', interval), 'NOT_FOUND');
+  assert.equal(verdict('the solution lies in the interval [0, 1] for every input', interval), 'OK');
+  assert.equal(verdict('the tank holds 10 m³ of water at most', 'The tank holds 10 m² of water at most.'), 'NOT_FOUND');
+  assert.equal(verdict('the tank holds 10 m² of water at most', 'The tank holds 10 m² of water at most.'), 'OK');
+  // pdf.js extracts a raised digit as a plain one.
+  assert.equal(verdict('the tank holds 10 m² of water at most', 'The tank holds 10 m2 of water at most.'), 'OK');
+  assert.equal(verdict('the tank holds 10 m2 of water at most', 'The tank holds 10 m3 of water at most.'), 'NOT_FOUND');
+});
+
+// A bracket is the author's words, so a "[not]" the source lacks reverses it.
+// An ellipsis that leaves out a negation in the same clause as a quoted part
+// reverses it too, however many words it leaves out; a whole clause set off by
+// commas or parentheses may go.
+test('a bracketed negation, or an ellipsis that leaves out a negation in a quoted clause, is NOT_FOUND', () => {
+  assert.equal(verdict('The treatment did [not] reduce mortality in patients', 'The treatment did reduce mortality in patients over 65.'), 'NOT_FOUND');
+  assert.equal(verdict('The vaccine was ... safe for adults', 'The vaccine was not found to be safe for adults.'), 'NOT_FOUND');
+  assert.equal(verdict('It is ... effective in adults', 'It is not, in our view, effective in adults.'), 'NOT_FOUND');
+  assert.equal(verdict('The treatment ... reduce mortality in patients', "The treatment didn't reduce mortality in patients."), 'NOT_FOUND');
+  assert.equal(verdict('The treatment [did] reduce mortality in patients', "The treatment didn't reduce mortality in patients."), 'NOT_FOUND');
+  // A clause that holds a negation, set off on both sides, may be left out.
+  assert.equal(verdict('The effect was small ... and consistent across sites', 'The effect was small, not large, and consistent across sites.'), 'OK');
+  assert.equal(verdict('It is ... effective in adults', 'It is, not surprisingly, effective in adults.'), 'OK');
+  assert.equal(verdict('The vaccine ... proved safe for adults', 'The vaccine (not yet tested in children) proved safe for adults.'), 'OK');
+});
+
 test('a reference marker the quotation leaves out, or keeps, is accepted', () => {
   assert.equal(verdict('although it shortened the hospital stay by 2.4 days on average. The effect on younger patients was small', SOURCE), 'OK');
   assert.equal(verdict('although it shortened the hospital stay by 2.4 days on average [14]. The effect on younger patients was small', SOURCE), 'OK');
@@ -150,8 +182,8 @@ test('quotations of a real PDF, which pdf.js extracts with words run together an
 // Speed
 // ---------------------------------------------------------------------------
 
-/** About `pages` pages of deterministic, varied prose. */
-function longText(pages: number): string {
+/** About `pages` pages of deterministic, varied prose; with `every`, "of the" once per that many words. */
+function longText(pages: number, every = 0): string {
   const words = ('the of and a to in is was for that on with as by at from this which be are were an have has not or ' +
     'cohort treatment effect patients mortality trial analysis results sample study model data control group risk ' +
     'outcome baseline estimate variance significant measure response follow-up survey participants evidence method').split(' ');
@@ -161,11 +193,15 @@ function longText(pages: number): string {
     return seed;
   };
   const out: string[] = [];
+  let count = 0;
   for (let p = 0; p < pages; p += 1) {
     for (let s = 0; s < 30; s += 1) {
       const n = 8 + (next() % 20);
       const sentence: string[] = [];
-      for (let w = 0; w < n; w += 1) sentence.push(words[next() % words.length]!);
+      for (let w = 0; w < n; w += 1) {
+        count += 1;
+        sentence.push(every > 0 && count % every === 0 ? 'of the' : words[next() % words.length]!);
+      }
       out.push(`${sentence.join(' ')}.`);
     }
     out.push(`\n${p + 1}\n\n`);
@@ -187,5 +223,29 @@ test('a 400-page source text is matched in well under a second per quotation', (
     assert.equal(verdict(q, text), expected, q);
     const ms = performance.now() - t0;
     assert.ok(ms < 1000, `${ms.toFixed(0)} ms for: ${q}`);
+  }
+});
+
+// A part after an ellipsis or a bracket can only lie close to the part before
+// it. It used to be searched for to the end of the source once per placement
+// of the part before, so a quotation that starts with a common phrase took
+// seconds on a long source.
+test('a quotation whose first part is common is matched in well under a second on a 400-page source', () => {
+  const text = `${longText(400, 25)} In the largest of the trials, the treatment did not reduce mortality in patients over 65 years of age.`;
+  assert.ok(text.split('of the').length > 7000, 'the first part is common');
+  const src = prepareSource(text);
+  const repeated = prepareSource('The cohorts differed in age and baseline risk across the sites. '.repeat(20000));
+  const cases: Array<[string, typeof src, boolean]> = [
+    ['of the ... did not reduce mortality', src, true],
+    ['of the ... did not reduce hospital stays', src, false],
+    ['of the [x] reduce mortality', src, false],
+    ['The cohorts differed ... baseline mortality', repeated, false],
+    ['The cohorts differed [in] age and baseline mortality', repeated, false],
+  ];
+  for (const [q, source, found] of cases) {
+    const t0 = performance.now();
+    assert.equal(matchQuote(q, source).found, found, q);
+    const ms = performance.now() - t0;
+    assert.ok(ms < 500, `${ms.toFixed(0)} ms for: ${q}`);
   }
 });
