@@ -161,6 +161,15 @@ and the files saved from it carry `placeholder: true` frontmatter. verify,
 compile and done refuse placeholder text with exit 2, so a stub run can drive
 the pipeline in a test but can never produce an export.
 
+## Export tests and external tools
+
+The export tests that drive real Pandoc and pdflatex
+(`tests/export-pandoc-trace.test.ts` and the LaTeX compile checks) skip when
+the tool is not installed. `.github/workflows/export.yml` installs both and
+sets `PENSMITH_REQUIRE_EXPORT_TOOLS=1`, which turns a missing tool into a
+failure. Set it locally when you change the exporter, so a skipped test is not
+mistaken for a pass.
+
 ## Cassette Refresh Workflow
 
 PR-time CI (`.github/workflows/ci.yml`) runs in cassette mode against recorded

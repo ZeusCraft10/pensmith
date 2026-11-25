@@ -1,0 +1,48 @@
+name: Export
+
+# The trace-free export is a non-negotiable, and its real risk is in what
+# Pandoc and TeX add to a file. The main CI matrix has neither tool, so the
+# tests that drive them skip there. This lane installs both and makes those
+# tests mandatory: a missing tool fails instead of skipping.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install Pandoc and TeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pandoc texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended lmodern
+          pandoc --version | head -1
+          pdflatex --version | head -1
+
+      - run: npm ci
+
+      # bin/lib/version.generated.ts is gitignored; the CLI imports it.
+      - name: Generate derived sources
+        run: npm run prebuild
+
+      - name: Export tests against real Pandoc and pdflatex
+        env:
+          PENSMITH_REQUIRE_EXPORT_TOOLS: '1'
+        run: >
+          node scripts/run-tests.mjs
+          tests/export-pandoc-trace.test.ts
+          tests/export-citation-render.test.ts
+          tests/export-failures.test.ts
+          tests/export-trace-scan.test.ts
+          tests/export-bibliography.test.ts
+          tests/exporter.test.ts
