@@ -46,6 +46,9 @@
 //     falls through to a root run() after every verb, H2). The root command
 //     keeps subCommands ONLY and NO run().
 
+import { realpathSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineCommand, runMain, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
 import { VERSION } from './lib/version.generated.js';
@@ -406,12 +409,27 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   });
 }
 
-// CLI-style invocation: `node dist/bin/pensmith.js <verb>` dispatches.
-// Guarded so importing this module from tests (WR-06: tests/cli-verbs.test.ts
-// introspects command.subCommands at runtime) does NOT auto-run.
-// Same pathToFileURL + import.meta.url comparison pattern as mcp/server.ts —
-// naive `file://${process.argv[1]}` fails on Windows for relative argv[1].
-import { pathToFileURL } from 'node:url';
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+/**
+ * True when this module is the program Node was asked to run, as opposed to a
+ * module imported by a test or script (which must not dispatch).
+ *
+ * npm link, global installs, npx and node_modules/.bin start the CLI through a
+ * symlink. Node resolves import.meta.url to the real file but leaves argv[1] as
+ * the link, so both sides are compared after resolving symlinks.
+ */
+export function isMainModule(argv1: string | undefined, moduleUrl: string): boolean {
+  if (!argv1) return false;
+  const self = fileURLToPath(moduleUrl);
+  const real = (p: string): string => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return resolvePath(p);
+    }
+  };
+  return real(resolvePath(argv1)) === real(self);
+}
+
+if (isMainModule(process.argv[1], import.meta.url)) {
   void dispatch();
 }
