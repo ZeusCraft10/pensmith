@@ -100,6 +100,8 @@ export interface VerdictRow {
   /** The detail without the scores before it (`titleJW=…, authorJW=… — `, `lev=… — `). */
   reason: string;
   blocking: boolean;
+  /** For a Pass-3 row, the start of the quotation it is about, as the row shows it. */
+  quote?: string;
 }
 
 // `- <key>: **VERDICT** <detail>` (Pass 1) and `- <key> ("<quote>…"): **VERDICT**
@@ -110,7 +112,7 @@ export interface VerdictRow {
 // that holds ` ("` (text from the draft) does not fit the Pass-3 form, so it
 // is read as Pass 1. The `^\s*-\s*` anchor leaves the pipe tables of the
 // advisory sections alone.
-const PASS3_ROW = /^\s*-\s*(.+?) \(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
+const PASS3_ROW = /^\s*-\s*(.+?) \("(.*)"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
 const PASS1_ROW = /^\s*-\s*(.+?):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
 // The `name=value` scores the renderers put before a row's reason, and the
 // dash after them.
@@ -122,17 +124,21 @@ export function parseVerdictRowDetails(verificationMd: string): VerdictRow[] {
   for (const line of verificationMd.split(/\r?\n/)) {
     const quote = line.indexOf(' ("');
     const colon = line.indexOf(': **');
-    const m = (quote !== -1 && (colon === -1 || quote < colon) ? PASS3_ROW.exec(line) : null) ?? PASS1_ROW.exec(line);
+    const pass3 = quote !== -1 && (colon === -1 || quote < colon) ? PASS3_ROW.exec(line) : null;
+    const m = pass3 ? [pass3[0], pass3[1], pass3[3], pass3[4]] : PASS1_ROW.exec(line);
     if (!m) continue;
     const verdict = m[2]!;
     const detail = m[3]!.replace(/^—\s*/, '').trim();
-    out.push({
+    const row: VerdictRow = {
       citekey: m[1]!.trim(),
       verdict,
       detail,
       reason: detail.replace(ROW_SCORES, ''),
       blocking: BLOCKING_VERDICTS.has(verdict),
-    });
+    };
+    // The renderer ends the snippet with an ellipsis (U+2026).
+    if (pass3) row.quote = pass3[2]!.replace(/…$/, '');
+    out.push(row);
   }
   return out;
 }

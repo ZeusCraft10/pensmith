@@ -16,11 +16,16 @@
 //   4. Approval gate (default-on, PRD §19): render a before/after diff and
 //      prompt. Skipped under --yolo. Non-TTY without --yolo → exit code 3.
 //   5. On accept: `swap` replaces the flagged key inside each citation that
-//      cites it (prefix and locator kept); `remove` mechanically deletes it from
-//      its cluster, or the whole bracketed citation when it is the only key (no
-//      LLM prose rewrite). A patch that changes nothing is not applied. Write
+//      cites it (prefix and locator kept). `remove` is mechanical too (no LLM
+//      prose rewrite). For a misquotation (a Pass-3 NOT_FOUND row) it deletes
+//      the quotation, with the sentence or block quote that holds it, and
+//      leaves the work's other citations alone. For a failed citation it deletes
+//      the key from its clusters, or the whole bracketed citation when it is
+//      the only key, and every quotation attributed to that key alone: removing
+//      only the key would leave the quotation in quote marks with nothing to
+//      check it against. A patch that changes nothing is not applied. Write
 //      DRAFT.md via atomicWriteFile; reset PLAN.md verified_against_draft_hash
-//      → null via updateFrontmatter under withLock.
+//      → null via updateFrontmatter under withLock, so verify must run again.
 //   6. --yolo auto-loop: re-run the SAME path up to 2 retries; on exhaustion
 //      write a RETRY_EXHAUSTED verdict to VERIFICATION.md (D-06).
 //
@@ -38,7 +43,18 @@ import { readFileSync, existsSync } from 'node:fs';
 import { atomicWriteFile } from './atomic-write.js';
 import { updateFrontmatter, parseFrontmatter } from './frontmatter.js';
 import { withLock } from './lock.js';
-import { citationsOf, dropCitedKey, findCitations, renameCitedKey, sentenceSpan } from './citation-grammar.js';
+import {
+  citationsOf,
+  clusterWithoutKey,
+  dropCitedKey,
+  findCitations,
+  findQuotes,
+  paragraphBreaks,
+  renameCitedKey,
+  sentenceSpan,
+  type Citation,
+  type Quote,
+} from './citation-grammar.js';
 import { parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
 import { parseBibtex } from './citations.js';
 import { writeBibtex } from './bibtex-write.js';
@@ -140,6 +156,8 @@ export class ApprovalUnavailableError extends Error {
 interface FailingCitation {
   citekey: string;
   reason: string;
+  /** For a misquotation (a Pass-3 row), the start of the quotation. */
+  quote?: string;
 }
 
 /**
@@ -151,7 +169,10 @@ interface FailingCitation {
 export function firstFailingCitation(verificationMd: string): FailingCitation | null {
   const row = parseVerdictRowDetails(verificationMd)
     .find((r) => FAILING_VERDICTS.has(r.verdict));
-  return row ? { citekey: row.citekey, reason: `${row.verdict}: ${row.detail}` } : null;
+  if (!row) return null;
+  const failing: FailingCitation = { citekey: row.citekey, reason: `${row.verdict}: ${row.detail}` };
+  if (row.quote !== undefined) failing.quote = row.quote;
+  return failing;
 }
 
 /** Blocking rows revise cannot repair with a swap or a remove (raw citations, broken keys, offline). */
@@ -164,12 +185,98 @@ function unrepairableRows(verificationMd: string): VerdictRow[] {
 // Claim-context extraction — the sentence that cites the flagged key.
 // ---------------------------------------------------------------------------
 
-function claimContext(draftMd: string, citekey: string): string {
+function claimContext(draftMd: string, failing: FailingCitation): string {
   const cites = findCitations(draftMd);
-  const c = citationsOf(draftMd, citekey, cites)[0];
+  // For a misquotation, the sentence with that quotation in it.
+  const q = failing.quote === undefined ? undefined : quotationsOf(draftMd, failing.citekey, failing.quote, cites)[0];
+  if (q?.citation) {
+    const [s, e] = sentenceSpan(draftMd, Math.min(q.start, q.citation.start), Math.max(q.end, q.citation.end), cites);
+    return draftMd.slice(s, e).trim();
+  }
+  const c = citationsOf(draftMd, failing.citekey, cites)[0];
   if (!c) return '(citation not found in DRAFT.md)';
   const [s, e] = sentenceSpan(draftMd, c.start, c.end, cites);
   return draftMd.slice(s, e).trim();
+}
+
+// ---------------------------------------------------------------------------
+// Taking quotations out
+// ---------------------------------------------------------------------------
+
+/**
+ * The quotations attributed to a citation of `key`; with `start`, only those
+ * whose text begins with it (the snippet a Pass-3 row shows).
+ */
+function quotationsOf(md: string, key: string, start: string | undefined, cites: readonly Citation[]): Quote[] {
+  return findQuotes(md, cites).filter((q) =>
+    q.citation?.items.some((i) => i.key === key) && (start === undefined || q.text.startsWith(start)));
+}
+
+/** `md` without [s, e), leaving no space dangling and no empty paragraph behind. */
+function cut(md: string, s: number, e: number): string {
+  let before = md.slice(0, s);
+  let after = md.slice(e);
+  if (/(^|\n)[ \t]*$/.test(before) || /^[ \t]*(\r?\n|$)/.test(after)) {
+    before = before.replace(/[ \t]+$/, '');
+    after = after.replace(/^[ \t]+/, '');
+  } else if (/[ \t]$/.test(before)) {
+    after = after.replace(/^[ \t]+/, '');
+  }
+  if ((before === '' || before.endsWith('\n')) && (after === '' || /^\r?\n/.test(after))) {
+    // A paragraph emptied: one blank line between what is left around it.
+    before = before.replace(/(\r?\n[ \t]*)+$/, '');
+    after = after.replace(/^(\r?\n[ \t]*)+/, '');
+    if (before === '') return after;
+    return after === '' ? `${before}\n` : `${before}\n\n${after}`;
+  }
+  return before + after;
+}
+
+/**
+ * `md` with quotations attributed to `key` taken out, and the text taken out.
+ *
+ * With `start` (a misquotation), the quotation that begins with it. When its
+ * citation cites other works too, only `key` leaves that citation: the
+ * quotation stays, to be checked against the others. Without `start` (the key
+ * itself failed), every quotation attributed to `key` alone.
+ *
+ * An inline quotation goes with its sentence. A block quotation goes with its
+ * block, the sentence that introduces it with a colon, and its citation.
+ */
+function withoutQuotations(md: string, key: string, start?: string): { text: string; removed: string[] } {
+  const cites = findCitations(md);
+  const breaks = paragraphBreaks(md);
+  const spans: Array<[number, number]> = [];
+  const rewrites: Array<{ s: number; e: number; text: string }> = [];
+  for (const q of quotationsOf(md, key, start, cites)) {
+    const c = q.citation!;
+    if (c.items.some((i) => i.key !== key)) {
+      if (start !== undefined && !c.narrative) rewrites.push({ s: c.start, e: c.end, text: clusterWithoutKey(c, key) });
+      continue;
+    }
+    if (q.kind === 'inline') {
+      spans.push(sentenceSpan(md, Math.min(q.start, c.start), Math.max(q.end, c.end), cites, breaks));
+    } else {
+      spans.push([q.start, q.end]);
+      const intro = md.slice(0, q.start).replace(/\s+$/, '');
+      if (intro.endsWith(':')) spans.push(sentenceSpan(md, intro.length - 1, intro.length, cites, breaks));
+      if (c.start >= q.end || c.end <= q.start) spans.push([c.start, c.end]);
+    }
+  }
+  // Overlapping deletions become one; a rewrite inside a deletion goes with it.
+  const deletions: Array<[number, number]> = [];
+  for (const [s, e] of spans.sort((a, b) => a[0] - b[0])) {
+    const last = deletions[deletions.length - 1];
+    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+    else deletions.push([s, e]);
+  }
+  const edits = [
+    ...deletions.map(([s, e]) => ({ s, e, text: '' })),
+    ...rewrites.filter((r) => !deletions.some(([s, e]) => r.s < e && r.e > s)),
+  ].sort((a, b) => b.s - a.s);
+  let text = md;
+  for (const ed of edits) text = ed.text === '' ? cut(text, ed.s, ed.e) : text.slice(0, ed.s) + ed.text + text.slice(ed.e);
+  return { text, removed: deletions.map(([s, e]) => md.slice(s, e).trim()) };
 }
 
 // ---------------------------------------------------------------------------
@@ -267,26 +374,40 @@ function validateProposal(
 // ---------------------------------------------------------------------------
 
 /**
- * The patched draft for an accepted proposal, or why it cannot be applied:
- * the citation is no longer in the draft, or removing a narrative citation
- * would leave a sentence without its subject.
+ * The patched draft for an accepted proposal and the text it deletes, or why
+ * it cannot be applied: the citation or quotation is no longer in the draft,
+ * or removing a narrative citation would leave a sentence without its subject.
  */
-function patchFor(proposal: ReviseSwapProposal, draftMd: string): { patched: string } | { refused: string } {
+function patchFor(
+  proposal: ReviseSwapProposal,
+  draftMd: string,
+  failing: FailingCitation,
+): { patched: string; removed: string[] } | { refused: string } {
   const flagged = proposal.flagged_citekey;
   const cites = citationsOf(draftMd, flagged);
   if (cites.length === 0) {
     return { refused: `the draft no longer cites ${flagged}, so the ${proposal.action} changed nothing — re-run verify` };
   }
-  if (proposal.action === 'remove' && cites.some((c) => c.narrative)) {
+  if (proposal.action === 'swap') {
+    // The prefix and locator of a swapped key stay.
+    const patched = renameCitedKey(draftMd, flagged, proposal.replacement_citekey as string);
+    return patched === draftMd ? { refused: 'the swap changed nothing in DRAFT.md' } : { patched, removed: [] };
+  }
+  // A misquotation: the quotation goes, and the work stays cited where Pass 1 confirmed it.
+  if (failing.quote !== undefined) {
+    const { text, removed } = withoutQuotations(draftMd, flagged, failing.quote);
+    if (text === draftMd) {
+      return { refused: `the draft no longer holds the quotation "${failing.quote}…" cited to ${flagged} — re-run verify` };
+    }
+    return { patched: text, removed };
+  }
+  // A failed citation: the quotations it alone supports go, then the key.
+  const { text, removed } = withoutQuotations(draftMd, flagged);
+  if (citationsOf(text, flagged).some((c) => c.narrative)) {
     return { refused: `@${flagged} is a narrative citation in running text; removing it would break the sentence — edit DRAFT.md by hand or swap it` };
   }
-  // Mechanical patches, no prose rewrite: the prefix and locator of a swapped
-  // key stay; a removed key leaves its cluster, or the whole bracketed
-  // citation goes when it was the only key.
-  const patched = proposal.action === 'swap'
-    ? renameCitedKey(draftMd, flagged, proposal.replacement_citekey as string)
-    : dropCitedKey(draftMd, flagged);
-  return patched === draftMd ? { refused: `the ${proposal.action} changed nothing in DRAFT.md` } : { patched };
+  const patched = dropCitedKey(text, flagged);
+  return patched === draftMd ? { refused: 'the remove changed nothing in DRAFT.md' } : { patched, removed };
 }
 
 async function applyProposal(draftPath: string, planPath: string, patched: string): Promise<void> {
@@ -473,7 +594,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   const vars: ReviseSwapVars = {
     flagged_citekey: failing.citekey,
     verifier_reason: failing.reason,
-    claim_context: claimContext(draftMd, failing.citekey),
+    claim_context: claimContext(draftMd, failing),
     available_sources: assignedSources.map((k) => `- ${k}`).join('\n'),
     voice_hint: voiceHint(planMd),
   };
@@ -491,21 +612,27 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     base.action = proposal.action;
     base.replacement_citekey = proposal.replacement_citekey;
 
-    // Approval gate (default-on, PRD §19). --yolo skips.
-    const accepted = opts.yolo ? true : await approve(proposal);
+    const patch = patchFor(proposal, draftMd, failing);
+    if ('refused' in patch) {
+      return { ...base, accepted: false, rejectedReason: patch.refused, message: `${base.message} Not applied: ${patch.refused}; DRAFT.md unchanged.`.trim() };
+    }
+
+    // Approval gate (default-on, PRD §19). --yolo skips. When the patch
+    // deletes text, the gate shows that text, not the model's excerpt.
+    const shown: ReviseSwapProposal = patch.removed.length === 0 ? proposal
+      : { ...proposal, patch: { before_excerpt: patch.removed.join('\n'), after_excerpt: '(deleted)' } };
+    const accepted = opts.yolo ? true : await approve(shown);
     if (!accepted) {
       return { ...base, accepted: false, message: `${base.message} Proposal rejected at the approval gate — DRAFT.md unchanged.`.trim() };
     }
 
-    const patch = patchFor(proposal, draftMd);
-    if ('refused' in patch) {
-      return { ...base, accepted: false, rejectedReason: patch.refused, message: `${base.message} Not applied: ${patch.refused}; DRAFT.md unchanged.`.trim() };
-    }
     await applyProposal(draftPath, planPath, patch.patched);
+    const deleted = patch.removed.length === 0 ? ''
+      : ` Deleted ${patch.removed.length === 1 ? 'the quotation' : `${patch.removed.length} passages with quotations`} it alone supported: "${patch.removed[0]!.slice(0, 60)}…".`;
     return {
       ...base,
       accepted: true,
-      message: `${base.message} Applied ${proposal.action} for [@${failing.citekey}]${proposal.replacement_citekey ? ` → [@${proposal.replacement_citekey}]` : ''}; verification hash reset.`.trim(),
+      message: `${base.message} Applied ${proposal.action} for [@${failing.citekey}]${proposal.replacement_citekey ? ` → [@${proposal.replacement_citekey}]` : ''}.${deleted} Verification hash reset — re-run verify.`.trim(),
     };
   }
 

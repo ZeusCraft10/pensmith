@@ -325,11 +325,20 @@ export function renameCitedKey(md: string, from: string, to: string): string {
 export function dropCitedKey(md: string, key: string): string {
   return editCitationsOf(md, key, (c, text) => {
     if (c.narrative) return text;
-    const kept = c.raw.slice(1, -1).split(';').filter((part) => !citedKeyPattern(key).test(part));
-    if (kept.length > 0) return `${text.slice(0, c.start)}[${kept.map((p) => p.trim()).join('; ')}]${text.slice(c.end)}`;
+    const kept = clusterWithoutKey(c, key);
+    if (kept !== '') return `${text.slice(0, c.start)}${kept}${text.slice(c.end)}`;
     const start = c.start - (/\s*$/.exec(text.slice(0, c.start))?.[0].length ?? 0);
     return text.slice(0, start) + text.slice(c.end);
   });
+}
+
+/**
+ * The bracketed citation `c` without `key`: `[@a; @key, p. 4]` becomes `[@a]`,
+ * and a citation of `key` alone becomes ''. `c` must not be narrative.
+ */
+export function clusterWithoutKey(c: Citation, key: string): string {
+  const kept = c.raw.slice(1, -1).split(';').filter((part) => !citedKeyPattern(key).test(part));
+  return kept.length > 0 ? `[${kept.map((p) => p.trim()).join('; ')}]` : '';
 }
 
 // ---------------------------------------------------------------------------
