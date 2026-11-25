@@ -9,7 +9,7 @@
 // (verification timestamps, the RETRACTED note) and free-text fields such as
 // notes and abstracts never leave the project.
 
-import { formatBibtex, formatRis, parseBib } from './citations.js';
+import { formatBibtex, formatRis, parseBib, parseBibFieldsByCitekey } from './citations.js';
 
 export type CslEntry = Record<string, unknown> & { id: string };
 
@@ -21,6 +21,21 @@ const EXPORT_FIELDS: ReadonlySet<string> = new Set([
   'number-of-pages', 'edition', 'genre', 'event-title', 'event-place', 'language',
   'DOI', 'ISBN', 'ISSN', 'URL', 'PMID', 'PMCID',
 ]);
+
+// Raw BibTeX fields that identify a work where CSL has no variable: an arXiv
+// preprint's eprint and a PubMed article's PMID. citation-js drops them when
+// it reads the bibliography, so they are read and written as they are.
+const IDENTIFIER_FIELDS: readonly string[] = ['eprint', 'archiveprefix', 'eprinttype', 'primaryclass', 'pmid'];
+
+/** The identifier fields (IDENTIFIER_FIELDS) of each entry of a BibTeX file's text, by citekey. */
+export async function readIdentifierFields(bibText: string): Promise<Map<string, Record<string, string>>> {
+  const out = new Map<string, Record<string, string>>();
+  for (const [key, fields] of await parseBibFieldsByCitekey(bibText)) {
+    const ids = Object.fromEntries(IDENTIFIER_FIELDS.filter((f) => fields[f]).map((f) => [f, fields[f]!]));
+    if (Object.keys(ids).length > 0) out.set(key, ids);
+  }
+  return out;
+}
 
 /** Parse a BibTeX file's text; an empty file has no entries. */
 export async function readBibEntries(bibText: string): Promise<CslEntry[]> {
@@ -57,9 +72,13 @@ export function selectEntries(entries: CslEntry[], keys: readonly string[]): { e
   return { entries: picked, missing };
 }
 
-/** BibTeX for `entries`, each keyed by its citekey. Names and titles in any script are kept. */
-export function toBibtex(entries: readonly CslEntry[]): string {
-  return formatBibtex(entries.map((e) => ({ ...e, 'citation-key': e.id })));
+/**
+ * BibTeX for `entries`, each keyed by its citekey, with its identifier fields
+ * from `identifiers` (readIdentifierFields). Names and titles in any script
+ * are kept.
+ */
+export function toBibtex(entries: readonly CslEntry[], identifiers: ReadonlyMap<string, Readonly<Record<string, string>>> = new Map()): string {
+  return formatBibtex(entries.map((e) => ({ ...e, 'citation-key': e.id })), identifiers);
 }
 
 /** RIS for `entries`. Each record carries its citekey (ID) and DOI (DO). */

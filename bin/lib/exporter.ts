@@ -32,7 +32,7 @@ import { cslFilePath, renderCitationsInDocument, SUPPORTED_STYLES, type Rendered
 import { atomicWriteFile, makeTempDir, removePath, type AtomicWriteOptions } from './atomic-write.js';
 import { citedKeys, exportCitations, findCitations, type Citation } from './citation-grammar.js';
 import { cslHtmlToLatex, cslHtmlToMarkdown, escapeLatexText } from './csl-html.js';
-import { readBibEntries, selectEntries, toBibtex, toRis, type CslEntry } from './export-bib.js';
+import { readBibEntries, readIdentifierFields, selectEntries, toBibtex, toRis, type CslEntry } from './export-bib.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
 import { homeDirs, packageRoot, paperDir, realPath } from './paths.js';
 import { describeFinding, EPOCH_W3CDTF, scanExportBuffer, type TraceFormat } from './trace-scan.js';
@@ -657,8 +657,10 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   const bibPathSrc = join(paper, 'CITATIONS.bib');
   const bibText = opts.bibText ?? (existsSync(bibPathSrc) ? await fsp.readFile(bibPathSrc, 'utf8') : '');
   let entries: CslEntry[] = [];
+  let identifiers = new Map<string, Record<string, string>>();
   try {
     entries = await readBibEntries(bibText);
+    identifiers = await readIdentifierFields(bibText);
   } catch (err) {
     if (findCitations(md).some((c) => !c.narrative)) {
       throw new ExportError('invalid-input', `CITATIONS.bib could not be read: ${err instanceof Error ? err.message : String(err)}`);
@@ -680,7 +682,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   try {
     const files: string[] = [];
     if (exported.length > 0) {
-      await atomicWriteFile(join(stage, 'CITATIONS.bib'), toBibtex(exported), STAGED);
+      await atomicWriteFile(join(stage, 'CITATIONS.bib'), toBibtex(exported, identifiers), STAGED);
       await atomicWriteFile(join(stage, 'CITATIONS.ris'), toRis(exported), STAGED);
       files.push(join(stage, 'CITATIONS.bib'), join(stage, 'CITATIONS.ris'));
     }

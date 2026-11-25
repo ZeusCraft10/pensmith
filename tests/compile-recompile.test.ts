@@ -69,13 +69,17 @@ test('a second compile with nothing changed re-verifies nothing, and works offli
   assert.equal(existsSync(join(paper, 'DRAFT.stale.md')), false, 'nothing was moved aside');
 });
 
-test('compile leaves CITATIONS.bib as verify read it: no entry rewritten, none dropped', () => {
+test('compile leaves the canonical store as verify read it: CITATIONS.bib and LIBRARY.json untouched', () => {
   const root = seedPaper();
+  // The library a research run and an add left behind.
+  const library = JSON.stringify({ $schemaVersion: 1, entries: [{ source: 'crossref', id: '10.1109/MCSE.2011.37', title: 'The NumPy Array', authors: ['van der Walt, Stéfan'], year: 2011, doi: '10.1109/MCSE.2011.37', retracted: false, last_verified: '2026-11-25T00:00:00.000Z', citekey: 'walt2011', raw: null }] });
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), library);
   const v = cli(root, ['verify', '1', '--slug', 'intro']);
   assert.equal(v.status, 0, v.out);
   const c = cli(root, ['compile']);
   assert.equal(c.status, 0, c.out);
   assert.equal(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'), BIB);
+  assert.equal(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8'), library);
 });
 
 // Two works with no DOI: an arXiv preprint known by its eprint field, and a
@@ -114,4 +118,9 @@ test('works known by an eprint or a PubMed ID stay in the bibliography through c
   const exported = readFileSync(join(root, '.paper', 'export', 'CITATIONS.bib'), 'utf8');
   assert.match(exported, /@misc\{vaswani2017,/);
   assert.match(exported, /@article\{encode2012,/);
+  // The identifiers the works are known by go with them: a reader (and Pass 1)
+  // finds the preprint by its eprint and the article by its PubMed ID.
+  assert.match(exported, /@misc\{vaswani2017,[^@]*eprint = \{1706\.03762\}/);
+  assert.match(exported, /@misc\{vaswani2017,[^@]*archiveprefix = \{arXiv\}/);
+  assert.match(exported, /@article\{encode2012,[^@]*pmid = \{PMID: 22955616\}/);
 });
