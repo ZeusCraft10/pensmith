@@ -4,8 +4,10 @@
 // validator that approved invalid manifests: it installs the Claude Code CLI,
 // validates the plugin and marketplace with `claude plugin validate --strict`,
 // installs the plugin into a throwaway config dir, runs the shim through a
-// symlink (scripts/plugin-smoke.mjs does all of that), and fails when the
-// committed bundle is stale. It runs on Node 22 and 24 on three OSes.
+// symlink (scripts/plugin-smoke.mjs does all of that). The plugin bundle is
+// never committed: CI builds it before the tests and the smoke, so both run
+// against the bundle the sources produce. It runs on Node 22 and 24 on three
+// OSes.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,6 +20,8 @@ interface Workflow { jobs: Record<string, { strategy?: { matrix?: { os?: string[
 const ci = parseYaml(readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')) as Workflow;
 const job = ci.jobs['check']!;
 const runs = job.steps.map((s) => s.run ?? '').join('\n');
+/** Index of the first step whose `run` matches. */
+const stepIndex = (re: RegExp): number => job.steps.findIndex((s) => re.test(s.run ?? ''));
 
 test('CI runs on Node 22 and 24 on Linux, macOS and Windows', () => {
   const matrix = job.strategy?.matrix ?? {};
@@ -36,8 +40,20 @@ test('CI installs the Claude Code CLI and runs the plugin smoke', () => {
   }
 });
 
-test('CI fails when the committed plugin bundle is stale', () => {
-  assert.match(runs, /npm run bundle:check/);
+test('CI builds the plugin bundle before the tests and the smoke, and never checks in a built one', () => {
+  const bundle = stepIndex(/^npm run bundle\s*$/);
+  assert.ok(bundle >= 0, 'CI must run `npm run bundle`');
+  assert.ok(bundle < stepIndex(/npm run test(:coverage)?\b/), 'the bundle must be built before the tests');
+  assert.ok(bundle < stepIndex(/node scripts\/plugin-smoke\.mjs/), 'the bundle must be built before the smoke');
+  assert.ok(!/bundle:check|bundle\.mjs --check/.test(runs), 'there is no committed bundle to check');
+});
+
+test('npm run check builds the bundle before it runs the tests', () => {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { scripts: Record<string, string> };
+  const steps = (pkg.scripts['check'] ?? '').split('&&').map((s) => s.trim());
+  assert.ok(steps.includes('npm run bundle'), `check must run npm run bundle: ${pkg.scripts['check']}`);
+  assert.ok(steps.indexOf('npm run bundle') < steps.indexOf('npm test'), 'check must bundle before it tests');
+  assert.ok(!('bundle:check' in pkg.scripts), 'the stale-committed-bundle check is gone');
 });
 
 test('CI runs every gate once and nothing that pins the old plugin format', () => {

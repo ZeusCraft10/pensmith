@@ -395,7 +395,9 @@ test('CF-D24: CONTRIBUTING.md has Tier contract — do not skip section with loc
   }
   // The gates CI really runs must be named:
   assert.match(src, /claude plugin validate plugin --strict/, 'the plugin validation gate must be named');
-  assert.match(src, /npm run bundle:check/, 'the stale-bundle gate must be named');
+  assert.match(src, /`npm run bundle`/, 'the bundle build CI runs before the tests must be named');
+  // The bundle is built, never committed, so there is no stale-bundle check to describe.
+  assert.ok(!/bundle:check|commit the result/.test(src), 'CONTRIBUTING.md must not describe a committed bundle');
   assert.match(src, /plugin-smoke\.mjs/, 'the isolated-install smoke must be named');
   // The four merge-gate layers must be named:
   assert.match(src, /CI step/, 'merge-gate layer 1 (CI step) must be named');

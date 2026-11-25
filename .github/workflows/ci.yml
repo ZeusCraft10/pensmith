@@ -36,16 +36,16 @@ jobs:
       - name: Generate derived sources
         run: npm run prebuild
 
-      # plugin/dist is committed so a marketplace install needs no build. Fail if
-      # it no longer matches the sources (fix: `npm run bundle` and commit).
-      - name: Committed plugin bundle is up to date
-        run: npm run bundle:check
-
       - run: npm run lint
 
       - run: npm run typecheck
 
       - run: npm run build
+
+      # plugin/dist is never committed (a release publishes it on the release
+      # branch), so build it here: the tests and the smoke run against it.
+      - name: Build the plugin bundle
+        run: npm run bundle
 
       - name: Test suite + coverage gate (non-TTY stdin)
         shell: bash

@@ -5,6 +5,9 @@
 // skill, one hook and a `pensmith` executable on the Bash tool's PATH. These
 // tests check the layout and then run the payload from a copy outside the
 // repository, which is how Claude Code runs it after an install.
+//
+// plugin/dist and the copied assets are built by `npm run bundle` and are
+// never committed; tests that need them fail with that instruction.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,10 +27,21 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
+import { builtPluginFile } from './lib/built-plugin.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = path.join(repoRoot, 'plugin');
 const at = (...rel: string[]): string => path.join(pluginDir, ...rel);
+const built = (rel: string): string => builtPluginFile(pluginDir, rel);
+const BUNDLES = ['dist/pensmith.mjs', 'dist/hook.mjs'];
+// Every file git tracks under plugin/. Everything else there is generated.
+const HAND_WRITTEN = [
+  '.claude-plugin/plugin.json',
+  'bin/pensmith',
+  'bin/pensmith.cmd',
+  'hooks/hooks.json',
+  'skills/pensmith/SKILL.md',
+];
 const readJson = <T>(p: string): T => JSON.parse(readFileSync(p, 'utf8')) as T;
 
 const pkg = readJson<{ version: string; bin?: Record<string, string>; files?: string[] }>(
@@ -152,23 +166,34 @@ test('bin/pensmith is an executable POSIX shim and bin/pensmith.cmd exists', () 
   assert.match(readFileSync(at('bin', 'pensmith.cmd'), 'utf8'), /dist\\pensmith\.mjs/);
 });
 
-test('the committed bundles and runtime assets are present', () => {
-  for (const f of ['dist/pensmith.mjs', 'dist/hook.mjs']) {
-    assert.ok(statSync(at(f)).size > 1000, `plugin/${f} must be a real bundle`);
-    // A fresh clone (and so a marketplace install) only has what git tracks.
-    const ignored = spawnSync('git', ['check-ignore', '-q', '--no-index', `plugin/${f}`], { cwd: repoRoot });
-    assert.equal(ignored.status, 1, `plugin/${f} must not be gitignored`);
-  }
-  const cli = readFileSync(at('dist', 'pensmith.mjs'), 'utf8');
+test('the bundles and runtime assets are built into plugin/', () => {
+  for (const f of BUNDLES) assert.ok(statSync(built(f)).size > 1000, `plugin/${f} must be a real bundle`);
+  const cli = readFileSync(built('dist/pensmith.mjs'), 'utf8');
   assert.match(cli, /^#!\/usr\/bin\/env node\n/);
   // Node prints a DEP0040 warning to the user's terminal when the deprecated
   // punycode core module loads; the bundle must use the userland package.
   assert.ok(!/__require\("punycode"\)/.test(cli), 'the CLI bundle must not load the punycode core module');
   for (const dir of ['templates/prompts', 'templates/citation-styles', 'templates/presets', 'references']) {
     const src = readdirSync(path.join(repoRoot, dir)).sort();
-    assert.deepEqual(readdirSync(at(dir)).sort(), src, `plugin/${dir} must mirror ${dir}`);
+    assert.deepEqual(readdirSync(at(dir)).sort(), src, `plugin/${dir} must mirror ${dir}: run \`npm run bundle\``);
   }
   assert.ok(existsSync(at('LICENSE')), 'the payload carries its licence');
+});
+
+test('git tracks only the hand-written payload; built output stays out of source history', () => {
+  // The built payload is published on the release branch. Committing it here
+  // would add megabytes to the history every marketplace add clones.
+  const tracked = execFileSync('git', ['ls-files', '--', 'plugin'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\n').filter(Boolean).map((f) => f.replace(/^plugin\//, '')).sort();
+  assert.deepEqual(tracked, [...HAND_WRITTEN].sort(), 'only the hand-written plugin files belong in git');
+  // Each generated file is gitignored, so a build leaves nothing to commit.
+  const untracked = execFileSync('git', ['--no-optional-locks', 'status', '--porcelain', '--untracked-files=all', '--', 'plugin'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\n').filter((l) => l.startsWith('??'));
+  assert.deepEqual(untracked, [], 'every generated plugin file must be gitignored');
+  for (const f of [...BUNDLES, 'templates/prompts/section-drafter.md', 'references/doctor-output.md', 'LICENSE']) {
+    const ignored = spawnSync('git', ['check-ignore', '-q', '--no-index', `plugin/${f}`], { cwd: repoRoot });
+    assert.equal(ignored.status, 0, `plugin/${f} is generated and must be gitignored`);
+  }
 });
 
 test('every package-root lookup in shipped source recognises the installed plugin root', () => {
@@ -204,6 +229,7 @@ test('package.json publishes the plugin payload and links its CLI', () => {
 // ---------------------------------------------------------------------------
 
 function installedCopy(): string {
+  for (const f of BUNDLES) built(f);
   const root = mkdtempSync(path.join(tmpdir(), 'pensmith-installed-'));
   const dest = path.join(root, 'pensmith', '0.3.0-alpha.1');
   cpSync(pluginDir, dest, { recursive: true });
@@ -268,8 +294,8 @@ test('the installed CLI parses a PDF without printing a Buffer() deprecation war
   const r = runPensmith(copy, ['add', pdf, '--dry-run'], cwd);
   assert.doesNotMatch(r.stderr, /could not read local PDF/, 'the PDF must actually be parsed');
   assert.doesNotMatch(r.stderr, /DeprecationWarning|DEP0005/, `stderr: ${r.stderr}`);
-  for (const f of ['dist/pensmith.mjs', 'dist/hook.mjs']) {
-    assert.doesNotMatch(readFileSync(at(f), 'utf8'), /new Buffer\(/, `plugin/${f} must not call the deprecated Buffer constructor`);
+  for (const f of BUNDLES) {
+    assert.doesNotMatch(readFileSync(built(f), 'utf8'), /new Buffer\(/, `plugin/${f} must not call the deprecated Buffer constructor`);
   }
 });
 

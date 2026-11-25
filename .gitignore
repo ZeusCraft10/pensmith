@@ -1,4 +1,4 @@
-# Build output (tsc). plugin/dist/ holds the committed bundles and is tracked.
+# Build output (tsc).
 /dist/
 *.tsbuildinfo
 
@@ -47,5 +47,10 @@ coverage/
 .planning/graphs/
 graphify-out/
 
-# Built plugin payload: produced by `npm run bundle`, published only on the release branch
+# Built plugin payload: `npm run bundle` writes the bundles and copies the
+# runtime assets into plugin/. It is published only on the release branch;
+# source history holds just the hand-written plugin files.
 /plugin/dist/
+/plugin/templates/
+/plugin/references/
+/plugin/LICENSE

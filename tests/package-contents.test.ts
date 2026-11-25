@@ -7,7 +7,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { builtPluginFile } from './lib/built-plugin.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -37,6 +39,16 @@ test('npm pack ships no compiled tests or test fixtures', () => {
   assert.ok(files.length > 0, 'npm pack listed no files');
   const leaked = files.filter((f) => /(^|\/)tests\//.test(f) || /\.test\.(js|ts|mjs)$/.test(f));
   assert.deepEqual(leaked, [], `npm pack would ship test files:\n${leaked.slice(0, 20).join('\n')}`);
+});
+
+test('npm pack ships the built plugin bundle that package.json bin points at', () => {
+  // git ignores plugin/dist, but the package's `files` list must still carry
+  // it, or an npm install would get a `pensmith` bin with no file behind it.
+  builtPluginFile(path.join(repoRoot, 'plugin'), 'dist/pensmith.mjs');
+  const files = packedFiles();
+  for (const f of ['plugin/dist/pensmith.mjs', 'plugin/dist/hook.mjs', 'plugin/templates/prompts/section-drafter.md']) {
+    assert.ok(files.includes(f), `npm pack must ship ${f}`);
+  }
 });
 
 test('the production tsconfig excludes tests from the build', () => {

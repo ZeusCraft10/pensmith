@@ -6,7 +6,7 @@ newer.
 
 ```bash
 npm ci
-npm run check    # prebuild · lint · typecheck · build · bundle check · tests
+npm run check    # prebuild · lint · typecheck · build · bundle · tests
 ```
 
 ## What CI runs
@@ -14,9 +14,10 @@ npm run check    # prebuild · lint · typecheck · build · bundle check · tes
 `.github/workflows/ci.yml` runs on Node 22 and 24, on Linux, macOS and
 Windows. Every step must pass:
 
-1. `npm run bundle:check`: the committed plugin bundle matches the sources.
-2. `npm run lint` and `npm run typecheck`.
-3. `npm run build` (tsc with `tsconfig.build.json`, which leaves tests out).
+1. `npm run lint` and `npm run typecheck`.
+2. `npm run build` (tsc with `tsconfig.build.json`, which leaves tests out).
+3. `npm run bundle`: builds the plugin bundle the tests and the smoke run
+   against. It is never committed (see [The plugin payload](#the-plugin-payload)).
 4. `npm run test:coverage`: the test suite, with coverage thresholds from
    `.c8rc.json`, and stdin closed so nothing waits on a TTY.
 5. `node scripts/plugin-smoke.mjs`, with the Claude Code CLI installed:
@@ -30,13 +31,16 @@ Run `npm run smoke:plugin` locally if you have `claude` on your `PATH`.
 
 ## The plugin payload
 
-`plugin/` is the only thing a marketplace install copies, and Claude Code runs
-no build or `npm install` for it. So:
+`plugin/` is the only thing a plugin install copies, and Claude Code runs no
+build or `npm install` for it. So:
 
 - `plugin/dist/pensmith.mjs` and `plugin/dist/hook.mjs` are esbuild bundles
-  with every dependency inlined, and `plugin/templates/`, `plugin/references/`
-  and `plugin/LICENSE` are copies. `npm run bundle` regenerates all of them;
-  commit the result with the source change that caused it.
+  with every dependency inlined, and `plugin/templates/`,
+  `plugin/references/` and `plugin/LICENSE` are copies. `npm run bundle`
+  generates all of them. They are gitignored and never committed: a release
+  publishes the built `plugin/` on the `release` branch, which is what users
+  install. Tests that need the bundle fail with "run `npm run bundle`" when it
+  is missing; `npm run check` builds it before the tests.
 - The rest is written by hand: `.claude-plugin/plugin.json`, the one skill
   (`skills/pensmith/SKILL.md`), `hooks/hooks.json`, and the `bin/` shims.
 - Keep `plugin/` free of `package.json` and lockfiles.
@@ -109,7 +113,7 @@ implementation of every step.
 
 - The plugin's skill only sends Claude to commands the CLI registers
   (`tests/nl-triggers.test.ts`), and the plugin's `pensmith` is the bundled
-  CLI built from the same sources (`npm run bundle:check`).
+  CLI built from the same sources (`npm run bundle`, before the tests).
 - Each command produces its declared artifacts when run through the built CLI
   in a temporary paper folder (`tests/tier-contract.test.ts`).
 - Comparing what Tier 1 does step by step against Tier 2 (action-trace

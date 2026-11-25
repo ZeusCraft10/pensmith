@@ -1,25 +1,22 @@
 #!/usr/bin/env node
-// scripts/bundle.mjs — build the committed plugin payload.
-//
-//   node scripts/bundle.mjs           write plugin/dist/* and the copied assets
-//   node scripts/bundle.mjs --check   rebuild in memory; exit 1 if anything
-//                                     committed under plugin/ is stale
+// scripts/bundle.mjs — build the plugin payload: write plugin/dist/* and copy
+// the runtime assets into plugin/.
 //
 // The plugin is installed by copying plugin/ as-is: Claude Code never runs
 // npm install for it, so the CLI and the hook are esbuild bundles with every
 // dependency inlined, and the runtime assets the CLI reads (prompt templates,
 // CSL styles, presets, reference copy) are copied next to them. Everything
-// written here is generated; edit the sources, then re-run this script.
+// written here is generated and gitignored: `npm run check` and CI rebuild it
+// before the tests, and a release publishes it on the release branch (see
+// scripts/release.mjs). Edit the sources, then re-run this script.
 
 import { build } from 'esbuild';
-import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(repoRoot, 'plugin');
-const checkOnly = process.argv.includes('--check');
 
 // Asset trees copied verbatim into the payload (source dir → payload dir).
 const ASSET_DIRS = ['templates', 'references'];
@@ -200,39 +197,19 @@ function existingGenerated() {
   return found;
 }
 
-const sha = (buf) => createHash('sha256').update(buf).digest('hex');
-
 const files = await generate();
 
-if (checkOnly) {
-  const problems = [];
-  for (const [rel, contents] of files) {
-    const p = path.join(pluginDir, rel);
-    if (!existsSync(p)) problems.push(`missing: plugin/${rel}`);
-    else if (sha(readFileSync(p)) !== sha(contents)) problems.push(`stale:   plugin/${rel}`);
-  }
-  for (const rel of existingGenerated()) {
-    if (!files.has(rel)) problems.push(`extra:   plugin/${rel}`);
-  }
-  if (problems.length > 0) {
-    console.error('plugin payload is out of date with its sources:');
-    for (const p of problems) console.error(`  ${p}`);
-    console.error('Run `npm run bundle` and commit the result.');
-    process.exit(1);
-  }
-  console.log(`plugin payload is up to date (${files.size} generated files)`);
-} else {
-  for (const rel of existingGenerated()) {
-    if (!files.has(rel)) rmSync(path.join(pluginDir, rel));
-  }
-  for (const [rel, contents] of files) {
-    const p = path.join(pluginDir, rel);
-    mkdirSync(path.dirname(p), { recursive: true });
-    writeFileSync(p, contents);
-  }
-  for (const b of BUNDLES) {
-    if (b.executable && process.platform !== 'win32') chmodSync(path.join(pluginDir, b.out), 0o755);
-  }
-  const sizes = BUNDLES.map((b) => `${b.out} ${(statSync(path.join(pluginDir, b.out)).size / 1024 / 1024).toFixed(1)} MB`);
-  console.log(`bundled ${sizes.join(', ')}; copied ${files.size - BUNDLES.length} asset files`);
+// Drop generated files whose source is gone, then write the fresh set.
+for (const rel of existingGenerated()) {
+  if (!files.has(rel)) rmSync(path.join(pluginDir, rel));
 }
+for (const [rel, contents] of files) {
+  const p = path.join(pluginDir, rel);
+  mkdirSync(path.dirname(p), { recursive: true });
+  writeFileSync(p, contents);
+}
+for (const b of BUNDLES) {
+  if (b.executable && process.platform !== 'win32') chmodSync(path.join(pluginDir, b.out), 0o755);
+}
+const sizes = BUNDLES.map((b) => `${b.out} ${(statSync(path.join(pluginDir, b.out)).size / 1024 / 1024).toFixed(1)} MB`);
+console.log(`bundled ${sizes.join(', ')}; copied ${files.size - BUNDLES.length} asset files`);
