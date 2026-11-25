@@ -66,7 +66,7 @@ After a section is drafted, the verifier runs on that section:
 | Pass | What it checks | Verdicts | Blocks compile and export? |
 |------|----------------|---------|-----------|
 | **Pass 1: integrity** | Re-fetches each cited DOI and fuzzy-matches the author **and** title against the published record (a DOI that resolves is necessary but not sufficient). Reads every Pandoc citation form: `[@key, p. 4]`, `[see @a; @b]`, `[-@key]` and narrative `@key` | `FABRICATED`, `MIS-CITED`; `UNRESOLVED` when no registry answered; `RAW_CITATION` for a DOI, arXiv ID, PMID or `(Author, 2020)` typed as text; `UNPARSEABLE` for a bracketed citation whose key does not parse | Yes |
-| **Pass 3: quotes** | Looks for every quoted span in the open-access text of the cited source: straight, curly and single quotes and block quotes, cited before or after the quote in any form. A short quote must appear word for word | `NOT_FOUND` | Yes |
+| **Pass 3: quotes** | Looks for every quoted span in the open-access text of the cited source: straight, curly and single quotes and block quotes, cited before or after the quote in any form. A short quote must appear word for word; an ellipsis marks words left out | `NOT_FOUND` | Yes |
 | **Pass 3: quotes with no citation** | A quotation of ten or more words that cites nothing. It may quote a source without crediting it, or be your own data (an interview, a participant) or an epigraph, which no source can confirm, so you check it yourself | `UNATTRIBUTED`; the section is marked unverifiable | No, but verify, compile and export each warn about it |
 | **Pass 2 / Pass 4: judgment** | Model-assisted claim support and coherence review | Advisory notes | No |
 

@@ -49,6 +49,24 @@ interface BibLike {
 }
 
 /**
+ * Whether a short quotation appears word for word in `sourceText`, ignoring
+ * case and Unicode compatibility forms. An ellipsis (`...`, `…`, `[...]`)
+ * marks words left out, so the parts around it must appear in order.
+ */
+export function shortQuoteFound(quote: string, sourceText: string): boolean {
+  const source = nfkcNormalize(sourceText).toLowerCase();
+  // NFKC turns `…` into `...`.
+  const parts = nfkcNormalize(quote).toLowerCase().split(/\s*\[?\.{3,}\]?\s*/).filter((p) => p.length > 0);
+  let from = 0;
+  for (const part of parts) {
+    const at = source.indexOf(part, from);
+    if (at === -1) return false;
+    from = at + part.length;
+  }
+  return parts.length > 0;
+}
+
+/**
  * Run Pass-3 against every quote in `draftMd`, looking up source PDFs via
  * the bib map.
  *
@@ -119,7 +137,7 @@ export async function runPass3(
       }
       if (q.exact) {
         // A few words: a fuzzy threshold would accept a changed word.
-        const found = nfkcNormalize(text).toLowerCase().includes(nfkcNormalize(q.text).toLowerCase());
+        const found = shortQuoteFound(q.text, text);
         results.push({
           citekey: q.citekey, quoteSnippet: snippet,
           verdict: found ? 'OK' : 'NOT_FOUND', levRatio: found ? 1 : 0,
