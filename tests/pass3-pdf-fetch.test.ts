@@ -40,19 +40,28 @@ const DRAFT = [
 ].join('\n');
 const BIB = new Map([['k', { DOI }]]);
 
-interface Served { pdfUrl: string; routes: Record<string, (hits: number) => { statusCode: number; data: Buffer | string; headers: Record<string, string> }> }
+interface Served {
+  pdfUrl: string;
+  /** The PDF Unpaywall names, when not `pdfUrl`. */
+  unpaywallPdfUrl?: string;
+  /** The contact email; null for none. */
+  email?: string | null;
+  routes: Record<string, (hits: number) => { statusCode: number; data: Buffer | string; headers: Record<string, string> }>;
+}
 
 /**
- * Run Pass 3 on DRAFT with OpenAlex and Unpaywall both naming `pdfUrl` as the
- * open-access PDF, and `routes` answering on the OA hosts. Returns the
- * verdicts, how often each route was asked, and the HTTP cache files left.
+ * Run Pass 3 on DRAFT with OpenAlex and Unpaywall naming `pdfUrl` (or
+ * `unpaywallPdfUrl`) as the open-access PDF, and `routes` answering on the OA
+ * hosts. Returns the verdicts, how often each route and registry was asked,
+ * and the HTTP cache files left.
  */
 async function pass3With(s: Served): Promise<{ results: Pass3Result[]; hits: Record<string, number>; cacheFiles: string[] }> {
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'pensmith-pass3-fetch-'));
   const saved = { ...process.env };
   const savedDispatcher = getGlobalDispatcher();
   for (const k of ['HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'LOCALAPPDATA']) process.env[k] = tmp;
-  process.env['PENSMITH_CONTACT_EMAIL'] = 'test@example.org';
+  if (s.email === null) delete process.env['PENSMITH_CONTACT_EMAIL'];
+  else process.env['PENSMITH_CONTACT_EMAIL'] = s.email ?? 'test@example.org';
   _resetWarnedForTest();
   _resetBucketsForTest();
 
@@ -60,13 +69,15 @@ async function pass3With(s: Served): Promise<{ results: Pass3Result[]; hits: Rec
   agent.disableNetConnect();
   setGlobalDispatcher(agent);
   const json = { 'content-type': 'application/json' };
+  const hits: Record<string, number> = { unpaywall: 0 };
   agent.get('https://api.openalex.org').intercept({ path: (p) => p.startsWith('/works/doi:'), method: 'GET' }).reply(200,
     JSON.stringify({ id: 'https://openalex.org/W1', doi: `https://doi.org/${DOI}`, best_oa_location: { is_oa: true, pdf_url: s.pdfUrl }, locations: [] }),
     { headers: json }).persist();
-  agent.get('https://api.unpaywall.org').intercept({ path: (p) => p.startsWith('/v2/'), method: 'GET' }).reply(200,
-    JSON.stringify({ doi: DOI, title: 'A Paper', year: 2020, is_oa: true, z_authors: [{ given: 'Ann', family: 'Smith' }], best_oa_location: { url_for_pdf: s.pdfUrl } }),
-    { headers: json }).persist();
-  const hits: Record<string, number> = {};
+  agent.get('https://api.unpaywall.org').intercept({ path: (p) => p.startsWith('/v2/'), method: 'GET' }).reply(() => {
+    hits['unpaywall']! += 1;
+    const body = { doi: DOI, title: 'A Paper', year: 2020, is_oa: true, z_authors: [{ given: 'Ann', family: 'Smith' }], best_oa_location: { url_for_pdf: s.unpaywallPdfUrl ?? s.pdfUrl } };
+    return { statusCode: 200, data: JSON.stringify(body), responseOptions: { headers: json } };
+  }).persist();
   for (const [url, answer] of Object.entries(s.routes)) {
     const u = new URL(url);
     hits[url] = 0;
@@ -136,4 +147,60 @@ test('pass 3: a redirect to a private address is refused', async () => {
   });
   assert.equal(hits['http://127.0.0.1:9/paper.pdf'], 0, 'the private address was never asked');
   assert.deepEqual(results.map((r) => r.verdict), ['PDF_UNAVAILABLE', 'PDF_UNAVAILABLE'], show(results));
+});
+
+// OpenAlex may list only links that fail (a login page, a 404). Unpaywall
+// often knows another copy, so with a contact email it is asked then too.
+const login = () => ({ statusCode: 200, data: '<!doctype html><title>Sign in</title>', headers: { 'content-type': 'text/html' } });
+
+test('pass 3: when every OpenAlex link fails, Unpaywall is asked for another', async () => {
+  const { results, hits } = await pass3With({
+    pdfUrl: `${OA}/login`,
+    unpaywallPdfUrl: `${OA}/paper.pdf`,
+    routes: { [`${OA}/login`]: login, [`${OA}/paper.pdf`]: pdf },
+  });
+  assert.deepEqual(results.map((r) => r.verdict), ['OK', 'NOT_FOUND'], show(results));
+  assert.ok(hits[`${OA}/login`]! >= 1, 'the OpenAlex link was tried first');
+});
+
+test('pass 3: when every OpenAlex link fails and no contact email is set, the reason says Unpaywall was not asked', async () => {
+  const { results, hits } = await pass3With({
+    pdfUrl: `${OA}/login`,
+    unpaywallPdfUrl: `${OA}/paper.pdf`,
+    email: null,
+    routes: { [`${OA}/login`]: login, [`${OA}/paper.pdf`]: pdf },
+  });
+  assert.deepEqual(results.map((r) => r.verdict), ['PDF_UNAVAILABLE', 'PDF_UNAVAILABLE'], show(results));
+  assert.equal(hits['unpaywall'], 0);
+  assert.match(results[0]!.reason, /served text\/html rather than a PDF/);
+  assert.match(results[0]!.reason, /PENSMITH_CONTACT_EMAIL/);
+});
+
+// pdf.js rejects a damaged PDF asynchronously, and an unhandled rejection
+// would end the verify run. A damaged PDF must read as no source text, with
+// nothing left unhandled.
+test('pass 3: a truncated or garbled PDF reads PDF_UNAVAILABLE, and nothing is left unhandled', async () => {
+  const unhandled: unknown[] = [];
+  const onUnhandled = (err: unknown): void => { unhandled.push(err); };
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const damaged: Record<string, Buffer> = {
+      truncated: PDF.subarray(0, Math.floor(PDF.length / 3)),
+      'garbage after the header': Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.from(Array.from({ length: 4096 }, (_, i) => (i * 37 + 11) % 256))]),
+      'header only': Buffer.from('%PDF-1.4\n%%EOF\n'),
+    };
+    for (const [what, bytes] of Object.entries(damaged)) {
+      const { results } = await pass3With({
+        pdfUrl: `${OA}/damaged.pdf`,
+        routes: { [`${OA}/damaged.pdf`]: () => ({ statusCode: 200, data: bytes, headers: { 'content-type': 'application/pdf' } }) },
+      });
+      assert.deepEqual(results.map((r) => r.verdict), ['PDF_UNAVAILABLE', 'PDF_UNAVAILABLE'], `${what}\n${show(results)}`);
+      assert.match(results[0]!.reason, /could not be read/, what);
+    }
+    // Let any rejection pdf.js left behind surface before checking.
+    await new Promise((r) => setTimeout(r, 50));
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
 });

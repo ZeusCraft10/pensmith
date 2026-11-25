@@ -82,12 +82,16 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
    - Quotes with fewer than 10 words are NOT extracted (the writer is responsible for inline-cite integrity at Pass-1 level for short attribution).
 
    For each extracted quote with an associated citekey:
-   - **(a)** Find the open-access PDF links (`bin/lib/verify/source-text.ts`): OpenAlex's
-     best open-access location and its other open-access locations, then Unpaywall's when
-     `PENSMITH_CONTACT_EMAIL` is set. If there are none → `verdict = 'PDF_UNAVAILABLE'`,
+   - **(a)** Read the entry's DOI as Pass 1 reads it (`workIdentifiers`, normalized through
+     `bin/lib/doi.ts`: a doi.org link or a `doi:` prefix is the same DOI, and a DOI given only as a
+     doi.org link in the `url` field counts). Find its open-access PDF links
+     (`bin/lib/verify/source-text.ts`): OpenAlex's best open-access location and its other
+     open-access locations first. When none of them gives text, Unpaywall's links not tried yet,
+     when `PENSMITH_CONTACT_EMAIL` is set. If there are none → `verdict = 'PDF_UNAVAILABLE'`,
      with a reason that names what each registry said (and says to set the email when it is unset).
    - **(b)** Fetch the first link that serves a PDF: bytes (`bodyBytes`, never the text body or the
-     HTTP cache), through the SSRF guard, following redirects. A page served as HTML is not a PDF.
+     HTTP cache), through the SSRF guard, following redirects. A page served as HTML is not a PDF,
+     and a damaged PDF that pdf.js cannot read is skipped; either way the next link is tried.
    - **(c)** Extract text: `extractPdfText(bytes)` (the `bin/lib/pdf-text.ts` chokepoint).
      If `text.replace(/\s/g, '').length < 50` → `verdict = 'TEXT_UNAVAILABLE'` (a scanned PDF).
    - **(d)** Else match: `matchQuote(quote, prepareSource(text))`. Every quoted word must appear in

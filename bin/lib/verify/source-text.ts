@@ -1,9 +1,10 @@
 // bin/lib/verify/source-text.ts — the open-access text Pass 3 checks a
 // quotation against.
 //
-// The PDF links come from OpenAlex first, which needs no contact email, then
-// from Unpaywall when PENSMITH_CONTACT_EMAIL is set (Unpaywall refuses a
-// request without one). Each link is tried in turn until one gives a PDF.
+// The PDF links come from OpenAlex first, which needs no contact email. When
+// none of them gives text, Unpaywall is asked too, if PENSMITH_CONTACT_EMAIL
+// is set (Unpaywall refuses a request without one): it often knows another
+// copy. Each link is tried in turn until one gives a PDF.
 //
 // A PDF is fetched as bytes, never through the UTF-8 text body, which destroys
 // its compressed streams, and never through the HTTP cache, which stores text.
@@ -23,28 +24,6 @@ const MAX_LINKS = 3;
 const MAX_REDIRECTS = 5;
 /** Below this many non-space characters a PDF is taken to be scanned images. */
 const MIN_TEXT_CHARS = 50;
-
-/** The open-access PDF links for `doi`, best first, and what kept the list short. */
-export async function openAccessPdfLinks(doi: string): Promise<{ urls: string[]; notes: string[] }> {
-  const urls: string[] = [];
-  const notes: string[] = [];
-  const add = (registry: string, a: OaPdfAnswer): void => {
-    if (a.kind === 'found') {
-      for (const u of a.urls) if (!urls.includes(u)) urls.push(u);
-      if (a.urls.length === 0) notes.push(`${registry} lists no open-access PDF`);
-    } else if (a.kind === 'not_found') {
-      notes.push(`${registry} does not hold the DOI`);
-    } else {
-      notes.push(`${registry} did not answer (${a.detail})`);
-    }
-  };
-  add('OpenAlex', await openAlexPdfs(doi));
-  if (urls.length === 0) {
-    if (contactEmail()) add('Unpaywall', await unpaywallPdfs(doi));
-    else notes.push('set PENSMITH_CONTACT_EMAIL so Unpaywall can be asked too');
-  }
-  return { urls: urls.slice(0, MAX_LINKS), notes };
-}
 
 const TEXT_TYPE = /^\s*(?:text\/|application\/(?:[\w.-]+\+)?(?:json|xml)\b)/i;
 
@@ -93,14 +72,15 @@ export async function fetchPdf(url: string): Promise<{ bytes: Buffer } | { reaso
 
 export type SourceText =
   | { kind: 'text'; url: string; source: QuoteSource }
-  | { kind: 'none'; scanned: boolean; reason: string };
+  /** `noLinks`: no registry listed an open-access PDF, so nothing was fetched. */
+  | { kind: 'none'; scanned: boolean; noLinks: boolean; reason: string };
 
 /**
  * The text of the first PDF among `urls` that gives one. `seen` holds the
  * texts already read in this run, by link; a failure is not kept, so the next
  * quotation of the same work tries again.
  */
-export async function firstPdfText(urls: readonly string[], seen: Map<string, QuoteSource>): Promise<SourceText> {
+async function firstPdfText(urls: readonly string[], seen: Map<string, QuoteSource>): Promise<SourceText> {
   const failures: string[] = [];
   let scanned = false;
   for (const url of urls) {
@@ -127,5 +107,45 @@ export async function firstPdfText(urls: readonly string[], seen: Map<string, Qu
     seen.set(url, source);
     return { kind: 'text', url, source };
   }
-  return { kind: 'none', scanned, reason: failures.join('; ') };
+  return { kind: 'none', scanned, noLinks: urls.length === 0, reason: failures.join('; ') };
+}
+
+/** The PDF links a registry's answer lists, noting in `notes` why it lists none. */
+function linksFrom(registry: string, a: OaPdfAnswer, notes: string[]): string[] {
+  if (a.kind === 'found') {
+    if (a.urls.length === 0) notes.push(`${registry} lists no open-access PDF`);
+    return a.urls;
+  }
+  notes.push(a.kind === 'not_found' ? `${registry} does not hold the DOI` : `${registry} did not answer (${a.detail})`);
+  return [];
+}
+
+/**
+ * The text of the first open-access PDF of `doi` that gives one: OpenAlex's
+ * links first, then Unpaywall's links not tried yet. `seen` holds the texts
+ * already read in this run, by link.
+ */
+export async function openAccessText(doi: string, seen: Map<string, QuoteSource>): Promise<SourceText> {
+  const notes: string[] = [];
+  const failures: string[] = [];
+  const tried = new Set<string>();
+  let scanned = false;
+  const fromRegistry = async (registry: string, answer: OaPdfAnswer): Promise<SourceText | null> => {
+    const urls = linksFrom(registry, answer, notes).filter((u) => !tried.has(u)).slice(0, MAX_LINKS);
+    for (const u of urls) tried.add(u);
+    const got = await firstPdfText(urls, seen);
+    if (got.kind === 'text') return got;
+    if (got.reason) failures.push(got.reason);
+    scanned ||= got.scanned;
+    return null;
+  };
+  const viaOpenAlex = await fromRegistry('OpenAlex', await openAlexPdfs(doi));
+  if (viaOpenAlex) return viaOpenAlex;
+  if (contactEmail()) {
+    const viaUnpaywall = await fromRegistry('Unpaywall', await unpaywallPdfs(doi));
+    if (viaUnpaywall) return viaUnpaywall;
+  } else {
+    notes.push('set PENSMITH_CONTACT_EMAIL so Unpaywall can be asked too');
+  }
+  return { kind: 'none', scanned, noLinks: tried.size === 0, reason: [...failures, ...notes].join('; ') };
 }

@@ -3,7 +3,8 @@
 // Deterministic; no LLM.
 //
 // For each quotation in DRAFT.md (bin/lib/quote-extractor.ts):
-//   1. find the DOI of each work it cites in .paper/CITATIONS.bib;
+//   1. find the DOI of each work it cites in .paper/CITATIONS.bib, read as
+//      Pass 1 reads it (a doi.org link or a `doi:` prefix is the same DOI);
 //   2. find the work's open-access PDF links (OpenAlex, then Unpaywall when a
 //      contact email is set) and read the first PDF that has text
 //      (bin/lib/verify/source-text.ts);
@@ -24,7 +25,8 @@
 // the known-bad-quotes corpus.
 
 import { matchQuote, type QuoteSource } from './quote-match.js';
-import { firstPdfText, openAccessPdfLinks } from './source-text.js';
+import { openAccessText } from './source-text.js';
+import { workIdentifiers } from './resolve.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
 import { extractQuotes } from '../quote-extractor.js';
 import { NO_CITATION_KEY } from './verdict-rows.js';
@@ -43,6 +45,7 @@ export interface Pass3Result {
 
 interface BibLike {
   DOI?: string;
+  URL?: string;
 }
 
 /**
@@ -81,25 +84,27 @@ export async function runPass3(
       NO_CITATION_KEY);
       continue;
     }
-    const doi = bibByCitekey.get(q.citekey)?.DOI;
-    if (!doi) {
+    const entry = bibByCitekey.get(q.citekey);
+    const id = entry ? workIdentifiers({ DOI: entry.DOI, URL: entry.URL }).find((w) => w.kind === 'doi') : undefined;
+    if (!id) {
       push('PDF_UNAVAILABLE', 'No DOI for citekey — cannot fetch OA PDF');
       continue;
     }
+    if (id.value === null) {
+      push('PDF_UNAVAILABLE', `the entry's DOI field "${id.raw}" is not a DOI — cannot fetch OA PDF`);
+      continue;
+    }
+    const doi = id.value;
     // Offline: no source text can be fetched, so the quote is unchecked.
     if (isOfflineMode()) {
       push('PDF_UNAVAILABLE', `${OFFLINE_SKIP_NOTE}: source text not fetched — re-run verify with network access`);
       continue;
     }
 
-    const links = await openAccessPdfLinks(doi);
-    if (links.urls.length === 0) {
-      push('PDF_UNAVAILABLE', `No OA PDF available for DOI ${doi}: ${links.notes.join('; ')}`);
-      continue;
-    }
-    const got = await firstPdfText(links.urls, texts);
+    const got = await openAccessText(doi, texts);
     if (got.kind === 'none') {
-      push(got.scanned ? 'TEXT_UNAVAILABLE' : 'PDF_UNAVAILABLE', `PDF fetch/parse failed: ${got.reason}`);
+      if (got.noLinks) push('PDF_UNAVAILABLE', `No OA PDF available for DOI ${doi}: ${got.reason}`);
+      else push(got.scanned ? 'TEXT_UNAVAILABLE' : 'PDF_UNAVAILABLE', `PDF fetch/parse failed: ${got.reason}`);
       continue;
     }
     const match = matchQuote(q.text, got.source);

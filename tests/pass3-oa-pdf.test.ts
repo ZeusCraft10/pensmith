@@ -68,6 +68,30 @@ test('pass 3: quotations of a real open-access PDF found through OpenAlex, with 
   );
 });
 
+// Pass 1 reads a DOI written as a doi.org link or with a `doi:` prefix, and an
+// entry that gives its DOI only as a doi.org link in its url field. Pass 3
+// used the field as written, so the registries were asked for
+// `doi:https://doi.org/...`, no PDF was found, and the misquotation read
+// PDF_UNAVAILABLE, which does not block.
+test('pass 3: a DOI written as a link, with a doi: prefix or only in the url field is looked up as the DOI', async () => {
+  const entries: Array<{ DOI?: string; URL?: string }> = [
+    { DOI: `https://doi.org/${DOI}` },
+    { DOI: `doi:${DOI}` },
+    { DOI: `http://dx.doi.org/${DOI}` },
+    { URL: `https://doi.org/${DOI}` },
+  ];
+  for (const entry of entries) {
+    const results = await withContactEmail(undefined, () => runPass3(draftQuoting([FAITHFUL, ONE_WORD]), new Map([[KEY, entry]])));
+    assert.deepEqual(results.map((r) => r.verdict), ['OK', 'NOT_FOUND'], `${JSON.stringify(entry)}\n${results.map((r) => r.reason).join('\n')}`);
+  }
+});
+
+test('pass 3: a DOI field that holds no DOI says so', async () => {
+  const results = await runPass3(draftQuoting([FAITHFUL]), new Map([[KEY, { DOI: 'not a doi' }]]));
+  assert.equal(results[0]?.verdict, 'PDF_UNAVAILABLE');
+  assert.match(results[0]!.reason, /not a DOI/);
+});
+
 test('pass 3: no open-access PDF in OpenAlex and no contact email: unverifiable, and the reason says to set one', async () => {
   const results = await withContactEmail(undefined, () =>
     runPass3(draftQuoting([FAITHFUL]), new Map([[KEY, { DOI: '10.0000/pensmith-no-oa-pdf' }]])));
