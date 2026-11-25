@@ -47,7 +47,7 @@ test('package.json contract', () => {
   assert.equal(pkg['type'], 'module');
   assert.equal(pkg['license'], 'AGPL-3.0-or-later');
   const engines = pkg['engines'] as Record<string, string> | undefined;
-  assert.equal(engines?.['node'], '>=20.10.0');
+  assert.equal(engines?.['node'], '>=22.12.0');
   assert.equal(pkg['packageManager'], 'npm@10.9.0');
   const scripts = pkg['scripts'] as Record<string, string> | undefined;
   for (const s of ['lint', 'typecheck', 'test', 'build', 'dev', 'validate:manifests', 'check']) {
@@ -187,7 +187,7 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   const hash = createHash('sha256').update(bytes).digest('hex');
   // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
-  const PINNED = '35c1fb8c6e3c839e020267ca9befb8e8b8b9521c921c2b6180953e1f5c1db324';
+  const PINNED = '1bbcd00b925420e571eb2c694764e69423f0ba2afa3085987c1c3d5aba6507ff';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

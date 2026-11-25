@@ -65,8 +65,8 @@ test('no source or test file imports the MCP SDK', () => {
   for (const dir of ['bin', 'hooks', 'scripts', 'tests']) {
     if (!existsSync(at(dir)) || !statSync(at(dir)).isDirectory()) continue;
     for (const file of sourceFiles(at(dir))) {
-      if (file.endsWith(path.join('tests', 'no-mcp-server.test.ts'))) continue;
-      if (/@modelcontextprotocol\//.test(readFileSync(file, 'utf8'))) offenders.push(path.relative(repoRoot, file));
+      const src = readFileSync(file, 'utf8');
+      if (/(?:from\s+|import\(\s*|require\(\s*)['"]@modelcontextprotocol\//.test(src)) offenders.push(path.relative(repoRoot, file));
     }
   }
   assert.deepEqual(offenders, [], `files still import the MCP SDK:\n${offenders.join('\n')}`);

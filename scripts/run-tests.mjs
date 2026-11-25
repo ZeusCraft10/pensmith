@@ -7,8 +7,8 @@
 //     `tests/**/*.test.ts` — the literal string is passed to Node, which
 //     interprets it as a single non-existent file and silently runs zero
 //     tests (vacuous pass). This is a Pitfall 8 cross-platform landmine.
-//   - Node 20.10 (D-10) lacks native `--test` glob support; that lands in
-//     Node 21+. We cannot wait for it.
+//   - `node --test` glob expansion differs between Node versions and shells;
+//     enumerating the files here keeps every supported platform identical.
 //   - This script enumerates `tests/**/*.test.ts` programmatically via
 //     fs.readdir({recursive:true}), passes the matched files explicitly to
 //     `node --import tsx --test`, and exits 1 if zero matches are found
@@ -29,7 +29,7 @@ const testsDir = path.join(repoRoot, 'tests');
 // Manual recursive walker — does NOT rely on Dirent.parentPath (Node 20.12+)
 // or Dirent.path (Node 20.5+ for recursive readdir). We use a depth-first
 // traversal where the parent path is tracked explicitly. This works on any
-// supported Node version (engines.node = ">=20.10.0"). See
+// supported Node version (engines.node = ">=22.12.0"). See
 // 00-CONTEXT.md D-10 + RESEARCH.md Pitfall 8: vacuous-pass mitigation.
 async function discoverTestFiles(dir) {
   const matches = [];

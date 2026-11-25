@@ -24,7 +24,7 @@ in Plan 03-09 Task 9.1 — its locked copy is the `intake-outline-verify-wiring
 ## Probe summary copy (locked per-probe)
 
 ### node-version (DOCT-01)
-> Node.js runtime version probe — pensmith requires >=20.10.0.
+> Node.js runtime version probe — pensmith requires >=22.12.0.
 
 ### contact-email-presence (DOCT-03)
 > PENSMITH_CONTACT_EMAIL environment variable presence — see references/http-warnings.md for the full WARN copy. (Canonical probe id per 02-05 line 45.)

@@ -11,9 +11,7 @@
 //   AWS' full-jitter randomizes uniformly across [0, exp_backoff] which
 //   maximally decorrelates retries across N clients sharing a queue.
 //
-// p-retry remains installed (W0 dep) so consumers may use it directly for
-// non-HTTP scenarios; bin/lib/http.ts is the only required caller of
-// retry() here.
+// bin/lib/http.ts is the only required caller of retry() here.
 //
 // Dispatch order inside retry():
 //   1. attempt = 1: call fn(); on success return
