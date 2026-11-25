@@ -164,3 +164,13 @@ test('verify: a refusal for a missing DRAFT.md leaves no earlier "verified" mark
   assert.notEqual(r.plan['status'], 'verified');
   assert.equal(r.plan['verified_against_draft_hash'], null);
 });
+
+for (const preDraft of ['planned', 'writing']) {
+  test(`verify: a refusal for a missing DRAFT.md keeps a ${preDraft} section ${preDraft}, so the router still sends it on to plan or write`, async () => {
+    const plan = WRITTEN_PLAN.replace('status: written', `status: ${preDraft}\nverified_against_draft_hash: 'earlier-run'`);
+    const r = await verifyDraft(null, REAL_BIB, plan);
+    assert.equal(r.status, 2);
+    assert.equal(r.plan['status'], preDraft);
+    assert.equal(r.plan['verified_against_draft_hash'], null);
+  });
+}

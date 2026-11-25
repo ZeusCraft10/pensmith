@@ -79,20 +79,26 @@ export const verifyCommand = defineCommand({
     // Every refusal below writes this status-only VERIFICATION.md, the shape
     // compile and done read (a `Status:` line), and records the same status in
     // PLAN.md with no draft hash: a "verified" mark from an earlier run must
-    // not outlive a run that could not verify.
+    // not outlive a run that could not verify. A section not drafted yet keeps
+    // its planned or writing status, so the router still sends it on to be
+    // planned or written instead of back to verify.
     const statusOnly = (status: string, reason: string): string =>
       `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: ${status}\nReason: ${reason}\n`;
-    const refuse = async (status: 'failed' | 'unverifiable', reason: string): Promise<void> => {
+    const refuse = async (
+      status: 'failed' | 'unverifiable',
+      reason: string,
+      { keepPreDraftStatus = false } = {},
+    ): Promise<void> => {
       await atomicWriteFile(verifPath, statusOnly(status, reason));
       await updatePlanFrontmatter(sectionPlan(n, slug), (fm) => {
-        fm.status = status;
+        if (!(keepPreDraftStatus && (fm.status === 'planned' || fm.status === 'writing'))) fm.status = status;
         fm.verified_against_draft_hash = null;
       });
       process.exitCode = EXIT_REFUSED;
     };
 
     if (!existsSync(draftPath)) {
-      await refuse('unverifiable', `DRAFT.md missing at ${draftPath}`);
+      await refuse('unverifiable', `DRAFT.md missing at ${draftPath}`, { keepPreDraftStatus: true });
       process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
