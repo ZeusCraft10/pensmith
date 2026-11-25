@@ -1,0 +1,122 @@
+% tests/fixtures/pass1-known-good.bib: real works, each written the way
+% bibliographies really write them, and every one must be OK in Pass 1. Each
+% is answered by a recorded registry response in tests/fixtures/cassettes.
+% tests/pass1-known-good.test.ts runs them all through runPass1.
+
+% NumPy (Crossref): braced particle surname, ISO 4 journal abbreviation, the
+% registrant's uppercase DOI.
+@article{numpy-braced,
+  title = {The {NumPy} Array: A Structure for Efficient Numerical Computation},
+  author = {{van der Walt}, Stéfan and Colbert, S. Chris and Varoquaux, Gaël},
+  journal = {Comput. Sci. Eng.},
+  year = {2011},
+  volume = {13},
+  number = {2},
+  pages = {22--30},
+  doi = {10.1109/MCSE.2011.37}
+}
+
+% NumPy: the particle unbraced (citation-js splits it off), initials, no
+% diacritics, the subtitle left out, a doi.org DOI, a year one off.
+@article{numpy-initials,
+  title = {The NumPy array},
+  author = {van der Walt, S. and Colbert, S. C. and Varoquaux, G.},
+  journal = {Computing in Science and Engineering},
+  year = {2010},
+  doi = {https://doi.org/10.1109/mcse.2011.37}
+}
+
+% NumPy: given-first names, "and others", and the DOI only as a dx.doi.org link.
+@article{numpy-given-first,
+  title = {The NumPy Array -- a structure for efficient numerical computation},
+  author = {Stefan van der Walt and Chris Colbert and others},
+  journal = {Computing in Science \& Engineering},
+  year = {2011},
+  url = {http://dx.doi.org/10.1109/mcse.2011.37}
+}
+
+% ATLAS and CMS (Crossref, MathML title): author list cut short.
+@article{higgs-mass,
+  title = {Combined Measurement of the Higgs Boson Mass in pp Collisions at √s = 7 and 8 TeV with the ATLAS and CMS Experiments},
+  author = {Aad, G. and others},
+  journal = {Physical Review Letters},
+  year = {2015},
+  doi = {10.1103/PhysRevLett.114.191803}
+}
+
+% Infection and Immunity (Crossref, <i> markup): LaTeX italics in the entry,
+% abbreviated journal and initials.
+@article{salmonella,
+  title = {Comparison of sample sequences of the \textit{Salmonella typhi} genome to the sequence of the complete \textit{Escherichia coli} {K-12} genome},
+  author = {McClelland, M. and Wilson, R. K.},
+  journal = {Infect. Immun.},
+  year = {1998},
+  doi = {10.1128/IAI.66.9.4305-4312.1998}
+}
+
+% ENCODE (Crossref): a consortium as the only author, without "The".
+@article{encode-doi,
+  title = {An integrated encyclopedia of {DNA} elements in the human genome},
+  author = {{ENCODE Project Consortium}},
+  journal = {Nature},
+  year = {2012},
+  doi = {10.1038/nature11247}
+}
+
+% ENCODE (PubMed): cited by its PMID alone, written with its label.
+@article{encode-pmid,
+  title = {An integrated encyclopedia of DNA elements in the human genome.},
+  author = {{The ENCODE Project Consortium}},
+  journal = {Nature},
+  year = {2012},
+  pmid = {PMID: 22955616}
+}
+
+% Attention (arXiv API): an eprint, the full author list with a diacritic the
+% registry drops.
+@misc{attention-eprint,
+  title = {Attention Is All You Need},
+  author = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, Łukasz and Polosukhin, Illia},
+  year = {2017},
+  eprint = {1706.03762},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL}
+}
+
+% Attention (DataCite): the arXiv DOI, a short author list.
+@article{attention-doi,
+  title = {Attention is all you need},
+  author = {Vaswani, A. and Shazeer, N. and others},
+  journal = {arXiv preprint arXiv:1706.03762},
+  year = {2017},
+  doi = {10.48550/arXiv.1706.03762}
+}
+
+% Matplotlib (DataCite, Zenodo): software by a corporate author.
+@software{matplotlib,
+  title = {Matplotlib: Visualization with Python},
+  author = {{The Matplotlib Development Team}},
+  year = {2026},
+  doi = {10.5281/zenodo.592536}
+}
+
+% A JaLC article (doi.org content negotiation): Japanese title and name, the
+% subtitle left out.
+@article{jslis,
+  title = {起業者の情報行動からみた公共図書館のビジネス支援サービス},
+  author = {滑川, 貴之},
+  journal = {日本図書館情報学会誌},
+  year = {2016},
+  doi = {10.20651/jslis.62.1_1}
+}
+
+% CLRS (Open Library): a book by ISBN, written with its label and a second
+% ISBN with a qualifier.
+@book{clrs,
+  title = {Introduction to Algorithms},
+  author = {Cormen, Thomas H. and Leiserson, Charles E. and Rivest, Ronald L. and Stein, Clifford},
+  publisher = {MIT Press},
+  edition = {3rd},
+  year = {2009},
+  isbn = {ISBN 978-0-262-03384-8; 978-0-262-53305-8 (pbk)}
+}
