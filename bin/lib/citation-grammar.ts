@@ -233,6 +233,47 @@ export function citedKeys(cites: readonly Citation[]): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Editing citations
+// ---------------------------------------------------------------------------
+
+/** `@key` or `@{key}` exactly, not the start of a longer key. */
+function citedKeyPattern(key: string): RegExp {
+  const k = escapeRe(key);
+  return new RegExp(String.raw`@(?:\{${k}\}|${k}(?![\p{L}\p{N}_]|[:.#$%&\-+?<>~/][\p{L}\p{N}_]))`, 'gu');
+}
+
+/** Apply `edit` to every citation of `key` in `md`, last first so offsets stay valid. */
+function editCitationsOf(md: string, key: string, edit: (c: Citation, text: string) => string): string {
+  let out = md;
+  for (const c of findCitations(md).filter((x) => x.items.some((i) => i.key === key)).reverse()) {
+    out = edit(c, out);
+  }
+  return out;
+}
+
+/** `md` with every citation of `from` citing `to` instead; prefixes and locators stay. */
+export function renameCitedKey(md: string, from: string, to: string): string {
+  return editCitationsOf(md, from, (c, text) =>
+    text.slice(0, c.start) + c.raw.replace(citedKeyPattern(from), `@${to}`) + text.slice(c.end));
+}
+
+/**
+ * `md` with `key` taken out of every bracketed cluster that cites it:
+ * `[@a; @key, p. 4]` becomes `[@a]`, and a cluster citing only `key` goes,
+ * with the space before it (` [@key].` becomes `.`). Narrative citations are
+ * left alone, since removing one would leave a sentence without its subject.
+ */
+export function dropCitedKey(md: string, key: string): string {
+  return editCitationsOf(md, key, (c, text) => {
+    if (c.narrative) return text;
+    const kept = c.raw.slice(1, -1).split(';').filter((part) => !citedKeyPattern(key).test(part));
+    if (kept.length > 0) return `${text.slice(0, c.start)}[${kept.map((p) => p.trim()).join('; ')}]${text.slice(c.end)}`;
+    const start = c.start - (/\s*$/.exec(text.slice(0, c.start))?.[0].length ?? 0);
+    return text.slice(0, start) + text.slice(c.end);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Sentences
 // ---------------------------------------------------------------------------
 

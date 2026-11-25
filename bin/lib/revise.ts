@@ -4,8 +4,9 @@
 // BOTH delegate to runRevise — there is NO divergent code path between tiers
 // (WRTE-02 satisfied by this single module). The flow follows 04-RESEARCH §I:
 //
-//   1. Parse sections/<N>/VERIFICATION.md for the FIRST failing citation
-//      (FABRICATED / MIS-CITED / NOT_FOUND), in order of appearance.
+//   1. Parse sections/<N>/VERIFICATION.md (with the parser compile uses) for
+//      the FIRST failing citation (FABRICATED / MIS-CITED / NOT_FOUND), in
+//      order of appearance. Other blocking verdicts are named, not repaired.
 //   2. Load PLAN.md frontmatter → assigned_sources + the section voice hint
 //      (WRTE-02 per-section consume point — threaded into the prompt vars).
 //   3. Ask the LLM (via the hash-pinned revise-swap prompt) for a citekey swap.
@@ -14,11 +15,13 @@
 //      LLM-response-injection mitigation — no new citekeys ever enter DRAFT.md).
 //   4. Approval gate (default-on, PRD §19): render a before/after diff and
 //      prompt. Skipped under --yolo. Non-TTY without --yolo → exit code 3.
-//   5. On accept: `swap` substitutes the flagged [@k] via replaceCitekeys
-//      (Plan 01 citation-token helper); `remove` mechanically deletes the
-//      bracketed citation clause (NO LLM prose rewrite — 04-RESEARCH §I). Write
-//      DRAFT.md via atomicWriteFile; reset PLAN.md verified_against_draft_hash
-//      → null via updateFrontmatter under withLock (D-05).
+//   5. On accept: `swap` replaces the flagged key inside each citation that
+//      cites it (prefix and locator kept); `remove` mechanically deletes it from
+//      its cluster, or the whole bracketed citation when it is the only key (NO
+//      LLM prose rewrite — 04-RESEARCH §I). A patch that changes nothing is not
+//      applied. Write DRAFT.md via atomicWriteFile; reset PLAN.md
+//      verified_against_draft_hash → null via updateFrontmatter under withLock
+//      (D-05).
 //   6. --yolo auto-loop: re-run the SAME path up to 2 retries; on exhaustion
 //      write a RETRY_EXHAUSTED verdict to VERIFICATION.md (D-06).
 //
@@ -36,7 +39,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { atomicWriteFile } from './atomic-write.js';
 import { updateFrontmatter, parseFrontmatter } from './frontmatter.js';
 import { withLock } from './lock.js';
-import { replaceCitekeys } from './citation-token.js';
+import { dropCitedKey, findCitations, renameCitedKey, sentenceSpan, type Citation } from './citation-grammar.js';
+import { parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
 import { parseBibtex } from './citations.js';
 import { writeBibtex } from './bibtex-write.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
@@ -139,37 +143,37 @@ interface FailingCitation {
 
 /**
  * Find the FIRST failing citation in VERIFICATION.md (one-at-a-time, in order
- * of appearance — 04-RESEARCH §I). A failing line looks like:
- *   - jones2019: **FABRICATED** — ... — <reason>
- * We scan top-to-bottom and return the first line whose verdict is one of
- * FAILING_VERDICTS. Returns null when the section has no failing citation.
+ * of appearance — 04-RESEARCH §I), read with the parser compile and done use,
+ * so every key compile blocks on is found here too. Returns null when the
+ * section has no FABRICATED / MIS-CITED / NOT_FOUND citation.
  */
 export function firstFailingCitation(verificationMd: string): FailingCitation | null {
-  const lines = verificationMd.split(/\r?\n/);
-  for (const line of lines) {
-    // `- <citekey>: **<VERDICT>** — ...rest`
-    const m = /^\s*-\s*([a-z][a-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*\s*(.*)$/.exec(line);
-    if (!m) continue;
-    const citekey = m[1];
-    const verdict = m[2];
-    if (citekey === undefined || verdict === undefined) continue;
-    if ((FAILING_VERDICTS as readonly string[]).includes(verdict)) {
-      return { citekey, reason: `${verdict}: ${(m[3] ?? '').replace(/^—\s*/, '').trim()}` };
-    }
-  }
-  return null;
+  const row = parseVerdictRowDetails(verificationMd)
+    .find((r) => (FAILING_VERDICTS as readonly string[]).includes(r.verdict));
+  return row ? { citekey: row.citekey, reason: `${row.verdict}: ${row.detail}` } : null;
+}
+
+/** Blocking rows revise cannot repair with a swap or a remove (raw citations, broken keys, offline). */
+function unrepairableRows(verificationMd: string): VerdictRow[] {
+  return parseVerdictRowDetails(verificationMd)
+    .filter((r) => r.blocking && !(FAILING_VERDICTS as readonly string[]).includes(r.verdict));
 }
 
 // ---------------------------------------------------------------------------
-// Claim-context extraction — the line(s) around the flagged [@citekey] token.
+// Claim-context extraction — the sentence that cites the flagged key.
 // ---------------------------------------------------------------------------
 
+/** The citations in `md` that cite `citekey`, in any Pandoc form. */
+function citationsOf(md: string, citekey: string): Citation[] {
+  return findCitations(md).filter((c) => c.items.some((i) => i.key === citekey));
+}
+
 function claimContext(draftMd: string, citekey: string): string {
-  const token = `[@${citekey}]`;
-  for (const line of draftMd.split(/\r?\n/)) {
-    if (line.includes(token)) return line.trim();
-  }
-  return '(token not found in DRAFT.md)';
+  const cites = findCitations(draftMd);
+  const c = cites.find((x) => x.items.some((i) => i.key === citekey));
+  if (!c) return '(citation not found in DRAFT.md)';
+  const [s, e] = sentenceSpan(draftMd, c.start, c.end, cites);
+  return draftMd.slice(s, e).trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -180,21 +184,6 @@ function claimContext(draftMd: string, citekey: string): string {
 function voiceHint(planMd: string): string {
   const m = /(^|\n)\s*Voice:\s*([^\n]+)/i.exec(planMd);
   return m && m[2] ? `Voice: ${m[2].trim()}` : 'Voice: formal academic tone.';
-}
-
-// ---------------------------------------------------------------------------
-// Mechanical bracket-clause removal for action: "remove".
-// Deletes the flagged [@citekey] token plus a single adjacent space and a
-// trailing punctuation-preserving cleanup. NO prose rewrite (04-RESEARCH §I).
-// ---------------------------------------------------------------------------
-
-function mechanicalRemove(draftMd: string, citekey: string): string {
-  const token = `\\[@${citekey}\\]`;
-  // " [@k]." -> "." ; " [@k]" -> "" ; "[@k] " -> "" ; "[@k]" -> ""
-  return draftMd
-    .replace(new RegExp(`\\s*${token}(?=[.,;:])`, 'g'), '')
-    .replace(new RegExp(`\\s*${token}`, 'g'), '')
-    .replace(new RegExp(`${token}\\s*`, 'g'), '');
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +250,9 @@ function validateProposal(
     if (!p.replacement_citekey) {
       return { ok: false, reason: 'swap action requires a non-null replacement_citekey' };
     }
+    if (p.replacement_citekey === flagged) {
+      return { ok: false, reason: `swap replaces "${flagged}" with itself, which repairs nothing` };
+    }
     // T-04-14: replacement MUST be drawn from assigned_sources — no new citekeys.
     if (!assignedSources.includes(p.replacement_citekey)) {
       return { ok: false, reason: `replacement_citekey "${p.replacement_citekey}" is not in assigned_sources (no new citekeys allowed)` };
@@ -278,24 +270,30 @@ function validateProposal(
 // Apply an accepted proposal: patch DRAFT.md + reset the hash under withLock.
 // ---------------------------------------------------------------------------
 
-async function applyProposal(
-  opts: ReviseOptions,
-  proposal: ReviseSwapProposal,
-  draftPath: string,
-  planPath: string,
-  draftMd: string,
-): Promise<void> {
-  let patched: string;
-  if (proposal.action === 'swap') {
-    const replacement = proposal.replacement_citekey as string;
-    // Locate + swap the flagged token via the Plan 01 citation-token helper
-    // (NOT a bespoke regex) — only the flagged citekey is rewritten.
-    patched = replaceCitekeys(draftMd, (k) =>
-      k === proposal.flagged_citekey ? `[@${replacement}]` : `[@${k}]`,
-    );
-  } else {
-    patched = mechanicalRemove(draftMd, proposal.flagged_citekey);
+/**
+ * The patched draft for an accepted proposal, or why it cannot be applied:
+ * the citation is no longer in the draft, or removing a narrative citation
+ * would leave a sentence without its subject.
+ */
+function patchFor(proposal: ReviseSwapProposal, draftMd: string): { patched: string } | { refused: string } {
+  const flagged = proposal.flagged_citekey;
+  const cites = citationsOf(draftMd, flagged);
+  if (cites.length === 0) {
+    return { refused: `the draft no longer cites ${flagged}, so the ${proposal.action} changed nothing — re-run verify` };
   }
+  if (proposal.action === 'remove' && cites.some((c) => c.narrative)) {
+    return { refused: `@${flagged} is a narrative citation in running text; removing it would break the sentence — edit DRAFT.md by hand or swap it` };
+  }
+  // Mechanical patches, NO prose rewrite (04-RESEARCH §I): the prefix and
+  // locator of a swapped key stay; a removed key leaves its cluster, or the
+  // whole bracketed citation goes when it was the only key.
+  const patched = proposal.action === 'swap'
+    ? renameCitedKey(draftMd, flagged, proposal.replacement_citekey as string)
+    : dropCitedKey(draftMd, flagged);
+  return patched === draftMd ? { refused: `the ${proposal.action} changed nothing in DRAFT.md` } : { patched };
+}
+
+async function applyProposal(draftPath: string, planPath: string, patched: string): Promise<void> {
   await atomicWriteFile(draftPath, patched);
 
   // Reset verified_against_draft_hash → null under a per-PLAN.md lock (D-05).
@@ -450,6 +448,15 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   const verificationMd = readFileSync(verifPath, 'utf8');
   const failing = firstFailingCitation(verificationMd);
   if (!failing) {
+    const other = unrepairableRows(verificationMd);
+    if (other.length > 0) {
+      const named = other.map((r) => `${r.citekey} (${r.verdict})`).join('; ');
+      const why =
+        `Section ${opts.n} has blocking verdict(s) revise cannot repair by swapping or removing a citekey: ${named}. ` +
+        'Rewrite a raw or broken citation as [@key], cite or unquote an unattributed quotation, ' +
+        'or re-run verify with network access for UNRESOLVED; then verify again.';
+      return { ...base, message: `${base.message} ${why}`.trim() };
+    }
     return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation in section ${opts.n}.`.trim() };
   }
   base.flagged_citekey = failing.citekey;
@@ -494,7 +501,11 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
       return { ...base, accepted: false, message: `${base.message} Proposal rejected at the approval gate — DRAFT.md unchanged.`.trim() };
     }
 
-    await applyProposal(opts, proposal, draftPath, planPath, draftMd);
+    const patch = patchFor(proposal, draftMd);
+    if ('refused' in patch) {
+      return { ...base, accepted: false, rejectedReason: patch.refused, message: `${base.message} Not applied: ${patch.refused}; DRAFT.md unchanged.`.trim() };
+    }
+    await applyProposal(draftPath, planPath, patch.patched);
     return {
       ...base,
       accepted: true,
