@@ -43,6 +43,7 @@ import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropi
 import { getProviderApiKey } from '../lib/runtime.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { artifactText } from '../lib/placeholder.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
 
 // Phase 11 — the section-draft placeholder constant has been removed. write now
 // calls complete() for real generation (GEN-02). With no key configured:
@@ -333,7 +334,7 @@ export const writeCommand = defineCommand({
           `pensmith write: no usable outline at ${outlinePath} — run \`pensmith outline\` ` +
           `to create the section table first.\n`,
         );
-        process.exitCode = 1;
+        process.exitCode = EXIT_REFUSED;
         return { ok: false, mode: 'no-outline' };
       }
 
@@ -392,7 +393,9 @@ export const writeCommand = defineCommand({
     // ---- Single-section mode: positional <n> present (UNCHANGED) ----
     const n = Number(args.n);
     if (!Number.isInteger(n) || n < 1) {
-      throw new Error(`pensmith write: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
+      process.stderr.write(`pensmith write: <n> must be a positive integer; got ${JSON.stringify(args.n)}\n`);
+      process.exitCode = EXIT_REFUSED;
+      return { ok: false, mode: 'invalid-input' };
     }
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).

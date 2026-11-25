@@ -198,6 +198,21 @@ test('exit codes: done exits 2 when the export gate blocks, even with --yolo', (
   assert.ok(!existsSync(join(root, '.paper', 'export')), 'nothing may be exported');
 });
 
+test('exit codes: `write` exits 2 when there is no outline to write from', () => {
+  const root = seedPaper([{ n: 1, slug: 'intro', draft: 'x\n', verification: CLEAN, status: 'planned' }]);
+  rmSync(join(root, '.paper', 'OUTLINE.md'));
+  const r = runCli(['write'], root);
+  assert.match(r.stderr, /no usable outline/, r.stdout + r.stderr);
+  assert.equal(r.status, 2, 'a missing outline is a refusal, not an unexpected error');
+});
+
+test('exit codes: `write` exits 2 for a section number that is not a positive integer', () => {
+  const root = seedPaper([{ n: 1, slug: 'intro', draft: 'x\n', verification: CLEAN }]);
+  const r = runCli(['write', '0'], root);
+  assert.match(r.stderr, /positive integer/, r.stdout + r.stderr);
+  assert.equal(r.status, 2);
+});
+
 test('exit codes: `plan` with no number exits 2 when no section is ready to plan', () => {
   const root = seedPaper([{ n: 1, slug: 'intro', draft: 'x\n', verification: CLEAN }]);
   const r = runCli(['plan'], root);
