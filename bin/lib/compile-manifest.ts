@@ -10,16 +10,15 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { atomicWriteFile } from './atomic-write.js';
-import { compileManifestPath } from './paths.js';
+import { compileManifestPath, SLUG_RE } from './paths.js';
+import { bibEntryHashes, HEX64 } from './verify/verification-record.js';
+import type { Bib } from './verify/pass1.js';
 
-const HEX64 = z.string().regex(/^[0-9a-f]{64}$/);
 // done joins n and slug into the section's paths, so they must name a folder
 // under .paper/sections (the rule paths.ts's validateSlug applies).
-const SLUG = /^[a-z0-9-]+$/;
-
 const ManifestSectionSchema = z.object({
   n: z.number().int().min(1).max(99),
-  slug: z.string().regex(SLUG),
+  slug: z.string().regex(SLUG_RE),
   draft_sha256: HEX64,
   verification_sha256: HEX64,
   /** compile re-checked the section because it changed after verify. */
@@ -38,6 +37,15 @@ export const CompileManifestSchema = z.object({
 
 export type CompileManifest = z.infer<typeof CompileManifestSchema>;
 export type ManifestSection = z.infer<typeof ManifestSectionSchema>;
+
+/** The manifest's `bib_entries`: the entry hash of each of `keys` that CITATIONS.bib holds. */
+export function manifestBibEntries(keys: Iterable<string>, bib: Bib): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, hash] of Object.entries(bibEntryHashes(keys, bib))) {
+    if (hash !== null) out[key] = hash;
+  }
+  return out;
+}
 
 export async function writeCompileManifest(paperRoot: string, manifest: CompileManifest): Promise<void> {
   await atomicWriteFile(compileManifestPath(paperRoot), `${JSON.stringify(CompileManifestSchema.parse(manifest), null, 2)}\n`);

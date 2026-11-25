@@ -231,7 +231,7 @@ test('re-check: a warning a section\'s record already gave is not repeated', asy
   // The section's record as verify would write it now: the same two findings.
   const dir = join(root, '.paper', 'sections', '01-intro');
   const bib = await parseBibForPass1(CONCERN);
-  const checked = await checkCitationsAndQuotes(CONCERN_DRAFT, { bib, bibPath: join(root, '.paper', 'CITATIONS.bib') });
+  const checked = await checkCitationsAndQuotes(CONCERN_DRAFT, { bib });
   const record = buildVerificationRecord({
     section: 1, slug: 'intro', status: 'unverifiable', checked: true, draftBytes: Buffer.from(CONCERN_DRAFT),
     assignedSources: ['feng2013'], bibEntries: await fixtureBibHashes(CONCERN, CONCERN_DRAFT), pass1: checked.pass1, pass3: checked.pass3,

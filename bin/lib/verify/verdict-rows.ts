@@ -148,19 +148,39 @@ export function parseVerdictRows(verificationMd: string): string[] {
   return parseVerdictRowDetails(verificationMd).filter((r) => r.blocking).map((r) => r.citekey);
 }
 
+/** `count` quotations, in words. */
+const quotations = (count: number): string => (count === 1 ? '1 quotation' : `${count} quotations`);
+
 /**
  * The warning for `count` quotations with no citation in `where`, shared by
  * verify, compile and done so each says the same thing.
  */
 export function unattributedWarning(where: string, count: number): string {
-  const what = count === 1 ? '1 quotation' : `${count} quotations`;
-  return `${where} has ${what} with no citation, which nothing checked — ` +
+  return `${where} has ${quotations(count)} with no citation, which nothing checked — ` +
     'cite a quoted source as [@key, p. N]; check your own data or an epigraph yourself';
 }
 
+/** The warning for `count` quotations in `where` whose source text could not be read, shared by compile and done. */
+export function uncheckedQuoteWarning(where: string, count: number): string {
+  return `${where} has ${quotations(count)} that could not be checked against the source text`;
+}
+
 /** How a refusal names what a verdict is about: `[@key]`, or the quoted text. */
-export function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): string {
+function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): string {
   return TEXT_VERDICTS.has(row.verdict) ? `text "${row.citekey}"` : `citation [@${row.citekey}]`;
+}
+
+/**
+ * The refusal for each blocking verdict in `rows`, worded the same by compile
+ * and done. `where` names the section or the text.
+ */
+export function blockingReasons(
+  rows: ReadonlyArray<Pick<VerdictRow, 'citekey' | 'verdict' | 'reason'>>,
+  where: string,
+): string[] {
+  return rows
+    .filter((r) => isBlockingVerdict(r.verdict))
+    .map((r) => `${where}: ${describeVerdictRow(r)} is ${r.verdict} — ${r.reason}`);
 }
 
 /**

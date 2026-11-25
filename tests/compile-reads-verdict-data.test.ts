@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runCli } from './lib/export-fixture.js';
+import { cli } from './lib/export-fixture.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 
 // A key holding Pandoc key characters the old row regex could not read.
@@ -21,13 +21,6 @@ const KEY = 'ghost.2024/a+b';
 const GHOST =
   `@article{${KEY},\n  title = {Room-temperature superconductivity in a ternary hydride at ambient pressure},\n` +
   '  author = {Ghost, Casper},\n  year = {2024},\n  journal = {Nature},\n  doi = {10.1038/s41586-024-99999-x}\n}\n';
-
-interface Run { status: number | null; out: string }
-
-function cli(root: string, args: string[]): Run {
-  const r = runCli(args, root, { PENSMITH_OFFLINE: '0', PENSMITH_TEST_CASSETTES: '1' });
-  return { status: r.status, out: r.stdout + r.stderr };
-}
 
 function seedPaper(): { root: string; sec: string } {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-compile-verdict-data-'));

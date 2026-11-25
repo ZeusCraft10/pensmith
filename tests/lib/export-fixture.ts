@@ -70,7 +70,8 @@ export async function compiledPaper(spec: PaperSpec): Promise<string> {
   if (spec.ris !== undefined) writeFileSync(join(pdir, 'CITATIONS.ris'), spec.ris);
   if (spec.intake !== undefined) writeFileSync(join(pdir, 'INTAKE.md'), spec.intake);
   if (spec.configToml !== undefined) writeFileSync(join(root, 'config.toml'), spec.configToml);
-  spec.sections.forEach((s, i) => {
+  const bib = await parseBibForPass1(spec.bib);
+  for (const [i, s] of spec.sections.entries()) {
     const sdir = join(pdir, 'sections', `${String(i + 1).padStart(2, '0')}-${s.slug}`);
     mkdirSync(sdir, { recursive: true });
     writeFileSync(join(sdir, 'DRAFT.md'), s.draft);
@@ -80,10 +81,6 @@ export async function compiledPaper(spec: PaperSpec): Promise<string> {
       `---\nsection: ${i + 1}\nslug: ${s.slug}\ntitle: ${s.title}\nstatus: verified\nassigned_sources: [${sources.join(', ')}]\n` +
         `verified_against_draft_hash: ${computeDraftHash(Buffer.from(s.draft), sources)}\n---\n`,
     );
-  });
-  const bib = await parseBibForPass1(spec.bib);
-  for (const [i, s] of spec.sections.entries()) {
-    const sdir = join(pdir, 'sections', `${String(i + 1).padStart(2, '0')}-${s.slug}`);
     const ackPath = join(sdir, 'ACKNOWLEDGEMENTS.json');
     for (const citekey of s.acknowledge ?? []) {
       const binding = workBinding(bib.entries.get(citekey) ?? {}, bib.fields.get(citekey));
@@ -94,7 +91,7 @@ export async function compiledPaper(spec: PaperSpec): Promise<string> {
       });
     }
     writeVerificationFixture(sdir, {
-      n: i + 1, slug: s.slug, draft: s.draft, assignedSources: s.sources ?? [], bibEntries: await fixtureBibHashes(spec.bib, s.draft),
+      n: i + 1, slug: s.slug, draft: s.draft, assignedSources: sources, bibEntries: await fixtureBibHashes(spec.bib, s.draft),
       acknowledgementsSha256: readAcknowledgements(ackPath).sha256,
     });
   }
@@ -137,6 +134,15 @@ export function runCli(args: string[], cwd: string, extraEnv: Record<string, str
     timeout: 120_000,
   });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '', home };
+}
+
+/** A CLI run as the CLI tests read it: the exit status, and stdout then stderr. */
+export interface CliOutput { status: number | null; out: string }
+
+/** runCli in `root` (on the recorded registry answers), as a CliOutput. */
+export function cli(root: string, args: string[], env: Record<string, string> = {}): CliOutput {
+  const r = runCli(args, root, env);
+  return { status: r.status, out: r.stdout + r.stderr };
 }
 
 /** True when `cmd --version` runs. */

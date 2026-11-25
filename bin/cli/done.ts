@@ -28,6 +28,8 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { runPass3 } from '../lib/verify/pass3.js';
+import type { QuoteSource } from '../lib/verify/quote-match.js';
+import { readBibText } from '../lib/verify/pass1.js';
 import { extractQuotes } from '../lib/quote-extractor.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
@@ -55,7 +57,7 @@ import {
 } from '../lib/citation-grammar.js';
 import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
-import { readBibText, recheckExportText, runExportBlockingGate } from '../lib/export-gate.js';
+import { recheckExportText, runExportBlockingGate } from '../lib/export-gate.js';
 import { readVerificationRecord } from '../lib/verify/verification-record.js';
 
 // ---------------------------------------------------------------------------
@@ -421,7 +423,8 @@ function unattributedQuotes(md: string, cites: readonly Citation[]): string[] {
  * (c) Pass-3 quote re-check on finalMd against the whole CITATIONS.bib, not
  *     only the works the draft cites, so a quote moved onto another work is
  *     still checked; an absent or empty bib is an empty library. Any
- *     NOT_FOUND quote is a HARD block.
+ *     NOT_FOUND quote is a HARD block. `sourceTexts` holds the source texts
+ *     an earlier Pass 3 in this run read, so no PDF is downloaded again.
  *
  * Never throws. Returns { passed: boolean; reason: string }.
  */
@@ -429,6 +432,7 @@ export async function reCheckFinalMd(
   finalMd: string,
   draftMd: string,
   bibPath: string,
+  sourceTexts?: Map<string, QuoteSource>,
 ): Promise<{ passed: boolean; reason: string }> {
   // Step (a): the citation diff runs first, so its reason is the one reported.
   const finalCites = findCitations(finalMd);
@@ -479,7 +483,7 @@ export async function reCheckFinalMd(
 
   let pass3Results;
   try {
-    pass3Results = await runPass3(finalMd, bibByCitekey);
+    pass3Results = await runPass3(finalMd, bibByCitekey, sourceTexts);
   } catch (err) {
     // GATE-04 FAIL-CLOSED: an unexpected runPass3 error is NOT a clean pass.
     // We already have a valid bibByCitekey map here, so an exception is unexpected
@@ -638,7 +642,7 @@ export const doneCommand = defineCommand({
     const draftMd = draftBytes.toString('utf8');
     let bibText: string;
     try {
-      bibText = readBibText(paperRoot);
+      bibText = readBibText(paperRoot) ?? '';
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code ?? (err instanceof Error ? err.message : String(err));
       return refuseExport('export refused (the bibliography cannot be checked)', [`.paper/CITATIONS.bib could not be read (${code})`]);
@@ -648,7 +652,9 @@ export const doneCommand = defineCommand({
       return refuseExport('export refused (the compiled draft is not what a gated compile produced, a section is unverified, or text is placeholder)', blocking.reasons);
     }
     for (const w of blocking.warnings) process.stderr.write(`pensmith done: WARN — ${w}.\n`);
-    const recheck = await recheckExportText(paperRoot, draftMd, { label: '.paper/DRAFT.md', bibText });
+    // The source texts the re-check reads, kept for the check of a humanized FINAL.md.
+    const sourceTexts = new Map<string, QuoteSource>();
+    const recheck = await recheckExportText(paperRoot, draftMd, { label: '.paper/DRAFT.md', bibText, inputs: blocking.inputs, sourceTexts });
     if (recheck.blocked) {
       return refuseExport('export refused (a citation or quotation in the text being exported does not pass when checked again)', recheck.reasons);
     }
@@ -715,7 +721,7 @@ export const doneCommand = defineCommand({
         return { ok: false, blocked: true };
       }
       const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
-      const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath);
+      const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath, sourceTexts);
       if (!gate4.passed) {
         process.stdout.write(
           `pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification: ${gate4.reason}\n`,
@@ -726,7 +732,7 @@ export const doneCommand = defineCommand({
       // FINAL.md is what is exported, so its citations are checked as well
       // (reCheckFinalMd has just run Pass 3 on it). It cites exactly the works
       // DRAFT.md cites, so its warnings are the ones already printed.
-      const finalCheck = await recheckExportText(paperRoot, finalMd, { pass3: false, label: '.paper/FINAL.md', bibText });
+      const finalCheck = await recheckExportText(paperRoot, finalMd, { pass3: false, label: '.paper/FINAL.md', bibText, inputs: blocking.inputs });
       if (finalCheck.blocked) {
         return refuseExport('export refused (a citation in the humanized FINAL.md does not pass when checked again)', finalCheck.reasons);
       }

@@ -20,57 +20,38 @@
 // report emission all run in Tier 2.
 
 import { defineCommand } from 'citty';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { runCompile, type ReVerifyInput, type ReVerifyResult } from '../lib/compile.js';
-import { parseBibForPass1, pass1CitedKeys } from '../lib/verify/pass1.js';
+import { pass1CitedKeys } from '../lib/verify/pass1.js';
 import { checkCitationsAndQuotes } from '../lib/verify/check-text.js';
 import { buildVerificationRecord, decideStatus, verificationGate } from '../lib/verify/verification-record.js';
-import { sectionAcknowledgements, sectionDraft, sectionPlan, paperDir } from '../lib/paths.js';
-import { parseFrontmatter } from '../lib/frontmatter.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
-import { isBlockingVerdict } from '../lib/verify/verdict-rows.js';
-import { readAcknowledgements } from '../lib/verify/acknowledgements.js';
 
 /**
  * Production staleness re-verify seam (D-08 — Pass 1 + Pass 3 ONLY). Runs the
- * deterministic verifiers on the text compile is about to use for the stale
- * section, decides its status as verify does, and refuses it the way the gate
- * refuses a recorded verdict. NEVER wires Pass 2/4 (advisory). Nothing is
- * written: compile never writes into a section folder.
+ * deterministic verifiers on the section as compile read it (the text it is
+ * about to use, its assigned sources, the bibliography and acknowledgements),
+ * decides its status as verify does, and refuses it the way the gate refuses
+ * a recorded verdict. NEVER wires Pass 2/4 (advisory). Nothing is written:
+ * compile never writes into a section folder.
  */
-async function productionReVerify(paperRoot: string, input: ReVerifyInput): Promise<ReVerifyResult> {
-  const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
-  let draftMd: string;
-  let bibText: string;
-  let planMd: string;
-  try {
-    draftMd = input.draft ?? readFileSync(sectionDraft(input.n, input.slug, paperRoot), 'utf8');
-    bibText = readFileSync(bibPath, 'utf8');
-    planMd = readFileSync(sectionPlan(input.n, input.slug, paperRoot), 'utf8');
-  } catch {
-    // Missing inputs → treat as a re-verify failure (fail-safe: never let a
-    // stale section escape unverified).
-    return { passed: false, failingCitekeys: [] };
-  }
-  const fm = parseFrontmatter(planMd).frontmatter;
-  const assignedSources = Array.isArray(fm['assigned_sources']) ? (fm['assigned_sources'] as unknown[]).map(String) : [];
-  // An empty CITATIONS.bib is an empty library: every cited key is FABRICATED.
-  // The section's acknowledgements apply here as they do in verify.
-  const bib = await parseBibForPass1(bibText);
-  const { acknowledgements } = readAcknowledgements(sectionAcknowledgements(input.n, input.slug, paperRoot));
-  const { pass1, pass3 } = await checkCitationsAndQuotes(draftMd, { bib, bibPath, acknowledgements, section: input.n });
+async function productionReVerify(input: ReVerifyInput): Promise<ReVerifyResult> {
+  // No CITATIONS.bib: a re-verify failure (fail-safe: never let a stale
+  // section escape unverified). An empty one is an empty library: every cited
+  // key is FABRICATED.
+  if (input.bib === null) return { passed: false, failingCitekeys: [] };
+  const { n, slug, draft, assignedSources, bib } = input;
+  const { pass1, pass3 } = await checkCitationsAndQuotes(draft, { bib, acknowledgements: input.acknowledgements, section: n });
   const decided = decideStatus({
-    section: input.n, pass1, pass3, citedKeys: pass1CitedKeys(draftMd), assignedSources, bibIsEmpty: bibText.trim().length === 0,
+    section: n, pass1, pass3, citedKeys: pass1CitedKeys(draft), assignedSources, bibIsEmpty: input.bibIsEmpty,
   });
   const record = buildVerificationRecord({
-    section: input.n, slug: input.slug, status: decided.status, checked: true,
+    section: n, slug, status: decided.status, checked: true,
     ...(decided.reason ? { reason: decided.reason } : {}),
-    draftBytes: Buffer.from(draftMd, 'utf8'), assignedSources, pass1, pass3,
+    draftBytes: Buffer.from(draft, 'utf8'), assignedSources, pass1, pass3,
   });
-  const gate = verificationGate(record, `section ${input.n} (${input.slug}), re-verified since it changed`);
-  const failing = [...new Set([...pass1, ...pass3].filter((r) => isBlockingVerdict(r.verdict)).map((r) => r.citekey))];
-  return { passed: gate.reasons.length === 0, failingCitekeys: failing, reasons: gate.reasons, warnings: gate.warnings };
+  const gate = verificationGate(record, `section ${n} (${slug}), re-verified since it changed`);
+  // The gate names every blocking verdict, so the reasons replace the citekey list.
+  return { passed: gate.reasons.length === 0, failingCitekeys: [], reasons: gate.reasons, warnings: gate.warnings };
 }
 
 export const compileCommand = defineCommand({
@@ -103,7 +84,7 @@ export const compileCommand = defineCommand({
       yolo: args.yolo === true,
       lintHeadings: args.lintHeadings === true,
       ...(discipline ? { discipline } : {}),
-      reVerify: (input: ReVerifyInput) => productionReVerify(paperRoot, input),
+      reVerify: productionReVerify,
       // Tier-2: no boundary smoother wired (raw concat — best-effort prose).
     });
 

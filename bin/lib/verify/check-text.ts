@@ -8,6 +8,7 @@
 import { runPass1, type Bib, type Pass1Result } from './pass1.js';
 import { runPass3, type Pass3Result } from './pass3.js';
 import type { Acknowledgement } from './acknowledgements.js';
+import type { QuoteSource } from './quote-match.js';
 
 export interface CheckedText {
   pass1: Pass1Result[];
@@ -17,22 +18,21 @@ export interface CheckedText {
 export interface CheckTextOptions {
   /** The bibliography, read once by the caller (parseBibForPass1). */
   bib: Bib;
-  /** Where it was read from; Pass 1 reports it. */
-  bibPath: string;
   acknowledgements?: readonly Acknowledgement[];
   section?: number;
   /** False when the caller has already run Pass 3 on this exact text. */
   pass3?: boolean;
+  /** The source texts already read, by PDF link (runPass3), shared with a later check of the same quotations. */
+  sourceTexts?: Map<string, QuoteSource> | undefined;
 }
 
 export async function checkCitationsAndQuotes(text: string, opts: CheckTextOptions): Promise<CheckedText> {
-  const pass1 = await runPass1(text, opts.bibPath, {
-    bib: opts.bib,
+  const pass1 = await runPass1(text, opts.bib, {
     ...(opts.acknowledgements ? { acknowledgements: opts.acknowledgements } : {}),
     ...(opts.section !== undefined ? { section: opts.section } : {}),
   });
   const pass3 = opts.pass3 === false
     ? []
-    : await runPass3(text, opts.bib.entries as Map<string, { DOI?: string; URL?: string }>);
+    : await runPass3(text, opts.bib.entries as Map<string, { DOI?: string; URL?: string }>, opts.sourceTexts);
   return { pass1, pass3 };
 }

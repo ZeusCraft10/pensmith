@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runCli } from './lib/export-fixture.js';
+import { cli } from './lib/export-fixture.js';
 
 // The NumPy paper as a bibliography writes it: an unbraced particle surname,
 // diacritics, a journal, volume, issue and pages. An uncited work sits beside it.
@@ -31,13 +31,6 @@ const BIB =
   '  doi = {10.1109/MCSE.2011.37}\n}\n\n' +
   '@book{kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas S.},\n' +
   '  publisher = {University of Chicago Press},\n  year = {1962},\n  isbn = {9780226458083}\n}\n';
-
-interface Run { status: number | null; out: string }
-
-function cli(root: string, args: string[], env: Record<string, string> = {}): Run {
-  const r = runCli(args, root, { PENSMITH_OFFLINE: '0', PENSMITH_TEST_CASSETTES: '1', ...env });
-  return { status: r.status, out: r.stdout + r.stderr };
-}
 
 function seedPaper(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-recompile-'));

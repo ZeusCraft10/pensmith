@@ -47,7 +47,7 @@ import { fileURLToPath } from 'node:url';
 // regex used by HandoffSchema.section_pointers[].slug.
 // ---------------------------------------------------------------------------
 
-const SLUG_RE = /^[a-z0-9-]+$/;
+export const SLUG_RE = /^[a-z0-9-]+$/;
 
 /**
  * Throw if `slug` is not a bare lowercase kebab-case slug. This is the path-

@@ -7,19 +7,22 @@
 //
 // Not a test file (the runner collects only *.test.ts).
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   bibEntryHashes,
   buildVerificationRecord,
+  quoteId,
   renderVerificationMd,
   sha256,
   type VerificationRecord,
   type VerificationStatus,
 } from '../../bin/lib/verify/verification-record.js';
-import { parseBibForPass1, pass1CitedKeys, type Pass1Result, type Pass1Verdict } from '../../bin/lib/verify/pass1.js';
+import { parseBibForPass1, pass1CitedKeys, readBibText, type Pass1Result, type Pass1Verdict } from '../../bin/lib/verify/pass1.js';
 import type { Pass3Result, Pass3Verdict } from '../../bin/lib/verify/pass3.js';
-import { writeCompileManifest } from '../../bin/lib/compile-manifest.js';
+import { isBlockingVerdict } from '../../bin/lib/verify/verdict-rows.js';
+import { manifestBibEntries, writeCompileManifest } from '../../bin/lib/compile-manifest.js';
+import { paperDir, sectionDraft, sectionVerificationRecord } from '../../bin/lib/paths.js';
 
 export interface CitationSpec {
   citekey: string;
@@ -55,8 +58,6 @@ export interface VerificationSpec {
   advisoryMarkdown?: string;
 }
 
-const BLOCKING = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'RETRACTED', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE']);
-
 /** The record `spec` describes, built by the production builder. */
 export function verificationRecord(spec: VerificationSpec): VerificationRecord {
   const draftBytes = Buffer.isBuffer(spec.draft) ? spec.draft : Buffer.from(spec.draft, 'utf8');
@@ -67,8 +68,9 @@ export function verificationRecord(spec: VerificationSpec): VerificationRecord {
   }));
   const pass3: Pass3Result[] = quotes.map((q) => ({
     citekey: q.citekey, quoteSnippet: q.quote.slice(0, 40), verdict: q.verdict, levRatio: q.verdict === 'OK' ? 1 : 0, reason: q.reason ?? 'fixture',
+    quoteId: quoteId(q.quote),
   }));
-  const blocking = [...citations, ...quotes].some((v) => BLOCKING.has(v.verdict));
+  const blocking = [...citations, ...quotes].some((v) => isBlockingVerdict(v.verdict));
   return buildVerificationRecord({
     section: spec.n,
     slug: spec.slug,
@@ -104,28 +106,19 @@ export async function fixtureBibHashes(bibText: string, draft: string): Promise<
  * section's DRAFT.md and VERIFICATION.json, and of each cited bibliography entry.
  */
 export async function writeCompileManifestFixture(paperRoot: string, sections: ReadonlyArray<{ n: number; slug: string }>): Promise<void> {
-  const paper = join(paperRoot, '.paper');
-  const compiled = readFileSync(join(paper, 'DRAFT.md'));
-  const bibPath = join(paper, 'CITATIONS.bib');
-  const bib = await parseBibForPass1(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '');
-  const bibEntries: Record<string, string> = {};
-  for (const [key, hash] of Object.entries(bibEntryHashes(pass1CitedKeys(compiled.toString('utf8')), bib))) {
-    if (hash !== null) bibEntries[key] = hash;
-  }
+  const compiled = readFileSync(join(paperDir(paperRoot), 'DRAFT.md'));
+  const bib = await parseBibForPass1(readBibText(paperRoot) ?? '');
   await writeCompileManifest(paperRoot, {
     $schemaVersion: 1,
     compiled_at: new Date().toISOString(),
     draft_sha256: sha256(compiled),
-    sections: sections.map((s) => {
-      const dir = join(paper, 'sections', `${String(s.n).padStart(2, '0')}-${s.slug}`);
-      return {
-        n: s.n,
-        slug: s.slug,
-        draft_sha256: sha256(readFileSync(join(dir, 'DRAFT.md'))),
-        verification_sha256: sha256(readFileSync(join(dir, 'VERIFICATION.json'))),
-        re_verified: false,
-      };
-    }),
-    bib_entries: bibEntries,
+    sections: sections.map((s) => ({
+      n: s.n,
+      slug: s.slug,
+      draft_sha256: sha256(readFileSync(sectionDraft(s.n, s.slug, paperRoot))),
+      verification_sha256: sha256(readFileSync(sectionVerificationRecord(s.n, s.slug, paperRoot))),
+      re_verified: false,
+    })),
+    bib_entries: manifestBibEntries(pass1CitedKeys(compiled.toString('utf8')), bib),
   });
 }

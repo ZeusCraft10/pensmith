@@ -14,11 +14,11 @@
 //
 // `kind` leaves room for other verdicts an author may acknowledge.
 
-import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { atomicWriteFile } from '../atomic-write.js';
 import { workIdentifiers } from './resolve.js';
+import { sha256 as sha256Hex } from './verification-record.js';
 
 const AcknowledgementSchema = z.object({
   kind: z.literal('retracted'),
@@ -53,7 +53,7 @@ export function workBinding(csl: Record<string, unknown>, fields: Record<string,
   const id = workIdentifiers(csl, fields).find((i) => i.value !== null);
   if (!id?.value) return null;
   const work = `${id.kind}:${id.value}`;
-  return { work, sha256: createHash('sha256').update(work).digest('hex') };
+  return { work, sha256: sha256Hex(work) };
 }
 
 /**
@@ -74,7 +74,7 @@ export function readAcknowledgements(file: string): {
   } catch {
     return { acknowledgements: [], unreadable: true, sha256: null };
   }
-  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const sha256 = sha256Hex(bytes);
   try {
     const parsed = AcknowledgementsFileSchema.safeParse(JSON.parse(bytes.toString('utf8')));
     return parsed.success

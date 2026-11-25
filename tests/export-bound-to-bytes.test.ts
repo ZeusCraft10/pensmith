@@ -15,7 +15,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { recheckExportText } from '../bin/lib/export-gate.js';
-import { compiledPaper as recordedPaper, runCli } from './lib/export-fixture.js';
+import { cli, compiledPaper as recordedPaper, type CliOutput } from './lib/export-fixture.js';
 
 const ATTENTION =
   '@misc{vaswani2017,\n  title = {Attention Is All You Need},\n' +
@@ -32,14 +32,6 @@ const WAKEFIELD =
   '  author = {Wakefield, A. J. and Murch, S. H. and Anthony, A. and Linnell, J. and Casson, D. M. and Malik, M. and ' +
   'Berelowitz, M. and Dhillon, A. P. and Thomson, M. A. and Harvey, P. and Valentine, A. and Davies, S. E. and Walker-Smith, J. A.},\n' +
   `  journal = {The Lancet},\n  volume = {351},\n  pages = {637--641},\n  year = {1998},\n  doi = {${WAKEFIELD_DOI}}\n}\n`;
-
-interface Run { status: number | null; out: string }
-
-/** The real CLI in `root` on the recorded registry answers. */
-function cli(root: string, args: string[], env: Record<string, string> = {}): Run {
-  const r = runCli(args, root, { PENSMITH_OFFLINE: '0', PENSMITH_TEST_CASSETTES: '1', ...env });
-  return { status: r.status, out: r.stdout + r.stderr };
-}
 
 const SLUGS = ['intro', 'body'];
 const secDir = (root: string, i: number): string =>
@@ -73,7 +65,7 @@ function compiledPaper(bib: string, key: string, sections = 1): string {
 
 const exported = (root: string): string => join(root, '.paper', 'export', 'DRAFT.md');
 
-function done(root: string, env: Record<string, string> = {}): Run {
+function done(root: string, env: Record<string, string> = {}): CliOutput {
   return cli(root, ['done', '--yolo', '--raw', '--format', 'md'], env);
 }
 

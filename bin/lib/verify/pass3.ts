@@ -43,7 +43,7 @@ export interface Pass3Result {
   levRatio: number;
   reason: string;
   /** The first 12 hex digits of the SHA-256 of the whole quotation, which the snippet may cut short. */
-  quoteId?: string;
+  quoteId: string;
 }
 
 interface BibLike {
@@ -53,20 +53,22 @@ interface BibLike {
 
 /**
  * Run Pass 3 on every quotation in `draftMd`, finding each cited work's
- * open-access PDF through its DOI in `bibByCitekey`.
+ * open-access PDF through its DOI in `bibByCitekey`. `texts` holds the texts
+ * already read, by PDF link: a caller that checks the same quotations twice
+ * passes one map to both runs, so no PDF is downloaded twice.
  *
  * Deterministic except for the HTTP requests.
  */
 export async function runPass3(
   draftMd: string,
   bibByCitekey: Map<string, BibLike>,
+  texts: Map<string, QuoteSource> = new Map(),
 ): Promise<Pass3Result[]> {
   const quotes = extractQuotes(draftMd);
   const results: Pass3Result[] = [];
-  // The texts read in this run, by PDF link. Only a success is kept: a failed
-  // lookup or fetch for one quotation must not leave a later quotation of the
-  // same work unchecked, so the next one asks again.
-  const texts = new Map<string, QuoteSource>();
+  // Only a text read is kept in `texts`: a failed lookup or fetch for one
+  // quotation must not leave a later quotation of the same work unchecked, so
+  // the next one asks again.
 
   for (const q of quotes) {
     const snippet = q.text.slice(0, 40);

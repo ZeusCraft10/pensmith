@@ -35,7 +35,9 @@
 // scores (0..1) for the record that was compared.
 
 import { parseBibByCitekey, parseBibFieldsByCitekey } from '../citations.js';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { paperDir } from '../paths.js';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { lookupRetraction } from '../sources/openalex.js';
 import { describeSignal, recordRetraction, type RetractionSignal } from './retraction.js';
@@ -70,11 +72,6 @@ export interface Pass1Options {
   acknowledgements?: readonly Acknowledgement[];
   /** The section's number, for the `pensmith ack` command a RETRACTED reason gives. */
   section?: number;
-  /**
-   * The bibliography already read (parseBibForPass1), so the verdicts are
-   * about the same bytes the caller hashed; otherwise it is read from the path.
-   */
-  bib?: Bib;
 }
 
 export interface Pass1Result {
@@ -323,6 +320,12 @@ function readBib(citationsBibPath: string): Promise<Bib> {
   return parseBibForPass1(readFileSync(citationsBibPath, 'utf8'));
 }
 
+/** The text of .paper/CITATIONS.bib, or null when there is none. Throws when it cannot be read. */
+export function readBibText(paperRoot: string): string | null {
+  const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
+  return existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : null;
+}
+
 const RAW_WHAT: Readonly<Record<RawCitationKind, string>> = {
   'doi': 'a DOI typed as text',
   'arxiv': 'an arXiv ID typed as text',
@@ -341,18 +344,21 @@ export function pass1CitedKeys(draftMd: string): string[] {
 /**
  * Pass-1 verdicts for a draft: one per cited key, then one per citation that
  * is not a Pandoc citation (typed as text, or a key that does not parse).
- * `opts.acknowledgements` are the section's, so an acknowledged retraction
- * reads the same to verify, compile's re-check and anything else that asks.
+ * `bibOrPath` is the bibliography already read (parseBibForPass1), so the
+ * verdicts are about the bytes the caller hashed, or the path of a
+ * CITATIONS.bib to read. `opts.acknowledgements` are the section's, so an
+ * acknowledged retraction reads the same to verify, compile's re-check and
+ * anything else that asks.
  *
  * 100% deterministic — no LLM, no narration, no side effects beyond the
  * registry reads.
  */
 export async function runPass1(
   draftMd: string,
-  citationsBibPath: string,
+  bibOrPath: Bib | string,
   opts: Pass1Options = {},
 ): Promise<Pass1Result[]> {
-  const bib = opts.bib ?? await readBib(citationsBibPath);
+  const bib = typeof bibOrPath === 'string' ? await readBib(bibOrPath) : bibOrPath;
   const cites = findCitations(draftMd);
   const bracketed = new Set(citedKeys(cites.filter((c) => !c.narrative)));
 
@@ -392,7 +398,7 @@ export async function runPass1(
  *
  * SEPARATE from `runPass1` by design: this never feeds the blocking verdict
  * path. It reads the same cited keys out of the draft, resolves each
- * to its DOI in the bib, and probes freshness (a DOI HEAD) advisory-only. A
+ * to its DOI in `entries` (the bibliography as the caller read it), and probes freshness (a DOI HEAD) advisory-only. A
  * stale DOI produces a WARN row; it can NEVER produce a blocking verdict
  * (PRD §14 / D-10). Retraction is checked by runPass1, and blocks.
  *
@@ -400,10 +406,8 @@ export async function runPass1(
  */
 export async function runFreshnessForDraft(
   draftMd: string,
-  citationsBibPath: string,
+  entries: ReadonlyMap<string, BibEntry>,
 ): Promise<FreshnessResult[]> {
-  // Only the DOIs are read, so the raw BibTeX fields readBib adds are not needed.
-  const entries = await parseBibByCitekey<BibEntry>(readFileSync(citationsBibPath, 'utf8'));
   // The same keys runPass1 checks, so the advisory probe covers what the gate sees.
   return probeFreshnessAll(
     pass1CitedKeys(draftMd).map((ck) => ({ citekey: ck, doi: entries.get(ck)?.DOI ?? null })),

@@ -60,6 +60,7 @@ import { oneLine, parseVerdictRowDetails, type VerdictRow } from './verify/verdi
 import { parseBibtex } from './citations.js';
 import { writeBibtex } from './bibtex-write.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
+import { assignedSourcesFrom } from './plan-status.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
 // --yolo retry cap: 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
@@ -604,10 +605,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     return { ...base, message: `${base.message} Section ${opts.n} is missing PLAN.md or DRAFT.md.`.trim() };
   }
   const planMd = readFileSync(planPath, 'utf8');
-  const { frontmatter } = parseFrontmatter(planMd);
-  const assignedSources = Array.isArray(frontmatter['assigned_sources'])
-    ? (frontmatter['assigned_sources'] as unknown[]).map(String)
-    : [];
+  const assignedSources = assignedSourcesFrom(parseFrontmatter(planMd).frontmatter);
 
   const proposeSwap = opts.proposeSwap ?? defaultProposeSwap;
   const approve = opts.approve ?? defaultApprove;

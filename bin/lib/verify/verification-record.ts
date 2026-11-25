@@ -27,15 +27,17 @@ import { computeDraftHash } from '../draft-hash.js';
 import type { Bib, Pass1Result, Pass1Verdict } from './pass1.js';
 import type { Pass3Result, Pass3Verdict } from './pass3.js';
 import {
+  blockingReasons,
   citationWarnings,
-  describeVerdictRow,
   isBlockingVerdict,
   renderPass1VerdictRow,
   renderPass3VerdictRow,
   unattributedWarning,
+  uncheckedQuoteWarning,
 } from './verdict-rows.js';
 
-const HEX64 = z.string().regex(/^[0-9a-f]{64}$/);
+/** A SHA-256, in lowercase hex. */
+export const HEX64 = z.string().regex(/^[0-9a-f]{64}$/);
 
 const PASS1_VERDICTS = [
   'OK', 'MIS-CITED', 'FABRICATED', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE',
@@ -218,7 +220,7 @@ export function buildVerificationRecord(input: VerificationInput): VerificationR
       citekey: r.citekey, verdict: r.verdict, reason: r.reason, title_score: clamp(r.titleJW), author_score: clamp(r.authorJW),
     })),
     quotes: (input.pass3 ?? []).map((r) => ({
-      quote_id: r.quoteId ?? quoteId(r.quoteSnippet), citekey: r.citekey, quote: r.quoteSnippet, verdict: r.verdict, reason: r.reason,
+      quote_id: r.quoteId, citekey: r.citekey, quote: r.quoteSnippet, verdict: r.verdict, reason: r.reason,
     })),
     advisory_markdown: input.advisoryMarkdown ?? '',
   });
@@ -299,16 +301,12 @@ export function verificationGate(record: VerificationRecord, where: string): { r
   } else if (record.status === 'failed') {
     reasons.push(`${where}: verify failed this section${record.reason ? ` — ${record.reason}` : ''}`);
   }
-  for (const v of [...record.citations, ...record.quotes]) {
-    if (isBlockingVerdict(v.verdict)) reasons.push(`${where}: ${describeVerdictRow(v)} is ${v.verdict} — ${v.reason}`);
-  }
+  reasons.push(...blockingReasons([...record.citations, ...record.quotes], where));
   const warnings = citationWarnings(record.citations, where);
   const unattributed = record.quotes.filter((q) => q.verdict === 'UNATTRIBUTED').length;
   if (unattributed > 0) warnings.push(unattributedWarning(where, unattributed));
   const unchecked = record.quotes.filter((q) => UNCHECKED_QUOTE.has(q.verdict)).length;
-  if (unchecked > 0) {
-    warnings.push(`${where} has ${unchecked === 1 ? '1 quotation' : `${unchecked} quotations`} that could not be checked against the source text`);
-  }
+  if (unchecked > 0) warnings.push(uncheckedQuoteWarning(where, unchecked));
   return { reasons, warnings };
 }
 
@@ -326,14 +324,13 @@ export interface SectionNow {
  * changed since verify. Empty when they still apply.
  */
 export function verificationStaleness(record: VerificationRecord, now: SectionNow): string[] {
-  const why: string[] = [];
-  if (record.draft_hash !== computeDraftHash(now.draftBytes, [...now.assignedSources])) {
-    const draftNow = sha256(now.draftBytes);
-    why.push(record.draft_sha256 === draftNow
-      ? "PLAN.md's assigned sources changed since verify"
-      : `DRAFT.md changed since verify (${(record.draft_sha256 ?? 'none').slice(0, 12)} → ${draftNow.slice(0, 12)})`);
-    return why;
+  const draftNow = sha256(now.draftBytes);
+  if (record.draft_sha256 !== draftNow) {
+    return [`DRAFT.md changed since verify (${(record.draft_sha256 ?? 'none').slice(0, 12)} → ${draftNow.slice(0, 12)})`];
   }
+  const sorted = (sources: readonly string[]): string => JSON.stringify([...sources].sort());
+  if (sorted(record.assigned_sources) !== sorted(now.assignedSources)) return ["PLAN.md's assigned sources changed since verify"];
+  const why: string[] = [];
   const current = bibEntryHashes(Object.keys(record.bib_entries), now.bib);
   for (const [key, hash] of Object.entries(record.bib_entries)) {
     if (current[key] !== hash) why.push(`the CITATIONS.bib entry for [@${key}] changed since verify`);

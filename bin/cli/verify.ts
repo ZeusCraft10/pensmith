@@ -47,7 +47,7 @@ import {
 import { citationWarnings, unattributedWarning } from '../lib/verify/verdict-rows.js';
 import { readAcknowledgements } from '../lib/verify/acknowledgements.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
-import { updatePlanFrontmatter } from '../lib/plan-status.js';
+import { assignedSourcesFrom, updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
@@ -56,8 +56,7 @@ import { isPlaceholderText } from '../lib/placeholder.js';
 function assignedSourcesOf(planPath: string): string[] {
   try {
     if (!existsSync(planPath)) return [];
-    const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
-    return Array.isArray(frontmatter['assigned_sources']) ? (frontmatter['assigned_sources'] as unknown[]).map(String) : [];
+    return assignedSourcesFrom(parseFrontmatter(readFileSync(planPath, 'utf8')).frontmatter);
   } catch {
     return [];
   }
@@ -162,7 +161,7 @@ export const verifyCommand = defineCommand({
       process.stderr.write(`pensmith verify: WARN — ${ackPath} could not be read, so no acknowledgement in it applies.\n`);
     }
     const { pass1, pass3 } = await checkCitationsAndQuotes(draftMd, {
-      bib, bibPath, acknowledgements: acks.acknowledgements, section: n,
+      bib, acknowledgements: acks.acknowledgements, section: n,
     });
     const cited = pass1CitedKeys(draftMd);
 
@@ -175,7 +174,7 @@ export const verifyCommand = defineCommand({
     // The advisory passes run after the status is set and never change it.
     // Pass 2 / Pass 4 load their own prompts inside their modules, so this
     // file stays deterministic at the prompt-loader chokepoint.
-    const freshness = await runFreshnessForDraft(draftMd, bibPath);
+    const freshness = await runFreshnessForDraft(draftMd, bib.entries);
     const bibByCitekey = bib.entries as Map<string, { DOI?: string; title?: string | string[]; abstract?: string }>;
     const pass2 = await runPass2(draftMd, bibByCitekey, { n });
     const pass4 = await runPass4(draftMd, { n });

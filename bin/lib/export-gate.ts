@@ -18,25 +18,25 @@
 //
 // Neither --raw nor --yolo skips either step.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir, sectionAcknowledgements, sectionDraft, sectionVerificationRecord } from './paths.js';
 import { parseOutline } from './outline-parse.js';
 import { readCompileManifest, type ManifestSection } from './compile-manifest.js';
 import { isPlaceholderText } from './placeholder.js';
 import { isOfflineMode } from './network-mode.js';
-import { citedKeys, findCitations } from './citation-grammar.js';
-import { parseBibForPass1, type Bib } from './verify/pass1.js';
+import { parseBibForPass1, pass1CitedKeys, readBibText, type Bib } from './verify/pass1.js';
 import { readAcknowledgements, type Acknowledgement } from './verify/acknowledgements.js';
 import { checkCitationsAndQuotes } from './verify/check-text.js';
-import { citationWarnings, describeVerdictRow, isBlockingVerdict } from './verify/verdict-rows.js';
+import type { QuoteSource } from './verify/quote-match.js';
+import { blockingReasons, citationWarnings, uncheckedQuoteWarning } from './verify/verdict-rows.js';
 import {
   bibEntryHashes,
   readVerificationRecord,
   sha256,
   UNCHECKED_QUOTE,
   verificationGate,
-  type VerificationRecord,
+  type ReadVerification,
 } from './verify/verification-record.js';
 
 export interface ExportBlock {
@@ -44,11 +44,24 @@ export interface ExportBlock {
   reasons: string[];
   /** What passes but must not look clean (quotations with no citation or no source text, acknowledged retractions, expressions of concern). */
   warnings: string[];
+  /** What the gate read and checked, when it read everything; recheckExportText works from it. */
+  inputs?: ExportInputs;
+}
+
+/** A section the manifest lists: its DRAFT.md bytes and recorded verdicts, or why they could not be read. */
+interface SectionInputs {
+  section: ManifestSection;
+  draft: { bytes: Buffer } | { error: string };
+  record: ReadVerification;
+}
+
+/** The manifest's sections and the bibliography, read once. */
+export interface ExportInputs {
+  sections: SectionInputs[];
+  bib: Bib;
 }
 
 const RECOMPILE = "run 'pensmith compile' again";
-
-type SectionRef = Pick<ManifestSection, 'n' | 'slug'>;
 
 /** The bytes at `path`, or why they could not be read. */
 function readBytes(path: string): { bytes: Buffer } | { error: string } {
@@ -59,29 +72,31 @@ function readBytes(path: string): { bytes: Buffer } | { error: string } {
   }
 }
 
-/** The text of .paper/CITATIONS.bib; '' when there is none. Throws when it cannot be read. */
-export function readBibText(paperRoot: string): string {
-  const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
-  return existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '';
+function readSection(paperRoot: string, s: ManifestSection): SectionInputs {
+  return {
+    section: s,
+    draft: readBytes(sectionDraft(s.n, s.slug, paperRoot)),
+    record: readVerificationRecord(sectionVerificationRecord(s.n, s.slug, paperRoot)),
+  };
 }
 
-async function readBib(paperRoot: string, bibText?: string): Promise<{ bib: Bib; bibPath: string } | { error: string }> {
-  const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
+/** The bibliography (`bibText`, else .paper/CITATIONS.bib; none is an empty library), or why it could not be read. */
+async function readBib(paperRoot: string, bibText?: string): Promise<Bib | { error: string }> {
   try {
-    return { bib: await parseBibForPass1(bibText ?? readBibText(paperRoot)), bibPath };
+    return await parseBibForPass1(bibText ?? readBibText(paperRoot) ?? '');
   } catch (err) {
     return { error: `.paper/CITATIONS.bib could not be read (${err instanceof Error ? err.message : String(err)})` };
   }
 }
 
 /**
- * Whether the compiled draft (`compiled`: its bytes, or the text read from
+ * Whether the compiled draft (`compiled`: its bytes, else read from
  * .paper/DRAFT.md) may be exported: it is the one the last gated compile
  * wrote, from sections and a bibliography (`bibText`, else read from
  * .paper/CITATIONS.bib) that have not changed since, and every section's
  * recorded verdicts pass. Deterministic and offline; never throws.
  */
-export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer | string, bibText?: string): Promise<ExportBlock> {
+export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer, bibText?: string): Promise<ExportBlock> {
   const reasons: string[] = [];
   const warnings: string[] = [];
   const blocked = (): ExportBlock => ({ blocked: reasons.length > 0, reasons, warnings });
@@ -89,7 +104,7 @@ export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer
   const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
   let bytes: Buffer;
   try {
-    bytes = compiled === undefined ? readFileSync(draftPath) : Buffer.isBuffer(compiled) ? compiled : Buffer.from(compiled, 'utf8');
+    bytes = compiled ?? readFileSync(draftPath);
   } catch {
     reasons.push("no compiled draft at .paper/DRAFT.md — run 'pensmith compile' first");
     return blocked();
@@ -122,9 +137,9 @@ export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer
     reasons.push(`the outline's sections (${listed(outlineSections)}) are not the ones compiled (${listed(manifest.sections)}) — ${RECOMPILE}`);
   }
 
-  for (const s of manifest.sections) {
+  const sections = manifest.sections.map((s) => readSection(paperRoot, s));
+  for (const { section: s, draft, record } of sections) {
     const where = `section ${s.n} (${s.slug})`;
-    const draft = readBytes(sectionDraft(s.n, s.slug, paperRoot));
     if ('error' in draft) {
       reasons.push(`${where}: DRAFT.md could not be read (${draft.error}) — ${RECOMPILE}`);
     } else {
@@ -135,7 +150,6 @@ export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer
         reasons.push(`${where}: DRAFT.md changed after compile — verify it ('pensmith verify ${s.n}') and ${RECOMPILE}`);
       }
     }
-    const record = readVerificationRecord(sectionVerificationRecord(s.n, s.slug, paperRoot));
     if (!record.ok) {
       reasons.push(`${where}: its recorded verdicts are ${record.problem === 'missing' ? 'missing' : `unreadable (${record.detail})`} — run 'pensmith verify ${s.n}' and ${RECOMPILE}`);
       continue;
@@ -152,13 +166,21 @@ export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer
   const bib = await readBib(paperRoot, bibText);
   if ('error' in bib) {
     reasons.push(bib.error);
-  } else {
-    const now = bibEntryHashes(Object.keys(manifest.bib_entries), bib.bib);
-    for (const [key, hash] of Object.entries(manifest.bib_entries)) {
-      if (now[key] !== hash) reasons.push(`the CITATIONS.bib entry for [@${key}] changed after compile — verify the sections that cite it and ${RECOMPILE}`);
-    }
+    return blocked();
   }
-  return blocked();
+  const now = bibEntryHashes(Object.keys(manifest.bib_entries), bib);
+  for (const [key, hash] of Object.entries(manifest.bib_entries)) {
+    if (now[key] !== hash) reasons.push(`the CITATIONS.bib entry for [@${key}] changed after compile — verify the sections that cite it and ${RECOMPILE}`);
+  }
+  return { ...blocked(), inputs: { sections, bib } };
+}
+
+/** The manifest's sections and the bibliography (`bibText`, else read), as the gate reads them; no sections without a manifest. */
+async function readExportInputs(paperRoot: string, bibText?: string): Promise<ExportInputs | { error: string }> {
+  const bib = await readBib(paperRoot, bibText);
+  if ('error' in bib) return bib;
+  const manifest = readCompileManifest(paperRoot);
+  return { bib, sections: manifest.ok ? manifest.manifest.sections.map((s) => readSection(paperRoot, s)) : [] };
 }
 
 /**
@@ -166,13 +188,12 @@ export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer
  * acknowledgement counts only when every section citing it acknowledged it,
  * since each acknowledgement covers its own section.
  */
-function paperAcknowledgements(paperRoot: string, sections: readonly SectionRef[]): Acknowledgement[] {
-  const perSection = sections.map((s) => {
-    const draft = readBytes(sectionDraft(s.n, s.slug, paperRoot));
+function paperAcknowledgements(paperRoot: string, sections: readonly SectionInputs[]): Acknowledgement[] {
+  const perSection = sections.map(({ section: s, draft }) => {
     // A missing draft cites nothing; the manifest check refuses it anyway.
     const text = 'bytes' in draft ? draft.bytes.toString('utf8') : '';
     return {
-      cites: new Set(citedKeys(findCitations(text))),
+      cites: new Set(pass1CitedKeys(text)),
       acks: readAcknowledgements(sectionAcknowledgements(s.n, s.slug, paperRoot)).acknowledgements,
     };
   });
@@ -187,14 +208,13 @@ function paperAcknowledgements(paperRoot: string, sections: readonly SectionRef[
 }
 
 /** The warnings the sections' records already gave: each work's verdict, and each quotation that had no source text. */
-function reportedBySections(paperRoot: string, sections: readonly SectionRef[]): { verdicts: Set<string>; uncheckedQuotes: Set<string> } {
+function reportedBySections(sections: readonly SectionInputs[]): { verdicts: Set<string>; uncheckedQuotes: Set<string> } {
   const verdicts = new Set<string>();
   const uncheckedQuotes = new Set<string>();
-  for (const s of sections) {
-    const read = readVerificationRecord(sectionVerificationRecord(s.n, s.slug, paperRoot));
-    const record: VerificationRecord | null = read.ok ? read.record : null;
-    for (const c of record?.citations ?? []) verdicts.add(`${c.citekey}\u0000${c.verdict}`);
-    for (const q of record?.quotes ?? []) if (UNCHECKED_QUOTE.has(q.verdict)) uncheckedQuotes.add(q.quote_id);
+  for (const { record } of sections) {
+    if (!record.ok) continue;
+    for (const c of record.record.citations) verdicts.add(`${c.citekey}\u0000${c.verdict}`);
+    for (const q of record.record.quotes) if (UNCHECKED_QUOTE.has(q.verdict)) uncheckedQuotes.add(q.quote_id);
   }
   return { verdicts, uncheckedQuotes };
 }
@@ -202,36 +222,40 @@ function reportedBySections(paperRoot: string, sections: readonly SectionRef[]):
 /**
  * Pass 1, and Pass 3 unless `pass3` is false (the caller already ran it on
  * these bytes), on the exact text being exported, against CITATIONS.bib as it
- * is now (`bibText`, else read). A blocking verdict is a reason to refuse the
- * export. What passes but must not look clean, and that no section's record
- * reported (a work under an expression of concern since verify, a quotation
- * whose source text can no longer be read), is a warning. An unexpected
- * failure of the check throws: nothing is exported, and it is not a verdict.
+ * is now: the gate's `inputs`, else `bibText` (or the file) and the manifest's
+ * sections, read here. Pass 3 reads its source texts into `sourceTexts`, when
+ * given, for a later check of the same quotations. A blocking verdict is a reason to refuse the export.
+ * What passes but must not look clean, and that no section's record reported
+ * (a work under an expression of concern since verify, a quotation whose
+ * source text can no longer be read), is a warning. An unexpected failure of
+ * the check throws: nothing is exported, and it is not a verdict.
  */
 export async function recheckExportText(
   paperRoot: string,
   text: string,
-  opts: { pass3?: boolean; label?: string; bibText?: string } = {},
+  opts: {
+    pass3?: boolean;
+    label?: string;
+    bibText?: string;
+    inputs?: ExportInputs | undefined;
+    sourceTexts?: Map<string, QuoteSource>;
+  } = {},
 ): Promise<ExportBlock> {
   const label = opts.label ?? 'the exported text';
-  const bib = await readBib(paperRoot, opts.bibText);
-  if ('error' in bib) return { blocked: true, reasons: [bib.error], warnings: [] };
-  const manifest = readCompileManifest(paperRoot);
-  const sections = manifest.ok ? manifest.manifest.sections : [];
+  const inputs = opts.inputs ?? await readExportInputs(paperRoot, opts.bibText);
+  if ('error' in inputs) return { blocked: true, reasons: [inputs.error], warnings: [] };
+  const { bib, sections } = inputs;
   const acknowledgements = paperAcknowledgements(paperRoot, sections);
-  const checked = await checkCitationsAndQuotes(text, { bib: bib.bib, bibPath: bib.bibPath, acknowledgements, pass3: opts.pass3 !== false });
-  const reasons = [...checked.pass1, ...checked.pass3]
-    .filter((r) => isBlockingVerdict(r.verdict))
-    .map((r) => `${label}: ${describeVerdictRow(r)} is ${r.verdict} — ${r.reason}`);
+  const checked = await checkCitationsAndQuotes(text, { bib, acknowledgements, pass3: opts.pass3 !== false, sourceTexts: opts.sourceTexts });
+  const reasons = blockingReasons([...checked.pass1, ...checked.pass3], label);
   if (reasons.length > 0 && isOfflineMode() && checked.pass1.some((r) => r.verdict === 'UNRESOLVED')) {
     reasons.push('done checks every citation against the registries before it exports, and the network is off (offline / --dry-run) — run it with network access');
   }
-  const reported = reportedBySections(paperRoot, sections);
+  const reported = reportedBySections(sections);
   const warnings = citationWarnings(checked.pass1.filter((r) => !reported.verdicts.has(`${r.citekey}\u0000${r.verdict}`)), label);
-  const unchecked = checked.pass3.filter((r) => UNCHECKED_QUOTE.has(r.verdict) && !reported.uncheckedQuotes.has(r.quoteId ?? ''));
+  const unchecked = checked.pass3.filter((r) => UNCHECKED_QUOTE.has(r.verdict) && !reported.uncheckedQuotes.has(r.quoteId));
   if (unchecked.length > 0) {
-    const what = unchecked.length === 1 ? '1 quotation' : `${unchecked.length} quotations`;
-    warnings.push(`${label} has ${what} that could not be checked against the source text: ${unchecked.map((r) => `[@${r.citekey}] "${r.quoteSnippet}"`).join('; ')}`);
+    warnings.push(`${uncheckedQuoteWarning(label, unchecked.length)}: ${unchecked.map((r) => `[@${r.citekey}] "${r.quoteSnippet}"`).join('; ')}`);
   }
   return { blocked: reasons.length > 0, reasons, warnings };
 }

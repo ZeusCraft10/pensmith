@@ -63,16 +63,16 @@ import {
   type StalenessEntry,
 } from './compile-report.js';
 import { isPlaceholderText } from './placeholder.js';
-import { parseBibForPass1, type Bib } from './verify/pass1.js';
-import { readAcknowledgements } from './verify/acknowledgements.js';
+import { parseBibForPass1, readBibText, type Bib } from './verify/pass1.js';
+import { readAcknowledgements, type Acknowledgement } from './verify/acknowledgements.js';
+import { assignedSourcesFrom } from './plan-status.js';
 import {
-  bibEntryHashes,
   readVerificationRecord,
   sha256,
   verificationGate,
   verificationStaleness,
 } from './verify/verification-record.js';
-import { writeCompileManifest, type ManifestSection } from './compile-manifest.js';
+import { manifestBibEntries, writeCompileManifest, type ManifestSection } from './compile-manifest.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -86,12 +86,24 @@ export interface SmoothBoundaryInput {
   head: string;
 }
 
-/** The re-verify seam input (staleness path — Pass 1+3 only). */
+/**
+ * The re-verify seam input (staleness path — Pass 1+3 only): the section as
+ * compile read it, so the re-check is about the bytes compile staleness-checks,
+ * compiles and binds in the manifest.
+ */
 export interface ReVerifyInput {
   n: number;
   slug: string;
-  /** The section's DRAFT.md as compile read it: the text it will compile. */
-  draft?: string;
+  /** The section's DRAFT.md: the text compile will compile. */
+  draft: string;
+  /** PLAN.md's assigned sources. */
+  assignedSources: readonly string[];
+  /** CITATIONS.bib as parsed; null when there is none, so a stale section never passes. */
+  bib: Bib | null;
+  /** CITATIONS.bib holds nothing (an empty library). */
+  bibIsEmpty: boolean;
+  /** The section's acknowledgements (ACKNOWLEDGEMENTS.json). */
+  acknowledgements: readonly Acknowledgement[];
   /** Present ONLY so a test can prove Pass 2/4 are never wired here. */
   runPass2?: () => void;
   runPass4?: () => void;
@@ -144,9 +156,6 @@ export interface CompileResult {
 interface LoadedSection {
   outline: ParsedOutlineSection;
   slug: string;
-  /** The section's VERIFICATION.json and ACKNOWLEDGEMENTS.json. */
-  recordPath: string;
-  acknowledgementsPath: string;
   /** Normalized to exactly one trailing '\n'. */
   draft: string;
   draftBytes: Buffer;
@@ -262,20 +271,12 @@ async function loadSection(
   if (!existsSync(draftPath) || !existsSync(planPath)) return 'missing PLAN.md or DRAFT.md';
 
   const draftBytes = readFileSync(draftPath);
-  const planMd = readFileSync(planPath, 'utf8');
-  const { frontmatter } = parseFrontmatter(planMd);
-  const assignedSources = Array.isArray(frontmatter['assigned_sources'])
-    ? (frontmatter['assigned_sources'] as unknown[]).map(String)
-    : [];
-
   return {
     outline: outlineSection,
     slug,
-    recordPath: sectionVerificationRecord(n, slug, paperRoot),
-    acknowledgementsPath: sectionAcknowledgements(n, slug, paperRoot),
     draft: normalizeTrailingNewline(draftBytes.toString('utf8')),
     draftBytes,
-    assignedSources,
+    assignedSources: assignedSourcesFrom(parseFrontmatter(readFileSync(planPath, 'utf8')).frontmatter),
   };
 }
 
@@ -346,12 +347,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     const ordered = outline.sections.slice().sort((a, b) => a.n - b.n);
 
     // The bibliography, read once: each record's cited entries are compared
-    // with it, and the manuscript's citations are checked against it.
-    const bibPath = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
-    const bibText = existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '';
+    // with it, a stale section is re-verified against it, and the
+    // manuscript's citations are checked against it.
+    const bibText = readBibText(opts.paperRoot);
     let bib: Bib;
     try {
-      bib = await parseBibForPass1(bibText);
+      bib = await parseBibForPass1(bibText ?? '');
     } catch (err) {
       return refuse(opts.paperRoot, {
         refused: true,
@@ -384,7 +385,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
       // The verdicts verify recorded. A section with none was never
       // verified and never compiles; VERIFICATION.md is only their rendering.
-      const read = readVerificationRecord(sec.recordPath);
+      const read = readVerificationRecord(sectionVerificationRecord(os.n, os.slug, opts.paperRoot));
       if (!read.ok) {
         refuseReasons.push(
           read.problem === 'missing'
@@ -406,11 +407,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       if (gate.reasons.length > 0) continue;
 
       // Staleness: the record must still describe the section.
+      const acks = readAcknowledgements(sectionAcknowledgements(os.n, os.slug, opts.paperRoot));
       const stale = verificationStaleness(record, {
         draftBytes: sec.draftBytes,
         assignedSources: sec.assignedSources,
         bib,
-        acknowledgementsSha256: readAcknowledgements(sec.acknowledgementsPath).sha256,
+        acknowledgementsSha256: acks.sha256,
       });
       if (stale.length > 0) {
         warn(`WARN: ${where} stale (${stale.join('; ')}) — re-verifying (Pass 1+3)`);
@@ -419,7 +421,15 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         const reVerify =
           opts.reVerify ??
           (async () => ({ passed: false, failingCitekeys: [] } as ReVerifyResult));
-        const result = await reVerify({ n: os.n, slug: os.slug, draft: sec.draftBytes.toString('utf8') });
+        const result = await reVerify({
+          n: os.n,
+          slug: os.slug,
+          draft: sec.draftBytes.toString('utf8'),
+          assignedSources: sec.assignedSources,
+          bib: bibText === null ? null : bib,
+          bibIsEmpty: (bibText ?? '').trim().length === 0,
+          acknowledgements: acks.acknowledgements,
+        });
         for (const w of result.warnings ?? []) warn(`WARN: ${w}`);
         if (!result.passed) {
           if (result.reasons && result.reasons.length > 0) {
@@ -584,12 +594,13 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       });
     }
 
+    const compiledAt = new Date().toISOString();
     const draftPath = join(paperDir(opts.paperRoot), 'DRAFT.md');
     await atomicWriteFile(draftPath, compiled);
 
     const reportPath = join(paperDir(opts.paperRoot), 'COMPILE-REPORT.md');
     const report = renderCompileReport({
-      compiled_at: new Date().toISOString(),
+      compiled_at: compiledAt,
       sections_count: loaded.length,
       stale_resolved_count: stalenessResolved.length,
       refuse_reasons: [],
@@ -603,16 +614,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     // What done checks before it exports: the manuscript, each section's draft
     // and recorded verdicts, and the bibliography entry of each work the
     // export renders (every one is in CITATIONS.bib, or compile refused above).
-    const bibHashes: Record<string, string> = {};
-    for (const [key, hash] of Object.entries(bibEntryHashes(citedKeys(rendered), bib))) {
-      if (hash !== null) bibHashes[key] = hash;
-    }
     await writeCompileManifest(opts.paperRoot, {
       $schemaVersion: 1,
-      compiled_at: new Date().toISOString(),
+      compiled_at: compiledAt,
       draft_sha256: sha256(Buffer.from(compiled, 'utf8')),
       sections: manifestSections,
-      bib_entries: bibHashes,
+      bib_entries: manifestBibEntries(citedKeys(rendered), bib),
     });
 
     return {

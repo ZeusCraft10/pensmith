@@ -1,4 +1,5 @@
-// bin/lib/plan-status.ts — round-trip-safe section PLAN.md frontmatter writer.
+// bin/lib/plan-status.ts — round-trip-safe section PLAN.md frontmatter writer,
+// and the reader of the sources a PLAN.md assigns.
 //
 // The router's per-section walk (router.ts:188-211) advances the pipeline by
 // reading each section PLAN.md's `status` frontmatter. The write verb
@@ -11,6 +12,17 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { updateFrontmatter } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
+
+/**
+ * The citekeys a section's PLAN.md frontmatter assigns it (`assigned_sources`),
+ * as verify, compile and revise read them: none unless the key is a list.
+ * Lenient on purpose: a PLAN.md that fails the strict schema still assigns
+ * its sources, so a draft that cites none of them still fails verify.
+ */
+export function assignedSourcesFrom(frontmatter: Record<string, unknown>): string[] {
+  const sources = frontmatter['assigned_sources'];
+  return Array.isArray(sources) ? sources.map(String) : [];
+}
 
 /**
  * Best-effort, round-trip-safe mutation of a section PLAN.md's frontmatter via
