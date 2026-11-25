@@ -77,27 +77,36 @@ export function assignUniqueCitekeys(candidates: SourceCandidate[]): SourceCandi
 // ---------------------------------------------------------------------------
 
 export interface BibBlock {
-  /** The entry type, lowercased ('article', 'string', 'preamble', 'comment'). */
+  /**
+   * The entry type, lowercased ('article', 'string', 'preamble', 'comment'),
+   * or 'text' for text between blocks (`%` lines, notes), which BibTeX ignores.
+   */
   type: string;
-  /** The citekey of an entry; '' for @string, @preamble and @comment. */
+  /** The citekey of an entry; '' for @string, @preamble, @comment and text. */
   key: string;
-  /** The block's text from its `@` to its closing delimiter. */
+  /** The block's text from its `@` to its closing delimiter, or the text itself. */
   text: string;
 }
 
 const NON_ENTRY: ReadonlySet<string> = new Set(['string', 'preamble', 'comment']);
 
 /**
- * The blocks of BibTeX `text`, each exactly as written. Text between blocks
- * is a comment to BibTeX and is not kept. A block whose closing delimiter is
- * missing runs to the end of the text.
+ * The blocks of BibTeX `text`, each exactly as written, and the text between
+ * them (trimmed, when not blank) as 'text' blocks. A block whose closing
+ * delimiter is missing runs to the end of the text.
  */
 export function splitBibtex(text: string): BibBlock[] {
   const out: BibBlock[] = [];
+  const between = (from: number, to: number): void => {
+    const t = text.slice(from, to).trim();
+    if (t) out.push({ type: 'text', key: '', text: t });
+  };
   const re = /@\s*([A-Za-z]+)\s*([{(])/g;
   let m: RegExpExecArray | null;
+  let last = 0;
   while ((m = re.exec(text))) {
     const start = m.index;
+    between(last, start);
     const open = m[2]!;
     let i = re.lastIndex;
     let depth = 0;
@@ -121,7 +130,9 @@ export function splitBibtex(text: string): BibBlock[] {
     const key = NON_ENTRY.has(type) ? '' : (/^\s*([^,\s]+)/.exec(body)?.[1] ?? '');
     out.push({ type, key, text: text.slice(start, end) });
     re.lastIndex = end;
+    last = end;
   }
+  between(last, text.length);
   return out;
 }
 
@@ -160,7 +171,7 @@ export function itemBibtex(item: LibraryItem): string {
   return formatBibtex([renderedCsl(item)], new Map([[item.id, identifierFields(item)]])).trim();
 }
 
-/** CITATIONS.bib for `library`: any @string/@preamble blocks first, then every item in citekey order. */
+/** CITATIONS.bib for `library`: the blocks that are not entries (@string, @preamble, @comment, other text) first, then every item in citekey order. */
 export function libraryBibtex(library: Pick<Library, 'entries' | 'bibtex_preamble'>): string {
   const items = [...library.entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const blocks = [...library.bibtex_preamble.map((b) => b.trim()), ...items.map(itemBibtex)];

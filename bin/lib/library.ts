@@ -118,6 +118,9 @@ async function parseBib(text: string): Promise<ParsedBib> {
   return { entries: await parseBibByCitekey(text), fields: await parseBibFieldsByCitekey(text) };
 }
 
+/** The blocks of a bibliography that are not entries, which the library writes back first. */
+const KEPT_BLOCKS: ReadonlySet<string> = new Set(['string', 'preamble', 'comment', 'text']);
+
 /**
  * Read into `lib` every entry of `bibText` that is not what the library would
  * write for its key, keeping the entry's text. An edited entry replaces the
@@ -125,10 +128,16 @@ async function parseBib(text: string): Promise<ParsedBib> {
  * link, the identifiers it was found by) is kept when the entry still names
  * the same work. Returns the keys read in.
  */
-async function readInBibliography(lib: Library, bibText: string, at: string): Promise<string[]> {
+async function readInBibliography(lib: Library, rawBibText: string, at: string): Promise<string[]> {
+  // A checkout with CRLF line endings (git's autocrlf) holds the same entries
+  // the library wrote; compared byte for byte, every one would read as edited.
+  const bibText = rawBibText.replace(/\r\n?/g, '\n');
   if (bibText.trim() === '') return [];
   const blocks = splitBibtex(bibText);
-  lib.bibtex_preamble = blocks.filter((b) => b.type === 'string' || b.type === 'preamble').map((b) => b.text.trim());
+  // @comment blocks (JabRef keeps its metadata in one) and other text between
+  // entries are kept beside the @string and @preamble blocks, written first.
+  lib.bibtex_preamble = blocks.filter((b) => KEPT_BLOCKS.has(b.type)).map((b) => b.text.trim());
+  const macros = blocks.filter((b) => b.type === 'string' || b.type === 'preamble').map((b) => b.text.trim());
   // A key given twice is read as Pass 1 reads it: the last entry counts.
   const entries = new Map(blocks.filter((b) => b.key !== '' && b.type !== 'comment').map((b) => [b.key, b.text.trim()]));
   const index = new Map(lib.entries.map((e, i) => [e.id, i]));
@@ -146,7 +155,7 @@ async function readInBibliography(lib: Library, bibText: string, at: string): Pr
     // entry is then read on its own, and one that still cannot be read is
     // kept as text alone (verify reports the file as unreadable).
   }
-  const preamble = lib.bibtex_preamble.join('\n');
+  const preamble = macros.join('\n');
   for (const [key, text] of changed) {
     let csl = bib?.entries.get(key);
     let fields = bib?.fields.get(key);
@@ -420,7 +429,8 @@ function placeImported(lib: Library, item: LibraryItem, taken: Set<string>): Omi
  * own is taken). @string blocks it defines are kept for the entries that use
  * them.
  */
-export async function importBibliography(lib: Library, text: string, at: string, file: string): Promise<ImportResult> {
+export async function importBibliography(lib: Library, rawText: string, at: string, file: string): Promise<ImportResult> {
+  const text = rawText.replace(/\r\n?/g, '\n');
   const blocks = splitBibtex(text);
   const preamble = blocks.filter((b) => b.type === 'string' || b.type === 'preamble').map((b) => b.text.trim());
   for (const p of preamble) if (!lib.bibtex_preamble.includes(p)) lib.bibtex_preamble.push(p);

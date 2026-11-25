@@ -158,3 +158,37 @@ test('an entry edited by hand is read back in and kept as edited', async () => {
   const item = (await loadLibrary(root)).entries.find((e) => e.id === 'vaswani2017')!;
   assert.match(item.abstract ?? '', /dominant sequence transduction/, 'what the library knew about the work is kept');
 });
+
+const MEASURED = {
+  source: 'crossref', id: '10.1038/nphys1170', doi: '10.1038/nphys1170', title: 'Measured measurement',
+  authors: ['Aspelmeyer, Markus'], names: [{ family: 'Aspelmeyer', given: 'Markus' }], year: 2009,
+  retracted: false, last_verified: '2026-11-25T00:00:00.000Z', citekey: 'aspelmeyer2009', raw: null,
+} as SourceCandidate;
+
+test('a CITATIONS.bib checked out with CRLF line endings is still the library\'s own, so a retraction reaches it', async () => {
+  // git with core.autocrlf on Windows checks the file out with CRLF.
+  const root = paperRoot();
+  await addToLibrary(root, [MEASURED]);
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bibOf(root).replace(/\n/g, '\r\n'));
+  await addToLibrary(root, [{ ...MEASURED, retracted: true }]);
+  const item = (await loadLibrary(root)).entries.find((e) => e.id === 'aspelmeyer2009')!;
+  assert.equal(item.custom.bibtex, undefined, 'the entry is not taken for a hand edit');
+  const bib = bibOf(root);
+  assert.match(bib, /note = \{RETRACTED\}/, bib);
+  assert.doesNotMatch(bib, /\r/);
+});
+
+test('@comment blocks and text between entries are kept when the library writes the bibliography', async () => {
+  const root = paperRoot();
+  const comments = '% My reading list, kept by hand.\n\n' + OLD_BIB + '\n@comment{jabref-meta: databaseType:bibtex;}\n';
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), comments);
+  await addToLibrary(root, [MEASURED]);
+  const bib = bibOf(root);
+  assert.ok(bib.includes('% My reading list, kept by hand.'), bib);
+  assert.ok(bib.includes('@comment{jabref-meta: databaseType:bibtex;}'), bib);
+  for (const block of OLD_BIB.split('\n\n')) assert.ok(bib.includes(block.trim()), `kept as it was:\n${block}`);
+  // A second write reads them back and keeps them once.
+  await addToLibrary(root, [MEASURED]);
+  assert.equal(bibOf(root).split('jabref-meta').length, 2, bibOf(root));
+  assert.equal(bibOf(root).split('My reading list').length, 2);
+});
