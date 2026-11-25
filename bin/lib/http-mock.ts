@@ -155,18 +155,23 @@ function toReplay(c: Cassette): CassetteReplay {
   return { status: c.status, headers, body };
 }
 
-function buildIndex(): CassetteIndex {
+/** Index every cassette in the adapter folders under `root`. */
+function buildIndex(root: string): CassetteIndex {
   const byKey = new Map<string, CassetteReplay>();
+  // JSON of the raw `response` first recorded for each key. Two recordings of a
+  // key disagree when these differ, even if they replay the same body (an
+  // object and its JSON string replay with different content-types).
+  const rawByKey = new Map<string, string | undefined>();
   const ambiguous = new Set<string>();
-  if (!existsSync(CASSETTES_ROOT)) return { byKey, ambiguous };
-  const dirs = readdirSync(CASSETTES_ROOT, { withFileTypes: true })
+  if (!existsSync(root)) return { byKey, ambiguous };
+  const dirs = readdirSync(root, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
     .sort();
   for (const dir of dirs) {
-    const files = readdirSync(join(CASSETTES_ROOT, dir)).filter((f) => f.endsWith('.json')).sort();
+    const files = readdirSync(join(root, dir)).filter((f) => f.endsWith('.json')).sort();
     for (const f of files) {
-      const file = join(CASSETTES_ROOT, dir, f);
+      const file = join(root, dir, f);
       for (const c of readCassetteArray(file)) {
         let origin: string;
         try {
@@ -174,13 +179,16 @@ function buildIndex(): CassetteIndex {
         } catch {
           throw new Error(`Cassette ${file} has an invalid scope ${JSON.stringify(c.scope)}`);
         }
+        if (typeof c.method !== 'string') {
+          throw new Error(`Cassette ${file} has an invalid method ${JSON.stringify(c.method)}`);
+        }
         const key = requestKey(c.method, origin, c.path);
-        const replay = toReplay(c);
-        const prior = byKey.get(key);
-        if (prior && prior.body !== replay.body) {
+        const raw = JSON.stringify(c.response);
+        if (!byKey.has(key)) {
+          byKey.set(key, toReplay(c));
+          rawByKey.set(key, raw);
+        } else if (rawByKey.get(key) !== raw) {
           ambiguous.add(key);
-        } else if (!prior) {
-          byKey.set(key, replay);
         }
       }
     }
@@ -194,14 +202,26 @@ function buildIndex(): CassetteIndex {
  * the same request disagree (a POST whose body we do not key on, for example).
  */
 export function replayCassette(method: string, url: string): CassetteReplay {
-  index ??= buildIndex();
+  index ??= buildIndex(CASSETTES_ROOT);
+  return replayFrom(index, method, url);
+}
+
+/**
+ * Test-only: replayCassette against the cassettes under `root` instead of the
+ * committed ones, indexed afresh on every call.
+ */
+export function _replayFromRootForTest(root: string, method: string, url: string): CassetteReplay {
+  return replayFrom(buildIndex(root), method, url);
+}
+
+function replayFrom(idx: CassetteIndex, method: string, url: string): CassetteReplay {
   const u = new URL(url);
   const key = requestKey(method, u.origin, u.pathname + u.search);
   const shown = (): string => `${method.toUpperCase()} ${u.origin}${scrubRecordedPath(u.pathname + u.search)}`;
-  if (index.ambiguous.has(key)) {
+  if (idx.ambiguous.has(key)) {
     throw new CassetteMissError(`${shown()} (several different recordings match; refusing to pick one)`);
   }
-  const hit = index.byKey.get(key);
+  const hit = idx.byKey.get(key);
   if (!hit) throw new CassetteMissError(shown());
   return { ...hit, headers: { ...hit.headers } };
 }
