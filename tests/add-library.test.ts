@@ -142,16 +142,20 @@ test('add <pdf> with no identifier accepts a title-search hit with the same titl
 
 test('add <pdf> uses a DOI printed in it only when that DOI names this paper', async () => {
   // The only DOI on the page is a reference's: the NumPy paper's, cited by a
-  // paper on attention. It must not be taken for the paper itself.
+  // paper on attention, written as references are, with the cited title and
+  // authors. The cited title is in the PDF's text, but not in its title block.
   const root = project();
   const pdf = await pdfOf(root, [
     'Attention Is All You Need',
     'Ashish Vaswani, Noam Shazeer, Niki Parmar',
     'References',
-    '[1] S. van der Walt et al. 2011. doi:10.1109/MCSE.2011.37',
+    '[1] S. van der Walt, S. C. Colbert, G. Varoquaux.',
+    'The NumPy Array: A Structure for Efficient Numerical Computation.',
+    'Computing in Science & Engineering 13(2), 2011. doi:10.1109/MCSE.2011.37',
   ]);
   const r = cli(root, ['add', pdf, '--yolo']);
   assert.equal(r.status, 2, r.out);
+  assert.doesNotMatch(r.out, /added vanderwalt2011/, r.out);
   assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false);
 
   const own = await pdfOf(root, [
@@ -162,6 +166,54 @@ test('add <pdf> uses a DOI printed in it only when that DOI names this paper', a
   const ok = cli(root, ['add', own, '--yolo']);
   assert.equal(ok.status, 0, ok.out);
   assert.deepEqual(keysOf(bibOf(root)), ['vanderwalt2011']);
+});
+
+test('add <pdf> finds its own DOI when its title wraps onto a second line', async () => {
+  const root = project();
+  const pdf = await pdfOf(root, [
+    'The NumPy Array: A Structure for',
+    'Efficient Numerical Computation',
+    'Stefan van der Walt, S. Chris Colbert and Gael Varoquaux',
+    'doi:10.1109/MCSE.2011.37',
+  ]);
+  const r = cli(root, ['add', pdf, '--yolo']);
+  assert.equal(r.status, 0, r.out);
+  assert.deepEqual(keysOf(bibOf(root)), ['vanderwalt2011']);
+});
+
+test('add <pdf> refuses a title-search hit one word from its title, even when its author is cited', async () => {
+  // Jaro-Winkler scores "Climate change and mental health" 0.93 against
+  // "Climate change and human health", and the reference list names Berry.
+  // The hit is a synthetic record (10.0000 test prefix).
+  const root = project();
+  const pdf = await pdfOf(root, [
+    'Climate change and human health',
+    'Jane Smith and John Jones',
+    'Abstract Rising temperatures change the burden of disease.',
+    'References',
+    '[1] H. L. Berry. Climate change and mental health. 2010.',
+  ]);
+  const r = cli(root, ['add', pdf, '--yolo']);
+  assert.equal(r.status, 2, r.out);
+  assert.doesNotMatch(r.out, /added berry2010/, r.out);
+  assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
+});
+
+test('add <pdf> refuses a hit with its title when none of the hit\'s authors is named before the references', async () => {
+  // Same title as the NumPy paper, other authors; the NumPy paper's authors
+  // appear only in the reference list.
+  const root = project();
+  const pdf = await pdfOf(root, [
+    'The NumPy Array: A Structure for Efficient Numerical Computation',
+    'John Smith and Jane Doe',
+    'Abstract We revisit array computing in Python.',
+    'References',
+    '[1] S. van der Walt, S. C. Colbert and G. Varoquaux. 2011.',
+  ]);
+  const r = cli(root, ['add', pdf, '--yolo']);
+  assert.equal(r.status, 2, r.out);
+  assert.doesNotMatch(r.out, /added vanderwalt2011/, r.out);
+  assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
 });
 
 test('add <arXiv ID> adds the preprint, known by its eprint', () => {

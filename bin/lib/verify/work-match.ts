@@ -345,6 +345,19 @@ export function matchTitle(claimed: string, record: Pick<WorkRecord, 'title' | '
   return { ok: false, score: best };
 }
 
+/**
+ * Whether `a` and `b` are the same whole title, word for word as matchTitle
+ * compares them, with no allowance for a missing subtitle. A PDF prints its
+ * whole title, so the record that names it must have all of it: "Deep
+ * learning" is not "Deep learning: a review".
+ */
+export function sameWholeTitle(a: string, b: string): boolean {
+  const ta = tokens(withoutRetractionLabel(a));
+  const tb = tokens(withoutRetractionLabel(b));
+  if (ta.length === 0 || tb.length === 0) return false;
+  return alignTitles(ta, tb).unmatched === 0 && titleNumbers(ta) === titleNumbers(tb);
+}
+
 // ---------------------------------------------------------------------------
 //   Names
 // ---------------------------------------------------------------------------

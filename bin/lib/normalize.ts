@@ -4,7 +4,7 @@
 //
 //   nfkcNormalize(s) ──→ string
 //     Used by:
-//       - bin/lib/fuzzy.ts::jaroWinkler   (research title dedupe pre-normalize)
+//       - bin/lib/fuzzy.ts                (normalizeForFuzzy, jaroWinkler)
 //       - bin/lib/author-normalize.ts     (Pass-1 first-author surname normalize)
 //       - bin/lib/verify/work-match.ts    (Pass-1 word-by-word metadata comparison)
 //

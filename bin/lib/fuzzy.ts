@@ -1,30 +1,21 @@
 // bin/lib/fuzzy.ts — Hand-rolled Jaro-Winkler and Levenshtein primitives.
 //
-//   pensmith add: a Crossref title-search hit for a PDF with no identifier of
-//     its own is accepted only when jaroWinkler(PDF title, hit title) >=
-//     TITLE_JW_THRESHOLD (0.92) and an author of the hit is named in the PDF
-//     (bin/lib/source-hydrate.ts). Research merges records by identifier,
-//     never by title.
-//   Verb suggestions and Pass 1's one-letter-slip check use levenshtein().
+// Verb suggestions and Pass 1's one-letter-slip check use levenshtein().
 //
-// Pass 1 does not use Jaro-Winkler: a whole-title similarity let sibling
-// papers one word apart through and blocked real ones over markup or a
-// subtitle. Its word-by-word comparison lives in bin/lib/verify/work-match.ts.
-// Pass 3 does not use a similarity score either: a threshold on characters
-// accepted a changed word ("not", a number, an antonym) in a long quotation.
-// It matches word for word in bin/lib/verify/quote-match.ts.
+// No title or quotation check uses a similarity score. Jaro-Winkler on whole
+// titles let sibling papers one word apart through ("Climate change and
+// mental health" scores 0.93 against "Climate change and human health") and
+// blocked real ones over markup or a subtitle, so Pass 1 and `pensmith add`
+// compare titles word for word (bin/lib/verify/work-match.ts). A threshold on
+// characters accepted a changed word ("not", a number, an antonym) in a long
+// quotation, so Pass 3 matches word for word (bin/lib/verify/quote-match.ts).
+// Research merges records by identifier, never by title.
 //
 // No npm dependency: both algorithms are short, deterministic and tested.
 // jaroWinkler pre-normalizes both inputs with nfkcNormalize (NFKC, diacritics
 // and smart quotes), so accents do not lower a score.
 
 import { nfkcNormalize } from './normalize.js';
-
-/**
- * Title similarity at or above which a title-search hit can be the work a PDF
- * is (with an author the PDF names).
- */
-export const TITLE_JW_THRESHOLD = 0.92;
 
 /**
  * Pre-normalize a string for fuzzy comparison.

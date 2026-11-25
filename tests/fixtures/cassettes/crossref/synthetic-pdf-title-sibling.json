@@ -1,0 +1,46 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=Climate%20change%20and%20human%20health&rows=5",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message": {
+        "total-results": 1,
+        "items": [
+          {
+            "DOI": "10.0000/near-title-sibling",
+            "type": "journal-article",
+            "title": [
+              "Climate change and mental health"
+            ],
+            "author": [
+              {
+                "family": "Berry",
+                "given": "Helen L.",
+                "sequence": "first"
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2010
+                ]
+              ]
+            },
+            "container-title": [
+              "Journal of Test Fixtures"
+            ],
+            "volume": "1",
+            "page": "1-10"
+          }
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchTitle, matchWork, stripMarkup, venuesMatch, withoutRetractionLabel, type ClaimedWork } from '../bin/lib/verify/work-match.js';
+import { matchTitle, matchWork, sameWholeTitle, stripMarkup, venuesMatch, withoutRetractionLabel, type ClaimedWork } from '../bin/lib/verify/work-match.js';
 import type { WorkName, WorkRecord } from '../bin/lib/sources/work-record.js';
 
 function record(over: Partial<WorkRecord>): WorkRecord {
@@ -193,4 +193,17 @@ test('titles: matchWork compares titles as given; a "RETRACTED:" label is set as
   assert.ok(!matchWork({ title: 'A study', authors }, record({ title: 'RETRACTED: A study', authors })).ok);
   assert.ok(matchWork({ title: withoutRetractionLabel('RETRACTED: A study'), authors },
     record({ title: withoutRetractionLabel('Retracted Article: A study'), authors })).ok);
+});
+
+test('whole titles: the same words as Pass 1 compares them, with no subtitle left out', () => {
+  // `pensmith add` names a PDF by the record whose whole title the PDF prints.
+  assert.ok(sameWholeTitle('The NumPy array: a structure for efficient numerical computation', 'The NumPy Array: A Structure for Efficient Numerical Computation'));
+  assert.ok(sameWholeTitle('Modelling tumour behaviour', 'Modeling <i>tumor</i> behavior'));
+  assert.ok(sameWholeTitle('A study of things', 'RETRACTED: A study of things'), 'a retraction label is not part of the title');
+  assert.ok(!sameWholeTitle('Deep learning', 'Deep learning: a review'), 'a subtitle the PDF does not print is another work');
+  assert.ok(!sameWholeTitle('Deep learning: a review', 'Deep learning'));
+  assert.ok(!sameWholeTitle('Climate change and human health', 'Climate change and mental health'));
+  assert.ok(!sameWholeTitle('Attention is all you need', 'Attention is not all you need'));
+  assert.ok(!sameWholeTitle('Part I of the survey', 'Part II of the survey'));
+  assert.ok(!sameWholeTitle('', ''));
 });
