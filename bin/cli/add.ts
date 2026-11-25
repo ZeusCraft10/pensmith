@@ -3,7 +3,8 @@
 // THIN ORCHESTRATOR (compile.ts shape): ingest ONE new source mid-paper and
 // optionally remap it onto sections. No business logic lives here beyond
 // input-type detection + composing the existing chokepoints:
-//   - DOI  → crossrefFetchById(normalizeDoi(source))
+//   - DOI  → crossrefFetchById(normalizeDoi(source)); the record must carry that
+//            same DOI, or nothing is added
 //   - PDF  → readFile → extractPdfText (pdf-parse → pymupdf fallback, 08-03) →
 //            title heuristic → crossrefSearch(title, {limit:1})
 //   - URL  → httpFetch (D-06 chokepoint, NEVER raw fetch) → sniff Content-Type:
@@ -63,6 +64,28 @@ function extractTitleHeuristic(text: string): string | undefined {
   }
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length >= 8 ? flat.slice(0, 200) : undefined;
+}
+
+/**
+ * Look up a DOI and accept the record only if it is that DOI. Crossref answers
+ * an alias with its canonical record, and a wrong record would be cited under
+ * the user's DOI, so a mismatch is reported and nothing is added.
+ */
+async function fetchExactDoi(
+  doi: string,
+): Promise<{ candidate: SourceCandidate | null; mismatch?: string }> {
+  const hit = await crossrefFetchById(doi);
+  if (!hit) return { candidate: null };
+  const got = hit.doi ? normalizeDoi(hit.doi) : null;
+  if (got !== doi) return { candidate: null, mismatch: hit.doi ?? '(no DOI)' };
+  return { candidate: hit };
+}
+
+function reportMismatch(requested: string, returned: string): void {
+  process.stdout.write(
+    `pensmith add: the registry answered ${requested} with a different work (${returned}). ` +
+    `Source NOT added. If ${returned} is the work you meant, add that DOI directly.\n`,
+  );
 }
 
 /** Refusal for a path that needs the network while offline / --dry-run. */
@@ -207,7 +230,14 @@ export const addCommand = defineCommand({
         reportOffline('DOI lookup');
         return { ok: false };
       }
-      candidate = norm ? await crossrefFetchById(norm) : null;
+      if (norm) {
+        const r = await fetchExactDoi(norm);
+        if (r.mismatch !== undefined) {
+          reportMismatch(norm, r.mismatch);
+          return { ok: false };
+        }
+        candidate = r.candidate;
+      }
     } else if (isHttpUrl(source)) {
       // URL path — checked BEFORE the local-PDF branch (audit #12: a URL ending
       // in .pdf used to fall into the local branch and crash fs.readFile with an
@@ -234,7 +264,14 @@ export const addCommand = defineCommand({
             }
           } else {
             const doi = scrapeDoiFromHtml(res.body);
-            if (doi) candidate = await crossrefFetchById(doi);
+            if (doi) {
+              const r = await fetchExactDoi(doi);
+              if (r.mismatch !== undefined) {
+                reportMismatch(doi, r.mismatch);
+                return { ok: false };
+              }
+              candidate = r.candidate;
+            }
           }
         } catch {
           candidate = null;

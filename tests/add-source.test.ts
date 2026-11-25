@@ -149,3 +149,27 @@ test('Pitfall 3 / A6: the remap appends the citekey to assigned_sources[] and le
     'remap must NOT mutate verified_against_draft_hash',
   );
 });
+
+test('add <doi>: a registry record whose DOI differs from the requested DOI is rejected, not added', { skip: !READY }, async () => {
+  // The redirect-audit16 cassette answers /works/10.0000/alias-audit16 with a
+  // record whose DOI is 10.0000/retracted — a different work.
+  const { root } = await mkProjectWithSection();
+  const out: string[] = [];
+  const origWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: string | Uint8Array): boolean => {
+    out.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
+    return true;
+  }) as typeof process.stdout.write;
+  let result: unknown;
+  try {
+    result = await runAdd(root, { source: '10.0000/alias-audit16', yolo: true });
+  } finally {
+    process.stdout.write = origWrite;
+  }
+  assert.deepEqual(result, { ok: false });
+  assert.match(out.join(''), /10\.0000\/retracted/, 'the refusal names the DOI the registry returned');
+  assert.ok(
+    !fs.existsSync(path.join(root, '.paper', 'CITATIONS.bib')),
+    'a mismatched record must not be written to CITATIONS.bib',
+  );
+});
