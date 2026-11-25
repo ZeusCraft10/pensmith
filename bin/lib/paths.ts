@@ -105,11 +105,22 @@ export function localDataDir(
 }
 
 /**
- * The user's home folder: $HOME (USERPROFILE on Windows) when set, else the
- * OS answer. The export trace scanner looks for it in exported files.
+ * Every spelling of the user's home folder: $HOME and USERPROFILE when set,
+ * the OS answer, and the account's home from the user database. The export
+ * trace scanner looks for each one in exported files. They differ under Git
+ * Bash ($HOME is /c/Users/name) and when HOME is set to something else or
+ * left empty.
  */
-export function homeDir(env: NodeJS.ProcessEnv = process.env): string {
-  return env.HOME ?? env.USERPROFILE ?? os.homedir();
+export function homeDirs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const out = new Set<string>();
+  for (const h of [env.HOME, env.USERPROFILE, os.homedir()]) if (h) out.add(h);
+  try {
+    const account = os.userInfo().homedir;
+    if (account) out.add(account);
+  } catch {
+    // no user database entry for this uid
+  }
+  return [...out];
 }
 
 /**

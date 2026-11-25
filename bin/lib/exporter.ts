@@ -35,7 +35,7 @@ import { findCitations, type Citation } from './citation-grammar.js';
 import { cslHtmlToLatex, cslHtmlToMarkdown } from './csl-html.js';
 import { readBibEntries, selectEntries, toBibtex, toRis, type CslEntry } from './export-bib.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
-import { homeDir, paperDir } from './paths.js';
+import { homeDirs, paperDir } from './paths.js';
 import { describeFinding, scanExportFile, type TraceFormat } from './trace-scan.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -688,7 +688,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     const ctx = {
       authorText: md,
       bibliographicText: JSON.stringify(exported),
-      sensitivePaths: [homeDir(), paper, path.resolve(opts.paperRoot ?? process.cwd()), PKG_ROOT, tmpdir(), stage],
+      sensitivePaths: [...homeDirs(), paper, path.resolve(opts.paperRoot ?? process.cwd()), PKG_ROOT, tmpdir(), stage],
     };
     const findings = [];
     for (const f of files) findings.push(...(await scanExportFile(f, traceFormat(f), ctx)));

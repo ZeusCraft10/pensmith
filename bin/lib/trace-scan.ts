@@ -11,6 +11,7 @@
 // also appears in the author's manuscript (or, for words, in the titles and
 // names of the cited works) is allowed. Metadata parts get no such allowance.
 
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -46,10 +47,11 @@ interface Pattern {
   kind: 'word' | 'path';
 }
 
+// A stamp may be wrapped across lines, so words are separated by any whitespace.
 const WORD_PATTERNS: readonly Pattern[] = [
   { what: 'tool name', re: /pensmith/gi, kind: 'word' },
-  { what: 'generator stamp', re: /generated (?:by|with)\b/gi, kind: 'word' },
-  { what: 'generator stamp', re: /\bvia pandoc\b/gi, kind: 'word' },
+  { what: 'generator stamp', re: /generated\s+(?:by|with)\b/gi, kind: 'word' },
+  { what: 'generator stamp', re: /\bvia\s+pandoc\b/gi, kind: 'word' },
 ];
 
 // Path fragments that only ever come from a local machine. A URL such as
@@ -87,14 +89,24 @@ function shorten(s: string): string {
 }
 
 function pathVariants(p: string): string[] {
-  const abs = path.resolve(p);
-  const forward = abs.replace(/\\/g, '/');
-  const back = abs.replace(/\//g, '\\');
-  const out = new Set([abs, forward, back, back.replace(/\\/g, '\\\\')]);
+  const out = new Set<string>();
+  const resolved = path.resolve(p);
+  // A tool may write the real path (macOS's /var/folders is /private/var/folders).
+  let real = resolved;
   try {
-    out.add(pathToFileURL(abs).href);
+    real = realpathSync.native(resolved);
   } catch {
-    // not representable as a URL
+    // the path does not exist (any more)
+  }
+  for (const abs of new Set([resolved, real])) {
+    const forward = abs.replace(/\\/g, '/');
+    const back = abs.replace(/\//g, '\\');
+    for (const v of [abs, forward, back, back.replace(/\\/g, '\\\\')]) out.add(v);
+    try {
+      out.add(pathToFileURL(abs).href);
+    } catch {
+      // not representable as a URL
+    }
   }
   return [...out];
 }
@@ -111,11 +123,48 @@ function sensitiveNeedles(paths: readonly string[] | undefined): string[] {
   return [...out];
 }
 
+/** Lower case with every run of whitespace as one space: Pandoc and the LaTeX writer reflow lines. */
+function comparable(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ');
+}
+
 function excused(match: string, kind: Pattern['kind'], ctx: TraceScanContext, strict: boolean): boolean {
   if (strict) return false;
-  const m = match.toLowerCase();
-  if (ctx.authorText && ctx.authorText.toLowerCase().includes(m)) return true;
-  return kind === 'word' && Boolean(ctx.bibliographicText && ctx.bibliographicText.toLowerCase().includes(m));
+  const m = comparable(match);
+  if (ctx.authorText && comparable(ctx.authorText).includes(m)) return true;
+  return kind === 'word' && Boolean(ctx.bibliographicText && comparable(ctx.bibliographicText).includes(m));
+}
+
+// A character that continues a file or folder name, or a host name before a path.
+const NAME_CHAR = /[\p{L}\p{N}_-]/u;
+const BEFORE_PATH_CHAR = /[\p{L}\p{N}_.~%-]/u;
+// A needle shorter than this (`/root`, `/home/a`) is a path only when a
+// separator follows it: "the /root of the tree" is prose.
+const SHORT_NEEDLE = 8;
+
+/**
+ * True when the needle found at `start` is that path, not part of a longer
+ * name ("shoot/root", "/home/alpha") or a path on another host
+ * ("example.org/home/al/").
+ */
+function atPathBoundary(text: string, start: number, needle: string): boolean {
+  const before = text[start - 1];
+  if (before !== undefined && BEFORE_PATH_CHAR.test(before)) return false;
+  const end = start + needle.length;
+  const next = text[end];
+  if (next === undefined) return needle.length >= SHORT_NEEDLE;
+  if (next === '/' || next === '\\') return true;
+  if (needle.length < SHORT_NEEDLE) return false;
+  // A full stop ends a sentence unless a name continues after it (".bak").
+  if (next === '.') return !NAME_CHAR.test(text[end + 1] ?? '');
+  return !NAME_CHAR.test(next);
+}
+
+function containsPath(hay: string, needle: string): boolean {
+  for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + 1)) {
+    if (atPathBoundary(hay, i, needle)) return true;
+  }
+  return false;
 }
 
 /**
@@ -137,7 +186,7 @@ export function scanText(
   const caseless = process.platform === 'win32';
   const hay = caseless ? text.toLowerCase() : text;
   for (const needle of sensitiveNeedles(ctx.sensitivePaths)) {
-    if (hay.includes(caseless ? needle.toLowerCase() : needle)) {
+    if (containsPath(hay, caseless ? needle.toLowerCase() : needle)) {
       found.push({ what: 'local path of this machine', match: shorten(needle) });
     }
   }
