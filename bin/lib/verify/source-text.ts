@@ -11,7 +11,7 @@
 // The link comes from a registry record, not from pensmith, so it is fetched
 // as an untrusted URL: the SSRF guard checks it and every redirect hop.
 
-import { fetch as httpFetch, isTextContentType, SsrfBlockedError } from '../http.js';
+import { fetch as httpFetch, SsrfBlockedError } from '../http.js';
 import { extractPdfText, isImageOnlyText } from '../pdf-text.js';
 import { lookupOaPdfs as openAlexPdfs } from '../sources/openalex.js';
 import { lookupOaPdfs as unpaywallPdfs } from '../sources/unpaywall.js';
@@ -23,9 +23,16 @@ const MAX_LINKS = 3;
 /** Redirects followed from one link. */
 const MAX_REDIRECTS = 5;
 
+/**
+ * Content types a PDF is never served as: text/*, JSON and XML. Not the HTTP
+ * cache's wider text list, which also names JavaScript, BibTeX and RIS: a
+ * real PDF a server labels with one of those is still read.
+ */
+const TEXT_TYPE = /^\s*(?:text\/|application\/(?:[\w.-]+\+)?(?:json|xml)\b)/i;
+
 /** Whether a response is a PDF: not served as text, and starting with the PDF header. */
 function isPdf(bytes: Buffer, contentType: string): boolean {
-  return !isTextContentType(contentType) && bytes.subarray(0, 1024).includes('%PDF-');
+  return !TEXT_TYPE.test(contentType) && bytes.subarray(0, 1024).includes('%PDF-');
 }
 
 /** The bytes of the PDF at `url`, following redirects, or why there are none. */
@@ -69,7 +76,7 @@ export type SourceText =
   | { kind: 'none'; scanned: boolean; noLinks: boolean; reason: string };
 
 /** A text found: the PDF link it came from, and the text prepared for matching. */
-export type FoundText = Extract<SourceText, { kind: 'text' }>;
+type FoundText = Extract<SourceText, { kind: 'text' }>;
 
 /**
  * The text of the first PDF among `urls` that gives one, adding why each

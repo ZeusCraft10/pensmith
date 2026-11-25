@@ -288,14 +288,12 @@ function isPrivateIp(addr: string): boolean {
   return false;
 }
 
-/** The SSRF guard refused a URL before any connection was made. */
-export class SsrfBlockedError extends Error {
-  readonly code = 'PENSMITH_SSRF_BLOCKED';
-  constructor(message: string) {
-    super(message);
-    this.name = 'SsrfBlockedError';
-  }
-}
+/**
+ * The SSRF guard refused a URL before any connection was made. Callers tell
+ * it apart with instanceof; it keeps Error's name and has no code, so it
+ * prints and serialises as the plain Error it always was.
+ */
+export class SsrfBlockedError extends Error {}
 
 /**
  * SSRF pre-flight guard (HARD-02 / T-15-02).
@@ -797,13 +795,8 @@ function isRetryable(err: unknown, method: string): boolean {
 // answers), text/*, or a JSON or XML type such as application/vnd.api+json.
 const TEXT_CONTENT_TYPE = /^\s*(?:text\/|application\/(?:[\w.-]+\+)?(?:json|xml)\b|application\/(?:javascript|x-bibtex|x-research-info-systems)\b)/i;
 
-/** Whether `contentType` names a text body: text/*, JSON, XML, or a bibliographic text format. */
-export function isTextContentType(contentType: string): boolean {
-  return TEXT_CONTENT_TYPE.test(contentType);
-}
-
 function isTextContent(contentType: string | undefined): boolean {
-  return !contentType || isTextContentType(contentType);
+  return !contentType || TEXT_CONTENT_TYPE.test(contentType);
 }
 
 // ============================================================

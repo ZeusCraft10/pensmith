@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fsp from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runPass3, type Pass3Result } from '../bin/lib/verify/pass3.js';
@@ -40,6 +40,10 @@ const BIB = new Map([['k', { DOI }]]);
 
 interface Served {
   pdfUrl: string;
+  /** Further PDF links OpenAlex lists after `pdfUrl`, best first. */
+  morePdfUrls?: string[];
+  /** The draft checked; DRAFT when not given. */
+  draft?: string;
   /** The PDF Unpaywall names, when not `pdfUrl`. */
   unpaywallPdfUrl?: string;
   /** The contact email; null for none. */
@@ -60,7 +64,7 @@ async function pass3With(s: Served): Promise<{ results: Pass3Result[]; hits: Rec
   const agent = mockAgent();
   const hits: Record<string, number> = { unpaywall: 0 };
   agent.get('https://api.openalex.org').intercept({ path: (p) => p.startsWith('/works/doi:'), method: 'GET' }).reply(200,
-    JSON.stringify({ id: 'https://openalex.org/W1', doi: `https://doi.org/${DOI}`, best_oa_location: { is_oa: true, pdf_url: s.pdfUrl }, locations: [] }),
+    JSON.stringify({ id: 'https://openalex.org/W1', doi: `https://doi.org/${DOI}`, best_oa_location: { is_oa: true, pdf_url: s.pdfUrl }, locations: (s.morePdfUrls ?? []).map((u) => ({ is_oa: true, pdf_url: u })) }),
     { headers: JSON_HEADERS }).persist();
   agent.get('https://api.unpaywall.org').intercept({ path: (p) => p.startsWith('/v2/'), method: 'GET' }).reply(() => {
     hits['unpaywall']! += 1;
@@ -77,7 +81,7 @@ async function pass3With(s: Served): Promise<{ results: Pass3Result[]; hits: Rec
     }).persist();
   }
 
-  const results = await runPass3(DRAFT, BIB);
+  const results = await runPass3(s.draft ?? DRAFT, BIB);
   let cacheFiles: string[] = [];
   try {
     const dir = pensmithHttpCacheDir();
@@ -93,6 +97,31 @@ test('pass 3: a real (compressed) PDF arrives byte for byte, so the misquotation
   const { results } = await pass3With({ pdfUrl: `${OA}/paper.pdf`, routes: { [`${OA}/paper.pdf`]: pdf } });
   assert.deepEqual(results.map((r) => r.verdict), ['OK', 'NOT_FOUND'], show(results));
 });
+
+// A server may label a real PDF with a type the HTTP cache treats as text
+// (JavaScript, BibTeX, RIS). Only text/*, JSON and XML mean the body is not a
+// PDF; the bytes are checked otherwise, so the misquotation still blocks.
+for (const type of ['application/javascript', 'application/x-bibtex', 'application/x-research-info-systems']) {
+  test(`pass 3: a real PDF served as ${type} is still read, so the misquotation is NOT_FOUND`, async () => {
+    const { results } = await pass3With({
+      pdfUrl: `${OA}/paper.pdf`,
+      routes: { [`${OA}/paper.pdf`]: () => ({ statusCode: 200, data: PDF, headers: { 'content-type': type } }) },
+    });
+    assert.deepEqual(results.map((r) => r.verdict), ['OK', 'NOT_FOUND'], show(results));
+  });
+}
+
+for (const type of ['text/plain', 'application/json']) {
+  test(`pass 3: a body served as ${type} is not read as a PDF, even when it starts with the PDF header`, async () => {
+    const { results } = await pass3With({
+      pdfUrl: `${OA}/paper.pdf`,
+      email: null,
+      routes: { [`${OA}/paper.pdf`]: () => ({ statusCode: 200, data: PDF, headers: { 'content-type': type } }) },
+    });
+    assert.deepEqual(results.map((r) => r.verdict), ['PDF_UNAVAILABLE', 'PDF_UNAVAILABLE'], show(results));
+    assert.ok(results[0]!.reason.includes(`served ${type} rather than a PDF`), results[0]!.reason);
+  });
+}
 
 test('pass 3: the PDF is never written to the HTTP cache', async () => {
   const { results, cacheFiles } = await pass3With({ pdfUrl: `${OA}/paper.pdf`, routes: { [`${OA}/paper.pdf`]: pdf } });
@@ -186,3 +215,50 @@ for (const [what, bytes] of Object.entries(DAMAGED)) {
     }
   });
 }
+
+// Each quotation reads the best-ranked copy it can reach. A link that failed
+// for one quotation (a 403, a timeout) is asked again for the next, and a
+// quotation found only in that copy is checked against it, not against the
+// lower-ranked copy an earlier quotation fell back to.
+const PREPRINT = readFileSync(fileURLToPath(new URL('./fixtures/pdf/byo-text.pdf', import.meta.url)));
+
+test('pass 3: a link that failed for one quotation is asked again for the next quotation of the same work', async () => {
+  const draft = [
+    '# Results',
+    '',
+    'The preprint says "We propose the Transformer based solely on attention mechanisms" [@k, p. 1].',
+    '',
+    'The published version says "In this paper, we study a relaxed version of this question by replacing holes with visible islands" [@k, p. 1].',
+    '',
+  ].join('\n');
+  const { results, hits } = await pass3With({
+    pdfUrl: `${OA}/vor.pdf`,
+    morePdfUrls: [`${OA}/preprint.pdf`],
+    email: null,
+    draft,
+    routes: {
+      // Refused once, then served.
+      [`${OA}/vor.pdf`]: (n) => (n === 1 ? { statusCode: 403, data: '', headers: { 'content-type': 'text/html' } } : pdf()),
+      [`${OA}/preprint.pdf`]: () => ({ statusCode: 200, data: PREPRINT, headers: { 'content-type': 'application/pdf' } }),
+    },
+  });
+  assert.deepEqual(results.map((r) => r.verdict), ['OK', 'OK'], show(results));
+  assert.match(results[0]!.reason, /preprint\.pdf/);
+  assert.match(results[1]!.reason, /vor\.pdf/);
+  assert.equal(hits[`${OA}/vor.pdf`], 2, 'the failed link was asked again');
+  assert.equal(hits[`${OA}/preprint.pdf`], 1);
+});
+
+// The harness removes each test's HTTP cache folder after the test.
+let previousCacheHome: string | undefined;
+
+test('pass 3 fetch tests: each test has its own HTTP cache folder', () => {
+  previousCacheHome = process.env['XDG_CACHE_HOME'];
+  assert.ok(previousCacheHome && existsSync(previousCacheHome));
+});
+
+test('pass 3 fetch tests: the previous test\'s HTTP cache folder is gone', (t) => {
+  if (!previousCacheHome) return t.skip('the previous test did not run');
+  assert.notEqual(process.env['XDG_CACHE_HOME'], previousCacheHome);
+  assert.equal(existsSync(previousCacheHome), false, `${previousCacheHome} was left behind`);
+});

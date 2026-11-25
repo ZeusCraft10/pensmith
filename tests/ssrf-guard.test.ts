@@ -244,6 +244,33 @@ test('SSRF guard: IPv4-mapped IPv6 hex-colon ::ffff:0a00:0001 (10.0.0.1) is reje
   },
 );
 
+// The refusal is a plain Error, as the PENSMITH_DEBUG lines of freshness and
+// plagiarism print it ("transport error: Error: SSRF guard: ..."), with no
+// error code a caller could map.
+test('SSRF guard: a refusal reads as a plain Error with no code',
+  { skip: !hasCheckSsrf ? 'checkSsrf not yet exported from bin/lib/http.ts' : false },
+  async () => {
+    const cases: Array<[string, FakeResolverFn]> = [
+      ['https://evil.local/data', makeResolver({ 'evil.local': '10.0.0.1' })],
+      ['https://nowhere.example/data', makeResolver({})],
+      ['file:///etc/passwd', makeResolver({})],
+    ];
+    for (const [url, resolve] of cases) {
+      await assert.rejects(
+        () => checkSsrfFn!(url, resolve),
+        (err: Error & { code?: unknown }) => {
+          assert.ok(String(err).startsWith('Error: SSRF guard: '), String(err));
+          assert.equal(err.name, 'Error');
+          assert.equal(err.code, undefined);
+          assert.equal(JSON.stringify(err), '{}');
+          return true;
+        },
+        url,
+      );
+    }
+  },
+);
+
 // ---- Wave-0 module-presence consistency (mirrors known-bad-pass2 pattern) ----
 
 test('HARD-02: http.ts exists at expected src path (module-presence sanity)',
