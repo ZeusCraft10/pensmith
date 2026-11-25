@@ -618,6 +618,25 @@ function traceFormat(file: string): TraceFormat {
 }
 
 /**
+ * How the export reads the citations of `md` against the bibliography's keys:
+ * the citations it renders, the narrative `@word`s with no entry that it
+ * leaves as ordinary text (a handle, an email-like word, as it would read in
+ * the source), and the keys of bracketed citations with no entry, which it
+ * refuses.
+ */
+export function exportCitations(
+  md: string,
+  known: ReadonlySet<string>,
+): { cites: Citation[]; ignored: Citation[]; unknownCited: string[] } {
+  const all = findCitations(md);
+  return {
+    cites: all.filter((c) => !c.narrative || known.has(c.items[0]!.key)),
+    ignored: all.filter((c) => c.narrative && !known.has(c.items[0]!.key)),
+    unknownCited: citedKeys(all.filter((c) => !c.narrative)).filter((k) => !known.has(k)),
+  };
+}
+
+/**
  * Export one manuscript in one format. Builds every file in a staging folder,
  * scans each for traces, then replaces the previous export with them. On any
  * failure it throws an ExportError and leaves the export folder as it was.
@@ -643,27 +662,21 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   }
   const md = await fsp.readFile(inputPath, 'utf8');
 
-  // Citations and the works they cite. A bracketed citation of a key with no
-  // entry is refused; a narrative `@word` with no entry is ordinary text
-  // (a handle, an email-like word), as it would read in the source.
+  // Citations and the works they cite.
   const bibPathSrc = join(paper, 'CITATIONS.bib');
   const bibText = existsSync(bibPathSrc) ? await fsp.readFile(bibPathSrc, 'utf8') : '';
-  const all = findCitations(md);
   let entries: CslEntry[] = [];
   try {
     entries = await readBibEntries(bibText);
   } catch (err) {
-    if (all.some((c) => !c.narrative)) {
+    if (findCitations(md).some((c) => !c.narrative)) {
       throw new ExportError('invalid-input', `CITATIONS.bib could not be read: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  const known = new Set(entries.map((e) => e.id));
-  const unknownCited = citedKeys(all.filter((c) => !c.narrative)).filter((k) => !known.has(k));
+  const { cites, ignored, unknownCited } = exportCitations(md, new Set(entries.map((e) => e.id)));
   if (unknownCited.length > 0) {
     throw new ExportError('unresolved-citation', 'The paper cites works that are not in CITATIONS.bib.', unknownCited);
   }
-  const cites = all.filter((c) => !c.narrative || known.has(c.items[0]!.key));
-  const ignored = all.filter((c) => c.narrative && !known.has(c.items[0]!.key));
   const keys = citedKeys(cites);
   const { entries: exported } = selectEntries(entries, keys);
 

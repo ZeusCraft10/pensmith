@@ -3,7 +3,8 @@ name: Export
 # The trace-free export is a non-negotiable, and its real risk is in what
 # Pandoc and TeX add to a file. The main CI matrix has neither tool, so the
 # tests that drive them skip there. This lane installs both and makes those
-# tests mandatory: a missing tool fails instead of skipping.
+# tests mandatory: a missing tool fails instead of skipping. It also checks
+# that the citation grammar reads the same keys Pandoc renders.
 
 on:
   push:
@@ -47,3 +48,4 @@ jobs:
           tests/export-bibliography.test.ts
           tests/export-non-latin.test.ts
           tests/exporter.test.ts
+          tests/citation-grammar-pandoc-parity.test.ts
