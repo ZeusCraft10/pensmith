@@ -37,6 +37,31 @@ export interface AtomicWriteOptions {
 
 const DEFAULT_MODE = 0o644;
 
+/** True during `--dry-run`, which may not change any file. */
+export function isDryRun(): boolean {
+  return process.env['PENSMITH_DRY_RUN'] === '1';
+}
+
+/** Thrown for a write attempted during a dry run. */
+export class DryRunWriteError extends Error {
+  readonly code = 'PENSMITH_DRY_RUN';
+  constructor(readonly targetPath: string) {
+    super(`dry run: refused to write ${targetPath} (a dry run changes nothing)`);
+    this.name = 'DryRunWriteError';
+  }
+}
+
+/**
+ * A dry run may write only inside a `.dry-run` folder (a scratch overlay such
+ * as `.paper/.dry-run/`). Every write in this module checks here first, so a
+ * code path that forgets about dry runs still cannot change a real artifact.
+ */
+function assertWritable(targetPath: string): void {
+  if (!isDryRun()) return;
+  if (path.resolve(targetPath).split(path.sep).includes('.dry-run')) return;
+  throw new DryRunWriteError(targetPath);
+}
+
 /**
  * fsync a directory fd to flush the new directory entry to disk.
  * Swallows the errors that are platform-expected and not correctness bugs:
@@ -89,6 +114,7 @@ export async function atomicWriteFile(
   data: string | Buffer,
   opts: AtomicWriteOptions = {},
 ): Promise<void> {
+  assertWritable(targetPath);
   const dir = path.dirname(targetPath);
   await fsp.mkdir(dir, { recursive: true });
 
@@ -158,6 +184,8 @@ export async function atomicWriteFile(
  * instead of deleting it.
  */
 export async function atomicRename(fromPath: string, toPath: string): Promise<void> {
+  assertWritable(fromPath);
+  assertWritable(toPath);
   await fsp.rename(fromPath, toPath);
   await syncDir(path.dirname(toPath));
 }
@@ -181,6 +209,7 @@ export async function atomicAppendFile(
   line: string,
   opts: AtomicWriteOptions = {},
 ): Promise<void> {
+  assertWritable(targetPath);
   const dir = path.dirname(targetPath);
   await fsp.mkdir(dir, { recursive: true });
 

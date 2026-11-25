@@ -37,7 +37,7 @@ export const resumeCommand = defineCommand({
     description: 'Resume the active paper: summarize the last handoff and run the next work verb.',
   },
   args: {
-    'dry-run': { type: 'boolean', description: 'Zero external API calls.', default: false },
+    'dry-run': { type: 'boolean', description: 'Show what would run; run nothing, write nothing.', default: false },
     estimate: { type: 'boolean', description: 'Project cost; do not execute.', default: false },
     yolo: { type: 'boolean', description: 'Skip approval gates.', default: false },
     'show-prompts': { type: 'boolean', description: 'Echo every LLM prompt to stderr.', default: false },

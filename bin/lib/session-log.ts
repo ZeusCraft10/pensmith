@@ -25,7 +25,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { atomicAppendFile, atomicWriteFile } from './atomic-write.js';
+import { atomicAppendFile, atomicWriteFile, isDryRun } from './atomic-write.js';
 import { redactKeys, deepRedactPii } from './pii.js';
 import { paperDir, pensmithDataDir } from './paths.js';
 
@@ -360,6 +360,8 @@ export function openSessionLog(opts: OpenSessionLogOptions = {}): SessionLogger 
       const record = buildRecord(kind, payload, bindings, run_id);
       // Mirror BEFORE async write so it's synchronous from caller's POV.
       mirrorIfPrompt(record);
+      // A dry run changes no file, the log included.
+      if (isDryRun()) return;
       enqueue(async () => {
         try {
           const line = await writeLineOrTruncate(

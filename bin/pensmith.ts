@@ -49,15 +49,16 @@
 import { realpathSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineCommand, runMain, type CommandDef } from 'citty';
+import { defineCommand, parseArgs, runMain, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
 import { VERSION } from './lib/version.generated.js';
 import { UX02_VERBS, canonicalVerb, unknownVerbMessage, type Ux02Verb } from './lib/verbs.js';
 import { setMirrorPromptsToStderr } from './lib/session-log.js';
 import { projectEstimate } from './lib/estimator.js';
-import { resolveNextAction } from './lib/router.js';
+import { resolveNextAction, type RouterDecision } from './lib/router.js';
+import { describeStep, renderDryRun } from './lib/dry-run.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
-import { EXIT_ERROR, EXIT_REFUSED } from './lib/exit-codes.js';
+import { EXIT_ERROR, EXIT_OK, EXIT_REFUSED } from './lib/exit-codes.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -202,7 +203,7 @@ export const command = defineCommand({
   // Four global flags declared so `--help` documents them; the LOAD-BEARING
   // application is the argv pre-parse below (NOT a root run() — H2).
   args: {
-    'dry-run': { type: 'boolean', description: 'No network requests (implies --offline) and the placeholder LLM path.', default: false },
+    'dry-run': { type: 'boolean', description: 'Show what the step would read, write and call; run nothing, write nothing, no network.', default: false },
     offline: { type: 'boolean', description: 'Refuse every network request; lookups report "skipped (offline)" and citations UNRESOLVED.', default: false },
     estimate: { type: 'boolean', description: 'Project token + USD cost; do not execute.', default: false },
     yolo: { type: 'boolean', description: 'Skip outline + export approval gates.', default: false },
@@ -239,7 +240,7 @@ const READ_ONLY_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor'
  */
 export function shouldRunYoloCapPreflight(argv: string[]): boolean {
   if (!hasFlag(argv, 'yolo')) return false;
-  if (hasFlag(argv, 'estimate')) return false;
+  if (hasFlag(argv, 'estimate') || hasFlag(argv, 'dry-run')) return false;
   if (argv.includes('--version') || argv.includes('--help') || argv.includes('-h')) return false;
   const v = firstVerb(argv);
   if (v !== null && READ_ONLY_VERBS.has(v)) return false;
@@ -285,6 +286,55 @@ function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
   return true;
 }
 
+/** The decision's section (n, slug) as verb args, when it has one. */
+function decisionArgs(decision: RouterDecision): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if ('n' in decision) out['n'] = decision.n;
+  if ('slug' in decision) out['slug'] = decision.slug;
+  return out;
+}
+
+/**
+ * `--dry-run`: work out the step that would run — the named command with its
+ * arguments, or the router's next step for bare `pensmith`, `next`, `resume`
+ * and a section verb typed without its number — and print what it would read,
+ * write and call. Never runs a verb. Returns the exit code.
+ */
+async function runDryRun(argv: string[], verb: Ux02Verb | null): Promise<number> {
+  const paperRoot = process.cwd();
+  const routed =
+    verb === null || verb === 'next' || verb === 'resume' || isSectionVerbWithoutNumber(argv, verb);
+
+  if (!routed) {
+    const loader = REAL_VERB_LOADERS[verb];
+    const cmd: AnyCommandDef = loader ? await loader() : makeStub(verb);
+    const argsDef = typeof cmd.args === 'function' ? await cmd.args() : await cmd.args;
+    const args = parseArgs(argv.slice(argv.indexOf(verb) + 1), argsDef ?? {}) as Record<string, unknown>;
+    const step = describeStep({ verb, args }, paperRoot);
+    process.stdout.write(renderDryRun(`pensmith --dry-run: would run \`${step.command}\`.`, step));
+    return EXIT_OK;
+  }
+
+  const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
+  const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
+  if (verb !== null && verb !== 'next' && verb !== 'resume' && decision.verb !== verb) {
+    process.stderr.write(
+      `pensmith ${verb}: no section is ready to ${verb} right now — the next step is \`pensmith ${decision.verb}\`.\n`,
+    );
+    return EXIT_REFUSED;
+  }
+  if (decision.verb === 'status' || decision.verb === 'resume') {
+    const why = decision.verb === 'status' && decision.reason === 'done'
+      ? 'the paper is finished'
+      : 'the paper needs attention (run `pensmith status`)';
+    process.stdout.write(`pensmith --dry-run: nothing to run — ${why}.\nDry run: nothing was written and no network request was made.\n`);
+    return EXIT_OK;
+  }
+  const step = describeStep({ verb: decision.verb, args: decisionArgs(decision) }, paperRoot);
+  process.stdout.write(renderDryRun(`pensmith --dry-run: the next step is \`${step.command}\`.`, step));
+  return EXIT_OK;
+}
+
 /**
  * The pre-dispatch entrypoint: applies global-flag setup, the yolo cap
  * pre-flight, and the --estimate preview BEFORE any verb runs, then dispatches
@@ -311,14 +361,14 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   if (hasFlag(argv, 'show-prompts')) setMirrorPromptsToStderr(true);
 
   // (b) --offline / --dry-run → http.ts refuses every request (network-mode.ts).
-  //     --dry-run also keeps the LLM call sites on their placeholder path so a
-  //     dry run needs no key.
+  //     --dry-run also makes the write chokepoint refuse every write
+  //     (atomic-write.ts), as a backstop: a dry run never runs a verb at all.
   if (hasFlag(argv, 'offline') || hasFlag(argv, 'dry-run')) {
     process.env['PENSMITH_OFFLINE'] = '1';
   }
   if (hasFlag(argv, 'dry-run')) {
     process.env['PENSMITH_NO_LLM'] = '1';
-    process.env['PENSMITH_DRY_RUN'] = '1'; // advisory marker only — NOT itself a gate
+    process.env['PENSMITH_DRY_RUN'] = '1';
   }
 
   // (c) H1 / C2-H1 YOLO CAP PRE-FLIGHT — runs WHENEVER --yolo is present for a
@@ -364,6 +414,13 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   }
 
   const verb = firstVerb(argv);
+
+  // --dry-run: say what would run and stop before any verb runs.
+  if (hasFlag(argv, 'dry-run')) {
+    process.exitCode = await runDryRun(argv, verb);
+    return;
+  }
+
   if (verb && !isSectionVerbWithoutNumber(argv, verb)) {
     // Explicit verb (with its required positional, if any) → citty parses
     // --yolo into the subcommand args itself; no manual forwarding needed. NO

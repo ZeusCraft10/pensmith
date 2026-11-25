@@ -23,7 +23,7 @@ export const nextCommand = defineCommand({
   // Declare the four global flags so `pensmith next --yolo` parses; they are
   // forwarded into the dispatched verb's args via dispatchVerb (C3-HIGH-2).
   args: {
-    'dry-run': { type: 'boolean', description: 'Zero external API calls.', default: false },
+    'dry-run': { type: 'boolean', description: 'Show what would run; run nothing, write nothing.', default: false },
     estimate: { type: 'boolean', description: 'Project cost; do not execute.', default: false },
     yolo: { type: 'boolean', description: 'Skip approval gates.', default: false },
     'show-prompts': { type: 'boolean', description: 'Echo every LLM prompt to stderr.', default: false },

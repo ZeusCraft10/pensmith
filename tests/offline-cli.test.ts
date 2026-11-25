@@ -117,12 +117,14 @@ test('offline CLI: `research --offline` makes zero requests, says skipped (offli
   }
 });
 
-test('offline CLI: `--dry-run` implies offline for research (zero requests)', async () => {
+test('offline CLI: `--dry-run` research makes zero requests and runs nothing', async () => {
   const listener = await startCountingListener();
   try {
     const root = makePaper();
     const res = await runCli(['research', '--dry-run', '--yolo'], root, listener.url);
-    assert.match(res.stdout + res.stderr, /skipped \(offline\)/);
+    // A dry run does not run research at all (it used to run it offline); it
+    // only says what research would do.
+    assert.match(res.stdout, /would run `pensmith research`/);
     assert.ok(!existsSync(join(root, '.paper', 'LIBRARY.json')), 'dry-run research must not write a library');
     assert.equal(listener.connections(), 0);
   } finally {

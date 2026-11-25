@@ -360,12 +360,10 @@ test('C3-HIGH-2 (b) RESUME path: `pensmith resume --yolo` → dispatched work ve
   });
 
 // ===========================================================================
-// H3 / C2-H3 — --dry-run gates the LLM call sites on a path that WOULD egress.
-// `verify <N> --dry-run` with a FAKE ANTHROPIC_API_KEY present is the path that
-// WOULD call messages.create() in pass2/pass4 absent the guard. The previous
-// test drove write/research (Tier-2 placeholders, zero LLM calls in any mode)
-// so it gated NOTHING (vacuous). Assert: ZERO COSTS.jsonl append (the pass2/4
-// placeholder path skips appendCost under PENSMITH_NO_LLM, which --dry-run sets).
+// H3 / C2-H3 — `verify <N> --dry-run` with a FAKE ANTHROPIC_API_KEY present is
+// the path that WOULD call the model in pass2/pass4 and the registries in Pass
+// 1. A dry run does not run the verb at all: it prints what verify would do.
+// Assert: no VERIFICATION.md, no COSTS.jsonl, no network error text.
 // ===========================================================================
 test('H3 / C2-H3: `verify <N> --dry-run` with a fake key makes ZERO network calls + appends NO COSTS.jsonl (non-vacuous)',
   { skip: !flagsWired }, () => {
@@ -392,9 +390,8 @@ test('H3 / C2-H3: `verify <N> --dry-run` with a fake key makes ZERO network call
       // gate ever regressed.
       PENSMITH_TEST_CASSETTES: '1',
     });
-    // Non-vacuous: the verify LLM-calling path ran with a key present, yet
-    // --dry-run (which sets PENSMITH_NO_LLM) must keep pass2/pass4 on the
-    // offline UNCLEAR placeholder so NO cost record is appended.
+    assert.match(res.stdout, /would run `pensmith verify 1`/, `the dry run must describe verify; stdout=${res.stdout}`);
+    assert.ok(!existsSync(join(secDir, 'VERIFICATION.md')), 'H3: `verify --dry-run` must not write VERIFICATION.md');
     assert.ok(
       !existsSync(join(root, '.paper', 'COSTS.jsonl')),
       'H3/C2-H3: `verify --dry-run` with a key present must NOT append COSTS.jsonl (LLM gated)',
