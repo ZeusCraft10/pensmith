@@ -1,8 +1,8 @@
 // bin/lib/sources/arxiv.ts — arXiv adapter (RSCH-03, RSCH-04, T-3-13).
 //
 // Endpoints:
-//   search:     GET http://export.arxiv.org/api/query?search_query=<encoded>&max_results=20
-//   fetchById:  GET http://export.arxiv.org/api/query?id_list=<arxiv-id>
+//   search:     GET https://export.arxiv.org/api/query?search_query=<encoded>&max_results=20
+//   fetchById:  GET https://export.arxiv.org/api/query?id_list=<arxiv-id>
 //
 // Atom-XML response. We parse with a tiny regex-based extractor instead of
 // pulling in fast-xml-parser / xml2js — keeps zero extra deps and the shape
@@ -17,7 +17,8 @@ import { isOfflineMode, loadCassetteFile } from '../http-mock.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
-const BASE = 'http://export.arxiv.org';
+// https only: search terms and IDs must never travel in cleartext.
+const BASE = 'https://export.arxiv.org';
 
 interface ArxivEntry {
   id: string;

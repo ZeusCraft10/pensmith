@@ -20,7 +20,7 @@ refuses private, loopback and link-local addresses.
 | `api.crossref.org` | Research, adding a source, and Pass 1 of the verifier (every cited DOI) | DOIs and title searches. |
 | `api.labs.crossref.org` | The verifier's retraction check | DOIs. |
 | `doi.org` | Re-checking how fresh an earlier verification is | `HEAD https://doi.org/<doi>` for cited DOIs. DOIs written as `dx.doi.org` links are normalised to this host. |
-| `export.arxiv.org` | Research | Search terms. This adapter still uses plain HTTP. |
+| `export.arxiv.org` | Research | Search terms. |
 | `eutils.ncbi.nlm.nih.gov` | Research (PubMed) | Search terms. |
 | `api.semanticscholar.org` | Research | Search terms, and your Semantic Scholar key if you set one. |
 | `api.unpaywall.org` | Pass 3 of the verifier, to find open-access text for quoted sources | DOIs and your contact email (Unpaywall requires one). |

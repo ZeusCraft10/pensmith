@@ -192,6 +192,9 @@ export default [
       // audit #29: must import undici MockAgent to reply with binary bytes and
       // assert http.ts exposes byte-faithful bodyBytes (no other way to test it).
       'tests/http-binary-body.test.ts',
+      // Must import undici MockAgent to prove the arXiv adapter only talks
+      // https, and redirect the HTTP cache into a per-test tmpdir.
+      'tests/sources/arxiv-https.test.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

@@ -1,6 +1,6 @@
 [
   {
-    "scope": "http://export.arxiv.org",
+    "scope": "https://export.arxiv.org",
     "method": "GET",
     "path": "/api/query?search_query=attention+mechanisms+transformers&max_results=20",
     "status": 200,
@@ -8,7 +8,7 @@
     "responseHeaders": { "content-type": "application/atom+xml" }
   },
   {
-    "scope": "http://export.arxiv.org",
+    "scope": "https://export.arxiv.org",
     "method": "GET",
     "path": "/api/query?id_list=1706.03762",
     "status": 200,
