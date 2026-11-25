@@ -79,8 +79,10 @@ cut a release:
    matches both versions, runs `npm ci`, `npm run check` and the plugin smoke,
    then `node scripts/release.mjs publish <tag>`: that commits the built
    `plugin/` as `release <tag>` on top of the previous release commit and
-   pushes the `release` branch as a fast-forward, never forced. Last, it
-   creates a GitHub Release for the tag.
+   pushes the `release` branch as a fast-forward, never forced. It refuses a
+   version that is not newer than the last release, so a late or re-created
+   tag cannot move installs back. Last, it creates a GitHub Release for the
+   tag.
 
 To rehearse the publish step without touching GitHub, run it in a scratch
 clone whose `origin` is a scratch bare repository: `npm ci && npm run bundle`,

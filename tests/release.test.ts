@@ -338,3 +338,63 @@ test('files git ignores under plugin/ never reach the release branch', (t) => {
   assert.deepEqual([...releaseFiles(fx)!.keys()].sort(), ['.gitattributes', ...PAYLOAD].sort(),
     'only tracked plugin files, the bundles and the copied assets ship');
 });
+
+test('publish refuses a version that is not newer than the last release', (t) => {
+  const fx = fixture();
+  t.after(() => rmSync(fx.root, { recursive: true, force: true }));
+  assert.equal(release(fx, 'publish', 'v1.2.3').status, 0);
+  setVersion(fx, '1.2.4');
+  commitAndTag(fx, 'v1.2.4');
+  bundle(fx, 'build 1.2.4');
+  assert.equal(release(fx, 'publish', 'v1.2.4').status, 0);
+
+  // An older tag pushed after a newer one would move every install back.
+  git(fx, ['checkout', '-q', 'v1.2.3']);
+  bundle(fx, 'build 1.2.3 again');
+  let r = release(fx, 'publish', 'v1.2.3');
+  assert.notEqual(r.status, 0, 'an older version must be refused');
+  assert.match(r.stderr, /1\.2\.4/, 'the refusal names the version already released');
+  assert.equal(releaseLog(fx)[0]!.subject, 'release v1.2.4');
+
+  // A re-created tag: the released version again, with a different payload.
+  git(fx, ['checkout', '-q', 'main']);
+  put(path.join(fx.src, 'plugin', 'skills', 'old', 'SKILL.md'), '---\nname: changed\n---\n');
+  git(fx, ['commit', '-q', '-am', 'change after the release']);
+  git(fx, ['tag', '-f', 'v1.2.4']);
+  bundle(fx, 'build 1.2.4 rebuilt');
+  r = release(fx, 'publish', 'v1.2.4');
+  assert.notEqual(r.status, 0, 'a released version cannot be replaced');
+  assert.match(r.stderr, /1\.2\.4/);
+  assert.deepEqual(releaseLog(fx).map((c) => c.subject), ['release v1.2.4', 'release v1.2.3'], 'nothing was pushed');
+});
+
+test('publish orders versions by semver precedence, not as text', (t) => {
+  const fx = fixture();
+  t.after(() => rmSync(fx.root, { recursive: true, force: true }));
+  assert.equal(release(fx, 'publish', 'v1.2.3').status, 0);
+  let released = 'v1.2.3';
+  const steps: Array<[string, boolean]> = [
+    ['1.2.10-alpha.2', true],
+    ['1.2.10-alpha.10', true],
+    ['1.2.10-alpha.9', false],
+    ['1.2.10-beta', true],
+    ['1.2.10', true],
+    ['1.2.10-rc.1', false],
+    ['1.2.9', false],
+    ['1.10.0', true],
+    ['1.9.0', false],
+  ];
+  for (const [version, newer] of steps) {
+    setVersion(fx, version);
+    commitAndTag(fx, `v${version}`);
+    bundle(fx, `build ${version}`);
+    const r = release(fx, 'publish', `v${version}`);
+    if (newer) {
+      assert.equal(r.status, 0, `${version} is newer than ${released}: ${r.stderr}`);
+      released = `v${version}`;
+    } else {
+      assert.notEqual(r.status, 0, `${version} is older than ${released}`);
+    }
+    assert.equal(releaseLog(fx)[0]!.subject, `release ${released}`);
+  }
+});

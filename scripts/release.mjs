@@ -6,7 +6,8 @@
 //       plugin/.claude-plugin/plugin.json both carry that version
 //   node scripts/release.mjs publish <tag> [--remote origin] [--branch release]
 //       commit the built plugin/ payload as the whole tree of <branch>, on top
-//       of the previous release commit, and push it (never forced)
+//       of the previous release commit, and push it (never forced). Refuses a
+//       version that is not newer than the one <branch> already holds.
 //
 // The marketplace entry installs the plugin from the release branch, so that
 // branch holds the built payload and nothing else, one commit per release.
@@ -33,6 +34,33 @@ function tagProblems(tag, root) {
   return problems;
 }
 
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-.]+)?$/;
+
+/** Negative, zero or positive as `a` has lower, equal or higher semver precedence than `b`. */
+function compareVersions(a, b) {
+  const [ma, mb] = [a, b].map((v) => {
+    const m = SEMVER.exec(v);
+    if (!m) throw new Error(`${v} is not a semver version`);
+    return m;
+  });
+  for (let i = 1; i <= 3; i += 1) {
+    const d = Number(ma[i]) - Number(mb[i]);
+    if (d !== 0) return d;
+  }
+  // A release outranks its own pre-releases.
+  if (!ma[4] || !mb[4]) return (ma[4] ? -1 : 0) - (mb[4] ? -1 : 0);
+  const [pa, pb] = [ma[4].split('.'), mb[4].split('.')];
+  for (let i = 0; i < Math.min(pa.length, pb.length); i += 1) {
+    if (pa[i] === pb[i]) continue;
+    const [na, nb] = [/^\d+$/.test(pa[i]), /^\d+$/.test(pb[i])];
+    // Numeric identifiers compare as numbers and rank below alphanumeric ones.
+    if (na && nb) return Number(pa[i]) - Number(pb[i]);
+    if (na !== nb) return na ? -1 : 1;
+    return pa[i] < pb[i] ? -1 : 1;
+  }
+  return pa.length - pb.length;
+}
+
 function parseArgs(argv) {
   const [command, tag, ...rest] = argv;
   const opts = { remote: 'origin', branch: 'release' };
@@ -47,7 +75,7 @@ function parseArgs(argv) {
   return { command, tag, ...opts };
 }
 
-function publish({ root, tag, remote, branch }) {
+function publish({ root, tag, version, remote, branch }) {
   const pluginDir = path.join(root, 'plugin');
   try {
     assertBuilt(pluginDir);
@@ -81,6 +109,21 @@ function publish({ root, tag, remote, branch }) {
       console.log(`${remote}/${branch} already holds the ${tag} payload (${parent}); nothing to publish`);
       return;
     }
+    // Every install follows this branch, so an older tag pushed late, or a
+    // re-created tag, would move users to an older or different build.
+    let released;
+    try {
+      released = JSON.parse(git(['show', `${parent}:.claude-plugin/plugin.json`], { cwd: root })).version;
+    } catch (err) {
+      fail(`cannot read the version of the last release on ${remote}/${branch} (${parent}):\n${err.message}`);
+    }
+    const order = compareVersions(version, released);
+    if (order === 0) {
+      fail(`${remote}/${branch} already holds ${released} with a different payload; a released version is never replaced. Bump the version and tag again.`);
+    }
+    if (order < 0) {
+      fail(`${tag} is older than ${released}, which ${remote}/${branch} already holds; publishing it would move every install back.`);
+    }
   }
 
   const commit = git(
@@ -100,7 +143,7 @@ if (args.command === 'check') {
   console.log(`${args.tag} matches package.json and plugin/.claude-plugin/plugin.json`);
 } else {
   try {
-    publish({ root, ...args });
+    publish({ root, version: args.tag.slice(1), ...args });
   } catch (err) {
     fail(err.message);
   }
