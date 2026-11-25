@@ -1,42 +1,19 @@
-// bin/lib/fuzzy.ts — Hand-rolled Jaro-Winkler + Levenshtein primitives.
+// bin/lib/fuzzy.ts — Hand-rolled Jaro-Winkler and Levenshtein primitives.
 //
 //   Research dedupe: two candidates without a DOI are the same work when
 //     jaroWinkler(titleA, titleB) >= TITLE_JW_THRESHOLD (0.92).
-//
-//   Pass 3 verdict:
-//     levenshteinSubstring(claimedQuote, extractedPdfText) >= QUOTE_LEV_THRESHOLD (0.95)
+//   Verb suggestions and Pass 1's one-letter-slip check use levenshtein().
 //
 // Pass 1 does not use Jaro-Winkler: a whole-title similarity let sibling
 // papers one word apart through and blocked real ones over markup or a
 // subtitle. Its word-by-word comparison lives in bin/lib/verify/work-match.ts.
+// Pass 3 does not use a similarity score either: a threshold on characters
+// accepted a changed word ("not", a number, an antonym) in a long quotation.
+// It matches word for word in bin/lib/verify/quote-match.ts.
 //
-// Hand-rolled per RESEARCH.md "Standard Stack" — no npm dependency added.
-// Algorithm is ~80 LOC for Jaro-Winkler + ~40 LOC for Levenshtein, fully
-// testable, deterministic, no third-party version-skew risk. The only import
-// is the local ./normalize.js (NFKC + diacritic strip + smart-quote/em-dash
-// normalization), which is itself zero-dep.
-//
-// Threat model:
-//   - T-3-DOS-01 (DoS via pathological Levenshtein input): classical 2-row DP
-//     is O(|a|·|b|); for QUOTE_LEV_THRESHOLD=0.95 on quotes <= 500 chars and
-//     PDF haystack <= 100KB, sliding-window cost is bounded by
-//     |needle| * |haystack| chars * |needle| ops ≈ 500 * 100000 * 500 = 25M
-//     operations worst case. Property test (numRuns: 100, maxLength: 50)
-//     completes in <5s on commodity hardware. Ukkonen banding (O(|a|·k) where
-//     k = ⌈|needle| * (1 - QUOTE_LEV_THRESHOLD)⌉) is documented as a future
-//     optimization if profiling shows regression — not required for Plan 03-01.
-//   - T-3-04 (accent-mark mismatch): nfkcNormalize is applied to BOTH inputs
-//     of jaroWinkler and levenshteinSubstring BEFORE measurement; see Pitfall 5
-//     in 03-RESEARCH.md.
-//   - Threshold drift via copy-paste: TITLE_JW_THRESHOLD and
-//     QUOTE_LEV_THRESHOLD are exported from THIS file as named constants.
-//     Callers import them rather than duplicate the numbers.
-//
-// Aliases:
-//   `normalizeForFuzzy` is exported as the NFKC + lowercase pre-step used
-//   internally by jaroWinkler/levenshteinSubstring; tests/fuzzy.test.ts uses
-//   it directly to apply consistent pre-normalization before calling JW on
-//   title/author golden cases.
+// No npm dependency: both algorithms are short, deterministic and tested.
+// jaroWinkler pre-normalizes both inputs with nfkcNormalize (NFKC, diacritics
+// and smart quotes), so accents do not lower a score.
 
 import { nfkcNormalize } from './normalize.js';
 
@@ -47,18 +24,11 @@ import { nfkcNormalize } from './normalize.js';
 export const TITLE_JW_THRESHOLD = 0.92;
 
 /**
- * Pass-3 quote integrity threshold (D-11).
- * levenshteinSubstring(claimedQuote, extractedPdfText) MUST be >= this value
- * to PASS. Anything below = NOT_FOUND verdict (which blocks compile/export).
- */
-export const QUOTE_LEV_THRESHOLD = 0.95;
-
-/**
  * Pre-normalize a string for fuzzy comparison.
  *
  * NFKC + diacritic strip + smart-quote/em-dash normalization (delegated to
- * nfkcNormalize) + lowercase. This is the canonical pre-step for both
- * jaroWinkler and levenshteinSubstring — exported so callers can apply it
+ * nfkcNormalize) + lowercase. This is the canonical pre-step for
+ * jaroWinkler — exported so callers can apply it
  * consistently across batched comparisons (e.g. running JW over 100 candidate
  * authors without re-normalizing the claimed-author string).
  *
@@ -192,8 +162,7 @@ export function jaroWinkler(a: string, b: string): number {
  * deletions, and substitutions needed to transform `a` into `b`.
  *
  * Implementation: 2-row dynamic programming, O(|a|·|b|) time, O(min(|a|,|b|))
- * space. Returns the bare integer distance (NOT a normalized ratio); callers
- * that want a ratio use {@link levenshteinSubstring}.
+ * space. Returns the bare integer distance, not a normalized ratio.
  *
  * Properties (exercised by tests/fuzzy.property.test.ts):
  *   - levenshtein(a, a) === 0 for all a
@@ -256,54 +225,4 @@ export function levenshtein(a: string, b: string): number {
   }
 
   return prev[n]!;
-}
-
-/**
- * Best-match ratio of `needle` as a substring of `haystack`, in [0, 1].
- *
- * Slides a window of `needle.length` chars across `haystack`, computes
- * Levenshtein distance to `needle` at each window position, and returns
- * `1 - (minDist / needle.length)`.
- *
- * Pre-normalizes both inputs via {@link normalizeForFuzzy} (NFKC + diacritic
- * strip + lowercase) BEFORE the sliding-window scan, so that PDF distortion
- * artifacts (soft hyphens, ligatures, smart quotes) don't fool the matcher.
- *
- * Used by Pass-3 quote integrity: a quote that scores >= QUOTE_LEV_THRESHOLD
- * (0.95) anywhere in the source PDF passes; below = NOT_FOUND.
- *
- * Edge cases:
- *   - needle === haystack → 1 (perfect match).
- *   - needle === "" → 1 (vacuous match; same convention as jaroWinkler).
- *   - needle.length > haystack.length → 0 (can't fit).
- *
- * @example
- * levenshteinSubstring("attention is all you need", "we propose attention is all you need as a baseline") // > 0.99
- * levenshteinSubstring("hello", "world") // ≈ 0.2
- */
-export function levenshteinSubstring(needle: string, haystack: string): number {
-  // Strict-equality short-circuit on raw inputs.
-  if (needle === haystack) return 1;
-
-  const N = normalizeForFuzzy(needle);
-  const H = normalizeForFuzzy(haystack);
-
-  if (N === H) return 1;
-  if (N.length === 0) return 1; // vacuous match per plan task 1.2 behavior contract
-  if (N.length > H.length) return 0;
-
-  const nLen = N.length;
-  let minDist = nLen;
-
-  // Sliding window: at each start position s in [0, H.length - nLen],
-  // compute levenshtein(H.substring(s, s + nLen), N) and track the min.
-  // Early-exit if we hit 0 (exact substring match).
-  for (let s = 0; s <= H.length - nLen; s++) {
-    const window = H.substring(s, s + nLen);
-    const d = levenshtein(window, N);
-    if (d < minDist) minDist = d;
-    if (minDist === 0) break;
-  }
-
-  return 1 - minDist / nLen;
 }

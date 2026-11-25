@@ -100,5 +100,45 @@
     "distortion_codepoint": "U+FB01",
     "expected_verdict": "NOT_FOUND",
     "note": "Second U+FB01 LATIN SMALL LIGATURE FI entry; quote is fabricated (layer norm behavior)"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "the Transformer is not the first transduction model relying entirely on self-attention to compute representations of its input and output without using sequence-aligned RNNs or convolution",
+    "actual_pdf_snippet": "To the best of our knowledge, however, the Transformer is the first transduction model relying entirely on self-attention to compute representations of its input and output without using sequence-aligned RNNs or convolution.",
+    "distortion": "negation_inserted",
+    "expected_verdict": "NOT_FOUND",
+    "note": "One word added ('not') reverses the sentence; a 0.95 character similarity accepted it"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "Our model achieves 24.8 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU",
+    "actual_pdf_snippet": "Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU.",
+    "distortion": "number_changed",
+    "expected_verdict": "NOT_FOUND",
+    "note": "28.4 written as 24.8; every word is the same"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "We propose a new complex network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely",
+    "actual_pdf_snippet": "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
+    "distortion": "antonym",
+    "expected_verdict": "NOT_FOUND",
+    "note": "'simple' replaced by its antonym 'complex'"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "We propose a new simple network architecture, the Transformer, based on attention mechanisms, dispensing with recurrence and convolutions entirely",
+    "actual_pdf_snippet": "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
+    "distortion": "word_dropped",
+    "expected_verdict": "NOT_FOUND",
+    "note": "'solely' dropped: the paper says the model uses attention alone"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "We propose a new simple network architecture, the Transformer, based solely on recurrence mechanisms, dispensing with attention and convolutions entirely",
+    "actual_pdf_snippet": "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
+    "distortion": "words_swapped",
+    "expected_verdict": "NOT_FOUND",
+    "note": "'attention' and 'recurrence' swapped, which reverses the claim"
   }
 ]

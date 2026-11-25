@@ -1,12 +1,12 @@
-// bin/lib/normalize.ts — Deterministic Unicode normalization for Pass-3 quote integrity.
+// bin/lib/normalize.ts — Deterministic Unicode normalization for comparing names and titles.
 //
 // Spec (D-11, VRFY-04 — Phase 3):
 //
 //   nfkcNormalize(s) ──→ string
 //     Used by:
-//       - bin/lib/fuzzy.ts::jaroWinkler   (D-11 Pass-1 AND-gate pre-normalize)
-//       - bin/lib/fuzzy.ts::levenshteinSubstring (Pass-3 quote integrity)
+//       - bin/lib/fuzzy.ts::jaroWinkler   (research title dedupe pre-normalize)
 //       - bin/lib/author-normalize.ts     (Pass-1 first-author surname normalize)
+//       - bin/lib/verify/work-match.ts    (Pass-1 word-by-word metadata comparison)
 //
 //     Steps (applied in strict order; each is idempotent on its own output):
 //       1. String.prototype.normalize('NFKC')        — collapses compatibility

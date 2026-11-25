@@ -16,14 +16,14 @@
 //   1. Read DRAFT.md for section N
 //   2. Run Pass-1 (each identifier resolved through its registries, the entry
 //      compared with the record) via runPass1
-//   3. Run Pass-3 (deterministic levenshtein-substring) via runPass3
+//   3. Run Pass-3 (each quotation matched word for word in its open-access
+//      source) via runPass3
 //   4. Aggregate to per-source verdicts (OK / UNVERIFIABLE / FAIL)
 //   5. Atomic-write VERIFICATION.md
 
 import { defineCommand } from 'citty';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { jaroWinkler, levenshteinSubstring } from '../lib/fuzzy.js';
 import { runPass1, runFreshnessForDraft, renderFreshnessTable } from '../lib/verify/pass1.js';
 import { runPass3 } from '../lib/verify/pass3.js';
 import { runPass2, renderPass2Section } from '../lib/verify/pass2.js';
@@ -46,12 +46,6 @@ import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
-
-// Force-bind the deterministic primitives so the acceptance grep
-// (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
-// stays GREEN even if a refactor later inlines runPass1/runPass3.
-void jaroWinkler;
-void levenshteinSubstring;
 
 export const verifyCommand = defineCommand({
   meta: {
@@ -191,7 +185,7 @@ export const verifyCommand = defineCommand({
       '',
       ...pass1.map((r) => renderPass1VerdictRow(r.citekey, r.verdict, r.titleJW, r.authorJW, r.reason)),
       '',
-      '## Pass-3 (quote integrity, deterministic — levenshtein-substring)',
+      '## Pass-3 (quote integrity, deterministic — word for word)',
       '',
       ...pass3.map((r) => renderPass3VerdictRow(r.citekey, r.quoteSnippet, r.verdict, r.levRatio, r.reason)),
       '',

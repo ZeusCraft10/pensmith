@@ -6,13 +6,12 @@
 // same sentence, in any Pandoc form (`[@key, p. 12]`, `[@a; @b]`, `@key`).
 //
 // A quotation attributed to a cluster is checked against every work the
-// cluster cites. One of at least MIN_WORDS words is matched with the fuzzy
-// matcher; a shorter one (MIN_SHORT_WORDS or more) must appear exactly, since
-// a fuzzy threshold on a few words accepts a changed word. One or two quoted
-// words are usually a term, not a quotation, and are left alone. An ellipsis
-// is not a word. A quotation of MIN_WORDS or more with no citation at all
-// cannot be checked against anything: it is reported as unattributed, which
-// leaves the section unverifiable, and every verb that reads it warns.
+// cluster cites, word for word (bin/lib/verify/quote-match.ts), whatever its
+// length. One or two quoted words are usually a term, not a quotation, and
+// are left alone. An ellipsis is not a word. A quotation of MIN_WORDS or more
+// with no citation at all cannot be checked against anything: it is reported
+// as unattributed, which leaves the section unverifiable, and every verb that
+// reads it warns.
 
 import { findCitations, findQuotes, type Citation } from './citation-grammar.js';
 
@@ -23,15 +22,15 @@ export interface ExtractedQuote {
   citekey: string;
   /** Whether this was a markdown block quote (`> ...`) or an inline quote. */
   kind: 'block' | 'inline';
-  /** True for a short quotation, which must appear verbatim. */
+  /** True for a short quotation (fewer than MIN_WORDS words). */
   exact: boolean;
   /** True for a long quotation with no citation. */
   unattributed: boolean;
 }
 
-/** A quotation this long is checked with the fuzzy matcher, or reported as unattributed when it cites nothing. */
+/** A quotation this long that cites nothing is reported as unattributed. */
 export const MIN_WORDS = 10;
-/** A shorter quotation of at least this many words is checked for an exact match. */
+/** A quotation of at least this many words is checked against its source. */
 export const MIN_SHORT_WORDS = 3;
 
 /** An ellipsis marking words left out: `...`, `…` or `[...]`. */
