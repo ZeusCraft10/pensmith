@@ -27,7 +27,7 @@
 
 Pensmith guides you through a paper-writing workflow: **intake → research → outline → (plan → write → verify, for each section) → compile → done**. It ships as a [Claude Code](https://claude.com/claude-code) plugin and as a Node.js command-line tool; both run the same `pensmith` CLI.
 
-What makes it different from asking a model to write your paper: a section cannot be compiled or exported while it carries a citation the verifier flagged as `FABRICATED` or `MIS-CITED`, a citation it could not check because no registry answered (`UNRESOLVED`), or a quote it marked `NOT_FOUND`. That check is deterministic, runs per section, and is not skippable.
+What makes it different from asking a model to write your paper: a section cannot be compiled or exported while it carries a citation the verifier flagged as `FABRICATED` or `MIS-CITED`, a citation it could not check because no registry answered (`UNRESOLVED`), a citation it cannot check at all because it was typed as text (`RAW_CITATION`) or does not parse (`UNPARSEABLE`), a quote it marked `NOT_FOUND`, or a long quotation with no citation (`UNATTRIBUTED`). That check is deterministic, runs per section, and is not skippable.
 
 ## Status
 
@@ -65,8 +65,8 @@ After a section is drafted, the verifier runs on that section:
 
 | Pass | What it checks | Verdicts | Blocks compile and export? |
 |------|----------------|---------|-----------|
-| **Pass 1: integrity** | Re-fetches each cited DOI and fuzzy-matches the author **and** title against the published record (a DOI that resolves is necessary but not sufficient) | `FABRICATED`, `MIS-CITED`; `UNRESOLVED` when no registry answered | Yes |
-| **Pass 3: quotes** | Looks for every quoted span in the open-access text of the cited source | `NOT_FOUND` | Yes |
+| **Pass 1: integrity** | Re-fetches each cited DOI and fuzzy-matches the author **and** title against the published record (a DOI that resolves is necessary but not sufficient). Reads every Pandoc citation form: `[@key, p. 4]`, `[see @a; @b]`, `[-@key]` and narrative `@key` | `FABRICATED`, `MIS-CITED`; `UNRESOLVED` when no registry answered; `RAW_CITATION` for a DOI, arXiv ID, PMID or `(Author, 2020)` typed as text; `UNPARSEABLE` for a bracketed citation whose key does not parse | Yes |
+| **Pass 3: quotes** | Looks for every quoted span in the open-access text of the cited source: straight, curly and single quotes and block quotes, cited before or after the quote in any form. A short quote must appear word for word | `NOT_FOUND`; `UNATTRIBUTED` for a quotation of ten or more words with no citation | Yes |
 | **Pass 2 / Pass 4: judgment** | Model-assisted claim support and coherence review | Advisory notes | No |
 
 Edits made after verification are detected with a hash of the draft, so a stale "verified" mark cannot slip through.

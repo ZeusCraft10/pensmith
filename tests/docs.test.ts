@@ -130,8 +130,8 @@ test('README makes none of the claims the code does not back', () => {
 // Every verdict name the verifier writes or the design names. A verdict that is
 // not listed here but is named in README's verifier section is checked too.
 const KNOWN_VERDICTS = [
-  'OK', 'FABRICATED', 'MIS-CITED', 'RETRACTED', 'UNRESOLVED',
-  'NOT_FOUND', 'PDF_UNAVAILABLE', 'TEXT_UNAVAILABLE',
+  'OK', 'FABRICATED', 'MIS-CITED', 'RETRACTED', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE',
+  'NOT_FOUND', 'UNATTRIBUTED', 'PDF_UNAVAILABLE', 'TEXT_UNAVAILABLE',
 ];
 const VERDICT_TOKEN = /`([A-Z][A-Z_-]+)`/g;
 const verdictsIn = (md: string): string[] => [...md.matchAll(VERDICT_TOKEN)].map((m) => m[1]!);
