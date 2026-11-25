@@ -28,7 +28,6 @@
 // Public API (D-26):
 //   - withLock(resource, fn, opts?)   — acquire, run, release (try/finally)
 //   - tryAcquire(resource, opts?)     — returns release(); caller manages
-//   - release(resource)               — unlock (recompute stub)
 //   - isLocked(resource)              — non-destructive check
 
 import { createHash } from 'node:crypto';
@@ -149,18 +148,6 @@ export async function tryAcquire(
   const stub = await stubFor(resource);
   const release = await lockfile.lock(stub, buildPlfOpts(opts));
   return release;
-}
-
-/**
- * Release the lock for `resource` if held by this process. Unlike the
- * release() returned from tryAcquire(), this recomputes the stub path and
- * calls proper-lockfile.unlock() — it should ONLY be used for cleanup of
- * orphaned locks held by the current process. Prefer the per-acquisition
- * release function returned from tryAcquire / withLock.
- */
-export async function release(resource: string): Promise<void> {
-  const stub = await stubFor(resource);
-  await lockfile.unlock(stub);
 }
 
 /**

@@ -1,10 +1,9 @@
-// tests/schemas.test.ts — happy + sad path validation for all 5 zod schemas.
+// tests/schemas.test.ts — happy + sad path validation for the 4 persisted zod schemas.
 //
 // Coverage matrix (per VALIDATION 01-07-03):
-//   - All 5 CURRENT_*_VERSION constants are 1
+//   - All 4 CURRENT_*_VERSION constants (state=2, others=1)
 //   - state    : valid + 3 invalid (empty paperId / wrong version / bad date)
 //   - library  : valid empty, valid with entry, rejects empty-id entry
-//   - checkpoint: valid + rejects empty label
 //   - session-log: valid (kind=event/tool_call), rejects bad-kind, rejects missing run_id
 //   - runtime-config: valid record form + defaults + rejects empty record
 //   - runtime-config: providers overlay-merges by key (record-form proof)
@@ -20,10 +19,6 @@ import {
   CURRENT_LIBRARY_VERSION,
 } from '../bin/lib/schemas/library.js';
 import {
-  Schema as CheckpointSchema,
-  CURRENT_CHECKPOINT_VERSION,
-} from '../bin/lib/schemas/checkpoint.js';
-import {
   Schema as SessionLogSchema,
   CURRENT_SESSION_LOG_VERSION,
 } from '../bin/lib/schemas/session-log.js';
@@ -37,7 +32,6 @@ const ISO = '2026-05-08T00:00:00.000Z';
 test('CURRENT_*_VERSION constants (state=2, others=1)', () => {
   assert.equal(CURRENT_STATE_VERSION, 2);
   assert.equal(CURRENT_LIBRARY_VERSION, 1);
-  assert.equal(CURRENT_CHECKPOINT_VERSION, 1);
   assert.equal(CURRENT_SESSION_LOG_VERSION, 1);
   assert.equal(CURRENT_RUNTIME_CONFIG_VERSION, 1);
 });
@@ -100,27 +94,6 @@ test('library: rejects entry with empty id', () => {
     !LibrarySchema.safeParse({
       $schemaVersion: 1,
       entries: [{ id: '', addedAt: ISO }],
-    }).success,
-  );
-});
-
-// ---- checkpoint ----
-
-test('checkpoint: valid + rejects empty label', () => {
-  assert.ok(
-    CheckpointSchema.safeParse({
-      $schemaVersion: 1,
-      label: 'pre-section-3',
-      tookAt: ISO,
-      refs: {},
-    }).success,
-  );
-  assert.ok(
-    !CheckpointSchema.safeParse({
-      $schemaVersion: 1,
-      label: '',
-      tookAt: ISO,
-      refs: {},
     }).success,
   );
 });

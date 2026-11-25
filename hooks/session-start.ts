@@ -13,6 +13,7 @@
 
 import { statSync } from 'node:fs';
 import path from 'node:path';
+import { paperDir } from '../bin/lib/paths.js';
 
 const STDIN_TIMEOUT_MS = 1000;
 
@@ -64,7 +65,7 @@ function isDirectory(p: string): boolean {
 async function main(): Promise<void> {
   const projectDir = projectDirFrom(await readStdin());
   // The gate: no .paper/ directory means this is not a paper project.
-  if (!isDirectory(path.join(projectDir, '.paper'))) return;
+  if (!isDirectory(paperDir(projectDir))) return;
 
   // Load the router only for paper projects, and resolve paths the way the
   // CLI does when it runs from the project directory.
