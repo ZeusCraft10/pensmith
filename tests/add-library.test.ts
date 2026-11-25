@@ -245,3 +245,58 @@ test('add <file.bib> imports its entries by identifier, as they are written', ()
   assert.ok(bib.includes('@article{vaswani2017a,\n  title = {Measured measurement},'), 'imported as written, under its new key');
   assert.ok(bib.includes(KEPT_BIB.split('\n\n')[0]!.trim()), 'the work that held the key keeps it');
 });
+
+// Zotero's own CSL-JSON export names each item by its URI, which BibTeX
+// cannot use as a key.
+const ZOTERO_ITEM = {
+  id: 'http://zotero.org/users/local/AbCdEf/items/7XK2Q9PZ',
+  type: 'article-journal',
+  title: 'Measured measurement',
+  'container-title': 'Nature Physics',
+  volume: '5',
+  issue: '1',
+  page: '11-12',
+  author: [{ family: 'Aspelmeyer', given: 'Markus' }],
+  issued: { 'date-parts': [[2009]] },
+  DOI: '10.1038/nphys1170',
+};
+
+const libraryKeys = (root: string): string[] =>
+  (JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<{ id: string }> }).entries.map((e) => e.id).sort();
+
+test('add <file.json> files a Zotero export under the key its bibliography entry has, and later adds keep one entry per work', () => {
+  const root = project();
+  const file = join(root, 'zotero.json');
+  writeFileSync(file, JSON.stringify([ZOTERO_ITEM]));
+  const r = cli(root, ['add', file, '--yolo']);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /added aspelmeyer2009\./, r.out);
+  assert.deepEqual(libraryKeys(root), keysOf(bibOf(root)).sort(), 'LIBRARY.json and CITATIONS.bib file the work under one key');
+
+  const next = cli(root, ['add', '10.1109/MCSE.2011.37', '--yolo']);
+  assert.equal(next.status, 0, next.out);
+  const keys = keysOf(bibOf(root)).sort();
+  assert.deepEqual(keys, ['aspelmeyer2009', 'vanderwalt2011'], 'no work is in the bibliography twice');
+  assert.deepEqual(libraryKeys(root), keys);
+
+  const again = cli(root, ['add', '10.1038/nphys1170', '--yolo']);
+  assert.equal(again.status, 0, again.out);
+  assert.match(again.out, /already in the library as aspelmeyer2009;/, again.out);
+});
+
+test('add <file.json> reads number variables given as numbers and names with an empty part', () => {
+  const root = project();
+  const file = join(root, 'refs.json');
+  writeFileSync(
+    file,
+    JSON.stringify([{ ...ZOTERO_ITEM, id: 'aspelmeyer2009measured', volume: 5, issue: 1, author: [{ family: 'Aspelmeyer', given: '' }, { family: '', given: '' }] }]),
+  );
+  const r = cli(root, ['add', file, '--yolo']);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /added aspelmeyer2009measured\./, r.out);
+  const bib = bibOf(root);
+  assert.match(bib, /^@article\{aspelmeyer2009measured,/m, bib);
+  assert.match(bib, /volume = \{5\}/, bib);
+  assert.match(bib, /number = \{1\}/, bib);
+  assert.match(bib, /author = \{\{Aspelmeyer\}\},/, 'the empty given name is dropped, the second, empty name too');
+});

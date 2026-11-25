@@ -436,20 +436,69 @@ export async function importBibliography(lib: Library, text: string, at: string,
   return result;
 }
 
-/** Import CSL-JSON `items` (read from `file`): each a library item under its own `id` when that is free. */
+// A key BibTeX takes as it is and a citation can name: letters, digits and
+// underscores, from a letter. citation-js writes any other key as a label of
+// its own making, which would file one work under two keys, one in
+// LIBRARY.json and another in CITATIONS.bib. Zotero's own export uses each
+// item's URI as its id.
+const IMPORTABLE_KEY = /^[A-Za-z][A-Za-z0-9_]*$/;
+
+// CSL's name variables: lists of name objects.
+const CSL_NAME_VARIABLES: ReadonlySet<string> = new Set([
+  'author', 'editor', 'translator', 'container-author', 'collection-editor', 'composer', 'director',
+  'editorial-director', 'illustrator', 'interviewer', 'original-author', 'recipient', 'reviewed-author',
+  'chair', 'compiler', 'contributor', 'curator', 'executive-producer', 'guest', 'host', 'narrator',
+  'organizer', 'performer', 'producer', 'script-writer', 'series-creator',
+]);
+
+/** A CSL name without its empty parts, or null when none is left. */
+function cslName(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const name = Object.fromEntries(Object.entries(raw).filter(([, v]) => !(typeof v === 'string' && v.trim() === '')));
+  return ['family', 'given', 'literal'].some((k) => typeof name[k] === 'string') ? name : null;
+}
+
+/**
+ * A CSL-JSON item as the library reads one. CSL lets a number variable
+ * (volume, issue, page, number, edition) be a number and a name part be
+ * empty; the library keeps variables as non-empty strings, so one such item
+ * would otherwise make the whole file unreadable.
+ */
+function normalizedCsl(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === 'number') {
+      if (Number.isFinite(v)) out[k] = String(v);
+    } else if (typeof v === 'string') {
+      if (v.trim() !== '') out[k] = v;
+    } else if (CSL_NAME_VARIABLES.has(k) && Array.isArray(v)) {
+      const names = v.map(cslName).filter((n): n is Record<string, unknown> => n !== null);
+      if (names.length > 0) out[k] = names;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/**
+ * Import CSL-JSON `items` (read from `file`): each a library item under its
+ * own `citation-key` or `id` when that is a key BibTeX can write and no work
+ * has it, else under a key made from its first author and year.
+ */
 export function importCslJson(lib: Library, items: unknown[], at: string, file: string): ImportResult {
   const taken = new Set(lib.entries.map((e) => e.id.toLowerCase()));
   const result: ImportResult = { works: [], unidentified: [] };
   for (const raw of items) {
     if (!raw || typeof raw !== 'object') continue;
-    const csl = raw as Record<string, unknown>;
-    const year = (csl['issued'] as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
+    const csl = normalizedCsl(raw as Record<string, unknown>);
+    const year = Number((csl['issued'] as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0]);
     const authors = Array.isArray(csl['author']) ? (csl['author'] as Array<Record<string, unknown>>) : [];
     const first = authors[0];
-    const ownKey = typeof csl['id'] === 'string' && csl['id'] ? (csl['id'] as string) : '';
-    const key = ownKey || generateCitekey({
-      authors: first ? [String(first['family'] ?? first['literal'] ?? '')] : [],
-      ...(typeof year === 'number' ? { year } : {}),
+    const ownKey = [csl['citation-key'], csl['id']].find((k): k is string => typeof k === 'string' && IMPORTABLE_KEY.test(k));
+    const key = ownKey ?? generateCitekey({
+      authors: first ? [String(first['family'] ?? first['literal'] ?? first['given'] ?? '')] : [],
+      ...(Number.isInteger(year) ? { year } : {}),
     });
     const fields = Object.fromEntries(Object.entries(csl).filter(([k]) => k !== 'custom' && k !== 'citation-key'));
     const str = (k: string): string | undefined => (typeof csl[k] === 'string' ? (csl[k] as string) : undefined);
