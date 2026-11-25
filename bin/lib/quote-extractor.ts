@@ -11,8 +11,8 @@
 // a fuzzy threshold on a few words accepts a changed word. One or two quoted
 // words are usually a term, not a quotation, and are left alone. An ellipsis
 // is not a word. A quotation of MIN_WORDS or more with no citation at all
-// cannot be checked against anything, so it is reported as unattributed and
-// blocks.
+// cannot be checked against anything: it is reported as unattributed, which
+// leaves the section unverifiable, and every verb that reads it warns.
 
 import { findQuotes } from './citation-grammar.js';
 
@@ -29,7 +29,7 @@ export interface ExtractedQuote {
   unattributed: boolean;
 }
 
-/** A quotation this long is checked with the fuzzy matcher, or blocks when it cites nothing. */
+/** A quotation this long is checked with the fuzzy matcher, or reported as unattributed when it cites nothing. */
 export const MIN_WORDS = 10;
 /** A shorter quotation of at least this many words is checked for an exact match. */
 export const MIN_SHORT_WORDS = 3;
