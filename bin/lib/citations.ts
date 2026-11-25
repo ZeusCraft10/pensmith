@@ -326,9 +326,11 @@ function escapeBibtexValue(v: unknown): unknown {
  * `%`, `&` or `#` in the URL stopped BibTeX, and Pandoc (which reads `%` as
  * a comment) listed a cut-off second copy of the address. `url` holds it.
  */
-function writeBibtexRecord({ type, label, properties }: BibtexRecord): string {
-  const fields = Object.entries(properties)
-    .filter(([name, value]) => !(name === 'howpublished' && value === properties['url']))
+function writeBibtexRecord({ type, label, properties }: BibtexRecord, extra: Readonly<Record<string, string>> = {}): string {
+  const fields = [
+    ...Object.entries(properties).filter(([name, value]) => !(name === 'howpublished' && value === properties['url'])),
+    ...Object.entries(extra).filter(([name]) => !(name in properties)),
+  ]
     .map(([name, value]) => `\t${name} = {${value}},\n`)
     .join('');
   return `@${type}{${label},\n${fields}}\n`;
@@ -337,8 +339,16 @@ function writeBibtexRecord({ type, label, properties }: BibtexRecord): string {
 /**
  * BibTeX for CSL-JSON `entries`, keyed by each entry's `citation-key` (or
  * `id`). Text in any script is kept as UTF-8.
+ *
+ * `extraFields` adds raw BibTeX fields CSL has no variable for, by citekey:
+ * the `eprint` and `archiveprefix` of an arXiv preprint and the `pmid` of a
+ * PubMed article, which Pass 1 looks a work up by. Their values are
+ * identifiers and are written as they are.
  */
-export function formatBibtex(entries: ReadonlyArray<Record<string, unknown>>): string {
+export function formatBibtex(
+  entries: ReadonlyArray<Record<string, unknown>>,
+  extraFields: ReadonlyMap<string, Readonly<Record<string, string>>> = new Map(),
+): string {
   if (entries.length === 0) return '';
   const prepared = entries.map((e) =>
     Object.fromEntries(
@@ -353,7 +363,7 @@ export function formatBibtex(entries: ReadonlyArray<Record<string, unknown>>): s
   config.asciiOnly = false;
   try {
     const records = new Cite(prepared, { forceType: '@csl/list+object' }).format('bibtex', { format: 'object' });
-    return records.map(writeBibtexRecord).join('') + '\n';
+    return records.map((r) => writeBibtexRecord(r, extraFields.get(r.label))).join('') + '\n';
   } finally {
     config.asciiOnly = asciiOnly;
   }

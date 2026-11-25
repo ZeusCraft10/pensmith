@@ -1,356 +1,353 @@
-// bin/lib/library.ts — paper library load/save/add/find glue (D-59 foundation slice).
+// bin/lib/library.ts — the paper's canonical bibliographic store.
 //
-// W10 sibling — same architectural shape as bin/lib/state.ts. This is the W10
-// chokepoint integration that composes the four lower-level chokepoints into
-// a one-import API for paper library operations:
+// .paper/LIBRARY.json holds every work the paper may cite as a CSL-JSON item
+// (bin/lib/schemas/library.ts). CITATIONS.bib and CITATIONS.ris are views of
+// it, written in the same locked step as LIBRARY.json itself, so research,
+// add and revise --research never rewrite the bibliography by hand.
 //
-//   atomicWriteFile (W2 / D-04)   — crash-safe writes via tmp+rename
-//   withLock        (W3 / D-26)   — cross-process advisory lock
-//   loadAndMigrate  (W7 / D-37)   — version envelope + zod validation
-//   openSessionLog  (W9 / D-49)   — JSONL structured log, kind:'event'
+// A work is found by its identifiers (bin/lib/library-item.ts), so a work
+// research finds again, or the user adds again, keeps the citekey it was given
+// the first time; a new work gets a key no other work has had. Nothing here
+// removes a work, so a citekey a draft cites never comes to name another one.
 //
-// Per D-59 the foundation-slice schema is intentionally minimal: an envelope
-// {$schemaVersion, entries: LibraryEntry[]} where LibraryEntry only requires
-// {id, addedAt}. Citation metadata, sources[], cite-keys, and fingerprints
-// land in Phase 3 (research wave) via forward migrations registered under
-// bin/lib/migrations/library/. Adding ANY new field to the LibraryEntry
-// schema in this repo MUST come with a v(N)→v(N+1) migration registered in
-// the loader or readers will throw SchemaValidationError.
+// CITATIONS.bib is the file verify checks, and a person may edit it or an
+// older pensmith may have written it. Before each write, any entry that is not
+// what the library would write (an edited entry, or one the library does not
+// hold) is read in as it is, and from then on written back byte for byte. So
+// no entry, field or retraction flag is lost, and nothing verify checked is
+// re-rendered.
 //
-// Concurrency contract (T-01-01 mitigation):
-//   addEntry performs read → duplicate-check → mutate → save inside a SINGLE
-//   withLock critical section. Reading outside the lock would let two
-//   concurrent callers each observe the pre-write value and the second writer
-//   would silently clobber the first. The 10-concurrent-disjoint-ids test
-//   in tests/library.test.ts is the regression gate for this invariant.
-//
-//   loadLibrary ALSO takes withLock around its loadAndMigrate call because
-//   the loader's writeBack:true path issues an atomicWriteFile when a
-//   forward migration runs (BLOCKER-02 fix). Without the lock, two
-//   concurrent loadLibrary callers each migrating a v(N-1) file to vN
-//   would race their tmp+rename writes against each other AND against
-//   any concurrent addEntry/saveLibrary. Today the migration registry
-//   is empty so the writeBack branch is dormant, but the lock is in
-//   place so the race cannot activate the day a real v2 ships.
-//
-//   initLibrary ALSO takes withLock around the existence check (BLOCKER-01
-//   fix) so the access-then-write is atomic. The pre-fix code performed
-//   fs.access OUTSIDE the lock, allowing two concurrent inits to both
-//   observe ENOENT and both seed — the second silently clobbering the
-//   first via atomic rename. The fix is to move the access check inside
-//   the same critical section as the write.
-//
-// Forward-incompat contract (T-01-COMPAT-01 mitigation):
-//   ForwardIncompatError from loadAndMigrate propagates UNCHANGED so a
-//   newer-on-disk LIBRARY.json never gets silently downgraded by an older
-//   pensmith build.
-//
-// Duplicate-id contract (T-01-DUP-01 mitigation):
-//   addEntry rejects an entry whose id already appears in the loaded library
-//   with DuplicateLibraryEntryError. The check runs INSIDE the lock so the
-//   read-and-check is atomic against concurrent writers. Library state is
-//   left unchanged on rejection (no atomicWriteFile call is made).
-//
-// Defense-in-depth schema validation (T-01-08 mitigation):
-//   LibrarySchema.parse runs on:
-//     - initLibrary seed construction
-//     - saveLibrary input
-//     - addEntry mutator output
-//   Single-entry validation via LibraryEntrySchema runs on the addEntry
-//   argument before the lock is taken (fail-fast on caller-side garbage).
-//   PLUS the loader validates on every read. That's three save-side guards
-//   plus the loader's read-side guard — no malformed library survives a
-//   write/read cycle.
-//
-// findEntry is intentionally lock-free: it's a pure read against a snapshot.
-// Callers that need add-then-find atomicity should use addEntry's return
-// value directly rather than re-querying.
-//
-// Imports limited to: node:fs, node:path, and the four W2/W3/W7/W9
-// chokepoint modules above. No third-party deps.
+// Every write goes through updateLibrary: one lock on LIBRARY.json for the
+// read, the change and the three writes.
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import * as fsp from 'node:fs/promises';
+import { join } from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
-import { loadAndMigrate } from './migrations/loader.js';
+import { loadAndMigrate, type Migration } from './migrations/loader.js';
+import { migrate as v1ToV2 } from './migrations/library/v1_to_v2.js';
+import { paperDir } from './paths.js';
+import { generateCitekey } from './citekey.js';
+import { freeCitekey, itemBibtex, libraryBibtex, splitBibtex } from './bibtex-write.js';
+import { libraryRis } from './ris-write.js';
+import { candidateIdentities, itemFromBibEntry, itemFromCandidate, itemIdentities } from './library-item.js';
+import { parseBibByCitekey, parseBibFieldsByCitekey } from './citations.js';
 import {
-  Schema as LibrarySchema,
-  LibraryEntrySchema,
   CURRENT_LIBRARY_VERSION,
+  Schema as LibrarySchema,
   type Library,
-  type LibraryEntry,
+  type LibraryItem,
+  type Provenance,
 } from './schemas/library.js';
-import { openSessionLog, type SessionLogger } from './session-log.js';
+import type { SourceCandidate } from './schemas/source-candidate.js';
 
-// ---------------------------------------------------------------------------
-// Errors (per <interfaces> in 01-11-PLAN.md).
-// ---------------------------------------------------------------------------
+export type { Library, LibraryItem } from './schemas/library.js';
 
-export class LibraryNotFoundError extends Error {
-  code = 'LIBRARY_NOT_FOUND' as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'LibraryNotFoundError';
-  }
+const MIGRATIONS: Record<number, Migration> = { 1: (v) => v1ToV2(v) };
+
+/** .paper/LIBRARY.json under the project at `root`. */
+export function libraryFile(root: string): string {
+  return join(paperDir(root), 'LIBRARY.json');
 }
 
-export class LibraryAlreadyExistsError extends Error {
-  code = 'LIBRARY_ALREADY_EXISTS' as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'LibraryAlreadyExistsError';
-  }
+function emptyLibrary(): Library {
+  return { $schemaVersion: CURRENT_LIBRARY_VERSION, entries: [], bibtex_preamble: [] };
 }
 
-export class DuplicateLibraryEntryError extends Error {
-  code = 'LIBRARY_DUP_ID' as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'DuplicateLibraryEntryError';
-  }
+function isMissing(err: unknown): boolean {
+  const e = err as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
+  return e?.code === 'ENOENT' || e?.cause?.code === 'ENOENT';
 }
 
-// ---------------------------------------------------------------------------
-// Internals.
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the absolute path to LIBRARY.json under `paperRoot`. Resolving up-
- * front ensures the lock key (which is the file path) is identical across
- * callers regardless of relative vs. absolute paperRoot input.
- */
-function libraryFile(paperRoot: string): string {
-  return path.join(path.resolve(paperRoot), 'LIBRARY.json');
-}
-
-/**
- * Module-level singleton SessionLogger child bound to `module: 'library'`.
- * Lazy-initialized so test files that mutate process.env (LOCALAPPDATA,
- * XDG_DATA_HOME, HOME) BEFORE dynamically importing this module observe
- * the mutated env. openSessionLog reads paths.ts at call-time, so this
- * singleton resolves the log destination at first use, not at import.
- */
-let _log: SessionLogger | null = null;
-function log(): SessionLogger {
-  if (!_log) {
-    _log = openSessionLog({ scope: 'auto' }).child({ module: 'library' });
-  }
-  return _log;
-}
-
-// ---------------------------------------------------------------------------
-// Public API (D-59 foundation slice).
-// ---------------------------------------------------------------------------
-
-/**
- * Create LIBRARY.json under `paperRoot` with $schemaVersion =
- * CURRENT_LIBRARY_VERSION and entries=[].
- *
- * Refuses to overwrite an existing LIBRARY.json — throws
- * LibraryAlreadyExistsError (code: LIBRARY_ALREADY_EXISTS). Use addEntry /
- * saveLibrary for in-place mutation.
- *
- * Permission errors (EACCES, EPERM, ...) bubble up unchanged. Only the
- * existence-check is translated; everything else is opaque to the caller.
- */
-export async function initLibrary(paperRoot: string): Promise<Library> {
-  const file = libraryFile(paperRoot);
-
-  // Validate the seed against the schema BEFORE acquiring the lock.
-  const seeded: Library = LibrarySchema.parse({
-    $schemaVersion: CURRENT_LIBRARY_VERSION,
-    entries: [],
-  });
-
-  // BLOCKER-01 fix: the existence check MUST run INSIDE the lock. The
-  // pre-fix code performed fs.access OUTSIDE the lock, which left a
-  // window where two concurrent inits could both observe ENOENT, both
-  // pass the access-then-throw gate, and both enter withLock sequentially
-  // — the second writer silently clobbering the first via atomic rename.
-  // Moving the access call inside the critical section makes
-  // "check-then-write" atomic against any other locked writer
-  // (saveLibrary, addEntry, or another initLibrary).
-  await withLock(file, async () => {
-    // Refuse to clobber. fs.access throws ENOENT when the file is absent —
-    // which is exactly the case where init is allowed to proceed. Any
-    // other error code (EACCES, EPERM, etc.) bubbles up unchanged.
-    try {
-      await fs.promises.access(file);
-      throw new LibraryAlreadyExistsError(`LIBRARY.json already exists at ${file}`);
-    } catch (e) {
-      if (e instanceof LibraryAlreadyExistsError) throw e;
-      const code = (e as NodeJS.ErrnoException | null)?.code;
-      if (code !== 'ENOENT') throw e;
-    }
-    await atomicWriteFile(file, JSON.stringify(seeded, null, 2) + '\n');
-  });
-
-  log().event({
-    event: 'library.init',
-    entryCount: seeded.entries.length,
-    schemaVersion: seeded.$schemaVersion,
-  });
-
-  return seeded;
-}
-
-/**
- * Read LIBRARY.json under `paperRoot`, run any pending forward migrations,
- * validate against LibrarySchema, and return the typed value.
- *
- * Translates ENOENT (or `cause.code === 'ENOENT'`) into LibraryNotFoundError
- * (code: LIBRARY_NOT_FOUND). Every other error — permission errors, JSON
- * parse failures, schema validation failures, ForwardIncompatError —
- * bubbles up unchanged.
- *
- * Pass-through ForwardIncompatError is the T-01-COMPAT-01 mitigation:
- * a newer-on-disk LIBRARY.json must never be silently downgraded.
- *
- * `writeBack: true` so a future v1→v2 migration persists the upgraded
- * shape on disk. Today the migration registry is empty (we're at v1)
- * so no actual write occurs.
- */
-export async function loadLibrary(paperRoot: string): Promise<Library> {
-  const file = libraryFile(paperRoot);
-  let value: Library;
+async function readFrom(file: string): Promise<Library> {
   try {
-    // BLOCKER-02 fix: wrap the loadAndMigrate call inside withLock. The
-    // loader's writeBack:true branch issues an atomicWriteFile when a
-    // forward migration runs — without the lock, two concurrent
-    // loadLibrary callers each migrating a v(N-1) file to vN would race
-    // tmp+rename writes against each other and against any concurrent
-    // saveLibrary/addEntry. The race is dormant today (no v2 schema yet)
-    // but the lock must be in place so the race cannot activate the day
-    // a real forward migration ships.
-    value = await withLock(file, async () =>
-      (await loadAndMigrate({
-        file,
-        schema: LibrarySchema,
-        schemaName: 'library',
-        currentVersion: CURRENT_LIBRARY_VERSION,
-        writeBack: true,
-      })) as Library,
-    );
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
-    if (err?.code === 'ENOENT' || err?.cause?.code === 'ENOENT') {
-      throw new LibraryNotFoundError(`LIBRARY.json not found at ${file}`);
-    }
-    throw e;
-  }
-
-  log().event({
-    event: 'library.load',
-    entryCount: value.entries.length,
-    schemaVersion: value.$schemaVersion,
-  });
-
-  return value;
-}
-
-/**
- * Validate `library` against LibrarySchema and atomically write it to
- * LIBRARY.json under `paperRoot`. Acquires the per-file lock for the
- * duration of the write so it cannot interleave with addEntry.
- *
- * LibrarySchema.parse runs BEFORE the disk write — refuses to write
- * malformed library regardless of caller discipline (T-01-08 mitigation).
- */
-export async function saveLibrary(paperRoot: string, library: Library): Promise<void> {
-  const file = libraryFile(paperRoot);
-  const validated = LibrarySchema.parse(library);
-
-  await withLock(file, async () => {
-    await atomicWriteFile(file, JSON.stringify(validated, null, 2) + '\n');
-  });
-
-  log().event({
-    event: 'library.save',
-    entryCount: validated.entries.length,
-    schemaVersion: validated.$schemaVersion,
-  });
-}
-
-/**
- * Append a single entry to LIBRARY.json atomically.
- *
- * Operation sequence inside ONE withLock critical section:
- *   1. read+migrate+validate the current library
- *   2. duplicate-id check (refuse if entry.id already present)
- *   3. construct next library = current ∪ {entry}
- *   4. LibrarySchema.parse the result
- *   5. atomicWriteFile the result
- *
- * The single-lock-holds-everything design is the T-01-01 mitigation: two
- * concurrent addEntry callers cannot both observe the pre-write state. Test
- * "10 concurrent addEntry calls with disjoint ids all visible" in
- * tests/library.test.ts is the regression gate.
- *
- * Duplicate-id rejection (T-01-DUP-01 mitigation): throws
- * DuplicateLibraryEntryError if `entry.id` already appears in the loaded
- * library. The check runs INSIDE the lock; library state is left untouched
- * on rejection (atomicWriteFile is not called).
- *
- * `writeBack: false` on the inner loadAndMigrate because we're about to
- * atomicWriteFile a fresh copy moments later — there's no point persisting
- * the migrated shape twice in one critical section.
- */
-export async function addEntry(paperRoot: string, entry: LibraryEntry): Promise<Library> {
-  const file = libraryFile(paperRoot);
-
-  // Single-entry fail-fast validation BEFORE acquiring the lock. Catches
-  // caller-side garbage (missing id, malformed addedAt, etc.) without
-  // contending the per-file critical section.
-  const validatedEntry: LibraryEntry = LibraryEntrySchema.parse(entry);
-
-  let next!: Library;
-
-  await withLock(file, async () => {
-    const current = (await loadAndMigrate({
+    return (await loadAndMigrate({
       file,
       schema: LibrarySchema,
       schemaName: 'library',
       currentVersion: CURRENT_LIBRARY_VERSION,
-      writeBack: false,
+      migrations: MIGRATIONS,
     })) as Library;
-
-    if (current.entries.some((e) => e.id === validatedEntry.id)) {
-      throw new DuplicateLibraryEntryError(
-        `entry id "${validatedEntry.id}" already in library`,
-      );
-    }
-
-    next = LibrarySchema.parse({
-      ...current,
-      entries: [...current.entries, validatedEntry],
-    });
-
-    await atomicWriteFile(file, JSON.stringify(next, null, 2) + '\n');
-  });
-
-  log().event({
-    event: 'library.addEntry',
-    id: validatedEntry.id,
-    entryCount: next.entries.length,
-  });
-
-  return next;
+  } catch (err) {
+    if (isMissing(err)) return emptyLibrary();
+    throw err;
+  }
 }
 
 /**
- * Pure read against the loaded library snapshot. Returns the first entry
- * matching `predicate`, or undefined.
- *
- * Lock-free by design: the predicate runs against a value that's already
- * been loaded into memory, so concurrent writers cannot tear it. Callers
- * that need add-then-find atomicity should use addEntry's return value
- * directly rather than re-querying.
+ * The library of the project at `root`, migrated to the current version in
+ * memory (the file is upgraded at the next write). A project with no
+ * LIBRARY.json has an empty library. A newer version on disk throws
+ * ForwardIncompatError rather than being misread.
  */
-export async function findEntry(
-  paperRoot: string,
-  predicate: (e: LibraryEntry) => boolean,
-): Promise<LibraryEntry | undefined> {
-  const lib = await loadLibrary(paperRoot);
-  return lib.entries.find(predicate);
+export async function loadLibrary(root: string): Promise<Library> {
+  return readFrom(libraryFile(root));
+}
+
+/** loadLibrary, synchronously, for readers that cannot wait; null when the file cannot be read. */
+export function readLibrarySync(root: string): Library | null {
+  const file = libraryFile(root);
+  if (!existsSync(file)) return emptyLibrary();
+  try {
+    let value: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    const version = typeof (value as { $schemaVersion?: unknown })?.$schemaVersion === 'number'
+      ? (value as { $schemaVersion: number }).$schemaVersion
+      : 1;
+    for (let v = version; v < CURRENT_LIBRARY_VERSION; v++) value = MIGRATIONS[v]!(value);
+    const parsed = LibrarySchema.safeParse(value);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reading CITATIONS.bib back in.
+// ---------------------------------------------------------------------------
+
+interface ParsedBib {
+  entries: Map<string, Record<string, unknown>>;
+  fields: Map<string, Record<string, string>>;
+}
+
+/** A bibliography as Pass 1 reads it: the CSL entries and the raw fields, by citekey. */
+async function parseBib(text: string): Promise<ParsedBib> {
+  return { entries: await parseBibByCitekey(text), fields: await parseBibFieldsByCitekey(text) };
+}
+
+/**
+ * Read into `lib` every entry of `bibText` that is not what the library would
+ * write for its key, keeping the entry's text. An edited entry replaces the
+ * item under its key; the item's library-only data (abstract, open-access
+ * link, the identifiers it was found by) is kept when the entry still names
+ * the same work. Returns the keys read in.
+ */
+async function readInBibliography(lib: Library, bibText: string, at: string): Promise<string[]> {
+  if (bibText.trim() === '') return [];
+  const blocks = splitBibtex(bibText);
+  lib.bibtex_preamble = blocks.filter((b) => b.type === 'string' || b.type === 'preamble').map((b) => b.text.trim());
+  // A key given twice is read as Pass 1 reads it: the last entry counts.
+  const entries = new Map(blocks.filter((b) => b.key !== '' && b.type !== 'comment').map((b) => [b.key, b.text.trim()]));
+  const index = new Map(lib.entries.map((e, i) => [e.id, i]));
+  const changed = [...entries].filter(([key, text]) => {
+    const i = index.get(key);
+    return i === undefined || itemBibtex(lib.entries[i]!) !== text;
+  });
+  if (changed.length === 0) return [];
+
+  let bib: ParsedBib | null = null;
+  try {
+    bib = await parseBib(bibText);
+  } catch {
+    // One unreadable entry stops citation-js reading the file; each changed
+    // entry is then read on its own, and one that still cannot be read is
+    // kept as text alone (verify reports the file as unreadable).
+  }
+  const preamble = lib.bibtex_preamble.join('\n');
+  for (const [key, text] of changed) {
+    let csl = bib?.entries.get(key);
+    let fields = bib?.fields.get(key);
+    if (!bib) {
+      try {
+        const one = await parseBib(`${preamble}\n${text}\n`);
+        csl = one.entries.get(key);
+        fields = one.fields.get(key);
+      } catch {
+        csl = undefined;
+        fields = undefined;
+      }
+    }
+    const i = index.get(key);
+    const prior = i === undefined ? undefined : lib.entries[i]!;
+    const item = itemFromBibEntry(key, text, csl, fields, prior?.custom.added_at ?? at, { source: 'CITATIONS.bib', at });
+    if (prior) {
+      item.custom.provenance = [...prior.custom.provenance, ...item.custom.provenance];
+      const ids = itemIdentities(prior);
+      if (item.custom.identities.some((k) => ids.includes(k))) {
+        item.custom.identities = [...new Set([...item.custom.identities, ...ids])];
+        if (prior.abstract && !item.abstract) item.abstract = prior.abstract;
+        if (prior.custom.oa_pdf_url) item.custom.oa_pdf_url = prior.custom.oa_pdf_url;
+        if (prior.custom.local_text) item.custom.local_text = prior.custom.local_text;
+      }
+      lib.entries[i!] = item;
+    } else {
+      index.set(key, lib.entries.length);
+      lib.entries.push(item);
+    }
+  }
+  return changed.map(([key]) => key);
+}
+
+/**
+ * Change the library of the project at `root`: under one lock, read it (and
+ * read in any CITATIONS.bib entry it would not write itself), let `fn` change
+ * it, then write LIBRARY.json, CITATIONS.bib and CITATIONS.ris from it.
+ */
+export async function updateLibrary<T>(root: string, fn: (lib: Library, at: string) => T | Promise<T>): Promise<T> {
+  const file = libraryFile(root);
+  const paper = paperDir(root);
+  const bibPath = join(paper, 'CITATIONS.bib');
+  return withLock(file, async () => {
+    const lib = await readFrom(file);
+    const at = new Date().toISOString();
+    const bibText = existsSync(bibPath) ? await fsp.readFile(bibPath, 'utf8') : '';
+    await readInBibliography(lib, bibText, at);
+    const result = await fn(lib, at);
+    const valid = LibrarySchema.parse(lib);
+    // LIBRARY.json first: if the views are not written, the next write
+    // writes them from it.
+    await atomicWriteFile(file, JSON.stringify(valid, null, 2) + '\n');
+    await atomicWriteFile(bibPath, libraryBibtex(valid));
+    await atomicWriteFile(join(paper, 'CITATIONS.ris'), libraryRis(valid));
+    return result;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Merging research candidates by identifier.
+// ---------------------------------------------------------------------------
+
+/**
+ * Which record of a work the library takes its metadata from when several
+ * sources return it, best first, after the discipline's own preference
+ * (templates/presets/disciplines.json `sourcePreference`). Registries with
+ * structured names and journal data come before display-name sources.
+ */
+const DEFAULT_SOURCE_ORDER: readonly string[] = ['crossref', 'pubmed', 'zotero-mcp', 'openalex', 'semanticscholar', 'arxiv', 'unpaywall'];
+
+function sourceRank(preference: readonly string[]): (source: string) => number {
+  const order = [...preference, ...DEFAULT_SOURCE_ORDER.filter((s) => !preference.includes(s))];
+  return (source) => {
+    const i = order.indexOf(source);
+    return i === -1 ? order.length : i;
+  };
+}
+
+export interface MergeOptions {
+  /** The discipline's source preference, most trusted first. */
+  preference?: readonly string[];
+  /** Recorded once for each work merged, beside the registries it came from. */
+  via?: Omit<Provenance, 'at'>;
+}
+
+export interface MergedWork {
+  /** The key the work is cited by. */
+  citekey: string;
+  /** Whether the library already held the work. */
+  status: 'added' | 'existing';
+  title: string;
+  /** The candidates that are this work. */
+  candidates: SourceCandidate[];
+}
+
+export interface MergeResult {
+  works: MergedWork[];
+  /** Candidates with no DOI, arXiv ID, PMID, PMC ID or ISBN: nothing could verify them, so none is stored. */
+  skipped: SourceCandidate[];
+}
+
+interface Group {
+  members: SourceCandidate[];
+  keys: string[];
+}
+
+/** Candidates that share any identifier, grouped as one work each, in first-seen order. */
+function groupByIdentity(candidates: SourceCandidate[]): Group[] {
+  const groups: Group[] = [];
+  for (const c of candidates) {
+    const keys = candidateIdentities(c);
+    const hits = groups.filter((g) => g.keys.some((k) => keys.includes(k)));
+    const into = hits[0] ?? { members: [], keys: [] };
+    if (!hits[0]) groups.push(into);
+    for (const other of hits.slice(1)) {
+      into.members.push(...other.members);
+      into.keys.push(...other.keys);
+      groups.splice(groups.indexOf(other), 1);
+    }
+    into.members.push(c);
+    into.keys = [...new Set([...into.keys, ...keys])];
+  }
+  return groups;
+}
+
+/**
+ * One candidate for a group: the preferred source's record, with an abstract
+ * or open-access link another record has, and retracted if any record says so.
+ * Only the preferred record's own identifiers are printed.
+ */
+function mergedCandidate(members: SourceCandidate[], rank: (s: string) => number): SourceCandidate {
+  const ordered = [...members].sort((a, b) => rank(a.source) - rank(b.source));
+  const base = { ...ordered[0]! };
+  base.abstract ??= ordered.find((m) => m.abstract)?.abstract;
+  if (base.abstract === undefined) delete base.abstract;
+  const oa = ordered.find((m) => m.oa_pdf_url)?.oa_pdf_url;
+  if (!base.oa_pdf_url && oa) base.oa_pdf_url = oa;
+  const retracted = ordered.find((m) => m.retracted);
+  if (retracted) {
+    base.retracted = true;
+    if (!base.retraction_details && retracted.retraction_details) base.retraction_details = retracted.retraction_details;
+  }
+  return base;
+}
+
+/**
+ * Merge `candidates` into `lib`. Candidates sharing an identifier are one
+ * work. A work the library already holds keeps its key and its entry; it
+ * gains the other identifiers it is known by, an abstract or open-access link
+ * it lacked, and a retraction a record reports. A new work gets the key
+ * generated from its first author and year, suffixed past every key already
+ * used (new works are keyed in a fixed order, so the keys do not depend on the
+ * order the sources answered in). Candidates with no identifier are skipped.
+ */
+export function mergeCandidates(lib: Library, candidates: SourceCandidate[], at: string, opts: MergeOptions = {}): MergeResult {
+  const skipped = candidates.filter((c) => candidateIdentities(c).length === 0);
+  const groups = groupByIdentity(candidates.filter((c) => candidateIdentities(c).length > 0));
+  const rank = sourceRank(opts.preference ?? []);
+
+  const byIdentity = new Map<string, LibraryItem>();
+  for (const item of lib.entries) for (const k of itemIdentities(item)) if (!byIdentity.has(k)) byIdentity.set(k, item);
+  const taken = new Set(lib.entries.map((e) => e.id.toLowerCase()));
+
+  const provenanceOf = (g: Group): Provenance[] => [
+    ...g.members.map((m) => ({ source: m.source, id: m.id, at })),
+    ...(opts.via ? [{ ...opts.via, at }] : []),
+  ];
+
+  const work = new Map<Group, MergedWork>();
+  const fresh: Array<{ g: Group; c: SourceCandidate; base: string }> = [];
+  for (const g of groups) {
+    const c = mergedCandidate(g.members, rank);
+    const known = g.keys.map((k) => byIdentity.get(k)).find((x): x is LibraryItem => x !== undefined);
+    if (!known) {
+      fresh.push({ g, c, base: generateCitekey(c) });
+      continue;
+    }
+    known.custom.identities = [...new Set([...known.custom.identities, ...g.keys])];
+    known.custom.provenance.push(...provenanceOf(g));
+    if (!known.abstract && c.abstract) known.abstract = c.abstract;
+    if (!known.custom.oa_pdf_url && c.oa_pdf_url) known.custom.oa_pdf_url = c.oa_pdf_url;
+    if (c.retracted && !known.custom.retracted) {
+      known.custom.retracted = true;
+      if (c.retraction_details) known.custom.retraction_details = c.retraction_details;
+    }
+    for (const k of g.keys) if (!byIdentity.has(k)) byIdentity.set(k, known);
+    work.set(g, { citekey: known.id, status: 'existing', title: known.title, candidates: g.members });
+  }
+
+  fresh.sort((a, b) => (a.base < b.base ? -1 : a.base > b.base ? 1 : a.g.keys[0]! < b.g.keys[0]! ? -1 : 1));
+  for (const { g, c, base } of fresh) {
+    const citekey = freeCitekey(base, taken);
+    const item = itemFromCandidate(c, citekey, at, { identities: g.keys, provenance: provenanceOf(g) });
+    lib.entries.push(item);
+    for (const k of g.keys) byIdentity.set(k, item);
+    work.set(g, { citekey, status: 'added', title: item.title, candidates: g.members });
+  }
+
+  return { works: groups.map((g) => work.get(g)!), skipped };
+}
+
+/** Merge `candidates` into the library of the project at `root` (mergeCandidates), writing it and its views. */
+export function addToLibrary(root: string, candidates: SourceCandidate[], opts: MergeOptions = {}): Promise<MergeResult> {
+  return updateLibrary(root, (lib, at) => mergeCandidates(lib, candidates, at, opts));
 }

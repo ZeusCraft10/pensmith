@@ -1,9 +1,9 @@
 // tests/schemas.test.ts — happy + sad path validation for the 4 persisted zod schemas.
 //
 // Coverage matrix (per VALIDATION 01-07-03):
-//   - All 4 CURRENT_*_VERSION constants (state=2, others=1)
+//   - All 4 CURRENT_*_VERSION constants (state=2, library=2, others=1)
 //   - state    : valid + 3 invalid (empty paperId / wrong version / bad date)
-//   - library  : valid empty, valid with entry, rejects empty-id entry
+//   - library  : valid empty, valid with a CSL item, rejects empty-id entry
 //   - session-log: valid (kind=event/tool_call), rejects bad-kind, rejects missing run_id
 //   - runtime-config: valid record form + defaults + rejects empty record
 //   - runtime-config: providers overlay-merges by key (record-form proof)
@@ -29,9 +29,9 @@ import {
 
 const ISO = '2026-05-08T00:00:00.000Z';
 
-test('CURRENT_*_VERSION constants (state=2, others=1)', () => {
+test('CURRENT_*_VERSION constants (state=2, library=2, others=1)', () => {
   assert.equal(CURRENT_STATE_VERSION, 2);
-  assert.equal(CURRENT_LIBRARY_VERSION, 1);
+  assert.equal(CURRENT_LIBRARY_VERSION, 2);
   assert.equal(CURRENT_SESSION_LOG_VERSION, 1);
   assert.equal(CURRENT_RUNTIME_CONFIG_VERSION, 1);
 });
@@ -77,23 +77,26 @@ test('state: rejects empty paperId / wrong $schemaVersion / bad createdAt', () =
 
 // ---- library ----
 
-test('library: valid empty + valid with entry', () => {
+const ITEM = { id: 'x2020', type: 'article-journal', title: 'A Work', custom: { added_at: ISO } };
+
+test('library: valid empty + valid with a CSL item', () => {
   assert.ok(
-    LibrarySchema.safeParse({ $schemaVersion: 1, entries: [] }).success,
+    LibrarySchema.safeParse({ $schemaVersion: 2, entries: [] }).success,
   );
   assert.ok(
     LibrarySchema.safeParse({
-      $schemaVersion: 1,
-      entries: [{ id: 'x', addedAt: ISO }],
+      $schemaVersion: 2,
+      entries: [ITEM],
     }).success,
   );
+  assert.ok(!LibrarySchema.safeParse({ $schemaVersion: 1, entries: [] }).success, 'v1 is read through its migration');
 });
 
 test('library: rejects entry with empty id', () => {
   assert.ok(
     !LibrarySchema.safeParse({
-      $schemaVersion: 1,
-      entries: [{ id: '', addedAt: ISO }],
+      $schemaVersion: 2,
+      entries: [{ ...ITEM, id: '' }],
     }).success,
   );
 });

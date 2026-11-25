@@ -67,7 +67,7 @@ test('assignUniqueCitekeys: already-unique keys pass through unchanged (by refer
 
 test('writeBibtex (#21/#31): two same-base candidates emit TWO distinct bib citekeys (no duplicate)', async () => {
   const target = join(mkdtempSync(join(tmpdir(), 'pensmith-ckcoll-')), 'CITATIONS.bib');
-  await writeBibtex([cand('wu2017', '10.0/a'), cand('wu2017', '10.0/b')], target);
+  await writeBibtex([cand('wu2017', '10.1000/a'), cand('wu2017', '10.1000/b')], target);
   const bib = readFileSync(target, 'utf8');
   const keys = [...bib.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]);
   assert.equal(keys.length, 2, `expected 2 bib entries; got ${keys.length}`);

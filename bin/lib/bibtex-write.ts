@@ -1,102 +1,25 @@
-// bin/lib/bibtex-write.ts — SourceCandidate[] -> .paper/CITATIONS.bib serializer
-// (D-19 LOCKED citation-js chokepoint, D-07 LOCKED atomic-write chokepoint, D-20,
-// VRFY-04).
+// bin/lib/bibtex-write.ts — CITATIONS.bib as a view of the library.
 //
-// This module rides two chokepoints:
-//   1. citation-js — we import { Cite } from './citations.js' (the SOLE module
-//      that imports the library directly). ESLint backstops the chokepoint via
-//      no-restricted-imports on 'citation-js'.
-//   2. atomic-write — we call atomicWriteFile from './atomic-write.js' for the
-//      final write; we NEVER call raw fs write/append directly. ESLint backstops
-//      via the callee-property selector banning those node:fs methods.
-//
-// Citekey strategy:
-//   - Every emitted entry is keyed by a deterministic citekey set as CslEntry.id
-//     BEFORE Cite.format() is called. citation-js then renders @article{<id>, …}
-//     verbatim — no auto-generation, no surprise spelling.
-//   - Collisions resolve via base-26 spreadsheet-column encoding (seen=1 -> 'a',
-//     26 -> 'z', 27 -> 'aa', 53 -> 'ba', etc.). This stays deterministic for
-//     pathologically deep collision chains (e.g. a "Wu, 2017" literature dump)
-//     and still satisfies the D-14 citekey regex /^[a-z][a-z0-9_-]*$/.
-//
-// Sorting:
-//   - Entries are sorted by FINAL citekey BEFORE being handed to Cite() so the
-//     emitted .bib is git-diff-stable. We do NOT post-process the output via
-//     `bibtex.split(/\n(?=@)/)` — that is fragile for field values containing
-//     literal `\n@` (URLs in notes, email addresses in abstracts).
-//
-// Empty array:
-//   - writeBibtex([], target) writes a zero-length file. Plan 06 verify.md
-//     reads .paper/CITATIONS.bib via citations.parseBib(); we never want it to
-//     ENOENT just because a section happens to have zero citations.
+// .paper/LIBRARY.json is the canonical store; CITATIONS.bib is written from it
+// (bin/lib/library.ts) and is what verify, compile and done read. Each item
+// becomes one entry, in citekey order:
+//   - an item read in from a bibliography (written by hand, imported, or by an
+//     older pensmith) is written back exactly as it was read: those bytes are
+//     what verify checked;
+//   - any other item is rendered through formatBibtex (bin/lib/citations.ts),
+//     which keeps text in every script as UTF-8, with the identifiers CSL has
+//     no variable for added as raw fields (`eprint` + `archiveprefix` for an
+//     arXiv ID, `pmid`) and a retracted work marked `note = {RETRACTED}`, the
+//     flag Pass 1 reads offline.
+// Rendering one item never changes another's entry, so adding a source leaves
+// every verified entry byte for byte as it was.
 
-import { Cite } from './citations.js';
+import { formatBibtex } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { generateCitekey } from './citekey.js';
-import { normalizeDoi } from './doi.js';
+import { candidateIdentities, itemFromCandidate } from './library-item.js';
+import type { Library, LibraryItem } from './schemas/library.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
-
-interface CslAuthor {
-  family: string;
-  given?: string;
-}
-
-interface CslEntry {
-  // CYCLE-3 MEDIUM REVIEWS CONVERGENCE — id is assigned downstream (in the
-  // writeBibtex collision loop). Marking optional so toCsl() can return a
-  // CslEntry without pre-computing the citekey AND TS still accepts the
-  // later assignment.
-  id?: string;
-  type: 'article-journal' | 'paper-conference' | 'article' | 'book';
-  title: string;
-  author: CslAuthor[];
-  issued?: { 'date-parts': [[number]] };
-  DOI?: string;
-  ISBN?: string;
-  // arXiv id surfaces here per CSL-JSON convention for arxiv preprints.
-  number?: string;
-  // CYCLE-3 D-15 retracted-flag persistence: SourceCandidate.retracted: true
-  // surfaces in compiled output via CSL `note = "RETRACTED"`. citation-js
-  // >=0.7 preserves `note` verbatim in BibTeX output, so the flag survives
-  // the serializer round-trip and Plan 06 verify can scan emitted .bib for
-  // `note = {RETRACTED}` to fail loudly on citing retracted works.
-  note?: string;
-}
-
-function parseAuthor(s: string): CslAuthor {
-  const comma = s.indexOf(',');
-  if (comma === -1) return { family: s.trim() };
-  const family = s.slice(0, comma).trim();
-  const given = s.slice(comma + 1).trim();
-  return given ? { family, given } : { family };
-}
-
-function toCsl(c: SourceCandidate): CslEntry | null {
-  // CYCLE-3 REVIEWS — entries lacking ANY persistent identifier (DOI, ISBN,
-  // arXiv id) are dropped. The verifier needs a stable id to cross-reference;
-  // a candidate without one cannot be safely cited.
-  const asExt = c as { isbn?: string; arxivId?: string };
-  const hasId = Boolean(c.doi) || Boolean(asExt.isbn) || Boolean(asExt.arxivId);
-  if (!hasId) return null;
-
-  const entry: CslEntry = {
-    type: c.source === 'arxiv' ? 'article' : 'article-journal',
-    title: c.title,
-    author: (c.authors ?? []).map(parseAuthor),
-  };
-
-  if (typeof c.year === 'number') {
-    entry.issued = { 'date-parts': [[c.year]] };
-  }
-  // DOIs are case-insensitive and come as bare DOIs, `doi:` strings or
-  // doi.org links; the bib holds the one canonical form.
-  if (c.doi) entry.DOI = normalizeDoi(c.doi) ?? c.doi;
-  if (asExt.isbn) entry.ISBN = asExt.isbn;
-  if (asExt.arxivId) entry.number = asExt.arxivId;
-  if (c.retracted === true) entry.note = 'RETRACTED';
-
-  return entry;
-}
 
 /**
  * Base-26 spreadsheet-column collision suffix.
@@ -104,8 +27,8 @@ function toCsl(c: SourceCandidate): CslEntry | null {
  * seen=1 -> 'a', seen=26 -> 'z', seen=27 -> 'aa', seen=52 -> 'az',
  * seen=53 -> 'ba', seen=702 -> 'zz'.
  *
- * Pure, deterministic, ASCII-lowercase. Satisfies the D-14 citekey
- * regex /^[a-z][a-z0-9_-]*$/ for any positive integer input.
+ * Pure, deterministic, ASCII-lowercase, so a suffixed key still matches the
+ * citekey pattern /^[a-z][a-z0-9_-]*$/.
  */
 export function suffixForCollision(seen: number): string {
   if (!Number.isInteger(seen) || seen < 1) {
@@ -122,93 +45,140 @@ export function suffixForCollision(seen: number): string {
 }
 
 /**
- * Assign collision-suffixed citekeys that are GLOBALLY UNIQUE across the set, so
- * the citekey is a stable primary key shared by LIBRARY.json, CITATIONS.bib, the
- * RIS export, and the research keep-sets (audit #21/#31/#32).
+ * `base`, or `base` plus the first collision suffix that is free in `taken`
+ * (compared ignoring case: BibTeX keys are case-insensitive). The key is
+ * added to `taken`.
+ */
+export function freeCitekey(base: string, taken: Set<string>): string {
+  let key = base;
+  for (let n = 1; taken.has(key.toLowerCase()); n++) key = base + suffixForCollision(n);
+  taken.add(key.toLowerCase());
+  return key;
+}
+
+/**
+ * Citekeys that are unique across `candidates`, in order: two candidates
+ * sharing a base key (same first author and year) get base, base+'a', ... A
+ * base that equals another candidate's suffixed form is suffixed too, so no
+ * two candidates share a key. A candidate whose key is already unique is
+ * returned by reference; others get a shallow copy with the new key.
  *
- * Two candidates sharing a base key (same first-author + year) get
- * base / base+'a' / base+'b' …. Crucially, the suffix loop also skips any value
- * already taken, so a base key that happens to equal another candidate's
- * suffixed form (e.g. a literal 'wu2017a' alongside a second 'wu2017') ends up
- * unique rather than silently duplicated — the bug a naive per-base counter has.
- *
- * Order-preserving. A candidate whose citekey is already unique is returned by
- * reference; others get a shallow copy with the new `citekey`.
+ * These keys are provisional, for one research run; the library assigns the
+ * key a work keeps (bin/lib/library.ts).
  */
 export function assignUniqueCitekeys(candidates: SourceCandidate[]): SourceCandidate[] {
-  const used = new Set<string>();
+  const taken = new Set<string>();
   return candidates.map((c) => {
-    const base = c.citekey || generateCitekey(c);
-    let citekey = base;
-    let n = 0;
-    while (used.has(citekey)) {
-      n += 1;
-      citekey = base + suffixForCollision(n);
-    }
-    used.add(citekey);
+    const citekey = freeCitekey(c.citekey || generateCitekey(c), taken);
     return citekey === c.citekey ? c : { ...c, citekey };
   });
 }
 
+// ---------------------------------------------------------------------------
+// Reading a bibliography's text entry by entry.
+// ---------------------------------------------------------------------------
+
+export interface BibBlock {
+  /** The entry type, lowercased ('article', 'string', 'preamble', 'comment'). */
+  type: string;
+  /** The citekey of an entry; '' for @string, @preamble and @comment. */
+  key: string;
+  /** The block's text from its `@` to its closing delimiter. */
+  text: string;
+}
+
+const NON_ENTRY: ReadonlySet<string> = new Set(['string', 'preamble', 'comment']);
+
 /**
- * Serialize SourceCandidate[] to a BibTeX file at `targetPath`.
- *
- * Entries are keyed by a deterministic citekey (collision-suffixed when
- * multiple candidates share a base key). Output is sorted by citekey so
- * the file is git-diff-stable across runs.
- *
- * Empty input still writes a zero-length file so Plan 06 verify.md
- * does not ENOENT on .paper/CITATIONS.bib (D-20 LOCKED canonical path).
- *
- * @param candidates SourceCandidate[] (per D-14 schema).
- * @param targetPath Absolute or relative path; parent dir created if missing.
+ * The blocks of BibTeX `text`, each exactly as written. Text between blocks
+ * is a comment to BibTeX and is not kept. A block whose closing delimiter is
+ * missing runs to the end of the text.
  */
-export async function writeBibtex(
-  candidates: SourceCandidate[],
-  targetPath: string,
-): Promise<void> {
-  // Keep only serializable candidates (toCsl drops id-less ones), THEN assign
-  // globally-unique citekeys over that surviving set. assignUniqueCitekeys is the
-  // single uniqueness authority (audit #21) — it handles base-vs-suffix collisions
-  // a per-base counter would silently duplicate. Computing toCsl once per
-  // candidate avoids re-deriving it after keying.
-  const survivors: Array<{ candidate: SourceCandidate; csl: CslEntry }> = [];
-  for (const c of candidates) {
-    const csl = toCsl(c);
-    if (csl) survivors.push({ candidate: c, csl });
+export function splitBibtex(text: string): BibBlock[] {
+  const out: BibBlock[] = [];
+  const re = /@\s*([A-Za-z]+)\s*([{(])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const start = m.index;
+    const open = m[2]!;
+    let i = re.lastIndex;
+    let depth = 0;
+    let end = text.length;
+    for (; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        if (depth === 0 && open === '{') {
+          end = i + 1;
+          break;
+        }
+        depth--;
+      } else if (ch === ')' && open === '(' && depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+    const type = m[1]!.toLowerCase();
+    const body = text.slice(re.lastIndex, end);
+    const key = NON_ENTRY.has(type) ? '' : (/^\s*([^,\s]+)/.exec(body)?.[1] ?? '');
+    out.push({ type, key, text: text.slice(start, end) });
+    re.lastIndex = end;
   }
-  const keyed = assignUniqueCitekeys(survivors.map((s) => s.candidate));
-  const entries: Array<{ citekey: string; csl: CslEntry }> = keyed.map((c, i) => {
-    const csl = survivors[i]!.csl;
-    csl.id = c.citekey;
-    return { citekey: c.citekey, csl };
-  });
+  return out;
+}
 
-  // Sort by FINAL citekey before rendering — input order is preserved by
-  // citation-js, so this guarantees the output is sorted.
-  entries.sort((a, b) => a.citekey.localeCompare(b.citekey));
+// ---------------------------------------------------------------------------
+// Writing the library as BibTeX.
+// ---------------------------------------------------------------------------
 
-  let bibtex = '';
-  if (entries.length > 0) {
-    const cite = new Cite(entries.map((e) => e.csl));
-    const rendered = (cite as { format: (...args: unknown[]) => unknown }).format(
-      'bibtex',
-      { format: 'text' },
-    ) as string;
+// Library-only variables: never part of a bibliography entry.
+const NOT_BIBTEX: ReadonlySet<string> = new Set(['custom', 'abstract', 'PMID', 'PMCID', 'note']);
 
-    // citation-js auto-generates its own BibTeX citekeys (label) regardless
-    // of CslEntry.id — e.g. our 'wu2017' becomes 'Wu2017Foo' in the output.
-    // To honor the deterministic citekey contract (D-14) AND the collision-
-    // suffix policy (CYCLE-2 H-4), rewrite each `@<type>{<autokey>,` header
-    // in-place with our citekey. Input order is preserved by citation-js,
-    // so iterating `entries` and replacing the N-th header is safe.
-    let i = 0;
-    bibtex = rendered.replace(/^(@\w+\{)[^,]+(,)/gm, (_match, p1: string, p2: string) => {
-      const entry = entries[i++];
-      const key = entry?.citekey ?? 'unknown';
-      return `${p1}${key}${p2}`;
-    });
+/** The CSL-JSON citation-js renders for `item`. */
+function renderedCsl(item: LibraryItem): Record<string, unknown> {
+  const csl: Record<string, unknown> = { 'citation-key': item.id };
+  for (const [k, v] of Object.entries(item)) if (!NOT_BIBTEX.has(k)) csl[k] = v;
+  // A preprint is BibTeX's @misc with its eprint, as arXiv itself writes it.
+  if (item.type === 'article') csl['type'] = 'document';
+  if (item.custom.retracted) csl['note'] = 'RETRACTED';
+  else if (typeof item['note'] === 'string') csl['note'] = item['note'];
+  return csl;
+}
+
+/** The raw fields `item`'s entry carries for identifiers CSL drops. */
+function identifierFields(item: LibraryItem): Record<string, string> {
+  const extra: Record<string, string> = {};
+  if (item.custom.arxiv) {
+    extra['eprint'] = item.custom.arxiv;
+    extra['archiveprefix'] = 'arXiv';
   }
+  if (item.PMID) extra['pmid'] = item.PMID;
+  return extra;
+}
 
-  await atomicWriteFile(targetPath, bibtex);
+/** The BibTeX entry for one library item, without a trailing newline. */
+export function itemBibtex(item: LibraryItem): string {
+  if (item.custom.bibtex) return item.custom.bibtex.trim();
+  return formatBibtex([renderedCsl(item)], new Map([[item.id, identifierFields(item)]])).trim();
+}
+
+/** CITATIONS.bib for `library`: any @string/@preamble blocks first, then every item in citekey order. */
+export function libraryBibtex(library: Pick<Library, 'entries' | 'bibtex_preamble'>): string {
+  const items = [...library.entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const blocks = [...library.bibtex_preamble.map((b) => b.trim()), ...items.map(itemBibtex)];
+  return blocks.length === 0 ? '' : `${blocks.join('\n\n')}\n`;
+}
+
+/**
+ * Write the BibTeX for `candidates` to `targetPath`: each candidate with an
+ * identifier becomes an item (as the library would store it) under a unique
+ * citekey. A candidate with no DOI, arXiv ID, PMID or ISBN is left out, as
+ * research leaves it out of the library: nothing could verify it. No
+ * candidates writes an empty file, which verify reads as an empty library.
+ */
+export async function writeBibtex(candidates: SourceCandidate[], targetPath: string): Promise<void> {
+  const at = new Date().toISOString();
+  const keyed = assignUniqueCitekeys(candidates.filter((c) => candidateIdentities(c).length > 0));
+  const entries = keyed.map((c) => itemFromCandidate(c, c.citekey, at));
+  await atomicWriteFile(targetPath, libraryBibtex({ entries, bibtex_preamble: [] }));
 }
