@@ -30,7 +30,7 @@ import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, PDFStream } from 'pdf-lib';
 import { renderCitationsInDocument, SUPPORTED_STYLES, type RenderedCitations } from './citations.js';
-import { atomicRename, atomicWriteFile, makeTempDir, removePath } from './atomic-write.js';
+import { atomicWriteFile, makeTempDir, removePath } from './atomic-write.js';
 import { findCitations, type Citation } from './citation-grammar.js';
 import { cslHtmlToLatex, cslHtmlToMarkdown } from './csl-html.js';
 import { readBibEntries, selectEntries, toBibtex, toRis, type CslEntry } from './export-bib.js';
@@ -707,10 +707,11 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     }
     await removePath(join(exportDir, 'CITATIONS.bib'));
     await removePath(join(exportDir, 'CITATIONS.ris'));
+    // Copied rather than renamed: the export folder may be on another disk.
     const published = new Map<string, string>();
     for (const f of files) {
       const dest = join(exportDir, basename(f));
-      await atomicRename(f, dest);
+      await atomicWriteFile(dest, await fsp.readFile(f));
       published.set(basename(f), dest);
     }
 

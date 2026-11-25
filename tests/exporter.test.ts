@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -121,4 +121,18 @@ test('exporter (#19): offline LaTeX resolves citations and emits a References se
   assert.ok(tex.includes('Vaswani'), tex);
   assert.match(tex, /\\section\{References\}/, tex);
   assert.match(tex, /\\begin\{document\}/);
+});
+
+// An export folder on another disk (a USB stick, a synced drive) cannot be
+// reached by rename(2) from the staging folder in .paper/. /dev/shm is a
+// separate tmpfs on Linux; elsewhere there is no second disk to try.
+const SHM = '/dev/shm';
+const otherDisk = existsSync(SHM) && statSync(SHM).dev !== statSync(tmpdir()).dev;
+test('exporter: an export folder on another disk receives the export', { skip: !otherDisk && 'no second filesystem' }, async () => {
+  const { root, inputPath } = seedPaper('otherdisk');
+  const outputDir = mkdtempSync(join(SHM, 'pensmith-export-'));
+  const res = await exportDraft({ inputPath, outputDir, format: 'md', paperRoot: root, pandocPresent: false });
+  assert.equal(dirname(res.outputPath), outputDir);
+  assert.match(readFileSync(res.outputPath, 'utf8'), /\(Ex, 2020\)/);
+  assert.ok(existsSync(join(outputDir, 'CITATIONS.bib')));
 });
