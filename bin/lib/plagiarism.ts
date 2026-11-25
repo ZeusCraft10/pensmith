@@ -22,7 +22,7 @@
 import { fetch as httpFetch } from './http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
 import { Semaphore } from './budget.js';
-import { findCitations } from './citation-grammar.js';
+import { replaceCitations } from './citation-grammar.js';
 
 // ============================================================
 //   Public types
@@ -88,17 +88,6 @@ function isDistinctive(phrase: string): boolean {
   return specific >= 2;
 }
 
-/** `text` with every citation, in any Pandoc form, replaced by a space. */
-function stripCitations(text: string): string {
-  let out = '';
-  let at = 0;
-  for (const c of findCitations(text)) {
-    out += `${text.slice(at, c.start)} `;
-    at = c.end;
-  }
-  return out + text.slice(at);
-}
-
 /**
  * Strip citations (prefixes, keys and locators included) and surrounding
  * markdown punctuation from a chunk of draft text so citation keys are never
@@ -106,7 +95,8 @@ function stripCitations(text: string): string {
  * Deterministic.
  */
 function stripCitationsAndMarkdown(text: string): string {
-  return stripCitations(text)
+  // Every citation, in any Pandoc form, becomes a space.
+  return replaceCitations(text, () => ' ')
     // markdown emphasis / code / heading / link punctuation → space
     .replace(/[*_`#>~|]+/g, ' ')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, ' $1 ')

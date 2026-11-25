@@ -30,8 +30,8 @@ import { extractPdfText } from '../pdf-text.js';
 import { sources } from '../sources/index.js';
 import { fetch as httpFetch } from '../http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
-import { extractQuotes, MIN_SHORT_WORDS, wordCount } from '../quote-extractor.js';
-import { sentenceEnds } from '../citation-grammar.js';
+import { ELLIPSIS, extractQuotes, MIN_SHORT_WORDS, wordCount } from '../quote-extractor.js';
+import { escapeRe, sentenceEnds } from '../citation-grammar.js';
 import { NO_CITATION_KEY } from './verdict-rows.js';
 
 export type Pass3Verdict = 'OK' | 'NOT_FOUND' | 'PDF_UNAVAILABLE' | 'TEXT_UNAVAILABLE' | 'UNATTRIBUTED';
@@ -51,13 +51,6 @@ interface BibLike {
 
 /** The most source text an ellipsis in a short quotation may stand for. */
 export const MAX_ELIDED_CHARS = 150;
-
-// An ellipsis marking words left out: `...` (NFKC turns `…` into it) or `[...]`.
-const ELLIPSIS = /\[?\.{3,}\]?/;
-
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * Whether a short quotation appears word for word in `sourceText`, as whole
@@ -80,15 +73,30 @@ export function shortQuoteFound(quote: string, sourceText: string): boolean {
   if (parts.length > 1 && parts.some((p) => wordCount(p) < 2)) return false;
 
   const patterns = parts.map((p) => new RegExp(String.raw`(?<![\p{L}\p{N}])${escapeRe(p)}(?![\p{L}\p{N}])`, 'giu'));
-  const ends = sentenceEnds(source);
-  const sentenceEndIn = (a: number, b: number): boolean => ends.some((e) => e >= a && e < b);
+  // The source's sentence ends, found the first time a later part is.
+  let ends: number[] | undefined;
+  const sentenceEndIn = (a: number, b: number): boolean => {
+    ends ??= sentenceEnds(source);
+    let lo = 0;
+    let hi = ends.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (ends[mid]! < a) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo < ends.length && ends[lo]! < b;
+  };
   // Part `i` at or after `from`; every later part close behind it in the same
   // sentence. Each occurrence of the first part is tried in turn.
   const matchFrom = (i: number, from: number): boolean => {
     if (i === parts.length) return true;
     const re = patterns[i]!;
+    // A later part counts only when it starts within MAX_ELIDED_CHARS of
+    // `from`, so it is looked for no further than that, plus its own length
+    // and the character after it (two code units, for a surrogate pair).
+    const hay = i === 0 ? source : source.slice(0, from + MAX_ELIDED_CHARS + parts[i]!.length + 2);
     re.lastIndex = from;
-    for (let m = re.exec(source); m; m = re.exec(source)) {
+    for (let m = re.exec(hay); m; m = re.exec(hay)) {
       if (i > 0 && (m.index - from > MAX_ELIDED_CHARS || sentenceEndIn(from, m.index))) return false;
       const at = m.index;
       if (matchFrom(i + 1, at + m[0].length)) return true;
@@ -97,6 +105,25 @@ export function shortQuoteFound(quote: string, sourceText: string): boolean {
     return false;
   };
   return matchFrom(0, 0);
+}
+
+/** A source's extracted text, and its normalized form once a long quotation needs it. */
+interface SourceText {
+  text: string;
+  normalized?: string;
+}
+
+/** `fn`, called once per key: a later call with the same key shares the first call's promise. */
+function once<T>(fn: (key: string) => Promise<T>): (key: string) => Promise<T> {
+  const calls = new Map<string, Promise<T>>();
+  return (key) => {
+    let p = calls.get(key);
+    if (!p) {
+      p = fn(key);
+      calls.set(key, p);
+    }
+    return p;
+  };
 }
 
 /**
@@ -111,6 +138,14 @@ export async function runPass3(
 ): Promise<Pass3Result[]> {
   const quotes = extractQuotes(draftMd);
   const results: Pass3Result[] = [];
+  // A source several quotations cite is looked up, fetched and parsed once.
+  const oaPdfUrl = once(async (doi: string) => (await sources.unpaywall.fetchById(doi))?.oa_pdf_url);
+  const sourceText = once(async (url: string): Promise<SourceText> => {
+    const resp = await httpFetch(url, { source: 'unpaywall' });
+    const body = resp.body;
+    const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+    return { text: await extractPdfText(buf) };
+  });
 
   for (const q of quotes) {
     const snippet = q.text.slice(0, 40);
@@ -144,8 +179,7 @@ export async function runPass3(
       continue;
     }
 
-    const oaCandidate = await sources.unpaywall.fetchById(claimed.DOI);
-    const oaUrl = oaCandidate?.oa_pdf_url;
+    const oaUrl = await oaPdfUrl(claimed.DOI);
     if (!oaUrl) {
       results.push({
         citekey: q.citekey, quoteSnippet: snippet,
@@ -156,10 +190,8 @@ export async function runPass3(
     }
 
     try {
-      const resp = await httpFetch(oaUrl, { source: 'unpaywall' });
-      const body = resp.body;
-      const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
-      const text = await extractPdfText(buf);
+      const src = await sourceText(oaUrl);
+      const text = src.text;
       if (text.replace(/\s/g, '').length < 50) {
         results.push({
           citekey: q.citekey, quoteSnippet: snippet,
@@ -182,7 +214,8 @@ export async function runPass3(
         });
         continue;
       }
-      const ratio = levenshteinSubstring(nfkcNormalize(q.text), nfkcNormalize(text));
+      src.normalized ??= nfkcNormalize(text);
+      const ratio = levenshteinSubstring(nfkcNormalize(q.text), src.normalized);
       if (ratio >= QUOTE_LEV_THRESHOLD) {
         results.push({
           citekey: q.citekey, quoteSnippet: snippet,

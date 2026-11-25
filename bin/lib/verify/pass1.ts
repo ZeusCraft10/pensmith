@@ -25,7 +25,7 @@
 import { jaroWinkler, TITLE_JW_THRESHOLD, AUTHOR_JW_THRESHOLD } from '../fuzzy.js';
 import { firstAuthorSurname } from '../author-normalize.js';
 import { sources } from '../sources/index.js';
-import { parseBibOrEmpty } from '../citations.js';
+import { parseBibByCitekey } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
@@ -251,8 +251,7 @@ async function verdictForCitekey(
  * draft cites is then FABRICATED.
  */
 async function readBib(citationsBibPath: string): Promise<Map<string, BibEntry>> {
-  const entries = await parseBibOrEmpty(readFileSync(citationsBibPath, 'utf8'));
-  return new Map(entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]));
+  return parseBibByCitekey<BibEntry>(readFileSync(citationsBibPath, 'utf8'));
 }
 
 const RAW_WHAT: Readonly<Record<RawCitationKind, string>> = {
@@ -260,14 +259,6 @@ const RAW_WHAT: Readonly<Record<RawCitationKind, string>> = {
   'arxiv': 'an arXiv ID typed as text',
   'pmid': 'a PubMed ID typed as text',
   'author-year': 'an author-year citation typed as text',
-};
-
-/** How to write text that only looks like a citation so the verifier reads it as text. */
-const RAW_ESCAPE: Readonly<Record<RawCitationKind, string>> = {
-  'doi': 'put it in backticks',
-  'arxiv': 'put it in backticks',
-  'pmid': 'put it in backticks',
-  'author-year': 'write its bracket as \\(',
 };
 
 /**
@@ -291,26 +282,28 @@ export async function runPass1(
 ): Promise<Pass1Result[]> {
   const bibByCitekey = await readBib(citationsBibPath);
   const cites = findCitations(draftMd);
-  const narrativeOnly = new Set(citedKeys(cites.filter((c) => c.narrative)));
-  for (const k of citedKeys(cites.filter((c) => !c.narrative))) narrativeOnly.delete(k);
+  const bracketed = new Set(citedKeys(cites.filter((c) => !c.narrative)));
 
   const results: Pass1Result[] = [];
   for (const ck of citedKeys(cites)) {
     const r = await verdictForCitekey(ck, bibByCitekey.get(ck));
     // `@word` in running text is a citation to Pandoc; when it was meant as
     // text (a handle), the fix is an escape, not a new source.
-    if (r.verdict === 'FABRICATED' && !bibByCitekey.has(ck) && narrativeOnly.has(ck)) {
+    if (r.verdict === 'FABRICATED' && !bibByCitekey.has(ck) && !bracketed.has(ck)) {
       r.reason += ` — if @${ck} is not a citation, write it as \\@${ck}`;
     }
     results.push(r);
   }
   // The row key for text that is not a citation is the text itself, on one
   // line: a draft wrapped mid-citation must still give a row compile reads.
+  // `escape` says how to write text that only looks like a citation so the
+  // verifier reads it as text.
   for (const raw of findRawCitations(draftMd, cites)) {
+    const escape = raw.kind === 'author-year' ? 'write its bracket as \\(' : 'put it in backticks';
     results.push({
       citekey: oneLine(raw.raw), verdict: 'RAW_CITATION', titleJW: 0, authorJW: 0,
       reason: `${RAW_WHAT[raw.kind]}, which nothing checks — cite the work as [@key] from CITATIONS.bib ` +
-        `(add it with \`pensmith add\` if it is missing); if it is not a citation, ${RAW_ESCAPE[raw.kind]}`,
+        `(add it with \`pensmith add\` if it is missing); if it is not a citation, ${escape}`,
     });
   }
   for (const u of findUnparseableCitations(draftMd, cites)) {

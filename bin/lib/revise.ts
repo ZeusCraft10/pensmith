@@ -38,7 +38,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { atomicWriteFile } from './atomic-write.js';
 import { updateFrontmatter, parseFrontmatter } from './frontmatter.js';
 import { withLock } from './lock.js';
-import { dropCitedKey, findCitations, renameCitedKey, sentenceSpan, type Citation } from './citation-grammar.js';
+import { citationsOf, dropCitedKey, findCitations, renameCitedKey, sentenceSpan } from './citation-grammar.js';
 import { parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
 import { parseBibtex } from './citations.js';
 import { writeBibtex } from './bibtex-write.js';
@@ -48,8 +48,8 @@ import type { SourceCandidate } from './schemas/source-candidate.js';
 // --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
 
-/** The verifier verdicts that --revise repairs, in priority/appearance order. */
-const FAILING_VERDICTS = ['FABRICATED', 'MIS-CITED', 'NOT_FOUND'] as const;
+/** The verifier verdicts that --revise repairs. */
+const FAILING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND']);
 
 // Strict-JSON contract for the revise-swap LLM response (04-RESEARCH §I).
 const ReviseSwapSchema = z.object({
@@ -148,28 +148,23 @@ interface FailingCitation {
  */
 export function firstFailingCitation(verificationMd: string): FailingCitation | null {
   const row = parseVerdictRowDetails(verificationMd)
-    .find((r) => (FAILING_VERDICTS as readonly string[]).includes(r.verdict));
+    .find((r) => FAILING_VERDICTS.has(r.verdict));
   return row ? { citekey: row.citekey, reason: `${row.verdict}: ${row.detail}` } : null;
 }
 
 /** Blocking rows revise cannot repair with a swap or a remove (raw citations, broken keys, offline). */
 function unrepairableRows(verificationMd: string): VerdictRow[] {
   return parseVerdictRowDetails(verificationMd)
-    .filter((r) => r.blocking && !(FAILING_VERDICTS as readonly string[]).includes(r.verdict));
+    .filter((r) => r.blocking && !FAILING_VERDICTS.has(r.verdict));
 }
 
 // ---------------------------------------------------------------------------
 // Claim-context extraction — the sentence that cites the flagged key.
 // ---------------------------------------------------------------------------
 
-/** The citations in `md` that cite `citekey`, in any Pandoc form. */
-function citationsOf(md: string, citekey: string): Citation[] {
-  return findCitations(md).filter((c) => c.items.some((i) => i.key === citekey));
-}
-
 function claimContext(draftMd: string, citekey: string): string {
   const cites = findCitations(draftMd);
-  const c = cites.find((x) => x.items.some((i) => i.key === citekey));
+  const c = citationsOf(draftMd, citekey, cites)[0];
   if (!c) return '(citation not found in DRAFT.md)';
   const [s, e] = sentenceSpan(draftMd, c.start, c.end, cites);
   return draftMd.slice(s, e).trim();

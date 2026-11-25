@@ -14,7 +14,7 @@
 // cannot be checked against anything: it is reported as unattributed, which
 // leaves the section unverifiable, and every verb that reads it warns.
 
-import { findQuotes } from './citation-grammar.js';
+import { findCitations, findQuotes, type Citation } from './citation-grammar.js';
 
 export interface ExtractedQuote {
   /** The quoted text, with citations removed and whitespace collapsed. */
@@ -34,9 +34,13 @@ export const MIN_WORDS = 10;
 /** A shorter quotation of at least this many words is checked for an exact match. */
 export const MIN_SHORT_WORDS = 3;
 
+/** An ellipsis marking words left out: `...`, `…` or `[...]`. */
+export const ELLIPSIS = /\[?(?:\.{3,}|…)\]?/;
+const WORD_BREAK = new RegExp(String.raw`\s+|${ELLIPSIS.source}`);
+
 /** The words in `s`: an ellipsis (`...`, `…`, `[...]`) or a lone dash is not one. */
 export function wordCount(s: string): number {
-  return s.split(/\s+|\[?(?:\.{3,}|…)\]?/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+  return s.split(WORD_BREAK).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
 }
 
 /**
@@ -44,9 +48,9 @@ export function wordCount(s: string): number {
  * (quotation, cited key) pair, plus one unattributed entry for each long
  * quotation that cites nothing.
  */
-export function extractQuotes(draftMd: string): ExtractedQuote[] {
+export function extractQuotes(draftMd: string, cites: readonly Citation[] = findCitations(draftMd)): ExtractedQuote[] {
   const out: ExtractedQuote[] = [];
-  for (const q of findQuotes(draftMd)) {
+  for (const q of findQuotes(draftMd, cites)) {
     const words = wordCount(q.text);
     if (!q.citation) {
       if (words >= MIN_WORDS) out.push({ text: q.text, citekey: '', kind: q.kind, exact: false, unattributed: true });

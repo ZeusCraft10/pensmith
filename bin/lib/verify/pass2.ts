@@ -28,7 +28,7 @@
 
 import { complete } from '../anthropic.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
-import { findCitations, sentenceSpan } from '../citation-grammar.js';
+import { findCitations, paragraphBreaks, sentenceSpan } from '../citation-grammar.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
 //
@@ -100,11 +100,12 @@ function pass2Placeholder(claimSentence: string, citekey: string): Pass2Result {
  */
 function collectClaimPairs(draftMd: string): ClaimPair[] {
   const cites = findCitations(draftMd);
+  const breaks = paragraphBreaks(draftMd);
   const pairs = new Map<string, string>();
   for (const c of cites) {
     for (const { key } of c.items) {
       if (pairs.has(key)) continue;
-      const [start, end] = sentenceSpan(draftMd, c.start, c.end, cites);
+      const [start, end] = sentenceSpan(draftMd, c.start, c.end, cites, breaks);
       pairs.set(key, draftMd.slice(start, end).trim());
     }
   }

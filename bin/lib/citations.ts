@@ -206,6 +206,12 @@ export async function parseBibOrEmpty(bibtex: string): Promise<Array<Record<stri
   return parseBib(bibtex);
 }
 
+/** The entries of `bibtex` by citekey, read as parseBibOrEmpty reads them. */
+export async function parseBibByCitekey<T = Record<string, unknown>>(bibtex: string): Promise<Map<string, T>> {
+  const entries = await parseBibOrEmpty(bibtex);
+  return new Map(entries.map((e) => [String(e['id'] ?? ''), e as T]));
+}
+
 /**
  * Plan-spec alias for `parseBib`. Both names resolve to the same
  * canonical implementation so the plan's `parseBibtex` reference and the

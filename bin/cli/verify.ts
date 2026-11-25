@@ -27,10 +27,15 @@ import { runPass1, runFreshnessForDraft, renderFreshnessTable } from '../lib/ver
 import { runPass3 } from '../lib/verify/pass3.js';
 import { runPass2, renderPass2Section } from '../lib/verify/pass2.js';
 import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
-import { parseBibOrEmpty } from '../lib/citations.js';
+import { parseBibByCitekey } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir } from '../lib/paths.js';
-import { renderPass1VerdictRow, renderPass3VerdictRow, unattributedWarning } from '../lib/verify/verdict-rows.js';
+import {
+  isBlockingVerdict,
+  renderPass1VerdictRow,
+  renderPass3VerdictRow,
+  unattributedWarning,
+} from '../lib/verify/verdict-rows.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
@@ -124,7 +129,6 @@ export const verifyCommand = defineCommand({
     const bibText = readFileSync(bibPath, 'utf8');
     const bibIsEmpty = bibText.trim().length === 0;
     const pass1 = await runPass1(draftMd, bibPath);
-    const bibEntries = await parseBibOrEmpty(bibText);
     // Widened value type (additive): carries title/author/abstract so Pass 2
     // (claim support) has source metadata. runPass3 reads only DOI, so the
     // widening is backward-compatible with the runPass3 call below.
@@ -134,9 +138,7 @@ export const verifyCommand = defineCommand({
       author?: Array<{ family?: string; given?: string }> | string[];
       abstract?: string;
     };
-    const bibByCitekey = new Map<string, BibValue>(
-      bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as BibValue]),
-    );
+    const bibByCitekey = await parseBibByCitekey<BibValue>(bibText);
     const pass3 = await runPass3(draftMd, bibByCitekey);
 
     // RSCH-10 freshness probe (D-10, WARN-only). Runs AFTER the blocking
@@ -144,16 +146,17 @@ export const verifyCommand = defineCommand({
     // retraction-watch hit surfaces as an advisory table row, not a block.
     const freshness = await runFreshnessForDraft(draftMd, bibPath);
 
-    // Aggregate: any Pass-1 verdict other than OK, or a quote NOT_FOUND →
-    // status: failed. A quote nothing could check (no source text, or no
-    // citation at all) → status: unverifiable. Else verified. A draft that
-    // cites nothing against an empty library has nothing to check:
-    // unverifiable, as before, but recorded like any other verdict.
-    const hasFail = pass1.some((r) => r.verdict !== 'OK') || pass3.some((r) => r.verdict === 'NOT_FOUND');
+    // Aggregate: any verdict that blocks compile (every Pass-1 verdict other
+    // than OK, or a quote NOT_FOUND) → status: failed. A quote nothing could
+    // check (no source text, or no citation at all) → status: unverifiable.
+    // Else verified. A draft that cites nothing against an empty library has
+    // nothing to check: unverifiable, as before, but recorded like any other
+    // verdict.
+    const hasFail = [...pass1, ...pass3].some((r) => isBlockingVerdict(r.verdict));
     const sourceTextMissing = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
     const unattributed = pass3.filter((r) => r.verdict === 'UNATTRIBUTED').length;
-    const hasUnverifiable = sourceTextMissing || unattributed > 0
-      || (bibIsEmpty && pass1.length === 0 && pass3.length === 0);
+    const nothingToCheck = bibIsEmpty && pass1.length === 0 && pass3.length === 0;
+    const hasUnverifiable = sourceTextMissing || unattributed > 0 || nothingToCheck;
     const status: 'verified' | 'failed' | 'unverifiable' = hasFail
       ? 'failed'
       : (hasUnverifiable ? 'unverifiable' : 'verified');
@@ -231,11 +234,12 @@ export const verifyCommand = defineCommand({
     if (status === 'failed') {
       // A blocking verdict: compile and done will refuse this section.
       process.exitCode = EXIT_REFUSED;
-    } else if (status === 'unverifiable' && (sourceTextMissing || unattributed === 0)) {
-      const what = sourceTextMissing
-        ? 'has quote(s) that could not be checked against source text'
-        : 'cites nothing, and CITATIONS.bib is empty';
-      process.stderr.write(`pensmith verify: WARN — section ${n} ${what}; see ${verifPath}.\n`);
+    } else if (sourceTextMissing) {
+      process.stderr.write(
+        `pensmith verify: WARN — section ${n} has quote(s) that could not be checked against source text; see ${verifPath}.\n`,
+      );
+    } else if (nothingToCheck) {
+      process.stderr.write(`pensmith verify: WARN — section ${n} cites nothing, and CITATIONS.bib is empty; see ${verifPath}.\n`);
     }
     return { ok: status !== 'failed', status, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
   },

@@ -41,18 +41,19 @@ import {
   type ExportFormat,
 } from '../lib/exporter.js';
 import { paperDir } from '../lib/paths.js';
-import { parseBibOrEmpty } from '../lib/citations.js';
+import { parseBibByCitekey } from '../lib/citations.js';
 import { resolveCitationStyle } from '../lib/citation-style.js';
 import { isPandocPresent } from '../lib/ecosystem-presence.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
-import { citedKeys, findCitations, findRawCitations, findUnparseableCitations } from '../lib/citation-grammar.js';
 import {
-  BLOCKING_VERDICT_LIST,
-  describeVerdictRow,
-  parseVerdictRowDetails,
-  unattributedWarning,
-} from '../lib/verify/verdict-rows.js';
+  citedKeys,
+  findCitations,
+  findRawCitations,
+  findUnparseableCitations,
+  type Citation,
+} from '../lib/citation-grammar.js';
+import { verdictGate } from '../lib/verify/verdict-rows.js';
 import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderFile, isPlaceholderText } from '../lib/placeholder.js';
 
@@ -303,15 +304,10 @@ export function runExportBlockingGate(paperRoot: string, compiledText?: string):
     if (statusMatch[1]?.toLowerCase() === 'failed') {
       reasons.push(`section ${name}: VERIFICATION.md Status is 'failed'`);
     }
-    // Blocking verdicts — same parser + blocking set compile uses.
-    const rows = parseVerdictRowDetails(md);
-    for (const row of rows.filter((r) => r.blocking)) {
-      reasons.push(
-        `section ${name}: ${describeVerdictRow(row)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`,
-      );
-    }
-    const unattributed = rows.filter((r) => r.verdict === 'UNATTRIBUTED').length;
-    if (unattributed > 0) warnings.push(unattributedWarning(`section ${name}`, unattributed));
+    // Blocking verdicts — the same gate compile uses.
+    const gate = verdictGate(md, `section ${name}`);
+    reasons.push(...gate.reasons);
+    warnings.push(...gate.warnings);
   }
 
   return { blocked: reasons.length > 0, reasons, warnings };
@@ -478,8 +474,7 @@ export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
 // ---------------------------------------------------------------------------
 
 /** The citations of `md` that are not Pandoc citations: raw identifiers and broken brackets. */
-function nonPandocCitations(md: string): string[] {
-  const cites = findCitations(md);
+function nonPandocCitations(md: string, cites: readonly Citation[]): string[] {
   return [...findRawCitations(md, cites), ...findUnparseableCitations(md, cites)].map((c) => c.raw);
 }
 
@@ -495,8 +490,8 @@ function addedEntries(after: readonly string[], before: readonly string[]): stri
 }
 
 /** The text of every long quotation in `md` with no citation. */
-function unattributedQuotes(md: string): string[] {
-  return extractQuotes(md).filter((q) => q.unattributed).map((q) => q.text);
+function unattributedQuotes(md: string, cites: readonly Citation[]): string[] {
+  return extractQuotes(md, cites).filter((q) => q.unattributed).map((q) => q.text);
 }
 
 /**
@@ -521,12 +516,14 @@ export async function reCheckFinalMd(
   bibPath: string,
 ): Promise<{ passed: boolean; reason: string }> {
   // Step (a): the citation diff runs first, so its reason is the one reported.
-  const finalKeys = new Set(citedKeys(findCitations(finalMd)));
-  const draftKeys = new Set(citedKeys(findCitations(draftMd)));
+  const finalCites = findCitations(finalMd);
+  const draftCites = findCitations(draftMd);
+  const finalKeys = new Set(citedKeys(finalCites));
+  const draftKeys = new Set(citedKeys(draftCites));
 
   const added = [...finalKeys].filter((k) => !draftKeys.has(k));
   const dropped = [...draftKeys].filter((k) => !finalKeys.has(k));
-  const addedRaw = addedEntries(nonPandocCitations(finalMd), nonPandocCitations(draftMd));
+  const addedRaw = addedEntries(nonPandocCitations(finalMd, finalCites), nonPandocCitations(draftMd, draftCites));
 
   if (added.length > 0 || dropped.length > 0 || addedRaw.length > 0) {
     const parts: string[] = [];
@@ -540,7 +537,7 @@ export async function reCheckFinalMd(
   }
 
   // Step (b): quotations with no citation, which need no bibliography.
-  const changedUnattributed = addedEntries(unattributedQuotes(finalMd), unattributedQuotes(draftMd));
+  const changedUnattributed = addedEntries(unattributedQuotes(finalMd, finalCites), unattributedQuotes(draftMd, draftCites));
   if (changedUnattributed.length > 0) {
     const detail = changedUnattributed.map((t) => `no citation "${t.slice(0, 40)}"`).join('; ');
     return {
@@ -554,15 +551,12 @@ export async function reCheckFinalMd(
   try {
     if (existsSync(bibPath)) bibText = readFileSync(bibPath, 'utf8');
   } catch {
-    bibText = '';
+    // Unreadable: read as an empty library.
   }
 
   let bibByCitekey: Map<string, { DOI?: string }>;
   try {
-    const bibEntries = await parseBibOrEmpty(bibText);
-    bibByCitekey = new Map(
-      bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
-    );
+    bibByCitekey = await parseBibByCitekey<{ DOI?: string }>(bibText);
   } catch {
     // Unparseable bib → skip-clean (no DOIs to check against).
     return { passed: true, reason: '' };

@@ -30,7 +30,7 @@ import JSZip from 'jszip';
 import { PDFDict, PDFDocument, PDFName, PDFRef, PDFStream } from 'pdf-lib';
 import { cslFilePath, renderCitationsInDocument, SUPPORTED_STYLES, type RenderedCitations } from './citations.js';
 import { atomicWriteFile, makeTempDir, removePath, type AtomicWriteOptions } from './atomic-write.js';
-import { citedKeys, findCitations, type Citation } from './citation-grammar.js';
+import { citedKeys, exportCitations, findCitations, type Citation } from './citation-grammar.js';
 import { cslHtmlToLatex, cslHtmlToMarkdown, escapeLatexText } from './csl-html.js';
 import { readBibEntries, selectEntries, toBibtex, toRis, type CslEntry } from './export-bib.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
@@ -612,28 +612,12 @@ export interface ExportResult {
 
 const DELIVERABLE_EXTS = ['md', 'docx', 'pdf', 'tex'];
 
+// How the export reads citations against the bibliography; compile reads them the same way.
+export { exportCitations };
+
 function traceFormat(file: string): TraceFormat {
   const ext = extname(file).slice(1);
   return ext === 'tex' ? 'latex' : (ext as TraceFormat);
-}
-
-/**
- * How the export reads the citations of `md` against the bibliography's keys:
- * the citations it renders, the narrative `@word`s with no entry that it
- * leaves as ordinary text (a handle, an email-like word, as it would read in
- * the source), and the keys of bracketed citations with no entry, which it
- * refuses.
- */
-export function exportCitations(
-  md: string,
-  known: ReadonlySet<string>,
-): { cites: Citation[]; ignored: Citation[]; unknownCited: string[] } {
-  const all = findCitations(md);
-  return {
-    cites: all.filter((c) => !c.narrative || known.has(c.items[0]!.key)),
-    ignored: all.filter((c) => c.narrative && !known.has(c.items[0]!.key)),
-    unknownCited: citedKeys(all.filter((c) => !c.narrative)).filter((k) => !known.has(k)),
-  };
 }
 
 /**

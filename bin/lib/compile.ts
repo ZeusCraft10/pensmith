@@ -53,7 +53,15 @@ import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
 import { writeBibtex } from './bibtex-write.js';
 import { parseBibOrEmpty } from './citations.js';
-import { citedKeys, codeRanges, findCitations, findRawCitations } from './citation-grammar.js';
+import {
+  citedKeys,
+  codeRanges,
+  exportCitations,
+  findCitations,
+  findRawCitations,
+  replaceCitations,
+} from './citation-grammar.js';
+import { deepEqual } from './deep-equal.js';
 import {
   renderCompileReport,
   type TransitionEntry,
@@ -62,12 +70,7 @@ import {
   type StalenessEntry,
 } from './compile-report.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
-import {
-  BLOCKING_VERDICT_LIST,
-  describeVerdictRow,
-  parseVerdictRowDetails,
-  unattributedWarning,
-} from './verify/verdict-rows.js';
+import { verdictGate } from './verify/verdict-rows.js';
 import { isPlaceholderText } from './placeholder.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
@@ -211,15 +214,12 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
  */
 function substitutePlaceholders(text: string, k: number): { masked: string; restore: Map<string, string> } {
   const restore = new Map<string, string>();
-  let masked = '';
-  let at = 0;
-  for (const c of findCitations(text)) {
+  const masked = replaceCitations(text, (c) => {
     const ph = makePlaceholder(k, restore.size);
     restore.set(ph, c.raw);
-    masked += text.slice(at, c.start) + ph;
-    at = c.end;
-  }
-  return { masked: masked + text.slice(at), restore };
+    return ph;
+  });
+  return { masked, restore };
 }
 
 /** Restore every {{cite_K_M}} placeholder back to its citation. */
@@ -373,12 +373,9 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         refuseReasons.push(`section ${os.n} (${os.slug}): VERIFICATION.md Status is 'failed'`);
       }
       // Refuse-gate: any blocking verdict row blocks, and is named.
-      const rows = parseVerdictRowDetails(verificationMd);
-      for (const row of rows.filter((r) => r.blocking)) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): ${describeVerdictRow(row)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`);
-      }
-      const unattributed = rows.filter((r) => r.verdict === 'UNATTRIBUTED').length;
-      if (unattributed > 0) warn(`WARN: ${unattributedWarning(`section ${os.n} (${os.slug})`, unattributed)}`);
+      const gate = verdictGate(verificationMd, `section ${os.n} (${os.slug})`);
+      refuseReasons.push(...gate.reasons);
+      for (const w of gate.warnings) warn(`WARN: ${w}`);
 
       // Staleness (COMP-01 / D-08): recompute the per-section hash.
       const freshHash = computeDraftHash(sec.draftBytes, sec.assignedSources);
@@ -448,9 +445,15 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       const tailRaw = left[li] ?? '';
       const headRaw = right[ri] ?? '';
       const beforeChars = tailRaw.length + headRaw.length;
+      const boundary = `${k + 1}→${k + 2}`;
+      // Keep the original prose at this boundary, and say why.
+      const reject = (why: string): void => {
+        warn(`WARN: boundary ${boundary} smoothing ${why}`);
+        transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+      };
 
       if (!opts.smoothBoundary) {
-        transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'skipped', before_chars: beforeChars, after_chars: beforeChars });
+        transitions.push({ boundary, status: 'skipped', before_chars: beforeChars, after_chars: beforeChars });
         continue;
       }
 
@@ -469,16 +472,14 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         });
       } catch (err) {
         // Smoothing is best-effort prose — a seam error NEVER refuses compile.
-        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing threw (${err instanceof Error ? err.message : String(err)}) — keeping original prose`);
-        transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+        reject(`threw (${err instanceof Error ? err.message : String(err)}) — keeping original prose`);
         continue;
       }
 
       // D-13: post-call token-set equality. ANY drift → reject (keep original).
       const outputSet = placeholderSet(smoothed);
       if (!setsEqual(inputSet, outputSet)) {
-        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — citation placeholder set drifted; keeping original prose`);
-        transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+        reject('rejected — citation placeholder set drifted; keeping original prose');
         continue;
       }
 
@@ -492,18 +493,15 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
       // The model may also have written a citation of its own (`@key`,
       // `(Author, 2020)`): the boundary must cite exactly what it cited before.
-      const before = citationFingerprint(`${tailRaw}\n\n${headRaw}`);
-      const after = citationFingerprint(`${newTail}\n\n${newHead}`);
-      if (before.length !== after.length || before.some((c, i) => c !== after[i])) {
-        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — the smoother changed the citations; keeping original prose`);
-        transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+      if (!deepEqual(citationFingerprint(`${tailRaw}\n\n${headRaw}`), citationFingerprint(`${newTail}\n\n${newHead}`))) {
+        reject('rejected — the smoother changed the citations; keeping original prose');
         continue;
       }
       left[li] = newTail;
       if (newHead.trim().length > 0) right[ri] = newHead;
       drafts[k] = left.join('\n\n');
       drafts[k + 1] = right.join('\n\n');
-      transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'smoothed', before_chars: beforeChars, after_chars: newTail.length + newHead.length });
+      transitions.push({ boundary, status: 'smoothed', before_chars: beforeChars, after_chars: newTail.length + newHead.length });
     }
 
     // Build the compiled manuscript (outline order, one blank line between):
@@ -541,12 +539,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     // ---- Step 4: regen CITATIONS.bib (D-19) + emit DRAFT + REPORT (COMP-07) -
     // A bracketed citation of a work the bibliography does not hold would
     // export as a raw token with no reference, so it refuses here. A
-    // narrative `@word` with no entry is text, as the exporter reads it.
+    // narrative `@word` with no entry is text: compile reads the citations
+    // through the same function the exporter does.
     const bibPath = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
     const bibEntries = await parseBibOrEmpty(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '');
     const inBib = new Set(bibEntries.map((e) => String(e['id'] ?? '')));
-    const compiledCites = findCitations(compiled);
-    const missing = citedKeys(compiledCites.filter((c) => !c.narrative)).filter((key) => !inBib.has(key));
+    const missing = exportCitations(compiled, inBib).unknownCited;
     if (missing.length > 0) {
       const reasons = missing.map((key) => `citation [@${key}] has no entry in .paper/CITATIONS.bib — re-run research or \`pensmith add\` it, then verify`);
       for (const r of reasons) warn(`REFUSE: ${r}`);
@@ -557,7 +555,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         staleResolvedCount: stalenessResolved.length,
       });
     }
-    await regenerateBib(new Set(citedKeys(compiledCites)), bibEntries, bibPath);
+    await regenerateBib(new Set(citedKeys(findCitations(compiled))), bibEntries, bibPath);
 
     const draftPath = join(paperDir(opts.paperRoot), 'DRAFT.md');
     await atomicWriteFile(draftPath, compiled);

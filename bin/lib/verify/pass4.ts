@@ -200,8 +200,7 @@ function locateSpan(para: string, sentence: string, fromIndex: number): { start:
 
 /**
  * R2 — the character offset of every citation inside the paragraph, in any
- * Pandoc form. Used by isOrphan for the ORPHAN_PROXIMITY_CHARS distance test;
- * an empty list is the fast no-citation path.
+ * Pandoc form. Used by isOrphan for the ORPHAN_PROXIMITY_CHARS distance test.
  */
 function citationOffsets(para: string): number[] {
   return findCitations(para).map((c) => c.start);
@@ -209,14 +208,12 @@ function citationOffsets(para: string): number[] {
 
 /**
  * R2/R8 — a HIGH-confidence claim is an orphan when NO citation starts
- * within ORPHAN_PROXIMITY_CHARS of the claim sentence's span. AMBIGUOUS claims
- * are NEVER auto-flagged here and NEVER contribute to orphanCount (R8). The
- * optional `hasAnyCitekey` fast-path lets the caller skip the offset scan when
- * the paragraph has no citations at all.
+ * within ORPHAN_PROXIMITY_CHARS of the claim sentence's span, so a paragraph
+ * with no citation at all leaves every HIGH claim an orphan. AMBIGUOUS claims
+ * are NEVER auto-flagged here and NEVER contribute to orphanCount (R8).
  */
-function isOrphan(offsets: number[], claim: ExtractedClaim, hasAnyCitekey = true): boolean {
+function isOrphan(offsets: number[], claim: ExtractedClaim): boolean {
   if (claim.claimConfidence !== 'HIGH') return false;
-  if (!hasAnyCitekey) return true; // R2: no citation anywhere -> uncited -> orphan
   for (const off of offsets) {
     // Distance from the citekey to the nearest edge of the sentence span.
     const distance =
@@ -284,7 +281,6 @@ function auditParagraph(para: string, paragraphIndex: number): {
   const totalSentences = splitSentences(para).length;
   const claims = extractClaimsFromParagraph(para);
   const offsets = citationOffsets(para);
-  const hasAnyCitekey = offsets.length > 0;
 
   const claimResults: Pass4ClaimResult[] = [];
   const ambiguous: Array<{ index: number; claim: ExtractedClaim }> = [];
@@ -292,7 +288,7 @@ function auditParagraph(para: string, paragraphIndex: number): {
 
   for (const claim of claims) {
     if (claim.claimConfidence === 'HIGH') {
-      const orphan = isOrphan(offsets, claim, hasAnyCitekey);
+      const orphan = isOrphan(offsets, claim);
       if (orphan) orphanCount += 1; // R8 — HIGH orphans ONLY
       claimResults.push({
         paragraphIndex,

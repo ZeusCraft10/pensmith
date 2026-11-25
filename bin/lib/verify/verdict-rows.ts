@@ -25,11 +25,16 @@ const BLOCKING_VERDICTS = new Set([
   'FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE',
 ]);
 
-/** Verdicts on text that is not a `[@key]` citation, so the row's key is that text. */
-const TEXT_VERDICTS: ReadonlySet<string> = new Set(['RAW_CITATION', 'UNPARSEABLE', 'UNATTRIBUTED']);
+/** Whether `verdict` blocks compile and export. */
+export function isBlockingVerdict(verdict: string): boolean {
+  return BLOCKING_VERDICTS.has(verdict);
+}
+
+/** Blocking verdicts on text that is not a `[@key]` citation, so the row's key is that text. */
+const TEXT_VERDICTS: ReadonlySet<string> = new Set(['RAW_CITATION', 'UNPARSEABLE']);
 
 /** The blocking verdicts as refusal text: `FABRICATED/MIS-CITED/...`. */
-export const BLOCKING_VERDICT_LIST = [...BLOCKING_VERDICTS].join('/');
+const BLOCKING_VERDICT_LIST = [...BLOCKING_VERDICTS].join('/');
 
 /** The key a Pass-3 row carries for a quotation that cites nothing. */
 export const NO_CITATION_KEY = '(no citation)';
@@ -136,8 +141,23 @@ export function unattributedWarning(where: string, count: number): string {
 }
 
 /** How a refusal names what a blocking row is about: `[@key]`, or the quoted text. */
-export function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): string {
-  if (!TEXT_VERDICTS.has(row.verdict)) return `citation [@${row.citekey}]`;
-  if (row.verdict === 'UNATTRIBUTED') return 'a quotation with no citation';
-  return `text "${row.citekey}"`;
+function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): string {
+  return TEXT_VERDICTS.has(row.verdict) ? `text "${row.citekey}"` : `citation [@${row.citekey}]`;
+}
+
+/**
+ * The verdict rows of a section's VERIFICATION.md as compile and done gate
+ * them: a refusal reason for each blocking row, and a warning when quotations
+ * have no citation. `where` names the section. The caller checks the Status
+ * line itself.
+ */
+export function verdictGate(verificationMd: string, where: string): { reasons: string[]; warnings: string[] } {
+  const rows = parseVerdictRowDetails(verificationMd);
+  const unattributed = rows.filter((r) => r.verdict === 'UNATTRIBUTED').length;
+  return {
+    reasons: rows
+      .filter((r) => r.blocking)
+      .map((r) => `${where}: ${describeVerdictRow(r)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`),
+    warnings: unattributed > 0 ? [unattributedWarning(where, unattributed)] : [],
+  };
 }

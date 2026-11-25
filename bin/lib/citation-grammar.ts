@@ -49,7 +49,9 @@ export interface Citation {
 
 // A key starts with a letter, digit or `_`. Punctuation from :.#$%&-+?<>~/ may
 // appear inside it, but not at its end, so `@doe99.` cites `doe99`.
-const KEY_BODY = String.raw`[\p{L}\p{N}_](?:[\p{L}\p{N}_]|[:.#$%&\-+?<>~/](?=[\p{L}\p{N}_]))*`;
+const KEY_CHAR = String.raw`[\p{L}\p{N}_]`;
+const KEY_PUNCT = String.raw`[:.#$%&\-+?<>~/]`;
+const KEY_BODY = String.raw`${KEY_CHAR}(?:${KEY_CHAR}|${KEY_PUNCT}(?=${KEY_CHAR}))*`;
 const KEY_RE = new RegExp(String.raw`^(?:\{([^{}]+)\}|(${KEY_BODY}))`, 'u');
 
 // Pandoc's locator terms, longest spellings first so `pp.` wins over `p.`.
@@ -80,7 +82,8 @@ const ROMAN = '(?=[ivxlcdm])m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v
 const LOCATOR_TOKEN = `(?:\\d+[a-z]?|${ROMAN})(?![\\p{L}\\p{N}])`;
 const LOCATOR_VALUE_RE = new RegExp(`^${LOCATOR_TOKEN}(?:\\s*(?:[-–—]|,|&)\\s*${LOCATOR_TOKEN})*`, 'iu');
 
-function escapeRe(s: string): string {
+/** `s` with every regex metacharacter escaped, to match it literally. */
+export function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -160,6 +163,11 @@ function parseItem(part: string): CiteItem | null {
   return item;
 }
 
+/** Whether `i` falls inside one of the [start, end) ranges `rs`. */
+function inRanges(rs: ReadonlyArray<readonly [number, number]>, i: number): boolean {
+  return rs.some(([a, b]) => i >= a && i < b);
+}
+
 /** Character ranges of inline code spans and fenced code blocks. */
 export function codeRanges(md: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
@@ -168,9 +176,28 @@ export function codeRanges(md: string): Array<[number, number]> {
   const inline = /(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g;
   for (const m of md.matchAll(inline)) {
     const s = m.index;
-    if (!ranges.some(([a, b]) => s >= a && s < b)) ranges.push([s, s + m[0].length]);
+    if (!inRanges(ranges, s)) ranges.push([s, s + m[0].length]);
   }
   return ranges;
+}
+
+/**
+ * The bracketed groups of `md` that may be citation clusters: no nested
+ * brackets, at least one `@`, not in code, not escaped as `\[`, and not a link
+ * (a bracket followed by `(`).
+ */
+function* bracketGroups(
+  md: string,
+  skip: ReadonlyArray<readonly [number, number]>,
+): Generator<{ start: number; end: number; inner: string }> {
+  for (const m of md.matchAll(/\[([^[\]]*@[^[\]]*)\]/g)) {
+    const start = m.index;
+    const end = start + m[0].length;
+    if (inRanges(skip, start)) continue;
+    if (start > 0 && md[start - 1] === '\\') continue;
+    if (md[end] === '(') continue;
+    yield { start, end, inner: m[1]! };
+  }
 }
 
 /**
@@ -180,19 +207,12 @@ export function codeRanges(md: string): Array<[number, number]> {
  */
 export function findCitations(md: string): Citation[] {
   const skip = codeRanges(md);
-  const inCode = (i: number): boolean => skip.some(([a, b]) => i >= a && i < b);
   const out: Citation[] = [];
   const claimed: Array<[number, number]> = [];
 
-  // Bracketed clusters: no nested brackets, at least one @.
-  for (const m of md.matchAll(/\[([^[\]]*@[^[\]]*)\]/g)) {
-    const start = m.index;
-    const end = start + m[0].length;
-    if (inCode(start)) continue;
-    if (start > 0 && md[start - 1] === '\\') continue;
-    if (md[end] === '(') continue;
+  for (const { start, end, inner } of bracketGroups(md, skip)) {
     // `@key [p. 4]` is a narrative citation's locator, handled below.
-    const parts = m[1]!.split(';');
+    const parts = inner.split(';');
     const items: CiteItem[] = [];
     let ok = true;
     for (const p of parts) {
@@ -201,7 +221,7 @@ export function findCitations(md: string): Citation[] {
       items.push(it);
     }
     if (!ok || items.length === 0) continue;
-    out.push({ start, end, raw: m[0], narrative: false, items });
+    out.push({ start, end, raw: md.slice(start, end), narrative: false, items });
     claimed.push([start, end]);
   }
 
@@ -209,8 +229,7 @@ export function findCitations(md: string): Citation[] {
   const narrativeRe = new RegExp(String.raw`(?<![\p{L}\p{N}_@\\])@(?:\{([^{}]+)\}|(${KEY_BODY}))`, 'gu');
   for (const m of md.matchAll(narrativeRe)) {
     const start = m.index;
-    if (inCode(start)) continue;
-    if (claimed.some(([a, b]) => start >= a && start < b)) continue;
+    if (inRanges(skip, start) || inRanges(claimed, start)) continue;
     const key = m[1] ?? m[2]!;
     let end = start + m[0].length;
     const item: CiteItem = { key };
@@ -232,29 +251,68 @@ export function citedKeys(cites: readonly Citation[]): string[] {
   return [...seen];
 }
 
+/**
+ * How the export reads the citations of `md` against the bibliography's keys:
+ * the citations it renders, the narrative `@word`s with no entry that it
+ * leaves as ordinary text (a handle, an email-like word, as it would read in
+ * the source), and the keys of bracketed citations with no entry, which it
+ * refuses. Compile refuses the same keys.
+ */
+export function exportCitations(
+  md: string,
+  known: ReadonlySet<string>,
+): { cites: Citation[]; ignored: Citation[]; unknownCited: string[] } {
+  const all = findCitations(md);
+  return {
+    cites: all.filter((c) => !c.narrative || known.has(c.items[0]!.key)),
+    ignored: all.filter((c) => c.narrative && !known.has(c.items[0]!.key)),
+    unknownCited: citedKeys(all.filter((c) => !c.narrative)).filter((k) => !known.has(k)),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Editing citations
 // ---------------------------------------------------------------------------
 
+/** The citations in `md` that cite `key`, in any Pandoc form, in document order. */
+export function citationsOf(md: string, key: string, cites: readonly Citation[] = findCitations(md)): Citation[] {
+  return cites.filter((c) => c.items.some((i) => i.key === key));
+}
+
+/**
+ * `md` with each of `cites` replaced by `fn` of it. `cites` must be in
+ * document order and not overlap, as findCitations gives them.
+ */
+export function replaceCitations(
+  md: string,
+  fn: (c: Citation) => string,
+  cites: readonly Citation[] = findCitations(md),
+): string {
+  let out = '';
+  let at = 0;
+  for (const c of cites) {
+    out += md.slice(at, c.start) + fn(c);
+    at = c.end;
+  }
+  return out + md.slice(at);
+}
+
 /** `@key` or `@{key}` exactly, not the start of a longer key. */
 function citedKeyPattern(key: string): RegExp {
   const k = escapeRe(key);
-  return new RegExp(String.raw`@(?:\{${k}\}|${k}(?![\p{L}\p{N}_]|[:.#$%&\-+?<>~/][\p{L}\p{N}_]))`, 'gu');
+  return new RegExp(String.raw`@(?:\{${k}\}|${k}(?!${KEY_CHAR}|${KEY_PUNCT}${KEY_CHAR}))`, 'gu');
 }
 
 /** Apply `edit` to every citation of `key` in `md`, last first so offsets stay valid. */
 function editCitationsOf(md: string, key: string, edit: (c: Citation, text: string) => string): string {
   let out = md;
-  for (const c of findCitations(md).filter((x) => x.items.some((i) => i.key === key)).reverse()) {
-    out = edit(c, out);
-  }
+  for (const c of citationsOf(md, key).reverse()) out = edit(c, out);
   return out;
 }
 
 /** `md` with every citation of `from` citing `to` instead; prefixes and locators stay. */
 export function renameCitedKey(md: string, from: string, to: string): string {
-  return editCitationsOf(md, from, (c, text) =>
-    text.slice(0, c.start) + c.raw.replace(citedKeyPattern(from), `@${to}`) + text.slice(c.end));
+  return replaceCitations(md, (c) => c.raw.replace(citedKeyPattern(from), `@${to}`), citationsOf(md, from));
 }
 
 /**
@@ -289,6 +347,12 @@ const SENTENCE_END = /[.!?]["”’')\]]*(?=\s+[\p{Lu}\p{N}"“‘'[@])/gu;
 
 // A blank line, with LF or CRLF line endings (a draft edited on Windows).
 const BLANK_LINE = /\n[ \t\r]*\n/g;
+// The same, matched only where it starts at `lastIndex`.
+const BLANK_LINE_AT = new RegExp(BLANK_LINE.source, 'y');
+
+// How far back from a full stop endsSentence looks for the word before it:
+// further than any abbreviation or initial reaches.
+const WORD_LOOKBACK = 32;
 
 /**
  * Whether the `.`, `!` or `?` at `at` ends a sentence. A full stop after an
@@ -307,16 +371,30 @@ function endsSentence(text: string, from: number, at: number): boolean {
 export function sentenceEnds(text: string): number[] {
   const out: number[] = [];
   for (const m of text.matchAll(SENTENCE_END)) {
-    if (endsSentence(text, Math.max(0, m.index - 32), m.index)) out.push(m.index);
+    if (endsSentence(text, Math.max(0, m.index - WORD_LOOKBACK), m.index)) out.push(m.index);
   }
   return out;
 }
 
-/** Offset of the paragraph that holds `at`: just after the last blank line before it. */
-function paragraphStart(md: string, at: number): number {
-  let from = 0;
-  for (const m of md.slice(0, at).matchAll(BLANK_LINE)) from = m.index + m[0].length;
-  return from;
+/**
+ * The offset just past each blank line of `md`, in order: where each paragraph
+ * after the first starts. sentenceSpan takes it, as it takes the citations,
+ * so a caller that asks for many sentences of one text reads it once.
+ */
+export function paragraphBreaks(md: string): number[] {
+  return [...md.matchAll(BLANK_LINE)].map((m) => m.index + m[0].length);
+}
+
+/** Offset of the paragraph that holds `at`: just after the last blank line that ends at or before it. */
+function paragraphStart(breaks: readonly number[], at: number): number {
+  let lo = 0;
+  let hi = breaks.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (breaks[mid]! <= at) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo > 0 ? breaks[lo - 1]! : 0;
 }
 
 /**
@@ -330,8 +408,9 @@ export function sentenceSpan(
   start: number,
   end: number,
   cites: readonly Citation[] = findCitations(md),
+  breaks: readonly number[] = paragraphBreaks(md),
 ): [number, number] {
-  const paraStart = paragraphStart(md, start);
+  const paraStart = paragraphStart(breaks, start);
   const afterBreak = md.slice(end).search(BLANK_LINE);
   const paraEnd = afterBreak === -1 ? md.length : end + afterBreak;
   const masked = (i: number): boolean =>
@@ -342,7 +421,7 @@ export function sentenceSpan(
   const para = md.slice(paraStart, paraEnd);
   for (const m of para.matchAll(SENTENCE_END)) {
     const at = paraStart + m.index;
-    if (masked(at) || !endsSentence(md, paraStart, at)) continue;
+    if (masked(at) || !endsSentence(md, Math.max(paraStart, at - WORD_LOOKBACK), at)) continue;
     const boundary = at + m[0].length;
     if (boundary <= start) s = boundary;
     else if (at >= end) { e = boundary; break; }
@@ -486,21 +565,14 @@ export interface UnparsedCitation {
  * address, is not a citation.
  */
 export function findUnparseableCitations(md: string, cites: readonly Citation[] = findCitations(md)): UnparsedCitation[] {
-  const skip = codeRanges(md);
   const out: UnparsedCitation[] = [];
-  for (const m of md.matchAll(/\[([^[\]]*@[^[\]]*)\]/g)) {
-    const start = m.index;
-    const end = start + m[0].length;
-    if (skip.some(([a, b]) => start >= a && start < b)) continue;
-    if (start > 0 && md[start - 1] === '\\') continue;
-    if (md[end] === '(') continue;
+  for (const { start, end, inner } of bracketGroups(md, codeRanges(md))) {
     if (cites.some((c) => !c.narrative && c.start === start)) continue;
-    for (const a of m[1]!.matchAll(/(^|[\s;])-?@/g)) {
-      const at = start + 1 + a.index + a[0].length - 1;
-      if (cites.some((c) => c.narrative && c.start === at)) continue;
-      out.push({ start, end, raw: m[0] });
-      break;
-    }
+    // An `@` where a key starts (the group's start, a space or `;`, then
+    // `-?@`) that opens no narrative citation.
+    const unparsed = [...inner.matchAll(/(^|[\s;])-?@/g)]
+      .some((a) => !cites.some((c) => c.narrative && c.start === start + a.index + a[0].length));
+    if (unparsed) out.push({ start, end, raw: md.slice(start, end) });
   }
   return out;
 }
@@ -549,9 +621,7 @@ function linkTargetRanges(md: string): Array<[number, number]> {
 }
 
 function quoteText(inner: string): string {
-  let text = inner;
-  for (const c of findCitations(inner).reverse()) text = text.slice(0, c.start) + text.slice(c.end);
-  return text.replace(/\s+/g, ' ').trim().replace(/[\s.,;:]+$/u, '');
+  return replaceCitations(inner, () => '').replace(/\s+/g, ' ').trim().replace(/[\s.,;:]+$/u, '');
 }
 
 interface Line { start: number; end: number; text: string }
@@ -591,7 +661,13 @@ function blockQuoteSpans(md: string, inCode: (i: number) => boolean): Array<{ st
 }
 
 /** The citation a block quotation is attributed to. */
-function blockAttribution(md: string, start: number, end: number, cites: readonly Citation[]): Citation | null {
+function blockAttribution(
+  md: string,
+  start: number,
+  end: number,
+  cites: readonly Citation[],
+  breaks: readonly number[],
+): Citation | null {
   // A citation inside the block, usually on its last line.
   const inside = cites.filter((c) => c.start >= start && c.start < end);
   if (inside.length > 0) return inside.at(-1)!;
@@ -602,7 +678,7 @@ function blockAttribution(md: string, start: number, end: number, cites: readonl
   // The paragraph before introduces it: `As @key argues:`.
   const before = md.slice(0, start).replace(/\s+$/, '');
   if (before.endsWith(':')) {
-    const from = paragraphStart(md, before.length);
+    const from = paragraphStart(breaks, before.length);
     const intro = cites.filter((c) => c.start >= from && c.end <= before.length);
     if (intro.length > 0) return intro.at(-1)!;
   }
@@ -610,14 +686,20 @@ function blockAttribution(md: string, start: number, end: number, cites: readonl
 }
 
 /** The citation an inline quotation is attributed to. */
-function inlineAttribution(md: string, start: number, end: number, cites: readonly Citation[]): Citation | null {
+function inlineAttribution(
+  md: string,
+  start: number,
+  end: number,
+  cites: readonly Citation[],
+  breaks: readonly number[],
+): Citation | null {
   // Right after the closing mark: `"..." [@key, p. 4]`, `"...," [@key]`, `"..." (p. 4) [@key]`.
   const tail = /^[\s,.;:]*(?:\([^()\n]{0,40}\)[\s,.;:]*)?/.exec(md.slice(end))?.[0] ?? '';
   const direct = cites.find((c) => c.start === end + tail.length);
   if (direct) return direct;
   const inner = cites.filter((c) => c.start > start && c.end <= end);
   if (inner.length > 0) return inner.at(-1)!;
-  const [s, e] = sentenceSpan(md, start, end, cites);
+  const [s, e] = sentenceSpan(md, start, end, cites, breaks);
   const following = cites.find((c) => c.start >= end && c.start < e);
   if (following) return following;
   const preceding = cites.filter((c) => c.start >= s && c.end <= start);
@@ -636,14 +718,14 @@ function inlineAttribution(md: string, start: number, end: number, cites: readon
  */
 export function findQuotes(md: string, cites: readonly Citation[] = findCitations(md)): Quote[] {
   const skip = codeRanges(md);
-  const inCode = (i: number): boolean => skip.some(([a, b]) => i >= a && i < b);
+  const inCode = (i: number): boolean => inRanges(skip, i);
   const links = linkTargetRanges(md);
-  const inLinkTarget = (i: number): boolean => links.some(([a, b]) => i >= a && i < b);
+  const breaks = paragraphBreaks(md);
   const out: Quote[] = [];
 
   const blocks = blockQuoteSpans(md, inCode);
   for (const b of blocks) {
-    out.push({ kind: 'block', start: b.start, end: b.end, text: quoteText(b.inner), citation: blockAttribution(md, b.start, b.end, cites) });
+    out.push({ kind: 'block', start: b.start, end: b.end, text: quoteText(b.inner), citation: blockAttribution(md, b.start, b.end, cites, breaks) });
   }
   const inBlockOrCite = (i: number): boolean =>
     blocks.some((b) => i >= b.start && i < b.end) || cites.some((c) => i >= c.start && i < c.end);
@@ -652,7 +734,7 @@ export function findQuotes(md: string, cites: readonly Citation[] = findCitation
   for (let i = 0; i < md.length; i += 1) {
     const open = md[i]!;
     const closers = CLOSERS[open];
-    if (!closers || inCode(i) || inBlockOrCite(i) || inLinkTarget(i)) continue;
+    if (!closers || inCode(i) || inBlockOrCite(i) || inRanges(links, i)) continue;
     const prev = i > 0 ? md[i - 1]! : ' ';
     const next = md[i + 1];
     if (next === undefined || /\s/.test(next)) continue;
@@ -660,7 +742,10 @@ export function findQuotes(md: string, cites: readonly Citation[] = findCitation
     if ((open === "'" || open === '‘') && (!/\p{L}/u.test(next) || CLIPPED_WORD.test(md.slice(i + 1, i + 8)))) continue;
     let close = -1;
     for (let j = i + 1; j < md.length; j += 1) {
-      if (md[j] === '\n' && /^\n[ \t\r]*\n/.test(md.slice(j))) break;
+      if (md[j] === '\n') {
+        BLANK_LINE_AT.lastIndex = j;
+        if (BLANK_LINE_AT.test(md)) break;
+      }
       if (!closers.includes(md[j]!) || /\s/.test(md[j - 1]!) || isWordChar(md[j + 1])) continue;
       close = j;
       break;
@@ -670,7 +755,7 @@ export function findQuotes(md: string, cites: readonly Citation[] = findCitation
     const end = close + 1;
     const text = quoteText(md.slice(i + 1, close));
     if (text.length > 0) {
-      out.push({ kind: 'inline', start, end, text, citation: inlineAttribution(md, start, end, cites) });
+      out.push({ kind: 'inline', start, end, text, citation: inlineAttribution(md, start, end, cites, breaks) });
     }
     i = close;
   }
