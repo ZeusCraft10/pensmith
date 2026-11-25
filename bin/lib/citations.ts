@@ -215,6 +215,69 @@ export async function parseBib(bibtex: string): Promise<Array<Record<string, unk
 export const parseBibtex = parseBib;
 
 // =====================================================================
+//   Public: formatBibtex — BibTeX that keeps every script
+// =====================================================================
+
+// citation-js writes BibTeX in ASCII by default: it turns accented Latin
+// letters into LaTeX commands, Greek into math mode, and drops every other
+// script (Chinese, Cyrillic, Arabic, ...). With ASCII-only output off it
+// escapes nothing at all, so LaTeX's special characters are escaped here
+// instead, the way citation-js escapes them. Every other character is kept
+// as UTF-8, which Pandoc, biber and reference managers read.
+const BIBTEX_ESCAPES: Readonly<Record<string, string>> = {
+  '\\': '\\textbackslash{}',
+  '{': '\\{',
+  '}': '\\}',
+  '&': '\\&',
+  '%': '\\%',
+  '$': '\\$',
+  '#': '\\#',
+  '_': '\\_',
+  '~': '\\textasciitilde{}',
+  '^': '\\textasciicircum{}',
+};
+// The markup citation-js keeps in titles (<i>, <sc>, <span class="nocase">)
+// and turns into LaTeX commands itself.
+const RICH_TEXT_TAG = /(<\/?(?:i|b|sc|sup|sub|span)(?:\s[^>]*)?>)/;
+// Fields citation-js writes as they are (identifiers, DOI, URL).
+const VERBATIM_CSL_FIELDS: ReadonlySet<string> = new Set(['id', 'citation-key', 'type', 'DOI', 'URL']);
+
+function escapeBibtexText(s: string): string {
+  return s
+    .split(RICH_TEXT_TAG)
+    .map((part, i) => (i % 2 === 1 ? part : part.replace(/[\\{}&%$#_~^]/g, (c) => BIBTEX_ESCAPES[c] ?? c)))
+    .join('');
+}
+
+function escapeBibtexValue(v: unknown): unknown {
+  if (typeof v === 'string') return escapeBibtexText(v);
+  if (Array.isArray(v)) return v.map(escapeBibtexValue);
+  if (v !== null && typeof v === 'object') {
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, escapeBibtexValue(x)]));
+  }
+  return v;
+}
+
+/**
+ * BibTeX for CSL-JSON `entries`, keyed by each entry's `citation-key` (or
+ * `id`). Text in any script is kept as UTF-8.
+ */
+export function formatBibtex(entries: ReadonlyArray<Record<string, unknown>>): string {
+  if (entries.length === 0) return '';
+  const prepared = entries.map((e) =>
+    Object.fromEntries(Object.entries(e).map(([k, v]) => [k, VERBATIM_CSL_FIELDS.has(k) ? v : escapeBibtexValue(v)])),
+  );
+  const config = plugins.config.get('@bibtex').format;
+  const asciiOnly = config.asciiOnly;
+  config.asciiOnly = false;
+  try {
+    return new Cite(prepared, { forceType: '@csl/list+object' }).format('bibtex', { format: 'text' });
+  } finally {
+    config.asciiOnly = asciiOnly;
+  }
+}
+
+// =====================================================================
 //   Public: renderStyle (CITE-02 / CITE-03 — generic N-style renderer)
 // =====================================================================
 /**

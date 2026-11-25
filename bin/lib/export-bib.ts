@@ -9,7 +9,7 @@
 // (verification timestamps, the RETRACTED note) and free-text fields such as
 // notes and abstracts never leave the project.
 
-import { Cite, parseBib } from './citations.js';
+import { Cite, formatBibtex, parseBib } from './citations.js';
 
 export type CslEntry = Record<string, unknown> & { id: string };
 
@@ -57,11 +57,9 @@ export function selectEntries(entries: CslEntry[], keys: readonly string[]): { e
   return { entries: picked, missing };
 }
 
-/** BibTeX for `entries`, each keyed by its citekey. */
+/** BibTeX for `entries`, each keyed by its citekey. Names and titles in any script are kept. */
 export function toBibtex(entries: readonly CslEntry[]): string {
-  if (entries.length === 0) return '';
-  const cite = new Cite(entries.map((e) => ({ ...e, 'citation-key': e.id })));
-  return cite.format('bibtex', { format: 'text' });
+  return formatBibtex(entries.map((e) => ({ ...e, 'citation-key': e.id })));
 }
 
 /** RIS for `entries`. Each record carries its citekey (ID) and DOI (DO). */

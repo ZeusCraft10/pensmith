@@ -9,6 +9,8 @@
 //     CSL template loader).
 //   - `plugins.config.get('@csl').engine(...)` and `Cite.util.downgradeCsl`,
 //     so a whole document's citations render in one citeproc session.
+//   - `plugins.config.get('@bibtex').format.asciiOnly`, so formatBibtex can
+//     write UTF-8 BibTeX instead of dropping non-Latin text.
 //
 // Widening this shim is a chokepoint-bypass smell — new fields go via
 // the citations.ts wrapper API, not by widening global typings.
@@ -46,9 +48,14 @@ declare module 'citation-js' {
     engine(data: unknown[], template: string, lang: string, format: string): CiteprocEngine;
   }
 
+  export interface BibtexPluginConfig {
+    format: { asciiOnly: boolean };
+  }
+
   export interface PluginRegistry {
     config: {
       get(plugin: '@csl'): CslPluginConfig;
+      get(plugin: '@bibtex'): BibtexPluginConfig;
       get(plugin: string): unknown;
     };
   }
