@@ -28,7 +28,9 @@
 //   Retry (D-31, D-32)
 // =================================================================
 // Retryable status codes: 429, 500, 502, 503, 504
-// Retryable error codes:  ETIMEDOUT, ECONNRESET, ENOTFOUND, EAI_AGAIN
+// Retryable error codes:  ETIMEDOUT, ECONNRESET, ENOTFOUND, EAI_AGAIN, plus the
+//                         undici socket/connect codes and a missed deadline
+//                         (see RETRYABLE_ERR_CODES)
 // Backoff:                full-jitter via bin/lib/retry.ts (NOT p-retry's
 //                         bounded multiplicative jitter — see retry.ts header)
 // 4xx OTHER than 429 are NOT retried (they are application errors).
@@ -48,7 +50,7 @@
 // Bucket acquire happens AFTER the cache short-circuit and INSIDE the
 // retry's `fn` so 429-retry re-pays the rate cost.
 
-import { request, getGlobalDispatcher, EnvHttpProxyAgent, type Dispatcher } from 'undici';
+import { request, getGlobalDispatcher, EnvHttpProxyAgent, Pool, type Dispatcher } from 'undici';
 import { createHash } from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { readFileSync, statSync } from 'node:fs';
@@ -93,10 +95,101 @@ function dispatcherForRequest(): Dispatcher {
   const env = proxyEnvFingerprint();
   if (!proxyAgent || proxyAgent.env !== env) {
     const previous = proxyAgent?.agent;
-    proxyAgent = { env, agent: new EnvHttpProxyAgent() };
+    proxyAgent = { env, agent: new EnvHttpProxyAgent({ clientFactory: proxyClientFactory }) };
     void previous?.close().catch(() => { /* idle sockets only */ });
   }
   return proxyAgent.agent;
+}
+
+/**
+ * Drop our proxy-aware agent after a request on it missed its deadline, so the
+ * next request (the retry included) opens fresh connections. Destroying it is
+ * the only way to stop a tunnel that is still being set up: undici does not
+ * abort a request that is waiting for its connection. A dispatcher we did not
+ * create (a test MockAgent, a host application's agent) is left alone.
+ */
+function retireDispatcher(dispatcher: Dispatcher, reason: Error): void {
+  if (proxyAgent?.agent !== dispatcher) return;
+  proxyAgent = null;
+  void dispatcher.destroy(reason).catch(() => { /* already torn down */ });
+}
+
+/** The proxy closed or broke the connection while a tunnel was being opened. */
+export class ProxyTunnelError extends Error {
+  readonly code = 'PENSMITH_PROXY_TUNNEL';
+  constructor(cause: unknown) {
+    super(`proxy connection failed while opening a tunnel: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.name = 'ProxyTunnelError';
+  }
+}
+
+// undici treats a socket error during connection setup as recoverable and
+// reconnects at once. When a proxy reads the CONNECT and then hangs up, that
+// becomes a tight loop: thousands of connections a second to the proxy for as
+// long as the request waits. Re-labelling the error makes undici fail the
+// request instead, and fetch()'s own retry then applies its backoff.
+const LOOPING_TUNNEL_ERROR_CODES: ReadonlySet<string> = new Set(['UND_ERR_SOCKET', 'UND_ERR_INFO']);
+
+function asTunnelError(err: unknown): unknown {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && LOOPING_TUNNEL_ERROR_CODES.has(code) ? new ProxyTunnelError(err) : err;
+}
+
+type ConnectCallback = (err: Error | null, data: Dispatcher.ConnectData) => void;
+type ConnectFn = (o: Dispatcher.ConnectOptions, cb?: ConnectCallback) => Promise<Dispatcher.ConnectData> | void;
+
+/** The connection pool to the proxy itself, which carries the CONNECT requests. */
+function proxyClientFactory(origin: URL, opts: object): Dispatcher {
+  const pool = new Pool(origin, opts as Pool.Options);
+  const connect = pool.connect.bind(pool) as ConnectFn;
+  const guarded: ConnectFn = (o, cb) => {
+    if (typeof cb === 'function') {
+      return connect(o, (err, data) => cb(err ? (asTunnelError(err) as Error) : null, data));
+    }
+    return (connect(o) as Promise<Dispatcher.ConnectData>).catch((err: unknown) => {
+      throw asTunnelError(err);
+    });
+  };
+  Object.assign(pool, { connect: guarded });
+  return pool;
+}
+
+/** No response headers arrived within the request's timeout. */
+export class HttpDeadlineError extends Error {
+  readonly code = 'PENSMITH_HTTP_DEADLINE';
+  constructor(url: string, timeoutMs: number) {
+    super(`http: no response from ${new URL(url).host} within ${timeoutMs} ms (deadline exceeded)`);
+    this.name = 'HttpDeadlineError';
+  }
+}
+
+/**
+ * Wait for the response head, but never longer than `timeoutMs` in total.
+ * undici's headersTimeout starts only once a connection exists, and through a
+ * proxy the CONNECT runs on the proxy pool's own 300 s default, so a stalled
+ * proxy would otherwise hold the request (and the CLI process) for minutes.
+ */
+async function withDeadline<T>(
+  pending: Promise<T>,
+  url: string,
+  timeoutMs: number,
+  dispatcher: Dispatcher,
+  abort: AbortController,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      const err = new HttpDeadlineError(url, timeoutMs);
+      abort.abort(err);
+      retireDispatcher(dispatcher, err);
+      reject(err);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([pending, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ============================================================
@@ -351,7 +444,11 @@ export interface FetchOptions {
   cacheKey?: string;
   /** Override the per-source TTL. */
   cacheTtlMs?: number;
-  /** Per-request total timeout (headers + body). Default: 30_000. */
+  /**
+   * Per-attempt timeout, default 30_000. The response headers must arrive within
+   * it, counting connection and proxy tunnel setup, and the body may not go
+   * quiet for longer than it.
+   */
   timeoutMs?: number;
   /** Skip the cache entirely (read AND write). */
   noCache?: boolean;
@@ -664,6 +761,11 @@ const RETRYABLE_ERR_CODES: ReadonlySet<string> = new Set([
   'EAI_AGAIN',
   'UND_ERR_SOCKET',
   'UND_ERR_CONNECT_TIMEOUT',
+  // Missed deadline, or a proxy that hung up mid-tunnel: retried on a fresh agent.
+  'PENSMITH_HTTP_DEADLINE',
+  'PENSMITH_PROXY_TUNNEL',
+  // Another request's deadline tore down the shared agent under this one.
+  'UND_ERR_DESTROYED',
 ]);
 
 // ============================================================
@@ -735,17 +837,22 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       // SSRF pre-flight: throws on private IP / bad scheme / resolver error.
       await checkSsrf(url);
     }
+    const dispatcher = dispatcherForRequest();
+    const abort = new AbortController();
     const reqInit: Parameters<typeof request>[1] = {
       method,
       headers,
       headersTimeout: timeoutMs,
       bodyTimeout: timeoutMs,
-      dispatcher: dispatcherForRequest(),
+      dispatcher,
+      signal: abort.signal,
     };
     if (opts.body !== undefined) {
       reqInit.body = opts.body;
     }
-    const { statusCode, headers: rh, body } = await request(url, reqInit);
+    const { statusCode, headers: rh, body } = await withDeadline(
+      request(url, reqInit), url, timeoutMs, dispatcher, abort,
+    );
     // Read the raw bytes ONCE (audit #29). `text` is the UTF-8 decode for text
     // consumers (byte-identical to the prior body.text()); `bodyBytes` preserves
     // the exact bytes for binary content (PDFs fetched by URL).
