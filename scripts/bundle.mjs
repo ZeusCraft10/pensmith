@@ -104,6 +104,12 @@ const noBufferConstructor = {
           }
           src = src.replace(from, to);
         }
+        // Checked per file as well as on the whole bundle: minifying prints a
+        // zero-argument `new Buffer()` as `new Buffer`, which the bundle-wide
+        // check below cannot see.
+        if (src.includes('new Buffer(')) {
+          throw new Error(`${args.path} still calls new Buffer(); add it to BUFFER_PATCHES in scripts/bundle.mjs`);
+        }
         return { contents: src, loader: 'js' };
       });
     }

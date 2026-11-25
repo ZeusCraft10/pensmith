@@ -27,7 +27,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFrontmatter } from '../bin/lib/frontmatter.js';
+import { parse as parseYaml } from 'yaml';
 import { builtPluginFile } from './lib/built-plugin.js';
 import { filesUnder } from './lib/files.js';
 
@@ -51,10 +51,14 @@ const pkg = readJson<{ version: string; bin?: Record<string, string>; files?: st
   path.join(repoRoot, 'package.json'),
 );
 
+// A strict parse, not the engine's error-tolerant frontmatter reader: invalid
+// YAML in the shipped skill must fail this test, because Claude Code rejects it.
 function frontmatter(md: string): { data: Record<string, unknown>; body: string } {
-  const { frontmatter: data, body } = parseFrontmatter(md);
-  assert.ok(Object.keys(data).length > 0, 'SKILL.md must start with YAML frontmatter');
-  return { data, body };
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(md);
+  assert.ok(m, 'SKILL.md must start with YAML frontmatter');
+  const data = (parseYaml(m[1]!) ?? {}) as Record<string, unknown>;
+  assert.ok(Object.keys(data).length > 0, 'SKILL.md frontmatter must not be empty');
+  return { data, body: m[2]! };
 }
 
 // ---------------------------------------------------------------------------
