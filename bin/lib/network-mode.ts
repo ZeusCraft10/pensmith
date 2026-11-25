@@ -42,7 +42,7 @@ export const OFFLINE_SKIP_NOTE = 'skipped (offline)';
  */
 export class OfflineEgressError extends Error {
   readonly code = 'PENSMITH_OFFLINE';
-  constructor(readonly url: string) {
+  constructor(url: string) {
     super(`network access is disabled (offline / --dry-run): refused request to ${safeOrigin(url)}`);
     this.name = 'OfflineEgressError';
   }

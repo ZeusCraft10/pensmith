@@ -124,8 +124,8 @@ function asTunnelError(err: unknown): unknown {
   return typeof code === 'string' && LOOPING_TUNNEL_ERROR_CODES.has(code) ? new ProxyTunnelError(err) : err;
 }
 
-type ConnectCallback = (err: Error | null, data: Dispatcher.ConnectData) => void;
-type ConnectFn = (o: Dispatcher.ConnectOptions, cb?: ConnectCallback) => Promise<Dispatcher.ConnectData> | void;
+// undici's ProxyAgent only calls the promise form of connect().
+type ConnectFn = (o: Dispatcher.ConnectOptions) => Promise<Dispatcher.ConnectData>;
 
 // The CONNECT requests the proxy has not answered yet, numbered in the order
 // they were sent. A request waiting for its tunnel cannot be aborted on its own
@@ -140,25 +140,22 @@ const openingTunnels = new Map<number, AbortController>();
 function proxyClientFactory(origin: URL, opts: object): Dispatcher {
   const pool = new Pool(origin, opts as Pool.Options);
   const connect = pool.connect.bind(pool) as ConnectFn;
-  const guarded: ConnectFn = (o, cb) => {
+  // Everything before the first await runs synchronously when undici calls
+  // this, so each CONNECT takes its number in dispatch order.
+  const guarded: ConnectFn = async (o) => {
     const id = ++tunnelSeq;
     const controller = new AbortController();
     openingTunnels.set(id, controller);
-    const settled = (): void => { openingTunnels.delete(id); };
     const signal = o.signal instanceof AbortSignal
       ? AbortSignal.any([o.signal, controller.signal])
       : controller.signal;
-    const params: Dispatcher.ConnectOptions = { ...o, signal };
-    if (typeof cb === 'function') {
-      return connect(params, (err, data) => {
-        settled();
-        cb(err ? (asTunnelError(err) as Error) : null, data);
-      });
+    try {
+      return await connect({ ...o, signal });
+    } catch (err) {
+      throw asTunnelError(err);
+    } finally {
+      openingTunnels.delete(id);
     }
-    return (connect(params) as Promise<Dispatcher.ConnectData>).then(
-      (data) => { settled(); return data; },
-      (err: unknown) => { settled(); throw asTunnelError(err); },
-    );
   };
   Object.assign(pool, { connect: guarded });
   return pool;

@@ -272,6 +272,11 @@ export async function runPlagiarism(
   );
 }
 
+/** The Matches cell of one probed phrase. */
+function matchesCell(matches: string[]): string {
+  return matches.length === 0 ? '_(no matches)_' : matches.map((u) => `<${u}>`).join('<br>');
+}
+
 /**
  * Render the `## Plagiarism Check (DONE-02)` section for VERIFICATION.md.
  * Deterministic, no LLM. Mirrors the verify/freshness.ts renderFreshnessTable
@@ -294,12 +299,7 @@ export function renderPlagiarismSection(
     return lines.join('\n');
   }
   for (const r of results) {
-    const cell =
-      r.skipped === 'offline'
-        ? OFFLINE_SKIP_NOTE
-        : r.matches.length === 0
-          ? '_(no matches)_'
-          : r.matches.map((u) => `<${u}>`).join('<br>');
+    const cell = r.skipped === 'offline' ? OFFLINE_SKIP_NOTE : matchesCell(r.matches);
     // Escape pipes in the phrase so a literal `|` cannot break the table.
     const phraseCell = r.phrase.replace(/\|/g, '\\|');
     lines.push(`| ${phraseCell} | ${cell} |`);

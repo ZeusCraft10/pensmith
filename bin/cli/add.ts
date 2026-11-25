@@ -234,6 +234,8 @@ export const addCommand = defineCommand({
 
     // (1) Detect type + hydrate into a SourceCandidate.
     let candidate: SourceCandidate | null = null;
+    // True once fetchExactDoi has fetched the registry record for the DOI itself.
+    let doiConfirmed = false;
 
     if (isDoi(source)) {
       const norm = normalizeDoi(source);
@@ -242,6 +244,7 @@ export const addCommand = defineCommand({
         const r = await fetchExactDoi(norm);
         if (r.mismatch !== undefined) return reportMismatch(norm, r.mismatch);
         candidate = r.candidate;
+        doiConfirmed = candidate !== null;
       }
     } else if (isHttpUrl(source)) {
       // URL path — checked BEFORE the local-PDF branch (audit #12: a URL ending
@@ -270,10 +273,11 @@ export const addCommand = defineCommand({
             const r = await fetchExactDoi(doi);
             if (r.mismatch !== undefined) return reportMismatch(doi, r.mismatch);
             candidate = r.candidate;
+            doiConfirmed = candidate !== null;
           }
         }
       } catch {
-        candidate = null;
+        // not hydrated: falls through to "could not hydrate"
       }
     } else if (source.toLowerCase().endsWith('.pdf') || fs.existsSync(path.resolve(source))) {
       // BYO LOCAL PDF — bytes-only chokepoint (T-08-04-03 path-traversal mitigation).
@@ -283,8 +287,8 @@ export const addCommand = defineCommand({
         const buf = await fs.promises.readFile(path.resolve(source));
         const text = await extractPdfText(buf); // pdf-parse → pymupdf fallback (08-03)
         const title = extractTitleHeuristic(text);
-        if (title && isOfflineMode()) return reportOffline('looking up the PDF by title');
         if (title) {
+          if (isOfflineMode()) return reportOffline('looking up the PDF by title');
           const hits = await crossrefSearch(title, { limit: 1 });
           candidate = hits[0] ?? null;
         }
@@ -304,11 +308,13 @@ export const addCommand = defineCommand({
       return refuse();
     }
 
-    // (2) verifyDoi when a DOI is present — a 404 flags the source unverified but
-    //     it is STILL added with a warning (the Pass-1 verifier blocks compile on
-    //     FABRICATED at verify time — T-08-04-04: add cannot smuggle a verified
-    //     source past the verifier). Never let a transport throw abort the add.
-    if (candidate.doi) {
+    // (2) verifyDoi when the DOI came from a title search, not from an exact
+    //     DOI fetch (that one already read the same registry record). A 404
+    //     flags the source unverified but it is STILL added with a warning (the
+    //     Pass-1 verifier blocks compile on FABRICATED at verify time —
+    //     T-08-04-04: add cannot smuggle a verified source past the verifier).
+    //     Never let a transport throw abort the add.
+    if (candidate.doi && !doiConfirmed) {
       try {
         const v = await verifyDoi(candidate.doi);
         if (!v.valid) {

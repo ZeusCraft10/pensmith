@@ -99,7 +99,8 @@ export const SENSITIVE_HEADERS: ReadonlySet<string> = new Set([
 
 // Query parameters that identify the caller rather than the records asked for.
 // They are stripped when recording and ignored when matching.
-const IDENTIFYING_PARAMS: ReadonlySet<string> = new Set([
+// tests/cassette-no-leak.test.ts imports this same set to scan the committed files.
+export const IDENTIFYING_PARAMS: ReadonlySet<string> = new Set([
   'mailto', 'email', 'api_key', 'apikey', 'key', 'token',
 ]);
 
@@ -137,19 +138,44 @@ function requestKey(method: string, origin: string, pathAndQuery: string): strin
     params.push(`${name}=${v.replace(/\s+/g, ' ').trim()}`);
   }
   params.sort();
-  return `${method.toUpperCase()} ${origin}${safeDecode(rawPath)}?${params.join('&')}`.toLowerCase();
+  return `${method} ${origin}${safeDecode(rawPath)}?${params.join('&')}`.toLowerCase();
 }
 
 interface CassetteIndex {
-  byKey: Map<string, Cassette>;
+  byKey: Map<string, CassetteReplay>;
   /** Keys recorded more than once with different responses. */
   ambiguous: Set<string>;
 }
 
 let index: CassetteIndex | null = null;
 
+/** Read a cassette file; throws on corrupt JSON so a broken fixture fails loudly. */
+function readCassetteArray(file: string): Cassette[] {
+  const parsed = JSON.parse(readFileSync(file, 'utf8')) as unknown;
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Cassette ${file} is not a JSON array (got ${typeof parsed})`);
+  }
+  return parsed as Cassette[];
+}
+
+/** The response a recording replays: lower-cased headers and a string body. */
+function toReplay(c: Cassette): CassetteReplay {
+  const headers: Record<string, string> = {};
+  for (const [k, v] of Object.entries(c.responseHeaders ?? {})) headers[k.toLowerCase()] = v;
+  let body: string;
+  if (typeof c.response === 'string') {
+    body = c.response;
+  } else if (c.response === undefined || c.response === null) {
+    body = '';
+  } else {
+    body = JSON.stringify(c.response);
+    headers['content-type'] ??= 'application/json';
+  }
+  return { status: c.status, headers, body };
+}
+
 function buildIndex(): CassetteIndex {
-  const byKey = new Map<string, Cassette>();
+  const byKey = new Map<string, CassetteReplay>();
   const ambiguous = new Set<string>();
   if (!existsSync(CASSETTES_ROOT)) return { byKey, ambiguous };
   const dirs = readdirSync(CASSETTES_ROOT, { withFileTypes: true })
@@ -160,11 +186,7 @@ function buildIndex(): CassetteIndex {
     const files = readdirSync(join(CASSETTES_ROOT, dir)).filter((f) => f.endsWith('.json')).sort();
     for (const f of files) {
       const file = join(CASSETTES_ROOT, dir, f);
-      const parsed = JSON.parse(readFileSync(file, 'utf8')) as unknown;
-      if (!Array.isArray(parsed)) {
-        throw new Error(`Cassette ${file} is not a JSON array (got ${typeof parsed})`);
-      }
-      for (const c of parsed as Cassette[]) {
+      for (const c of readCassetteArray(file)) {
         let origin: string;
         try {
           origin = new URL(c.scope).origin;
@@ -172,11 +194,12 @@ function buildIndex(): CassetteIndex {
           throw new Error(`Cassette ${file} has an invalid scope ${JSON.stringify(c.scope)}`);
         }
         const key = requestKey(c.method, origin, c.path);
+        const replay = toReplay(c);
         const prior = byKey.get(key);
-        if (prior && JSON.stringify(prior.response) !== JSON.stringify(c.response)) {
+        if (prior && prior.body !== replay.body) {
           ambiguous.add(key);
         } else if (!prior) {
-          byKey.set(key, c);
+          byKey.set(key, replay);
         }
       }
     }
@@ -193,30 +216,13 @@ export function replayCassette(method: string, url: string): CassetteReplay {
   index ??= buildIndex();
   const u = new URL(url);
   const key = requestKey(method, u.origin, u.pathname + u.search);
-  const shown = `${method.toUpperCase()} ${u.origin}${scrubRecordedPath(u.pathname + u.search)}`;
+  const shown = (): string => `${method.toUpperCase()} ${u.origin}${scrubRecordedPath(u.pathname + u.search)}`;
   if (index.ambiguous.has(key)) {
-    throw new CassetteMissError(`${shown} (several different recordings match; refusing to pick one)`);
+    throw new CassetteMissError(`${shown()} (several different recordings match; refusing to pick one)`);
   }
   const hit = index.byKey.get(key);
-  if (!hit) throw new CassetteMissError(shown);
-
-  const headers: Record<string, string> = {};
-  for (const [k, v] of Object.entries(hit.responseHeaders ?? {})) headers[k.toLowerCase()] = v;
-  let body: string;
-  if (typeof hit.response === 'string') {
-    body = hit.response;
-  } else if (hit.response === undefined || hit.response === null) {
-    body = '';
-  } else {
-    body = JSON.stringify(hit.response);
-    headers['content-type'] ??= 'application/json';
-  }
-  return { status: hit.status, headers, body };
-}
-
-/** Test-only: forget the loaded cassette index (after writing a cassette). */
-export function _resetCassetteIndexForTest(): void {
-  index = null;
+  if (!hit) throw new CassetteMissError(shown());
+  return { ...hit, headers: { ...hit.headers } };
 }
 
 /**
@@ -226,12 +232,7 @@ export function _resetCassetteIndexForTest(): void {
  */
 export function loadCassetteFile(adapter: string, basename: string): Cassette[] | null {
   const file = join(CASSETTES_ROOT, adapter, `${basename}.json`);
-  if (!existsSync(file)) return null;
-  const parsed = JSON.parse(readFileSync(file, 'utf8')) as unknown;
-  if (!Array.isArray(parsed)) {
-    throw new Error(`Cassette ${file} is not a JSON array (got ${typeof parsed})`);
-  }
-  return parsed as Cassette[];
+  return existsSync(file) ? readCassetteArray(file) : null;
 }
 
 // ---------------------------------------------------------------------

@@ -74,11 +74,8 @@ export async function probeFreshness(
     debug(`citekey=${citekey} doi=${JSON.stringify(doi)} failed normalization — skipping HEAD`);
   }
 
-  if (normalized && isOfflineMode()) {
-    return { citekey, doi: normalized, warnings, skipped: 'offline' };
-  }
-
   if (normalized) {
+    if (isOfflineMode()) return { citekey, doi: normalized, warnings, skipped: 'offline' };
     // --- DOI HEAD probe ---
     try {
       // HEAD goes ONLY to doi.org (SSRF mitigation), 10s timeout, 1 retry

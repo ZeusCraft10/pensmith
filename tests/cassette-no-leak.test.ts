@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SENSITIVE_HEADERS } from '../bin/lib/http-mock.js';
+import { IDENTIFYING_PARAMS, SENSITIVE_HEADERS } from '../bin/lib/http-mock.js';
 
 const CASSETTE_ROOT = fileURLToPath(
   new URL('../tests/fixtures/cassettes', import.meta.url),
@@ -85,7 +85,6 @@ test('cassette-no-leak: no committed cassette carries SENSITIVE_HEADERS (T-3-02 
 // Contact addresses and keys travel in query strings (OpenAlex `mailto=`,
 // Unpaywall `email=`), which header scrubbing never sees. Recorded paths must
 // carry none of them, and the recorder must strip them before writing.
-const IDENTIFYING_PARAMS = ['mailto', 'email', 'api_key', 'apikey', 'key', 'token'];
 
 test('cassette-no-leak: no committed cassette path carries a contact address or key in its query string', () => {
   for (const file of walkDir(CASSETTE_ROOT)) {
