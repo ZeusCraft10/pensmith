@@ -89,7 +89,14 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
    SAFE on an unparseable table), Pass-4 orphans, and plagiarism hits. When any
    exist, print a PER-ISSUE summary FIRST; then ALWAYS require an explicit
    confirm (generic confirm even when clean — PRD §7.9). `--yolo` skips the gate.
-   A declined gate cancels the export and writes no deliverable.
+   A declined gate cancels the export, writes no deliverable and exits 2.
+
+   With no terminal (Claude Code's Bash tool, CI, a pipe) the CLI cannot ask.
+   It prints the pending decision as one JSON line, exports nothing and exits
+   3. On exit 3, show the user that summary and ask with AskUserQuestion.
+   Never add `--yolo` yourself: only the user may type it. Until pensmith can
+   take the answer back from Tier 1, a user who wants to export runs
+   `pensmith done` in their own terminal and answers the prompt there.
 
 7. **Export + mandatory scrub** (DONE-06/07/08): `exportDraft` into the DISTINCT
    export dir (`outputDir` LEFT UNSET so the md-fallback never overwrites the

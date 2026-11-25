@@ -73,7 +73,7 @@ const childEnv = {
   ...process.env,
   PENSMITH_NO_LLM: '1',           // LLM calls -> offline placeholder (zero egress)
   PENSMITH_TEST_CASSETTES: '1',   // HTTP answered from committed cassettes (zero egress)
-  PENSMITH_DRY_RUN: '1',          // advisory marker
+  PENSMITH_DRY_RUN: '1',          // every step only describes itself: nothing runs or is written
   LOCALAPPDATA: DATA,             // Windows data root -> isolated temp
   XDG_DATA_HOME: DATA,            // POSIX data root  -> isolated temp
   PENSMITH_CONTACT_EMAIL: 'e2e-smoke@example.invalid',

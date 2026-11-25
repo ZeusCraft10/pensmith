@@ -606,8 +606,9 @@ for (const tc of PHASE_3_CASES) {
     // carrying a real [@citekey] so verify reaches the advisory Pass 2/4 passes
     // (else it short-circuits on the missing draft and never emits ## Pass-2/4).
     // Done here (scoped) rather than in seedPaperFixture so the other cases stay
-    // unperturbed. The citekey MUST exist in the seeded known-good CITATIONS.bib
-    // (vaswani2017attention) so Pass 1 does not flag it FABRICATED.
+    // unperturbed. The citekey (vaswani2017attention) is in the seeded
+    // known-good CITATIONS.bib, but that entry has no DOI, so Pass 1 still
+    // blocks it.
     if (tc.name === 'verify-section') {
       seedVerifySectionDraft(root);
     }

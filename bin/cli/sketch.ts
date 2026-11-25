@@ -47,7 +47,7 @@ export const sketchCommand = defineCommand({
   },
   args: {
     yolo: { type: 'boolean', description: 'Skip the confirm gate and proceed to intake.', default: false },
-    'dry-run': { type: 'boolean', description: 'Zero external API calls.', default: false },
+    'dry-run': { type: 'boolean', description: 'Describe the step only; ask nothing, write nothing, no network.', default: false },
   },
   async run({ args }) {
     // (1) Synthesize a candidate thesis. If a thesis was pre-supplied (test

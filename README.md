@@ -173,7 +173,7 @@ In normal use, bare `/pensmith` handles dispatch. The 16 verbs below let power u
 | `GPTZERO_API_KEY` | *Optional.* Enables the AI-likelihood transparency check (consent-gated). |
 | `ZOTERO_API_KEY` | *Optional.* Enables the Zotero library adapter. |
 | `PENSMITH_NETWORK_TESTS=1` | Opt into **live** network calls. Pensmith is offline-by-default and replays committed cassettes otherwise. |
-| `PENSMITH_NO_LLM=1` | Run the deterministic stages only (skips the advisory LLM passes). |
+| `PENSMITH_NO_LLM=1` | Test stub mode: every model call returns placeholder text, which verify, compile and done refuse. A stub run can never be exported. |
 
 ## Style Match
 

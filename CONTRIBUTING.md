@@ -155,6 +155,12 @@ Pensmith talks to the real registries by default. Two switches change that:
 response needs a recording of that exact request. `PENSMITH_NETWORK_TESTS=1`
 opts the runner out of cassettes for a live lane.
 
+`PENSMITH_NO_LLM=1` is a stub mode for tests, not a way to run pensmith
+without a model. Every model call returns `[PENSMITH_NO_LLM placeholder — …]`,
+and the files saved from it carry `placeholder: true` frontmatter. verify,
+compile and done refuse placeholder text with exit 2, so a stub run can drive
+the pipeline in a test but can never produce an export.
+
 ## Cassette Refresh Workflow
 
 PR-time CI (`.github/workflows/ci.yml`) runs in cassette mode against recorded

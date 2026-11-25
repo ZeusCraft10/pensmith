@@ -70,5 +70,5 @@ verbs bijective with the 16 workflow bodies).
    (`intake --thesis` pre-fills the intake brief — NOT a new verb).
 
 4. **Shell fallback** (TIER-06 equivalence path): `pensmith sketch [--yolo]
-   [--dry-run]`. `--yolo` auto-confirms; `--dry-run` makes zero external API
-   calls.
+   [--dry-run]`. `--yolo` auto-confirms; `--dry-run` only describes the step:
+   it asks nothing, writes nothing and makes no network or model call.
