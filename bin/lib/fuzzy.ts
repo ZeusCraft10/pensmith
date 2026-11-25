@@ -1,7 +1,10 @@
 // bin/lib/fuzzy.ts — Hand-rolled Jaro-Winkler and Levenshtein primitives.
 //
-//   Research dedupe: two candidates without a DOI are the same work when
-//     jaroWinkler(titleA, titleB) >= TITLE_JW_THRESHOLD (0.92).
+//   pensmith add: a Crossref title-search hit for a PDF with no identifier of
+//     its own is accepted only when jaroWinkler(PDF title, hit title) >=
+//     TITLE_JW_THRESHOLD (0.92) and an author of the hit is named in the PDF
+//     (bin/lib/source-hydrate.ts). Research merges records by identifier,
+//     never by title.
 //   Verb suggestions and Pass 1's one-letter-slip check use levenshtein().
 //
 // Pass 1 does not use Jaro-Winkler: a whole-title similarity let sibling
@@ -18,8 +21,8 @@
 import { nfkcNormalize } from './normalize.js';
 
 /**
- * Title similarity at or above which research treats two DOI-less candidates
- * as the same work.
+ * Title similarity at or above which a title-search hit can be the work a PDF
+ * is (with an author the PDF names).
  */
 export const TITLE_JW_THRESHOLD = 0.92;
 

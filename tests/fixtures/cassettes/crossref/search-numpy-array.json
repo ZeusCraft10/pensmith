@@ -1,0 +1,707 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=The%20NumPy%20Array%3A%20A%20Structure%20for%20Efficient%20Numerical%20Computation&rows=5",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 4124561,
+        "items": [
+          {
+            "indexed": {
+              "date-parts": [
+                [
+                  2026,
+                  11,
+                  24
+                ]
+              ],
+              "date-time": "2026-11-24T23:44:34Z",
+              "timestamp": 1795563874500,
+              "version": "4.11.0"
+            },
+            "reference-count": 2,
+            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)",
+            "issue": "2",
+            "license": [
+              {
+                "start": {
+                  "date-parts": [
+                    [
+                      2011,
+                      3,
+                      1
+                    ]
+                  ],
+                  "date-time": "2011-03-01T00:00:00Z",
+                  "timestamp": 1298937600000
+                },
+                "content-version": "vor",
+                "delay-in-days": 0,
+                "URL": "https://ieeexplore.ieee.org/Xplorehelp/downloads/license-information/IEEE.html"
+              },
+              {
+                "start": {
+                  "date-parts": [
+                    [
+                      2011,
+                      3,
+                      1
+                    ]
+                  ],
+                  "date-time": "2011-03-01T00:00:00Z",
+                  "timestamp": 1298937600000
+                },
+                "content-version": "stm-asf",
+                "delay-in-days": 0,
+                "URL": "https://doi.org/10.15223/policy-029"
+              },
+              {
+                "start": {
+                  "date-parts": [
+                    [
+                      2011,
+                      3,
+                      1
+                    ]
+                  ],
+                  "date-time": "2011-03-01T00:00:00Z",
+                  "timestamp": 1298937600000
+                },
+                "content-version": "stm-asf",
+                "delay-in-days": 0,
+                "URL": "https://doi.org/10.15223/policy-037"
+              }
+            ],
+            "content-domain": {
+              "domain": [],
+              "crossmark-restriction": false
+            },
+            "short-container-title": [
+              "Comput. Sci. Eng."
+            ],
+            "published-print": {
+              "date-parts": [
+                [
+                  2011,
+                  3
+                ]
+              ]
+            },
+            "DOI": "10.1109/mcse.2011.37",
+            "type": "journal-article",
+            "created": {
+              "date-parts": [
+                [
+                  2011,
+                  3,
+                  7
+                ]
+              ],
+              "date-time": "2011-03-07T16:42:18Z",
+              "timestamp": 1299516138000
+            },
+            "page": "22-30",
+            "source": "Crossref",
+            "is-referenced-by-count": 9410,
+            "title": [
+              "The NumPy Array: A Structure for Efficient Numerical Computation"
+            ],
+            "prefix": "10.1109",
+            "volume": "13",
+            "author": [
+              {
+                "given": "Stefan",
+                "family": "van der Walt",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Stellenbosch University"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "S. Chris",
+                "family": "Colbert",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Enthought, Inc."
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Gael",
+                "family": "Varoquaux",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "INRIA"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "member": "263",
+            "reference": [
+              {
+                "key": "ref2",
+                "article-title": "Optimized Symbolic Expressions and GPU Metaprogramming with Theano",
+                "author": "bergstra",
+                "year": "0",
+                "journal-title": "Proc 9th Python in Science Conf (SciPy 2010) forthcoming"
+              },
+              {
+                "key": "ref1",
+                "doi-asserted-by": "publisher",
+                "DOI": "10.1109/MCSE.2007.53"
+              }
+            ],
+            "container-title": [
+              "Computing in Science &amp; Engineering"
+            ],
+            "link": [
+              {
+                "URL": "http://xplorestaging.ieee.org/ielx5/5992/5725228/05725236.pdf?arnumber=5725236",
+                "content-type": "unspecified",
+                "content-version": "vor",
+                "intended-application": "similarity-checking"
+              }
+            ],
+            "deposited": {
+              "date-parts": [
+                [
+                  2025,
+                  8,
+                  23
+                ]
+              ],
+              "date-time": "2025-08-23T01:00:50Z",
+              "timestamp": 1755910850000
+            },
+            "score": 41.188873,
+            "resource": {
+              "primary": {
+                "URL": "https://ieeexplore.ieee.org/document/5725236/"
+              }
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2011,
+                  3
+                ]
+              ]
+            },
+            "references-count": 2,
+            "journal-issue": {
+              "issue": "2"
+            },
+            "URL": "https://doi.org/10.1109/mcse.2011.37",
+            "ISSN": [
+              "1521-9615",
+              "1558-366X"
+            ],
+            "issn-type": [
+              {
+                "value": "1521-9615",
+                "type": "print"
+              },
+              {
+                "value": "1558-366X",
+                "type": "electronic"
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2011,
+                  3
+                ]
+              ]
+            }
+          },
+          {
+            "indexed": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  21
+                ]
+              ],
+              "date-time": "2026-05-21T20:52:34Z",
+              "timestamp": 1779396754872,
+              "version": "3.53.1"
+            },
+            "reference-count": 0,
+            "publisher": "ScienceOpen",
+            "content-domain": {
+              "domain": []
+            },
+            "published-print": {
+              "date-parts": [
+                [
+                  2021,
+                  1,
+                  20
+                ]
+              ]
+            },
+            "DOI": "10.14293/s2199-1006.1.sor-uncat.a7759461.v1.raugfi",
+            "type": "peer-review",
+            "created": {
+              "date-parts": [
+                [
+                  2021,
+                  1,
+                  20
+                ]
+              ],
+              "date-time": "2021-01-20T04:46:00Z",
+              "timestamp": 1611117960000
+            },
+            "source": "Crossref",
+            "is-referenced-by-count": 0,
+            "title": [
+              "Review of \"Array programming with NumPy\""
+            ],
+            "prefix": "10.14293",
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0002-6093-3457",
+                "authenticated-orcid": false,
+                "given": "Ajit",
+                "family": "Singh",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "member": "5403",
+            "review": {
+              "stage": "post-publication"
+            },
+            "deposited": {
+              "date-parts": [
+                [
+                  2021,
+                  1,
+                  20
+                ]
+              ],
+              "date-time": "2021-01-20T04:46:00Z",
+              "timestamp": 1611117960000
+            },
+            "score": 28.601185,
+            "resource": {
+              "primary": {
+                "URL": "https://scienceopen.com/document/review?review=51c9d287-453f-4c66-8769-384d45899665&vid=8108de52-a612-4713-a117-b3c8a7759cee"
+              }
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2021,
+                  1,
+                  20
+                ]
+              ]
+            },
+            "references-count": 0,
+            "URL": "https://doi.org/10.14293/s2199-1006.1.sor-uncat.a7759461.v1.raugfi",
+            "relation": {
+              "is-review-of": [
+                {
+                  "id-type": "doi",
+                  "id": "10.1038/s41586-020-2649-2",
+                  "asserted-by": "subject"
+                }
+              ]
+            },
+            "published": {
+              "date-parts": [
+                [
+                  2021,
+                  1,
+                  20
+                ]
+              ]
+            }
+          },
+          {
+            "indexed": {
+              "date-parts": [
+                [
+                  2026,
+                  2,
+                  28
+                ]
+              ],
+              "date-time": "2026-02-28T09:31:38Z",
+              "timestamp": 1772271098866,
+              "version": "3.50.1"
+            },
+            "reference-count": 0,
+            "publisher": "PeerJ",
+            "content-domain": {
+              "domain": [],
+              "crossmark-restriction": false
+            },
+            "DOI": "10.7717/peerjcs.1800/fig-9",
+            "type": "component",
+            "created": {
+              "date-parts": [
+                [
+                  2024,
+                  1,
+                  16
+                ]
+              ],
+              "date-time": "2024-01-16T04:22:42Z",
+              "timestamp": 1705378962000
+            },
+            "source": "Crossref",
+            "is-referenced-by-count": 0,
+            "title": [
+              "Figure 9: Schematic of the Numpy array calculated by ION_MP and cycleslip functions."
+            ],
+            "prefix": "10.7717",
+            "member": "4443",
+            "deposited": {
+              "date-parts": [
+                [
+                  2024,
+                  1,
+                  16
+                ]
+              ],
+              "date-time": "2024-01-16T04:22:48Z",
+              "timestamp": 1705378968000
+            },
+            "score": 26.142248,
+            "resource": {
+              "primary": {
+                "URL": "https://peerj.com/articles/cs-1800/fig-9"
+              }
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "references-count": 0,
+            "URL": "https://doi.org/10.7717/peerjcs.1800/fig-9",
+            "relation": {
+              "is-component-of": [
+                {
+                  "id-type": "doi",
+                  "id": "10.7717/peerj-cs.1800",
+                  "asserted-by": "object"
+                }
+              ]
+            }
+          },
+          {
+            "indexed": {
+              "date-parts": [
+                [
+                  2026,
+                  11,
+                  15
+                ]
+              ],
+              "date-time": "2026-11-15T12:50:21Z",
+              "timestamp": 1794747021730,
+              "version": "4.9.1"
+            },
+            "edition-number": "3",
+            "reference-count": 0,
+            "publisher": "Cambridge University Press",
+            "isbn-type": [
+              {
+                "value": "9781009029728",
+                "type": "electronic"
+              },
+              {
+                "value": "9781009014809",
+                "type": "print"
+              }
+            ],
+            "license": [
+              {
+                "start": {
+                  "date-parts": [
+                    [
+                      2023,
+                      7,
+                      27
+                    ]
+                  ],
+                  "date-time": "2023-07-27T00:00:00Z",
+                  "timestamp": 1690416000000
+                },
+                "content-version": "unspecified",
+                "delay-in-days": 0,
+                "URL": "https://www.cambridge.org/core/terms"
+              }
+            ],
+            "content-domain": {
+              "domain": [],
+              "crossmark-restriction": false
+            },
+            "published-print": {
+              "date-parts": [
+                [
+                  2023,
+                  8,
+                  17
+                ]
+              ]
+            },
+            "DOI": "10.1017/9781009029728.005",
+            "type": "book-chapter",
+            "created": {
+              "date-parts": [
+                [
+                  2023,
+                  7,
+                  26
+                ]
+              ],
+              "date-time": "2023-07-26T20:05:28Z",
+              "timestamp": 1690401928000
+            },
+            "page": "72-119",
+            "source": "Crossref",
+            "is-referenced-by-count": 0,
+            "title": [
+              "NumPy: Numerical Math"
+            ],
+            "prefix": "10.1017",
+            "member": "56",
+            "container-title": [
+              "Python for Scientists"
+            ],
+            "deposited": {
+              "date-parts": [
+                [
+                  2023,
+                  9,
+                  24
+                ]
+              ],
+              "date-time": "2023-09-24T22:30:18Z",
+              "timestamp": 1695594618000
+            },
+            "score": 24.96212,
+            "resource": {
+              "primary": {
+                "URL": "https://www.cambridge.org/core/product/identifier/9781009029728%23c4/type/book_part"
+              }
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2023,
+                  8,
+                  17
+                ]
+              ]
+            },
+            "ISBN": [
+              "9781009029728",
+              "9781009014809"
+            ],
+            "references-count": 0,
+            "URL": "https://doi.org/10.1017/9781009029728.005",
+            "relation": {
+              "is-part-of": [
+                {
+                  "id-type": "doi",
+                  "id": "https://doi.org/10.1017/9781009029728",
+                  "asserted-by": "object"
+                }
+              ]
+            },
+            "published": {
+              "date-parts": [
+                [
+                  2023,
+                  8,
+                  17
+                ]
+              ]
+            }
+          },
+          {
+            "indexed": {
+              "date-parts": [
+                [
+                  2026,
+                  11,
+                  10
+                ]
+              ],
+              "date-time": "2026-11-10T15:14:40Z",
+              "timestamp": 1794323680632,
+              "version": "4.9.0"
+            },
+            "publisher-location": "München",
+            "edition-number": "1",
+            "reference-count": 0,
+            "publisher": "Carl Hanser Verlag GmbH & Co. KG",
+            "isbn-type": [
+              {
+                "value": "9781569904954",
+                "type": "print"
+              },
+              {
+                "value": "9781569909607",
+                "type": "electronic"
+              }
+            ],
+            "content-domain": {
+              "domain": [],
+              "crossmark-restriction": false
+            },
+            "published-print": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  15
+                ]
+              ]
+            },
+            "DOI": "10.3139/9781569909607.008",
+            "type": "book-chapter",
+            "created": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  13
+                ]
+              ],
+              "date-time": "2026-05-13T08:27:16Z",
+              "timestamp": 1778660836000
+            },
+            "page": "83-114",
+            "source": "Crossref",
+            "is-referenced-by-count": 0,
+            "title": [
+              "8 Numerical Operations on NumPy Arrays"
+            ],
+            "prefix": "10.3139",
+            "member": "1697",
+            "published-online": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  13
+                ]
+              ]
+            },
+            "container-title": [
+              "Numeric Python"
+            ],
+            "language": "en",
+            "deposited": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  13
+                ]
+              ],
+              "date-time": "2026-05-13T08:27:24Z",
+              "timestamp": 1778660844000
+            },
+            "score": 24.637886,
+            "resource": {
+              "primary": {
+                "URL": "https://www.hanser-elibrary.com/doi/10.3139/9781569909607.008"
+              }
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  13
+                ]
+              ]
+            },
+            "ISBN": [
+              "9781569904954",
+              "9781569909607"
+            ],
+            "references-count": 0,
+            "alternative-id": [
+              "10.3139/9781569909607.008",
+              "10.3139/9781569909607"
+            ],
+            "URL": "https://doi.org/10.3139/9781569909607.008",
+            "relation": {
+              "is-part-of": [
+                {
+                  "id-type": "doi",
+                  "id": "https://doi.org/10.3139/9781569909607",
+                  "asserted-by": "object"
+                }
+              ]
+            },
+            "published": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  13
+                ]
+              ]
+            }
+          }
+        ],
+        "items-per-page": 5,
+        "query": {
+          "start-index": 0,
+          "search-terms": "The NumPy Array: A Structure for Efficient Numerical Computation"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

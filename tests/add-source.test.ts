@@ -88,16 +88,16 @@ test('ERGO-06: `add <doi>` hydrates from the recorded Crossref answer and append
   assert.match(bib, /author = \{Aspelmeyer, Markus\}/, bib);
 });
 
-test('RSCH-05: `add <pdf>` reads the committed text-bearing PDF and extracts text via the existing chokepoint', async () => {
+test('RSCH-05: `add <pdf>` reads the committed PDF and adds the paper its arXiv ID names', async () => {
   const { root } = await mkProjectWithSection();
 
-  // byo-text.pdf yields >=50 non-whitespace chars, so the pdf-parse path is
-  // taken (not the image-only path).
-  const result = (await runAdd(root, { source: BYO_PDF, yolo: true })) as { ok?: boolean } | undefined;
+  // byo-text.pdf prints "arXiv 1706.03762" under its title.
+  const result = (await runAdd(root, { source: BYO_PDF, yolo: true })) as { ok?: boolean; citekey?: string } | undefined;
 
-  assert.ok(result === undefined || result.ok !== false, 'PDF ingest must not fail');
-  const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
-  assert.ok(fs.existsSync(bibPath), 'add <pdf> must produce/append a CITATIONS.bib entry');
+  assert.deepEqual(result, { ok: true, citekey: 'vaswani2017' });
+  const bib = fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  assert.match(bib, /title = \{Attention \{Is\} \{All\} \{You\} \{Need\}\}/, bib);
+  assert.match(bib, /eprint = \{1706\.03762\}/, bib);
 });
 
 test('Pitfall 3 / A6: the remap appends the citekey to assigned_sources[] and leaves status + verified_against_draft_hash UNCHANGED', async () => {

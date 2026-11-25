@@ -1,40 +1,37 @@
-// bin/cli/add.ts — `pensmith add <doi|pdf|url>` verb (ERGO-06 + RSCH-05b).
+// bin/cli/add.ts — `pensmith add <doi|arXiv ID|pdf|url|file.bib|file.json>`.
 //
-// THIN ORCHESTRATOR (compile.ts shape): ingest ONE new source mid-paper and
-// optionally remap it onto sections. No business logic lives here beyond
-// input-type detection + composing the existing chokepoints:
-//   - DOI  → crossrefFetchById(normalizeDoi(source)); the record must carry that
-//            same DOI, or nothing is added
-//   - PDF  → readFile → extractPdfText (pdf-parse → pymupdf fallback, 08-03) →
-//            title heuristic → crossrefSearch(title, {limit:1})
-//   - URL  → httpFetch (D-06 chokepoint, NEVER raw fetch) → sniff Content-Type:
-//            PDF bytes → PDF path; HTML → scrape a <meta> DOI → retry as DOI.
+// Ingests a source mid-paper into the library (.paper/LIBRARY.json, which
+// writes CITATIONS.bib and CITATIONS.ris from it) and optionally remaps it
+// onto sections:
+//   - DOI       the registry record for exactly that DOI (arXiv's own DOIs
+//               from arXiv); a record for another DOI is refused;
+//   - arXiv ID  the arXiv record;
+//   - PDF       a local file or a URL serving one: identified by a DOI or
+//               arXiv ID printed near its start whose work has the PDF's
+//               title, else by a Crossref title search whose hit has the
+//               PDF's title and an author it names (bin/lib/source-hydrate.ts).
+//               Its text is kept under .paper/sources/ for the quotation check;
+//   - URL       an HTML page with a DOI in its citation <meta> tags;
+//   - .bib      every entry, written back as it is in the file;
+//   - .json     CSL-JSON items.
+// A work the library already holds (by DOI, arXiv ID, PMID or ISBN) is not
+// added again: add reports its key and remaps with it. A new work whose key is
+// taken gets the next free one, and that key is the one remapped and printed.
 //
-// Writes via writeBibtex (D-19 citation-js chokepoint) — never a hand-rolled
-// serializer. The remap gate (approval-gates-default-on, --yolo skips) touches
-// ONLY assigned_sources[] in each section PLAN.md — NEVER status or
-// verified_against_draft_hash (Pitfall 3 / A6: a verified section STAYS
-// verified; the user runs `plan <N> --revise` to rebuild the claim mapping).
+// The remap (approval gate default-on, --yolo skips) touches only
+// assigned_sources[] in a section PLAN.md, never status or
+// verified_against_draft_hash: a verified section stays verified, and Pass 1
+// still checks the new source when the section is verified again.
 //
-// stdout-only (no console.* — Pitfall-7 stance shared with the other verbs).
-//
-// SECURITY (08-04 threat register):
-//   - T-08-04-02 SSRF: every network hop goes through httpFetch (http.ts owns
-//     per-source rate limits); a DOI is normalized via normalizeDoi first.
-//   - T-08-04-03 path traversal: PDFs are read via fs.readFile(path.resolve(..))
-//     and only a Buffer is handed to the bytes-only extractPdfText chokepoint.
-//   - T-08-04-04 verifier bypass: verifyDoi runs at add-time; a FABRICATED
-//     verdict at compile (Pass 1) still blocks — add cannot smuggle a verified
-//     source past the verifier.
+// Every network request goes through bin/lib/http.ts (SSRF guard, rate
+// limits); a local file is read by path and handed to the PDF chokepoint as
+// bytes.
 
 import { defineCommand } from 'citty';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { extractPdfText } from '../lib/pdf-text.js';
-import { search as crossrefSearch, fetchById as crossrefFetchById } from '../lib/sources/crossref.js';
-import { writeBibtex } from '../lib/bibtex-write.js';
-import { parseBibtex } from '../lib/citations.js';
-import { normalizeDoi, isDoi, sameDoi, verifyDoi } from '../lib/doi.js';
+import { bareArxivId, isDoi, normalizeDoi } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
@@ -44,40 +41,13 @@ import { resolveSectionSlug } from '../lib/section-slug.js';
 import { loadState } from '../lib/state.js';
 import { fetch as httpFetch } from '../lib/http.js';
 import { isOfflineMode } from '../lib/network-mode.js';
+import { importBibliography, importCslJson, mergeCandidates, updateLibrary, type ImportResult } from '../lib/library.js';
+import { hydrateArxiv, hydrateDoi, hydrateFromText, type Hydration } from '../lib/source-hydrate.js';
+import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
 
-/** True for an http(s) URL — used to route URL ingestion away from the local-PDF
- *  branch (audit #12: a URL ending in .pdf must NOT be read as a local file). */
+/** True for an http(s) URL — a URL ending in .pdf must not be read as a local file. */
 function isHttpUrl(s: string): boolean {
   return /^https?:\/\//i.test(s.trim());
-}
-import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
-
-/**
- * Heuristic title extractor for a BYO PDF: the first non-empty line with a
- * reasonable length. Deliberately conservative — the title only seeds a
- * crossrefSearch; a miss simply yields no candidate (handled by the caller).
- */
-function extractTitleHeuristic(text: string): string | undefined {
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line.length >= 8 && line.length <= 300) return line;
-  }
-  const flat = text.replace(/\s+/g, ' ').trim();
-  return flat.length >= 8 ? flat.slice(0, 200) : undefined;
-}
-
-/**
- * Look up a DOI and accept the record only if it is that DOI. Crossref answers
- * an alias with its canonical record, and a wrong record would be cited under
- * the user's DOI, so a mismatch is reported and nothing is added.
- */
-async function fetchExactDoi(
-  doi: string,
-): Promise<{ candidate: SourceCandidate | null; mismatch?: string }> {
-  const hit = await crossrefFetchById(doi);
-  if (!hit) return { candidate: null };
-  if (!sameDoi(hit.doi, doi)) return { candidate: null, mismatch: hit.doi ?? '(no DOI)' };
-  return { candidate: hit };
 }
 
 /**
@@ -89,15 +59,12 @@ function refuse(): { ok: false } {
   return { ok: false };
 }
 
-function reportMismatch(requested: string, returned: string): { ok: false } {
-  process.stdout.write(
-    `pensmith add: the registry answered ${requested} with a different work (${returned}). ` +
-    `Source NOT added. If ${returned} is the work you meant, add that DOI directly.\n`,
-  );
-  return refuse();
+/** The command's result: the key a source is filed under, or each key of an imported file. */
+function addedResult(keys: string[]): { ok: true; citekey: string } | { ok: true; citekeys: string[] } {
+  return keys.length === 1 ? { ok: true, citekey: keys[0]! } : { ok: true, citekeys: keys };
 }
 
-/** Refusal for a path that needs the network while offline / --dry-run. */
+/** Refusal for a source that needs the network while offline / --dry-run. */
 function reportOffline(what: string): { ok: false } {
   process.stderr.write(
     `pensmith add: ${what} requires network access and is disabled in ` +
@@ -114,72 +81,111 @@ function scrapeDoiFromHtml(html: string): string | null {
   return inline ? normalizeDoi(inline[0]) : null;
 }
 
-/** Reconstruct a minimal SourceCandidate from a parsed CSL-JSON bib entry. */
-function cslToCandidate(e: Record<string, unknown>): SourceCandidate | null {
-  const doi = typeof e.DOI === 'string' ? e.DOI : undefined;
-  const title = typeof e.title === 'string' ? e.title : '';
-  if (!doi || !title) return null; // writeBibtex drops id-less entries anyway
-  const authorArr = Array.isArray(e.author) ? (e.author as Array<Record<string, unknown>>) : [];
-  const authors = authorArr
-    .map((a) => {
-      const family = String(a.family ?? '').trim();
-      const given = String(a.given ?? '').trim();
-      if (!family) return '';
-      return given ? `${family}, ${given}` : family;
-    })
-    .filter(Boolean);
-  if (authors.length === 0) authors.push('Anonymous');
-  let year: number | undefined;
-  const issued = e.issued as { 'date-parts'?: number[][] } | undefined;
-  const y = issued?.['date-parts']?.[0]?.[0];
-  if (typeof y === 'number') year = y;
-  const citekey = typeof e.id === 'string' && /^[a-z][a-z0-9_-]*$/.test(e.id) ? e.id : undefined;
-  return {
-    source: 'crossref',
-    id: doi,
-    doi,
-    title,
-    authors,
-    year,
-    retracted: false,
-    last_verified: new Date().toISOString(),
-    citekey: citekey ?? 'anon',
-    raw: e,
-  };
+/** What a source turned out to be. */
+type Ingested =
+  | { kind: 'work'; hydration: Hydration; pdfText?: string; file?: string }
+  | { kind: 'bibtex'; text: string; file: string }
+  | { kind: 'csl'; items: unknown[]; file: string }
+  | { kind: 'refused'; result: { ok: false } };
+
+/** The record a local PDF or PDF bytes name, keeping the text. */
+async function fromPdf(bytes: Buffer, file: string): Promise<Ingested> {
+  const text = await extractPdfText(bytes);
+  if (isOfflineMode()) return { kind: 'refused', result: reportOffline('looking up the PDF') };
+  return { kind: 'work', hydration: await hydrateFromText(text), pdfText: text, file };
 }
 
-/** Load the existing CITATIONS.bib (if any) as reconstructed candidates. */
-async function loadExistingCandidates(bibPath: string): Promise<SourceCandidate[]> {
-  let text: string;
-  try {
-    text = await fs.promises.readFile(bibPath, 'utf8');
-  } catch {
-    return []; // no bib yet
+async function ingest(source: string): Promise<Ingested> {
+  if (isDoi(source)) {
+    if (isOfflineMode()) return { kind: 'refused', result: reportOffline('DOI lookup') };
+    return { kind: 'work', hydration: await hydrateDoi(source) };
   }
-  if (!text.trim()) return [];
-  try {
-    const entries = await parseBibtex(text);
-    return entries
-      .map((e) => cslToCandidate(e as Record<string, unknown>))
-      .filter((c): c is SourceCandidate => c !== null);
-  } catch {
-    // A malformed pre-existing bib must not abort the add; preserve it raw is
-    // impossible through the chokepoint, so fall back to a fresh write of the
-    // new candidate alone (the user keeps the new source; the corrupt file is
-    // surfaced by the verifier on the next compile).
-    return [];
+
+  if (isHttpUrl(source)) {
+    if (isOfflineMode()) return { kind: 'refused', result: reportOffline('URL ingestion') };
+    const abs = /arxiv\.org\/abs\/([^\s?#]+)/i.exec(source)?.[1];
+    if (abs && bareArxivId(abs)) return { kind: 'work', hydration: await hydrateArxiv(abs) };
+    try {
+      // noCache: a PDF must be read as the bytes served, never as cached text.
+      const res = await httpFetch(source, { source: 'generic', noCache: true });
+      const ct = (res.headers['content-type'] ?? '').toLowerCase();
+      if (ct.includes('application/pdf') || source.toLowerCase().endsWith('.pdf')) {
+        return await fromPdf(res.bodyBytes ?? Buffer.from(res.body, 'binary'), source);
+      }
+      const doi = scrapeDoiFromHtml(res.body);
+      if (doi) return { kind: 'work', hydration: await hydrateDoi(doi) };
+      return { kind: 'work', hydration: { kind: 'none', reason: 'the page names no DOI' } };
+    } catch (e) {
+      return { kind: 'work', hydration: { kind: 'none', reason: `the page could not be read (${(e as Error).message})` } };
+    }
   }
+
+  const local = path.resolve(source);
+  const ext = path.extname(source).toLowerCase();
+  if (fs.existsSync(local) || ext === '.pdf' || ext === '.bib' || ext === '.json') {
+    let bytes: Buffer;
+    try {
+      bytes = await fs.promises.readFile(local);
+    } catch (e) {
+      process.stderr.write(`pensmith add: could not read local ${ext === '.pdf' ? 'PDF' : 'file'} "${source}": ${(e as Error).message}\n`);
+      return { kind: 'refused', result: refuse() };
+    }
+    if (ext === '.bib') return { kind: 'bibtex', text: bytes.toString('utf8'), file: source };
+    if (ext === '.json') {
+      try {
+        const parsed = JSON.parse(bytes.toString('utf8')) as unknown;
+        const items = Array.isArray(parsed) ? parsed : (parsed as { items?: unknown })?.items;
+        if (Array.isArray(items)) return { kind: 'csl', items, file: source };
+      } catch {
+        // reported below
+      }
+      process.stderr.write(`pensmith add: "${source}" is not a CSL-JSON list of items. Source NOT added.\n`);
+      return { kind: 'refused', result: refuse() };
+    }
+    try {
+      return await fromPdf(bytes, source);
+    } catch (e) {
+      process.stderr.write(`pensmith add: could not read local PDF "${source}": ${(e as Error).message}\n`);
+      return { kind: 'refused', result: refuse() };
+    }
+  }
+
+  if (bareArxivId(source)) {
+    if (isOfflineMode()) return { kind: 'refused', result: reportOffline('arXiv lookup') };
+    return { kind: 'work', hydration: await hydrateArxiv(source) };
+  }
+  return { kind: 'work', hydration: { kind: 'none', reason: 'it is not a DOI, an arXiv ID, a URL or a readable file' } };
+}
+
+/** Store one hydrated work, keeping a PDF's text beside it; the library's result. */
+async function storeWork(root: string, ing: Extract<Ingested, { kind: 'work' }> & { hydration: { kind: 'found' } }): Promise<ImportResult> {
+  const { candidate } = ing.hydration;
+  // Its own record says whether it is retracted; the library keeps the flag.
+  crossCheckRetractions([candidate]);
+  return updateLibrary(root, async (lib, at) => {
+    const r = mergeCandidates(lib, [candidate], at, ing.file ? { via: { source: 'pdf', file: ing.file } } : {});
+    const work = r.works[0];
+    if (work && ing.pdfText) {
+      const item = lib.entries.find((e) => e.id === work.citekey);
+      if (item && !item.custom.local_text) {
+        const rel = `sources/${work.citekey}.txt`;
+        await atomicWriteFile(path.join(paperDir(root), rel), ing.pdfText);
+        item.custom.local_text = rel;
+      }
+    }
+    return { works: r.works.map(({ citekey, status, title }) => ({ citekey, status, title })), unidentified: [] };
+  });
 }
 
 /**
  * Remap a citekey onto sections by appending to assigned_sources[] ONLY.
- * NEVER mutates status or verified_against_draft_hash (Pitfall 3 / A6). When
- * `only` is provided, remaps exactly that one section; otherwise iterates every
- * section in STATE.json. Idempotent — a citekey already present is skipped.
+ * NEVER mutates status or verified_against_draft_hash. When `only` is
+ * provided, remaps exactly that one section; otherwise iterates every section
+ * in STATE.json. Idempotent — a citekey already present is skipped.
  */
 async function remapSections(
   paperRoot: string,
-  citekey: string,
+  citekeys: readonly string[],
   only?: { n: number; slug: string },
 ): Promise<number> {
   let targets: Array<{ n: number; slug: string }>;
@@ -204,9 +210,7 @@ async function remapSections(
         const existing = Array.isArray(fm.assigned_sources)
           ? (fm.assigned_sources as unknown[])
           : [];
-        if (!existing.includes(citekey)) {
-          fm.assigned_sources = [...existing, citekey];
-        }
+        fm.assigned_sources = [...existing, ...citekeys.filter((k) => !existing.includes(k))];
       });
       await atomicWriteFile(planPath, updated);
     });
@@ -218,10 +222,10 @@ async function remapSections(
 export const addCommand = defineCommand({
   meta: {
     name: 'add',
-    description: 'Ingest a source mid-paper (DOI, local PDF, or URL) and optionally remap sections.',
+    description: 'Ingest a source mid-paper (DOI, arXiv ID, local PDF, URL, .bib or CSL-JSON file) and optionally remap sections.',
   },
   args: {
-    source: { type: 'positional', description: 'DOI, local PDF path, or URL.', required: true },
+    source: { type: 'positional', description: 'DOI, arXiv ID, local PDF path, URL, .bib or CSL-JSON file.', required: true },
     section: { type: 'string', description: 'Section number to remap onto (optional).' },
     slug: { type: 'string', description: 'Section slug paired with --section (optional).' },
     remap: { type: 'boolean', description: 'Remap the new source onto sections (skips the prompt).', default: false },
@@ -231,113 +235,57 @@ export const addCommand = defineCommand({
     const paperRoot = process.cwd();
     const source = String(args.source);
 
-    // (1) Detect type + hydrate into a SourceCandidate.
-    let candidate: SourceCandidate | null = null;
-    // True once fetchExactDoi has fetched the registry record for the DOI itself.
-    let doiConfirmed = false;
-
-    if (isDoi(source)) {
-      const norm = normalizeDoi(source);
-      if (isOfflineMode()) return reportOffline('DOI lookup');
-      if (norm) {
-        const r = await fetchExactDoi(norm);
-        if (r.mismatch !== undefined) return reportMismatch(norm, r.mismatch);
-        candidate = r.candidate;
-        doiConfirmed = candidate !== null;
-      }
-    } else if (isHttpUrl(source)) {
-      // URL path — checked BEFORE the local-PDF branch (audit #12: a URL ending
-      // in .pdf used to fall into the local branch and crash fs.readFile with an
-      // unhandled ENOENT). D-06 chokepoint routes through http.ts checkSsrf
-      // (T-08-04-02): the hostname is DNS-resolved and RFC1918/loopback/link-local
-      // addresses are blocked before the socket connects (source:'generic').
-      if (isOfflineMode()) return reportOffline('URL ingestion');
-      try {
-        // noCache:true guarantees a live fetch so res.bodyBytes is populated
-        // (audit #29) — a PDF must be read byte-faithfully, never via the
-        // UTF-8-decoded body string.
-        const res = await httpFetch(source, { source: 'generic', noCache: true });
-        const ct = (res.headers['content-type'] ?? '').toLowerCase();
-        if (ct.includes('application/pdf') || source.toLowerCase().endsWith('.pdf')) {
-          const buf = res.bodyBytes ?? Buffer.from(res.body, 'binary');
-          const text = await extractPdfText(buf);
-          const title = extractTitleHeuristic(text);
-          if (title) {
-            const hits = await crossrefSearch(title, { limit: 1 });
-            candidate = hits[0] ?? null;
-          }
-        } else {
-          const doi = scrapeDoiFromHtml(res.body);
-          if (doi) {
-            const r = await fetchExactDoi(doi);
-            if (r.mismatch !== undefined) return reportMismatch(doi, r.mismatch);
-            candidate = r.candidate;
-            doiConfirmed = candidate !== null;
-          }
-        }
-      } catch {
-        // not hydrated: falls through to "could not hydrate"
-      }
-    } else if (source.toLowerCase().endsWith('.pdf') || fs.existsSync(path.resolve(source))) {
-      // BYO LOCAL PDF — bytes-only chokepoint (T-08-04-03 path-traversal mitigation).
-      // audit #30: guard the read so a missing/unreadable file yields a friendly
-      // diagnostic, not a raw unhandled ENOENT stack trace.
-      try {
-        const buf = await fs.promises.readFile(path.resolve(source));
-        const text = await extractPdfText(buf); // pdf-parse → pymupdf fallback (08-03)
-        const title = extractTitleHeuristic(text);
-        if (title) {
-          if (isOfflineMode()) return reportOffline('looking up the PDF by title');
-          const hits = await crossrefSearch(title, { limit: 1 });
-          candidate = hits[0] ?? null;
-        }
-      } catch (e) {
-        process.stderr.write(
-          `pensmith add: could not read local PDF "${source}": ${(e as Error).message}\n`,
+    // (1) Find the work, or read the file.
+    const ing = await ingest(source);
+    let result: ImportResult;
+    if (ing.kind === 'refused') return ing.result;
+    if (ing.kind === 'work') {
+      const h = ing.hydration;
+      if (h.kind === 'mismatch') {
+        process.stdout.write(
+          `pensmith add: the registry answered ${h.requested} with a different work (${h.returned}). ` +
+          `Source NOT added. If ${h.returned} is the work you meant, add that DOI directly.\n`,
         );
-        candidate = null;
+        return refuse();
+      }
+      if (h.kind === 'none') {
+        process.stdout.write(`pensmith add: could not hydrate "${source}": ${h.reason}. Source NOT added.\n`);
+        return refuse();
+      }
+      result = await storeWork(paperRoot, { ...ing, hydration: h });
+      if (result.works[0]?.status === 'added') {
+        process.stdout.write(`pensmith add: found ${h.candidate.title} through ${h.via}.\n`);
       }
     } else {
-      // Not a DOI, an http(s) URL, or a readable local .pdf — nothing to hydrate.
-      candidate = null;
-    }
-
-    if (!candidate) {
-      process.stdout.write(`pensmith add: could not hydrate "${source}". Source NOT added.\n`);
-      return refuse();
-    }
-
-    // (2) verifyDoi when the DOI came from a title search, not from an exact
-    //     DOI fetch (that one already read the same registry record). A 404
-    //     flags the source unverified but it is STILL added with a warning (the
-    //     Pass-1 verifier blocks compile on FABRICATED at verify time —
-    //     T-08-04-04: add cannot smuggle a verified source past the verifier).
-    //     Never let a transport throw abort the add.
-    if (candidate.doi && !doiConfirmed) {
       try {
-        const v = await verifyDoi(candidate.doi);
-        if (!v.valid) {
-          process.stdout.write(
-            `pensmith add: WARNING — DOI ${candidate.doi} did not verify (added as unverified; compile will re-check).\n`,
-          );
-        }
-      } catch {
-        // verification transport error — add proceeds, verifier re-checks later.
+        result = await updateLibrary(paperRoot, (lib, at) =>
+          ing.kind === 'bibtex' ? importBibliography(lib, ing.text, at, ing.file) : importCslJson(lib, ing.items, at, ing.file));
+      } catch (e) {
+        process.stdout.write(`pensmith add: could not read "${source}": ${(e as Error).message}. Nothing added.\n`);
+        return refuse();
+      }
+      if (result.works.length === 0) {
+        process.stdout.write(`pensmith add: "${source}" has no entries. Nothing added.\n`);
+        return refuse();
       }
     }
 
-    // (3) + (4) Write CITATIONS.bib via the writeBibtex chokepoint. Load existing
-    //     candidates, dedup the citekey, append, and re-serialize the whole file.
-    const bibPath = path.join(paperDir(paperRoot), 'CITATIONS.bib');
-    const existing = await loadExistingCandidates(bibPath);
-    if (existing.some((c) => c.citekey === candidate.citekey)) {
+    // (2) Say what happened to each work, by the key it is filed under.
+    for (const w of result.works) {
       process.stdout.write(
-        `pensmith add: WARNING — citekey "${candidate.citekey}" already in CITATIONS.bib (writeBibtex will collision-suffix).\n`,
+        w.status === 'added'
+          ? `pensmith add: added ${w.citekey}.\n`
+          : `pensmith add: "${w.title}" is already in the library as ${w.citekey}; nothing added.\n`,
       );
     }
-    await writeBibtex([...existing, candidate], bibPath);
+    for (const key of result.unidentified) {
+      process.stderr.write(
+        `pensmith add: WARN — ${key} has no DOI, arXiv ID, PubMed ID or ISBN; verify cannot confirm it and will block it as UNRESOLVED.\n`,
+      );
+    }
+    const keys = [...new Set(result.works.map((w) => w.citekey))];
 
-    // (5) Remap gate. Remap when --remap is set OR (not --yolo AND the user
+    // (3) Remap gate. Remap when --remap is set OR (not --yolo AND the user
     //     confirms). When --section/--slug are supplied, remap that one section;
     //     otherwise remap every section in STATE.json.
     let doRemap = args.remap === true;
@@ -352,14 +300,11 @@ export const addCommand = defineCommand({
 
     if (doRemap) {
       let only: { n: number; slug: string } | undefined;
-      let skipRemap = false;
       const secRaw = args.section;
       const slugRaw = args.slug;
-      // Audit #25: when --section is given, remap ONLY that section. Resolve its
-      // slug from --slug, else from OUTLINE.md. A --section we cannot resolve to a
-      // real slug must NOT fall through to "remap every section" (the old bug) —
-      // skip the remap with a clear message instead. Omitting --section entirely
-      // (only === undefined) still remaps all sections, by design.
+      // With --section, remap only that section, its slug from --slug or
+      // OUTLINE.md. One that cannot be resolved remaps nothing (never every
+      // section); no --section remaps every section, by design.
       if (secRaw !== undefined) {
         const n = Number(secRaw);
         const explicit = typeof slugRaw === 'string' && slugRaw.length > 0 ? slugRaw : undefined;
@@ -367,26 +312,18 @@ export const addCommand = defineCommand({
           Number.isInteger(n) && n >= 1 ? resolveSectionSlug(paperRoot, n, explicit) : 'placeholder';
         if (!Number.isInteger(n) || n < 1 || (slug === 'placeholder' && explicit === undefined)) {
           process.stdout.write(
-            `pensmith add: added ${candidate.citekey}; --section ${String(secRaw)} could not be ` +
-            `resolved to a section slug (pass --slug, or run \`pensmith outline\` first) — ` +
-            `no sections remapped.\n`,
+            `pensmith add: --section ${String(secRaw)} could not be resolved to a section slug ` +
+            `(pass --slug, or run \`pensmith outline\` first) — no sections remapped.\n`,
           );
-          skipRemap = true;
-        } else {
-          only = { n, slug };
+          return addedResult(keys);
         }
+        only = { n, slug };
       }
-      if (!skipRemap) {
-        const count = await remapSections(paperRoot, candidate.citekey, only);
-        process.stdout.write(
-          `pensmith add: added ${candidate.citekey}; remapped ${count} section(s) (assigned_sources only).\n`,
-        );
-      }
-    } else {
-      process.stdout.write(`pensmith add: added ${candidate.citekey}.\n`);
+      const count = await remapSections(paperRoot, keys, only);
+      process.stdout.write(`pensmith add: remapped ${keys.join(', ')} onto ${count} section(s) (assigned_sources only).\n`);
     }
 
-    return { ok: true, citekey: candidate.citekey };
+    return addedResult(keys);
   },
 });
 

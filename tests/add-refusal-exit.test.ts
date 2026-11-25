@@ -71,6 +71,6 @@ test('add exit code: an offline URL is refused with exit 2', () => {
   assertRefused(runAdd('https://example.com/some/article', 'offline'), /URL ingestion requires network access/);
 });
 
-test('add exit code: an offline local PDF (title lookup needs the registry) is refused with exit 2', () => {
-  assertRefused(runAdd(BYO_PDF, 'offline'), /looking up the PDF by title requires network access/);
+test('add exit code: an offline local PDF (its lookup needs the registry) is refused with exit 2', () => {
+  assertRefused(runAdd(BYO_PDF, 'offline'), /looking up the PDF requires network access/);
 });

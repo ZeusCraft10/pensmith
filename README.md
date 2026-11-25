@@ -148,7 +148,7 @@ The first run starts intake, and each later run advances one step (`pensmith nex
 | `pensmith list` | List all papers grouped by class, with each paper’s live lifecycle status. |
 | `pensmith open <name>` | Switch the active paper by name (writes the active-paper pointer). |
 | `pensmith sketch` | Thinking-partner thesis discovery before intake (no state created until you confirm). |
-| `pensmith add <source>` | Ingest a source mid-paper (DOI, local PDF, or URL) and optionally remap sections. |
+| `pensmith add <source>` | Ingest a source mid-paper (DOI, arXiv ID, local PDF, URL, .bib or CSL-JSON file) and optionally remap sections. |
 | `pensmith ack <n> <citekey>` | Acknowledge a RETRACTED citation in section &lt;n&gt; that the paper must cite, with your reason, so it no longer blocks. |
 <!-- verb-table:end -->
 

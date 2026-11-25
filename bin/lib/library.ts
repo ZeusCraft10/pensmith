@@ -31,10 +31,12 @@ import { paperDir } from './paths.js';
 import { generateCitekey } from './citekey.js';
 import { freeCitekey, itemBibtex, libraryBibtex, splitBibtex } from './bibtex-write.js';
 import { libraryRis } from './ris-write.js';
-import { candidateIdentities, itemFromBibEntry, itemFromCandidate, itemIdentities } from './library-item.js';
+import { candidateIdentities, identityKeys, itemFromBibEntry, itemFromCandidate, itemIdentities } from './library-item.js';
+import { bareArxivId } from './doi.js';
 import { parseBibByCitekey, parseBibFieldsByCitekey } from './citations.js';
 import {
   CURRENT_LIBRARY_VERSION,
+  LibraryItemSchema,
   Schema as LibrarySchema,
   type Library,
   type LibraryItem,
@@ -377,3 +379,95 @@ export function addToLibrary(root: string, candidates: SourceCandidate[], opts: 
   return updateLibrary(root, (lib, at) => mergeCandidates(lib, candidates, at, opts));
 }
 
+// ---------------------------------------------------------------------------
+// Importing a bibliography file (`pensmith add refs.bib` / `refs.json`).
+// ---------------------------------------------------------------------------
+
+/** The result of importing a file: each entry's work, and the entries no identifier names. */
+export interface ImportResult {
+  works: Array<Omit<MergedWork, 'candidates'>>;
+  /** Keys (as imported) of entries with no DOI, arXiv ID, PMID or ISBN: verify can never confirm them. */
+  unidentified: string[];
+}
+
+/**
+ * Put an imported `item` into `lib`: a work the library already holds (by
+ * identifier) keeps its key and is not added again; a new one keeps its own
+ * key when no work has it, and otherwise gets the next free one. Returns the
+ * work and the key it is filed under.
+ */
+function placeImported(lib: Library, item: LibraryItem, taken: Set<string>): Omit<MergedWork, 'candidates'> {
+  const ids = itemIdentities(item);
+  const known = lib.entries.find((e) => itemIdentities(e).some((k) => ids.includes(k)));
+  if (known) {
+    known.custom.identities = [...new Set([...known.custom.identities, ...ids])];
+    known.custom.provenance.push(...item.custom.provenance);
+    return { citekey: known.id, status: 'existing', title: known.title };
+  }
+  const key = freeCitekey(item.id, taken);
+  if (key !== item.id) {
+    // The entry is written as it was imported, under its new key.
+    if (item.custom.bibtex) item.custom.bibtex = item.custom.bibtex.replace(/^(@\s*\w+\s*[{(]\s*)[^,\s]+/, `$1${key}`);
+    item.id = key;
+  }
+  lib.entries.push(item);
+  return { citekey: key, status: 'added', title: item.title };
+}
+
+/**
+ * Import the entries of BibTeX `text` (read from `file`) into `lib`, each
+ * written back exactly as it is in the file (under a new key only when its
+ * own is taken). @string blocks it defines are kept for the entries that use
+ * them.
+ */
+export async function importBibliography(lib: Library, text: string, at: string, file: string): Promise<ImportResult> {
+  const blocks = splitBibtex(text);
+  const preamble = blocks.filter((b) => b.type === 'string' || b.type === 'preamble').map((b) => b.text.trim());
+  for (const p of preamble) if (!lib.bibtex_preamble.includes(p)) lib.bibtex_preamble.push(p);
+  const bib = await parseBib(text);
+  const taken = new Set(lib.entries.map((e) => e.id.toLowerCase()));
+  const result: ImportResult = { works: [], unidentified: [] };
+  for (const b of blocks) {
+    if (b.key === '' || b.type === 'comment') continue;
+    const item = itemFromBibEntry(b.key, b.text.trim(), bib.entries.get(b.key), bib.fields.get(b.key), at, { source: 'bibtex', file, at });
+    if (itemIdentities(item).length === 0) result.unidentified.push(b.key);
+    result.works.push(placeImported(lib, item, taken));
+  }
+  return result;
+}
+
+/** Import CSL-JSON `items` (read from `file`): each a library item under its own `id` when that is free. */
+export function importCslJson(lib: Library, items: unknown[], at: string, file: string): ImportResult {
+  const taken = new Set(lib.entries.map((e) => e.id.toLowerCase()));
+  const result: ImportResult = { works: [], unidentified: [] };
+  for (const raw of items) {
+    if (!raw || typeof raw !== 'object') continue;
+    const csl = raw as Record<string, unknown>;
+    const year = (csl['issued'] as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
+    const authors = Array.isArray(csl['author']) ? (csl['author'] as Array<Record<string, unknown>>) : [];
+    const first = authors[0];
+    const ownKey = typeof csl['id'] === 'string' && csl['id'] ? (csl['id'] as string) : '';
+    const key = ownKey || generateCitekey({
+      authors: first ? [String(first['family'] ?? first['literal'] ?? '')] : [],
+      ...(typeof year === 'number' ? { year } : {}),
+    });
+    const fields = Object.fromEntries(Object.entries(csl).filter(([k]) => k !== 'custom' && k !== 'citation-key'));
+    const str = (k: string): string | undefined => (typeof csl[k] === 'string' ? (csl[k] as string) : undefined);
+    const arxiv = bareArxivId(/arxiv\.org\/(?:abs|pdf)\/([^\s?#]+)/i.exec(str('URL') ?? '')?.[1] ?? '') ?? bareArxivId(str('number') ?? '');
+    const item = LibraryItemSchema.parse({
+      ...fields,
+      id: key,
+      type: str('type') ?? 'document',
+      title: str('title') ?? '',
+      custom: {
+        ...(arxiv ? { arxiv } : {}),
+        identities: identityKeys({ doi: str('DOI'), arxiv: arxiv ?? undefined, pmid: str('PMID'), pmcid: str('PMCID'), isbn: str('ISBN') }),
+        provenance: [{ source: 'csl-json', file, at }],
+        added_at: at,
+      },
+    });
+    if (itemIdentities(item).length === 0) result.unidentified.push(key);
+    result.works.push(placeImported(lib, item, taken));
+  }
+  return result;
+}
