@@ -1,4 +1,4 @@
-// bin/lib/sources/openalex.ts — OpenAlex adapter (RSCH-03, RSCH-04, T-3-13).
+// bin/lib/sources/openalex.ts — OpenAlex adapter.
 //
 // Endpoints:
 //   search:           GET https://api.openalex.org/works?search=<encoded>&per-page=<limit>
@@ -6,12 +6,9 @@
 //   lookupRetraction: GET https://api.openalex.org/works/doi:<doi>?select=id,doi,title,is_retracted
 //   lookupOaPdfs:     GET https://api.openalex.org/works/doi:<doi>?select=id,doi,best_oa_location,locations
 //
-// Polite-pool mailto query param (NOT a header — different from Crossref).
-// RESEARCH pitfall #2: the polite-pool slot SUNSETS Feb 2026. Today is
-// 2026-05-17, so the slot is still in effect; keep the &mailto param but
-// document the upcoming change.
-// TODO(post-2026-02): switch to a key-based pool once OpenAlex publishes
-// the replacement auth mechanism.
+// The contact email goes as a `mailto` query param (not a header, unlike
+// Crossref), read when each URL is built and left out when
+// PENSMITH_CONTACT_EMAIL is unset.
 
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
@@ -19,10 +16,6 @@ import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { askSource, contactParam, httpLinks, isGone, RETRACTION_STATUS_TTL_MS, type OaPdfAnswer } from './work-record.js';
 
 const BASE = 'https://api.openalex.org';
-
-// CR-03 fix: the contact email is read lazily at URL-build time. When
-// PENSMITH_CONTACT_EMAIL is unset, contactParam OMITS the mailto param
-// entirely — http.ts:166 documents the no-contact degradation banner.
 
 interface OpenAlexAuthor {
   author?: { display_name?: string };

@@ -1,16 +1,12 @@
-// bin/cli/verify.ts — `pensmith verify <n>` verb entrypoint
-// (VRFY-01, VRFY-07, VRFY-08).
+// bin/cli/verify.ts — `pensmith verify <n>`.
 //
-// THIN ORCHESTRATOR — D-13 LOCKED INVARIANT: this verb is 100%
-// deterministic in Phase 3. It calls `runPass1` from bin/lib/verify/pass1.ts
-// and `runPass3` from bin/lib/verify/pass3.ts, aggregates the per-citekey
-// verdicts, and writes VERIFICATION.md via template-literal narration
-// (NOT via any prompt-loader call). The hash-pinned `pass1-fuzzy-judge.md`
-// and `pass3-quote-checker.md` prompts exist as Phase-8 tie-break calibration
-// artifacts and MUST NOT be invoked here. The D-13 LOCKED grep chokepoint
-// in Plan 03-07 Task 7.2 enforces this: a literal-string search for the
-// prompt-loader symbol against this file MUST return 0 hits (including
-// this comment — hence the paraphrase above).
+// A thin, deterministic orchestrator: it calls `runPass1`
+// (bin/lib/verify/pass1.ts) and `runPass3` (bin/lib/verify/pass3.ts),
+// aggregates the verdicts, and writes VERIFICATION.md from templates. It never
+// loads a prompt: the blocking verdicts must not depend on a model. The
+// hash-pinned `pass1-fuzzy-judge.md` and `pass3-quote-checker.md` prompts are
+// not used here. tests/verify-advisory-isolation.test.ts checks that this file
+// never names the prompt loader, comments included, hence the paraphrase.
 //
 // Pipeline:
 //   1. Read DRAFT.md for section N

@@ -1,6 +1,6 @@
 // bin/lib/normalize.ts — Deterministic Unicode normalization for comparing names and titles.
 //
-// Spec (D-11, VRFY-04 — Phase 3):
+// Spec:
 //
 //   nfkcNormalize(s) ──→ string
 //     Used by:
@@ -14,8 +14,8 @@
 //                                                      full-width digits, etc.)
 //       2. Strip U+00AD SOFT HYPHEN                  — PDF tools insert these
 //                                                      as line-break hints; they
-//                                                      must not survive into
-//                                                      quote-match strings.
+//                                                      must not split a name or
+//                                                      title word being compared.
 //       3. Curly quotes → straight                   — U+2018/U+2019 → '
 //                                                      U+201C/U+201D → "
 //       4. En/em-dash → hyphen                       — U+2013/U+2014 → -
@@ -24,10 +24,9 @@
 //          diacritical marks) + back to NFC          — "naïve" → "naive",
 //                                                      "Müller" → "Muller" so
 //                                                      that JW vs "Mueller"
-//                                                      scores ≥ 0.85 (Pitfall 5).
-//       7. Collapse whitespace runs to single space  — Pitfall 7: PDF kerning
-//                                                      sometimes emits double
-//                                                      spaces inside quotes.
+//                                                      scores ≥ 0.85.
+//       7. Collapse whitespace runs to single space  — PDF kerning sometimes
+//                                                      emits double spaces.
 //       8. Trim leading/trailing whitespace.
 //
 //   Idempotency: nfkcNormalize(nfkcNormalize(x)) === nfkcNormalize(x) for all x.
@@ -35,16 +34,15 @@
 //   exercises this via JW pre-normalize chaining; tests/normalize.test.ts
 //   exercises the five distortion fixtures directly.
 //
-// Threat model (T-3-04 accent-mark mismatch, T-3-DOS-01 ReDoS):
+// Threat model (accent-mark mismatch, ReDoS):
 //   - All regexes are LINEAR (no nested quantifiers, no catastrophic
 //     backtracking). The character-class strips are O(n) in input length.
 //   - Pure function: no IO, no global state, no async, no third-party imports.
-//     Hand-rolled per RESEARCH.md "Standard Stack" — zero npm dependency cost.
+//     Hand-rolled, with no npm dependency.
 //
 // Aliases:
-//   `normalizeText` is exported as an alias to satisfy tests/normalize.test.ts
-//   (Wave 0 scaffold) which imports under the historical name. Downstream
-//   modules SHOULD import `nfkcNormalize` (the canonical name in the plan).
+//   `normalizeText` is an alias that tests/normalize.test.ts imports under
+//   its older name. Modules import `nfkcNormalize`.
 
 /**
  * NFKC-normalize a string and strip PDF/typography distortion artifacts.

@@ -20,9 +20,8 @@ import { askSource, contactParam, httpLinks, isGone, type OaPdfAnswer } from './
 
 const BASE = 'https://api.unpaywall.org';
 
-// CR-03 fix: the contact email is read lazily at URL-build time. When
-// PENSMITH_CONTACT_EMAIL is unset, contactParam OMITS the ?email= param
-// entirely — http.ts:166 documents the no-contact degradation banner.
+// The contact email is read when each URL is built; contactParam leaves the
+// ?email= param out when PENSMITH_CONTACT_EMAIL is unset.
 
 interface UnpaywallAuthor {
   given?: string;
