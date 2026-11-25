@@ -127,6 +127,11 @@ const noBufferConstructor = {
 const common = {
   absWorkingDir: repoRoot,
   bundle: true,
+  // Every release commits the payload to the release branch, so keep it small.
+  // keepNames keeps function and class names (and so stack traces) readable,
+  // and legalComments below keeps the inlined packages' licence notices.
+  minify: true,
+  keepNames: true,
   platform: 'node',
   format: 'esm',
   target: 'node22',

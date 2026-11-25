@@ -34,8 +34,8 @@ Run `npm run smoke:plugin` locally if you have `claude` on your `PATH`.
 `plugin/` is the only thing a plugin install copies, and Claude Code runs no
 build or `npm install` for it. So:
 
-- `plugin/dist/pensmith.mjs` and `plugin/dist/hook.mjs` are esbuild bundles
-  with every dependency inlined, and `plugin/templates/`,
+- `plugin/dist/pensmith.mjs` and `plugin/dist/hook.mjs` are minified esbuild
+  bundles with every dependency inlined, and `plugin/templates/`,
   `plugin/references/` and `plugin/LICENSE` are copies. `npm run bundle`
   generates all of them. They are gitignored and never committed: a release
   publishes the built `plugin/` on the `release` branch, which is what users

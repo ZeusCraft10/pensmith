@@ -171,8 +171,9 @@ test('the bundles and runtime assets are built into plugin/', () => {
   const cli = readFileSync(built('dist/pensmith.mjs'), 'utf8');
   assert.match(cli, /^#!\/usr\/bin\/env node\n/);
   // Node prints a DEP0040 warning to the user's terminal when the deprecated
-  // punycode core module loads; the bundle must use the userland package.
-  assert.ok(!/__require\("punycode"\)/.test(cli), 'the CLI bundle must not load the punycode core module');
+  // punycode core module loads; the bundle must use the userland package. The
+  // require helper is renamed when minified, so match a call by any name.
+  assert.ok(!/\("punycode"\)/.test(cli), 'the CLI bundle must not load the punycode core module');
   for (const dir of ['templates/prompts', 'templates/citation-styles', 'templates/presets', 'references']) {
     const src = readdirSync(path.join(repoRoot, dir)).sort();
     assert.deepEqual(readdirSync(at(dir)).sort(), src, `plugin/${dir} must mirror ${dir}: run \`npm run bundle\``);
@@ -194,6 +195,28 @@ test('git tracks only the hand-written payload; built output stays out of source
     const ignored = spawnSync('git', ['check-ignore', '-q', '--no-index', `plugin/${f}`], { cwd: repoRoot });
     assert.equal(ignored.status, 0, `plugin/${f} is generated and must be gitignored`);
   }
+});
+
+test('the bundles are minified, keep their names and carry the bundled licence notices', () => {
+  // Each release commits the built payload to the release branch, so the
+  // bundle size is what every release adds to that branch's history. Before
+  // minifying, the CLI was 8.9 MB and the hook 0.5 MB.
+  const MiB = 1024 * 1024;
+  const budgets: Array<[string, number]> = [['dist/pensmith.mjs', 7 * MiB], ['dist/hook.mjs', 0.35 * MiB]];
+  for (const [f, max] of budgets) {
+    const size = statSync(built(f)).size;
+    assert.ok(size <= max, `plugin/${f} is ${(size / MiB).toFixed(2)} MiB, over its ${(max / MiB).toFixed(2)} MiB budget: build it minified`);
+    // keepNames: minifying renames functions and classes, and esbuild then
+    // restores each original `.name` through this helper, so error names and
+    // stack traces stay readable.
+    assert.match(
+      readFileSync(built(f), 'utf8'),
+      /\([\w$]+,[\w$]+\)=>[\w$]+\([\w$]+,"name",\{value:[\w$]+,configurable:!0\}\)/,
+      `plugin/${f} must be minified with keepNames`,
+    );
+  }
+  // The licence comments of the inlined packages, collected at the end of the file.
+  assert.match(readFileSync(built('dist/pensmith.mjs'), 'utf8'), /Bundled license information:[\s\S]*Copyright/);
 });
 
 test('every package-root lookup in shipped source recognises the installed plugin root', () => {
