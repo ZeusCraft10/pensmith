@@ -12,18 +12,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fsp from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MockAgent, getGlobalDispatcher, setGlobalDispatcher } from 'undici';
 import { runPass3, type Pass3Result } from '../bin/lib/verify/pass3.js';
-import { _resetBucketsForTest, _resetWarnedForTest } from '../bin/lib/http.js';
+import { _resetWarnedForTest } from '../bin/lib/http.js';
 import { pensmithHttpCacheDir } from '../bin/lib/paths.js';
+import { JSON_HEADERS, useMockRegistries } from './lib/mock-registries.js';
 
 // Live transport against a MockAgent with net connect disabled, not cassette
-// replay (each test file runs in its own process, so this does not leak).
-delete process.env['PENSMITH_TEST_CASSETTES'];
-delete process.env['PENSMITH_OFFLINE'];
+// replay, with an empty HTTP cache for each test.
+const mockAgent = useMockRegistries('pensmith-pass3-fetch-');
 
 const PDF = readFileSync(fileURLToPath(new URL('./fixtures/cassettes/oa-pdf/arxiv-2109.00022.pdf', import.meta.url)));
 const DOI = '10.1234/abc';
@@ -56,27 +54,18 @@ interface Served {
  * and the HTTP cache files left.
  */
 async function pass3With(s: Served): Promise<{ results: Pass3Result[]; hits: Record<string, number>; cacheFiles: string[] }> {
-  const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'pensmith-pass3-fetch-'));
-  const saved = { ...process.env };
-  const savedDispatcher = getGlobalDispatcher();
-  for (const k of ['HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'LOCALAPPDATA']) process.env[k] = tmp;
-  if (s.email === null) delete process.env['PENSMITH_CONTACT_EMAIL'];
-  else process.env['PENSMITH_CONTACT_EMAIL'] = s.email ?? 'test@example.org';
+  if (s.email !== null) process.env['PENSMITH_CONTACT_EMAIL'] = s.email ?? 'test@example.org';
   _resetWarnedForTest();
-  _resetBucketsForTest();
 
-  const agent = new MockAgent();
-  agent.disableNetConnect();
-  setGlobalDispatcher(agent);
-  const json = { 'content-type': 'application/json' };
+  const agent = mockAgent();
   const hits: Record<string, number> = { unpaywall: 0 };
   agent.get('https://api.openalex.org').intercept({ path: (p) => p.startsWith('/works/doi:'), method: 'GET' }).reply(200,
     JSON.stringify({ id: 'https://openalex.org/W1', doi: `https://doi.org/${DOI}`, best_oa_location: { is_oa: true, pdf_url: s.pdfUrl }, locations: [] }),
-    { headers: json }).persist();
+    { headers: JSON_HEADERS }).persist();
   agent.get('https://api.unpaywall.org').intercept({ path: (p) => p.startsWith('/v2/'), method: 'GET' }).reply(() => {
     hits['unpaywall']! += 1;
     const body = { doi: DOI, title: 'A Paper', year: 2020, is_oa: true, z_authors: [{ given: 'Ann', family: 'Smith' }], best_oa_location: { url_for_pdf: s.unpaywallPdfUrl ?? s.pdfUrl } };
-    return { statusCode: 200, data: JSON.stringify(body), responseOptions: { headers: json } };
+    return { statusCode: 200, data: JSON.stringify(body), responseOptions: { headers: JSON_HEADERS } };
   }).persist();
   for (const [url, answer] of Object.entries(s.routes)) {
     const u = new URL(url);
@@ -88,21 +77,13 @@ async function pass3With(s: Served): Promise<{ results: Pass3Result[]; hits: Rec
     }).persist();
   }
 
+  const results = await runPass3(DRAFT, BIB);
+  let cacheFiles: string[] = [];
   try {
-    const results = await runPass3(DRAFT, BIB);
-    let cacheFiles: string[] = [];
-    try {
-      const dir = pensmithHttpCacheDir();
-      cacheFiles = await Promise.all((await fsp.readdir(dir)).map((f) => fsp.readFile(path.join(dir, f), 'utf8')));
-    } catch { /* no cache directory: nothing was cached */ }
-    return { results, hits, cacheFiles };
-  } finally {
-    setGlobalDispatcher(savedDispatcher);
-    await agent.close();
-    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
-    Object.assign(process.env, saved);
-    await fsp.rm(tmp, { recursive: true, force: true });
-  }
+    const dir = pensmithHttpCacheDir();
+    cacheFiles = await Promise.all((await fsp.readdir(dir)).map((f) => fsp.readFile(path.join(dir, f), 'utf8')));
+  } catch { /* no cache directory: nothing was cached */ }
+  return { results, hits, cacheFiles };
 }
 
 const pdf = () => ({ statusCode: 200, data: PDF, headers: { 'content-type': 'application/pdf' } });
@@ -179,28 +160,29 @@ test('pass 3: when every OpenAlex link fails and no contact email is set, the re
 // pdf.js rejects a damaged PDF asynchronously, and an unhandled rejection
 // would end the verify run. A damaged PDF must read as no source text, with
 // nothing left unhandled.
-test('pass 3: a truncated or garbled PDF reads PDF_UNAVAILABLE, and nothing is left unhandled', async () => {
-  const unhandled: unknown[] = [];
-  const onUnhandled = (err: unknown): void => { unhandled.push(err); };
-  process.on('unhandledRejection', onUnhandled);
-  try {
-    const damaged: Record<string, Buffer> = {
-      truncated: PDF.subarray(0, Math.floor(PDF.length / 3)),
-      'garbage after the header': Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.from(Array.from({ length: 4096 }, (_, i) => (i * 37 + 11) % 256))]),
-      'header only': Buffer.from('%PDF-1.4\n%%EOF\n'),
-    };
-    for (const [what, bytes] of Object.entries(damaged)) {
+const DAMAGED: Record<string, Buffer> = {
+  truncated: PDF.subarray(0, Math.floor(PDF.length / 3)),
+  'garbage after the header': Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.from(Array.from({ length: 4096 }, (_, i) => (i * 37 + 11) % 256))]),
+  'header only': Buffer.from('%PDF-1.4\n%%EOF\n'),
+};
+
+for (const [what, bytes] of Object.entries(DAMAGED)) {
+  test(`pass 3: a damaged PDF (${what}) reads PDF_UNAVAILABLE, and nothing is left unhandled`, async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (err: unknown): void => { unhandled.push(err); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
       const { results } = await pass3With({
         pdfUrl: `${OA}/damaged.pdf`,
         routes: { [`${OA}/damaged.pdf`]: () => ({ statusCode: 200, data: bytes, headers: { 'content-type': 'application/pdf' } }) },
       });
-      assert.deepEqual(results.map((r) => r.verdict), ['PDF_UNAVAILABLE', 'PDF_UNAVAILABLE'], `${what}\n${show(results)}`);
-      assert.match(results[0]!.reason, /could not be read/, what);
+      assert.deepEqual(results.map((r) => r.verdict), ['PDF_UNAVAILABLE', 'PDF_UNAVAILABLE'], show(results));
+      assert.match(results[0]!.reason, /could not be read/);
+      // Let any rejection pdf.js left behind surface before checking.
+      await new Promise((r) => setTimeout(r, 50));
+      assert.deepEqual(unhandled, []);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
     }
-    // Let any rejection pdf.js left behind surface before checking.
-    await new Promise((r) => setTimeout(r, 50));
-    assert.deepEqual(unhandled, []);
-  } finally {
-    process.off('unhandledRejection', onUnhandled);
-  }
-});
+  });
+}
