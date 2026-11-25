@@ -349,8 +349,22 @@ export interface RawCitation {
   raw: string;
 }
 
-// Words that sit before a year in brackets but are not names.
-const NOT_A_NAME = String.raw`(?!(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|Spring|Summer|Autumn|Fall|Winter|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|In|On|At|The|This|That|These|Those|Since|From|By|Until|Till|During|Before|After|Circa|Fiscal|Figure|Fig|Table|Version|Volume|Vol|Issue|Edition|Chapter|Section|Part|Year)(?![\p{L}\p{M}'’-]))`;
+// Words that sit before a year in brackets but are not names: dates, and the
+// laws, treaties, events and studies that are named with their year.
+const NOT_A_NAME = String.raw`(?!(?:${[
+  'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December',
+  'Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sep', 'Sept', 'Oct', 'Nov', 'Dec',
+  'Spring', 'Summer', 'Autumn', 'Fall', 'Winter',
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  'In', 'On', 'At', 'The', 'This', 'That', 'These', 'Those', 'Since', 'From', 'By', 'Until', 'Till', 'During',
+  'Before', 'After', 'Circa', 'Fiscal', 'Year',
+  'Figure', 'Fig', 'Table', 'Version', 'Volume', 'Vol', 'Issue', 'Edition', 'Chapter', 'Section', 'Part', 'Release',
+  'Act', 'Acts', 'Law', 'Bill', 'Amendment', 'Code', 'Directive', 'Regulation', 'Treaty', 'Accord', 'Agreement',
+  'Convention', 'Declaration', 'Protocol', 'Charter', 'Constitution', 'Report', 'Survey', 'Census', 'Study',
+  'Trial', 'Cohort', 'Election', 'Elections', 'Referendum', 'War', 'Crisis', 'Revolution', 'Pandemic',
+  'Summit', 'Conference', 'Olympics', 'Games', 'Cup', 'Prize', 'Award', 'Plan', 'Program', 'Programme',
+  'Project', 'Initiative', 'Strategy', 'Policy', 'Standard', 'Model',
+].join('|')})(?![\p{L}\p{M}'’-]))`;
 const PARTICLE = String.raw`(?:(?:van|von|der|den|de|del|della|di|da|du|dos|das|le|la|ten|ter)\s+){0,3}`;
 // A surname in brackets may be an acronym (`WHO`); in running text it must
 // have a lower-case letter, so `World War II (1939)` is not a citation.

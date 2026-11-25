@@ -65,6 +65,7 @@ test('raw citations: code, Pandoc citations, escapes and dates are not raw citat
     '```',
     'It happened in June (2020) and in (Summer 2019); also Brexit \\(2016).',
     'Figure 3 (2021 data) and a year range (2019-2020) are not citations.',
+    'The Clean Air Act (1970), the Kyoto Protocol (1997) and the Framingham Heart Study (1948) are not either.',
   ].join('\n');
   assert.deepEqual(raws(md), []);
 });

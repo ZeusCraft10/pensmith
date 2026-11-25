@@ -111,9 +111,10 @@ export const verifyCommand = defineCommand({
 
     // An empty CITATIONS.bib (research found nothing yet) is an empty library:
     // Pass 1 still runs, and every key the draft cites is FABRICATED.
-    const bibIsEmpty = readFileSync(bibPath, 'utf8').trim().length === 0;
+    const bibText = readFileSync(bibPath, 'utf8');
+    const bibIsEmpty = bibText.trim().length === 0;
     const pass1 = await runPass1(draftMd, bibPath);
-    const bibEntries = await parseBibOrEmpty(readFileSync(bibPath, 'utf8'));
+    const bibEntries = await parseBibOrEmpty(bibText);
     // Widened value type (additive): carries title/author/abstract so Pass 2
     // (claim support) has source metadata. runPass3 reads only DOI, so the
     // widening is backward-compatible with the runPass3 call below.

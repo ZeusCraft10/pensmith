@@ -254,11 +254,19 @@ async function readBib(citationsBibPath: string): Promise<Map<string, BibEntry>>
   return new Map(entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]));
 }
 
-const RAW_FIX: Readonly<Record<RawCitationKind, string>> = {
+const RAW_WHAT: Readonly<Record<RawCitationKind, string>> = {
   'doi': 'a DOI typed as text',
   'arxiv': 'an arXiv ID typed as text',
   'pmid': 'a PubMed ID typed as text',
   'author-year': 'an author-year citation typed as text',
+};
+
+/** How to write text that only looks like a citation so the verifier reads it as text. */
+const RAW_ESCAPE: Readonly<Record<RawCitationKind, string>> = {
+  'doi': 'put it in backticks',
+  'arxiv': 'put it in backticks',
+  'pmid': 'put it in backticks',
+  'author-year': 'write its bracket as \\(',
 };
 
 /**
@@ -298,8 +306,8 @@ export async function runPass1(
   for (const raw of findRawCitations(draftMd, cites)) {
     results.push({
       citekey: raw.raw, verdict: 'RAW_CITATION', titleJW: 0, authorJW: 0,
-      reason: `${RAW_FIX[raw.kind]}, which nothing checks — cite the work as [@key] from CITATIONS.bib ` +
-        '(add it with `pensmith add` if it is missing), or put it in backticks if it is not a citation',
+      reason: `${RAW_WHAT[raw.kind]}, which nothing checks — cite the work as [@key] from CITATIONS.bib ` +
+        `(add it with \`pensmith add\` if it is missing); if it is not a citation, ${RAW_ESCAPE[raw.kind]}`,
     });
   }
   for (const u of findUnparseableCitations(draftMd, cites)) {
