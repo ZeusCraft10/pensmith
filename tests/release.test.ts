@@ -9,10 +9,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { filesUnder } from './lib/files.js';
 
 const script = fileURLToPath(new URL('../scripts/release.mjs', import.meta.url));
 
@@ -62,18 +63,8 @@ function bundle(fx: Fixture, marker: string): void {
 }
 
 /** Files under `dir`, as sorted posix paths relative to it, with any .git directory left out. */
-function filesUnder(dir: string, prefix = ''): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(path.join(dir, prefix), { withFileTypes: true })) {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      if (entry.name !== '.git') out.push(...filesUnder(dir, rel));
-    } else {
-      out.push(rel);
-    }
-  }
-  return out.sort();
-}
+const checkedOut = (dir: string): string[] =>
+  filesUnder(dir, { skipDirs: ['.git'] }).map((f) => path.relative(dir, f).split(path.sep).join('/')).sort();
 
 function commitAndTag(fx: Fixture, tag: string): void {
   git(fx, ['add', '-A']);
@@ -297,7 +288,7 @@ test('the release tree matches the plugin/ payload byte for byte', (t) => {
   t.after(() => rmSync(fx.root, { recursive: true, force: true }));
   assert.equal(release(fx, 'publish', 'v1.2.3').status, 0);
   const pluginDir = path.join(fx.src, 'plugin');
-  assert.deepEqual(filesUnder(pluginDir), PAYLOAD);
+  assert.deepEqual(checkedOut(pluginDir), PAYLOAD);
   for (const f of PAYLOAD) {
     assert.deepEqual(blob(fx, `refs/heads/release:${f}`), readFileSync(path.join(pluginDir, ...f.split('/'))), f);
   }
@@ -321,7 +312,7 @@ test('a clone of the release branch has the payload bytes even with core.autocrl
     const checkedOut = readFileSync(path.join(clone, ...f.split('/')));
     assert.deepEqual(checkedOut, readFileSync(path.join(fx.src, 'plugin', ...f.split('/'))), `${f} must check out byte for byte`);
   }
-  assert.deepEqual(filesUnder(clone), ['.gitattributes', ...PAYLOAD].sort());
+  assert.deepEqual(checkedOut(clone), ['.gitattributes', ...PAYLOAD].sort());
 });
 
 test('files git ignores under plugin/ never reach the release branch', (t) => {

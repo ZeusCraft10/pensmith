@@ -12,10 +12,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderVerbTable, extractTable } from '../scripts/verb-table.js';
+import { filesUnder } from './lib/files.js';
 import {
   parseVerdictRows,
   renderPass1VerdictRow,
@@ -50,12 +51,16 @@ function section(md: string, heading: string): string {
   return end < 0 ? rest : rest.slice(0, end);
 }
 
-test('README quick start is one command per surface: /pensmith, and pensmith in a terminal', () => {
-  const qs = section(readme, 'Quick start');
-  const blockLines = [...qs.matchAll(/```[a-z]*\n([\s\S]*?)```/g)]
+/** The shell commands in fenced code blocks of `md`, comments and blank lines dropped. */
+const commandsIn = (md: string): string[] =>
+  [...md.matchAll(/```[a-z]*\n([\s\S]*?)```/g)]
     .flatMap((m) => m[1]!.split('\n'))
     .map((l) => l.replace(/\s+#.*$/, '').trim())
     .filter((l) => l.length > 0 && !l.startsWith('#'));
+
+test('README quick start is one command per surface: /pensmith, and pensmith in a terminal', () => {
+  const qs = section(readme, 'Quick start');
+  const blockLines = commandsIn(qs);
   const inline = [...qs.replace(/```[\s\S]*?```/g, '').matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim());
   const allowed = new Set(['/pensmith', 'pensmith', 'pensmith next']);
   assert.deepEqual(blockLines.filter((l) => !allowed.has(l)), [], 'quick-start code blocks hold nothing but the one command');
@@ -80,13 +85,6 @@ test('README install steps match the plugin layout', () => {
   assert.match(readme, /npm link/);
   assert.ok(!/npm run build[\s\S]{0,200}\/plugin marketplace add/.test(readme), 'installing the plugin needs no build step');
 });
-
-/** The shell commands in fenced code blocks of `md`, comments and blank lines dropped. */
-const commandsIn = (md: string): string[] =>
-  [...md.matchAll(/```[a-z]*\n([\s\S]*?)```/g)]
-    .flatMap((m) => m[1]!.split('\n'))
-    .map((l) => l.replace(/\s+#.*$/, '').trim())
-    .filter((l) => l.length > 0 && !l.startsWith('#'));
 
 test('README installs the latest release, or a checkout only after building its bundle', () => {
   const install = section(readme, 'Install');
@@ -188,11 +186,7 @@ test('README says research does not read from Zotero yet', () => {
 /** Hosts named in string literals of modules that send requests through bin/lib/http.ts. */
 function requestHosts(): Map<string, string[]> {
   const hosts = new Map<string, string[]>();
-  const walk = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-      e.isDirectory() ? walk(path.join(dir, e.name)) : e.name.endsWith('.ts') ? [path.join(dir, e.name)] : [],
-    );
-  for (const file of walk(path.join(repoRoot, 'bin'))) {
+  for (const file of filesUnder(path.join(repoRoot, 'bin'), { keep: (n) => n.endsWith('.ts') })) {
     const src = readFileSync(file, 'utf8');
     if (!/from ['"](\.\.?\/)+(lib\/)?http\.js['"]/.test(src)) continue;
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/ .*$/gm, '');

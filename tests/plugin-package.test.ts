@@ -9,7 +9,7 @@
 // plugin/dist and the copied assets are built by `npm run bundle` and are
 // never committed; tests that need them fail with that instruction.
 
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, execFileSync } from 'node:child_process';
 import {
@@ -19,6 +19,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -26,8 +27,9 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse as parseYaml } from 'yaml';
+import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 import { builtPluginFile } from './lib/built-plugin.js';
+import { filesUnder } from './lib/files.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = path.join(repoRoot, 'plugin');
@@ -50,9 +52,9 @@ const pkg = readJson<{ version: string; bin?: Record<string, string>; files?: st
 );
 
 function frontmatter(md: string): { data: Record<string, unknown>; body: string } {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(md);
-  assert.ok(m, 'SKILL.md must start with YAML frontmatter');
-  return { data: (parseYaml(m[1]!) ?? {}) as Record<string, unknown>, body: m[2]! };
+  const { frontmatter: data, body } = parseFrontmatter(md);
+  assert.ok(Object.keys(data).length > 0, 'SKILL.md must start with YAML frontmatter');
+  return { data, body };
 }
 
 // ---------------------------------------------------------------------------
@@ -243,19 +245,13 @@ test('every package-root lookup in shipped source recognises the installed plugi
   // The bundle runs from plugin/dist with no package.json above it, so each
   // module that locates templates/ or references/ must also stop at the
   // directory that holds .claude-plugin/plugin.json.
-  const offenders: string[] = [];
-  const walk = (dir: string): void => {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, e.name);
-      if (e.isDirectory()) walk(full);
-      else if (e.name.endsWith('.ts')) {
-        const src = readFileSync(full, 'utf8');
-        if (/function findPkgRoot\(/.test(src) && !/\.claude-plugin/.test(src)) offenders.push(path.relative(repoRoot, full));
-      }
-    }
-  };
-  walk(path.join(repoRoot, 'bin'));
-  walk(path.join(repoRoot, 'hooks'));
+  const offenders = ['bin', 'hooks']
+    .flatMap((dir) => filesUnder(path.join(repoRoot, dir), { keep: (n) => n.endsWith('.ts') }))
+    .filter((f) => {
+      const src = readFileSync(f, 'utf8');
+      return /function findPkgRoot\(/.test(src) && !/\.claude-plugin/.test(src);
+    })
+    .map((f) => path.relative(repoRoot, f));
   // The cassette replayer only runs under the test runner, which never uses the bundle.
   const allowed = new Set([path.join('bin', 'lib', 'http-mock.ts')]);
   assert.deepEqual(offenders.filter((f) => !allowed.has(f)), []);
@@ -271,11 +267,17 @@ test('package.json publishes the plugin payload and links its CLI', () => {
 // The payload, run from an installed-like copy
 // ---------------------------------------------------------------------------
 
+let installedRoot: string | undefined;
+after(() => {
+  if (installedRoot) rmSync(installedRoot, { recursive: true, force: true });
+});
+
+/** One installed-like copy of the payload, shared by the tests below (none of them writes to it). */
 function installedCopy(): string {
   for (const f of BUNDLES) built(f);
-  const root = mkdtempSync(path.join(tmpdir(), 'pensmith-installed-'));
-  const dest = path.join(root, 'pensmith', '0.3.0-alpha.1');
-  cpSync(pluginDir, dest, { recursive: true });
+  installedRoot ??= mkdtempSync(path.join(tmpdir(), 'pensmith-installed-'));
+  const dest = path.join(installedRoot, 'pensmith', pkg.version);
+  if (!existsSync(dest)) cpSync(pluginDir, dest, { recursive: true });
   return dest;
 }
 

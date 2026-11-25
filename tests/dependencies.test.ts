@@ -9,10 +9,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { builtinModules } from 'node:module';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isSupportedNodeVersion } from '../bin/lib/doctor/probes/node-version.js';
+import { filesUnder } from './lib/files.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -26,15 +27,7 @@ const pkg = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')
 // Shipped source = what the CLI and hook bundles are built from.
 const SHIPPED_DIRS = ['bin', 'hooks'];
 
-function tsFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...tsFiles(full));
-    else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) out.push(full);
-  }
-  return out;
-}
+const tsFiles = (dir: string): string[] => filesUnder(dir, { keep: (n) => n.endsWith('.ts') && !n.endsWith('.d.ts') });
 
 function packageOf(specifier: string): string | null {
   if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('node:')) return null;

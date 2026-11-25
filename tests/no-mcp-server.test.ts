@@ -9,28 +9,18 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { filesUnder } from './lib/files.js';
 import { runDoctor } from '../bin/lib/doctor/probes.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const at = (rel: string): string => path.join(repoRoot, rel);
 
-function sourceFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === 'fixtures' || entry.name === 'node_modules') continue;
-      out.push(...sourceFiles(full));
-    } else if (/\.(ts|mjs|cjs|js)$/.test(entry.name)) {
-      out.push(full);
-    }
-  }
-  return out;
-}
+const sourceFiles = (dir: string): string[] =>
+  filesUnder(dir, { keep: (n) => /\.(ts|mjs|cjs|js)$/.test(n), skipDirs: ['fixtures', 'node_modules'] });
 
 test('there is no MCP server source and no project-scope .mcp.json', () => {
   assert.ok(!existsSync(at('mcp')), 'mcp/ must not exist');
