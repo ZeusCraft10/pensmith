@@ -1165,7 +1165,7 @@ test('tier-contract: no unplanned verb — UX02_VERBS stays at exactly 17 (T-07-
 // research verb (CITE-05), not a verb of its own — so rather than add a 17th
 // verb case, this block (1) asserts the research path emits CITATIONS.ris
 // ALONGSIDE CITATIONS.bib in a temp .paper/ root (both tiers run the SAME
-// bin/cli/research.ts → writeRis path, mcpTool:null — the documented
+// bin/cli/research.ts → library write path, mcpTool:null — the documented
 // compile/done CLI-only asymmetry), and (2) re-asserts the 16-verb bijection:
 // exactly 16 verbs and NO Phase-10 surface (zotero/ris/style) leaked into the
 // locked set, while 'zotero-mcp' lives ONLY in the sources registry.
@@ -1175,7 +1175,7 @@ const researchVerbExists = existsSync(new URL('../bin/cli/research.ts', import.m
 test('tier-contract: research — emits CITATIONS.ris alongside CITATIONS.bib (CITE-05, D-24)', { skip: !researchVerbExists }, () => {
   // research is CLI-only at the tier-contract layer (no pensmith_research MCP
   // tool); the Tier-1 surface is the workflow body delegating to the SAME
-  // bin/cli/research.ts → writeRis path. Run it once in a temp root and assert
+  // bin/cli/research.ts → library write path. Run it once in a temp root and assert
   // BOTH library files land (Tier-2 placeholder path emits zero-length .ris/.bib
   // when no candidates — parity with the empty .bib). This proves the CITE-05
   // RIS surface is reached through the research verb on both tiers.

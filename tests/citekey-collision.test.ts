@@ -2,23 +2,23 @@
 //
 // The citekey is the primary key shared by LIBRARY.json, CITATIONS.bib, the RIS
 // export, and the research keep-sets. Before the fix the collision suffix was
-// computed locally inside writeBibtex (a per-base counter) and never written
-// back to the candidate set, so:
+// computed locally inside the bibliography writer (a per-base counter) and
+// never written back to the candidate set, so:
 //   #31 — LIBRARY.json kept the un-suffixed (duplicate) keys while the bib
 //         suffixed them → the citekey↔source mapping diverged.
 //   #32 — the evaluator/approval keep-sets filtered on a non-unique citekey →
 //         pruned the wrong rows.
 //   #21 — a per-base counter could re-emit a key equal to another candidate's
 //         base (a literal 'wu2017a' alongside a second 'wu2017') → a DUPLICATE.
-// assignUniqueCitekeys is now the single global-uniqueness authority.
+// assignUniqueCitekeys keys one research run's candidates; the library keys
+// the works it stores (bin/lib/library.ts).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { writeBibtex, assignUniqueCitekeys } from '../bin/lib/bibtex-write.js';
+import { readFileSync } from 'node:fs';
+import { assignUniqueCitekeys } from '../bin/lib/bibtex-write.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
+import { throughLibrary } from './lib/library-views.js';
 
 function cand(citekey: string, doi: string): SourceCandidate {
   return {
@@ -65,10 +65,8 @@ test('assignUniqueCitekeys: already-unique keys pass through unchanged (by refer
   assert.equal(out[0], a, 'unchanged candidate returned by reference (no churn)');
 });
 
-test('writeBibtex (#21/#31): two same-base candidates emit TWO distinct bib citekeys (no duplicate)', async () => {
-  const target = join(mkdtempSync(join(tmpdir(), 'pensmith-ckcoll-')), 'CITATIONS.bib');
-  await writeBibtex([cand('wu2017', '10.1000/a'), cand('wu2017', '10.1000/b')], target);
-  const bib = readFileSync(target, 'utf8');
+test('CITATIONS.bib (#21/#31): two same-base works get TWO distinct bib citekeys (no duplicate)', async () => {
+  const bib = readFileSync((await throughLibrary([cand('wu2017', '10.1000/a'), cand('wu2017', '10.1000/b')])).bibPath, 'utf8');
   const keys = [...bib.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]);
   assert.equal(keys.length, 2, `expected 2 bib entries; got ${keys.length}`);
   assert.equal(new Set(keys).size, 2, `bib must have NO duplicate citekey; got: ${keys.join(', ')}`);

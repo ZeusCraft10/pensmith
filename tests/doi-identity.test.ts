@@ -9,17 +9,16 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, relative, extname } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { sameDoi, normalizeIsbn } from '../bin/lib/doi.js';
-import { writeBibtex } from '../bin/lib/bibtex-write.js';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
 import { bibFile } from './lib/bib-fixture.js';
 import { filesUnder } from './lib/files.js';
+import { throughLibrary } from './lib/library-views.js';
 
 test('sameDoi: case, a doi: prefix and a doi.org link do not make two DOIs different', () => {
   assert.ok(sameDoi('10.1109/MCSE.2011.37', '10.1109/mcse.2011.37'));
@@ -49,15 +48,13 @@ test('normalizeIsbn: separators go, the check digit must be right', () => {
   assert.equal(normalizeIsbn('12345'), null);
 });
 
-test('writeBibtex writes DOIs in their normalized (lowercase) form', async () => {
+test('CITATIONS.bib carries DOIs in their normalized (lowercase) form', async () => {
   const c: SourceCandidate = {
     source: 'semanticscholar', id: 'x', doi: 'https://doi.org/10.1109/MCSE.2011.37', title: 'The NumPy Array',
     authors: ['van der Walt, Stéfan'], year: 2011, retracted: false, last_verified: '2026-11-25T00:00:00.000Z',
     citekey: 'walt2011', raw: {},
   };
-  const p = join(mkdtempSync(join(tmpdir(), 'pensmith-doi-write-')), 'CITATIONS.bib');
-  await writeBibtex([c], p);
-  const bib = readFileSync(p, 'utf8');
+  const bib = readFileSync((await throughLibrary([c])).bibPath, 'utf8');
   assert.match(bib, /doi = \{10\.1109\/mcse\.2011\.37\}/i);
   assert.doesNotMatch(bib, /MCSE|doi\.org/);
 });

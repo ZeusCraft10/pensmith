@@ -11,15 +11,13 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync, rmSync } from 'node:fs';
 import { crossCheckRetractions } from '../../bin/lib/sources/retraction-cross-check.js';
 import { fetchById as crossrefFetchById } from '../../bin/lib/sources/crossref.js';
 import { fetchById as pubmedFetchById } from '../../bin/lib/sources/pubmed.js';
-import { writeBibtex } from '../../bin/lib/bibtex-write.js';
 import type { SourceCandidate } from '../../bin/lib/schemas/source-candidate.js';
 import { withNetworkEnv } from '../lib/net-harness.js';
+import { throughLibrary } from '../lib/library-views.js';
 
 function candidate(overrides: Partial<SourceCandidate> = {}): SourceCandidate {
   return {
@@ -89,12 +87,10 @@ test('an expression of concern, a correction, a retraction notice and a plain re
 test('a marked candidate is written to CITATIONS.bib with note = {RETRACTED}, which Pass 1 reads back', async () => {
   const c = candidate({ source: 'crossref', doi: '10.5555/x', id: '10.5555/x', raw: { DOI: '10.5555/x', 'updated-by': [{ DOI: '10.5555/n', type: 'retraction', label: 'Retraction' }] } });
   crossCheckRetractions([c]);
-  const dir = mkdtempSync(join(tmpdir(), 'pensmith-retraction-cc-'));
+  const { root, bibPath } = await throughLibrary([c]);
   try {
-    const bibPath = join(dir, 'CITATIONS.bib');
-    await writeBibtex([c], bibPath);
     assert.match(readFileSync(bibPath, 'utf8'), /note\s*=\s*\{RETRACTED\}/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
 });

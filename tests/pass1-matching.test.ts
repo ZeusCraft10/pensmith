@@ -20,9 +20,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runPass1, runPass1Unit } from '../bin/lib/verify/pass1.js';
-import { writeBibtex } from '../bin/lib/bibtex-write.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
-import { bibFile, pass1Verdict as verdict } from './lib/bib-fixture.js';
+import { pass1Verdict as verdict } from './lib/bib-fixture.js';
+import { throughLibrary } from './lib/library-views.js';
 
 function entry(type: string, key: string, fields: Record<string, string>): string {
   return `@${type}{${key},\n${Object.entries(fields).map(([k, v]) => `  ${k} = {${v}}`).join(',\n')}\n}\n`;
@@ -61,9 +61,8 @@ test('Pass 1: a particle surname written by pensmith\'s own bib writer is OK', a
     citekey: 'walt2011',
     raw: {},
   };
-  const p = bibFile('');
-  await writeBibtex([candidate], p);
-  const results = await runPass1('# S\n\nNumPy arrays [@walt2011].\n', p);
+  const { bibPath } = await throughLibrary([candidate]);
+  const results = await runPass1('# S\n\nNumPy arrays [@vanderwalt2011].\n', bibPath);
   assert.equal(results[0]?.verdict, 'OK', results[0]?.reason);
 });
 

@@ -15,9 +15,7 @@
 // every verified entry byte for byte as it was.
 
 import { formatBibtex } from './citations.js';
-import { atomicWriteFile } from './atomic-write.js';
 import { generateCitekey } from './citekey.js';
-import { candidateIdentities, itemFromCandidate } from './library-item.js';
 import type { Library, LibraryItem } from './schemas/library.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
@@ -167,18 +165,4 @@ export function libraryBibtex(library: Pick<Library, 'entries' | 'bibtex_preambl
   const items = [...library.entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const blocks = [...library.bibtex_preamble.map((b) => b.trim()), ...items.map(itemBibtex)];
   return blocks.length === 0 ? '' : `${blocks.join('\n\n')}\n`;
-}
-
-/**
- * Write the BibTeX for `candidates` to `targetPath`: each candidate with an
- * identifier becomes an item (as the library would store it) under a unique
- * citekey. A candidate with no DOI, arXiv ID, PMID or ISBN is left out, as
- * research leaves it out of the library: nothing could verify it. No
- * candidates writes an empty file, which verify reads as an empty library.
- */
-export async function writeBibtex(candidates: SourceCandidate[], targetPath: string): Promise<void> {
-  const at = new Date().toISOString();
-  const keyed = assignUniqueCitekeys(candidates.filter((c) => candidateIdentities(c).length > 0));
-  const entries = keyed.map((c) => itemFromCandidate(c, c.citekey, at));
-  await atomicWriteFile(targetPath, libraryBibtex({ entries, bibtex_preamble: [] }));
 }

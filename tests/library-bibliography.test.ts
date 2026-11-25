@@ -15,12 +15,12 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeBibtex } from '../bin/lib/bibtex-write.js';
 import { addToLibrary, loadLibrary } from '../bin/lib/library.js';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
 import * as arxiv from '../bin/lib/sources/arxiv.js';
 import * as pubmed from '../bin/lib/sources/pubmed.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
+import { throughLibrary } from './lib/library-views.js';
 
 function paperRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-libbib-'));
@@ -40,9 +40,7 @@ async function verdictFor(bibPath: string, key: string): Promise<{ verdict: stri
 test('a preprint known only by its arXiv ID is in CITATIONS.bib with its eprint, and Pass 1 confirms it', async () => {
   const c = await arxiv.fetchById('1706.03762');
   assert.ok(c && !c.doi, 'the recorded arXiv answer gives the paper with no DOI');
-  const root = paperRoot();
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-  await writeBibtex([c], bibPath);
+  const { bibPath } = await throughLibrary([c], paperRoot());
   const bib = readFileSync(bibPath, 'utf8');
   assert.match(bib, /^@misc\{vaswani2017,/m);
   assert.match(bib, /eprint = \{1706\.03762\}/);
@@ -57,9 +55,7 @@ test('an article known only by its PubMed ID is in CITATIONS.bib with its pmid, 
   assert.ok(c);
   // The same article as a PubMed record that lists no DOI.
   delete c.doi;
-  const root = paperRoot();
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-  await writeBibtex([c], bibPath);
+  const { bibPath } = await throughLibrary([c], paperRoot());
   const bib = readFileSync(bibPath, 'utf8');
   assert.match(bib, /pmid = \{22955616\}/);
   assert.match(bib, /author = \{\{ENCODE Project Consortium\}\}/, 'a collective author is one name');
@@ -74,9 +70,7 @@ test('text in any script reaches CITATIONS.bib as it is', async () => {
     authors: ['Иванов, Пётр'], names: [{ family: 'Иванов', given: 'Пётр' }], year: 2019,
     retracted: false, last_verified: '2026-11-25T00:00:00.000Z', citekey: 'ivanov2019', raw: null,
   } as SourceCandidate;
-  const root = paperRoot();
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-  await writeBibtex([c], bibPath);
+  const { bibPath } = await throughLibrary([c], paperRoot());
   const bib = readFileSync(bibPath, 'utf8');
   assert.match(bib, /深度学习中的注意力机制/);
   assert.match(bib, /Ελληνικά/);
