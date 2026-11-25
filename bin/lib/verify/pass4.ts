@@ -22,11 +22,12 @@
 //        followed by whitespace OR end-of-string. No NLP, no abbreviation
 //        handling (residual abbreviation false-positives are an accepted advisory
 //        limitation). Trim each resulting sentence.
-//   R2 — In-text citation marker: a `[@citekey]` token matching CITEKEY_RE. "Has
-//        a citation within proximity" = a `[@citekey]` token appears within
-//        ORPHAN_PROXIMITY_CHARS=500 characters of the sentence's character span
-//        inside the paragraph (paragraphs are short, so in practice this is "the
-//        paragraph contains a [@citekey]").
+//   R2 — In-text citation marker: a citation in any Pandoc form, as the
+//        citation grammar reads it (`[@key]`, `[@k, p. 4]`, `[@a; @b]`,
+//        `[-@k]`, `@k`). "Has a citation within proximity" = a citation starts
+//        within ORPHAN_PROXIMITY_CHARS=500 characters of the sentence's
+//        character span inside the paragraph (paragraphs are short, so in
+//        practice this is "the paragraph contains a citation").
 //   R3 — Rhetorical skip: a sentence ending in `?` is NOT a claim (discarded
 //        BEFORE marker counting).
 //   R4 — Definition skip: a sentence matching DEFINITION_MARKERS is NOT a claim
@@ -56,6 +57,7 @@
 
 import { complete } from '../anthropic.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
+import { findCitations } from '../citation-grammar.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
 //
@@ -94,7 +96,7 @@ const CLAIM_MARKERS =
 /** R4 — definition-style sentences are NOT claims (Pitfall 6 precision guard). */
 const DEFINITION_MARKERS = /\b(defined as|refers to|known as)\b/i;
 
-/** R2 — a [@citekey] within this many chars of a claim sentence span = cited. */
+/** R2 — a citation within this many chars of a claim sentence span = cited. */
 const ORPHAN_PROXIMITY_CHARS = 500;
 
 /** R1 — sentence boundary: a terminator (. ! ?) followed by whitespace. The
@@ -102,8 +104,6 @@ const ORPHAN_PROXIMITY_CHARS = 500;
  *  sentence so R3's trailing-`?` test and R6 word counting see it. */
 const SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+/;
 
-/** R2 — canonical [@citekey] token regex (verbatim from pass1.ts / quote-extractor.ts). */
-const CITEKEY_RE = /\[@([a-z][a-z0-9_-]*)\]/g;
 
 // ---- Step-3 LLM constants (advisory edge-case labeling — AMBIGUOUS only) ----
 
@@ -191,7 +191,7 @@ function splitSentences(para: string): string[] {
  * indexOf from a running cursor so repeated sentences resolve to successive
  * spans (deterministic). Falls back to [0, sentence.length) if not found
  * (whitespace-normalization edge) — span is only used for R2 proximity, which
- * for short paragraphs is "paragraph contains a [@citekey]".
+ * for short paragraphs is "paragraph contains a citation".
  */
 function locateSpan(para: string, sentence: string, fromIndex: number): { start: number; end: number } {
   const start = para.indexOf(sentence, fromIndex);
@@ -200,38 +200,24 @@ function locateSpan(para: string, sentence: string, fromIndex: number): { start:
 }
 
 /**
- * R2 — collect every [@citekey] token's character offset inside the paragraph.
- * Used by isOrphan for the ORPHAN_PROXIMITY_CHARS distance test.
+ * R2 — the character offset of every citation inside the paragraph, in any
+ * Pandoc form. Used by isOrphan for the ORPHAN_PROXIMITY_CHARS distance test;
+ * an empty list is the fast no-citation path.
  */
-function citekeyOffsets(para: string): number[] {
-  const offsets: number[] = [];
-  for (const m of para.matchAll(CITEKEY_RE)) {
-    if (typeof m.index === 'number') offsets.push(m.index);
-  }
-  return offsets;
+function citationOffsets(para: string): number[] {
+  return findCitations(para).map((c) => c.start);
 }
 
 /**
- * Private findCitekeys (canonical dedup-extraction regex from pass1.ts lines
- * 191-194). Exported indirectly via runPass4 (Task 2) — not part of the public
- * surface. Deterministic Set of unique citekeys in the paragraph.
- */
-function findCitekeys(para: string): Set<string> {
-  return new Set(
-    [...para.matchAll(CITEKEY_RE)].map((m) => m[1]).filter((s): s is string => Boolean(s)),
-  );
-}
-
-/**
- * R2/R8 — a HIGH-confidence claim is an orphan when NO [@citekey] token appears
+ * R2/R8 — a HIGH-confidence claim is an orphan when NO citation starts
  * within ORPHAN_PROXIMITY_CHARS of the claim sentence's span. AMBIGUOUS claims
  * are NEVER auto-flagged here and NEVER contribute to orphanCount (R8). The
  * optional `hasAnyCitekey` fast-path lets the caller skip the offset scan when
- * the Step-2 findCitekeys set is empty (paragraph has no citations at all).
+ * the paragraph has no citations at all.
  */
 function isOrphan(offsets: number[], claim: ExtractedClaim, hasAnyCitekey = true): boolean {
   if (claim.claimConfidence !== 'HIGH') return false;
-  if (!hasAnyCitekey) return true; // R2: no [@citekey] anywhere -> uncited -> orphan
+  if (!hasAnyCitekey) return true; // R2: no citation anywhere -> uncited -> orphan
   for (const off of offsets) {
     // Distance from the citekey to the nearest edge of the sentence span.
     const distance =
@@ -298,10 +284,8 @@ function auditParagraph(para: string, paragraphIndex: number): {
 } {
   const totalSentences = splitSentences(para).length;
   const claims = extractClaimsFromParagraph(para);
-  const offsets = citekeyOffsets(para);
-  // Step-2 canonical citekey set (pass1.ts dedup pattern). Its emptiness is the
-  // fast no-citation path for isOrphan (R2).
-  const hasAnyCitekey = findCitekeys(para).size > 0;
+  const offsets = citationOffsets(para);
+  const hasAnyCitekey = offsets.length > 0;
 
   const claimResults: Pass4ClaimResult[] = [];
   const ambiguous: Array<{ index: number; claim: ExtractedClaim }> = [];

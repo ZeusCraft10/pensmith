@@ -22,6 +22,7 @@
 import { fetch as httpFetch } from './http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
 import { Semaphore } from './budget.js';
+import { findCitations } from './citation-grammar.js';
 
 // ============================================================
 //   Public types
@@ -87,17 +88,25 @@ function isDistinctive(phrase: string): boolean {
   return specific >= 2;
 }
 
+/** `text` with every citation, in any Pandoc form, replaced by a space. */
+function stripCitations(text: string): string {
+  let out = '';
+  let at = 0;
+  for (const c of findCitations(text)) {
+    out += `${text.slice(at, c.start)} `;
+    at = c.end;
+  }
+  return out + text.slice(at);
+}
+
 /**
- * Strip `[@citekey]` / `[@a; @b]` citation tokens and surrounding markdown
- * punctuation from a chunk of draft text so citation keys are never searched as
- * plagiarism phrases (behavior block), then collapse whitespace. Deterministic.
+ * Strip citations (prefixes, keys and locators included) and surrounding
+ * markdown punctuation from a chunk of draft text so citation keys are never
+ * searched as plagiarism phrases (behavior block), then collapse whitespace.
+ * Deterministic.
  */
 function stripCitationsAndMarkdown(text: string): string {
-  return text
-    // bracketed pandoc citations: [@key], [@a; @b, p. 4]
-    .replace(/\[@[^\]]*\]/g, ' ')
-    // stray inline @citekey tokens (no brackets)
-    .replace(/(^|\s)@[A-Za-z0-9_:-]+/g, ' ')
+  return stripCitations(text)
     // markdown emphasis / code / heading / link punctuation → space
     .replace(/[*_`#>~|]+/g, ' ')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, ' $1 ')

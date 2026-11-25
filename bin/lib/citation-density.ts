@@ -18,12 +18,12 @@
 // resolve; the comparison degrades gracefully to the default when the discipline
 // is unknown. The comparison is WARN-only and NEVER blocks compile.
 
-import { CITATION_TOKEN_RE } from './citation-token.js';
+import { findCitations } from './citation-grammar.js';
 
 export interface CitationDensitySectionEntry {
   n: number;
   slug: string;
-  /** Number of `[@key]` citation markers in the section text. */
+  /** Number of works cited in the section text, counted per citation (any Pandoc form). */
   citations: number;
   /** Number of whitespace-delimited tokens in the section text. */
   words: number;
@@ -87,12 +87,9 @@ function countWords(text: string): number {
   return trimmed.split(/\s+/).length;
 }
 
-/** Count `[@key]` citation markers (occurrences, not distinct keys). */
+/** Count cited works (occurrences, not distinct keys): `[@a; @b]` cites two. */
 function countCitations(text: string): number {
-  const re = new RegExp(CITATION_TOKEN_RE.source, 'g');
-  let count = 0;
-  while (re.exec(text) !== null) count += 1;
-  return count;
+  return findCitations(text).reduce((n, c) => n + c.items.length, 0);
 }
 
 /**

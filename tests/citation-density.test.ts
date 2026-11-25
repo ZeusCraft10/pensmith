@@ -11,7 +11,7 @@
 // comparison to the discipline preset target.
 //
 // Signature: computeCitationDensity(sections, discipline) → CitationDensityReport
-//   sections: { n, slug, text }[]; counts citations via extractCitekeys over text,
+//   sections: { n, slug, text }[]; counts the works cited in text (citation grammar),
 //   counts words, computes citations_per_1000_words; then paper-wide mean+stdev
 //   and a target-comparison verdict ('below' | 'within' | 'above').
 

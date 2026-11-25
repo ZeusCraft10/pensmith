@@ -7,8 +7,8 @@
 // line. There is NO hasFail / status reference anywhere in this file by design
 // (VRFY-07; tests/verify-advisory-isolation.test.ts is the structural gate).
 //
-// For each in-text [@citekey] occurrence Pass 2:
-//   1. extracts the citing sentence deterministically (pure regex, no LLM), and
+// For each cited key, in any Pandoc citation form, Pass 2:
+//   1. extracts the citing sentence deterministically (citation grammar, no LLM), and
 //   2. (live branch only) asks the hash-pinned `claim-support` prompt for a
 //      verdict in {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}.
 //
@@ -28,6 +28,7 @@
 
 import { complete } from '../anthropic.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
+import { findCitations, sentenceSpan } from '../citation-grammar.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
 //
@@ -54,7 +55,7 @@ export type Pass2Verdict = 'SUPPORTED' | 'PARTIAL' | 'UNSUPPORTED' | 'UNCLEAR';
 
 export interface Pass2Result {
   citekey: string;
-  /** The sentence in the draft that carries the [@citekey] token. */
+  /** The sentence in the draft that cites the key. */
   claimSentence: string;
   verdict: Pass2Verdict;
   /** <=200 chars, table-cell-safe (no markdown/HTML/newlines). */
@@ -77,29 +78,6 @@ interface ClaimPair {
   claimSentence: string;
 }
 
-const CITEKEY_RE = /\[@([a-z][a-z0-9_-]*)\]/g;
-
-/**
- * Deterministic claim-sentence extraction. Splits `draftMd` into sentences on a
- * pure-regex boundary (terminal . / ! / ? followed by whitespace) and returns
- * the sentence(s) that contain the literal `[@<citekey>]` token. No NLP, no LLM
- * — identical input always yields identical output (PRD §14 determinism).
- */
-function extractClaimSentences(draftMd: string, citekey: string): string[] {
-  const token = `[@${citekey}]`;
-  // Split on a sentence boundary: terminal punctuation followed by whitespace.
-  // The lookbehind keeps the punctuation attached to the preceding sentence.
-  const sentences = draftMd.split(/(?<=[.!?])\s+/);
-  const out: string[] = [];
-  for (const raw of sentences) {
-    const sentence = raw.trim();
-    if (sentence.length > 0 && sentence.includes(token)) {
-      out.push(sentence);
-    }
-  }
-  return out;
-}
-
 /**
  * Conservative offline placeholder (UNCLEAR-bias). Mirrors the revise.ts
  * Tier-2-placeholder stance: deterministic, reproducible, never confident.
@@ -115,21 +93,22 @@ function pass2Placeholder(claimSentence: string, citekey: string): Pass2Result {
 }
 
 /**
- * Build the ordered, de-duplicated list of (citekey, claimSentence) pairs to
- * judge. Each UNIQUE citekey contributes one pair using its first extracted
- * claim sentence; a citekey with no resolvable sentence still produces a pair
- * with an empty sentence so the offline placeholder path is total over the
- * draft's citations.
+ * The ordered, de-duplicated (citekey, claimSentence) pairs to judge: each
+ * key the draft cites, in any Pandoc form, with the sentence of its first
+ * citation. The sentence comes from the citation grammar, so a full stop in a
+ * locator (`p. 4`) does not cut it short. Deterministic: no NLP, no LLM.
  */
 function collectClaimPairs(draftMd: string): ClaimPair[] {
-  const citekeys = [...draftMd.matchAll(CITEKEY_RE)]
-    .map((m) => m[1])
-    .filter((s): s is string => Boolean(s));
-  const unique = [...new Set(citekeys)];
-  return unique.map((citekey) => {
-    const sentences = extractClaimSentences(draftMd, citekey);
-    return { citekey, claimSentence: sentences[0] ?? '' };
-  });
+  const cites = findCitations(draftMd);
+  const pairs = new Map<string, string>();
+  for (const c of cites) {
+    for (const { key } of c.items) {
+      if (pairs.has(key)) continue;
+      const [start, end] = sentenceSpan(draftMd, c.start, c.end, cites);
+      pairs.set(key, draftMd.slice(start, end).trim());
+    }
+  }
+  return [...pairs].map(([citekey, claimSentence]) => ({ citekey, claimSentence }));
 }
 
 // Per-section Pass 2 cap (ARCH-10 per-step cap). A config knob (05-RESEARCH Open
@@ -207,7 +186,7 @@ function parsePass2Response(
 
 /**
  * Pass 2 advisory claim-support run. Returns one Pass2Result per UNIQUE
- * [@citekey] in `draftMd`. Under PENSMITH_NO_LLM=1 (or when complete() cannot
+ * cited key in `draftMd`. Under PENSMITH_NO_LLM=1 (or when complete() cannot
  * resolve a provider key) every result is the conservative UNCLEAR placeholder
  * and no usable network call is made. A draft with zero citations returns [].
  * Advisory by construction — this function NEVER mutates shared blocking state.
