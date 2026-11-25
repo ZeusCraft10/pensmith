@@ -210,7 +210,8 @@ test('citation-render: resolveStyleName maps disciplines to styles (CITE-02/03)'
     const resolve = resolveStyleName as (d: string) => string;
     assert.equal(resolve('computer-science'), 'ieee', 'computer-science → ieee');
     assert.equal(resolve('literature'), 'mla', 'literature → mla');
-    assert.equal(resolve('history'), 'chicago-author-date', 'history → chicago-author-date');
+    // PRD §8: History uses Chicago Notes-Bibliography (the old table said author-date).
+    assert.equal(resolve('history'), 'chicago-notes-bib', 'history → chicago-notes-bib');
     assert.equal(resolve('unknown'), 'apa', 'unknown → apa fallback');
   },
 );

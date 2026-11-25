@@ -102,7 +102,9 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
 
 7. **Export + mandatory scrub + trace scan** (DONE-06/07/08): `exportDraft`
    builds the files in a staging folder inside `.paper/`, then moves them into
-   the DISTINCT export dir. docx/pdf/latex
+   the DISTINCT export dir. Citations render in the user's chosen style
+   (config.toml `[project] citation_style`, else a "Citation style:" answer in
+   INTAKE.md, else the discipline preset in disciplines.json). docx/pdf/latex
    run Pandoc with relative paths (latex with `--standalone`); docx →
    `zeroTracePatch` (docProps rebuilt from an allowlist, custom.xml dropped);
    pdf → `zeroTracePdf` (info dictionary, XMP and TeX banners removed); md →

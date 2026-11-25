@@ -420,31 +420,49 @@ export function renderCitationsInDocument(
 }
 
 // =====================================================================
-//   Public: style names
+//   Public: style names and discipline defaults
 // =====================================================================
 
 /** The citation styles pensmith ships a CSL file for. */
 export const SUPPORTED_STYLES: readonly string[] = Object.keys(STYLE_FILENAMES);
 
+// Spellings a person might type or the intake clarifier offers.
+const STYLE_ALIASES: ReadonlyMap<string, string> = new Map([
+  ['apa', 'apa'], ['apa 7', 'apa'], ['apa7', 'apa'], ['apa 7th', 'apa'],
+  ['mla', 'mla'], ['mla 8', 'mla'], ['mla 9', 'mla'],
+  ['chicago', 'chicago-notes-bib'], ['chicago nb', 'chicago-notes-bib'], ['chicago notes', 'chicago-notes-bib'],
+  ['chicago notes-bibliography', 'chicago-notes-bib'], ['chicago notes bibliography', 'chicago-notes-bib'],
+  ['chicago (notes-bibliography)', 'chicago-notes-bib'], ['chicago-notes-bib', 'chicago-notes-bib'],
+  ['chicago ad', 'chicago-author-date'], ['chicago author-date', 'chicago-author-date'],
+  ['chicago author date', 'chicago-author-date'], ['chicago (author-date)', 'chicago-author-date'],
+  ['chicago-author-date', 'chicago-author-date'],
+  ['ieee', 'ieee'], ['ama', 'ama'], ['vancouver', 'vancouver'], ['harvard', 'harvard'],
+]);
+
 /**
- * Map a discipline key (from disciplines.json / PROJECT.md) to its default
- * citation style name (the key `renderStyle` expects). Callers that already
- * know the style can pass it directly; this is a lookup convenience for
- * workflow bodies. Unknown disciplines fall back to 'apa'.
+ * The style key for a style name as a person writes it ("Chicago (Author-Date)",
+ * "APA 7", "vancouver"), or null when pensmith has no CSL file for it.
+ */
+export function normalizeStyleName(name: string): string | null {
+  const key = name.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.]$/, '');
+  return STYLE_ALIASES.get(key) ?? null;
+}
+
+/**
+ * The default citation style for a discipline slug, read from
+ * templates/presets/disciplines.json (the one place presets are defined).
+ * An unknown discipline uses the `other` preset.
  */
 export function resolveStyleName(discipline: string): string {
-  const map: Readonly<Record<string, string>> = {
-    'computer-science': 'ieee',
-    'biology': 'apa',
-    'psychology': 'apa',
-    'sociology': 'apa',
-    'economics': 'apa',
-    'history': 'chicago-author-date',
-    'philosophy': 'chicago-author-date',
-    'literature': 'mla',
-    'other': 'apa',
-  };
-  return map[discipline.toLowerCase()] ?? 'apa';
+  let presets: Record<string, { defaultCitationStyle?: unknown }> = {};
+  try {
+    presets = JSON.parse(readFileSync(path.join(PKG_ROOT, 'templates', 'presets', 'disciplines.json'), 'utf8')) as typeof presets;
+  } catch {
+    return 'apa';
+  }
+  const preset = presets[discipline.toLowerCase()] ?? presets['other'];
+  const style = typeof preset?.defaultCitationStyle === 'string' ? normalizeStyleName(preset.defaultCitationStyle) : null;
+  return style ?? 'apa';
 }
 
 // =====================================================================

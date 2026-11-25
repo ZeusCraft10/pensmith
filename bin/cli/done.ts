@@ -33,8 +33,8 @@ import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '.
 import { scoreHonesty, renderHonestyReport, renderHonestySkipped } from '../lib/honesty.js';
 import { exportDraft, ExportError, runHumanizer, type ExportFormat } from '../lib/exporter.js';
 import { paperDir } from '../lib/paths.js';
-import { parseIntakeMd } from '../lib/intake-parse.js';
-import { parseBibtex, resolveStyleName } from '../lib/citations.js';
+import { parseBibtex } from '../lib/citations.js';
+import { resolveCitationStyle } from '../lib/citation-style.js';
 import { isPandocPresent } from '../lib/ecosystem-presence.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
@@ -776,14 +776,9 @@ export const doneCommand = defineCommand({
 
     // 7. DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir.
 
-    // The citation style follows the discipline in INTAKE.md (apa without one).
-    let intake = '';
-    try {
-      intake = readFileSync(join(paperDir(paperRoot), 'INTAKE.md'), 'utf8');
-    } catch {
-      // no intake: the default style
-    }
-    const citation = { style: resolveStyleName(parseIntakeMd(intake).discipline) };
+    // The user's chosen citation style, else the discipline preset.
+    const citation = resolveCitationStyle(paperRoot);
+    if (citation.warning) process.stderr.write(`pensmith done: WARN — ${citation.warning}\n`);
 
     let result: Awaited<ReturnType<typeof exportDraft>>;
     try {

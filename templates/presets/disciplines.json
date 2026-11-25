@@ -17,7 +17,7 @@
   },
   "history": {
     "defaultTone": "narrative",
-    "defaultCitationStyle": "chicago-author-date",
+    "defaultCitationStyle": "chicago-notes-bib",
     "sourcePreference": ["crossref", "openalex"],
     "sectioningConvention": ["Introduction", "Background", "Analysis", "Conclusion", "Bibliography"],
     "counterargDefault": "required",
@@ -33,7 +33,7 @@
   },
   "biology": {
     "defaultTone": "technical",
-    "defaultCitationStyle": "apa",
+    "defaultCitationStyle": "vancouver",
     "sourcePreference": ["pubmed", "openalex", "crossref"],
     "sectioningConvention": ["Introduction", "Materials and Methods", "Results", "Discussion", "References"],
     "counterargDefault": "optional",

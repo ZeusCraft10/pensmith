@@ -24,6 +24,8 @@ import { atomicWriteFile } from '../lib/atomic-write.js';
 import { redactPii, diffPii } from '../lib/pii.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
+import { normalizeStyleName, SUPPORTED_STYLES } from '../lib/citations.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
 
 // EGRESS SEAM (H3 — test-observable model-bound payload). intake calls the
 // model-bound interpolate THROUGH this module-local indirection so the egress
@@ -107,6 +109,7 @@ async function persistProjectConfig(
   cwd: string,
   goal: 'draft' | 'learning' | 'both',
   piiRedactArg: boolean | undefined,
+  citationStyle?: string,
 ): Promise<void> {
   try {
     const cfgPath = path.join(cwd, 'config.toml');
@@ -123,6 +126,8 @@ async function persistProjectConfig(
     // Only persist pii_redaction when the user set it explicitly via the CLI arg
     // (the arg WINS over config — see precedence comment at the call site).
     if (piiRedactArg !== undefined) project.pii_redaction = piiRedactArg;
+    // The citation style the user chose; done reads it back (citation-style.ts).
+    if (citationStyle !== undefined) project.citation_style = citationStyle;
     const next = { ...cfg, project };
     await atomicWriteFile(cfgPath, stringifyToml(next));
   } catch (e) {
@@ -345,6 +350,10 @@ export const intakeCommand = defineCommand({
       type: 'boolean',
       description: 'Opt-in: redact PII from your answers before they reach the model (H3).',
     },
+    'citation-style': {
+      type: 'string',
+      description: `Citation style for the export: ${SUPPORTED_STYLES.join(', ')} (default: the discipline's).`,
+    },
     yolo: {
       type: 'boolean',
       description: 'Skip the approval gate (auto-accept the intake).',
@@ -353,6 +362,17 @@ export const intakeCommand = defineCommand({
   },
   async run({ args }) {
     const cwd = process.cwd();
+
+    // Refuse an unknown style before anything is written.
+    const styleArg = typeof args['citation-style'] === 'string' ? args['citation-style'].trim() : '';
+    const citationStyle = styleArg ? normalizeStyleName(styleArg) : undefined;
+    if (citationStyle === null) {
+      process.stderr.write(
+        `pensmith new: unknown citation style '${styleArg}'. Supported: ${SUPPORTED_STYLES.join(', ')}.\n`,
+      );
+      process.exitCode = EXIT_REFUSED;
+      return { ok: false, mode: 'invalid-input' };
+    }
 
     // DOCS-01: PRD §3 disclaimer — print at intake start so CLI-only users see it.
     // Static copy — sourced verbatim from PRD §3 (non-negotiable per CLAUDE.md).
@@ -404,7 +424,7 @@ export const intakeCommand = defineCommand({
 
     // Persist goal (and pii_redaction when set via arg). Done EARLY so a later
     // failure path still leaves the canonical config in place.
-    await persistProjectConfig(cwd, goal, piiRedactArg);
+    await persistProjectConfig(cwd, goal, piiRedactArg, citationStyle);
 
     // --- PII BLOCK — STRUCTURALLY BEFORE loadPrompt/interpolate (T-09-PII-EGRESS). ---
     // Collect the raw ANSWERS (the user's --from seed + thesis seed — NEVER the
