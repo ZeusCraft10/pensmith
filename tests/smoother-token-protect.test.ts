@@ -1,4 +1,4 @@
-// tests/smoother-token-protect.test.ts — COMP-03 / D-13 citation-token protection.
+// tests/smoother-token-protect.test.ts — COMP-03 / D-13 citation protection.
 //
 // RED-first: bin/lib/compile.ts does not exist yet.
 //

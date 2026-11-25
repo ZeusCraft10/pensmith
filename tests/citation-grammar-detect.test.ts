@@ -10,6 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  findCitations,
   findQuotes,
   findRawCitations,
   findUnparseableCitations,
@@ -112,4 +113,11 @@ test('quotes: block quotes take the citation inside the block, or a citation lin
 
 test('quotes: quotes inside code are not quotes', () => {
   assert.deepEqual(quotes(`Code \`"${Q}" [@k]\` only.`), []);
+});
+
+test('the smoother placeholders {{cite_K_M}} are never read as citations or citation text', () => {
+  const md = 'A transition {{cite_0_1}} and {{cite_1_2}}.';
+  assert.deepEqual(findCitations(md), []);
+  assert.deepEqual(findRawCitations(md), []);
+  assert.deepEqual(findUnparseableCitations(md), []);
 });

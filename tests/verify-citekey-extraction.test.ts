@@ -4,8 +4,9 @@
 // produces a BLOCKING verdict instead of silently vanishing. Before the fix, the
 // Pass-1 extraction regex matched only lowercase-first BARE `[@key]` tokens, so
 // uppercase keys, Pandoc locator forms, and multi-citation clusters produced NO
-// verdict at all and passed every gate. This covers both the broad detector and
-// the end-to-end runPass1 fail-closed behavior.
+// verdict at all and passed every gate. This covers both the keys Pass 1 reads
+// (through the citation grammar) and the end-to-end runPass1 fail-closed
+// behavior.
 //
 // Offline only (cassettes + PENSMITH_NETWORK_TESTS unset). FABRICATED verdicts
 // for keys absent from the bib are returned BEFORE any network call.
@@ -15,10 +16,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { extractCitedKeysForVerification } from '../bin/lib/citation-token.js';
-import { runPass1 } from '../bin/lib/verify/pass1.js';
+import { pass1CitedKeys, runPass1 } from '../bin/lib/verify/pass1.js';
 
-test('extractCitedKeysForVerification: catches uppercase, locator, and multi-cite forms', () => {
+test('pass1CitedKeys: catches uppercase, locator, and multi-cite forms', () => {
   const md = [
     'Bare lowercase [@smith2020].',
     'Uppercase [@Vaswani2017].',
@@ -27,7 +27,7 @@ test('extractCitedKeysForVerification: catches uppercase, locator, and multi-cit
     'Email-like [contact me at name@host.com] must NOT match.',
   ].join('\n');
 
-  const keys = extractCitedKeysForVerification(md);
+  const keys = pass1CitedKeys(md);
   // Every citation key, case + locator-stripped, deduped in order.
   assert.deepEqual(keys, [
     'smith2020', 'Vaswani2017', 'jones2019', 'doe2021', 'a', 'b', 'c', 'd',
@@ -36,9 +36,9 @@ test('extractCitedKeysForVerification: catches uppercase, locator, and multi-cit
   assert.ok(!keys.includes('host'), 'email-style name@host must not be extracted');
 });
 
-test('extractCitedKeysForVerification: bare lowercase output is unchanged (no regression)', () => {
+test('pass1CitedKeys: bare lowercase output is unchanged (no regression)', () => {
   assert.deepEqual(
-    extractCitedKeysForVerification('text [@smith2020] and [@jones-2019], [@smith2020] again'),
+    pass1CitedKeys('text [@smith2020] and [@jones-2019], [@smith2020] again'),
     ['smith2020', 'jones-2019'],
   );
 });
