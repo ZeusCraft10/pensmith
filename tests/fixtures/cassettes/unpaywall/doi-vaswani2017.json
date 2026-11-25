@@ -2,7 +2,7 @@
   {
     "scope": "https://api.unpaywall.org",
     "method": "GET",
-    "path": "/v2/10.48550/arxiv.1706.03762?email=akhilachanta8%40gmail.com",
+    "path": "/v2/10.48550/arxiv.1706.03762",
     "status": 200,
     "response": {
       "doi": "10.48550/arxiv.1706.03762",

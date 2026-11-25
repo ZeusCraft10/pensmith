@@ -81,3 +81,34 @@ test('cassette-no-leak: no committed cassette carries SENSITIVE_HEADERS (T-3-02 
     }
   }
 });
+
+// Contact addresses and keys travel in query strings (OpenAlex `mailto=`,
+// Unpaywall `email=`), which header scrubbing never sees. Recorded paths must
+// carry none of them, and the recorder must strip them before writing.
+const IDENTIFYING_PARAMS = ['mailto', 'email', 'api_key', 'apikey', 'key', 'token'];
+
+test('cassette-no-leak: no committed cassette path carries a contact address or key in its query string', () => {
+  for (const file of walkDir(CASSETTE_ROOT)) {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as Array<Record<string, unknown>>;
+    for (const entry of parsed) {
+      const p = String(entry['path'] ?? '');
+      const query = p.includes('?') ? p.slice(p.indexOf('?') + 1) : '';
+      const params = new URLSearchParams(query);
+      for (const name of IDENTIFYING_PARAMS) {
+        assert.ok(!params.has(name), `Cassette ${file} path carries ?${name}= (${p})`);
+      }
+      assert.ok(!/%40|@/.test(p), `Cassette ${file} path carries an email-like value (${p})`);
+    }
+  }
+});
+
+test('cassette-no-leak: the recorder strips identifying query params from recorded paths', async () => {
+  const { scrubRecordedPath } = await import('../bin/lib/http-mock.js');
+  assert.equal(
+    scrubRecordedPath('/works?search=attention+mechanisms&per-page=20&mailto=someone%40example.org'),
+    '/works?search=attention+mechanisms&per-page=20',
+  );
+  assert.equal(scrubRecordedPath('/v2/10.1/x?email=a%40b.c'), '/v2/10.1/x');
+  assert.equal(scrubRecordedPath('/graph/v1/paper/abc?api_key=secret&fields=title'), '/graph/v1/paper/abc?fields=title');
+  assert.equal(scrubRecordedPath('/works/10.1038/nphys1170'), '/works/10.1038/nphys1170');
+});

@@ -126,6 +126,38 @@ export const SENSITIVE_HEADERS: ReadonlySet<string> = new Set([
   'proxy-authorization',
 ]);
 
+// Query parameters that identify the caller (contact email, API keys). Header
+// scrubbing never sees them, and cassettes are committed and ship with every
+// git clone, so the recorder strips them from recorded paths.
+const IDENTIFYING_PARAMS: ReadonlySet<string> = new Set([
+  'mailto', 'email', 'api_key', 'apikey', 'key', 'token',
+]);
+
+/**
+ * Drop identifying query parameters (contact email, API keys) from a request
+ * path. Works on the raw string so the remaining parameters keep their exact
+ * recorded encoding and order.
+ */
+export function scrubRecordedPath(pathAndQuery: string): string {
+  const q = pathAndQuery.indexOf('?');
+  if (q < 0) return pathAndQuery;
+  const kept = pathAndQuery
+    .slice(q + 1)
+    .split('&')
+    .filter((pair) => {
+      if (pair === '') return false;
+      let name = pair.split('=')[0] ?? '';
+      try {
+        name = decodeURIComponent(name);
+      } catch {
+        // keep the raw name
+      }
+      return !IDENTIFYING_PARAMS.has(name.toLowerCase());
+    });
+  const base = pathAndQuery.slice(0, q);
+  return kept.length > 0 ? `${base}?${kept.join('&')}` : base;
+}
+
 // ---------------------------------------------------------------------
 //   Offline-mode predicate
 // ---------------------------------------------------------------------
@@ -329,12 +361,13 @@ export async function finalizeRecording(adapter: string): Promise<void> {
       for (const [k, v] of Object.entries(rec.reqheaders ?? {})) {
         if (!SENSITIVE_HEADERS.has(k.toLowerCase())) cleanedReqHeaders[k] = v;
       }
-      const sanitizedPath = rec.path.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+      const path = scrubRecordedPath(rec.path);
+      const sanitizedPath = path.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
       const outPath = join(outDir, `${sanitizedPath}.json`);
       const cassette: Cassette = {
         scope: rec.scope,
         method: rec.method.toUpperCase() as 'GET' | 'POST',
-        path: rec.path,
+        path,
         status: rec.status,
         response: rec.response,
         responseHeaders: cleanedHeaders,

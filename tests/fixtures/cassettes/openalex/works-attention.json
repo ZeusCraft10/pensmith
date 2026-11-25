@@ -2,7 +2,7 @@
   {
     "scope": "https://api.openalex.org",
     "method": "GET",
-    "path": "/works?search=attention+mechanisms&per-page=20&mailto=akhilachanta8%40gmail.com",
+    "path": "/works?search=attention+mechanisms&per-page=20",
     "status": 200,
     "response": {
       "meta": { "count": 3 },
@@ -44,7 +44,7 @@
   {
     "scope": "https://api.openalex.org",
     "method": "GET",
-    "path": "/works/W2741809807?mailto=akhilachanta8%40gmail.com",
+    "path": "/works/W2741809807",
     "status": 200,
     "response": {
       "id": "https://openalex.org/W2741809807",
