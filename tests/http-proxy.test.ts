@@ -16,12 +16,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as net from 'node:net';
-import { fetch as httpFetch, _resetBucketsForTest } from '../bin/lib/http.js';
-
-const PROXY_VARS = [
-  'HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy', 'NO_PROXY', 'no_proxy',
-  'PENSMITH_OFFLINE', 'PENSMITH_TEST_CASSETTES',
-] as const;
+import { fetch as httpFetch } from '../bin/lib/http.js';
+import { providerPost, settle, withNetworkEnv as withProxyEnv } from './lib/net-harness.js';
 
 const PROBE_HOST = 'pensmith-proxy-probe.invalid';
 const BODY = JSON.stringify({ via: 'proxy' });
@@ -122,24 +118,6 @@ async function startFakeProxy(
   };
 }
 
-async function withProxyEnv<T>(env: Partial<Record<(typeof PROXY_VARS)[number], string>>, fn: () => Promise<T>): Promise<T> {
-  const saved = new Map<string, string | undefined>();
-  for (const k of PROXY_VARS) {
-    saved.set(k, process.env[k]);
-    delete process.env[k];
-  }
-  for (const [k, v] of Object.entries(env)) if (v !== undefined) process.env[k] = v;
-  _resetBucketsForTest();
-  try {
-    return await fn();
-  } finally {
-    for (const [k, v] of saved) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-  }
-}
-
 test('http proxy: HTTP_PROXY routes registry requests through the proxy', async () => {
   const proxy = await startFakeProxy();
   try {
@@ -215,22 +193,7 @@ async function waitFor(cond: () => boolean, withinMs: number): Promise<boolean> 
 // per-attempt timeout the requests ask for.
 const GUARD_MS = 8_000;
 
-async function settleWithin<T>(p: Promise<T>): Promise<{ outcome: 'ok' | 'error' | 'hung'; error?: unknown; ms: number }> {
-  const started = Date.now();
-  let guard: NodeJS.Timeout | undefined;
-  const hung = new Promise<'hung'>((resolve) => { guard = setTimeout(() => resolve('hung'), GUARD_MS); });
-  try {
-    const r = await Promise.race([
-      p.then(() => 'ok' as const, (error: unknown) => ({ error })),
-      hung,
-    ]);
-    const ms = Date.now() - started;
-    if (r === 'ok' || r === 'hung') return { outcome: r, ms };
-    return { outcome: 'error', error: r.error, ms };
-  } finally {
-    clearTimeout(guard);
-  }
-}
+const settleWithin = <T>(p: Promise<T>) => settle(p, GUARD_MS);
 
 test('http proxy: a proxy that accepts the CONNECT and never answers fails within timeoutMs', async () => {
   const proxy = await startFakeProxy({ onConnect: 'stall' });
@@ -284,18 +247,6 @@ test('http proxy: after a stalled tunnel the retry goes out on a fresh connectio
     await proxy.close();
   }
 });
-
-// The options bin/lib/anthropic.ts sends to the provider: a billed generation.
-function providerPost(url: string, timeoutMs: number): ReturnType<typeof httpFetch> {
-  return httpFetch(url, {
-    method: 'POST',
-    body: JSON.stringify({ prompt: 'draft section 3' }),
-    source: 'generic',
-    noCache: true,
-    untrusted: false,
-    timeoutMs,
-  });
-}
 
 const tunnelled = (proxy: FakeProxy, method: string): string[] =>
   proxy.requestLines.filter((l) => l.startsWith(`tunnel: ${method} `));

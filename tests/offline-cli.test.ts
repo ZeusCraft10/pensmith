@@ -14,6 +14,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isolatedCliEnv } from './lib/cli-env.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -46,18 +47,19 @@ interface RunResult { status: number | null; stdout: string; stderr: string }
 // Async spawn (not spawnSync) so the in-process listener can accept connections
 // while the child runs.
 function runCli(args: string[], cwd: string, proxyUrl: string): Promise<RunResult> {
-  const home = mkdtempSync(join(tmpdir(), 'pensmith-offline-home-'));
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  delete env['PENSMITH_TEST_CASSETTES'];
-  delete env['PENSMITH_OFFLINE'];
-  delete env['PENSMITH_NO_LLM'];
-  for (const k of ['HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy']) env[k] = proxyUrl;
-  env['NO_PROXY'] = '';
-  env['no_proxy'] = '';
-  env['ANTHROPIC_API_KEY'] = 'sk-ant-fake-offline-test';
-  env['GPTZERO_API_KEY'] = 'fake-gptzero-offline-test';
-  for (const k of ['HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA']) env[k] = home;
+  const env = isolatedCliEnv({
+    PENSMITH_TEST_CASSETTES: undefined,
+    PENSMITH_OFFLINE: undefined,
+    PENSMITH_NO_LLM: undefined,
+    HTTP_PROXY: proxyUrl,
+    http_proxy: proxyUrl,
+    HTTPS_PROXY: proxyUrl,
+    https_proxy: proxyUrl,
+    NO_PROXY: '',
+    no_proxy: '',
+    ANTHROPIC_API_KEY: 'sk-ant-fake-offline-test',
+    GPTZERO_API_KEY: 'fake-gptzero-offline-test',
+  }, 'pensmith-offline-home-');
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, ...args], { cwd, env });
     let stdout = '';

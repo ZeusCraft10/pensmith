@@ -18,29 +18,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as net from 'node:net';
-import { fetch as httpFetch, _resetBucketsForTest } from '../bin/lib/http.js';
+import { fetch as httpFetch } from '../bin/lib/http.js';
+import { providerPost, settle, withNetworkEnv } from './lib/net-harness.js';
 
-const CLEARED_VARS = [
-  'HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy', 'NO_PROXY', 'no_proxy',
-  'PENSMITH_OFFLINE', 'PENSMITH_TEST_CASSETTES',
-] as const;
-
-async function withDirectNetwork<T>(fn: () => Promise<T>): Promise<T> {
-  const saved = new Map<string, string | undefined>();
-  for (const k of CLEARED_VARS) {
-    saved.set(k, process.env[k]);
-    delete process.env[k];
-  }
-  _resetBucketsForTest();
-  try {
-    return await fn();
-  } finally {
-    for (const [k, v] of saved) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-  }
-}
+const withDirectNetwork = <T>(fn: () => Promise<T>): Promise<T> => withNetworkEnv({}, fn);
 
 interface CountingServer {
   url: string;
@@ -112,39 +93,12 @@ async function startServer(answerAfterMs: (n: number) => number | null): Promise
 
 // Keeps a regression from hanging the run; far above every timeoutMs below.
 const GUARD_MS = 10_000;
-
-async function settle<T>(p: Promise<T>): Promise<{ value?: T; error?: unknown; ms: number }> {
-  const started = Date.now();
-  let guard: NodeJS.Timeout | undefined;
-  const hung = new Promise<never>((_resolve, reject) => {
-    guard = setTimeout(() => reject(new Error(`still pending after ${GUARD_MS} ms`)), GUARD_MS);
-  });
-  try {
-    const value = await Promise.race([p, hung]);
-    return { value, ms: Date.now() - started };
-  } catch (error) {
-    return { error, ms: Date.now() - started };
-  } finally {
-    clearTimeout(guard);
-  }
-}
-
-// The same options bin/lib/anthropic.ts sends to the provider.
-function providerPost(url: string, timeoutMs: number): ReturnType<typeof httpFetch> {
-  return httpFetch(`${url}/v1/messages`, {
-    method: 'POST',
-    body: JSON.stringify({ prompt: 'draft section 3' }),
-    source: 'generic',
-    noCache: true,
-    untrusted: false,
-    timeoutMs,
-  });
-}
+const settleWithin = <T>(p: Promise<T>) => settle(p, GUARD_MS);
 
 test('http deadline: a POST whose response is slower than timeoutMs reaches the server exactly once', async () => {
   const server = await startServer(() => 3_000);
   try {
-    const r = await withDirectNetwork(() => settle(providerPost(server.url, 300)));
+    const r = await withDirectNetwork(() => settleWithin(providerPost(`${server.url}/v1/messages`, 300)));
     assert.ok(r.error, `the request must fail at its deadline; it resolved after ${r.ms} ms`);
     assert.match(String(r.error), /deadline/i);
     assert.equal(server.hits(), 1, `the provider received the same POST ${server.hits()} times`);
@@ -157,7 +111,7 @@ test('http deadline: a POST whose response is slower than timeoutMs reaches the 
 test('http deadline: a GET that missed its deadline is retried', async () => {
   const server = await startServer((n) => (n === 1 ? null : 0));
   try {
-    const r = await withDirectNetwork(() => settle(httpFetch(`${server.url}/works/slow`, {
+    const r = await withDirectNetwork(() => settleWithin(httpFetch(`${server.url}/works/slow`, {
       source: 'crossref', noCache: true, timeoutMs: 300,
     })));
     assert.equal(r.error, undefined, `the retry must succeed; got ${String(r.error)}`);
@@ -174,8 +128,8 @@ for (const noRetry of [true, false]) {
     const healthy = await startServer(() => 700);
     try {
       const [late, fine] = await withDirectNetwork(() => Promise.all([
-        settle(httpFetch(`${stalled.url}/works/late`, { source: 'crossref', noCache: true, noRetry: true, timeoutMs: 300 })),
-        settle(httpFetch(`${healthy.url}/works/fine`, { source: 'openalex', noCache: true, noRetry, timeoutMs: 5_000 })),
+        settleWithin(httpFetch(`${stalled.url}/works/late`, { source: 'crossref', noCache: true, noRetry: true, timeoutMs: 300 })),
+        settleWithin(httpFetch(`${healthy.url}/works/fine`, { source: 'openalex', noCache: true, noRetry, timeoutMs: 5_000 })),
       ]));
       assert.match(String(late.error), /deadline/i, 'the late request fails at its own deadline');
       assert.equal(fine.error, undefined, `the healthy request must succeed; got ${String(fine.error)}`);

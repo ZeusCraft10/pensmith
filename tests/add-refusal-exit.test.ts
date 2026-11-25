@@ -14,6 +14,7 @@ import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isolatedCliEnv } from './lib/cli-env.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -23,15 +24,11 @@ interface RunResult { status: number | null; stdout: string; stderr: string; bib
 
 function runAdd(source: string, mode: 'cassette' | 'offline'): RunResult {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-add-exit-'));
-  const home = mkdtempSync(join(tmpdir(), 'pensmith-add-exit-home-'));
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  delete env['PENSMITH_OFFLINE'];
-  delete env['PENSMITH_TEST_CASSETTES'];
-  if (mode === 'offline') env['PENSMITH_OFFLINE'] = '1';
-  else env['PENSMITH_TEST_CASSETTES'] = '1';
-  env['PENSMITH_NO_LLM'] = '1';
-  for (const k of ['HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA']) env[k] = home;
+  const env = isolatedCliEnv({
+    PENSMITH_OFFLINE: mode === 'offline' ? '1' : undefined,
+    PENSMITH_TEST_CASSETTES: mode === 'offline' ? undefined : '1',
+    PENSMITH_NO_LLM: '1',
+  }, 'pensmith-add-exit-home-');
   const r = spawnSync(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, 'add', source, '--yolo'], {
     cwd: root, env, encoding: 'utf8',
   });
