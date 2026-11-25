@@ -104,7 +104,6 @@ const ORPHAN_PROXIMITY_CHARS = 500;
  *  sentence so R3's trailing-`?` test and R6 word counting see it. */
 const SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+/;
 
-
 // ---- Step-3 LLM constants (advisory edge-case labeling — AMBIGUOUS only) ----
 
 // Per-section Pass 4 cap (ARCH-10 per-step cap). A config knob (05-RESEARCH Open

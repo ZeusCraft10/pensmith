@@ -25,17 +25,16 @@
 //      exactly one trailing '\n', joined with '\n\n'. The outline's paper title
 //      leads as `# Title` and each section opens with `## <outline title>`
 //      (drafts are written without one).
-//   3. N-1 per-boundary smoothing (COMP-03 / D-12 / D-13): replace every
-//      citation, in any Pandoc form, with a {{cite_K_M}} placeholder BEFORE the
-//      smoother call (the model never sees a citation); after the call, require
-//      output placeholder-set == input set and no citation the model wrote
-//      itself — any drift REJECTS that boundary (keep original prose) and
-//      records a Transitions-Changed rejection. Then run the consistency scan
-//      (COMP-04, flags only) and citation density (COMP-05, warn-only vs
-//      discipline target).
+//   3. N-1 per-boundary smoothing: replace every citation, in any Pandoc
+//      form, with a {{cite_K_M}} placeholder BEFORE the smoother call (the
+//      model never sees a citation); after the call, require output
+//      placeholder-set == input set and no citation the model wrote itself —
+//      any drift REJECTS that boundary (keep original prose) and records a
+//      Transitions-Changed rejection. Then run the consistency scan (flags
+//      only) and citation density (warn-only vs discipline target).
 //   4. Refuse if the manuscript cites a work CITATIONS.bib does not hold, else
-//      regenerate .paper/CITATIONS.bib (D-19) from the cited works;
-//      atomicWriteFile DRAFT.md + COMPILE-REPORT.md (schema v1, D-14).
+//      regenerate .paper/CITATIONS.bib from the cited works; atomicWriteFile
+//      DRAFT.md + COMPILE-REPORT.md.
 //
 // The smoother + re-verify transports are injectable seams so CI never touches a
 // live model/network. Production callers (bin/cli/compile.ts) wire the real
@@ -455,7 +454,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         continue;
       }
 
-      // D-13: mask every citation → {{cite_K_M}} BEFORE the model sees the window.
+      // Mask every citation → {{cite_K_M}} BEFORE the model sees the window.
       const tailMask = substitutePlaceholders(tailRaw, k);
       const headMask = substitutePlaceholders(headRaw, k + 1);
       const inputSet = new Set<string>([...placeholderSet(tailMask.masked), ...placeholderSet(headMask.masked)]);
@@ -589,16 +588,14 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
 /**
  * Regenerate .paper/CITATIONS.bib from the works the compiled manuscript
- * cites, in any citation form (D-19 — via bibtex-write.ts / citation-js
- * chokepoint). Metadata is pulled from the existing bib; an uncited entry is
- * dropped.
+ * cites, in any citation form, through the bibtex-write.ts writer. Metadata
+ * is pulled from the existing bib; an uncited entry is dropped.
  */
 async function regenerateBib(
   compiledCitekeys: ReadonlySet<string>,
   entries: ReadonlyArray<Record<string, unknown>>,
   bibPath: string,
 ): Promise<void> {
-
   const now = new Date().toISOString();
   const candidates: SourceCandidate[] = [];
   for (const e of entries) {

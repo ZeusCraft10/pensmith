@@ -17,11 +17,10 @@
 //      prompt. Skipped under --yolo. Non-TTY without --yolo → exit code 3.
 //   5. On accept: `swap` replaces the flagged key inside each citation that
 //      cites it (prefix and locator kept); `remove` mechanically deletes it from
-//      its cluster, or the whole bracketed citation when it is the only key (NO
-//      LLM prose rewrite — 04-RESEARCH §I). A patch that changes nothing is not
-//      applied. Write DRAFT.md via atomicWriteFile; reset PLAN.md
-//      verified_against_draft_hash → null via updateFrontmatter under withLock
-//      (D-05).
+//      its cluster, or the whole bracketed citation when it is the only key (no
+//      LLM prose rewrite). A patch that changes nothing is not applied. Write
+//      DRAFT.md via atomicWriteFile; reset PLAN.md verified_against_draft_hash
+//      → null via updateFrontmatter under withLock.
 //   6. --yolo auto-loop: re-run the SAME path up to 2 retries; on exhaustion
 //      write a RETRY_EXHAUSTED verdict to VERIFICATION.md (D-06).
 //
@@ -142,9 +141,9 @@ interface FailingCitation {
 }
 
 /**
- * Find the FIRST failing citation in VERIFICATION.md (one-at-a-time, in order
- * of appearance — 04-RESEARCH §I), read with the parser compile and done use,
- * so every key compile blocks on is found here too. Returns null when the
+ * Find the FIRST failing citation in VERIFICATION.md (one at a time, in order
+ * of appearance), read with the parser compile and done use, so every key
+ * compile blocks on is found here too. Returns null when the
  * section has no FABRICATED / MIS-CITED / NOT_FOUND citation.
  */
 export function firstFailingCitation(verificationMd: string): FailingCitation | null {
@@ -284,9 +283,9 @@ function patchFor(proposal: ReviseSwapProposal, draftMd: string): { patched: str
   if (proposal.action === 'remove' && cites.some((c) => c.narrative)) {
     return { refused: `@${flagged} is a narrative citation in running text; removing it would break the sentence — edit DRAFT.md by hand or swap it` };
   }
-  // Mechanical patches, NO prose rewrite (04-RESEARCH §I): the prefix and
-  // locator of a swapped key stay; a removed key leaves its cluster, or the
-  // whole bracketed citation goes when it was the only key.
+  // Mechanical patches, no prose rewrite: the prefix and locator of a swapped
+  // key stay; a removed key leaves its cluster, or the whole bracketed
+  // citation goes when it was the only key.
   const patched = proposal.action === 'swap'
     ? renameCitedKey(draftMd, flagged, proposal.replacement_citekey as string)
     : dropCitedKey(draftMd, flagged);
