@@ -70,6 +70,11 @@ export interface Pass1Options {
   acknowledgements?: readonly Acknowledgement[];
   /** The section's number, for the `pensmith ack` command a RETRACTED reason gives. */
   section?: number;
+  /**
+   * The bibliography already read (parseBibForPass1), so the verdicts are
+   * about the same bytes the caller hashed; otherwise it is read from the path.
+   */
+  bib?: Bib;
 }
 
 export interface Pass1Result {
@@ -347,7 +352,7 @@ export async function runPass1(
   citationsBibPath: string,
   opts: Pass1Options = {},
 ): Promise<Pass1Result[]> {
-  const bib = await readBib(citationsBibPath);
+  const bib = opts.bib ?? await readBib(citationsBibPath);
   const cites = findCitations(draftMd);
   const bracketed = new Set(citedKeys(cites.filter((c) => !c.narrative)));
 

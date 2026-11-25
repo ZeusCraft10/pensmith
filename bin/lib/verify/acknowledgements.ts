@@ -61,13 +61,27 @@ export function workBinding(csl: Record<string, unknown>, fields: Record<string,
  * that does not parse is `unreadable` and holds none either: an
  * acknowledgement only ever lifts a block, so an unreadable one lifts nothing.
  */
-export function readAcknowledgements(file: string): { acknowledgements: Acknowledgement[]; unreadable: boolean } {
-  if (!existsSync(file)) return { acknowledgements: [], unreadable: false };
+export function readAcknowledgements(file: string): {
+  acknowledgements: Acknowledgement[];
+  unreadable: boolean;
+  /** SHA-256 of the bytes read, or null when there is no file; what a verdict record binds. */
+  sha256: string | null;
+} {
+  if (!existsSync(file)) return { acknowledgements: [], unreadable: false, sha256: null };
+  let bytes: Buffer;
   try {
-    const parsed = AcknowledgementsFileSchema.safeParse(JSON.parse(readFileSync(file, 'utf8')));
-    return parsed.success ? { acknowledgements: parsed.data.acknowledgements, unreadable: false } : { acknowledgements: [], unreadable: true };
+    bytes = readFileSync(file);
   } catch {
-    return { acknowledgements: [], unreadable: true };
+    return { acknowledgements: [], unreadable: true, sha256: null };
+  }
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  try {
+    const parsed = AcknowledgementsFileSchema.safeParse(JSON.parse(bytes.toString('utf8')));
+    return parsed.success
+      ? { acknowledgements: parsed.data.acknowledgements, unreadable: false, sha256 }
+      : { acknowledgements: [], unreadable: true, sha256 };
+  } catch {
+    return { acknowledgements: [], unreadable: true, sha256 };
   }
 }
 

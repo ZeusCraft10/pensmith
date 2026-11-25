@@ -161,8 +161,8 @@ export function unattributedWarning(where: string, count: number): string {
     'cite a quoted source as [@key, p. N]; check your own data or an epigraph yourself';
 }
 
-/** How a refusal names what a blocking row is about: `[@key]`, or the quoted text. */
-function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): string {
+/** How a refusal names what a verdict is about: `[@key]`, or the quoted text. */
+export function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): string {
   return TEXT_VERDICTS.has(row.verdict) ? `text "${row.citekey}"` : `citation [@${row.citekey}]`;
 }
 
@@ -190,7 +190,10 @@ export function verdictGate(verificationMd: string, where: string): { reasons: s
  * retracted work cited with the author's acknowledgement, or a work under an
  * expression of concern. `where` names the section.
  */
-export function citationWarnings(rows: readonly VerdictRow[], where: string): string[] {
+export function citationWarnings(
+  rows: ReadonlyArray<Pick<VerdictRow, 'citekey' | 'verdict' | 'reason'>>,
+  where: string,
+): string[] {
   return rows
     .filter((r) => Object.hasOwn(WARNING_VERDICTS, r.verdict))
     .map((r) => `${where}: ${describeVerdictRow(r)} ${WARNING_VERDICTS[r.verdict]} — ${r.reason}`);

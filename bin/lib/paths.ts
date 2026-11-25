@@ -525,6 +525,23 @@ export function sectionVerification(
   return path.join(strictSectionDir(n, slug, root), 'VERIFICATION.md');
 }
 
+/**
+ * A section's recorded verdicts (bin/lib/verify/verification-record.ts), the
+ * data compile and done gate on. VERIFICATION.md is rendered from it.
+ */
+export function sectionVerificationRecord(
+  n: number,
+  slug: string,
+  root: string = projectRoot(),
+): string {
+  return path.join(strictSectionDir(n, slug, root), 'VERIFICATION.json');
+}
+
+/** What the last compile was built from (bin/lib/compile-manifest.ts). */
+export function compileManifestPath(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'COMPILE-MANIFEST.json');
+}
+
 /** A section's acknowledged verdicts (bin/lib/verify/acknowledgements.ts). */
 export function sectionAcknowledgements(
   n: number,

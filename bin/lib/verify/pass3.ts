@@ -30,6 +30,7 @@ import { workIdentifiers } from './resolve.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
 import { extractQuotes } from '../quote-extractor.js';
 import { NO_CITATION_KEY } from './verdict-rows.js';
+import { quoteId } from './verification-record.js';
 
 export type Pass3Verdict = 'OK' | 'NOT_FOUND' | 'PDF_UNAVAILABLE' | 'TEXT_UNAVAILABLE' | 'UNATTRIBUTED';
 
@@ -41,6 +42,8 @@ export interface Pass3Result {
   /** 1 when the quotation was found, else 0 (the `lev=` field of the verdict row). */
   levRatio: number;
   reason: string;
+  /** The first 12 hex digits of the SHA-256 of the whole quotation, which the snippet may cut short. */
+  quoteId?: string;
 }
 
 interface BibLike {
@@ -67,8 +70,9 @@ export async function runPass3(
 
   for (const q of quotes) {
     const snippet = q.text.slice(0, 40);
+    const id = quoteId(q.text);
     const push = (verdict: Pass3Verdict, reason: string, citekey = q.citekey): void => {
-      results.push({ citekey, quoteSnippet: snippet, verdict, levRatio: verdict === 'OK' ? 1 : 0, reason });
+      results.push({ citekey, quoteSnippet: snippet, verdict, levRatio: verdict === 'OK' ? 1 : 0, reason, quoteId: id });
     };
     if (q.unattributed) {
       push('UNATTRIBUTED', 'a direct quotation with no citation, so no source can be checked — if it quotes a source, ' +
@@ -77,16 +81,16 @@ export async function runPass3(
       continue;
     }
     const entry = bibByCitekey.get(q.citekey);
-    const id = entry ? workIdentifiers({ DOI: entry.DOI, URL: entry.URL }).find((w) => w.kind === 'doi') : undefined;
-    if (!id) {
+    const work = entry ? workIdentifiers({ DOI: entry.DOI, URL: entry.URL }).find((w) => w.kind === 'doi') : undefined;
+    if (!work) {
       push('PDF_UNAVAILABLE', 'No DOI for citekey — cannot fetch OA PDF');
       continue;
     }
-    if (id.value === null) {
-      push('PDF_UNAVAILABLE', `the entry's DOI field "${id.raw}" is not a DOI — cannot fetch OA PDF`);
+    if (work.value === null) {
+      push('PDF_UNAVAILABLE', `the entry's DOI field "${work.raw}" is not a DOI — cannot fetch OA PDF`);
       continue;
     }
-    const doi = id.value;
+    const doi = work.value;
     // Offline: no source text can be fetched, so the quote is unchecked.
     if (isOfflineMode()) {
       push('PDF_UNAVAILABLE', `${OFFLINE_SKIP_NOTE}: source text not fetched — re-run verify with network access`);

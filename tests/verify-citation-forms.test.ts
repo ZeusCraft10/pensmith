@@ -137,9 +137,13 @@ const UNATTRIBUTED_FORMS: Array<[string, string]> = [
   ['an epigraph block quote', '> The whole of science is nothing more than a refinement of everyday thinking, as anyone will tell you.\n\nThis section reviews the field.'],
 ];
 
+// The section is planned with no sources: a draft that cites none of the
+// sources its plan assigns fails on that alone.
+const NO_SOURCES_PLAN = WRITTEN_PLAN.replace('assigned_sources: [engel2007]', 'assigned_sources: []');
+
 for (const [what, draft] of UNATTRIBUTED_FORMS) {
   test(`verify: ${what} is UNATTRIBUTED, which leaves the section unverifiable and warns, but does not block`, async () => {
-    const r = await verifyDraft(`# Intro\n\n${draft}\n`);
+    const r = await verifyDraft(`# Intro\n\n${draft}\n`, REAL_BIB, NO_SOURCES_PLAN);
     assert.match(r.verification, /^- \(no citation\) \("[^\n]*\*\*UNATTRIBUTED\*\*/m, r.verification);
     assert.match(r.verification, /^Status: unverifiable$/m, r.verification);
     assert.equal(r.status, 0, `an unattributed quotation alone does not block\n${r.out}`);
