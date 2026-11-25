@@ -449,7 +449,8 @@ async function applyProposal(draftPath: string, planPath: string, patched: strin
 // --research: library merge + project RESEARCH.md + section RESEARCH-LOG.md.
 // ---------------------------------------------------------------------------
 
-async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<void> {
+/** Merge `hits` into the library and the research notes; the hits not added because no identifier names them. */
+async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<ResearchHit[]> {
   const query = opts.research ?? '';
   const root = opts.paperRoot;
   const now = new Date().toISOString();
@@ -476,6 +477,15 @@ async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<
     .map((h, i) => ({ h, key: keyOf.get(candidates[i]!) }))
     .filter((x): x is { h: ResearchHit; key: string } => x.key !== undefined);
   const citekeysAdded = [...new Set(listed.map((x) => x.key))];
+  // Research leaves out a work no DOI, arXiv ID, PMID or ISBN names, since
+  // nothing could verify it; say which, rather than drop them unseen.
+  const skipped = hits.filter((_, i) => keyOf.get(candidates[i]!) === undefined);
+  if (skipped.length > 0) {
+    process.stderr.write(
+      `pensmith revise: WARN — ${skipped.length} hit(s) had no DOI, arXiv ID, PubMed ID or ISBN and were not added: ` +
+      `${skipped.map((h) => `"${h.title}"`).join(', ')}.\n`,
+    );
+  }
 
   // 2. Append to project-level .paper/RESEARCH.md (append, never overwrite).
   const researchPath = `${paperDir(root)}/RESEARCH.md`;
@@ -497,6 +507,7 @@ async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<
   const priorLog = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '# RESEARCH-LOG (section provenance)\n\n| timestamp | query | adapter | hits | citekeys-added |\n| --- | --- | --- | --- | --- |\n';
   const row = `| ${now} | ${query} | revise --research | ${hits.length} | ${citekeysAdded.join(', ')} |\n`;
   await atomicWriteFile(logPath, priorLog + row);
+  return skipped;
 }
 
 // ---------------------------------------------------------------------------
@@ -538,9 +549,10 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   if (opts.research && opts.research.trim().length > 0) {
     const adapter = opts.researchAdapter ?? (() => Promise.resolve([] as ResearchHit[]));
     const hits = await adapter(opts.research);
-    await applyResearch(opts, hits);
+    const skipped = await applyResearch(opts, hits);
     base.researchApplied = true;
-    base.message = `--research applied: ${hits.length} hit(s) for "${opts.research}".`;
+    base.message = `--research applied: ${hits.length} hit(s) for "${opts.research}"` +
+      (skipped.length > 0 ? `; ${skipped.length} not added (no DOI, arXiv ID, PubMed ID or ISBN).` : '.');
   }
 
   // --research is orthogonal to the swap loop: a `revise --research <query>`

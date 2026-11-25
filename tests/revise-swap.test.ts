@@ -305,3 +305,30 @@ test('revise --research: section-scoped append, sibling untouched (PLAN-03 / D-0
   assert.equal(readFileSync(siblingDraft, 'utf8'), siblingBefore, 'sibling DRAFT.md content must be unchanged');
   assert.equal(statSync(siblingDraft).mtimeMs, siblingMtimeBefore, 'sibling DRAFT.md mtime must be unchanged');
 });
+
+test('revise --research says which hits it could not add because no identifier names them', async () => {
+  const { root } = seedFixture();
+  const stderr: string[] = [];
+  const write = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array): boolean => { stderr.push(String(chunk)); return true; }) as typeof process.stderr.write;
+  let res;
+  try {
+    res = await runRevise({
+      paperRoot: root,
+      n: 2,
+      slug: 'target',
+      yolo: true,
+      research: 'mechanism robustness follow-up',
+      researchAdapter: () => Promise.resolve([
+        { citekey: 'wu2021', title: 'Robustness of the Mechanism', authors: ['Wu, A.'], year: 2021, doi: '10.1000/wu2021', source: 'openalex' },
+        { citekey: 'lee2022', title: 'A Hit With No Identifier', authors: ['Lee, B.'], year: 2022, source: 'openalex' },
+      ]),
+    });
+  } finally {
+    process.stderr.write = write;
+  }
+  assert.match(res.message, /1 not added/, res.message);
+  assert.match(stderr.join(''), /A Hit With No Identifier/, stderr.join(''));
+  const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<{ title: string }> };
+  assert.ok(!lib.entries.some((e) => e.title === 'A Hit With No Identifier'));
+});
