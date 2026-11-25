@@ -27,14 +27,19 @@ const REAL_BIB =
 
 interface Verified { status: number | null; verification: string; plan: Record<string, unknown>; out: string }
 
-/** A one-section paper with `draft` as its DRAFT.md, verified by the real CLI. */
-function verifyDraft(draft: string, bib = REAL_BIB): Promise<Verified> {
+const WRITTEN_PLAN = '---\nsection: 1\nslug: intro\ntitle: Intro\nstatus: written\nassigned_sources: [engel2007]\n---\n# Intro\n';
+
+/**
+ * A one-section paper with `draft` as its DRAFT.md (none when null) and `bib`
+ * as its CITATIONS.bib (none when null), verified by the real CLI.
+ */
+function verifyDraft(draft: string | null, bib: string | null = REAL_BIB, plan = WRITTEN_PLAN): Promise<Verified> {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-verify-forms-'));
   const sec = join(root, '.paper', 'sections', '01-intro');
   mkdirSync(sec, { recursive: true });
-  writeFileSync(join(sec, 'PLAN.md'), '---\nsection: 1\nslug: intro\ntitle: Intro\nstatus: written\nassigned_sources: [engel2007]\n---\n# Intro\n');
-  writeFileSync(join(sec, 'DRAFT.md'), draft);
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bib);
+  writeFileSync(join(sec, 'PLAN.md'), plan);
+  if (draft !== null) writeFileSync(join(sec, 'DRAFT.md'), draft);
+  if (bib !== null) writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bib);
   const env = isolatedCliEnv({ PENSMITH_TEST_CASSETTES: '1', PENSMITH_NO_LLM: '1', PENSMITH_OFFLINE: undefined }, 'pensmith-verify-forms-home-');
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, 'verify', '1', '--slug', 'intro'], { cwd: root, env });
@@ -125,4 +130,21 @@ for (const [form, draft, key] of QUOTE_FORMS) {
 test('verify: a long quotation with no citation is UNATTRIBUTED and blocks', async () => {
   const r = await verifyDraft(`# Intro\n\nSomeone once said "${QUOTE}" but nobody knows who.\n`);
   assertBlocked(r, /\("coherence plays no role[^\n]*\*\*UNATTRIBUTED\*\*/);
+});
+
+// An earlier run's mark: a section verified against this exact hash.
+const VERIFIED_PLAN = WRITTEN_PLAN.replace('status: written', "status: verified\nverified_against_draft_hash: 'earlier-run'");
+
+test('verify: a refusal for a missing CITATIONS.bib leaves no earlier "verified" mark in PLAN.md', async () => {
+  const r = await verifyDraft('# Intro\n\nCoherence is long lived [@engel2007].\n', null, VERIFIED_PLAN);
+  assert.equal(r.status, 2);
+  assert.notEqual(r.plan['status'], 'verified');
+  assert.equal(r.plan['verified_against_draft_hash'], null);
+});
+
+test('verify: a refusal for a missing DRAFT.md leaves no earlier "verified" mark in PLAN.md', async () => {
+  const r = await verifyDraft(null, REAL_BIB, VERIFIED_PLAN);
+  assert.equal(r.status, 2);
+  assert.notEqual(r.plan['status'], 'verified');
+  assert.equal(r.plan['verified_against_draft_hash'], null);
 });

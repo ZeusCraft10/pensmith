@@ -77,14 +77,23 @@ export const verifyCommand = defineCommand({
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
 
     // Every refusal below writes this status-only VERIFICATION.md, the shape
-    // compile and done read (a `Status:` line).
+    // compile and done read (a `Status:` line), and records the same status in
+    // PLAN.md with no draft hash: a "verified" mark from an earlier run must
+    // not outlive a run that could not verify.
     const statusOnly = (status: string, reason: string): string =>
       `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: ${status}\nReason: ${reason}\n`;
+    const refuse = async (status: 'failed' | 'unverifiable', reason: string): Promise<void> => {
+      await atomicWriteFile(verifPath, statusOnly(status, reason));
+      await updatePlanFrontmatter(sectionPlan(n, slug), (fm) => {
+        fm.status = status;
+        fm.verified_against_draft_hash = null;
+      });
+      process.exitCode = EXIT_REFUSED;
+    };
 
     if (!existsSync(draftPath)) {
-      await atomicWriteFile(verifPath, statusOnly('unverifiable', `DRAFT.md missing at ${draftPath}`));
+      await refuse('unverifiable', `DRAFT.md missing at ${draftPath}`);
       process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
-      process.exitCode = EXIT_REFUSED;
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
     // Placeholder text (PENSMITH_NO_LLM) is not a draft: no verdict on it may
@@ -94,18 +103,13 @@ export const verifyCommand = defineCommand({
       const reason =
         `DRAFT.md is placeholder text from PENSMITH_NO_LLM, not a draft — re-run ` +
         `\`pensmith write ${n}\` with a model configured.`;
-      await atomicWriteFile(verifPath, statusOnly('failed', reason));
-      await updatePlanFrontmatter(sectionPlan(n, slug), (fm) => {
-        fm.status = 'failed';
-      });
+      await refuse('failed', reason);
       process.stdout.write(`pensmith verify: section ${n} ${reason} Wrote failed VERIFICATION.md to ${verifPath}\n`);
-      process.exitCode = EXIT_REFUSED;
       return { ok: false, status: 'failed', path: verifPath };
     }
     if (!existsSync(bibPath)) {
-      await atomicWriteFile(verifPath, statusOnly('unverifiable', '.paper/CITATIONS.bib missing — run `pensmith research` first.'));
+      await refuse('unverifiable', '.paper/CITATIONS.bib missing — run `pensmith research` first.');
       process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
-      process.exitCode = EXIT_REFUSED;
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
 
