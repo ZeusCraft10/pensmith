@@ -235,13 +235,17 @@ test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT cra
       'C2-H1: `write --yolo` in a fresh dir must not crash with StateNotFoundError');
   });
 
-test('C4-HIGH: bare `pensmith --yolo` against a corrupt STATE.json does NOT crash (exit 0)',
+test('C4-HIGH: bare `pensmith --yolo` against a corrupt STATE.json does NOT crash (exits 1, the error code)',
   { skip: !flagsWired }, () => {
     const root = freshRoot();
     writeFileSync(join(root, 'STATE.json'), '{ this is not json ');
     const res = runCli(['--yolo'], root);
-    assert.equal(res.status, 0,
-      `C4-HIGH: a corrupt STATE.json yields the empty projection (under-cap), so --yolo must exit 0; stderr=${res.stderr}`);
+    // The cost pre-flight sees an empty projection and lets the run through;
+    // the router then reports the unreadable STATE.json. That is an error the
+    // user must fix, so it exits 1, not 0 (which scripts would read as success).
+    assert.equal(res.status, 1,
+      `C4-HIGH: a corrupt STATE.json must pass the cap pre-flight and then exit 1; stderr=${res.stderr}`);
+    assert.match(res.stdout, /unreadable\/corrupt/, 'C4-HIGH: the corrupt state must be reported');
     assert.ok(!/SyntaxError|SchemaValidationError/.test(res.stderr),
       'C4-HIGH: the parse error must NOT escape to an uncaught crash');
   });

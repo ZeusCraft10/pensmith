@@ -37,6 +37,7 @@ import { atomicWriteFile } from '../lib/atomic-write.js';
 import { ask } from '../lib/prompts.js';
 import { extractCitekeys } from '../lib/citation-token.js';
 import { parseVerdictRows } from '../lib/verify/verdict-rows.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -589,6 +590,7 @@ export const doneCommand = defineCommand({
       process.stdout.write(
         `pensmith done: no compiled draft at ${draftPath} — run 'pensmith compile' first.\n`,
       );
+      process.exitCode = EXIT_REFUSED;
       return { ok: false };
     }
 
@@ -606,6 +608,7 @@ export const doneCommand = defineCommand({
       process.stdout.write(
         "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
       );
+      process.exitCode = EXIT_REFUSED;
       return { ok: false, blocked: true };
     }
 
@@ -649,6 +652,7 @@ export const doneCommand = defineCommand({
         process.stdout.write(
           `pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification: ${gate4.reason}\n`,
         );
+        process.exitCode = EXIT_REFUSED;
         return { ok: false };
       }
     }
@@ -674,6 +678,7 @@ export const doneCommand = defineCommand({
 
     if (gateResult.exported === false && gateResult.gateSkipped !== true) {
       process.stdout.write('pensmith done: export cancelled by user.\n');
+      process.exitCode = EXIT_REFUSED;
       return { ok: false };
     }
 

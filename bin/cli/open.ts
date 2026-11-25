@@ -23,6 +23,7 @@ import * as path from 'node:path';
 import { loadGlobalLibrary } from '../lib/global-library.js';
 import { pensmithActivePointerPath } from '../lib/paths.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
 
 export const openCommand = defineCommand({
   meta: {
@@ -45,6 +46,7 @@ export const openCommand = defineCommand({
       process.stdout.write(
         `pensmith open: no paper named "${name}". Run \`pensmith list\` to see papers.\n`,
       );
+      process.exitCode = EXIT_REFUSED;
       return { ok: false, reason: 'not-found' };
     }
 
@@ -54,6 +56,7 @@ export const openCommand = defineCommand({
       process.stdout.write(
         `pensmith open: folder not found for "${entry.name}": ${entry.folderPath}\n`,
       );
+      process.exitCode = EXIT_REFUSED;
       return { ok: false, reason: 'folder-missing' };
     }
 

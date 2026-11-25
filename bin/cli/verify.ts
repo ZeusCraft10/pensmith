@@ -35,6 +35,7 @@ import { parseFrontmatter } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
@@ -67,7 +68,9 @@ export const verifyCommand = defineCommand({
   async run({ args }) {
     const n = Number(args.n);
     if (!Number.isInteger(n) || n < 1) {
-      throw new Error(`pensmith verify: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
+      process.stderr.write(`pensmith verify: <n> must be a positive integer; got ${JSON.stringify(args.n)}\n`);
+      process.exitCode = EXIT_REFUSED;
+      return { ok: false, status: 'invalid-input' };
     }
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
@@ -80,12 +83,14 @@ export const verifyCommand = defineCommand({
       const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath}\n`;
       await atomicWriteFile(verifPath, body);
       process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
+      process.exitCode = EXIT_REFUSED;
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
     if (!existsSync(bibPath)) {
       const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: .paper/CITATIONS.bib missing — run \`pensmith research\` first.\n`;
       await atomicWriteFile(verifPath, body);
       process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
+      process.exitCode = EXIT_REFUSED;
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
 
@@ -205,6 +210,16 @@ export const verifyCommand = defineCommand({
     }
 
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
+    if (status === 'failed') {
+      // A blocking verdict: compile and done will refuse this section.
+      process.exitCode = EXIT_REFUSED;
+    } else if (status === 'unverifiable') {
+      // Does not block yet, but a quote nobody could check must not look clean.
+      process.stderr.write(
+        `pensmith verify: WARN — section ${n} has quote(s) that could not be checked against source text; ` +
+        `see ${verifPath}.\n`,
+      );
+    }
     return { ok: status !== 'failed', status, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
   },
 });

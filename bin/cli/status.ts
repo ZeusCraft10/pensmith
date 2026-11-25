@@ -20,6 +20,7 @@ import type { State } from '../lib/schemas/state.js';
 import { resolveNextAction, readSectionState } from '../lib/router.js';
 import { sectionPlan } from '../lib/paths.js';
 import { readGoalFromConfig, stopAfterResearchFor } from './goal.js';
+import { EXIT_ERROR, EXIT_REFUSED } from '../lib/exit-codes.js';
 
 export const statusCommand = defineCommand({
   meta: {
@@ -36,11 +37,13 @@ export const statusCommand = defineCommand({
     } catch (e) {
       if (e instanceof StateNotFoundError) {
         process.stdout.write('pensmith status: no active paper — run `pensmith new` to start.\n');
+        process.exitCode = EXIT_REFUSED;
         return { ok: false, reason: 'no-paper' };
       }
       process.stdout.write(
         `pensmith status: STATE.json is unreadable/corrupt — inspect or restore it. (${(e as Error).message})\n`,
       );
+      process.exitCode = EXIT_ERROR;
       return { ok: false, reason: 'corrupt-state' };
     }
 

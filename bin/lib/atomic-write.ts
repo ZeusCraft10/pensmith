@@ -153,6 +153,16 @@ export async function atomicWriteFile(
 }
 
 /**
+ * Rename `fromPath` to `toPath` (replacing any file there), then fsync the
+ * directory so the new name survives a crash. Used to move an artifact aside
+ * instead of deleting it.
+ */
+export async function atomicRename(fromPath: string, toPath: string): Promise<void> {
+  await fsp.rename(fromPath, toPath);
+  await syncDir(path.dirname(toPath));
+}
+
+/**
  * Append `line` to `targetPath` using O_APPEND. POSIX guarantees writes
  * <= PIPE_BUF bytes (4096 on Linux) are atomic under concurrent O_APPEND.
  * Caller is responsible for keeping line size under PIPE_BUF and including

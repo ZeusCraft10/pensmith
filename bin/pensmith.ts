@@ -57,6 +57,7 @@ import { setMirrorPromptsToStderr } from './lib/session-log.js';
 import { projectEstimate } from './lib/estimator.js';
 import { resolveNextAction } from './lib/router.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
+import { EXIT_ERROR, EXIT_REFUSED } from './lib/exit-codes.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -170,7 +171,7 @@ export async function dispatchVerb(
     process.stderr.write(
       `[pensmith] dispatch of '${verb}' failed: ${(e as Error).message}\n`,
     );
-    process.exitCode = 1;
+    process.exitCode = EXIT_ERROR;
     return undefined;
   }
 }
@@ -299,7 +300,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
     const verb = canonicalVerb(word);
     if (verb === null) {
       process.stderr.write(`${unknownVerbMessage(word)}\n`);
-      process.exitCode = 2;
+      process.exitCode = EXIT_REFUSED;
       return;
     }
     // An alias is rewritten to its verb so it takes exactly the verb's arguments.
@@ -337,7 +338,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
       process.stderr.write(
         'pensmith: REFUSED — --yolo estimate exceeds 50% of the session cap (ARCH-11).\n',
       );
-      process.exit(1); // HARD refusal — not advisory, not nested in --estimate
+      process.exit(EXIT_REFUSED); // HARD refusal — not advisory, not nested in --estimate
     }
   }
 
@@ -398,7 +399,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
       `\`pensmith ${decision.verb}\`${at}. Pass a section number ` +
       `(e.g. \`pensmith ${verb} 2\`) to ${verb} a specific section.\n`,
     );
-    process.exitCode = 1;
+    process.exitCode = EXIT_REFUSED;
     return;
   }
 

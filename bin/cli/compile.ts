@@ -27,6 +27,7 @@ import { runPass1 } from '../lib/verify/pass1.js';
 import { runPass3 } from '../lib/verify/pass3.js';
 import { parseBibtex } from '../lib/citations.js';
 import { sectionDraft, paperDir } from '../lib/paths.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
 
 /**
  * Production staleness re-verify seam (D-08 — Pass 1 + Pass 3 ONLY). Runs the
@@ -99,6 +100,12 @@ export const compileCommand = defineCommand({
         `pensmith compile: REFUSED — ${(result.refuseReasons ?? []).length} blocking citation issue(s). No DRAFT.md written.\n`,
       );
       for (const r of result.refuseReasons ?? []) process.stdout.write(`  - ${r}\n`);
+      if (result.staleDraftPath) {
+        process.stdout.write(
+          `  The draft from an earlier compile no longer matches the sections; it was moved to ${result.staleDraftPath} so it cannot be exported.\n`,
+        );
+      }
+      process.exitCode = EXIT_REFUSED;
       return { ok: false, ...result };
     }
 

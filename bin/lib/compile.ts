@@ -19,7 +19,8 @@
 //          computeDraftHash(draftBytes, assigned_sources) → WARN + re-verify
 //          (Pass 1 + Pass 3 ONLY, NEVER Pass 2/4). A re-verify failure adds a
 //          refuse reason; an all-pass records a Compile-Staleness-Resolved event.
-//      If ANY refuse reason was collected, REFUSE: do NOT write .paper/DRAFT.md.
+//      If ANY refuse reason was collected, REFUSE: do NOT write .paper/DRAFT.md,
+//      and move a DRAFT.md left by an earlier compile aside to DRAFT.stale.md.
 //   2. Concatenate section drafts in OUTLINE order (COMP-02), each normalized to
 //      exactly one trailing '\n', joined with '\n\n'.
 //   3. N-1 per-boundary smoothing (COMP-03 / D-12 / D-13): substitute
@@ -41,7 +42,7 @@ import { paperDir } from './paths.js';
 import { loadOutline } from './outline.js';
 import { parseOutline, type ParsedOutlineSection } from './outline-parse.js';
 import { parseFrontmatter } from './frontmatter.js';
-import { atomicWriteFile } from './atomic-write.js';
+import { atomicRename, atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { computeDraftHash } from './draft-hash.js';
 import { extractCitekeys, replaceCitekeys } from './citation-token.js';
@@ -112,6 +113,8 @@ export interface RunCompileOpts {
 export interface CompileResult {
   refused: boolean;
   refuseReasons?: string[];
+  /** On a refusal: where an earlier compile's DRAFT.md was moved, if there was one. */
+  staleDraftPath?: string;
   draftPath?: string;
   reportPath?: string;
   bibPath?: string;
@@ -227,6 +230,19 @@ async function loadSection(
 }
 
 /**
+ * Finish a refusal. A DRAFT.md from an earlier compile no longer reflects the
+ * sections; left in place, the router would send the user to `done` and done
+ * would read it. Move it aside (kept, not deleted) and say where it went.
+ */
+async function refuse(paperRoot: string, result: CompileResult): Promise<CompileResult> {
+  const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
+  if (!existsSync(draftPath)) return result;
+  const staleDraftPath = join(paperDir(paperRoot), 'DRAFT.stale.md');
+  await atomicRename(draftPath, staleDraftPath);
+  return { ...result, staleDraftPath };
+}
+
+/**
  * Run the Phase-4 compile pipeline. See module header for the full contract.
  */
 export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
@@ -244,24 +260,24 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     try {
       outline = parseOutline(raw);
     } catch {
-      return {
+      return refuse(opts.paperRoot, {
         refused: true,
         refuseReasons: [
           "no usable outline: .paper/OUTLINE.md has no section table — run 'pensmith outline' first",
         ],
         sectionsCount: 0,
         staleResolvedCount: 0,
-      };
+      });
     }
     if (outline.sections.length === 0) {
-      return {
+      return refuse(opts.paperRoot, {
         refused: true,
         refuseReasons: [
           "no sections in .paper/OUTLINE.md — run 'pensmith outline' to populate the section table",
         ],
         sectionsCount: 0,
         staleResolvedCount: 0,
-      };
+      });
     }
     const ordered = outline.sections.slice().sort((a, b) => a.n - b.n);
 
@@ -342,12 +358,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     // REFUSE: no DRAFT.md write, no bib regen (COMP-01 — bad citation never escapes).
     if (refuseReasons.length > 0) {
       for (const r of refuseReasons) warn(`REFUSE: ${r}`);
-      return {
+      return refuse(opts.paperRoot, {
         refused: true,
         refuseReasons,
         sectionsCount: loaded.length,
         staleResolvedCount: stalenessResolved.length,
-      };
+      });
     }
 
     // ---- Step 2: concat in OUTLINE order (COMP-02) -------------------------

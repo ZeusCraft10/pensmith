@@ -67,7 +67,8 @@ test('audit #10: `verify` (no N) does NOT silently run a different verb when non
 
   const res = runCli(['verify'], root, { PENSMITH_NO_LLM: '1' });
 
-  assert.equal(res.status, 1, `verify-with-no-ready-section must exit non-zero; stderr=${res.stderr}`);
+  // A refusal exits 2 (blocked or refused); 1 is kept for unexpected errors.
+  assert.equal(res.status, 2, `verify-with-no-ready-section must exit 2; stderr=${res.stderr}`);
   assert.match(res.stderr, /no section is ready to verify/i);
   assert.match(res.stderr, /pensmith outline/, 'must point the user at the real next step');
   // The crucial assertion: it must NOT have run `outline` (no OUTLINE.md written).
