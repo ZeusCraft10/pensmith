@@ -23,6 +23,7 @@
     "prebundle:check": "node scripts/prebuild.mjs",
     "bundle:check": "node scripts/bundle.mjs --check",
     "smoke:plugin": "node scripts/plugin-smoke.mjs",
+    "docs:verbs": "tsx scripts/verb-table.ts",
     "dev": "tsx",
     "pensmith": "tsx bin/pensmith.ts",
     "test:tier-contract": "node --import tsx --test tests/tier-contract.test.ts",

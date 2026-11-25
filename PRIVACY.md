@@ -1,31 +1,61 @@
 # Privacy
 
-Pensmith is local-only. No telemetry, no cloud state, no remote logging.
+Pensmith is local-only software. There is no pensmith server, no account, and
+No telemetry: no usage analytics, crash reports or remote logging. Your paper
+lives in the `.paper/` folder of your project; the shared library index and
+logs live in your user data folder.
 
-## External API calls
+What does leave your machine is listed below: requests to scholarly
+registries, to the model provider you configure, and to the optional checks
+you turn on. All of them go through one HTTP module (`bin/lib/http.ts`), which
+refuses private, loopback and link-local addresses.
 
-Pensmith makes outbound HTTP requests only for academic-source lookup and citation verification. The following external services are contacted, all using a polite `User-Agent` header that includes your `PENSMITH_CONTACT_EMAIL` (required):
+## Hosts pensmith contacts
 
-- **OpenAlex** — paper metadata lookup (open, no authentication required)
-- **Crossref** — DOI resolution and citation verification (open, polite-pool with contact email)
-- **arXiv** — preprint metadata and full-text retrieval (open)
-- **PubMed / NCBI** — biomedical paper metadata (open)
-- **Unpaywall** — open-access PDF discovery (open, email required for polite pool)
-- **DuckDuckGo** — distinctive-phrase plagiarism check (free-tier, no account required; per PRD §11)
-- **GPTZero** — AI-likelihood honesty score (requires explicit user consent gate HARD-05, shipped Phase 15; your text is sent to GPTZero's API only after you confirm)
+| Host | When | What is sent |
+| --- | --- | --- |
+| `api.anthropic.com` | Intake clarifying questions, outline, section plans and drafts, the advisory verifier passes, and citation repair | The prompt for that step: your assignment and intake answers, the outline, the metadata of the sources assigned to the section, and the section draft. Needs `ANTHROPIC_API_KEY`. |
+| `api.openai.com` | The same steps, only if you configure the OpenAI-compatible provider instead | The same prompts. |
+| `api.openalex.org` | Research, adding a source, checking citations | Search terms from your topic, titles and DOIs. |
+| `api.crossref.org` | Research, adding a source, and Pass 1 of the verifier (every cited DOI) | DOIs and title searches. |
+| `api.labs.crossref.org` | The verifier's retraction check | DOIs. |
+| `doi.org` | Re-checking how fresh an earlier verification is | `HEAD https://doi.org/<doi>` for cited DOIs. DOIs written as `dx.doi.org` links are normalised to this host. |
+| `export.arxiv.org` | Research | Search terms. This adapter still uses plain HTTP. |
+| `eutils.ncbi.nlm.nih.gov` | Research (PubMed) | Search terms. |
+| `api.semanticscholar.org` | Research | Search terms, and your Semantic Scholar key if you set one. |
+| `api.unpaywall.org` | Pass 3 of the verifier, to find open-access text for quoted sources | DOIs and your contact email (Unpaywall requires one). |
+| Publisher and repository hosts | Pass 3 (the open-access PDF or page an OpenAlex or Unpaywall record points to) and `pensmith add <url>` | A plain download request for that URL. |
+| `html.duckduckgo.com` | The plagiarism check during `pensmith done` | A few short distinctive phrases taken from your draft. |
+| `api.gptzero.me` | The AI-likelihood score during `pensmith done`, only with `GPTZERO_API_KEY` set, after a consent prompt (in this alpha, `--yolo` also skips that prompt) | Your paper text, cut to 50 KB. |
 
-## PII handling at intake
+When `PENSMITH_CONTACT_EMAIL` is set, requests to the scholarly registries
+carry it in the `User-Agent` header, as their polite-use policies ask. It is
+not stored or logged.
 
-At intake (`pensmith new`), the assignment prompt, style samples, and any personal notes you provide are used only within your local paper session. No content is transmitted except as part of model API calls you have configured via `PENSMITH_CONTACT_EMAIL` and provider API keys.
+Pensmith does not contact Zotero itself. It only reads your Claude Code
+config to see whether a Zotero MCP server is set up there.
 
-## Humanizer and honesty-score data flows
+## Personal information
 
-The humanizer skill (`~/.claude/skills/humanizer/`) operates locally via Claude Code. The GPTZero honesty-score check sends your draft text to GPTZero's API; the consent gate (HARD-05) ensures this only happens after explicit confirmation. The honesty score is shown as a transparency metric — it is not a claim about AI-detector outcomes.
+- Text you give pensmith (the assignment, your answers, your notes and drafts)
+  is sent to the model provider as part of the prompts above.
+- Intake has an opt-in `--pii-redact` flag. With it, personal details pensmith
+  recognises (emails, phone numbers, ID numbers and similar) are redacted in
+  the saved intake answers, and the unredacted answers are kept in
+  `.paper/INTAKE.raw.local`, which the repository's `.gitignore` excludes.
+  It is not a filter on every later prompt.
+- The session log (`.paper/SESSION.log`) redacts API keys and the same
+  personal-detail patterns before anything is written.
+- API keys are read from environment variables. Pensmith never writes their
+  values to disk or to logs; config files store only the variable names.
 
-## `PENSMITH_CONTACT_EMAIL` requirement
+## The humanizer and the AI-likelihood score
 
-All adapters that contact Crossref, Unpaywall, and OpenAlex include your `PENSMITH_CONTACT_EMAIL` in the request `User-Agent` as required by those services' polite-pool policies. This email is never stored, logged, or transmitted beyond the HTTP request header. If unset, `pensmith doctor` reports a WARN.
+The humanizer is a Claude Code skill you install yourself. In this alpha,
+`pensmith done` does not run it. The AI-likelihood score is shown only for
+your own information: it says nothing certain about what any detector will
+decide, and pensmith does not try to change that outcome.
 
-## What is never collected
+## Exported documents
 
-No usage analytics, no crash reports, no session data, and no content are sent to any Pensmith-controlled server. There is no Pensmith server. All paper state lives in `.paper/` on your local filesystem.
+Exported files carry no pensmith metadata, footer or fingerprint.
