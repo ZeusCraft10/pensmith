@@ -138,8 +138,8 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       return {
         command,
         summary: 'Assemble the verified sections into one draft (refused if any section is blocked).',
-        reads: [paper('OUTLINE.md'), '.paper/sections/*/{PLAN,DRAFT}.md', '.paper/sections/*/VERIFICATION.json'],
-        writes: [paper('DRAFT.md'), paper('COMPILE-REPORT.md'), paper('COMPILE-MANIFEST.json'), paper('CITATIONS.bib')],
+        reads: [paper('OUTLINE.md'), '.paper/sections/*/{PLAN,DRAFT}.md', '.paper/sections/*/VERIFICATION.json', paper('CITATIONS.bib')],
+        writes: [paper('DRAFT.md'), paper('COMPILE-REPORT.md'), paper('COMPILE-MANIFEST.json')],
         model: NO_MODEL,
         network: 'registry re-checks for any section changed since it was verified',
       };

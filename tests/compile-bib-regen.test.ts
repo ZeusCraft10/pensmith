@@ -1,16 +1,14 @@
-// tests/compile-bib-regen.test.ts — COMP-07 / D-19 CITATIONS.bib regeneration.
+// tests/compile-bib-regen.test.ts — compile leaves CITATIONS.bib alone.
 //
-// RED-first: bin/lib/compile.ts does not exist yet.
-//
-// COMP-07 (compile output generation) anchored to the D-19 bibtex chokepoint:
-// after a successful compile, .paper/CITATIONS.bib is re-rendered from the UNION
-// of the compiled sections' citekeys via bin/lib/bibtex-write.ts (which rides the
-// citation-js D-19 chokepoint and resolves collisions with a base-26 suffix).
-// Bib regen is part of COMP-07 output generation — NOT canonical COMP-04/05.
+// compile used to rewrite .paper/CITATIONS.bib from the works the manuscript
+// cites, through a lossy converter: uncited works were deleted, journals,
+// particles and entry types were lost, and DOI-less works had to be carried
+// over field by field to survive. CITATIONS.bib is what verify checks every
+// citation against, so compile now leaves it as it is; the export writes the
+// cited subset into the export folder.
 //
 // Fixture: a CITATIONS.bib seeded with THREE entries; the compiled sections cite
-// only TWO of them. After compile the bib must contain the two cited keys and
-// drop the uncited one (regenerated from the union of compiled citekeys).
+// only TWO of them.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +16,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
-import { parseBib } from '../bin/lib/citations.js';
+import { parseBibForPass1 } from '../bin/lib/verify/pass1.js';
+import { bibEntryHashes } from '../bin/lib/verify/verification-record.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { writeVerificationFixture } from './lib/verification-fixture.js';
 
@@ -76,30 +75,14 @@ function seed(): string {
   return root;
 }
 
-test('COMP-07/D-19: compile regenerates CITATIONS.bib from the union of compiled citekeys', async () => {
+test('compile leaves CITATIONS.bib as it is: an uncited work is kept, no entry is rewritten', async () => {
   const root = seed();
   const result = await runCompile({ paperRoot: root, yolo: true });
   assert.equal(result.refused, false);
-
-  const bibText = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
-  const entries = await parseBib(bibText);
-  const ids = new Set(entries.map((e) => String((e as { id?: string }).id ?? '')));
-
-  assert.ok(ids.has('smith2020'), 'a cited key must survive bib regen');
-  assert.ok(ids.has('jones2019'), 'a cited key must survive bib regen');
-  assert.ok(!ids.has('unused2018'), 'an UNCITED key must be dropped (regenerated from the compiled union)');
-
-  // Audit #5: the publication year must survive regen (was stripped from every
-  // entry). citation-js parses `year` into issued.date-parts[0][0].
-  const smith = entries.find((e) => String((e as { id?: string }).id ?? '') === 'smith2020') as
-    | { issued?: { 'date-parts'?: number[][] } }
-    | undefined;
-  assert.equal(smith?.issued?.['date-parts']?.[0]?.[0], 2020, 'regen must preserve the publication year (#5)');
-  // Belt-and-suspenders: the raw bib text carries the year too.
-  assert.match(bibText, /year\s*=\s*\{?2020\}?/i, 'regenerated bib text must contain the year');
+  assert.equal(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'), SEED_BIB);
 });
 
-test('audit #17: a DOI-less source (book, ISBN only) survives bib regen', async () => {
+test('a DOI-less source (book, ISBN only) is still in CITATIONS.bib after compile', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-compile-bookregen-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
   writeFileSync(
@@ -113,12 +96,8 @@ test('audit #17: a DOI-less source (book, ISBN only) survives bib regen', async 
       '',
     ].join('\n'),
   );
-  // A book entry: ISBN, no DOI. Before the fix, writeBibtex's persistent-id gate
-  // dropped it because regenerateBib never carried the ISBN.
-  writeFileSync(
-    join(root, '.paper', 'CITATIONS.bib'),
-    '@book{kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas},\n  year = {1962},\n  isbn = {9780226458120}\n}\n',
-  );
+  const bib = '@book{kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas},\n  year = {1962},\n  isbn = {9780226458120}\n}\n';
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bib);
   const dir = join(root, '.paper', 'sections', '01-intro');
   mkdirSync(dir, { recursive: true });
   const draft = '# Intro\n\nA paradigm shift [@kuhn1962].\n';
@@ -132,17 +111,13 @@ test('audit #17: a DOI-less source (book, ISBN only) survives bib regen', async 
 
   const result = await runCompile({ paperRoot: root, yolo: true });
   assert.equal(result.refused, false);
-  const bibText = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
-  const ids = new Set((await parseBib(bibText)).map((e) => String((e as { id?: string }).id ?? '')));
-  assert.ok(ids.has('kuhn1962'), 'a DOI-less book (ISBN) must survive bib regen (#17)');
-  assert.match(bibText, /year\s*=\s*\{?1962\}?/i, 'the book year must survive too');
+  assert.equal(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'), bib);
 });
 
-test('COMP-07/D-19: regenerated bib is non-empty and parseable (rides the citation-js chokepoint)', async () => {
+test('the manifest binds the entry of each cited work, and no uncited one', async () => {
   const root = seed();
   await runCompile({ paperRoot: root, yolo: true });
-  const bibText = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
-  assert.ok(bibText.includes('@'), 'regenerated bib must contain BibTeX entries');
-  // Round-trips through the D-19 citation-js chokepoint without throwing.
-  await assert.doesNotReject(async () => parseBib(bibText));
+  const manifest = JSON.parse(readFileSync(join(root, '.paper', 'COMPILE-MANIFEST.json'), 'utf8')) as { bib_entries: Record<string, string> };
+  const hashes = bibEntryHashes(['smith2020', 'jones2019'], await parseBibForPass1(SEED_BIB));
+  assert.deepEqual(manifest.bib_entries, hashes);
 });

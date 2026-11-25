@@ -1,47 +1,40 @@
-// bin/lib/compile.ts — the Phase-4 compile pipeline (COMP-01..07, ARCH-20).
+// bin/lib/compile.ts — the compile pipeline.
 //
-// Phase 4 Plan 04-05 — the phase keystone. runCompile composes the Phase 1-3
-// chokepoints into a single, lock-guarded, read-only-on-sections pipeline that
-// produces .paper/DRAFT.md + .paper/COMPILE-REPORT.md and regenerates
-// .paper/CITATIONS.bib. Every write routes through the D-07 atomicWriteFile
-// sole-writer chokepoint; section files are NEVER written (ARCH-20).
+// runCompile turns the verified sections into .paper/DRAFT.md and
+// .paper/COMPILE-REPORT.md under one lock, and never writes into a section
+// folder. It leaves .paper/CITATIONS.bib as verify read it: the export writes
+// the cited subset of it into the export folder, and rewriting it here would
+// change the entries every section's verdicts are about.
 //
-// Pipeline (04-RESEARCH §F, with the CANONICAL COMP meanings from this plan):
-//   0. Acquire .paper/.compile.lock for the WHOLE run (§P-6 — no mid-pipeline
-//      race on the output files).
-//   1. parseOutline; for each section in OUTLINE order (sort by n — D-11):
-//        - read PLAN.md frontmatter (assigned_sources, slug), the section's
-//          DRAFT.md bytes and the verdicts verify recorded in VERIFICATION.json
-//          (never the Markdown report rendered from them).
-//        - REFUSE-GATE (COMP-01): no record, a record verify could not check,
-//          a failed status, or any blocking verdict → collect a refuse reason
-//          naming the section and the citation.
-//        - STALENESS (COMP-01 / D-08): when the draft, its assigned sources, a
-//          cited CITATIONS.bib entry or the acknowledgements changed since the
-//          record was made → WARN + re-verify (Pass 1 + Pass 3 ONLY, NEVER
-//          Pass 2/4). A re-verify failure adds a refuse reason; an all-pass
-//          records a Compile-Staleness-Resolved event.
-//      If ANY refuse reason was collected, REFUSE: do NOT write .paper/DRAFT.md,
-//      and move a DRAFT.md left by an earlier compile aside to DRAFT.stale.md.
-//   2. Concatenate section drafts in OUTLINE order (COMP-02), each normalized to
-//      exactly one trailing '\n', joined with '\n\n'. The outline's paper title
-//      leads as `# Title` and each section opens with `## <outline title>`
-//      (drafts are written without one).
-//   3. N-1 per-boundary smoothing: replace every citation, in any Pandoc
-//      form, with a {{cite_K_M}} placeholder BEFORE the smoother call (the
-//      model never sees a citation); after the call, require output
-//      placeholder-set == input set and no citation the model wrote itself —
-//      any drift REJECTS that boundary (keep original prose) and records a
-//      Transitions-Changed rejection. Then run the consistency scan (flags
-//      only) and citation density (warn-only vs discipline target).
-//   4. Refuse if the manuscript cites a work CITATIONS.bib does not hold, else
-//      regenerate .paper/CITATIONS.bib from the cited works; atomicWriteFile
-//      DRAFT.md + COMPILE-REPORT.md, then COMPILE-MANIFEST.json, the hashes
-//      done checks before it exports (bin/lib/compile-manifest.ts).
+// Pipeline:
+//   0. Acquire .paper/.compile.lock for the whole run, so no other compile
+//      races on the output files.
+//   1. parseOutline; for each section in outline order:
+//        - read PLAN.md frontmatter (assigned_sources), the section's DRAFT.md
+//          bytes and the verdicts verify recorded in VERIFICATION.json (never
+//          the Markdown report rendered from them);
+//        - refuse a section with no record, a record verify could not check, a
+//          failed status, or any blocking verdict, naming the citation;
+//        - when the draft, its assigned sources, a cited CITATIONS.bib entry or
+//          the acknowledgements changed since the record was made, warn and
+//          re-verify (Pass 1 and Pass 3 only, never the advisory Pass 2/4). A
+//          failed re-verify refuses the section.
+//      Any refusal: write no DRAFT.md, and move one left by an earlier compile
+//      aside to DRAFT.stale.md.
+//   2. Concatenate the drafts in outline order, each ending in exactly one
+//      '\n', joined by a blank line, under `# <paper title>` and one
+//      `## <outline title>` per section.
+//   3. Smooth each boundary between sections: every citation becomes a
+//      {{cite_K_M}} placeholder before the smoother sees the text (the model
+//      never sees a citation), and a boundary whose placeholders or citations
+//      changed keeps its original prose. Then the consistency scan (flags
+//      only) and citation density (a warning against the discipline target).
+//   4. Refuse if the manuscript cites a work CITATIONS.bib does not hold; else
+//      write DRAFT.md and COMPILE-REPORT.md, then COMPILE-MANIFEST.json, the
+//      hashes done checks before it exports (bin/lib/compile-manifest.ts).
 //
-// The smoother + re-verify transports are injectable seams so CI never touches a
-// live model/network. Production callers (bin/cli/compile.ts) wire the real
-// loadPrompt('smoother') + model call and the runPass1 + runPass3 re-verify.
+// The smoother and re-verify are injectable seams, so tests never reach a
+// model or the network. bin/cli/compile.ts wires the production re-verify.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -53,8 +46,6 @@ import { atomicRename, atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
-import { writeBibtex } from './bibtex-write.js';
-import { parseBibOrEmpty } from './citations.js';
 import {
   citedKeys,
   codeRanges,
@@ -71,7 +62,6 @@ import {
   type CitationDensityEntry,
   type StalenessEntry,
 } from './compile-report.js';
-import type { SourceCandidate } from './schemas/source-candidate.js';
 import { isPlaceholderText } from './placeholder.js';
 import { parseBibForPass1, type Bib } from './verify/pass1.js';
 import { readAcknowledgements } from './verify/acknowledgements.js';
@@ -120,9 +110,9 @@ export interface ReVerifyResult {
 export interface RunCompileOpts {
   paperRoot: string;
   yolo?: boolean;
-  /** Enable the opt-in heading-tense consistency heuristic (COMP-04). */
+  /** Enable the opt-in heading-tense consistency heuristic. */
   lintHeadings?: boolean;
-  /** Discipline preset for the citation-density target (COMP-05). */
+  /** Discipline preset for the citation-density target. */
   discipline?: string;
   /**
    * Boundary smoother seam. Returns the rewritten boundary text (rewritten
@@ -131,7 +121,7 @@ export interface RunCompileOpts {
    */
   smoothBoundary?: (input: SmoothBoundaryInput) => Promise<string>;
   /**
-   * Staleness re-verify seam (Pass 1 + Pass 3 only — D-08). Omit → a stale
+   * Staleness re-verify seam (Pass 1 + Pass 3 only). Omit → a stale
    * section is treated as a re-verify failure (fail-safe: never let a stale
    * section escape unverified). Production wires runPass1 + runPass3.
    */
@@ -147,7 +137,6 @@ export interface CompileResult {
   staleDraftPath?: string;
   draftPath?: string;
   reportPath?: string;
-  bibPath?: string;
   sectionsCount: number;
   staleResolvedCount: number;
 }
@@ -163,7 +152,7 @@ interface LoadedSection {
   assignedSources: string[];
 }
 
-/** Normalize a draft to end in exactly one '\n' (§F). */
+/** Normalize a draft to end in exactly one '\n'. */
 function normalizeTrailingNewline(s: string): string {
   return s.replace(/\n+$/, '') + '\n';
 }
@@ -384,7 +373,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       }
       loaded.push(sec);
 
-      // GATE-01: the verdicts verify recorded. A section with none was never
+      // The verdicts verify recorded. A section with none was never
       // verified and never compiles; VERIFICATION.md is only their rendering.
       const read = readVerificationRecord(join(sec.dir, 'VERIFICATION.json'));
       if (!read.ok) {
@@ -407,7 +396,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       for (const w of gate.warnings) warn(`WARN: ${w}`);
       if (gate.reasons.length > 0) continue;
 
-      // Staleness (COMP-01 / D-08): the record must still describe the section.
+      // Staleness: the record must still describe the section.
       const stale = verificationStaleness(record, {
         draftBytes: sec.draftBytes,
         assignedSources: sec.assignedSources,
@@ -437,8 +426,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         }
         stalenessResolved.push({
           section: `${os.n} (${os.slug})`,
-          prior_hash: (record.draft_hash ?? 'null').slice(0, 12),
-          new_hash: sha256(sec.draftBytes).slice(0, 12),
+          why: stale,
           re_verify_passed: true,
         });
       }
@@ -451,7 +439,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       });
     }
 
-    // REFUSE: no DRAFT.md write, no bib regen (COMP-01 — bad citation never escapes).
+    // Refuse: no DRAFT.md is written, so a bad citation never escapes.
     if (refuseReasons.length > 0) {
       for (const r of refuseReasons) warn(`REFUSE: ${r}`);
       return refuse(opts.paperRoot, {
@@ -462,12 +450,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       });
     }
 
-    // ---- Step 2: concat in OUTLINE order (COMP-02) -------------------------
+    // ---- Step 2: concatenate in outline order --------------------------------
     // Keep per-section draft strings so per-boundary smoothing can replace only
     // the adjacent paragraphs without disturbing the rest of each section.
     const drafts = loaded.map((s) => s.draft);
 
-    // ---- Step 3: N-1 per-boundary smoothing (COMP-03 / D-12 / D-13) --------
+    // ---- Step 3: smooth each boundary between sections ----------------------
     const transitions: TransitionEntry[] = [];
     for (let k = 0; k < drafts.length - 1; k += 1) {
       const left = splitParagraphs(drafts[k] ?? '');
@@ -510,7 +498,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         continue;
       }
 
-      // D-13: post-call token-set equality. ANY drift → reject (keep original).
+      // The placeholders must come back exactly: any drift rejects the boundary.
       const outputSet = placeholderSet(smoothed);
       if (!setsEqual(inputSet, outputSet)) {
         reject('rejected — citation placeholder set drifted; keeping original prose');
@@ -556,7 +544,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     }
     const compiled = pieces.join('');
 
-    // Consistency scan (COMP-04, flags only) + citation density (COMP-05, warn).
+    // Consistency scan (flags only) and citation density (a warning).
     const consistencyWarnings = runConsistencyScan(compiled, spans, { lintHeadings: opts.lintHeadings === true });
     const consistencyEntries: ConsistencyEntry[] = consistencyWarnings.map((w) => ({ detail: w.detail }));
 
@@ -570,14 +558,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     }));
     for (const w of densityReport.warnings) warn(`WARN: citation density — ${w.detail}`);
 
-    // ---- Step 4: regen CITATIONS.bib (D-19) + emit DRAFT + REPORT (COMP-07) -
+    // ---- Step 4: write the manuscript, the report and the manifest ---------
     // A bracketed citation of a work the bibliography does not hold would
     // export as a raw token with no reference, so it refuses here. A
     // narrative `@word` with no entry is text: compile reads the citations
     // through the same function the exporter does.
-    const bibEntries = await parseBibOrEmpty(bibText);
-    const inBib = new Set(bibEntries.map((e) => String(e['id'] ?? '')));
-    const missing = exportCitations(compiled, inBib).unknownCited;
+    const { cites: rendered, unknownCited: missing } = exportCitations(compiled, new Set(bib.entries.keys()));
     if (missing.length > 0) {
       const reasons = missing.map((key) => `citation [@${key}] has no entry in .paper/CITATIONS.bib — re-run research or \`pensmith add\` it, then verify`);
       for (const r of reasons) warn(`REFUSE: ${r}`);
@@ -588,7 +574,6 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         staleResolvedCount: stalenessResolved.length,
       });
     }
-    await regenerateBib(new Set(citedKeys(findCitations(compiled))), bibEntries, bibPath);
 
     const draftPath = join(paperDir(opts.paperRoot), 'DRAFT.md');
     await atomicWriteFile(draftPath, compiled);
@@ -607,11 +592,10 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     await atomicWriteFile(reportPath, report);
 
     // What done checks before it exports: the manuscript, each section's draft
-    // and recorded verdicts, and each cited entry of the bibliography as
-    // compile left it.
-    const bibAfter = await parseBibForPass1(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '');
+    // and recorded verdicts, and the bibliography entry of each work the
+    // export renders (every one is in CITATIONS.bib, or compile refused above).
     const bibHashes: Record<string, string> = {};
-    for (const [key, hash] of Object.entries(bibEntryHashes(citedKeys(findCitations(compiled)), bibAfter))) {
+    for (const [key, hash] of Object.entries(bibEntryHashes(citedKeys(rendered), bib))) {
       if (hash !== null) bibHashes[key] = hash;
     }
     await writeCompileManifest(opts.paperRoot, {
@@ -626,88 +610,10 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       refused: false,
       draftPath,
       reportPath,
-      bibPath,
       sectionsCount: loaded.length,
       staleResolvedCount: stalenessResolved.length,
     };
   });
-}
-
-/**
- * Regenerate .paper/CITATIONS.bib from the works the compiled manuscript
- * cites, in any citation form, through the bibtex-write.ts writer. Metadata
- * is pulled from the existing bib; an uncited entry is dropped.
- */
-async function regenerateBib(
-  compiledCitekeys: ReadonlySet<string>,
-  entries: ReadonlyArray<Record<string, unknown>>,
-  bibPath: string,
-): Promise<void> {
-  const now = new Date().toISOString();
-  const candidates: SourceCandidate[] = [];
-  for (const e of entries) {
-    const x = e as {
-      id?: string;
-      title?: string | string[];
-      author?: Array<{ family?: string; given?: string }>;
-      DOI?: string;
-      ISBN?: string;
-      number?: string;
-      note?: string;
-      issued?: { 'date-parts'?: number[][] };
-    };
-    const id = String(x.id ?? '');
-    if (!compiledCitekeys.has(id)) continue; // keep only cited keys (the union)
-    const title = Array.isArray(x.title) ? (x.title[0] ?? '') : (x.title ?? '');
-    const authors = (x.author ?? [])
-      .map((a) => {
-        const fam = String(a?.family ?? '').trim();
-        const giv = String(a?.given ?? '').trim();
-        return giv ? `${fam}, ${giv}` : fam;
-      })
-      .filter(Boolean);
-
-    // Preserve the publication year (audit #5). citation-js parses BibTeX
-    // `year = {2020}` into CSL `issued.date-parts[0][0]`; the prior code never
-    // read it, so writeBibtex (which emits a year only when c.year is a number)
-    // stripped the year from EVERY regenerated citation.
-    const yearRaw = x.issued?.['date-parts']?.[0]?.[0];
-    const year = typeof yearRaw === 'number' && Number.isFinite(yearRaw) ? yearRaw : undefined;
-
-    // Preserve the persistent identifier for DOI-less sources (audit #17): a book
-    // (ISBN) or arXiv preprint (CSL `number`) carries no DOI, so writeBibtex's
-    // toCsl persistent-id gate would DROP it entirely. Carry ISBN / arXiv id
-    // (the extra fields toCsl reads) so DOI-less sources survive the round-trip.
-    const isbn = typeof x.ISBN === 'string' && x.ISBN.trim() ? x.ISBN.trim() : undefined;
-    // CSL `number` is ALSO the generic journal issue number, so only treat it as
-    // an arXiv id when it is arXiv-SHAPED (CodeRabbit) — otherwise a DOI-less
-    // journal article with an issue number would be re-emitted as a fabricated
-    // arXiv preprint. New-style: 2305.12345 (optional vN); old-style: hep-th/9901001.
-    const numberRaw = typeof x.number === 'string' ? x.number.trim() : '';
-    const isArxivId =
-      /^\d{4}\.\d{4,5}(v\d+)?$/.test(numberRaw) ||
-      /^[a-z-]+(\.[a-z]{2})?\/\d{7}(v\d+)?$/i.test(numberRaw);
-    const arxivId = !x.DOI && isArxivId ? numberRaw : undefined;
-
-    candidates.push({
-      source: arxivId ? 'arxiv' : 'crossref',
-      id: x.DOI ?? id,
-      title: title || id,
-      authors: authors.length > 0 ? authors : ['Unknown'],
-      ...(x.DOI !== undefined ? { doi: x.DOI } : {}),
-      ...(year !== undefined ? { year } : {}),
-      ...(isbn !== undefined ? { isbn } : {}),
-      ...(arxivId !== undefined ? { arxivId } : {}),
-      retracted: x.note === 'RETRACTED',
-      last_verified: now,
-      citekey: id,
-      raw: {},
-    } as SourceCandidate);
-  }
-
-  // writeBibtex re-renders via the citation-js + atomic-write chokepoints and
-  // resolves any base-26 collisions (D-19). An empty union → a zero-length bib.
-  await writeBibtex(candidates, bibPath);
 }
 
 export default runCompile;

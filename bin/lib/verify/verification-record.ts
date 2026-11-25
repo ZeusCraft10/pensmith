@@ -328,7 +328,10 @@ export interface SectionNow {
 export function verificationStaleness(record: VerificationRecord, now: SectionNow): string[] {
   const why: string[] = [];
   if (record.draft_hash !== computeDraftHash(now.draftBytes, [...now.assignedSources])) {
-    why.push('DRAFT.md or its assigned sources changed since verify');
+    const draftNow = sha256(now.draftBytes);
+    why.push(record.draft_sha256 === draftNow
+      ? "PLAN.md's assigned sources changed since verify"
+      : `DRAFT.md changed since verify (${(record.draft_sha256 ?? 'none').slice(0, 12)} → ${draftNow.slice(0, 12)})`);
     return why;
   }
   const current = bibEntryHashes(Object.keys(record.bib_entries), now.bib);

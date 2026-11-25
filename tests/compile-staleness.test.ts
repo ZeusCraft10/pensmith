@@ -24,7 +24,8 @@ import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { bibForDrafts } from './lib/bib-fixture.js';
-import { writeVerificationFixture } from './lib/verification-fixture.js';
+import { fixtureBibHashes, writeVerificationFixture } from './lib/verification-fixture.js';
+import { sha256 } from '../bin/lib/verify/verification-record.js';
 
 interface SectionSpec {
   n: number;
@@ -155,4 +156,35 @@ test('D-08: NO stale sections → re-verify seam is never called', async () => {
   assert.equal(called, false, 'fresh sections must not trigger re-verify');
   assert.equal(result.refused, false);
   assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), true);
+});
+
+test('the report says what made a section stale, and an unchanged draft does not read as changed', async () => {
+  const draft = '# Intro\n\nGrounded [@smith2020].\n';
+  const root = seedPaper([{ n: 1, slug: 'intro', draft, assignedSources: ['smith2020'], stale: false }]);
+  const dir = join(root, '.paper', 'sections', '01-intro');
+  const bibPath = join(root, '.paper', 'CITATIONS.bib');
+  const bib = readFileSync(bibPath, 'utf8');
+  // Verdicts recorded with the entry as it was; the entry then changes.
+  writeVerificationFixture(dir, { n: 1, slug: 'intro', draft, assignedSources: ['smith2020'], bibEntries: await fixtureBibHashes(bib, draft) });
+  writeFileSync(bibPath, bib.replace('Fixture Work 1', 'Another Work Altogether'));
+
+  const result = await runCompile({ paperRoot: root, yolo: true, onWarn: () => {}, reVerify: async () => ({ passed: true, failingCitekeys: [] }) });
+  assert.equal(result.refused, false);
+  const report = readFileSync(join(root, '.paper', 'COMPILE-REPORT.md'), 'utf8');
+  const staleness = report.slice(report.indexOf('## Compile-Staleness Resolved'));
+  const line = staleness.split('\n').find((l) => l.startsWith('- 1 (intro):'));
+  assert.ok(line, report);
+  assert.match(line, /the CITATIONS\.bib entry for \[@smith2020\] changed since verify \(re-verify passed\)/);
+  assert.doesNotMatch(line, /DRAFT\.md|→/, 'the draft did not change');
+});
+
+test('a changed draft is reported with the hashes of the draft verify checked and the draft compiled', async () => {
+  const root = seedPaper([{ n: 1, slug: 'intro', draft: '# Intro\n\nGrounded [@smith2020].\n', assignedSources: ['smith2020'], stale: true }]);
+  const dir = join(root, '.paper', 'sections', '01-intro');
+  const record = JSON.parse(readFileSync(join(dir, 'VERIFICATION.json'), 'utf8')) as { draft_sha256: string };
+  const now = sha256(readFileSync(join(dir, 'DRAFT.md')));
+
+  await runCompile({ paperRoot: root, yolo: true, onWarn: () => {}, reVerify: async () => ({ passed: true, failingCitekeys: [] }) });
+  const report = readFileSync(join(root, '.paper', 'COMPILE-REPORT.md'), 'utf8');
+  assert.ok(report.includes(`- 1 (intro): DRAFT.md changed since verify (${record.draft_sha256.slice(0, 12)} → ${now.slice(0, 12)}) (re-verify passed)`), report);
 });

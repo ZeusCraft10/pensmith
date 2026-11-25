@@ -42,11 +42,11 @@ export interface CitationDensityEntry {
   citations_per_1000_words: number;
 }
 
-/** One compile-staleness resolution entry. */
+/** A section compile re-verified, and why its recorded verdicts no longer applied. */
 export interface StalenessEntry {
   section: string;
-  prior_hash: string;
-  new_hash: string;
+  /** What changed since verify (verificationStaleness). */
+  why: string[];
   re_verify_passed: boolean;
 }
 
@@ -137,7 +137,7 @@ export function renderCompileReport(input: CompileReportInput): string {
   const stalenessBody = staleness.length
     ? staleness.map(
         (s) =>
-          `- ${s.section}: ${s.prior_hash} → ${s.new_hash} (re-verify ${s.re_verify_passed ? 'passed' : 'FAILED'})`,
+          `- ${s.section}: ${s.why.join('; ')} (re-verify ${s.re_verify_passed ? 'passed' : 'FAILED'})`,
       )
     : ['_No stale sections resolved._'];
 

@@ -1,9 +1,9 @@
 // tests/compile-citation-forms.test.ts — compile reads citations the way the
 // verifier and the exporter do.
 //
-// compile rebuilt CITATIONS.bib from the keys a bare-lowercase `[@key]` regex
-// found, so a verified `[@k, p. 5]`, `[@a; @b]`, `[@Key]`, `[-@k]` or `@k`
-// lost its entry and the export showed the raw token with no reference. The
+// compile once read the cited works with a bare-lowercase `[@key]` regex, so
+// a verified `[@k, p. 5]`, `[@a; @b]`, `[@Key]`, `[-@k]` or `@k` lost its
+// entry and the export showed the raw token with no reference. The
 // smoother masked only bare `[@key]` tokens, so the model saw (and could edit)
 // every other citation, and could add one of its own.
 
@@ -15,7 +15,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCompile, type SmoothBoundaryInput } from '../bin/lib/compile.js';
-import { parseBib } from '../bin/lib/citations.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { isolatedCliEnv } from './lib/cli-env.js';
 import { writeVerificationFixture, type VerificationSpec } from './lib/verification-fixture.js';
@@ -69,12 +68,13 @@ function seedPaper(intro: string, body: string, bib = BIB, fresh = true): string
 const INTRO = 'Coherence lasts [@smith2020, p. 5], as others agree [@Jones2019; see @doe2021].\n';
 const BODY = 'As @lee2018 argued, the effect is robust [-@kim2017].\n';
 
-test('compile: CITATIONS.bib keeps every work cited in any Pandoc form and drops the uncited one', async () => {
+test('compile: the manifest binds every work cited in any Pandoc form and not the uncited one; CITATIONS.bib is left as it is', async () => {
   const root = seedPaper(INTRO, BODY);
   const result = await runCompile({ paperRoot: root, onWarn: () => {} });
   assert.equal(result.refused, false, JSON.stringify(result.refuseReasons));
-  const keys = (await parseBib(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'))).map((e) => String(e['id']));
-  assert.deepEqual(keys.sort(), ['Jones2019', 'doe2021', 'kim2017', 'lee2018', 'smith2020']);
+  const manifest = JSON.parse(readFileSync(join(root, '.paper', 'COMPILE-MANIFEST.json'), 'utf8')) as { bib_entries: Record<string, string> };
+  assert.deepEqual(Object.keys(manifest.bib_entries).sort(), ['Jones2019', 'doe2021', 'kim2017', 'lee2018', 'smith2020']);
+  assert.equal(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'), BIB);
 });
 
 test('compile: a bracketed citation of a work missing from CITATIONS.bib refuses compile', async () => {

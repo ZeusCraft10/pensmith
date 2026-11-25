@@ -16,8 +16,8 @@
 // In Tier 2 the boundary smoother is OMITTED (raw concat) — smoothing is
 // best-effort prose and never blocks compile; a later phase wires
 // loadPrompt('smoother') + interpolate + the model call. The deterministic
-// refuse-gate, staleness re-verify, consistency scan, citation density, bib
-// regen, and report emission all run in Tier 2.
+// refuse-gate, staleness re-verify, consistency scan, citation density and
+// report emission all run in Tier 2.
 
 import { defineCommand } from 'citty';
 import { readFileSync } from 'node:fs';
