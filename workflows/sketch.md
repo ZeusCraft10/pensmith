@@ -65,7 +65,7 @@ verbs bijective with the 16 workflow bodies).
 
 3. **Dispatch `new` with the thesis seed** (Open-Q2): ONLY after confirm,
    dispatch the existing `new` verb via `dispatchVerb('new', { args: { thesis },
-   globalFlags: { yolo, dryRun } })`. `new` is the single state-init site; sketch
+   globalFlags: { yolo } })`. `new` is the single state-init site; sketch
    never calls `initState` itself. The thesis is forwarded so it is not dropped
    (`intake --thesis` pre-fills the intake brief — NOT a new verb).
 

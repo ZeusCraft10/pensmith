@@ -46,8 +46,6 @@
 //     falls through to a root run() after every verb, H2). The root command
 //     keeps subCommands ONLY and NO run().
 
-import { realpathSync } from 'node:fs';
-import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineCommand, parseArgs, runMain, type ArgsDef, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
@@ -56,10 +54,11 @@ import { UX02_VERBS, canonicalVerb, unknownOptionMessage, unknownVerbMessage, ty
 import { setMirrorPromptsToStderr } from './lib/session-log.js';
 import { projectEstimate } from './lib/estimator.js';
 import { resolveNextAction, type RouterDecision } from './lib/router.js';
-import { describeStep, renderDryRun } from './lib/dry-run.js';
 import { isDryRun } from './lib/atomic-write.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 import { EXIT_ERROR, EXIT_OK, EXIT_REFUSED } from './lib/exit-codes.js';
+import { OFFLINE_SKIP_NOTE } from './lib/network-mode.js';
+import { realPath } from './lib/paths.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -113,10 +112,13 @@ export const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyComman
   add: () => import('./cli/add.js').then((m) => m.addCommand),
 };
 
+/** The CommandDef for `verb`: its real loader, or the Phase 2 stub. */
+const loadVerbCommand = (verb: Ux02Verb): Promise<AnyCommandDef> =>
+  (REAL_VERB_LOADERS[verb] ?? (() => Promise.resolve(makeStub(verb))))();
+
 /** Parsed global-flag bundle forwarded into a manually-dispatched verb. */
 export interface GlobalFlags {
   yolo?: boolean;
-  dryRun?: boolean;
   estimate?: boolean;
   showPrompts?: boolean;
 }
@@ -145,8 +147,7 @@ export async function dispatchVerb(
   verb: Ux02Verb,
   opts: { args?: Record<string, unknown>; globalFlags?: GlobalFlags } = {},
 ): Promise<unknown> {
-  const loader = REAL_VERB_LOADERS[verb];
-  const cmd: AnyCommandDef = loader ? await loader() : makeStub(verb);
+  const cmd = await loadVerbCommand(verb);
 
   const gf = opts.globalFlags ?? {};
   const mergedArgs: Record<string, unknown> = {
@@ -155,7 +156,6 @@ export async function dispatchVerb(
     // key compile/done read). The dispatched verb sees these as if citty parsed
     // them on an explicit invocation (C3-HIGH-2).
     yolo: gf.yolo === true,
-    'dry-run': gf.dryRun === true,
     estimate: gf.estimate === true,
     'show-prompts': gf.showPrompts === true,
   };
@@ -185,10 +185,7 @@ export async function dispatchVerb(
  */
 function buildSubCommands(): Record<string, () => Promise<AnyCommandDef>> {
   const out: Record<string, () => Promise<AnyCommandDef>> = {};
-  for (const verb of UX02_VERBS) {
-    const realLoader = REAL_VERB_LOADERS[verb];
-    out[verb] = realLoader ?? (() => Promise.resolve(makeStub(verb)));
-  }
+  for (const verb of UX02_VERBS) out[verb] = () => loadVerbCommand(verb);
   return out;
 }
 
@@ -196,7 +193,7 @@ function buildSubCommands(): Record<string, () => Promise<AnyCommandDef>> {
 // application is the argv pre-parse below (NOT a root run() — H2).
 const ROOT_ARGS = {
   'dry-run': { type: 'boolean', description: 'Show what the step would read, write and call; run nothing, write nothing, no network.', default: false },
-  offline: { type: 'boolean', description: 'Refuse every network request; lookups report "skipped (offline)" and citations UNRESOLVED.', default: false },
+  offline: { type: 'boolean', description: `Refuse every network request; lookups report "${OFFLINE_SKIP_NOTE}" and citations UNRESOLVED.`, default: false },
   estimate: { type: 'boolean', description: 'Project token + USD cost; do not execute.', default: false },
   yolo: { type: 'boolean', description: 'Skip outline + export approval gates.', default: false },
   'show-prompts': { type: 'boolean', description: 'Echo every LLM prompt to stderr.', default: false },
@@ -313,6 +310,12 @@ function refuseSectionVerb(verb: Ux02Verb, decision: RouterDecision): number {
   return EXIT_REFUSED;
 }
 
+/** The router's next step for the paper, with the goal's stop-after-research applied. */
+async function routeNext(paperRoot: string): Promise<{ stop: boolean; decision: RouterDecision }> {
+  const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
+  return { stop, decision: await resolveNextAction(paperRoot, { stopAfterResearch: stop }) };
+}
+
 /** The decision's section (n, slug) as verb args, when it has one. */
 function decisionArgs(decision: RouterDecision): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -328,30 +331,28 @@ function decisionArgs(decision: RouterDecision): Record<string, unknown> {
  * write and call. Never runs a verb. Returns the exit code.
  */
 async function runDryRun(argv: string[], verb: Ux02Verb | null): Promise<number> {
+  // Loaded here, not at startup: only a dry run needs it.
+  const { describeStep, renderDryRun, DRY_RUN_TRAILER } = await import('./lib/dry-run.js');
   const paperRoot = process.cwd();
-  const routed =
-    verb === null || verb === 'next' || verb === 'resume' || isSectionVerbWithoutNumber(argv, verb);
+  const bareSectionVerb = verb !== null && isSectionVerbWithoutNumber(argv, verb);
+  const routed = verb === null || verb === 'next' || verb === 'resume' || bareSectionVerb;
 
   if (!routed) {
-    const loader = REAL_VERB_LOADERS[verb];
-    const cmd: AnyCommandDef = loader ? await loader() : makeStub(verb);
+    const cmd = await loadVerbCommand(verb);
     const argsDef = typeof cmd.args === 'function' ? await cmd.args() : await cmd.args;
-    const args = parseArgs(argv.slice(argv.indexOf(verb) + 1), argsDef ?? {}) as Record<string, unknown>;
+    const args = parseArgs(argv.slice(commandWordIndex(argv) + 1), argsDef ?? {}) as Record<string, unknown>;
     const step = describeStep({ verb, args }, paperRoot);
     process.stdout.write(renderDryRun(`pensmith --dry-run: would run \`${step.command}\`.`, step));
     return EXIT_OK;
   }
 
-  const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
-  const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
-  if (verb !== null && verb !== 'next' && verb !== 'resume' && decision.verb !== verb) {
-    return refuseSectionVerb(verb, decision);
-  }
+  const { decision } = await routeNext(paperRoot);
+  if (bareSectionVerb && decision.verb !== verb) return refuseSectionVerb(verb, decision);
   if (decision.verb === 'status' || decision.verb === 'resume') {
     const why = decision.verb === 'status' && decision.reason === 'done'
       ? 'the paper is finished'
       : 'the paper needs attention (run `pensmith status`)';
-    process.stdout.write(`pensmith --dry-run: nothing to run — ${why}.\nDry run: nothing was written and no network request was made.\n`);
+    process.stdout.write(`pensmith --dry-run: nothing to run — ${why}.\n${DRY_RUN_TRAILER}\n`);
     return EXIT_OK;
   }
   const step = describeStep({ verb: decision.verb, args: decisionArgs(decision) }, paperRoot);
@@ -471,8 +472,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   //
   // Goal-aware tier: map goal → the router's goal-AGNOSTIC stopAfterResearch.
   const paperRoot = process.cwd();
-  const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
-  const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
+  const { stop, decision } = await routeNext(paperRoot);
 
   // Audit #10: a section-scoped verb (plan/verify) typed WITHOUT its section
   // number must default to the next section that needs THAT verb — it must NEVER
@@ -500,7 +500,6 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
     args: verbArgs,
     globalFlags: {
       yolo: hasFlag(argv, 'yolo'),
-      dryRun: hasFlag(argv, 'dry-run'),
       estimate: hasFlag(argv, 'estimate'),
       showPrompts: hasFlag(argv, 'show-prompts'),
     },
@@ -517,15 +516,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
  */
 export function isMainModule(argv1: string | undefined, moduleUrl: string): boolean {
   if (!argv1) return false;
-  const self = fileURLToPath(moduleUrl);
-  const real = (p: string): string => {
-    try {
-      return realpathSync(p);
-    } catch {
-      return resolvePath(p);
-    }
-  };
-  return real(resolvePath(argv1)) === real(self);
+  return realPath(argv1) === realPath(fileURLToPath(moduleUrl));
 }
 
 if (isMainModule(process.argv[1], import.meta.url)) {

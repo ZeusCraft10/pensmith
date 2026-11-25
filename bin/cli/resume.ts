@@ -84,7 +84,6 @@ export const resumeCommand = defineCommand({
       args: verbArgs,
       globalFlags: {
         yolo: args.yolo === true,
-        dryRun: args['dry-run'] === true,
         estimate: args.estimate === true,
         showPrompts: args['show-prompts'] === true,
       },

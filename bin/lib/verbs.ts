@@ -49,12 +49,13 @@ export const VERB_ALIASES: Readonly<Record<string, Ux02Verb>> = {
  * Words that look like verbs but are not, with where that work actually lives.
  * They used to fall through to the router, which ran a different step.
  */
+const GPTZERO_HINT = 'The GPTZero score runs inside `pensmith done`';
 const NOT_A_VERB_HINTS: Readonly<Record<string, string>> = {
   revise: 'To repair a flagged citation, run `pensmith plan <N> --revise`',
   humanize: 'Humanizing runs inside `pensmith done`',
-  score: 'The GPTZero score runs inside `pensmith done`',
-  'gpt-zero': 'The GPTZero score runs inside `pensmith done`',
-  gptzero: 'The GPTZero score runs inside `pensmith done`',
+  score: GPTZERO_HINT,
+  'gpt-zero': GPTZERO_HINT,
+  gptzero: GPTZERO_HINT,
   plagiarism: 'The plagiarism check runs inside `pensmith done`',
 };
 
@@ -65,7 +66,7 @@ function isVerb(word: string): word is Ux02Verb {
 /** The verb a typed word names, through an alias if needed; null when it names none. */
 export function canonicalVerb(word: string): Ux02Verb | null {
   if (isVerb(word)) return word;
-  return Object.prototype.hasOwnProperty.call(VERB_ALIASES, word) ? (VERB_ALIASES[word] ?? null) : null;
+  return Object.hasOwn(VERB_ALIASES, word) ? (VERB_ALIASES[word] ?? null) : null;
 }
 
 /** The names close enough to `word` to be what the user meant, closest first. */
@@ -81,7 +82,7 @@ function closeNames(word: string, names: readonly string[]): string[] {
 /** The error text for a first word that is not a verb (no trailing newline). */
 export function unknownVerbMessage(word: string): string {
   const lines = [`pensmith: unknown command '${word}'.`];
-  const hint = Object.prototype.hasOwnProperty.call(NOT_A_VERB_HINTS, word) ? NOT_A_VERB_HINTS[word] : undefined;
+  const hint = Object.hasOwn(NOT_A_VERB_HINTS, word) ? NOT_A_VERB_HINTS[word] : undefined;
   if (hint) {
     lines.push(`  ${hint}.`);
   } else {

@@ -105,7 +105,7 @@ export const sketchCommand = defineCommand({
 
     await dispatch('new', {
       args: { thesis: synthesized },
-      globalFlags: { yolo: args.yolo === true, dryRun: args['dry-run'] === true },
+      globalFlags: { yolo: args.yolo === true },
     });
 
     return { ok: true, thesis: synthesized };

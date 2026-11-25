@@ -41,7 +41,7 @@ import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
-import { resolveSectionSlug } from '../lib/section-slug.js';
+import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
 import { artifactText } from '../lib/placeholder.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 
@@ -391,12 +391,8 @@ export const writeCommand = defineCommand({
     }
 
     // ---- Single-section mode: positional <n> present (UNCHANGED) ----
-    const n = Number(args.n);
-    if (!Number.isInteger(n) || n < 1) {
-      process.stderr.write(`pensmith write: <n> must be a positive integer; got ${JSON.stringify(args.n)}\n`);
-      process.exitCode = EXIT_REFUSED;
-      return { ok: false, mode: 'invalid-input' };
-    }
+    const n = sectionNumberArg('write', args.n);
+    if (n === null) return { ok: false, mode: 'invalid-input' };
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
     const paperRoot = process.cwd();

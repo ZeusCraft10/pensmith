@@ -11,8 +11,28 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { EXIT_REFUSED } from './exit-codes.js';
 import { paperDir } from './paths.js';
 import { parseOutline } from './outline-parse.js';
+
+/** `raw` as a section number (a positive integer), or null. */
+export function parseSectionNumber(raw: unknown): number | null {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 ? n : null;
+}
+
+/**
+ * `raw` as the section number of `pensmith <verb> <n>`. Anything else is
+ * refused: one line on stderr, exit code 2, and null back.
+ */
+export function sectionNumberArg(verb: string, raw: unknown): number | null {
+  const n = parseSectionNumber(raw);
+  if (n === null) {
+    process.stderr.write(`pensmith ${verb}: <n> must be a positive integer; got ${JSON.stringify(raw)}\n`);
+    process.exitCode = EXIT_REFUSED;
+  }
+  return n;
+}
 
 /**
  * Resolve the slug for section `n`. Precedence:

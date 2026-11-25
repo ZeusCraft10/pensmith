@@ -8,7 +8,7 @@
 
 import { join, relative, sep } from 'node:path';
 import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
-import { resolveSectionSlug } from './section-slug.js';
+import { parseSectionNumber, resolveSectionSlug } from './section-slug.js';
 import type { Ux02Verb } from './verbs.js';
 
 export interface DryRunStep {
@@ -34,18 +34,13 @@ const NO_MODEL = 'none';
 const NO_NETWORK = 'none';
 const MODEL_PROVIDER = 'the model provider';
 
-function sectionNumber(args: Record<string, unknown>): number | null {
-  const n = Number(args['n']);
-  return Number.isInteger(n) && n >= 1 ? n : null;
-}
-
 /** Describe `target` as it would run in `paperRoot`. Reads files only. */
 export function describeStep(target: DryRunTarget, paperRoot: string): DryRunStep {
   // Paths are shown relative to the paper folder, with forward slashes on every OS.
   const rel = (p: string): string => (relative(paperRoot, p) || p).split(sep).join('/');
   const paper = (name: string): string => rel(join(paperDir(paperRoot), name));
   const { verb, args } = target;
-  const n = sectionNumber(args);
+  const n = parseSectionNumber(args['n']);
   const slugArg = typeof args['slug'] === 'string' ? args['slug'] : undefined;
   const slug = n === null ? null : resolveSectionSlug(paperRoot, n, slugArg);
   const sec = (file: 'PLAN.md' | 'DRAFT.md' | 'VERIFICATION.md'): string => {
@@ -198,6 +193,9 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
   }
 }
 
+/** The last line of every dry-run report. */
+export const DRY_RUN_TRAILER = 'Dry run: nothing was written and no network request was made.';
+
 /** The dry-run report. `lead` is the first line (what would run and why). */
 export function renderDryRun(lead: string, step: DryRunStep): string {
   const list = (xs: string[]): string => (xs.length > 0 ? xs.join(', ') : 'nothing');
@@ -210,6 +208,6 @@ export function renderDryRun(lead: string, step: DryRunStep): string {
     `  Network: ${step.network}`,
   ];
   if (step.asks) lines.push(`  Asks:    ${step.asks}`);
-  lines.push('Dry run: nothing was written and no network request was made.');
+  lines.push(DRY_RUN_TRAILER);
   return `${lines.join('\n')}\n`;
 }

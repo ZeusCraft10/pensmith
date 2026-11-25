@@ -34,7 +34,7 @@ import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verd
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
-import { resolveSectionSlug } from '../lib/section-slug.js';
+import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 
@@ -67,12 +67,8 @@ export const verifyCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const n = Number(args.n);
-    if (!Number.isInteger(n) || n < 1) {
-      process.stderr.write(`pensmith verify: <n> must be a positive integer; got ${JSON.stringify(args.n)}\n`);
-      process.exitCode = EXIT_REFUSED;
-      return { ok: false, status: 'invalid-input' };
-    }
+    const n = sectionNumberArg('verify', args.n);
+    if (n === null) return { ok: false, status: 'invalid-input' };
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
     const slug = resolveSectionSlug(process.cwd(), n, args.slug);
@@ -80,20 +76,25 @@ export const verifyCommand = defineCommand({
     const verifPath = sectionVerification(n, slug);
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
 
+    // Every refusal below writes this status-only VERIFICATION.md, the shape
+    // compile and done read (a `Status:` line).
+    const statusOnly = (status: string, reason: string): string =>
+      `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: ${status}\nReason: ${reason}\n`;
+
     if (!existsSync(draftPath)) {
-      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath}\n`;
-      await atomicWriteFile(verifPath, body);
+      await atomicWriteFile(verifPath, statusOnly('unverifiable', `DRAFT.md missing at ${draftPath}`));
       process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
       process.exitCode = EXIT_REFUSED;
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
     // Placeholder text (PENSMITH_NO_LLM) is not a draft: no verdict on it may
     // read as clean, so it fails before any pass runs.
-    if (isPlaceholderText(readFileSync(draftPath, 'utf8'))) {
+    const draftMd = readFileSync(draftPath, 'utf8');
+    if (isPlaceholderText(draftMd)) {
       const reason =
         `DRAFT.md is placeholder text from PENSMITH_NO_LLM, not a draft — re-run ` +
         `\`pensmith write ${n}\` with a model configured.`;
-      await atomicWriteFile(verifPath, `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: failed\nReason: ${reason}\n`);
+      await atomicWriteFile(verifPath, statusOnly('failed', reason));
       await updatePlanFrontmatter(sectionPlan(n, slug), (fm) => {
         fm.status = 'failed';
       });
@@ -102,8 +103,7 @@ export const verifyCommand = defineCommand({
       return { ok: false, status: 'failed', path: verifPath };
     }
     if (!existsSync(bibPath)) {
-      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: .paper/CITATIONS.bib missing — run \`pensmith research\` first.\n`;
-      await atomicWriteFile(verifPath, body);
+      await atomicWriteFile(verifPath, statusOnly('unverifiable', '.paper/CITATIONS.bib missing — run `pensmith research` first.'));
       process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
       process.exitCode = EXIT_REFUSED;
       return { ok: false, status: 'unverifiable', path: verifPath };
@@ -113,18 +113,19 @@ export const verifyCommand = defineCommand({
     // (research wrote an empty bib because no citations have been authored
     // yet). parseBib throws on empty input per T-3-04 strict-parse mitigation,
     // so we short-circuit here to "unverifiable: no citations to verify"
-    // rather than letting verify crash mid-pipeline. The DRAFT.md is read
-    // BEFORE the short-circuit so a draft with [@citekey] tokens against an
-    // empty bib still falls through to runPass1 (which will flag each as
-    // FABRICATED) — only the bib-empty + draft-citation-free intersection
-    // gets the short-circuit.
-    const draftMd = readFileSync(draftPath, 'utf8');
+    // rather than letting verify crash mid-pipeline. The DRAFT.md (read above)
+    // is checked BEFORE the short-circuit so a draft with [@citekey] tokens
+    // against an empty bib still falls through to runPass1 (which will flag
+    // each as FABRICATED) — only the bib-empty + draft-citation-free
+    // intersection gets the short-circuit.
     const bibText = readFileSync(bibPath, 'utf8');
     const draftHasCitekeys = /\[@[a-z][a-z0-9_-]*\]/i.test(draftMd);
     const bibIsEmpty = bibText.trim().length === 0;
     if (bibIsEmpty && !draftHasCitekeys) {
-      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify (Tier-2 placeholder state).\n`;
-      await atomicWriteFile(verifPath, body);
+      await atomicWriteFile(
+        verifPath,
+        statusOnly('unverifiable', 'CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify (Tier-2 placeholder state).'),
+      );
       process.stdout.write(`pensmith verify: empty bib + no draft citekeys — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
