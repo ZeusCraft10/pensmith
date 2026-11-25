@@ -7,20 +7,13 @@
 // tests/fixtures/lint-chokepoint-fixture.ts is the regression gate.
 //
 // =====================================================================
-//   renderInText — in-text sibling of renderStyle (Phase 13 / REND-01)
+//   renderCitationsInDocument — the exporter's renderer
 // =====================================================================
-// renderInText(entries, style) is the per-entry in-text CSL renderer. It
-// is the D-19-compliant delegate for exporter.ts: exporter.ts imports
-// { parseBib, renderStyle, renderInText } from './citations.js' — it
-// NEVER imports Cite or any citation-js symbol directly. All citation-js /
-// Cite usage stays inside this file (the D-19 chokepoint).
-//
-// Implementation note: renderInText calls ensureStyleTemplate(style) for
-// Pitfall-2 memoization, then constructs a new Cite([entries], …) and
-// calls .format('citation', …). One combined in-text string is returned
-// for the provided entries group (callers pass ONE entry per call to get
-// a per-key string — Pitfall 1). Offline + deterministic: same
-// format:'text' / lang:'en-US' options as renderStyle.
+// The exporter renders a paper's citations through renderCitationsInDocument:
+// one citeproc session over every citation in document order, so numeric
+// styles number works by first appearance and note styles shorten repeats.
+// renderInText / renderStyle render a single group or list on its own and
+// stay for callers that need exactly that.
 //
 // =====================================================================
 //   Why parseBib is async, parseBibtex is the alias (executor reconciliation)
@@ -63,13 +56,6 @@
 // preserving the D-19 LOCKED chokepoint singleton: bin/lib/citations.ts
 // remains the SOLE source whose body contains `from 'citation-js'`.
 //
-// =====================================================================
-//   Inline cite resolution is NOT this file's job (D-21)
-// =====================================================================
-// DRAFT.md uses Pandoc `[@citekey]` tokens. Inline citation rendering
-// happens at compile time via Pandoc. citations.ts renders only the
-// reference list (bibliography). Phase 6 compile verb wires Pandoc.
-
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -278,8 +264,8 @@ export async function renderStyle(
  * substituted token-by-token into a document (Pitfall 1 guard — passing all
  * entries at once yields one combined string for the entire group). For a
  * single-entry group in numeric styles (IEEE, Vancouver, AMA) the result
- * is always [1] or "1" — correct for single-entry groups; correct sequential
- * numbering for a full document requires the Pandoc citeproc path.
+ * is always [1] or "1" — correct for single-entry groups only. A whole
+ * document renders through renderCitationsInDocument.
  *
  * Accepts the array returned from `parseBib` (or a one-element slice of it).
  * Registration is memoized via ensureStyleTemplate (Pitfall 2 collision guard).
@@ -306,8 +292,140 @@ export async function renderInText(
 }
 
 // =====================================================================
-//   Public: resolveStyleName (discipline → CSL style name)
+//   Public: document-level citation rendering
 // =====================================================================
+
+/** One cited work, as the citation grammar parses it. */
+export interface CitationItemInput {
+  key: string;
+  prefix?: string;
+  locator?: string;
+  label?: string;
+  suffix?: string;
+  suppressAuthor?: boolean;
+}
+
+/** One citation in the document: a bracketed cluster or a narrative `@key`. */
+export interface CitationInput {
+  narrative: boolean;
+  items: CitationItemInput[];
+}
+
+export interface RenderedCitations {
+  /**
+   * One string per input citation, in order. For an in-text style this is the
+   * text that replaces the citation. For a note style it is the note's text.
+   */
+  citations: string[];
+  /**
+   * For a note style, the text that stays in the running prose (the author's
+   * name for a narrative citation, otherwise empty). Empty for in-text styles.
+   */
+  inline: string[];
+  /** The reference list entries, in the order the style sorts them. */
+  bibliography: string[];
+  /** True when the style puts citations in footnotes (Chicago notes). */
+  noteStyle: boolean;
+}
+
+// citeproc's marker for a citation that prints nothing (an author-only cite in
+// a numeric style).
+const NO_PRINTED_FORM = '[NO_PRINTED_FORM]';
+
+function toCiteprocItem(it: CitationItemInput, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  const out: Record<string, unknown> = { id: it.key, ...extra };
+  if (it.prefix) out['prefix'] = /\s$/.test(it.prefix) ? it.prefix : `${it.prefix} `;
+  if (it.locator) {
+    out['locator'] = it.locator;
+    out['label'] = it.label ?? 'page';
+  }
+  if (it.suffix) out['suffix'] = it.suffix;
+  if (it.suppressAuthor) out['suppress-author'] = true;
+  return out;
+}
+
+/**
+ * Render every citation in a document with ONE citeproc session, so numeric
+ * styles number works by first appearance, repeated works keep their number,
+ * note styles shorten repeated notes, and the reference list follows the
+ * style's own order. Rendering citations one at a time gives every numeric
+ * citation the number 1.
+ *
+ * A narrative citation renders like Pandoc's: the author in the prose and the
+ * year (or note) after it; in a numeric style it renders as the number alone.
+ *
+ * Throws when a cited key has no entry in `entries`.
+ */
+export function renderCitationsInDocument(
+  entries: Array<Record<string, unknown>>,
+  style: string,
+  citations: readonly CitationInput[],
+): RenderedCitations {
+  ensureStyleTemplate(style);
+  const known = new Set(entries.map((e) => String(e['id'] ?? '')));
+  for (const c of citations) {
+    for (const it of c.items) {
+      if (!known.has(it.key)) throw new Error(`no bibliography entry for cited key '${it.key}'`);
+    }
+  }
+  const engine = plugins.config.get('@csl').engine(Cite.util.downgradeCsl(entries), `pensmith-${style}`, 'en-US', 'html');
+  const noteStyle = engine.opt?.xclass === 'note';
+
+  // A narrative citation becomes two citeproc citations: the author alone, and
+  // the rest with the author suppressed.
+  const list: Array<{ citationID: string; citationItems: unknown[]; properties: { noteIndex: number } }> = [];
+  let noteIndex = 0;
+  citations.forEach((c, i) => {
+    const n = noteStyle ? ++noteIndex : 0;
+    if (c.narrative) {
+      const it = c.items[0]!;
+      // The author part stays in the prose, so it is never a note itself.
+      list.push({ citationID: `a${i}`, citationItems: [{ id: it.key, 'author-only': true }], properties: { noteIndex: 0 } });
+      list.push({
+        citationID: `c${i}`,
+        citationItems: [toCiteprocItem(it, { 'suppress-author': true })],
+        properties: { noteIndex: n },
+      });
+    } else {
+      list.push({ citationID: `c${i}`, citationItems: c.items.map((it) => toCiteprocItem(it)), properties: { noteIndex: n } });
+    }
+  });
+
+  const byId = new Map<string, string>();
+  if (list.length > 0) {
+    for (const [id, , text] of engine.rebuildProcessorState(list, 'html', [])) byId.set(id, text.trim());
+  }
+  const printed = (s: string | undefined): string => (s && s !== NO_PRINTED_FORM ? s : '');
+
+  const rendered: string[] = [];
+  const inline: string[] = [];
+  citations.forEach((c, i) => {
+    const main = printed(byId.get(`c${i}`));
+    const author = c.narrative ? printed(byId.get(`a${i}`)) : '';
+    if (noteStyle) {
+      rendered.push(main);
+      inline.push(author);
+    } else {
+      rendered.push(author && main ? `${author} ${main}` : author || main);
+      inline.push('');
+    }
+  });
+
+  let bibliography: string[] = [];
+  if (list.length > 0) {
+    const bib = engine.makeBibliography();
+    if (Array.isArray(bib)) bibliography = (bib[1] as string[]).map((e) => e.trim()).filter((e) => e.length > 0);
+  }
+  return { citations: rendered, inline, bibliography, noteStyle };
+}
+
+// =====================================================================
+//   Public: style names
+// =====================================================================
+
+/** The citation styles pensmith ships a CSL file for. */
+export const SUPPORTED_STYLES: readonly string[] = Object.keys(STYLE_FILENAMES);
+
 /**
  * Map a discipline key (from disciplines.json / PROJECT.md) to its default
  * citation style name (the key `renderStyle` expects). Callers that already

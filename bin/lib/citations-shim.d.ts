@@ -7,6 +7,8 @@
 //   - `plugins.config.get('@csl').templates.add(name, csl)` for the
 //     custom-template registration path (RESEARCH.md Pitfall #4 — lazy
 //     CSL template loader).
+//   - `plugins.config.get('@csl').engine(...)` and `Cite.util.downgradeCsl`,
+//     so a whole document's citations render in one citeproc session.
 //
 // Widening this shim is a chokepoint-bypass smell — new fields go via
 // the citations.ts wrapper API, not by widening global typings.
@@ -32,8 +34,16 @@ declare module 'citation-js' {
     has(name: string): boolean;
   }
 
+  /** The citeproc-js engine surface used for document-level rendering. */
+  export interface CiteprocEngine {
+    opt?: { xclass?: string };
+    rebuildProcessorState(citations: unknown[], format: string, uncited: unknown[]): Array<[string, number, string]>;
+    makeBibliography(): [unknown, string[]] | false;
+  }
+
   export interface CslPluginConfig {
     templates: CslTemplateRegistry;
+    engine(data: unknown[], template: string, lang: string, format: string): CiteprocEngine;
   }
 
   export interface PluginRegistry {
@@ -50,6 +60,7 @@ declare module 'citation-js' {
     // The `plugins` registry hangs off the class (citation-js@0.7
     // exposes it as a static-like property on the default export).
     static plugins: PluginRegistry;
+    static util: { downgradeCsl(data: unknown[]): unknown[] };
   }
 
   export default Cite;
