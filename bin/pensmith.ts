@@ -46,6 +46,8 @@
 //     falls through to a root run() after every verb, H2). The root command
 //     keeps subCommands ONLY and NO run().
 
+import { realpathSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineCommand, parseArgs, runMain, type ArgsDef, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
@@ -58,7 +60,6 @@ import { isDryRun } from './lib/atomic-write.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 import { EXIT_ERROR, EXIT_OK, EXIT_REFUSED } from './lib/exit-codes.js';
 import { OFFLINE_SKIP_NOTE } from './lib/network-mode.js';
-import { realPath } from './lib/paths.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -513,10 +514,22 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
  * npm link, global installs, npx and node_modules/.bin start the CLI through a
  * symlink. Node resolves import.meta.url to the real file but leaves argv[1] as
  * the link, so both sides are compared after resolving symlinks.
+ *
+ * This uses Node's JS realpathSync, not realpathSync.native (paths.ts
+ * realPath): the JS walk is what Node's loader uses for import.meta.url, and it
+ * still follows links where the OS realpath call fails (some Windows volumes,
+ * a libc whose realpath needs /proc).
  */
 export function isMainModule(argv1: string | undefined, moduleUrl: string): boolean {
   if (!argv1) return false;
-  return realPath(argv1) === realPath(fileURLToPath(moduleUrl));
+  const real = (p: string): string => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return resolvePath(p);
+    }
+  };
+  return real(resolvePath(argv1)) === real(fileURLToPath(moduleUrl));
 }
 
 if (isMainModule(process.argv[1], import.meta.url)) {
