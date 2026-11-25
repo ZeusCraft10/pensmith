@@ -13,45 +13,12 @@
 //   - An alias DOI is judged by the record the registry returns for it.
 //   - A retraction recorded in CITATIONS.bib blocks even offline.
 
-import { test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
-import { _resetBucketsForTest } from '../../bin/lib/http.js';
 import { pass1Verdict } from '../lib/bib-fixture.js';
+import { JSON_HEADERS, useMockRegistries } from '../lib/mock-registries.js';
 
-const ENV_KEYS = ['PENSMITH_TEST_CASSETTES', 'PENSMITH_OFFLINE', 'PENSMITH_CONTACT_EMAIL', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'HOME'];
-const savedEnv: Record<string, string | undefined> = {};
-let prevDispatcher: Dispatcher;
-let agent: MockAgent;
-
-beforeEach(() => {
-  for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
-  delete process.env['PENSMITH_TEST_CASSETTES'];
-  delete process.env['PENSMITH_OFFLINE'];
-  delete process.env['PENSMITH_CONTACT_EMAIL'];
-  // A fresh, empty HTTP cache, so nothing cached answers in place of a request.
-  const data = mkdtempSync(path.join(tmpdir(), 'pensmith-retraction-signals-'));
-  for (const k of ['XDG_DATA_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'HOME']) process.env[k] = data;
-  _resetBucketsForTest();
-  prevDispatcher = getGlobalDispatcher();
-  agent = new MockAgent();
-  agent.disableNetConnect();
-  setGlobalDispatcher(agent);
-});
-
-afterEach(async () => {
-  setGlobalDispatcher(prevDispatcher);
-  await agent.close();
-  for (const k of ENV_KEYS) {
-    if (savedEnv[k] === undefined) delete process.env[k];
-    else process.env[k] = savedEnv[k];
-  }
-});
-
-const JSON_HEADERS = { 'content-type': 'application/json' };
+const agent = useMockRegistries('pensmith-retraction-signals-');
 
 const WORK = {
   title: ['Tidal Heating in Icy Moons'],
@@ -70,7 +37,7 @@ const notice = (type: string, doi: string, label: string): Record<string, unknow
 
 /** Crossref answers `message` for `doi` (any case). */
 function crossrefHolds(doi: string, message: Record<string, unknown>): void {
-  agent.get('https://api.crossref.org')
+  agent().get('https://api.crossref.org')
     .intercept({ path: (p) => p.toLowerCase().startsWith(`/works/${encodeURIComponent(doi).toLowerCase()}`), method: 'GET' })
     .reply(200, JSON.stringify({ status: 'ok', message }), { headers: JSON_HEADERS })
     .persist();
@@ -78,7 +45,7 @@ function crossrefHolds(doi: string, message: Record<string, unknown>): void {
 
 /** OpenAlex answers every DOI with `status` and `work`; each DOI asked goes into `asked`. */
 function openAlexAnswers(asked: string[], status: number, work: Record<string, unknown> | string): void {
-  agent.get('https://api.openalex.org')
+  agent().get('https://api.openalex.org')
     .intercept({ path: (p) => p.startsWith('/works/doi:'), method: 'GET' })
     .reply((opts) => {
       asked.push(decodeURIComponent(new URL(String(opts.path), 'https://api.openalex.org').pathname.slice('/works/doi:'.length)));
@@ -145,11 +112,11 @@ test('Pass 1: a work retracted in place (update-to its own DOI) is RETRACTED', a
 
 test('Pass 1: a DataCite record titled "RETRACTED: …" is RETRACTED, and the label does not make the title a mismatch', async () => {
   openAlexAnswers([], 404, '{"error":"Not Found"}');
-  agent.get('https://api.crossref.org')
+  agent().get('https://api.crossref.org')
     .intercept({ path: (p) => p.startsWith('/works/10.5555%2Fdata.1'), method: 'GET' })
     .reply(404, 'Resource not found.')
     .persist();
-  agent.get('https://api.datacite.org')
+  agent().get('https://api.datacite.org')
     .intercept({ path: (p) => p.startsWith('/dois/10.5555%2Fdata.1'), method: 'GET' })
     .reply(200, JSON.stringify({
       data: {

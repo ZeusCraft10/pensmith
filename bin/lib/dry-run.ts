@@ -30,6 +30,14 @@ export interface DryRunTarget {
   args: Record<string, unknown>;
 }
 
+/** The files of a section folder a step reads or writes, and where each lives. */
+const SECTION_FILES = {
+  'PLAN.md': sectionPlan,
+  'DRAFT.md': sectionDraft,
+  'VERIFICATION.md': sectionVerification,
+  'ACKNOWLEDGEMENTS.json': sectionAcknowledgements,
+} as const;
+
 const NO_MODEL = 'none';
 const NO_NETWORK = 'none';
 const MODEL_PROVIDER = 'the model provider';
@@ -43,13 +51,8 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
   const n = parseSectionNumber(args['n']);
   const slugArg = typeof args['slug'] === 'string' ? args['slug'] : undefined;
   const slug = n === null ? null : resolveSectionSlug(paperRoot, n, slugArg);
-  const sec = (file: 'PLAN.md' | 'DRAFT.md' | 'VERIFICATION.md' | 'ACKNOWLEDGEMENTS.json'): string => {
-    if (n === null || slug === null) return `.paper/sections/<N>/${file}`;
-    if (file === 'PLAN.md') return rel(sectionPlan(n, slug, paperRoot));
-    if (file === 'DRAFT.md') return rel(sectionDraft(n, slug, paperRoot));
-    if (file === 'ACKNOWLEDGEMENTS.json') return rel(sectionAcknowledgements(n, slug, paperRoot));
-    return rel(sectionVerification(n, slug, paperRoot));
-  };
+  const sec = (file: keyof typeof SECTION_FILES): string =>
+    n === null || slug === null ? `.paper/sections/<N>/${file}` : rel(SECTION_FILES[file](n, slug, paperRoot));
   const command = ['pensmith', verb, ...(n === null ? [] : [String(n)])].join(' ');
 
   switch (verb) {

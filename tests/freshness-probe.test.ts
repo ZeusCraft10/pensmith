@@ -31,13 +31,13 @@ test('freshness: returns a FreshnessResult tagged with the citekey', async () =>
 
 test('freshness: DOI HEAD 200 produces NO warning', async () => {
   const r = await probeFreshness('smith2020', OK_DOI);
-  const doiWarn = r.warnings.find((w) => w.probe === 'DOI HEAD');
+  const doiWarn = r.warnings[0];
   assert.equal(doiWarn, undefined, 'a resolving DOI must not warn');
 });
 
 test('freshness: DOI HEAD 404 produces a WARN row (advisory, not blocking)', async () => {
   const r = await probeFreshness('jones2019', STALE_DOI);
-  const doiWarn = r.warnings.find((w) => w.probe === 'DOI HEAD');
+  const doiWarn = r.warnings[0];
   assert.ok(doiWarn, 'a 404 DOI HEAD must emit a WARN');
   assert.equal(doiWarn?.status, 'WARN');
   // RSCH-10 / D-10 — freshness is advisory: never escalates to a hard block.
@@ -50,12 +50,12 @@ test('freshness: transport error (no cassette / ECONNREFUSED) is SILENT — no W
   // must treat the absence of a real HTTP status as network noise, not
   // staleness (D-10 / RESEARCH §J). No DOI HEAD warning is emitted.
   const r = await probeFreshness('ghost2099', NO_CASSETTE_DOI);
-  const doiWarn = r.warnings.find((w) => w.probe === 'DOI HEAD');
+  const doiWarn = r.warnings[0];
   assert.equal(doiWarn, undefined, 'transport noise must NOT produce a WARN');
 });
 
 test('freshness: a null DOI skips the HEAD probe without throwing', async () => {
   const r = await probeFreshness('nodoi2021', null);
-  const doiWarn = r.warnings.find((w) => w.probe === 'DOI HEAD');
+  const doiWarn = r.warnings[0];
   assert.equal(doiWarn, undefined, 'no DOI → no HEAD probe, no warning');
 });

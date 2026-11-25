@@ -22,10 +22,10 @@
 // OpenAlex `is_retracted` is a cross-check Pass 1 asks for when the record
 // says nothing (bin/lib/sources/openalex.ts lookupRetraction).
 
-import { sameDoi } from '../doi.js';
+import { normalizeDoi, sameDoi } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import type { RegistryName, WorkRecord } from '../sources/work-record.js';
-import { stripMarkup } from './work-match.js';
+import { RETRACTION_LABEL, stripMarkup } from './work-match.js';
 
 /** What a record says about the work's standing. */
 export interface RetractionSignal {
@@ -41,20 +41,15 @@ export interface RetractionSignal {
 const RETRACTING_UPDATES: ReadonlySet<string> = new Set(['retraction', 'partial_retraction', 'withdrawal', 'removal']);
 const CONCERN_UPDATES: ReadonlySet<string> = new Set(['expression_of_concern']);
 
-// "RETRACTED: …", "Retracted Article: …", "WITHDRAWN: …", in any case, after
-// any markup is stripped. A notice's own title ("Retraction: …", "Retraction
-// notice to …") is not a label and does not match.
-const LABEL = /^\s*(?:retracted|withdrawn)(?:\s+article)?\s*[:：]\s*/i;
-
-/** `title` without a leading retraction label, so the label is not read as a title mismatch. */
-export function withoutRetractionLabel(title: string): string {
+/** The reason a title labelled "RETRACTED:" (RETRACTION_LABEL) gives, or null when it has no label. */
+function labelReason(title: string): string | null {
   const plain = stripMarkup(title);
-  return LABEL.test(plain) ? plain.replace(LABEL, '') : title;
+  return RETRACTION_LABEL.test(plain) ? `titled "${plain.trim()}"` : null;
 }
 
-function hasRetractionLabel(title: unknown): boolean {
-  return typeof title === 'string' && LABEL.test(stripMarkup(title));
-}
+/** A record's raw response as an object, or {} when it is not one. */
+const rawObject = (raw: unknown): Record<string, unknown> =>
+  raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
 
 interface CrossrefUpdate {
   DOI?: unknown;
@@ -89,6 +84,22 @@ const updates = (v: unknown): CrossrefUpdate[] =>
   Array.isArray(v) ? v.filter((u): u is CrossrefUpdate => !!u && typeof u === 'object') : [];
 
 /**
+ * A record's `update-to` notices with a DOI, split by what they update: `own`
+ * names the record's own DOI (the publisher retracted the work in place),
+ * `other` names another work, so the record is that work's notice.
+ */
+function updateTargets(raw: Record<string, unknown>): { own: CrossrefUpdate[]; other: CrossrefUpdate[] } {
+  const self = typeof raw['DOI'] === 'string' ? raw['DOI'] : '';
+  const own: CrossrefUpdate[] = [];
+  const other: CrossrefUpdate[] = [];
+  for (const u of updates(raw['update-to'])) {
+    if (typeof u.DOI !== 'string') continue;
+    (self && sameDoi(u.DOI, self) ? own : other).push(u);
+  }
+  return { own, other };
+}
+
+/**
  * The notices a Crossref-shaped record (a Crossref message, or CSL from
  * Crossref's content negotiation) lists about its own work.
  */
@@ -99,27 +110,23 @@ function crossrefSignals(raw: Record<string, unknown>, by: RegistryName): Retrac
     const type = typeof u.type === 'string' ? u.type.toLowerCase() : '';
     const kind = RETRACTING_UPDATES.has(type) ? 'retracted' : CONCERN_UPDATES.has(type) ? 'concern' : null;
     if (!kind) return;
-    const what = describeUpdate(u, type);
     // Crossref often lists one notice twice (from the publisher and from
     // Retraction Watch); say it once.
-    const key = `${kind}|${type}|${String(u.DOI ?? '').toLowerCase()}`;
+    const doiKey = typeof u.DOI === 'string' ? (normalizeDoi(u.DOI) ?? u.DOI.toLowerCase()) : '';
+    const key = `${kind}|${type}|${doiKey}`;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ kind, what, by });
+    out.push({ kind, what: describeUpdate(u, type), by });
   };
   for (const u of updates(raw['updated-by'])) add(u);
   // A notice on the work's own DOI: the publisher retracted it in place.
-  const own = typeof raw['DOI'] === 'string' ? raw['DOI'] : '';
-  for (const u of updates(raw['update-to'])) {
-    if (own && typeof u.DOI === 'string' && sameDoi(u.DOI, own)) add(u);
-  }
+  for (const u of updateTargets(raw).own) add(u);
   return out;
 }
 
 /** A record whose `update-to` names another work: it is that work's notice. */
 function isNoticeOfAnotherWork(raw: Record<string, unknown>): boolean {
-  const own = typeof raw['DOI'] === 'string' ? raw['DOI'] : '';
-  return updates(raw['update-to']).some((u) => typeof u.DOI === 'string' && !(own && sameDoi(u.DOI, own)));
+  return updateTargets(raw).other.length > 0;
 }
 
 interface PubmedReference { reftype?: unknown; refsource?: unknown }
@@ -151,10 +158,11 @@ export function describeSignal(s: RetractionSignal): string {
 
 /** What `record` itself says: notices it lists, its publication type, its title. */
 export function recordRetraction(record: Pick<WorkRecord, 'registry' | 'title' | 'raw'>): RetractionSignal[] {
-  const raw = record.raw && typeof record.raw === 'object' ? (record.raw as Record<string, unknown>) : {};
+  const raw = rawObject(record.raw);
   const out = record.registry === 'PubMed' ? pubmedSignals(raw) : crossrefSignals(raw, record.registry);
-  if (!out.some((s) => s.kind === 'retracted') && hasRetractionLabel(record.title) && !isNoticeOfAnotherWork(raw)) {
-    out.push({ kind: 'retracted', what: `titled "${stripMarkup(record.title).trim()}"`, by: record.registry });
+  const label = labelReason(record.title);
+  if (label && !out.some((s) => s.kind === 'retracted') && !isNoticeOfAnotherWork(raw)) {
+    out.push({ kind: 'retracted', what: label, by: record.registry });
   }
   return out;
 }
@@ -170,12 +178,11 @@ const CANDIDATE_REGISTRY: Partial<Record<SourceCandidate['source'], RegistryName
  * the reason when it is, else null. No request is made.
  */
 export function candidateRetraction(c: SourceCandidate): string | null {
-  const raw = c.raw && typeof c.raw === 'object' ? (c.raw as Record<string, unknown>) : {};
-  if (c.source === 'openalex' && raw['is_retracted'] === true) return 'OpenAlex lists it as retracted';
+  if (c.source === 'openalex' && rawObject(c.raw)['is_retracted'] === true) return 'OpenAlex lists it as retracted';
   const registry = CANDIDATE_REGISTRY[c.source];
   if (registry) {
-    const hit = recordRetraction({ registry, title: c.title, raw }).find((s) => s.kind === 'retracted');
+    const hit = recordRetraction({ registry, title: c.title, raw: c.raw }).find((s) => s.kind === 'retracted');
     return hit ? describeSignal(hit) : null;
   }
-  return hasRetractionLabel(c.title) ? `titled "${stripMarkup(c.title).trim()}"` : null;
+  return labelReason(c.title);
 }

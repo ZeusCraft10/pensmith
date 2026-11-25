@@ -11,7 +11,7 @@
 //   unavailable  no answer: a timeout, a 429 or 5xx after retries, a proxy or
 //                DNS failure, or a response that could not be read.
 // Treating "unavailable" as "not found" is what made rate limits and outages
-// read as fabricated references. askRegistry below holds that rule, so an
+// read as fabricated references. askSource below holds that rule, so an
 // adapter only says which answers are "found" and which are "no such work".
 
 import { fetch as httpFetch, type FetchOptions, type HttpResponse } from '../http.js';
@@ -103,31 +103,44 @@ export function unavailableDetail(err: unknown): string {
 }
 
 /**
- * Ask `registry` at `url`, and let `read` recognise its "found" and "no such
- * work" answers. Everything else is unavailable: a request that throws, and a
- * response `read` returns null for or fails on ("unreadable response" for a
- * 200, `HTTP <status>` otherwise). A case an adapter does not handle thus
- * fails toward "no answer", never toward "not found".
+ * Ask `url`, and let `read` recognise the answers it can give. Everything else
+ * is `none(detail)`, "no answer": a request that throws, and a response `read`
+ * returns null for or fails on ("unreadable response" for a 200,
+ * `HTTP <status>` otherwise). A case a caller does not handle thus fails
+ * toward "no answer", never toward "not found".
  */
-export async function askRegistry(
-  registry: RegistryName,
+export async function askSource<A>(
   url: string,
   opts: FetchOptions,
-  read: (res: HttpResponse) => Lookup | null,
-): Promise<Lookup> {
+  read: (res: HttpResponse) => A | null,
+  none: (detail: string) => A,
+): Promise<A> {
   let res: HttpResponse;
   try {
     res = await httpFetch(url, opts);
   } catch (err) {
-    return unavailable(registry, unavailableDetail(err));
+    return none(unavailableDetail(err));
   }
-  let answer: Lookup | null;
+  let answer: A | null;
   try {
     answer = read(res);
   } catch {
     answer = null;
   }
-  return answer ?? unavailable(registry, res.status === 200 ? 'unreadable response' : `HTTP ${res.status}`);
+  return answer ?? none(res.status === 200 ? 'unreadable response' : `HTTP ${res.status}`);
+}
+
+/**
+ * Ask `registry` at `url`, and let `read` recognise its "found" and "no such
+ * work" answers. Everything else is unavailable (askSource).
+ */
+export function askRegistry(
+  registry: RegistryName,
+  url: string,
+  opts: FetchOptions,
+  read: (res: HttpResponse) => Lookup | null,
+): Promise<Lookup> {
+  return askSource(url, opts, read, (detail) => unavailable(registry, detail));
 }
 
 /**

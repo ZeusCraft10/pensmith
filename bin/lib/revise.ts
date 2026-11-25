@@ -50,6 +50,8 @@ const YOLO_RETRY_CAP = 2;
 
 /** The verifier verdicts that --revise repairs. */
 const FAILING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'RETRACTED']);
+/** FAILING_VERDICTS as message text: `FABRICATED/MIS-CITED/...`. */
+const FAILING_VERDICT_LIST = [...FAILING_VERDICTS].join('/');
 
 // Strict-JSON contract for the revise-swap LLM response (04-RESEARCH §I).
 const ReviseSwapSchema = z.object({
@@ -451,7 +453,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
         'answers, or give the entry a DOI, arXiv ID, PMID or ISBN if it has none; then verify again.';
       return { ...base, message: `${base.message} ${why}`.trim() };
     }
-    return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND/RETRACTED citation in section ${opts.n}.`.trim() };
+    return { ...base, message: `${base.message} No ${FAILING_VERDICT_LIST} citation in section ${opts.n}.`.trim() };
   }
   base.flagged_citekey = failing.citekey;
 

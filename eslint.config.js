@@ -220,6 +220,9 @@ export default [
       // Answers Crossref, DataCite and OpenAlex with a MockAgent to check which
       // registry answers make a citation RETRACTED on the live request path.
       'tests/sources/retraction-signals.test.ts',
+      // The MockAgent harness the two files above share: installs the agent
+      // and points the HTTP cache at a per-test tmpdir.
+      'tests/lib/mock-registries.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

@@ -15,7 +15,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { contactParam, isGone, RETRACTION_STATUS_TTL_MS, unavailableDetail } from './work-record.js';
+import { askSource, contactParam, isGone, RETRACTION_STATUS_TTL_MS } from './work-record.js';
 
 const BASE = 'https://api.openalex.org';
 
@@ -122,21 +122,17 @@ export type RetractionAnswer =
  * A 404 means OpenAlex does not hold the DOI; any other answer that is not a
  * readable 200 is unavailable, and says nothing either way.
  */
-export async function lookupRetraction(doi: string): Promise<RetractionAnswer> {
+export function lookupRetraction(doi: string): Promise<RetractionAnswer> {
   const url = `${BASE}/works/doi:${encodeURIComponent(doi)}?select=id,doi,title,is_retracted${contactParam('mailto', '&')}`;
-  let res;
-  try {
-    res = await httpFetch(url, { source: 'openalex', cacheTtlMs: RETRACTION_STATUS_TTL_MS });
-  } catch (err) {
-    return { kind: 'unavailable', detail: unavailableDetail(err) };
-  }
-  if (isGone(res.status)) return { kind: 'not_found' };
-  if (res.status !== 200) return { kind: 'unavailable', detail: `HTTP ${res.status}` };
-  try {
-    const retracted = (JSON.parse(res.body) as { is_retracted?: unknown } | null)?.is_retracted;
-    if (typeof retracted === 'boolean') return { kind: 'found', retracted };
-  } catch {
-    // An unreadable body is no answer.
-  }
-  return { kind: 'unavailable', detail: 'unreadable response' };
+  return askSource<RetractionAnswer>(
+    url,
+    { source: 'openalex', cacheTtlMs: RETRACTION_STATUS_TTL_MS },
+    (res) => {
+      if (isGone(res.status)) return { kind: 'not_found' };
+      if (res.status !== 200) return null;
+      const retracted = (JSON.parse(res.body) as { is_retracted?: unknown } | null)?.is_retracted;
+      return typeof retracted === 'boolean' ? { kind: 'found', retracted } : null;
+    },
+    (detail) => ({ kind: 'unavailable', detail }),
+  );
 }

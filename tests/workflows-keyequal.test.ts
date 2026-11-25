@@ -7,7 +7,7 @@ import { command } from '../bin/pensmith.js';
 // WR-03 + WR-06 (cross-AI review): derived from the single source of truth
 // (bin/lib/verbs.ts), not a local copy. ARCH-01 below also introspects the
 // runtime command.subCommands instead of regex-scanning bin/pensmith.ts.
-const EXPECTED_16 = [...UX02_VERBS].sort();
+const EXPECTED_VERBS = [...UX02_VERBS].sort();
 
 // W4: closed vocabulary for ARCH-03 `required:` tokens.
 // Workflows that need nothing emit `(none required)`.
@@ -26,13 +26,13 @@ test('ARCH-01 / UX-02: workflows/ contains exactly one markdown body per verb (1
   const files = readdirSync('workflows').filter((f) => f.endsWith('.md')).sort();
   assert.deepEqual(
     files.map((f) => f.replace(/\.md$/, '')),
-    EXPECTED_16,
+    EXPECTED_VERBS,
     `workflows/ files must equal the canonical verb list`,
   );
 });
 
 test('ARCH-03: every workflow body has a <capability_check> block with required + degrade lists', () => {
-  for (const verb of EXPECTED_16) {
+  for (const verb of EXPECTED_VERBS) {
     const src = readFileSync(`workflows/${verb}.md`, 'utf8');
     assert.match(src, /<capability_check>[\s\S]+?<\/capability_check>/, `${verb}.md: missing <capability_check>`);
     assert.match(src, /required:\s*\n/, `${verb}.md: <capability_check> must have a required: list`);
@@ -41,7 +41,7 @@ test('ARCH-03: every workflow body has a <capability_check> block with required 
 });
 
 test('ARCH-03 W4: every required: token is in the closed Phase 2 vocabulary', () => {
-  for (const verb of EXPECTED_16) {
+  for (const verb of EXPECTED_VERBS) {
     const src = readFileSync(`workflows/${verb}.md`, 'utf8');
     const blockMatch = src.match(/<capability_check>([\s\S]+?)<\/capability_check>/);
     assert.ok(blockMatch, `${verb}.md: <capability_check> not found`);

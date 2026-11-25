@@ -16,17 +16,12 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { isolatedCliEnv } from './lib/cli-env.js';
+import { runCli } from './lib/export-fixture.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
-
-const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
-const TSX_LOADER = import.meta.resolve('tsx');
 
 const WAKEFIELD_DOI = '10.1016/S0140-6736(97)11096-0';
 const WAKEFIELD_AUTHORS =
@@ -53,12 +48,9 @@ const CONCERN =
 
 interface Run { status: number | null; out: string }
 
+/** The real CLI in `root`, live mode on the recorded registry answers. */
 function cli(root: string, ...args: string[]): Run {
-  const r = spawnSync(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, ...args], {
-    cwd: root,
-    encoding: 'utf8',
-    env: isolatedCliEnv({ PENSMITH_TEST_CASSETTES: '1', PENSMITH_NO_LLM: '1', PENSMITH_OFFLINE: undefined }, 'pensmith-retraction-home-'),
-  });
+  const r = runCli(args, root, { PENSMITH_OFFLINE: '0', PENSMITH_TEST_CASSETTES: '1' });
   return { status: r.status, out: r.stdout + r.stderr };
 }
 

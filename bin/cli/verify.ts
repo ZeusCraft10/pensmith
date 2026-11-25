@@ -157,12 +157,11 @@ export const verifyCommand = defineCommand({
     // resolves surfaces as an advisory table row, not a block.
     const freshness = await runFreshnessForDraft(draftMd, bibPath);
 
-    // Aggregate: any verdict that blocks compile (every Pass-1 verdict other
-    // than OK, or a quote NOT_FOUND) → status: failed. A quote nothing could
-    // check (no source text, or no citation at all) → status: unverifiable.
-    // Else verified. A draft that cites nothing against an empty library has
-    // nothing to check: unverifiable, as before, but recorded like any other
-    // verdict.
+    // Aggregate: any verdict that blocks compile (isBlockingVerdict) → status:
+    // failed. A quote nothing could check (no source text, or no citation at
+    // all) → status: unverifiable. Else verified. A draft that cites nothing
+    // against an empty library has nothing to check: unverifiable, as before,
+    // but recorded like any other verdict.
     const hasFail = [...pass1, ...pass3].some((r) => isBlockingVerdict(r.verdict));
     const sourceTextMissing = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
     const unattributed = pass3.filter((r) => r.verdict === 'UNATTRIBUTED').length;
@@ -203,7 +202,8 @@ export const verifyCommand = defineCommand({
       renderPass4Section(pass4),
       '',
     ];
-    await atomicWriteFile(verifPath, lines.join('\n'));
+    const body = lines.join('\n');
+    await atomicWriteFile(verifPath, body);
 
     // Audit #8: persist the verdict to the section PLAN.md frontmatter so the
     // router (router.ts:188-211) advances the pipeline instead of looping on
@@ -240,7 +240,7 @@ export const verifyCommand = defineCommand({
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
     // A retracted work cited with an acknowledgement, or one under an
     // expression of concern, passes but must not look clean.
-    for (const w of citationWarnings(parseVerdictRowDetails(lines.join('\n')), `section ${n}`)) {
+    for (const w of citationWarnings(parseVerdictRowDetails(body), `section ${n}`)) {
       process.stderr.write(`pensmith verify: WARN — ${w}.\n`);
     }
     // What nobody could check does not block yet, but must not look clean.

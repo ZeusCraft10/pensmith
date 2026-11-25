@@ -5,7 +5,7 @@
 // chokepoint — never a direct undici/fetch). Whether the work is retracted is
 // Pass 1's question (bin/lib/verify/retraction.ts), and it blocks.
 //
-// Offline (--offline / --dry-run) neither probe runs; the result says
+// Offline (--offline / --dry-run) the probe does not run; the result says
 // "skipped (offline)" so the table never implies the source was checked.
 //
 // WARN-only policy (D-10 / PRD §14):
@@ -26,12 +26,10 @@ import { fetch as httpFetch } from '../http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
 import { Semaphore } from '../budget.js';
 
-export type FreshnessProbe = 'DOI HEAD';
 export type FreshnessStatus = 'WARN';
 
+/** A DOI HEAD probe's warning. */
 export interface FreshnessWarning {
-  /** Which probe produced this warning. */
-  probe: FreshnessProbe;
   /** Always 'WARN' — freshness is advisory-only by construction (D-10). */
   status: FreshnessStatus;
   /** Human-readable detail for the VERIFICATION.md table. */
@@ -44,7 +42,7 @@ export interface FreshnessResult {
   doi: string | null;
   /** Zero or more advisory warnings. Empty array == no staleness signal. */
   warnings: FreshnessWarning[];
-  /** Set when the probes did not run, so an empty `warnings` means "not checked". */
+  /** Set when the probe did not run, so an empty `warnings` means "not checked". */
   skipped?: 'offline';
 }
 
@@ -83,7 +81,6 @@ export async function probeFreshness(
       });
       if (res.status >= 400) {
         warnings.push({
-          probe: 'DOI HEAD',
           status: 'WARN',
           detail: `DOI HEAD returned ${res.status} — source may be stale or moved`,
         });
@@ -138,7 +135,7 @@ export function renderFreshnessTable(results: ReadonlyArray<FreshnessResult>): s
       continue;
     }
     for (const w of r.warnings) {
-      lines.push(`| ${r.citekey} | ${w.probe} | ${w.status} | ${w.detail} |`);
+      lines.push(`| ${r.citekey} | DOI HEAD | ${w.status} | ${w.detail} |`);
     }
   }
   return lines.join('\n');

@@ -71,6 +71,10 @@ export function readAcknowledgements(file: string): { acknowledgements: Acknowle
   }
 }
 
+/** Whether `a` acknowledges `kind` for the work hashed `sha256`, cited as `citekey`. */
+const sameAck = (a: Acknowledgement, kind: Acknowledgement['kind'], citekey: string, sha256: string): boolean =>
+  a.kind === kind && a.citekey === citekey && a.work_sha256 === sha256;
+
 /** The acknowledgement of a retraction of `binding` cited as `citekey`, if one is recorded. */
 export function findRetractionAck(
   acks: readonly Acknowledgement[],
@@ -78,17 +82,19 @@ export function findRetractionAck(
   binding: WorkBinding | null,
 ): Acknowledgement | undefined {
   if (!binding) return undefined;
-  return acks.find((a) => a.kind === 'retracted' && a.citekey === citekey && a.work_sha256 === binding.sha256);
+  return acks.find((a) => sameAck(a, 'retracted', citekey, binding.sha256));
 }
 
 /**
  * Record `ack` in `file`, replacing an earlier acknowledgement of the same
- * kind, citekey and work. The caller has checked the file is readable.
+ * kind, citekey and work. False, and nothing written, when `file` exists but
+ * cannot be read: overwriting it would lose the acknowledgements in it.
  */
-export async function recordAcknowledgement(file: string, ack: Acknowledgement): Promise<void> {
-  const kept = readAcknowledgements(file).acknowledgements.filter(
-    (a) => !(a.kind === ack.kind && a.citekey === ack.citekey && a.work_sha256 === ack.work_sha256),
-  );
+export async function recordAcknowledgement(file: string, ack: Acknowledgement): Promise<boolean> {
+  const existing = readAcknowledgements(file);
+  if (existing.unreadable) return false;
+  const kept = existing.acknowledgements.filter((a) => !sameAck(a, ack.kind, ack.citekey, ack.work_sha256));
   const body = { $schemaVersion: 1 as const, acknowledgements: [...kept, ack] };
   await atomicWriteFile(file, `${JSON.stringify(body, null, 2)}\n`);
+  return true;
 }

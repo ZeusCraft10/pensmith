@@ -14,15 +14,13 @@ import { candidateRetraction } from '../verify/retraction.js';
 
 /**
  * Mark each candidate its own record shows as retracted: `retracted: true`,
- * and `retraction_details` saying how it is known. Mutates in place and
- * returns the same array.
+ * and `retraction_details` saying how it is known. Mutates in place.
  */
-export function crossCheckRetractions(candidates: SourceCandidate[]): SourceCandidate[] {
+export function crossCheckRetractions(candidates: SourceCandidate[]): void {
   for (const c of candidates) {
     const why = candidateRetraction(c);
     if (why === null) continue;
     c.retracted = true;
     c.retraction_details ??= why;
   }
-  return candidates;
 }

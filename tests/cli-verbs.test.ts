@@ -20,7 +20,7 @@ import { command } from '../bin/pensmith.js';
 
 // WR-03: derived from the single-source-of-truth list. Length-locked to 17
 // here (UX-02's 16 plus `ack`) so a new verb is a deliberate change.
-const EXPECTED_16: readonly string[] = UX02_VERBS;
+const EXPECTED_VERBS: readonly string[] = UX02_VERBS;
 
 test('TIER-04: dispatcher registers exactly 17 verbs (UX-02 canonical 16 plus ack, runtime introspection)', () => {
   // WR-06: introspect the actual citty CommandDef instead of regex-scanning
@@ -32,7 +32,7 @@ test('TIER-04: dispatcher registers exactly 17 verbs (UX-02 canonical 16 plus ac
     `command.subCommands must be a Record, got ${typeof subCommands}`,
   );
   const registeredVerbs = Object.keys(subCommands as Record<string, unknown>).sort();
-  const expectedSorted = [...EXPECTED_16].sort();
+  const expectedSorted = [...EXPECTED_VERBS].sort();
   assert.deepEqual(
     registeredVerbs,
     expectedSorted,
@@ -69,7 +69,7 @@ test('TIER-04 preflight: workflows/*.md keys match dispatcher verbs', () => {
     return;
   }
   const workflowVerbs = files.map((f) => f.replace(/\.md$/, '')).sort();
-  const dispatcherVerbs = [...EXPECTED_16].sort();
+  const dispatcherVerbs = [...EXPECTED_VERBS].sort();
   assert.deepEqual(
     workflowVerbs,
     dispatcherVerbs,

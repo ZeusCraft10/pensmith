@@ -23,12 +23,8 @@
 //   - arXiv and PubMed fetchById (research candidates, not Pass 1) read a
 //     response as their search() does.
 
-import { test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
 import { _resetBucketsForTest } from '../../bin/lib/http.js';
 import { lookupDoi as crossrefLookup } from '../../bin/lib/sources/crossref.js';
 import { lookupDoi as doiOrgLookup } from '../../bin/lib/sources/doi-content.js';
@@ -36,45 +32,19 @@ import { lookupIsbn } from '../../bin/lib/sources/openlibrary.js';
 import { fetchById as arxivFetchById, lookupArxiv, search as arxivSearch } from '../../bin/lib/sources/arxiv.js';
 import { fetchById as pubmedFetchById, lookupPmid } from '../../bin/lib/sources/pubmed.js';
 import { pass1Verdict } from '../lib/bib-fixture.js';
+import { JSON_HEADERS, useMockRegistries } from '../lib/mock-registries.js';
 
-const ENV_KEYS = ['PENSMITH_TEST_CASSETTES', 'PENSMITH_OFFLINE', 'PENSMITH_CONTACT_EMAIL', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'HOME'];
-const savedEnv: Record<string, string | undefined> = {};
-let prevDispatcher: Dispatcher;
-let agent: MockAgent;
+const agent = useMockRegistries('pensmith-registry-lookups-');
 
 const CROSSREF_MESSAGE = JSON.stringify({
   status: 'ok',
   message: { DOI: '10.1234/polite', title: ['A Polite Request'], author: [{ family: 'Roe', given: 'Jane' }], issued: { 'date-parts': [[2020]] } },
 });
 
-beforeEach(() => {
-  for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
-  delete process.env['PENSMITH_TEST_CASSETTES'];
-  delete process.env['PENSMITH_OFFLINE'];
-  delete process.env['PENSMITH_CONTACT_EMAIL'];
-  // A fresh, empty HTTP cache, so nothing cached answers in place of a request.
-  const data = mkdtempSync(path.join(tmpdir(), 'pensmith-registry-lookups-'));
-  for (const k of ['XDG_DATA_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'HOME']) process.env[k] = data;
-  _resetBucketsForTest();
-  prevDispatcher = getGlobalDispatcher();
-  agent = new MockAgent();
-  agent.disableNetConnect();
-  setGlobalDispatcher(agent);
-});
-
-afterEach(async () => {
-  setGlobalDispatcher(prevDispatcher);
-  await agent.close();
-  for (const k of ENV_KEYS) {
-    if (savedEnv[k] === undefined) delete process.env[k];
-    else process.env[k] = savedEnv[k];
-  }
-});
-
 test('Crossref: the contact address goes as mailto when it is set', async () => {
   process.env['PENSMITH_CONTACT_EMAIL'] = 'author@example.org';
   const paths: string[] = [];
-  agent.get('https://api.crossref.org')
+  agent().get('https://api.crossref.org')
     .intercept({ path: (p) => { paths.push(p); return p.startsWith('/works/10.1234%2Fpolite'); }, method: 'GET' })
     .reply(200, CROSSREF_MESSAGE, { headers: { 'content-type': 'application/json' } });
   const r = await crossrefLookup('10.1234/polite');
@@ -84,7 +54,7 @@ test('Crossref: the contact address goes as mailto when it is set', async () => 
 
 test('Crossref: no mailto when no contact address is configured', async () => {
   const paths: string[] = [];
-  agent.get('https://api.crossref.org')
+  agent().get('https://api.crossref.org')
     .intercept({ path: (p) => { paths.push(p); return p.startsWith('/works/10.1234%2Fanonymous'); }, method: 'GET' })
     .reply(200, CROSSREF_MESSAGE, { headers: { 'content-type': 'application/json' } });
   const r = await crossrefLookup('10.1234/anonymous');
@@ -93,7 +63,7 @@ test('Crossref: no mailto when no contact address is configured', async () => {
 });
 
 test('Crossref: a 503 that outlasts the retries is unavailable, not not_found', { timeout: 60_000 }, async () => {
-  agent.get('https://api.crossref.org')
+  agent().get('https://api.crossref.org')
     .intercept({ path: (p) => p.startsWith('/works/10.1234%2Foutage'), method: 'GET' })
     .reply(503, 'Service Unavailable')
     .persist();
@@ -102,10 +72,10 @@ test('Crossref: a 503 that outlasts the retries is unavailable, not not_found', 
 });
 
 test('doi.org: a redirect to the agency metadata host is followed to the CSL-JSON record', async () => {
-  agent.get('https://doi.org')
+  agent().get('https://doi.org')
     .intercept({ path: '/10.5555/negotiated', method: 'GET' })
     .reply(302, '', { headers: { location: 'https://data.crosscite.org/10.5555%2Fnegotiated' } });
-  agent.get('https://data.crosscite.org')
+  agent().get('https://data.crosscite.org')
     .intercept({ path: '/10.5555%2Fnegotiated', method: 'GET' })
     .reply(200, JSON.stringify({ type: 'dataset', title: 'A Negotiated Record', author: [{ literal: 'Some Lab' }], issued: { 'date-parts': [[2021]] } }),
       { headers: { 'content-type': 'application/vnd.citationstyles.csl+json' } });
@@ -115,7 +85,7 @@ test('doi.org: a redirect to the agency metadata host is followed to the CSL-JSO
 });
 
 test('doi.org: a redirect to a landing page is not followed, and the DOI is not called unregistered', async () => {
-  agent.get('https://doi.org')
+  agent().get('https://doi.org')
     .intercept({ path: '/10.5555/landing', method: 'GET' })
     .reply(302, '', { headers: { location: 'https://publisher.example.com/article/123' } });
   // No interceptor for publisher.example.com: following the redirect would fail differently.
@@ -125,7 +95,7 @@ test('doi.org: a redirect to a landing page is not followed, and the DOI is not 
 });
 
 test('doi.org: a 404 from doi.org itself means the DOI was never registered', async () => {
-  agent.get('https://doi.org')
+  agent().get('https://doi.org')
     .intercept({ path: '/10.5555/never-registered', method: 'GET' })
     .reply(404, 'DOI Not Found');
   const r = await doiOrgLookup('10.5555/never-registered');
@@ -133,14 +103,14 @@ test('doi.org: a 404 from doi.org itself means the DOI was never registered', as
 });
 
 test('Open Library: a book it does not list is not_found, but not authoritatively', async () => {
-  agent.get('https://openlibrary.org')
+  agent().get('https://openlibrary.org')
     .intercept({ path: (p) => p.startsWith('/api/books?') && p.includes('9780306406157'), method: 'GET' })
     .reply(200, '{}', { headers: { 'content-type': 'application/json' } });
   assert.deepEqual(await lookupIsbn('9780306406157'), { kind: 'not_found', registry: 'Open Library', authoritative: false });
 });
 
 test('Pass 1: a valid ISBN Open Library does not list is UNRESOLVED, not FABRICATED', async () => {
-  agent.get('https://openlibrary.org')
+  agent().get('https://openlibrary.org')
     .intercept({ path: (p) => p.startsWith('/api/books?') && p.includes('9780306406157'), method: 'GET' })
     .reply(200, '{}', { headers: { 'content-type': 'application/json' } });
   const r = await pass1Verdict('@book{doe1990,\n  title = {An Unlisted Monograph},\n  author = {Doe, Jane},\n  year = {1990},\n  isbn = {978-0-306-40615-7}\n}\n');
@@ -153,7 +123,6 @@ test('Pass 1: a valid ISBN Open Library does not list is UNRESOLVED, not FABRICA
 // ---------------------------------------------------------------------------
 
 const ATOM = { 'content-type': 'application/atom+xml; charset=utf-8' };
-const JSON_HEADERS = { 'content-type': 'application/json' };
 // What an egress proxy or a refusing server sends instead of the registry's answer.
 const PLAIN = { 'content-type': 'text/plain; charset=utf-8' };
 
@@ -188,7 +157,7 @@ const arxivErrorFeed = (id: string): string => `<?xml version="1.0" encoding="UT
 
 /** Answer GET export.arxiv.org/api/query?id_list=<id> (and only that) with `status` and `body`. */
 function arxivAnswers(id: string, status: number, body: string, headers: Record<string, string> = ATOM): void {
-  agent.get('https://export.arxiv.org')
+  agent().get('https://export.arxiv.org')
     .intercept({ path: (p) => p === `/api/query?id_list=${encodeURIComponent(id)}`, method: 'GET' })
     .reply(status, body, { headers })
     .persist();
@@ -196,7 +165,7 @@ function arxivAnswers(id: string, status: number, body: string, headers: Record<
 
 /** Answer GET eutils esummary for `pmid` (and only that) with `status` and `body`. */
 function pubmedAnswers(pmid: string, status: number, body: string, headers: Record<string, string> = JSON_HEADERS): void {
-  agent.get('https://eutils.ncbi.nlm.nih.gov')
+  agent().get('https://eutils.ncbi.nlm.nih.gov')
     .intercept({
       path: (p) => p.startsWith('/entrez/eutils/esummary.fcgi?') && p.includes(`id=${pmid}&`),
       method: 'GET',
@@ -244,7 +213,7 @@ test('arXiv: search and fetchById do not read the error entry as a paper', async
   arxivAnswers('2501.9999y', 200, arxivErrorFeed('2501.9999y'));
   assert.equal(await arxivFetchById('2501.9999y'), null);
   _resetBucketsForTest();
-  agent.get('https://export.arxiv.org')
+  agent().get('https://export.arxiv.org')
     .intercept({ path: (p) => p.startsWith('/api/query?search_query='), method: 'GET' })
     .reply(200, arxivErrorFeed('bad'), { headers: ATOM });
   assert.deepEqual(await arxivSearch('tidal heating'), []);
@@ -287,7 +256,7 @@ test('Pass 1: an arXiv-only entry arXiv has no record of is FABRICATED', async (
 });
 
 test('Pass 1: an arXiv-only entry is UNRESOLVED, not FABRICATED, when arXiv does not answer', async () => {
-  agent.get('https://export.arxiv.org')
+  agent().get('https://export.arxiv.org')
     .intercept({ path: (p) => p.startsWith('/api/query?id_list='), method: 'GET' })
     .replyWithError(new Error('socket hang up'));
   const r = await pass1Verdict(arxivOnly('2501.99999'));
@@ -342,7 +311,7 @@ const pubmedNumericPubdate = (pmid: string): string => JSON.stringify({
 });
 
 test('Open Library: a 200 whose fields are the wrong type is unavailable, and Pass 1 says UNRESOLVED', async () => {
-  agent.get('https://openlibrary.org')
+  agent().get('https://openlibrary.org')
     .intercept({ path: (p) => p.startsWith('/api/books?') && p.includes('9780306406157'), method: 'GET' })
     .reply(200, OPEN_LIBRARY_MALFORMED, { headers: JSON_HEADERS })
     .persist();
@@ -387,7 +356,7 @@ const BOTH_WRONG = [
  * retracted. Each DOI it is asked about goes into `asked`.
  */
 function openAlexLists(asked: string[], retracted?: string): void {
-  agent.get('https://api.openalex.org')
+  agent().get('https://api.openalex.org')
     .intercept({ path: (p) => p.startsWith('/works/doi:'), method: 'GET' })
     .reply((opts) => {
       const doi = decodeURIComponent(new URL(String(opts.path), 'https://api.openalex.org').pathname.slice('/works/doi:'.length));
@@ -400,7 +369,7 @@ function openAlexLists(asked: string[], retracted?: string): void {
 
 /** Crossref answers `message` for `doi`. */
 function crossrefHolds(doi: string, message: Record<string, unknown>): void {
-  agent.get('https://api.crossref.org')
+  agent().get('https://api.crossref.org')
     .intercept({ path: (p) => p.toLowerCase().startsWith(`/works/${encodeURIComponent(doi).toLowerCase()}`), method: 'GET' })
     .reply(200, JSON.stringify({ status: 'ok', message }), { headers: JSON_HEADERS })
     .persist();
@@ -408,16 +377,16 @@ function crossrefHolds(doi: string, message: Record<string, unknown>): void {
 
 /** Crossref and DataCite have no record of `doi`; doi.org redirects to Crossref's CSL transform, which answers `csl`. */
 function onlyDoiOrgHolds(doi: string, csl: Record<string, unknown>): void {
-  const crossref = agent.get('https://api.crossref.org');
+  const crossref = agent().get('https://api.crossref.org');
   crossref.intercept({ path: (p) => p.startsWith(`/works/${encodeURIComponent(doi)}`), method: 'GET' }).reply(404, 'Resource not found.').persist();
   crossref.intercept({ path: `/v1/works/${doi}/transform`, method: 'GET' })
     .reply(200, JSON.stringify(csl), { headers: { 'content-type': 'application/vnd.citationstyles.csl+json' } })
     .persist();
-  agent.get('https://api.datacite.org')
+  agent().get('https://api.datacite.org')
     .intercept({ path: (p) => p.startsWith(`/dois/${encodeURIComponent(doi)}`), method: 'GET' })
     .reply(404, JSON.stringify({ errors: [{ status: '404', title: 'The resource you are looking for doesn\'t exist.' }] }), { headers: JSON_HEADERS })
     .persist();
-  agent.get('https://doi.org')
+  agent().get('https://doi.org')
     .intercept({ path: `/${doi}`, method: 'GET' })
     .reply(302, '', { headers: { location: `https://api.crossref.org/v1/works/${doi}/transform` } })
     .persist();

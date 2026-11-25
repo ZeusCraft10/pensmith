@@ -7,7 +7,8 @@
 // list. So Pass 1 compares the entry with the registry's record:
 //
 //   title    the same words in the same order, after markup, entities, case,
-//            punctuation, hyphenation and British/US spelling are set aside;
+//            punctuation, hyphenation and British/US spelling are set aside,
+//            and a "RETRACTED:" label a publisher put on either title;
 //            a missing subtitle on either side is fine; every number and roman
 //            numeral must match ("Part I" is not "Part II", "K-12" not "K-13");
 //            a stopword may be left out but not swapped for another ("to"
@@ -90,6 +91,21 @@ export function stripMarkup(s: string): string {
 
 /** `s` as plain text: markup removed, NFKC-normalized. */
 const plain = (s: string): string => nfkcNormalize(stripMarkup(s));
+
+/**
+ * "RETRACTED: …", "Retracted Article: …", "WITHDRAWN: …", in any case, after
+ * any markup is stripped, as Elsevier, Springer and others relabel a retracted
+ * work. A notice's own title ("Retraction: …", "Retraction notice to …") is
+ * not a label and does not match. bin/lib/verify/retraction.ts reads the label
+ * as a retraction.
+ */
+export const RETRACTION_LABEL = /^\s*(?:retracted|withdrawn)(?:\s+article)?\s*[:：]\s*/i;
+
+/** `title` without a leading retraction label, so the label is not read as a title mismatch. */
+export function withoutRetractionLabel(title: string): string {
+  const p = stripMarkup(title);
+  return RETRACTION_LABEL.test(p) ? p.replace(RETRACTION_LABEL, '') : title;
+}
 
 const GREEK: Readonly<Record<string, string>> = {
   α: 'alpha', β: 'beta', γ: 'gamma', δ: 'delta', ε: 'epsilon', ζ: 'zeta', η: 'eta', θ: 'theta',
@@ -527,11 +543,14 @@ const PREPRINT_VENUE = /\b(?:arxiv|biorxiv|medrxiv|chemrxiv|psyarxiv|ssrn|resear
 // ---------------------------------------------------------------------------
 
 /** Compare a bibliography entry with the record a registry returned for its identifier. */
-export function matchWork(claimed: ClaimedWork, record: WorkRecord): WorkMatch {
+export function matchWork(claimed: ClaimedWork, given: WorkRecord): WorkMatch {
   const problems: string[] = [];
   const notes: string[] = [];
+  // A "RETRACTED:" label a publisher put on the title is not part of it, on
+  // either side.
+  const record: WorkRecord = { ...given, title: withoutRetractionLabel(given.title) };
 
-  const title = matchTitle(claimed.title, record);
+  const title = matchTitle(withoutRetractionLabel(claimed.title), record);
   if (!title.ok) {
     const theirs = plain(wholeTitle(record));
     problems.push(`the title is not the one ${record.registry} gives ("${theirs}")`);

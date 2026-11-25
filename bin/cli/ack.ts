@@ -14,12 +14,12 @@
 import { defineCommand } from 'citty';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parseBibByCitekey, parseBibFieldsByCitekey } from '../lib/citations.js';
+import { parseBibForPass1 } from '../lib/verify/pass1.js';
 import { paperDir, sectionAcknowledgements, sectionVerification } from '../lib/paths.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { parseVerdictRowDetails } from '../lib/verify/verdict-rows.js';
-import { readAcknowledgements, recordAcknowledgement, workBinding } from '../lib/verify/acknowledgements.js';
+import { recordAcknowledgement, workBinding } from '../lib/verify/acknowledgements.js';
 
 /** Verdicts an acknowledgement of a retraction applies to (a second ack replaces the reason). */
 const ACKNOWLEDGEABLE = new Set(['RETRACTED', 'RETRACTED_ACKNOWLEDGED']);
@@ -69,8 +69,9 @@ export const ackCommand = defineCommand({
 
     const slug = resolveSectionSlug(process.cwd(), n, args.slug);
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
-    const bibText = existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '';
-    const entry = (await parseBibByCitekey<Record<string, unknown>>(bibText)).get(citekey);
+    // Read as Pass 1 reads it, so the acknowledgement binds the work Pass 1 checks.
+    const bib = await parseBibForPass1(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '');
+    const entry = bib.entries.get(citekey);
     if (!entry) return refuse(`[@${citekey}] is not in .paper/CITATIONS.bib, so there is no work to acknowledge.`);
 
     // Only a citation verify found RETRACTED in this section can be acknowledged.
@@ -87,15 +88,12 @@ export const ackCommand = defineCommand({
       );
     }
 
-    const binding = workBinding(entry, (await parseBibFieldsByCitekey(bibText)).get(citekey));
+    const binding = workBinding(entry, bib.fields.get(citekey));
     if (!binding) {
       return refuse(`[@${citekey}] has no DOI, arXiv ID, PMID or ISBN to bind the acknowledgement to — add one to its CITATIONS.bib entry.`);
     }
     const ackPath = sectionAcknowledgements(n, slug);
-    if (readAcknowledgements(ackPath).unreadable) {
-      return refuse(`${ackPath} could not be read; fix or remove it before adding to it.`);
-    }
-    await recordAcknowledgement(ackPath, {
+    const recorded = await recordAcknowledgement(ackPath, {
       kind: 'retracted',
       citekey,
       work: binding.work,
@@ -103,6 +101,7 @@ export const ackCommand = defineCommand({
       reason,
       acknowledged_at: new Date().toISOString(),
     });
+    if (!recorded) return refuse(`${ackPath} could not be read; fix or remove it before adding to it.`);
     process.stdout.write(
       `pensmith ack: recorded that section ${n} cites the retracted work [@${citekey}] (${binding.work}) knowingly, in ${ackPath}.\n` +
       `  Run \`pensmith verify ${n}\` to apply it; compile and done will still warn about it.\n`,

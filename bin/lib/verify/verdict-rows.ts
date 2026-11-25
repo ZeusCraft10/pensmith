@@ -97,6 +97,8 @@ export interface VerdictRow {
   verdict: string;
   /** Everything after the bold verdict, without its leading dash. */
   detail: string;
+  /** The detail without the scores before it (`titleJW=…, authorJW=… — `, `lev=… — `). */
+  reason: string;
   blocking: boolean;
 }
 
@@ -110,6 +112,9 @@ export interface VerdictRow {
 // advisory sections alone.
 const PASS3_ROW = /^\s*-\s*(.+?) \(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
 const PASS1_ROW = /^\s*-\s*(.+?):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
+// The `name=value` scores the renderers put before a row's reason, and the
+// dash after them.
+const ROW_SCORES = /^(?:\w+=[\d.]+(?:,\s*)?)+\s*—\s*/;
 
 /** Every Pass-1 and Pass-3 verdict row in `verificationMd`, in order. Safe on any string. */
 export function parseVerdictRowDetails(verificationMd: string): VerdictRow[] {
@@ -120,10 +125,12 @@ export function parseVerdictRowDetails(verificationMd: string): VerdictRow[] {
     const m = (quote !== -1 && (colon === -1 || quote < colon) ? PASS3_ROW.exec(line) : null) ?? PASS1_ROW.exec(line);
     if (!m) continue;
     const verdict = m[2]!;
+    const detail = m[3]!.replace(/^—\s*/, '').trim();
     out.push({
       citekey: m[1]!.trim(),
       verdict,
-      detail: m[3]!.replace(/^—\s*/, '').trim(),
+      detail,
+      reason: detail.replace(ROW_SCORES, ''),
       blocking: BLOCKING_VERDICTS.has(verdict),
     });
   }
@@ -180,10 +187,5 @@ export function verdictGate(verificationMd: string, where: string): { reasons: s
 export function citationWarnings(rows: readonly VerdictRow[], where: string): string[] {
   return rows
     .filter((r) => Object.hasOwn(WARNING_VERDICTS, r.verdict))
-    .map((r) => `${where}: ${describeVerdictRow(r)} ${WARNING_VERDICTS[r.verdict]} — ${rowReason(r.detail)}`);
-}
-
-/** A Pass-1 row's reason, without the match scores before it. */
-function rowReason(detail: string): string {
-  return detail.replace(/^titleJW=[\d.]+, authorJW=[\d.]+\s*—\s*/, '');
+    .map((r) => `${where}: ${describeVerdictRow(r)} ${WARNING_VERDICTS[r.verdict]} — ${r.reason}`);
 }

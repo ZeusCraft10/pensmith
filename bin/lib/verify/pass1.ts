@@ -38,7 +38,7 @@ import { parseBibByCitekey, parseBibFieldsByCitekey } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { lookupRetraction } from '../sources/openalex.js';
-import { describeSignal, recordRetraction, withoutRetractionLabel, type RetractionSignal } from './retraction.js';
+import { describeSignal, recordRetraction, type RetractionSignal } from './retraction.js';
 import { findRetractionAck, workBinding, type Acknowledgement } from './acknowledgements.js';
 import {
   citedKeys,
@@ -81,7 +81,7 @@ export interface Pass1Result {
 }
 
 /** A bibliography entry as citation-js reads it (CSL-JSON). */
-interface BibEntry extends Record<string, unknown> {
+export interface BibEntry extends Record<string, unknown> {
   id?: string;
   title?: string | string[];
   DOI?: string;
@@ -91,7 +91,7 @@ interface BibEntry extends Record<string, unknown> {
   note?: string;
 }
 
-interface Bib {
+export interface Bib {
   entries: Map<string, BibEntry>;
   /** Raw BibTeX fields, for the identifiers CSL has no slot for. */
   fields: Map<string, Record<string, string>>;
@@ -171,12 +171,7 @@ async function retractionOf(record: WorkRecord, id: WorkId): Promise<{ retracted
 /** The verdict for an entry claiming `work`, whose identifier `id` led to `record`. */
 async function verdictForRecord(ctx: CiteContext, work: ClaimedWork, id: WorkId, record: WorkRecord): Promise<Pass1Result> {
   const ck = ctx.ck;
-  // A "RETRACTED:" label a publisher put on the title is not part of it, on
-  // either side.
-  const m = matchWork(
-    { ...work, title: withoutRetractionLabel(work.title) },
-    { ...record, title: withoutRetractionLabel(record.title) },
-  );
+  const m = matchWork(work, record);
   const source = `the ${record.registry} record for ${id.shown}`;
   const notes = m.notes.length > 0 ? ` (${m.notes.join('; ')})` : '';
   // A registry may answer an alias DOI with the work's canonical DOI.
@@ -219,7 +214,8 @@ async function verdictForCitekey(
   }
   const ctx: CiteContext = {
     ck,
-    ack: findRetractionAck(opts.acknowledgements ?? [], ck, workBinding(claimed, fields)),
+    // The binding is worked out only when there is an acknowledgement to match.
+    ack: opts.acknowledgements?.length ? findRetractionAck(opts.acknowledgements, ck, workBinding(claimed, fields)) : undefined,
     section: opts.section,
   };
   // A retraction recorded when the source was added (the boolean on an
@@ -300,13 +296,21 @@ async function checkIdentifiers(
 }
 
 /**
+ * BibTeX `text` by citekey, as Pass 1 reads it: the CSL entries and the raw
+ * fields. `pensmith ack` reads the bib the same way, so the work an
+ * acknowledgement binds is the one Pass 1 matches it against.
+ */
+export async function parseBibForPass1(text: string): Promise<Bib> {
+  return { entries: await parseBibByCitekey<BibEntry>(text), fields: await parseBibFieldsByCitekey(text) };
+}
+
+/**
  * The bibliography at `citationsBibPath` by citekey. A file with no entries
  * (research found nothing yet) is an empty library, not an error: every key a
  * draft cites is then FABRICATED.
  */
-async function readBib(citationsBibPath: string): Promise<Bib> {
-  const text = readFileSync(citationsBibPath, 'utf8');
-  return { entries: await parseBibByCitekey<BibEntry>(text), fields: await parseBibFieldsByCitekey(text) };
+function readBib(citationsBibPath: string): Promise<Bib> {
+  return parseBibForPass1(readFileSync(citationsBibPath, 'utf8'));
 }
 
 const RAW_WHAT: Readonly<Record<RawCitationKind, string>> = {
