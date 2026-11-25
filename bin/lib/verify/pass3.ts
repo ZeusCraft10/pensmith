@@ -30,7 +30,8 @@ import { extractPdfText } from '../pdf-text.js';
 import { sources } from '../sources/index.js';
 import { fetch as httpFetch } from '../http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
-import { extractQuotes } from '../quote-extractor.js';
+import { extractQuotes, MIN_SHORT_WORDS, wordCount } from '../quote-extractor.js';
+import { sentenceEnds } from '../citation-grammar.js';
 import { NO_CITATION_KEY } from './verdict-rows.js';
 
 export type Pass3Verdict = 'OK' | 'NOT_FOUND' | 'PDF_UNAVAILABLE' | 'TEXT_UNAVAILABLE' | 'UNATTRIBUTED';
@@ -48,22 +49,54 @@ interface BibLike {
   DOI?: string;
 }
 
+/** The most source text an ellipsis in a short quotation may stand for. */
+export const MAX_ELIDED_CHARS = 150;
+
+// An ellipsis marking words left out: `...` (NFKC turns `…` into it) or `[...]`.
+const ELLIPSIS = /\[?\.{3,}\]?/;
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
- * Whether a short quotation appears word for word in `sourceText`, ignoring
- * case and Unicode compatibility forms. An ellipsis (`...`, `…`, `[...]`)
- * marks words left out, so the parts around it must appear in order.
+ * Whether a short quotation appears word for word in `sourceText`, as whole
+ * words, ignoring case and Unicode compatibility forms.
+ *
+ * An ellipsis (`...`, `…`, `[...]`) marks words left out of one sentence. The
+ * parts around it must appear in order, in the same sentence of the source,
+ * with at most MAX_ELIDED_CHARS characters between them; otherwise parts of two
+ * sentences far apart pass as one quotation that can say the opposite of
+ * either. Each part needs at least two words, since one word such as `is` is
+ * found almost anywhere, and the quotation needs MIN_SHORT_WORDS in all.
  */
 export function shortQuoteFound(quote: string, sourceText: string): boolean {
-  const source = nfkcNormalize(sourceText).toLowerCase();
-  // NFKC turns `…` into `...`.
-  const parts = nfkcNormalize(quote).toLowerCase().split(/\s*\[?\.{3,}\]?\s*/).filter((p) => p.length > 0);
-  let from = 0;
-  for (const part of parts) {
-    const at = source.indexOf(part, from);
-    if (at === -1) return false;
-    from = at + part.length;
-  }
-  return parts.length > 0;
+  const source = nfkcNormalize(sourceText);
+  // Punctuation the omission left next to an ellipsis is not part of the quote.
+  const parts = nfkcNormalize(quote).split(ELLIPSIS)
+    .map((p) => p.replace(/^[\s,;:.!?]+|[\s,;:.!?]+$/g, ''))
+    .filter((p) => wordCount(p) > 0);
+  if (parts.reduce((n, p) => n + wordCount(p), 0) < MIN_SHORT_WORDS) return false;
+  if (parts.length > 1 && parts.some((p) => wordCount(p) < 2)) return false;
+
+  const patterns = parts.map((p) => new RegExp(String.raw`(?<![\p{L}\p{N}])${escapeRe(p)}(?![\p{L}\p{N}])`, 'giu'));
+  const ends = sentenceEnds(source);
+  const sentenceEndIn = (a: number, b: number): boolean => ends.some((e) => e >= a && e < b);
+  // Part `i` at or after `from`; every later part close behind it in the same
+  // sentence. Each occurrence of the first part is tried in turn.
+  const matchFrom = (i: number, from: number): boolean => {
+    if (i === parts.length) return true;
+    const re = patterns[i]!;
+    re.lastIndex = from;
+    for (let m = re.exec(source); m; m = re.exec(source)) {
+      if (i > 0 && (m.index - from > MAX_ELIDED_CHARS || sentenceEndIn(from, m.index))) return false;
+      const at = m.index;
+      if (matchFrom(i + 1, at + m[0].length)) return true;
+      re.lastIndex = at + 1;
+    }
+    return false;
+  };
+  return matchFrom(0, 0);
 }
 
 /**
@@ -141,7 +174,11 @@ export async function runPass3(
         results.push({
           citekey: q.citekey, quoteSnippet: snippet,
           verdict: found ? 'OK' : 'NOT_FOUND', levRatio: found ? 1 : 0,
-          reason: found ? 'short quote found verbatim' : 'short quote not found verbatim in OA PDF',
+          reason: found ? 'short quote found verbatim'
+            : ELLIPSIS.test(nfkcNormalize(q.text))
+              ? `short quote not found verbatim in OA PDF — an ellipsis may leave out at most ${MAX_ELIDED_CHARS} ` +
+                'characters of one sentence, with two or more quoted words in each part'
+              : 'short quote not found verbatim in OA PDF',
         });
         continue;
       }

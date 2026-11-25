@@ -9,9 +9,10 @@
 // cluster cites. One of at least MIN_WORDS words is matched with the fuzzy
 // matcher; a shorter one (MIN_SHORT_WORDS or more) must appear exactly, since
 // a fuzzy threshold on a few words accepts a changed word. One or two quoted
-// words are usually a term, not a quotation, and are left alone. A quotation
-// of MIN_WORDS or more with no citation at all cannot be checked against
-// anything, so it is reported as unattributed and blocks.
+// words are usually a term, not a quotation, and are left alone. An ellipsis
+// is not a word. A quotation of MIN_WORDS or more with no citation at all
+// cannot be checked against anything, so it is reported as unattributed and
+// blocks.
 
 import { findQuotes } from './citation-grammar.js';
 
@@ -33,8 +34,9 @@ export const MIN_WORDS = 10;
 /** A shorter quotation of at least this many words is checked for an exact match. */
 export const MIN_SHORT_WORDS = 3;
 
-function wordCount(s: string): number {
-  return s.split(/\s+/).filter(Boolean).length;
+/** The words in `s`: an ellipsis (`...`, `…`, `[...]`) or a lone dash is not one. */
+export function wordCount(s: string): number {
+  return s.split(/\s+|\[?(?:\.{3,}|…)\]?/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
 }
 
 /**

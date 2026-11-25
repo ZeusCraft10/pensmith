@@ -290,6 +290,28 @@ const SENTENCE_END = /[.!?]["”’')\]]*(?=\s+[\p{Lu}\p{N}"“‘'[@])/gu;
 // A blank line, with LF or CRLF line endings (a draft edited on Windows).
 const BLANK_LINE = /\n[ \t\r]*\n/g;
 
+/**
+ * Whether the `.`, `!` or `?` at `at` ends a sentence. A full stop after an
+ * abbreviation or an initial does not; `from` bounds the word read before it.
+ */
+function endsSentence(text: string, from: number, at: number): boolean {
+  if (text[at] !== '.') return true;
+  const word = /([\p{L}.]+)$/u.exec(text.slice(from, at))?.[1] ?? '';
+  return word.length !== 1 && !ABBREVIATIONS.has(word.toLowerCase());
+}
+
+/**
+ * Offsets of the `.`, `!` or `?` that end each sentence of plain text, such as
+ * the text extracted from a source.
+ */
+export function sentenceEnds(text: string): number[] {
+  const out: number[] = [];
+  for (const m of text.matchAll(SENTENCE_END)) {
+    if (endsSentence(text, Math.max(0, m.index - 32), m.index)) out.push(m.index);
+  }
+  return out;
+}
+
 /** Offset of the paragraph that holds `at`: just after the last blank line before it. */
 function paragraphStart(md: string, at: number): number {
   let from = 0;
@@ -320,11 +342,7 @@ export function sentenceSpan(
   const para = md.slice(paraStart, paraEnd);
   for (const m of para.matchAll(SENTENCE_END)) {
     const at = paraStart + m.index;
-    if (masked(at)) continue;
-    if (md[at] === '.') {
-      const word = /([\p{L}.]+)$/u.exec(md.slice(paraStart, at))?.[1] ?? '';
-      if (word.length === 1 || ABBREVIATIONS.has(word.toLowerCase())) continue;
-    }
+    if (masked(at) || !endsSentence(md, paraStart, at)) continue;
     const boundary = at + m[0].length;
     if (boundary <= start) s = boundary;
     else if (at >= end) { e = boundary; break; }
