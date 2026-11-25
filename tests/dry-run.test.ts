@@ -138,6 +138,51 @@ function paperMidway(): string {
   return root;
 }
 
+const METHODS_DRAFT = 'We compare sediment cores from three estuaries.\n';
+
+/** paperMidway with section 2 drafted and verified too: ready to compile. */
+function paperReadyToCompile(): string {
+  const root = paperMidway();
+  const sdir = join(root, '.paper', 'sections', '02-methods');
+  writeFileSync(join(sdir, 'DRAFT.md'), METHODS_DRAFT);
+  writeFileSync(
+    join(sdir, 'PLAN.md'),
+    `---\nsection: 2\nslug: methods\ntitle: Methods\nstatus: verified\nassigned_sources: []\nverified_against_draft_hash: ${computeDraftHash(Buffer.from(METHODS_DRAFT), [])}\n---\n## Brief\n\nDescribe the methods.\n`,
+  );
+  writeFileSync(join(sdir, 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n\n## Pass-3\n');
+  return root;
+}
+
+/** paperReadyToCompile with a compiled .paper/DRAFT.md: ready for done. */
+function paperCompiled(): string {
+  const root = paperReadyToCompile();
+  writeFileSync(join(root, '.paper', 'DRAFT.md'), `# Tidal Energy\n\n${PLAN_VERIFIED_DRAFT}\n${METHODS_DRAFT}`);
+  return root;
+}
+
+/**
+ * The same command without --dry-run must change the fixture, or the dry-run
+ * case proves nothing: a step that would have written nothing anyway leaves
+ * the snapshot unchanged whether or not the dry run ran it. Recorded
+ * cassettes and placeholder generation keep this run off the network.
+ */
+async function assertRealRunWrites(args: string[], root: string): Promise<void> {
+  const home = mkdtempSync(join(tmpdir(), 'pensmith-dry-run-home-'));
+  const before = snapshot(root);
+  const listener = await countingListener();
+  try {
+    const r = await runCli(args, root, home, listener.url, { PENSMITH_TEST_CASSETTES: '1', PENSMITH_NO_LLM: '1' });
+    assert.equal(r.status, 0, `pensmith ${args.join(' ')} (no --dry-run): stdout=${r.stdout} stderr=${r.stderr}`);
+    assert.notDeepEqual(
+      snapshot(root),
+      before,
+      `pensmith ${args.join(' ')} (no --dry-run) wrote nothing, so its dry-run case is vacuous: stdout=${r.stdout} stderr=${r.stderr}`,
+    );
+  } finally {
+    await listener.close();
+  }
+}
+
 async function assertDryRunChangesNothing(
   args: string[],
   root: string,
@@ -178,12 +223,16 @@ test('dry run: `write` (all sections), `plan 2` and `verify 1` change nothing', 
   await assertDryRunChangesNothing(['verify', '1', '--dry-run'], root, [/\.paper\/sections\/01-intro\/VERIFICATION\.md/]);
 });
 
-test('dry run: research, outline, compile and done change nothing', async () => {
-  const root = paperMidway();
-  await assertDryRunChangesNothing(['research', '--dry-run', '--yolo'], root, [/LIBRARY\.json/]);
-  await assertDryRunChangesNothing(['outline', '--dry-run', '--yolo', '--force'], root, [/OUTLINE\.md/]);
-  await assertDryRunChangesNothing(['compile', '--dry-run'], root, [/\.paper\/DRAFT\.md/]);
-  await assertDryRunChangesNothing(['done', '--dry-run', '--yolo'], root, [/export/]);
+test('dry run: research, outline, compile and done change nothing where the real step would write', async () => {
+  // Each fixture is one the real step writes to; assertRealRunWrites shows it.
+  await assertRealRunWrites(['research', '--yolo'], paperMidway());
+  await assertDryRunChangesNothing(['research', '--dry-run', '--yolo'], paperMidway(), [/LIBRARY\.json/]);
+  await assertRealRunWrites(['outline', '--yolo', '--force'], paperMidway());
+  await assertDryRunChangesNothing(['outline', '--dry-run', '--yolo', '--force'], paperMidway(), [/OUTLINE\.md/]);
+  await assertRealRunWrites(['compile'], paperReadyToCompile());
+  await assertDryRunChangesNothing(['compile', '--dry-run'], paperReadyToCompile(), [/\.paper\/DRAFT\.md/]);
+  await assertRealRunWrites(['done', '--yolo', '--format', 'md'], paperCompiled());
+  await assertDryRunChangesNothing(['done', '--dry-run', '--yolo', '--format', 'md'], paperCompiled(), [/export/]);
 });
 
 test('dry run: bare `pensmith`, `next` and `resume` name the step the router would take', async () => {
