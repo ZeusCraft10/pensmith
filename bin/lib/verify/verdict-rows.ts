@@ -14,6 +14,9 @@
  *  not consulted (offline) — an unchecked citation never passes. */
 const BLOCKING_VERDICTS = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNRESOLVED']);
 
+/** The blocking verdicts as refusal text: `FABRICATED/MIS-CITED/NOT_FOUND/UNRESOLVED`. */
+export const BLOCKING_VERDICT_LIST = [...BLOCKING_VERDICTS].join('/');
+
 /**
  * Render a Pass-1 verdict row (writer side — verify.ts).
  *

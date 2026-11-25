@@ -4,7 +4,7 @@
 //
 // This module is the RIS sibling of bibtex-write.ts and rides the same two
 // chokepoints:
-//   1. citation-js — we import { Cite } from './citations.js' (the SOLE module
+//   1. citation-js — we call formatRis from './citations.js' (the SOLE module
 //      that imports the library directly). NEVER import 'citation-js' here —
 //      ESLint no-restricted-imports backstops the chokepoint (RESEARCH Pitfall
 //      8). The @citation-js/plugin-ris formatter is already bundled inside
@@ -32,7 +32,7 @@
 //     writeBibtex([], target)), so no downstream ENOENT just because a section
 //     happens to have zero citations.
 
-import { Cite } from './citations.js';
+import { formatRis } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { generateCitekey } from './citekey.js';
 import { suffixForCollision } from './bibtex-write.js';
@@ -135,14 +135,6 @@ export async function writeRis(
   // THE SOLE DIVERGENCE from writeBibtex: format 'ris' with spec:'new'
   // (RIS2001 — Pitfall 4) instead of 'bibtex'. RIS has no citekey header to
   // rewrite, so the bibtex post-process regex is dropped.
-  let ris = '';
-  if (entries.length > 0) {
-    const cite = new Cite(entries.map((e) => e.csl));
-    ris = (cite as { format: (...args: unknown[]) => string }).format('ris', {
-      spec: 'new',
-      format: 'text',
-    });
-  }
-
-  await atomicWriteFile(targetPath, ris);
+  // formatRis returns '' for no entries: a zero-length file.
+  await atomicWriteFile(targetPath, formatRis(entries.map((e) => e.csl)));
 }

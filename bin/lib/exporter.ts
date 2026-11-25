@@ -23,20 +23,20 @@
 
 import { execFile } from 'node:child_process';
 import * as fsp from 'node:fs/promises';
-import { existsSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path, { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
-import { PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, PDFStream } from 'pdf-lib';
-import { renderCitationsInDocument, SUPPORTED_STYLES, type RenderedCitations } from './citations.js';
-import { atomicWriteFile, makeTempDir, removePath } from './atomic-write.js';
-import { findCitations, type Citation } from './citation-grammar.js';
-import { cslHtmlToLatex, cslHtmlToMarkdown } from './csl-html.js';
+import { PDFDict, PDFDocument, PDFName, PDFRef, PDFStream } from 'pdf-lib';
+import { cslFilePath, renderCitationsInDocument, SUPPORTED_STYLES, type RenderedCitations } from './citations.js';
+import { atomicWriteFile, makeTempDir, removePath, type AtomicWriteOptions } from './atomic-write.js';
+import { citedKeys, findCitations, type Citation } from './citation-grammar.js';
+import { cslHtmlToLatex, cslHtmlToMarkdown, escapeLatexText } from './csl-html.js';
 import { readBibEntries, selectEntries, toBibtex, toRis, type CslEntry } from './export-bib.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
-import { homeDirs, paperDir } from './paths.js';
-import { describeFinding, scanExportFile, type TraceFormat } from './trace-scan.js';
+import { homeDirs, paperDir, realPath } from './paths.js';
+import { describeFinding, EPOCH_W3CDTF, scanExportBuffer, type TraceFormat } from './trace-scan.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,9 +58,9 @@ function findPkgRoot(start: string): string {
 
 const PKG_ROOT = findPkgRoot(__dirname);
 
-// Fixed epoch for ZIP entry timestamps and docx dates: no authoring time ships.
+// Fixed epoch for ZIP entry timestamps and docx dates (EPOCH_W3CDTF, shared
+// with the trace scanner): no authoring time ships.
 const EPOCH = new Date(0);
-const EPOCH_W3CDTF = '1970-01-01T00:00:00Z';
 
 // ---------------------------------------------------------------------------
 // runHumanizer — DONE-03 humanizer wrap (skip-clean, never-throws)
@@ -201,9 +201,9 @@ function elementAttrs(xml: string, tag: string): Array<Record<string, string>> {
  *   - _rels/.rels keeps only the main document and those two parts, and
  *     [Content_Types].xml is rewritten to match.
  * The document body is not touched: the author's words are the author's.
- * Idempotent.
+ * Idempotent. `opts` is passed to the write.
  */
-export async function zeroTracePatch(docxPath: string): Promise<void> {
+export async function zeroTracePatch(docxPath: string, opts: AtomicWriteOptions = {}): Promise<void> {
   const zip = await JSZip.loadAsync(await fsp.readFile(docxPath));
 
   const rels = (await zip.file('_rels/.rels')?.async('string')) ?? '';
@@ -253,7 +253,7 @@ export async function zeroTracePatch(docxPath: string): Promise<void> {
   );
 
   for (const entry of Object.values(zip.files)) entry.date = EPOCH;
-  await atomicWriteFile(docxPath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+  await atomicWriteFile(docxPath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }), opts);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,9 +267,9 @@ export async function zeroTracePatch(docxPath: string): Promise<void> {
  * Every XMP metadata stream is deleted as an object (pdf-lib writes every
  * object it holds, reachable or not), and /Metadata and /PTEX.* keys are
  * dropped from every dictionary. No byte-level edits: they would break the
- * cross-reference offsets. Idempotent.
+ * cross-reference offsets. Idempotent. `opts` is passed to the write.
  */
-export async function zeroTracePdf(pdfPath: string): Promise<void> {
+export async function zeroTracePdf(pdfPath: string, opts: AtomicWriteOptions = {}): Promise<void> {
   const pdf = await PDFDocument.load(await fsp.readFile(pdfPath), { updateMetadata: false });
   const ctx = pdf.context;
 
@@ -279,7 +279,8 @@ export async function zeroTracePdf(pdfPath: string): Promise<void> {
 
   const metadataStreams: PDFRef[] = [];
   for (const [ref, obj] of ctx.enumerateIndirectObjects()) {
-    const dict = obj instanceof PDFDict ? obj : obj instanceof PDFStream || obj instanceof PDFRawStream ? obj.dict : null;
+    // Every stream class (PDFRawStream, PDFContentStream, ...) extends PDFStream.
+    const dict = obj instanceof PDFDict ? obj : obj instanceof PDFStream ? obj.dict : null;
     if (!dict) continue;
     if (dict.get(PDFName.of('Type')) === PDFName.of('Metadata')) metadataStreams.push(ref);
     for (const key of dict.keys()) {
@@ -292,7 +293,7 @@ export async function zeroTracePdf(pdfPath: string): Promise<void> {
 
   // Without object streams every dictionary is plain text in the file, so the
   // trace scan (and anyone auditing the file) can read it.
-  await atomicWriteFile(pdfPath, Buffer.from(await pdf.save({ updateFieldAppearances: false, useObjectStreams: false })));
+  await atomicWriteFile(pdfPath, Buffer.from(await pdf.save({ updateFieldAppearances: false, useObjectStreams: false })), opts);
 }
 
 // ---------------------------------------------------------------------------
@@ -373,17 +374,36 @@ function markCitations(md: string, cites: readonly Citation[], rendered: Rendere
 interface OfflineDoc {
   marked: string;
   rendered: RenderedCitations | null;
-  heading: string;
 }
 
 function prepareOffline(md: string, cites: readonly Citation[], entries: CslEntry[], style: string): OfflineDoc {
-  if (cites.length === 0) return { marked: md, rendered: null, heading: '' };
+  if (cites.length === 0) return { marked: md, rendered: null };
   const rendered = renderCitationsInDocument(entries, style, cites);
   let marked = markCitations(md, cites, rendered).replace(/\s+$/, '');
   if (rendered.bibliography.length > 0) {
     marked += `\n\n## ${referencesHeading(style)}\n\n${rendered.bibliography.map((_, j) => REF(j)).join('\n\n')}`;
   }
-  return { marked: `${marked}\n`, rendered, heading: referencesHeading(style) };
+  return { marked: `${marked}\n`, rendered };
+}
+
+/**
+ * `text` with each marker filled in: citations and reference entries through
+ * `conv`, notes through `note` (which gets the citation's index).
+ */
+function fillMarkers(
+  text: string,
+  r: RenderedCitations,
+  conv: (html: string) => string,
+  note: (i: number) => string,
+): string {
+  return text.replace(SENTINEL_RE, (_m, c?: string, n?: string, ref?: string) => {
+    if (c !== undefined) {
+      const i = Number(c);
+      return conv(r.noteStyle ? (r.inline[i] ?? '') : (r.citations[i] ?? ''));
+    }
+    if (n !== undefined) return note(Number(n));
+    return conv(r.bibliography[Number(ref)] ?? '');
+  });
 }
 
 /** A note is a sentence: its first letter is a capital ("See", not "see"). Skips leading tags. */
@@ -405,26 +425,10 @@ function renderMarkdown(doc: OfflineDoc): string {
   // In a note style every citation is a note, numbered in order around the
   // author's own footnotes.
   const labels = r.noteStyle ? freeNoteLabels(doc.marked, r.citations.length) : [];
-  const body = doc.marked.replace(SENTINEL_RE, (_m, c?: string, n?: string, ref?: string) => {
-    if (c !== undefined) {
-      const i = Number(c);
-      return cslHtmlToMarkdown(r.noteStyle ? (r.inline[i] ?? '') : (r.citations[i] ?? ''));
-    }
-    if (n !== undefined) return `[^${labels[Number(n)]}]`;
-    return cslHtmlToMarkdown(r.bibliography[Number(ref)] ?? '');
-  });
+  const body = fillMarkers(doc.marked, r, cslHtmlToMarkdown, (i) => `[^${labels[i]}]`);
   if (!r.noteStyle) return body;
   const notes = r.citations.map((html, i) => `[^${labels[i]}]: ${cslHtmlToMarkdown(capitalize(html))}`);
   return `${body.replace(/\s+$/, '')}\n\n${notes.join('\n\n')}\n`;
-}
-
-/** Escape LaTeX's special characters in prose (backslash first). */
-function escapeLatex(s: string): string {
-  return s
-    .replace(/\\/g, '\\textbackslash{}')
-    .replace(/([&%$#_{}])/g, '\\$1')
-    .replace(/~/g, '\\textasciitilde{}')
-    .replace(/\^/g, '\\textasciicircum{}');
 }
 
 /**
@@ -440,7 +444,7 @@ function renderLatex(doc: OfflineDoc): string {
   let para: string[] = [];
   const flush = (): void => {
     if (para.length > 0) {
-      body.push(escapeLatex(para.join(' ').trim()));
+      body.push(escapeLatexText(para.join(' ').trim()));
       para = [];
     }
   };
@@ -449,7 +453,7 @@ function renderLatex(doc: OfflineDoc): string {
     const h = /^(#{1,3})\s+(.*)$/.exec(line);
     if (h) {
       flush();
-      const text = escapeLatex(h[2]!.trim());
+      const text = escapeLatexText(h[2]!.trim());
       if (h[1] === '#' && !title) title = text;
       else if (h[1] === '###') body.push(`\\subsection{${text}}`);
       else body.push(`\\section{${text}}`);
@@ -462,16 +466,11 @@ function renderLatex(doc: OfflineDoc): string {
   flush();
 
   const r = doc.rendered;
-  const latex = (html: string): string => cslHtmlToLatex(html, escapeLatex);
-  const text = body.join('\n\n').replace(SENTINEL_RE, (_m, c?: string, n?: string, ref?: string) => {
-    if (!r) return '';
-    if (c !== undefined) {
-      const i = Number(c);
-      return latex(r.noteStyle ? (r.inline[i] ?? '') : (r.citations[i] ?? ''));
-    }
-    if (n !== undefined) return `\\footnote{${latex(capitalize(r.citations[Number(n)] ?? ''))}}`;
-    return latex(r.bibliography[Number(ref)] ?? '');
-  });
+  const latex = (html: string): string => cslHtmlToLatex(html, escapeLatexText);
+  const joined = body.join('\n\n');
+  const text = r
+    ? fillMarkers(joined, r, latex, (i) => `\\footnote{${latex(capitalize(r.citations[i] ?? ''))}}`)
+    : joined.replace(SENTINEL_RE, '');
 
   const preamble = ['\\documentclass{article}', '\\usepackage[utf8]{inputenc}', '\\usepackage[T1]{fontenc}'];
   if (title) preamble.push(`\\title{${title}}`, '\\author{}', '\\date{}');
@@ -483,6 +482,10 @@ function renderLatex(doc: OfflineDoc): string {
 // ---------------------------------------------------------------------------
 // Pandoc
 // ---------------------------------------------------------------------------
+
+// Writes into the staging folder skip fsync: the folder is deleted when the
+// export ends, and only the copies in the export folder need to be durable.
+const STAGED: AtomicWriteOptions = { fsync: false };
 
 interface PandocFailure {
   code?: string | number;
@@ -537,7 +540,7 @@ async function pandocExport(
 ): Promise<string> {
   let manuscript = escapeUncited(md, ignored).replace(/\s+$/, '');
   if (cites.length > 0) manuscript += `\n\n## ${referencesHeading(style)}\n\n::: {#refs}\n:::`;
-  await atomicWriteFile(join(stage, 'manuscript.md'), `${manuscript}\n`);
+  await atomicWriteFile(join(stage, 'manuscript.md'), `${manuscript}\n`, STAGED);
 
   const ext = format === 'latex' ? 'tex' : format;
   const output = `${stem}.${ext}`;
@@ -554,10 +557,7 @@ async function pandocExport(
   ];
   if (format === 'latex') args.push('--standalone');
   if (cites.length > 0) {
-    await atomicWriteFile(
-      join(stage, 'style.csl'),
-      await fsp.readFile(path.join(PKG_ROOT, 'templates', 'citation-styles', `${style}.csl`)),
-    );
+    await atomicWriteFile(join(stage, 'style.csl'), await fsp.readFile(cslFilePath(style)), STAGED);
     args.push('--citeproc', '--csl', 'style.csl', '--bibliography', 'CITATIONS.bib');
   }
 
@@ -569,18 +569,18 @@ async function pandocExport(
 
   const outPath = join(stage, output);
   try {
-    if (format === 'docx') await zeroTracePatch(outPath);
-    else if (format === 'pdf') await zeroTracePdf(outPath);
+    if (format === 'docx') await zeroTracePatch(outPath, STAGED);
+    else if (format === 'pdf') await zeroTracePdf(outPath, STAGED);
     else {
       // Pandoc's LaTeX template signs the PDF it will make: pdfcreator={LaTeX via pandoc}.
       const tex = await fsp.readFile(outPath, 'utf8');
-      await atomicWriteFile(outPath, tex.replace(/pdfcreator=\{LaTeX via pandoc\}/g, 'pdfcreator={}'));
+      await atomicWriteFile(outPath, tex.replace(/pdfcreator=\{LaTeX via pandoc\}/g, 'pdfcreator={}'), STAGED);
     }
   } catch (err) {
     throw new ExportError('tool-failed', `Could not remove the document metadata: ${err instanceof Error ? err.message : String(err)}`);
   }
-  await removePath(join(stage, 'manuscript.md'));
-  await removePath(join(stage, 'style.csl'));
+  // manuscript.md and style.csl stay behind: only the files exportDraft lists
+  // ship, and the staging folder is removed when the export ends.
   return outPath;
 }
 
@@ -588,7 +588,20 @@ async function pandocExport(
 // exportDraft
 // ---------------------------------------------------------------------------
 
-export type ExportFormat = 'docx' | 'pdf' | 'latex' | 'md';
+export const EXPORT_FORMATS = ['docx', 'pdf', 'latex', 'md'] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/**
+ * Why `format` cannot be made on this machine, and what to install, or null
+ * when it can: a docx or pdf needs Pandoc (and a pdf a TeX engine too).
+ */
+export function formatUnavailable(format: ExportFormat, pandocPresent: boolean): { reason: string; remedy: string } | null {
+  if ((format !== 'docx' && format !== 'pdf') || pandocPresent) return null;
+  return {
+    reason: `Pandoc is not installed, so a .${format} cannot be made.`,
+    remedy: `Install Pandoc (https://pandoc.org/installing.html)${format === 'pdf' ? ' and a TeX engine' : ''}, or export with --format md.`,
+  };
+}
 
 export interface ExportOptions {
   /** The manuscript to export (the compiled DRAFT.md or the humanized FINAL.md). */
@@ -616,16 +629,6 @@ export interface ExportResult {
 }
 
 const DELIVERABLE_EXTS = ['md', 'docx', 'pdf', 'tex'];
-
-/** `p` resolved, through symlinks where it exists, so two spellings of one folder compare equal. */
-function realPath(p: string): string {
-  const abs = path.resolve(p);
-  try {
-    return realpathSync.native(abs);
-  } catch {
-    return abs;
-  }
-}
 
 function traceFormat(file: string): TraceFormat {
   const ext = extname(file).slice(1);
@@ -673,30 +676,26 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     }
   }
   const known = new Set(entries.map((e) => e.id));
-  const unknownCited = [...new Set(all.filter((c) => !c.narrative).flatMap((c) => c.items.map((i) => i.key)).filter((k) => !known.has(k)))];
+  const unknownCited = citedKeys(all.filter((c) => !c.narrative)).filter((k) => !known.has(k));
   if (unknownCited.length > 0) {
     throw new ExportError('unresolved-citation', 'The paper cites works that are not in CITATIONS.bib.', unknownCited);
   }
   const cites = all.filter((c) => !c.narrative || known.has(c.items[0]!.key));
   const ignored = all.filter((c) => c.narrative && !known.has(c.items[0]!.key));
-  const citedKeys = [...new Set(cites.flatMap((c) => c.items.map((i) => i.key)))];
-  const { entries: exported } = selectEntries(entries, citedKeys);
+  const keys = citedKeys(cites);
+  const { entries: exported } = selectEntries(entries, keys);
 
-  const pandoc = opts.pandocPresent ?? isPandocPresent();
-  if ((format === 'docx' || format === 'pdf') && !pandoc) {
-    throw new ExportError(
-      'missing-tool',
-      `Pandoc is not installed, so a .${format} cannot be made. Install Pandoc (https://pandoc.org/installing.html)` +
-        `${format === 'pdf' ? ' and a TeX engine' : ''}, or export with --format md.`,
-    );
-  }
+  // A Markdown export never needs Pandoc, so it is not probed for.
+  const pandoc = format === 'md' ? false : (opts.pandocPresent ?? isPandocPresent());
+  const unavailable = formatUnavailable(format, pandoc);
+  if (unavailable) throw new ExportError('missing-tool', `${unavailable.reason} ${unavailable.remedy}`);
 
   const stage = await makeTempDir(paper, '.export-');
   try {
     const files: string[] = [];
     if (exported.length > 0) {
-      await atomicWriteFile(join(stage, 'CITATIONS.bib'), toBibtex(exported));
-      await atomicWriteFile(join(stage, 'CITATIONS.ris'), toRis(exported));
+      await atomicWriteFile(join(stage, 'CITATIONS.bib'), toBibtex(exported), STAGED);
+      await atomicWriteFile(join(stage, 'CITATIONS.ris'), toRis(exported), STAGED);
       files.push(join(stage, 'CITATIONS.bib'), join(stage, 'CITATIONS.ris'));
     }
 
@@ -704,24 +703,27 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     let pandocUsed = false;
     if (format === 'md') {
       outputFile = join(stage, `${stem}.md`);
-      await atomicWriteFile(outputFile, renderMarkdown(prepareOffline(md, cites, exported, style)));
+      await atomicWriteFile(outputFile, renderMarkdown(prepareOffline(md, cites, exported, style)), STAGED);
     } else if (format === 'latex' && !pandoc) {
       outputFile = join(stage, `${stem}.tex`);
-      await atomicWriteFile(outputFile, renderLatex(prepareOffline(md, cites, exported, style)));
+      await atomicWriteFile(outputFile, renderLatex(prepareOffline(md, cites, exported, style)), STAGED);
     } else {
       outputFile = await pandocExport(stage, stem, md, cites, ignored, style, format);
       pandocUsed = true;
     }
     files.push(outputFile);
 
-    // The last gate: every file that would ship is scanned.
+    // The last gate: every file that would ship is scanned, and the bytes
+    // scanned are the bytes that ship.
     const ctx = {
       authorText: md,
       bibliographicText: JSON.stringify(exported),
       sensitivePaths: [...homeDirs(), paper, path.resolve(opts.paperRoot ?? process.cwd()), PKG_ROOT, tmpdir(), stage],
     };
-    const findings = [];
-    for (const f of files) findings.push(...(await scanExportFile(f, traceFormat(f), ctx)));
+    const bytes = await Promise.all(files.map((f) => fsp.readFile(f)));
+    const findings = (
+      await Promise.all(files.map((f, i) => scanExportBuffer(bytes[i]!, basename(f), traceFormat(f), ctx)))
+    ).flat();
     if (findings.length > 0) {
       throw new ExportError(
         'trace-found',
@@ -731,27 +733,21 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     }
 
     // Replace the previous export: no stale file from an earlier run stays.
+    // Every old file is removed before any new one is written.
     await fsp.mkdir(exportDir, { recursive: true });
-    for (const s of new Set(['DRAFT', 'FINAL', stem])) {
-      for (const ext of DELIVERABLE_EXTS) await removePath(join(exportDir, `${s}.${ext}`));
-    }
-    await removePath(join(exportDir, 'CITATIONS.bib'));
-    await removePath(join(exportDir, 'CITATIONS.ris'));
+    const stale = [...new Set(['DRAFT', 'FINAL', stem])].flatMap((s) => DELIVERABLE_EXTS.map((ext) => `${s}.${ext}`));
+    await Promise.all([...stale, 'CITATIONS.bib', 'CITATIONS.ris'].map((name) => removePath(join(exportDir, name))));
     // Copied rather than renamed: the export folder may be on another disk.
-    const published = new Map<string, string>();
-    for (const f of files) {
-      const dest = join(exportDir, basename(f));
-      await atomicWriteFile(dest, await fsp.readFile(f));
-      published.set(basename(f), dest);
-    }
+    await Promise.all(files.map((f, i) => atomicWriteFile(join(exportDir, basename(f)), bytes[i]!)));
 
     return {
-      outputPath: published.get(basename(outputFile))!,
+      outputPath: join(exportDir, basename(outputFile)),
       format,
       pandocUsed,
-      ...(published.has('CITATIONS.bib') ? { bibPath: published.get('CITATIONS.bib')! } : {}),
-      ...(published.has('CITATIONS.ris') ? { risPath: published.get('CITATIONS.ris')! } : {}),
-      citedKeys,
+      ...(exported.length > 0
+        ? { bibPath: join(exportDir, 'CITATIONS.bib'), risPath: join(exportDir, 'CITATIONS.ris') }
+        : {}),
+      citedKeys: keys,
     };
   } finally {
     await removePath(stage);

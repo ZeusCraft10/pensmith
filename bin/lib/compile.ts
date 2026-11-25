@@ -61,7 +61,7 @@ import {
   type StalenessEntry,
 } from './compile-report.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
-import { parseVerdictRows } from './verify/verdict-rows.js';
+import { BLOCKING_VERDICT_LIST, parseVerdictRows } from './verify/verdict-rows.js';
 import { isPlaceholderText } from './placeholder.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
@@ -355,7 +355,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
       // Refuse-gate (COMP-01 / GATE-02): any failing verdict blocks.
       for (const ck of parseVerdictRows(verificationMd)) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): citation [@${ck}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND/UNRESOLVED)`);
+        refuseReasons.push(`section ${os.n} (${os.slug}): citation [@${ck}] has a blocking verdict (${BLOCKING_VERDICT_LIST})`);
       }
 
       // Staleness (COMP-01 / D-08): recompute the per-section hash.
@@ -477,9 +477,10 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     // Build the compiled manuscript (outline order, one blank line between):
     // the paper title, then each section under its outline title.
     const title = outline.paper_title.trim();
-    let cursor = title ? `# ${title}\n\n`.length : 0;
+    const head = title ? `# ${title}\n\n` : '';
+    let cursor = head.length;
     const spans: SectionSpan[] = [];
-    const pieces: string[] = title ? [`# ${title}\n\n`] : [];
+    const pieces: string[] = [head];
     for (let i = 0; i < loaded.length; i += 1) {
       const piece = withSectionHeading(normalizeTrailingNewline(drafts[i] ?? ''), loaded[i]!.outline.title);
       const start = cursor;

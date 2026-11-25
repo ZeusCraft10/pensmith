@@ -21,6 +21,7 @@
 //   one of these sync roots.
 
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -121,6 +122,20 @@ export function homeDirs(env: NodeJS.ProcessEnv = process.env): string[] {
     // no user database entry for this uid
   }
   return [...out];
+}
+
+/**
+ * `p` made absolute and, where it exists, resolved through symlinks, so two
+ * spellings of one file or folder compare equal. A path that does not exist
+ * comes back absolute only.
+ */
+export function realPath(p: string): string {
+  const abs = path.resolve(p);
+  try {
+    return realpathSync.native(abs);
+  } catch {
+    return abs;
+  }
 }
 
 /**

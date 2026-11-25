@@ -78,6 +78,11 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Each term as the pattern that reads it at the start of a locator, compiled once.
+const LOCATOR_TERM_RES: ReadonlyArray<readonly [RegExp, string]> = LOCATOR_TERMS.map(
+  ([term, label]) => [new RegExp(`^${escapeRe(term)}(?=\\s|\\d|$)\\s*`, 'iu'), label] as const,
+);
+
 /** Split `rest` (the text after a key) into locator, label and suffix. */
 export function parseLocator(rest: string): Pick<CiteItem, 'locator' | 'label' | 'suffix'> {
   const comma = /^\s*,/.test(rest);
@@ -114,8 +119,7 @@ export function parseLocator(rest: string): Pick<CiteItem, 'locator' | 'label' |
 }
 
 function splitLabel(s: string): { label?: string; value: string; remainder: string } {
-  for (const [term, label] of LOCATOR_TERMS) {
-    const re = new RegExp(`^${escapeRe(term)}(?=\\s|\\d|$)\\s*`, 'iu');
+  for (const [re, label] of LOCATOR_TERM_RES) {
     const m = re.exec(s);
     if (!m) continue;
     const afterTerm = s.slice(m[0].length);
@@ -215,9 +219,9 @@ export function findCitations(md: string): Citation[] {
   return out.sort((a, b) => a.start - b.start);
 }
 
-/** Keys cited anywhere in `md`, deduplicated in first-appearance order. */
-export function citedKeys(md: string): string[] {
+/** The keys `cites` name, deduplicated in first-appearance order. */
+export function citedKeys(cites: readonly Citation[]): string[] {
   const seen = new Set<string>();
-  for (const c of findCitations(md)) for (const it of c.items) seen.add(it.key);
+  for (const c of cites) for (const it of c.items) seen.add(it.key);
   return [...seen];
 }

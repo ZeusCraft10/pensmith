@@ -33,7 +33,7 @@ test('grammar: narrative citations, with and without a locator', () => {
 });
 
 test('grammar: keys follow Pandoc (internal punctuation, any case); trailing punctuation is not part of a key', () => {
-  assert.deepEqual(citedKeys('[@Vaswani2017:attn.v2] and @doe99. Also [@{weird key}].'), ['Vaswani2017:attn.v2', 'doe99', 'weird key']);
+  assert.deepEqual(citedKeys(findCitations('[@Vaswani2017:attn.v2] and @doe99. Also [@{weird key}].')), ['Vaswani2017:attn.v2', 'doe99', 'weird key']);
 });
 
 test('grammar: emails and code are not citations; escaped, link and mixed brackets are not clusters', () => {

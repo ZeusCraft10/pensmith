@@ -9,7 +9,7 @@
 // (verification timestamps, the RETRACTED note) and free-text fields such as
 // notes and abstracts never leave the project.
 
-import { Cite, formatBibtex, parseBib } from './citations.js';
+import { formatBibtex, formatRis, parseBib } from './citations.js';
 
 export type CslEntry = Record<string, unknown> & { id: string };
 
@@ -64,12 +64,7 @@ export function toBibtex(entries: readonly CslEntry[]): string {
 
 /** RIS for `entries`. Each record carries its citekey (ID) and DOI (DO). */
 export function toRis(entries: readonly CslEntry[]): string {
-  if (entries.length === 0) return '';
-  const cite = new Cite(entries.map((e) => ({ ...e })));
-  const ris = (cite as unknown as { format: (n: string, o: Record<string, unknown>) => string }).format('ris', {
-    spec: 'new',
-    format: 'text',
-  });
+  const ris = formatRis(entries);
   // citation-js leaves DO out of some record types; a reader needs the DOI.
   const doiById = new Map(entries.map((e) => [e.id, typeof e['DOI'] === 'string' ? (e['DOI'] as string) : '']));
   return ris

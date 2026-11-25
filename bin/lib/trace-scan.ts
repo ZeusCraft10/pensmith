@@ -11,12 +11,15 @@
 // also appears in the author's manuscript (or, for words, in the titles and
 // names of the cited works) is allowed. Metadata parts get no such allowance.
 
-import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import JSZip from 'jszip';
-import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFRawStream, PDFStream, PDFString } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFStream, PDFString } from 'pdf-lib';
+import { realPath } from './paths.js';
+
+/** The one timestamp an exported docx carries (the scrubber writes it, the scanner allows it). */
+export const EPOCH_W3CDTF = '1970-01-01T00:00:00Z';
 
 export type TraceFormat = 'docx' | 'pdf' | 'latex' | 'md' | 'bib' | 'ris';
 
@@ -72,6 +75,8 @@ const PATH_PATTERNS: readonly Pattern[] = [
   { what: 'file URL', re: new RegExp(String.raw`\bfile:/{2,3}${PATH_TAIL}`, 'gi'), kind: 'path' },
 ];
 
+const BASE_PATTERNS: readonly Pattern[] = [...WORD_PATTERNS, ...PATH_PATTERNS];
+
 // TeX and PDF tools sign their output; none of it belongs in the deliverable.
 const PDF_STAMPS: readonly Pattern[] = [
   { what: 'PDF producer stamp', re: /This is (?:pdf|lua|xe|e-)?TeX/gi, kind: 'word' },
@@ -90,15 +95,8 @@ function shorten(s: string): string {
 
 function pathVariants(p: string): string[] {
   const out = new Set<string>();
-  const resolved = path.resolve(p);
   // A tool may write the real path (macOS's /var/folders is /private/var/folders).
-  let real = resolved;
-  try {
-    real = realpathSync.native(resolved);
-  } catch {
-    // the path does not exist (any more)
-  }
-  for (const abs of new Set([resolved, real])) {
+  for (const abs of new Set([path.resolve(p), realPath(p)])) {
     const forward = abs.replace(/\\/g, '/');
     const back = abs.replace(/\//g, '\\');
     for (const v of [abs, forward, back, back.replace(/\\/g, '\\\\')]) out.add(v);
@@ -117,7 +115,8 @@ function sensitiveNeedles(paths: readonly string[] | undefined): string[] {
   for (const p of paths ?? []) {
     if (!p) continue;
     for (const v of pathVariants(p)) {
-      if (v.replace(/[\\/]+$/, '').length >= 5) out.add(v.replace(/[\\/]+$/, ''));
+      const trimmed = v.replace(/[\\/]+$/, '');
+      if (trimmed.length >= 5) out.add(trimmed);
     }
   }
   return [...out];
@@ -128,11 +127,28 @@ function comparable(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ');
 }
 
-function excused(match: string, kind: Pattern['kind'], ctx: TraceScanContext, strict: boolean): boolean {
+/** A scan context with everything that does not change between texts worked out once. */
+interface Prepared {
+  /** The author's text, comparable; null when there is none. */
+  author: string | null;
+  /** The bibliographic text, comparable; null when there is none. */
+  bibliographic: string | null;
+  needles: string[];
+}
+
+function prepare(ctx: TraceScanContext): Prepared {
+  return {
+    author: ctx.authorText ? comparable(ctx.authorText) : null,
+    bibliographic: ctx.bibliographicText ? comparable(ctx.bibliographicText) : null,
+    needles: sensitiveNeedles(ctx.sensitivePaths),
+  };
+}
+
+function excused(match: string, kind: Pattern['kind'], prep: Prepared, strict: boolean): boolean {
   if (strict) return false;
   const m = comparable(match);
-  if (ctx.authorText && comparable(ctx.authorText).includes(m)) return true;
-  return kind === 'word' && Boolean(ctx.bibliographicText && comparable(ctx.bibliographicText).includes(m));
+  if (prep.author !== null && prep.author.includes(m)) return true;
+  return kind === 'word' && prep.bibliographic !== null && prep.bibliographic.includes(m);
 }
 
 // A character that continues a file or folder name, or a host name before a path.
@@ -174,18 +190,28 @@ function containsPath(hay: string, needle: string): boolean {
 export function scanText(
   text: string,
   ctx: TraceScanContext,
-  opts: { strict?: boolean; extra?: readonly Pattern[] } = {},
+  opts: ScanOptions = {},
 ): Array<{ what: string; match: string }> {
+  return scanPrepared(text, prepare(ctx), opts);
+}
+
+interface ScanOptions {
+  strict?: boolean;
+  extra?: readonly Pattern[];
+}
+
+function scanPrepared(text: string, prep: Prepared, opts: ScanOptions = {}): Array<{ what: string; match: string }> {
   const found: Array<{ what: string; match: string }> = [];
   const strict = opts.strict === true;
-  for (const p of [...WORD_PATTERNS, ...PATH_PATTERNS, ...(opts.extra ?? [])]) {
-    for (const m of text.matchAll(new RegExp(p.re.source, p.re.flags))) {
-      if (!excused(m[0], p.kind, ctx, strict)) found.push({ what: p.what, match: shorten(m[0]) });
+  // Every pattern has the g flag; matchAll iterates its own copy of the regex.
+  for (const p of opts.extra ? [...BASE_PATTERNS, ...opts.extra] : BASE_PATTERNS) {
+    for (const m of text.matchAll(p.re)) {
+      if (!excused(m[0], p.kind, prep, strict)) found.push({ what: p.what, match: shorten(m[0]) });
     }
   }
   const caseless = process.platform === 'win32';
   const hay = caseless ? text.toLowerCase() : text;
-  for (const needle of sensitiveNeedles(ctx.sensitivePaths)) {
+  for (const needle of prep.needles) {
     if (containsPath(hay, caseless ? needle.toLowerCase() : needle)) {
       found.push({ what: 'local path of this machine', match: shorten(needle) });
     }
@@ -201,13 +227,13 @@ function docPropsValues(xml: string, allowTimestamps: boolean): string[] {
   for (const m of xml.matchAll(/<([A-Za-z][\w.:-]*)\b[^>]*>([^<]+)<\/\1>/g)) {
     const value = m[2]!.trim();
     if (!value) continue;
-    if (allowTimestamps && CORE_ALLOWED.test(m[1]!) && value === '1970-01-01T00:00:00Z') continue;
+    if (allowTimestamps && CORE_ALLOWED.test(m[1]!) && value === EPOCH_W3CDTF) continue;
     out.push(`${m[1]}=${value}`);
   }
   return out;
 }
 
-async function scanDocx(buf: Buffer, file: string, ctx: TraceScanContext): Promise<TraceFinding[]> {
+async function scanDocx(buf: Buffer, file: string, prep: Prepared): Promise<TraceFinding[]> {
   const findings: TraceFinding[] = [];
   const zip = await JSZip.loadAsync(buf);
   for (const [name, entry] of Object.entries(zip.files)) {
@@ -227,14 +253,14 @@ async function scanDocx(buf: Buffer, file: string, ctx: TraceScanContext): Promi
     if (/custom-properties/i.test(text) && /\.rels$|\[Content_Types\]\.xml$/.test(name)) {
       findings.push({ file, part: name, what: 'custom document properties', match: 'custom-properties' });
     }
-    for (const f of scanText(text, ctx, { strict: !AUTHOR_DOCX_PART.test(name) })) {
+    for (const f of scanPrepared(text, prep, { strict: !AUTHOR_DOCX_PART.test(name) })) {
       findings.push({ file, part: name, ...f });
     }
   }
   return findings;
 }
 
-async function scanPdf(buf: Buffer, file: string, ctx: TraceScanContext): Promise<TraceFinding[]> {
+async function scanPdf(buf: Buffer, file: string, prep: Prepared): Promise<TraceFinding[]> {
   const findings: TraceFinding[] = [];
   const pdf = await PDFDocument.load(buf, { updateMetadata: false });
   const info = pdf.context.lookup(pdf.context.trailerInfo.Info);
@@ -246,11 +272,6 @@ async function scanPdf(buf: Buffer, file: string, ctx: TraceScanContext): Promis
   if (pdf.catalog.get(PDFName.of('Metadata'))) {
     findings.push({ file, part: 'catalog', what: 'XMP metadata', match: '/Metadata' });
   }
-  for (const [, obj] of pdf.context.enumerateIndirectObjects()) {
-    if ((obj instanceof PDFStream || obj instanceof PDFRawStream) && obj.dict.get(PDFName.of('Type')) === PDFName.of('Metadata')) {
-      findings.push({ file, part: 'metadata stream', what: 'XMP metadata', match: '/Type /Metadata' });
-    }
-  }
   // Strings inside dictionaries (bookmarks, link targets, any leftover info)
   // are scanned decoded: a UTF-16 string hides its text from a byte search.
   const strings: string[] = [];
@@ -260,16 +281,37 @@ async function scanPdf(buf: Buffer, file: string, ctx: TraceScanContext): Promis
     else if (v instanceof PDFArray) for (const x of v.asArray()) collect(x);
   };
   for (const [, obj] of pdf.context.enumerateIndirectObjects()) {
-    collect(obj instanceof PDFStream || obj instanceof PDFRawStream ? obj.dict : obj);
+    // Every stream class (PDFRawStream, PDFContentStream, ...) extends PDFStream.
+    if (obj instanceof PDFStream) {
+      if (obj.dict.get(PDFName.of('Type')) === PDFName.of('Metadata')) {
+        findings.push({ file, part: 'metadata stream', what: 'XMP metadata', match: '/Type /Metadata' });
+      }
+      collect(obj.dict);
+    } else {
+      collect(obj);
+    }
   }
-  for (const f of scanText(strings.join('\n'), ctx, { extra: PDF_STAMPS })) findings.push({ file, part: 'strings', ...f });
+  for (const f of scanPrepared(strings.join('\n'), prep, { extra: PDF_STAMPS })) findings.push({ file, part: 'strings', ...f });
 
   const raw = buf.toString('latin1');
   if (/<x:xmpmeta|<\?xpacket/i.test(raw)) {
     findings.push({ file, part: 'raw bytes', what: 'XMP metadata', match: 'x:xmpmeta' });
   }
-  for (const f of scanText(raw, ctx, { extra: PDF_STAMPS })) findings.push({ file, part: 'raw bytes', ...f });
+  for (const f of scanPrepared(raw, prep, { extra: PDF_STAMPS })) findings.push({ file, part: 'raw bytes', ...f });
   return findings;
+}
+
+/** Scan one exported file's bytes; `file` names it in the findings. An empty result means it may ship. */
+export async function scanExportBuffer(
+  buf: Buffer,
+  file: string,
+  format: TraceFormat,
+  ctx: TraceScanContext,
+): Promise<TraceFinding[]> {
+  const prep = prepare(ctx);
+  if (format === 'docx') return scanDocx(buf, file, prep);
+  if (format === 'pdf') return scanPdf(buf, file, prep);
+  return scanPrepared(buf.toString('utf8'), prep).map((f) => ({ file, ...f }));
 }
 
 /** Scan one exported file. An empty result means it may ship. */
@@ -278,11 +320,7 @@ export async function scanExportFile(
   format: TraceFormat,
   ctx: TraceScanContext,
 ): Promise<TraceFinding[]> {
-  const buf = await readFile(filePath);
-  const file = path.basename(filePath);
-  if (format === 'docx') return scanDocx(buf, file, ctx);
-  if (format === 'pdf') return scanPdf(buf, file, ctx);
-  return scanText(buf.toString('utf8'), ctx).map((f) => ({ file, ...f }));
+  return scanExportBuffer(await readFile(filePath), path.basename(filePath), format, ctx);
 }
 
 /** One line per finding, for a refusal message. */

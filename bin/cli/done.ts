@@ -31,7 +31,14 @@ import { runPass3 } from '../lib/verify/pass3.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport, renderHonestySkipped } from '../lib/honesty.js';
-import { exportDraft, ExportError, runHumanizer, type ExportFormat } from '../lib/exporter.js';
+import {
+  EXPORT_FORMATS,
+  exportDraft,
+  ExportError,
+  formatUnavailable,
+  runHumanizer,
+  type ExportFormat,
+} from '../lib/exporter.js';
 import { paperDir } from '../lib/paths.js';
 import { parseBibtex } from '../lib/citations.js';
 import { resolveCitationStyle } from '../lib/citation-style.js';
@@ -39,9 +46,9 @@ import { isPandocPresent } from '../lib/ecosystem-presence.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
 import { extractCitekeys } from '../lib/citation-token.js';
-import { parseVerdictRows } from '../lib/verify/verdict-rows.js';
+import { BLOCKING_VERDICT_LIST, parseVerdictRows } from '../lib/verify/verdict-rows.js';
 import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
-import { isPlaceholderText } from '../lib/placeholder.js';
+import { isPlaceholderFile, isPlaceholderText } from '../lib/placeholder.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -52,6 +59,8 @@ export interface GateIssues {
   unsupported: Pass2Result[];
   /** Pass-4 paragraphs carrying at least one HIGH-confidence orphan claim. */
   orphanClaims: Pass4Result[];
+  /** The orphan claims in those paragraphs, added up. */
+  orphanClaimCount: number;
   /** Plagiarism results that returned at least one match URL. */
   plagiarismHits: PlagiarismResult[];
   /** True iff ANY of the three buckets is non-empty. */
@@ -76,9 +85,10 @@ export function collectGateIssues(input: {
   const plagiarismHits = (input.plagiarismResults ?? []).filter(
     (r) => Array.isArray(r.matches) && r.matches.length > 0,
   );
+  const orphanClaimCount = orphanClaims.reduce((sum, r) => sum + r.orphanCount, 0);
   const hasIssues =
     unsupported.length > 0 || orphanClaims.length > 0 || plagiarismHits.length > 0;
-  return { unsupported, orphanClaims, plagiarismHits, hasIssues };
+  return { unsupported, orphanClaims, orphanClaimCount, plagiarismHits, hasIssues };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,9 +116,8 @@ function writeGateSummary(issues: GateIssues): void {
     );
   }
   if (issues.orphanClaims.length > 0) {
-    const total = issues.orphanClaims.reduce((sum, r) => sum + r.orphanCount, 0);
     process.stdout.write(
-      `  - ${total} orphan claim(s) across ${issues.orphanClaims.length} paragraph(s) (Pass 4)\n`,
+      `  - ${issues.orphanClaimCount} orphan claim(s) across ${issues.orphanClaims.length} paragraph(s) (Pass 4)\n`,
     );
   }
   if (issues.plagiarismHits.length > 0) {
@@ -220,8 +229,9 @@ export interface ExportBlock {
  * It is UNCONDITIONAL: neither `--raw` nor `--yolo` bypasses it (per the PRD §14
  * non-negotiable — verifier gates are unconditional; `--yolo` skips ONLY the
  * advisory DONE-09 confirmation). Deterministic, offline, never throws.
+ * `compiledText` is the compiled DRAFT.md when the caller has already read it.
  */
-export function runExportBlockingGate(paperRoot: string): ExportBlock {
+export function runExportBlockingGate(paperRoot: string, compiledText?: string): ExportBlock {
   const reasons: string[] = [];
   const sectionsDir = join(paperDir(paperRoot), 'sections');
 
@@ -237,7 +247,7 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
 
   // Placeholder text (PENSMITH_NO_LLM) is not a paper, whatever the verdicts say.
   const compiledPath = join(paperDir(paperRoot), 'DRAFT.md');
-  if (existsSync(compiledPath) && isPlaceholderText(readFileSync(compiledPath, 'utf8'))) {
+  if (compiledText !== undefined ? isPlaceholderText(compiledText) : isPlaceholderFile(compiledPath)) {
     reasons.push('.paper/DRAFT.md is placeholder text (PENSMITH_NO_LLM), not a draft');
   }
 
@@ -254,8 +264,7 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
   }
 
   for (const name of dirNames) {
-    const draftPath = join(sectionsDir, name, 'DRAFT.md');
-    if (existsSync(draftPath) && isPlaceholderText(readFileSync(draftPath, 'utf8'))) {
+    if (isPlaceholderFile(join(sectionsDir, name, 'DRAFT.md'))) {
       reasons.push(`section ${name}: DRAFT.md is placeholder text (PENSMITH_NO_LLM), not a draft`);
     }
     const vpath = join(sectionsDir, name, 'VERIFICATION.md');
@@ -287,7 +296,7 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
     // Blocking verdicts — same parser + blocking set compile uses.
     for (const ck of parseVerdictRows(md)) {
       reasons.push(
-        `section ${name}: citation [@${ck}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND/UNRESOLVED)`,
+        `section ${name}: citation [@${ck}] has a blocking verdict (${BLOCKING_VERDICT_LIST})`,
       );
     }
   }
@@ -551,7 +560,7 @@ export async function reCheckFinalMd(
 //               + DONE-06/07/08 + DONE-09)
 // ---------------------------------------------------------------------------
 
-const VALID_FORMATS: ReadonlySet<string> = new Set(['docx', 'pdf', 'latex', 'md']);
+const VALID_FORMATS: ReadonlySet<string> = new Set(EXPORT_FORMATS);
 
 /** The export confirmation. It defaults to no: exporting needs an explicit yes. */
 export const EXPORT_CONFIRM_QUESTION = {
@@ -579,8 +588,7 @@ export function pendingExportDecision(
   format: string,
   source = '.paper/DRAFT.md',
 ): Record<string, unknown> {
-  const orphanClaims = issues.orphanClaims.reduce((sum, r) => sum + r.orphanCount, 0);
-  const count = issues.unsupported.length + orphanClaims + issues.plagiarismHits.length;
+  const count = issues.unsupported.length + issues.orphanClaimCount + issues.plagiarismHits.length;
   return {
     pending: 'export-confirmation',
     gate: 'export',
@@ -592,7 +600,7 @@ export function pendingExportDecision(
     default: 'cancel',
     issues: {
       unsupported: issues.unsupported.map((r) => r.citekey),
-      orphan_claims: orphanClaims,
+      orphan_claims: issues.orphanClaimCount,
       plagiarism_hits: issues.plagiarismHits.map((r) => r.phrase.replace(/\s+/g, ' ').slice(0, 80)),
     },
     how_to_answer: 'Run `pensmith done` in an interactive terminal and answer the prompt there.',
@@ -661,7 +669,7 @@ export const doneCommand = defineCommand({
     // Runs for EVERY done invocation (explicit, bare /pensmith, next) and is NOT
     // skipped by --raw or --yolo. A blocking citation or an unverified section
     // never reaches the deliverable.
-    const blocking = runExportBlockingGate(paperRoot);
+    const blocking = runExportBlockingGate(paperRoot, draftMd);
     if (blocking.blocked) {
       process.stdout.write(
         'pensmith done: BLOCKED — export refused (blocking citations, unverified sections or placeholder text):\n',
@@ -676,18 +684,19 @@ export const doneCommand = defineCommand({
 
     // The format, settled before any audit work: a format that cannot be made
     // here is refused now, not after the user has confirmed the export.
-    const pandoc = isPandocPresent();
     const requested = typeof args.format === 'string' && args.format.length > 0 ? args.format : undefined;
     if (requested !== undefined && !VALID_FORMATS.has(requested)) {
       process.stdout.write(`pensmith done: unknown export format '${requested}' — use docx, pdf, latex or md.\n`);
       process.exitCode = EXIT_REFUSED;
       return { ok: false };
     }
+    // A Markdown export never needs Pandoc, so it is not probed for.
+    const pandoc = requested === 'md' ? false : isPandocPresent();
     const format: ExportFormat = (requested as ExportFormat | undefined) ?? (pandoc ? 'docx' : 'md');
-    if ((format === 'docx' || format === 'pdf') && !pandoc) {
+    const unavailable = formatUnavailable(format, pandoc);
+    if (unavailable) {
       process.stdout.write(
-        `pensmith done: Pandoc is not installed, so a .${format} cannot be made. Nothing was exported.\n` +
-          `  Install Pandoc (https://pandoc.org/installing.html)${format === 'pdf' ? ' and a TeX engine' : ''}, or export with --format md.\n`,
+        `pensmith done: ${unavailable.reason} Nothing was exported.\n  ${unavailable.remedy}\n`,
       );
       process.exitCode = EXIT_REFUSED;
       return { ok: false };

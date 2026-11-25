@@ -7,6 +7,7 @@
 // also recognise the placeholder text itself, because older runs saved it
 // without the flag.
 
+import { existsSync, readFileSync } from 'node:fs';
 import { parseFrontmatter, updateFrontmatter } from './frontmatter.js';
 
 /** How every PENSMITH_NO_LLM placeholder starts. */
@@ -33,6 +34,11 @@ export function isPlaceholderText(text: string): boolean {
     // A body that merely starts with a `---` rule is not frontmatter.
     return false;
   }
+}
+
+/** True when the file at `p` exists and holds placeholder output. */
+export function isPlaceholderFile(p: string): boolean {
+  return existsSync(p) && isPlaceholderText(readFileSync(p, 'utf8'));
 }
 
 /** Text for a saved artifact: flagged when it came from the placeholder path. */

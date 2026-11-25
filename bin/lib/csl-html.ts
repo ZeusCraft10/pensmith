@@ -60,14 +60,36 @@ function convert(html: string, mk: Markup): string {
     else if (name === 'span' && /small-caps/i.test(attrs ?? '')) [open, close] = mk.smallCaps;
     else if (name === 'span' && /font-style:\s*italic/i.test(attrs ?? '')) [open, close] = mk.italic;
     else if (name === 'span' && /font-weight:\s*bold/i.test(attrs ?? '')) [open, close] = mk.bold;
-    // A reference number in its own column ("[1]") is followed by a space.
-    else if (name === 'div' && /csl-left-margin/.test(attrs ?? '')) close = ' ';
+    // A layout div ends with a space, so a reference number in its own column
+    // ("[1]") is followed by one.
     else if (name === 'div') close = ' ';
     out += open;
     closers.push(close);
   }
   while (closers.length > 0) out += closers.pop();
   return out.replace(/[ \t\u00a0]{2,}/g, ' ').trim();
+}
+
+// LaTeX's special characters and how text writes each one.
+const LATEX_ESCAPES: Readonly<Record<string, string>> = {
+  '\\': '\\textbackslash{}',
+  '{': '\\{',
+  '}': '\\}',
+  '&': '\\&',
+  '%': '\\%',
+  '$': '\\$',
+  '#': '\\#',
+  '_': '\\_',
+  '~': '\\textasciitilde{}',
+  '^': '\\textasciicircum{}',
+};
+
+/**
+ * Escape LaTeX's special characters in text. One pass, so the braces of the
+ * `\textbackslash{}` written for a backslash are not escaped again.
+ */
+export function escapeLatexText(s: string): string {
+  return s.replace(/[\\{}&%$#_~^]/g, (c) => LATEX_ESCAPES[c] ?? c);
 }
 
 // Characters that would change the meaning of Markdown text.

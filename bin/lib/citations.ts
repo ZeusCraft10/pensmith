@@ -67,6 +67,8 @@ import { fileURLToPath } from 'node:url';
 // "does not provide an export named 'plugins'". We bind via the class
 // to stay portable across both runtimes.
 import Cite, { type BibtexRecord } from 'citation-js';
+import type { Citation, CiteItem } from './citation-grammar.js';
+import { escapeLatexText } from './csl-html.js';
 const plugins = Cite.plugins;
 
 // CYCLE-3 NEW-H-1: re-export Cite so downstream Plan 04 / Plan 09
@@ -132,14 +134,11 @@ const STYLE_FILENAMES: Readonly<Record<string, string>> = {
   'harvard': 'harvard',
 };
 
-// Register the bundled CSL template for `style` under the citeproc name
-// `pensmith-${style}` exactly once per process. Reads the committed .csl via
-// readFileSync (OFFLINE — never fetches). For style==='apa' this resolves to
-// templates/citation-styles/apa.csl and registers 'pensmith-apa', the same
-// name+bytes the old renderApa used → byte-identical output. Throws a clear Error naming the
-// path when the .csl is absent (no silent empty bibliography — T-10-01-01).
-function ensureStyleTemplate(style: string): void {
-  if (registeredStyles.get(style)) return;
+/**
+ * The bundled CSL file for `style`. Throws a clear Error naming the path when
+ * the .csl is absent (no silent empty bibliography — T-10-01-01).
+ */
+export function cslFilePath(style: string): string {
   const filename = STYLE_FILENAMES[style] ?? style;
   const cslPath = path.join(PKG_ROOT, 'templates', 'citation-styles', `${filename}.csl`);
   if (!existsSync(cslPath)) {
@@ -147,7 +146,17 @@ function ensureStyleTemplate(style: string): void {
       `renderStyle: CSL file not found for style '${style}' at ${cslPath}`,
     );
   }
-  const cslString = readFileSync(cslPath, 'utf8');
+  return cslPath;
+}
+
+// Register the bundled CSL template for `style` under the citeproc name
+// `pensmith-${style}` exactly once per process. Reads the committed .csl via
+// readFileSync (OFFLINE — never fetches). For style==='apa' this resolves to
+// templates/citation-styles/apa.csl and registers 'pensmith-apa', the same
+// name+bytes the old renderApa used → byte-identical output.
+function ensureStyleTemplate(style: string): void {
+  if (registeredStyles.get(style)) return;
+  const cslString = readFileSync(cslFilePath(style), 'utf8');
   plugins.config.get('@csl').templates.add(`pensmith-${style}`, cslString);
   registeredStyles.set(style, true);
 }
@@ -222,20 +231,8 @@ export const parseBibtex = parseBib;
 // letters into LaTeX commands, Greek into math mode, and drops every other
 // script (Chinese, Cyrillic, Arabic, ...). With ASCII-only output off it
 // escapes nothing at all, so LaTeX's special characters are escaped here
-// instead, the way citation-js escapes them. Every other character is kept
-// as UTF-8, which Pandoc, biber and reference managers read.
-const BIBTEX_ESCAPES: Readonly<Record<string, string>> = {
-  '\\': '\\textbackslash{}',
-  '{': '\\{',
-  '}': '\\}',
-  '&': '\\&',
-  '%': '\\%',
-  '$': '\\$',
-  '#': '\\#',
-  '_': '\\_',
-  '~': '\\textasciitilde{}',
-  '^': '\\textasciicircum{}',
-};
+// instead (escapeLatexText), the way citation-js escapes them. Every other
+// character is kept as UTF-8, which Pandoc, biber and reference managers read.
 // The markup citation-js keeps in titles (<i>, <sc>, <span class="nocase">)
 // and turns into LaTeX commands itself.
 const RICH_TEXT_TAG = /(<\/?(?:i|b|sc|sup|sub|span)(?:\s[^>]*)?>)/;
@@ -269,7 +266,7 @@ function protectTitleCase(s: string): string {
 function escapeBibtexText(s: string): string {
   return s
     .split(RICH_TEXT_TAG)
-    .map((part, i) => (i % 2 === 1 ? part : part.replace(/[\\{}&%$#_~^]/g, (c) => BIBTEX_ESCAPES[c] ?? c)))
+    .map((part, i) => (i % 2 === 1 ? part : escapeLatexText(part)))
     .join('');
 }
 
@@ -320,6 +317,12 @@ export function formatBibtex(entries: ReadonlyArray<Record<string, unknown>>): s
   } finally {
     config.asciiOnly = asciiOnly;
   }
+}
+
+/** RIS (RIS2001, the spec reference managers read) for CSL-JSON `entries`; '' for none. */
+export function formatRis(entries: readonly object[]): string {
+  if (entries.length === 0) return '';
+  return new Cite(entries.map((e) => ({ ...e }))).format('ris', { spec: 'new', format: 'text' });
 }
 
 // =====================================================================
@@ -403,22 +406,6 @@ export async function renderInText(
 //   Public: document-level citation rendering
 // =====================================================================
 
-/** One cited work, as the citation grammar parses it. */
-export interface CitationItemInput {
-  key: string;
-  prefix?: string;
-  locator?: string;
-  label?: string;
-  suffix?: string;
-  suppressAuthor?: boolean;
-}
-
-/** One citation in the document: a bracketed cluster or a narrative `@key`. */
-export interface CitationInput {
-  narrative: boolean;
-  items: CitationItemInput[];
-}
-
 export interface RenderedCitations {
   /**
    * One string per input citation, in order. For an in-text style this is the
@@ -440,7 +427,7 @@ export interface RenderedCitations {
 // a numeric style).
 const NO_PRINTED_FORM = '[NO_PRINTED_FORM]';
 
-function toCiteprocItem(it: CitationItemInput, extra: Record<string, unknown> = {}): Record<string, unknown> {
+function toCiteprocItem(it: CiteItem, extra: Record<string, unknown> = {}): Record<string, unknown> {
   const out: Record<string, unknown> = { id: it.key, ...extra };
   if (it.prefix) out['prefix'] = /\s$/.test(it.prefix) ? it.prefix : `${it.prefix} `;
   if (it.locator) {
@@ -467,7 +454,7 @@ function toCiteprocItem(it: CitationItemInput, extra: Record<string, unknown> = 
 export function renderCitationsInDocument(
   entries: Array<Record<string, unknown>>,
   style: string,
-  citations: readonly CitationInput[],
+  citations: ReadonlyArray<Pick<Citation, 'narrative' | 'items'>>,
 ): RenderedCitations {
   ensureStyleTemplate(style);
   const known = new Set(entries.map((e) => String(e['id'] ?? '')));
@@ -535,16 +522,16 @@ export function renderCitationsInDocument(
 export const SUPPORTED_STYLES: readonly string[] = Object.keys(STYLE_FILENAMES);
 
 // Spellings a person might type or the intake clarifier offers.
+// Every style's own key is one of them.
 const STYLE_ALIASES: ReadonlyMap<string, string> = new Map([
-  ['apa', 'apa'], ['apa 7', 'apa'], ['apa7', 'apa'], ['apa 7th', 'apa'],
-  ['mla', 'mla'], ['mla 8', 'mla'], ['mla 9', 'mla'],
+  ...SUPPORTED_STYLES.map((s) => [s, s] as const),
+  ['apa 7', 'apa'], ['apa7', 'apa'], ['apa 7th', 'apa'],
+  ['mla 8', 'mla'], ['mla 9', 'mla'],
   ['chicago', 'chicago-notes-bib'], ['chicago nb', 'chicago-notes-bib'], ['chicago notes', 'chicago-notes-bib'],
   ['chicago notes-bibliography', 'chicago-notes-bib'], ['chicago notes bibliography', 'chicago-notes-bib'],
-  ['chicago (notes-bibliography)', 'chicago-notes-bib'], ['chicago-notes-bib', 'chicago-notes-bib'],
+  ['chicago (notes-bibliography)', 'chicago-notes-bib'],
   ['chicago ad', 'chicago-author-date'], ['chicago author-date', 'chicago-author-date'],
   ['chicago author date', 'chicago-author-date'], ['chicago (author-date)', 'chicago-author-date'],
-  ['chicago-author-date', 'chicago-author-date'],
-  ['ieee', 'ieee'], ['ama', 'ama'], ['vancouver', 'vancouver'], ['harvard', 'harvard'],
 ]);
 
 // Words around a style's name that do not change the style, removed from the
@@ -568,9 +555,11 @@ export function normalizeStyleName(name: string): string | null {
   for (;;) {
     const hit = STYLE_ALIASES.get(key);
     if (hit) return hit;
-    const shorter = STYLE_NAME_TAILS.reduce((k, re) => (k === key ? k.replace(re, '') : k), key);
-    if (shorter === key || shorter.length === 0) return null;
-    key = shorter;
+    // Remove one tail per round: the first pattern that matches.
+    const re = STYLE_NAME_TAILS.find((r) => r.test(key));
+    if (!re) return null;
+    key = key.replace(re, '');
+    if (key.length === 0) return null;
   }
 }
 

@@ -13,6 +13,8 @@
 //     write UTF-8 BibTeX instead of dropping non-Latin text.
 //   - `format('bibtex', { format: 'object' })`, the entries before they are
 //     written out, so formatBibtex can leave out a field.
+//   - `format('ris', { spec: 'new', format: 'text' })`, the RIS2001 output
+//     formatRis returns.
 //
 // Widening this shim is a chokepoint-bypass smell — new fields go via
 // the citations.ts wrapper API, not by widening global typings.
@@ -73,6 +75,7 @@ declare module 'citation-js' {
     constructor(input?: string | object | object[], options?: { forceType?: string });
     readonly data: CiteData[];
     format(name: 'bibtex', options: { format: 'object' }): BibtexRecord[];
+    format(name: 'ris', options: { spec: 'new' | 'old'; format: 'text' }): string;
     format(name: string, options?: CiteFormatOptions): string;
     // The `plugins` registry hangs off the class (citation-js@0.7
     // exposes it as a static-like property on the default export).
