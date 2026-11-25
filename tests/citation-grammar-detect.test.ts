@@ -123,8 +123,54 @@ test('the smoother placeholders {{cite_K_M}} are never read as citations or cita
   assert.deepEqual(findUnparseableCitations(md), []);
 });
 
+test('raw author-year citations: Harvard page forms, bare pages, year ranges and square brackets', () => {
+  const md = [
+    'Coherence is long lived (Smith 2020: 45).',
+    'It was shown twice (Smith, 2019-2021) and (Doe, 2018–19).',
+    'The figure is on one page (Smith, 2020, 45) or a range (Lee, 2017, 12-14).',
+    'Some write it in square brackets [Smith, 2020] or [see Doe & Lee, 2019].',
+    'Narrative forms too: Smith (2020: 45) and Doe (2019, 7).',
+  ].join('\n');
+  assert.deepEqual(raws(md), [
+    ['author-year', '(Smith 2020: 45)'],
+    ['author-year', '(Smith, 2019-2021)'],
+    ['author-year', '(Doe, 2018–19)'],
+    ['author-year', '(Smith, 2020, 45)'],
+    ['author-year', '(Lee, 2017, 12-14)'],
+    ['author-year', '[Smith, 2020]'],
+    ['author-year', '[see Doe & Lee, 2019]'],
+    ['author-year', 'Smith (2020: 45)'],
+    ['author-year', 'Doe (2019, 7)'],
+  ]);
+});
+
+test('raw citations: named storms, recessions and outbreaks with their year are not citations', () => {
+  const md = [
+    'After Hurricane Katrina (2005) and Typhoon Haiyan (2013), the Great Recession (2008)',
+    'and the Ebola Outbreak (2014) changed the field; so did the Great Depression (1929).',
+    'A link [Smith, 2020](https://example.org) and an interval [0, 1] are not citations either.',
+  ].join('\n');
+  assert.deepEqual(raws(md), []);
+});
+
 test('quotes: a link or image title is not a quotation', () => {
   const title = 'a long link title of well over ten words that nobody would call a quotation';
   assert.deepEqual(quotes(`See [the source](https://example.org/a "${title}") and ![fig](f.png "${title}").`), []);
   assert.deepEqual(quotes(`See [the source][ref].\n\n[ref]: https://example.org/a "${title}"\n`), []);
+});
+
+test('quotes: a word clipped with a leading apostrophe does not open a quotation', () => {
+  const md = "Critics dismissed 'em as fads, and 'tis said the field moved on, rock 'n' roll aside, as the authors' retrospective shows [@k].";
+  assert.deepEqual(quotes(md), []);
+  assert.deepEqual(quotes(`'Twas noted that '${Q}' [@k].`), [[Q, ['k']]]);
+});
+
+test('quotes and sentences: a CRLF blank line ends a paragraph, as an LF one does', () => {
+  const lf = `An unclosed "quote starts here and runs on.\n\nNext paragraph closes it" with a citation [@k] and more words after.`;
+  const crlf = lf.replace(/\n/g, '\r\n');
+  assert.deepEqual(quotes(lf), []);
+  assert.deepEqual(quotes(crlf), []);
+  const md = `Intro.\r\n\r\nThen someone wrote "${Q}".\r\n\r\nLater prose cites [@other].`;
+  assert.deepEqual(quotes(md), [[Q, []]]);
+  assert.deepEqual(quotes(`As @k argues:\r\n\r\n> ${Q}\r\n\r\nNext paragraph.`), [[Q, ['k']]]);
 });

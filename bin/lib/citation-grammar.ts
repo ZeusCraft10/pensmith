@@ -287,10 +287,13 @@ const ABBREVIATIONS: ReadonlySet<string> = new Set([
 // opening mark: the end of a sentence.
 const SENTENCE_END = /[.!?]["”’')\]]*(?=\s+[\p{Lu}\p{N}"“‘'[@])/gu;
 
+// A blank line, with LF or CRLF line endings (a draft edited on Windows).
+const BLANK_LINE = /\n[ \t\r]*\n/g;
+
 /** Offset of the paragraph that holds `at`: just after the last blank line before it. */
 function paragraphStart(md: string, at: number): number {
   let from = 0;
-  for (const m of md.slice(0, at).matchAll(/\n[ \t]*\n/g)) from = m.index + m[0].length;
+  for (const m of md.slice(0, at).matchAll(BLANK_LINE)) from = m.index + m[0].length;
   return from;
 }
 
@@ -307,7 +310,7 @@ export function sentenceSpan(
   cites: readonly Citation[] = findCitations(md),
 ): [number, number] {
   const paraStart = paragraphStart(md, start);
-  const afterBreak = md.slice(end).search(/\n[ \t]*\n/);
+  const afterBreak = md.slice(end).search(BLANK_LINE);
   const paraEnd = afterBreak === -1 ? md.length : end + afterBreak;
   const masked = (i: number): boolean =>
     (i >= start && i < end) || cites.some((c) => i >= c.start && i < c.end);
@@ -364,7 +367,11 @@ const NOT_A_NAME = String.raw`(?!(?:${[
   'Trial', 'Cohort', 'Election', 'Elections', 'Referendum', 'War', 'Crisis', 'Revolution', 'Pandemic',
   'Summit', 'Conference', 'Olympics', 'Games', 'Cup', 'Prize', 'Award', 'Plan', 'Program', 'Programme',
   'Project', 'Initiative', 'Strategy', 'Policy', 'Standard', 'Model',
+  'Recession', 'Depression', 'Outbreak', 'Epidemic', 'Famine', 'Disaster', 'Earthquake', 'Tsunami',
+  'Wildfire', 'Wildfires', 'Massacre', 'Uprising',
 ].join('|')})(?![\p{L}\p{M}'’-]))`;
+// A storm is named after its kind: `Hurricane Katrina (2005)` is not a citation.
+const NOT_AFTER = String.raw`(?<!\b(?:Hurricane|Typhoon|Cyclone|Storm)\s+)`;
 const PARTICLE = String.raw`(?:(?:van|von|der|den|de|del|della|di|da|du|dos|das|le|la|ten|ter)\s+){0,3}`;
 // A surname in brackets may be an acronym (`WHO`); in running text it must
 // have a lower-case letter, so `World War II (1939)` is not a citation.
@@ -372,9 +379,12 @@ const SURNAME_ANY = String.raw`${PARTICLE}${NOT_A_NAME}\p{Lu}[\p{L}\p{M}'’-]*[
 const SURNAME_PROSE = String.raw`${PARTICLE}${NOT_A_NAME}\p{Lu}(?=[\p{L}\p{M}'’-]*\p{Ll})[\p{L}\p{M}'’-]*[\p{L}\p{M}]`;
 const authors = (name: string): string =>
   String.raw`${name}(?:(?:,\s*|\s+)(?:and|&)\s+${name}|,\s+${name}|\s+et\s+al\.?)*`;
-const YEAR = String.raw`(?:(?:1[5-9]\d\d|20\d\d)[a-z]?(?![\p{L}\p{N}])|n\.\s?d\.|in\s+press|forthcoming)`;
+// A year, or a range of years (`2019-2021`, `2018–19`).
+const YEAR = String.raw`(?:(?:1[5-9]\d\d|20\d\d)(?:\s*[-–—]\s*(?:\d{4}|\d\d))?[a-z]?(?![\p{L}\p{N}])|n\.\s?d\.|in\s+press|forthcoming)`;
 const YEARS = String.raw`${YEAR}(?:,\s*${YEAR})*`;
-const PAGES = String.raw`(?:,\s*(?:pp?\.|paras?\.|chaps?\.|ch\.|sec\.|§)\s*[\dIVXLCivxlc]+(?:\s*[-–—]\s*[\dIVXLCivxlc]+)?)?`;
+// A page after the year: `, p. 4`, `, ch. 2`, Harvard `: 45`, or a bare `, 45`.
+const PAGE_VALUE = String.raw`[\dIVXLCivxlc]+(?:\s*[-–—]\s*[\dIVXLCivxlc]+)?`;
+const PAGES = String.raw`(?:,\s*(?:pp?\.|paras?\.|chaps?\.|ch\.|sec\.|§)\s*${PAGE_VALUE}|:\s*\d+(?:\s*[-–—]\s*\d+)?|,\s*\d+(?:\s*[-–—]\s*\d+)?)?`;
 const LEAD = String.raw`(?:(?:see|e\.g\.|cf\.|i\.e\.|also),?\s+(?:also\s+)?)?`;
 const ONE_WORK = String.raw`${LEAD}${authors(SURNAME_ANY)},?\s+${YEARS}${PAGES}`;
 
@@ -390,7 +400,9 @@ const RAW_PATTERNS: ReadonlyArray<readonly [RawCitationKind, RegExp]> = [
   ['pmid', /\bPMID:?\s*\d{1,9}\b/giu],
   ['pmid', /\b(?:PMCID:?\s*)?PMC\d{4,9}\b/giu],
   ['author-year', new RegExp(String.raw`(?<!\\)\(\s*${ONE_WORK}(?:\s*;\s*${ONE_WORK})*\s*\)`, 'gu')],
-  ['author-year', new RegExp(String.raw`(?<![\p{L}\p{N}])${authors(SURNAME_PROSE)}\s+\(\s*${YEARS}${PAGES}\s*\)`, 'gu')],
+  // `[Smith, 2020]`, but not a link (`[Smith, 2020](url)`, `[...][ref]`, `[...]: url`).
+  ['author-year', new RegExp(String.raw`(?<!\\)\[\s*${ONE_WORK}(?:\s*;\s*${ONE_WORK})*\s*\](?![(\[:])`, 'gu')],
+  ['author-year', new RegExp(String.raw`(?<![\p{L}\p{N}])${NOT_AFTER}${authors(SURNAME_PROSE)}\s+\(\s*${YEARS}${PAGES}\s*\)`, 'gu')],
 ];
 
 /** Drop sentence punctuation and unbalanced closing brackets from the end of an identifier. */
@@ -483,6 +495,10 @@ export interface Quote {
 }
 
 const CLOSERS: Readonly<Record<string, string>> = { '"': '"”', '“': '”"', "'": "'’", '‘': '’\'' };
+
+// Words clipped with a leading apostrophe ('em, 'tis, rock 'n' roll): the
+// apostrophe is part of the word, not an opening quote mark.
+const CLIPPED_WORD = /^(?:em|tis|twas|til|cause|n|bout|nuff)(?![\p{L}\p{N}])/iu;
 
 /**
  * Character ranges of link and image destinations with their titles
@@ -579,7 +595,8 @@ function inlineAttribution(md: string, start: number, end: number, cites: readon
  * after it, then before it, in the same sentence. A block quote takes the
  * citation inside it, a citation opening the next paragraph, or one in a
  * paragraph that introduces it with a colon. Apostrophes (`don't`,
- * `authors'`), quote marks inside code and link titles are not quotations.
+ * `authors'`, `'em`), quote marks inside code and link titles are not
+ * quotations.
  */
 export function findQuotes(md: string, cites: readonly Citation[] = findCitations(md)): Quote[] {
   const skip = codeRanges(md);
@@ -604,10 +621,10 @@ export function findQuotes(md: string, cites: readonly Citation[] = findCitation
     const next = md[i + 1];
     if (next === undefined || /\s/.test(next)) continue;
     if ((open === '"' || open === "'") && !/[\s([{—–\-/]/.test(prev)) continue;
-    if ((open === "'" || open === '‘') && !/\p{L}/u.test(next)) continue;
+    if ((open === "'" || open === '‘') && (!/\p{L}/u.test(next) || CLIPPED_WORD.test(md.slice(i + 1, i + 8)))) continue;
     let close = -1;
     for (let j = i + 1; j < md.length; j += 1) {
-      if (md[j] === '\n' && /^\n[ \t]*\n/.test(md.slice(j))) break;
+      if (md[j] === '\n' && /^\n[ \t\r]*\n/.test(md.slice(j))) break;
       if (!closers.includes(md[j]!) || /\s/.test(md[j - 1]!) || isWordChar(md[j + 1])) continue;
       close = j;
       break;
