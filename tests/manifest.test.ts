@@ -1,7 +1,5 @@
 // tests/manifest.test.ts
-// Wraps scripts/validate-plugin-manifest.cjs (D-17) and asserts the .mcp.json
-// and plugin.json.mcpServers shapes directly. Required by VALIDATION.md
-// Wave 0.
+// Wraps scripts/validate-plugin-manifest.cjs (D-17).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,29 +19,6 @@ test('scripts/validate-plugin-manifest.cjs exits 0 on valid manifests', () => {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   assert.match(out, /valid/);
-});
-
-test('plugin.json declares mcpServers.pensmith with command=node', () => {
-  const plugin = JSON.parse(read('.claude-plugin/plugin.json')) as {
-    mcpServers?: Record<string, { command?: string; args?: string[] }>;
-  };
-  assert.ok(plugin.mcpServers, 'plugin.json must declare mcpServers');
-  const srv = plugin.mcpServers['pensmith'];
-  assert.ok(srv, 'plugin.json.mcpServers.pensmith required');
-  assert.equal(srv.command, 'node');
-  assert.ok(Array.isArray(srv.args) && srv.args.length === 1);
-  assert.match(srv.args[0]!, /dist\/mcp\/server\.js$/);
-});
-
-test('.mcp.json declares mcpServers.pensmith with command=node', () => {
-  const mcp = JSON.parse(read('.mcp.json')) as {
-    mcpServers?: Record<string, { command?: string; args?: string[] }>;
-  };
-  assert.ok(mcp.mcpServers, '.mcp.json must declare mcpServers');
-  const srv = mcp.mcpServers['pensmith'];
-  assert.ok(srv, '.mcp.json mcpServers.pensmith required');
-  assert.equal(srv.command, 'node');
-  assert.match(srv.args![0]!, /dist\/mcp\/server\.js$/);
 });
 
 test('marketplace.json owner + plugins[] shape', () => {

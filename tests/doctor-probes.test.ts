@@ -13,7 +13,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runDoctor } from '../bin/lib/doctor/probes.js';
 import { nodeVersionProbe } from '../bin/lib/doctor/probes/node-version.js';
-import { mcpSdkPresenceProbe } from '../bin/lib/doctor/probes/mcp-sdk-presence.js';
 import { zoteroMcpPresenceProbe } from '../bin/lib/doctor/probes/zotero-mcp-presence.js';
 import { pandocPresenceProbe } from '../bin/lib/doctor/probes/pandoc-presence.js';
 import { humanizerSkillPresenceProbe } from '../bin/lib/doctor/probes/humanizer-skill-presence.js';
@@ -27,14 +26,6 @@ test('DOCT-01 node-version returns PASS on current Node', async () => {
   const r = await nodeVersionProbe.run();
   assert.equal(r.id, 'node-version');
   assert.ok(['PASS', 'FAIL'].includes(r.severity));
-});
-
-test('DOCT-02a mcp-sdk-presence returns one of {PASS,WARN,FAIL}', async () => {
-  // 02-04 ships the real server build before this plan; if running before that,
-  // the probe legitimately FAILs. Both shapes are acceptable to the test.
-  const r = await mcpSdkPresenceProbe.run();
-  assert.equal(r.id, 'mcp-sdk-presence');
-  assert.ok(['PASS', 'WARN', 'FAIL'].includes(r.severity));
 });
 
 test('DOCT-02b zotero-mcp-presence returns one of {PASS,WARN}', async () => {
@@ -113,9 +104,7 @@ test('DOCT-03 contact-email-presence PASS when env set', async () => {
 });
 
 test('DOCT-04 sync-folder-detection WARN when paperDir is inside /OneDrive/', async () => {
-  // WR-05: canonical env var name is PENSMITH_PAPER_ROOT. Matches the
-  // tier-contract test's Case C (which spawns the MCP server with
-  // PENSMITH_PAPER_ROOT=<tmp>) and mcp/server.ts's boot-time resolution.
+  // WR-05: canonical env var name is PENSMITH_PAPER_ROOT.
   // The transitional PENSMITH_PAPER_DIR fallback was dropped from
   // bin/lib/ecosystem-presence.ts in the same commit.
   const prev = process.env.PENSMITH_PAPER_ROOT;
@@ -203,11 +192,10 @@ test('D-19: runDoctor is read-only — does not create files in the configured p
   assert.deepEqual(after, before, 'D-19: doctor MUST NOT create files under the paper root');
 });
 
-test('D-20: runDoctor returns Record keyed by probe.id (11 probes)', async () => {
+test('D-20: runDoctor returns Record keyed by probe.id (10 probes)', async () => {
   const r = await runDoctor();
   assert.ok(!Array.isArray(r), 'must be object, not array');
   assert.ok('node-version' in r);
-  assert.ok('mcp-sdk-presence' in r);
   assert.ok('zotero-mcp-presence' in r);
   assert.ok('pandoc-presence' in r);
   assert.ok('humanizer-skill-presence' in r);
@@ -218,5 +206,5 @@ test('D-20: runDoctor returns Record keyed by probe.id (11 probes)', async () =>
   assert.ok('http-crossref-ping' in r);
   // DOCT-05 (Plan 03-09 Task 9.1) — the real intake/outline/verify wiring probe.
   assert.ok('intake-outline-verify-wiring' in r);
-  assert.equal(Object.keys(r).length, 11, 'expected exactly 11 probes');
+  assert.equal(Object.keys(r).length, 10, 'expected exactly 10 probes');
 });

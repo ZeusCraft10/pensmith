@@ -1,14 +1,9 @@
 // bin/lib/capabilities.ts
 //
-// D-12 architectural fix (cross-AI review HIGH consensus): SINGLE source of
-// capability facts. mcp/ MUST NOT call loadRuntimeConfig and MUST NOT access
-// process.env[...] directly — D-12 lint (02-03) catches both. This file is
-// the only authorised composition site.
-//
-// Invariant: returned shape contains presence-flag BOOLEANS only. NEVER a
-// resolved env value. tests/capabilities.test.ts uses sentinel values
-// (PROCESS-ENV-SENTINEL-DO-NOT-LEAK-...) to prove no leak path exists.
-// Symmetric to mcp/ T-01-07 / T-02-04-02 mitigation.
+// The single place that combines runtime config with environment presence
+// checks. The returned shape holds presence-flag booleans only, never a
+// resolved env value: tests/capabilities.test.ts plants sentinel values to
+// prove nothing leaks. `pensmith doctor` (runtime-config-presence) reads it.
 
 import { loadRuntimeConfig } from './runtime.js';
 import {
@@ -25,22 +20,15 @@ export interface ProviderCapability {
 }
 
 export interface CapabilityFacts {
-  readonly mcp_self: true;
   readonly contact_email_set: boolean;
   readonly providers: readonly ProviderCapability[];
-  // CR-01 fix: these are now REAL booleans populated via the shared
-  // ecosystem-presence module. The previous `boolean | undefined` placeholder
-  // caused tier-contract Case D divergence on hosts with pandoc/zotero/
-  // humanizer installed (D-21: fix the tiers, not the test).
+  // Real booleans from the shared ecosystem-presence module.
   readonly pandoc: boolean;
   readonly zotero_mcp: boolean;
   readonly humanizer: boolean;
   readonly onedrive_detected: boolean;
-  // WR-02: sync_folder_match is the absolute paper-dir path that matched a
-  // known cloud-sync folder, or null when no match. Previous boolean type
-  // collapsed information (which folder matched) that consumers want.
-  // tests/tier-contract.test.ts McpCapabilities already declared this as
-  // `string` (line 100) — the type now matches the contract.
+  // The absolute paper-dir path that matched a known cloud-sync folder, or
+  // null, so callers can say which folder triggered the warning.
   readonly sync_folder_match: string | null;
 }
 
@@ -57,9 +45,7 @@ function envPresent(name: string): boolean {
  * Build the capability facts record from runtime config + env presence checks.
  *
  * This is the SINGLE authorised site to combine loadRuntimeConfig() with
- * process.env[...] presence flags. Both mcp/resources.ts (paper://capabilities)
- * and mcp/tools.ts (paper_capability_probe) import this function and
- * JSON.stringify the return — neither does composition of its own.
+ * process.env[...] presence flags.
  *
  * The returned record contains only booleans, env-var NAMES, and provider names.
  * No resolved api-key values ever appear in the return shape.
@@ -76,12 +62,9 @@ export async function loadCapabilityFacts(): Promise<CapabilityFacts> {
     present: envPresent(p.apiKeyEnv),
   }));
 
-  // CR-01: probe the ecosystem facts so the MCP tier reports real booleans.
-  // These calls are read-only (spawn `pandoc --version`, statSync, readdirSync,
-  // and a path-substring check) so they are safe to invoke from the
-  // paper://capabilities handler hot path. Wrapping them in a try/catch
-  // keeps the handler robust to unexpected probe-module failure modes
-  // (false on error — same semantics as the doctor-probe WARN fallback).
+  // The ecosystem probes are read-only (spawn `pandoc --version`, statSync,
+  // readdirSync, a path-substring check). A probe that throws reads as
+  // "not present", the same as the doctor's WARN fallback.
   const syncFolder = (() => {
     try {
       return detectSyncFolder();
@@ -91,7 +74,6 @@ export async function loadCapabilityFacts(): Promise<CapabilityFacts> {
   })();
 
   return {
-    mcp_self: true,
     contact_email_set: envPresent(cfg.contactEmailEnv ?? 'PENSMITH_CONTACT_EMAIL'),
     providers,
     pandoc: safeBool(isPandocPresent),

@@ -92,10 +92,7 @@ export function isHumanizerSkillPresent(): boolean {
  * paper-dir path that matched (or null) for capabilities.ts
  * (`sync_folder_match`, per WR-02 — string|null, not boolean).
  *
- * Env-var resolution: PENSMITH_PAPER_ROOT → paperDir(). This is the canonical
- * env var name used everywhere else in the codebase (mcp/server.ts boot,
- * tests/tier-contract.test.ts Case C); WR-05 dropped the transitional
- * PENSMITH_PAPER_DIR legacy fallback.
+ * Env-var resolution: PENSMITH_PAPER_ROOT → paperDir().
  */
 export function detectSyncFolder(): { detected: boolean; match: string | null; dir: string } {
   const envRoot = process.env.PENSMITH_PAPER_ROOT;

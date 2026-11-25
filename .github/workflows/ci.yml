@@ -44,7 +44,7 @@ jobs:
 
       - run: npx tsc --noEmit
 
-      - name: Build (produces dist/mcp/server.js for manifest validation)
+      - name: Build
         run: npm run build
 
       - name: Test suite + coverage gate (non-TTY stdin — CI-03)

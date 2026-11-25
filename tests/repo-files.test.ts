@@ -28,7 +28,6 @@ test('root config files exist', () => {
     'README-DEV.md',
     'CONTRIBUTING.md',
     'eslint.config.js',
-    'mcp/server.ts',
     'scripts/run-tests.mjs',
     'references/doctor-output.md',
     // 02-06: hooks/.gitkeep replaced by real TIER-03 hook modules.
@@ -105,7 +104,6 @@ test('PRIVACY and README-DEV structure checks (README stubs removed — Phase 16
   assert.match(read('PRIVACY.md'), /No telemetry/i);
   // README-DEV — unchanged
   assert.match(read('README-DEV.md'), /npm run build/);
-  assert.match(read('README-DEV.md'), /dist\/mcp\/server\.js/);
   // CONTRIBUTING — unchanged
   const c = read('CONTRIBUTING.md');
   assert.match(c, /bin\/lib\/http\.ts/);
@@ -144,7 +142,7 @@ test('STYL-04: README style-match dual-use disclosure is present + honest (RED-b
 
 test('directory contract from D-21', () => {
   for (const d of [
-    'bin', 'bin/lib', 'bin/lib/migrations', 'mcp', 'hooks', 'skills', 'agents',
+    'bin', 'bin/lib', 'bin/lib/migrations', 'hooks', 'skills', 'agents',
     'workflows', 'templates', 'templates/citation-styles', 'references',
     'schema', 'tests', 'tests/fixtures', 'scripts',
   ]) {
@@ -189,7 +187,7 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   const hash = createHash('sha256').update(bytes).digest('hex');
   // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
-  const PINNED = 'e43c0cd7fd8b04cd079ace0f56e7d7d67d871ab3e04fbdaef0eb29a599aa020a';
+  const PINNED = '35c1fb8c6e3c839e020267ca9befb8e8b8b9521c921c2b6180953e1f5c1db324';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
@@ -254,7 +252,6 @@ test('references/doctor-output.md retains all probe section anchors (Phase 2 + P
   const copy = read('references/doctor-output.md');
   assert.match(copy, /# Doctor Output Strings \(locked — D-18\)/);
   assert.match(copy, /node-version \(DOCT-01\)/);
-  assert.match(copy, /mcp-sdk-presence \(DOCT-01 wiring\)/);
   assert.match(copy, /contact-email-presence \(DOCT-03\)/);
   assert.match(copy, /sync-folder-detection \(DOCT-04\)/);
   assert.match(copy, /runtime-config-presence \(DOCT-07\)/);

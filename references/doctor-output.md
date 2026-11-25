@@ -1,16 +1,13 @@
 # Doctor Output Strings (locked — D-18)
 
 This file is the SINGLE source of truth for `/pensmith doctor` (DOCT-01..04, DOCT-07
-+ DOCT-02 ecosystem probes) user-facing prose. `bin/cli/doctor.ts` reads these
-strings at module load. The Tier-1 MCP `paper://capabilities` resource consumes
-the same Record shape (severities only — no copy strings persisted across the wire).
-Drift between the locked copy and the rendered output is a regression — pinned
-by sha256 hash in `tests/repo-files.test.ts`.
++ DOCT-02 ecosystem probes) user-facing prose. Drift between the locked copy and
+the rendered output is a regression — pinned by sha256 hash in
+`tests/repo-files.test.ts`.
 
 The Phase-3 wiring-smoke probe (intake-outline-verify-wiring, DOCT-05) lands
 in Plan 03-09 Task 9.1 — its locked copy is the `intake-outline-verify-wiring
-(DOCT-05)` section below. The tier-equivalence assertion is the tier-contract
-Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this file.
+(DOCT-05)` section below.
 
 ## TTY render — header
 
@@ -29,11 +26,8 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 ### node-version (DOCT-01)
 > Node.js runtime version probe — pensmith requires >=20.10.0.
 
-### mcp-sdk-presence (DOCT-01 wiring)
-> MCP server build artifact presence — dist/mcp/server.js must exist and be non-empty.
-
 ### contact-email-presence (DOCT-03)
-> PENSMITH_CONTACT_EMAIL environment variable presence — see references/http-warnings.md for the full WARN copy. (Canonical probe id per 02-05 line 45; 02-07 Case A reads `probes['contact-email-presence']`.)
+> PENSMITH_CONTACT_EMAIL environment variable presence — see references/http-warnings.md for the full WARN copy. (Canonical probe id per 02-05 line 45.)
 
 ### sync-folder-detection (DOCT-04)
 > .paper/ inside cloud sync folder (OneDrive / iCloud / Dropbox / Google Drive) detection — WARN if matched.
@@ -52,7 +46,7 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 
 ### build-artifact-resolves (Phase 2 substitute for deferred DOCT-05)
 
-> Compiled dist/ build-artifact resolution probe — confirms dist/bin/pensmith.js and dist/mcp/server.js exist and are non-empty. Phase 2 substitute for the originally deferred DOCT-05; remains active in Phase 3 alongside the real DOCT-05 wiring smoke (D-15).
+> Compiled dist/ build-artifact resolution probe — confirms dist/bin/pensmith.js exists and is non-empty. Phase 2 substitute for the originally deferred DOCT-05; remains active in Phase 3 alongside the real DOCT-05 wiring smoke (D-15).
 
 ### http-crossref-ping (D-03(d) cassette wiring)
 
@@ -71,7 +65,6 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
   "schemaVersion": 1,
   "probes": {
     "node-version":             { "id": "...", "severity": "PASS|WARN|FAIL|SKIP", "summary": "...", "detail": "...", "fix": "..." },
-    "mcp-sdk-presence":         { "..." : "..." },
     "contact-email-presence":   { "..." : "..." },
     "sync-folder-detection":    { "..." : "..." },
     "runtime-config-presence":  { "..." : "..." },
@@ -87,9 +80,6 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 ```
 
 Keys under `probes` = `probe.id` (per D-20 — Record keyed by id, NOT an Array).
-The tier-contract test (02-07 Case A) compares Tier 1 `paper://capabilities`
-and Tier 2 `doctor --json` for capability-fact equivalence — the **boolean
-facts** must agree, even though the SHAPES differ by design.
 
 (Do NOT edit the wording above without also updating the SHA-256 hash pin in
 tests/repo-files.test.ts. The hash pin is the canonical drift sentinel.)

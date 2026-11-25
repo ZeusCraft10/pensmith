@@ -1,10 +1,10 @@
 // bin/lib/doctor/probes/build-artifact-resolves.ts
 //
 // DOCT-05 Phase-2 substitute (per checker iter 2 + B4 user decision):
-//   statSync on dist/bin/pensmith.js and dist/mcp/server.js (both must be non-empty);
-//   then execFileSync(process.execPath, ['dist/bin/pensmith.js', '--version']) smoke-test.
-// D-15 severity: PASS when both artifacts exist non-empty AND --version exits 0;
-//   FAIL when either artifact is missing/empty OR the smoke exec fails.
+//   statSync on dist/bin/pensmith.js (must be non-empty); then
+//   execFileSync(process.execPath, ['dist/bin/pensmith.js', '--version']) smoke-test.
+// D-15 severity: PASS when the artifact exists non-empty AND --version exits 0;
+//   FAIL when it is missing/empty OR the smoke exec fails.
 // D-19 read-only: statSync + execFileSync (read-only query), no writes.
 // Pitfall 8: NEVER exec() (shell-interpolation risk) — only execFileSync with argv array.
 
@@ -46,9 +46,7 @@ function findPkgRoot(start: string): string {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = findPkgRoot(HERE);
 const BIN_REL = 'dist/bin/pensmith.js';
-const MCP_REL = 'dist/mcp/server.js';
 const BIN = path.join(PKG_ROOT, BIN_REL);
-const MCP = path.join(PKG_ROOT, MCP_REL);
 
 function presentNonEmpty(p: string): { ok: boolean; size: number; reason?: string } {
   try {
@@ -71,12 +69,11 @@ export const buildArtifactResolvesProbe: Probe = {
   id: 'build-artifact-resolves',
   async run(): Promise<ProbeResult> {
     const bin = presentNonEmpty(BIN);
-    const mcp = presentNonEmpty(MCP);
-    if (!bin.ok || !mcp.ok) {
+    if (!bin.ok) {
       return {
         id: 'build-artifact-resolves',
         severity: 'FAIL',
-        summary: `Build artifact missing: ${[!bin.ok && bin.reason, !mcp.ok && mcp.reason].filter(Boolean).join('; ')}`,
+        summary: `Build artifact missing: ${bin.reason ?? BIN_REL}`,
         fix: 'Run `npm run build`.',
       };
     }
@@ -90,7 +87,7 @@ export const buildArtifactResolvesProbe: Probe = {
       return {
         id: 'build-artifact-resolves',
         severity: 'PASS',
-        summary: `Build artifacts present (${BIN_REL}: ${bin.size}B, ${MCP_REL}: ${mcp.size}B) and \`pensmith --version\` exits 0.`,
+        summary: `Build artifact present (${BIN_REL}: ${bin.size}B) and \`pensmith --version\` exits 0.`,
       };
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
