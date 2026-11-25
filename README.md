@@ -70,7 +70,7 @@ After a section is drafted, the verifier runs on that section:
 | **Pass 3: quotes with no citation** | A quotation of ten or more words that cites nothing. It may quote a source without crediting it, or be your own data (an interview, a participant) or an epigraph, which no source can confirm, so you check it yourself | `UNATTRIBUTED`; the section is marked unverifiable | No, but verify, compile and export each warn about it |
 | **Pass 2 / Pass 4: judgment** | Model-assisted claim support and coherence review | Advisory notes | No |
 
-Text that only looks like a citation is flagged too: `ChatGPT (2022)` or `Wuhan (2019)` reads as an author-year citation. Write its bracket as `\(` (`ChatGPT \(2022)`), put an identifier in backticks, or write a handle as `\@name`, and the verifier reads it as text.
+Text that only looks like a citation is flagged too: `ChatGPT (2022)`, `Wuhan (2019)` or a period in brackets such as `(USSR, 1922–1991)` reads as an author-year citation. Write its bracket as `\(` (`ChatGPT \(2022)`), put an identifier in backticks, or write a handle as `\@name`, and the verifier reads it as text. A lifespan after a name, such as `Darwin (1809–1882)`, is not flagged.
 
 Edits made after verification are detected with a hash of the draft, so a stale "verified" mark cannot slip through.
 

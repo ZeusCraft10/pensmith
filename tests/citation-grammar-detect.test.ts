@@ -174,3 +174,16 @@ test('quotes and sentences: a CRLF blank line ends a paragraph, as an LF one doe
   assert.deepEqual(quotes(md), [[Q, []]]);
   assert.deepEqual(quotes(`As @k argues:\r\n\r\n> ${Q}\r\n\r\nNext paragraph.`), [[Q, ['k']]]);
 });
+
+test('raw citations: a lifespan or a period after a name is not a citation', () => {
+  const md = [
+    'Charles Darwin (1809–1882) and Immanuel Kant (1724-1804) wrote before Max Weber (1864–1920).',
+    'Ada Lovelace (1815–52) saw it first; the Weimar Republic (1919–1933) and President Obama (2009–2017) came later.',
+  ].join('\n');
+  assert.deepEqual(raws(md), []);
+  // A range in a bracketed author-year citation is still one.
+  assert.deepEqual(raws('It held (Smith, 2019–2021) and [Doe, 2018-19].'), [
+    ['author-year', '(Smith, 2019–2021)'],
+    ['author-year', '[Doe, 2018-19]'],
+  ]);
+});

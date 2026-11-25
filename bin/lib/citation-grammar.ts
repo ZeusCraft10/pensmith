@@ -397,14 +397,23 @@ const SURNAME_ANY = String.raw`${PARTICLE}${NOT_A_NAME}\p{Lu}[\p{L}\p{M}'’-]*[
 const SURNAME_PROSE = String.raw`${PARTICLE}${NOT_A_NAME}\p{Lu}(?=[\p{L}\p{M}'’-]*\p{Ll})[\p{L}\p{M}'’-]*[\p{L}\p{M}]`;
 const authors = (name: string): string =>
   String.raw`${name}(?:(?:,\s*|\s+)(?:and|&)\s+${name}|,\s+${name}|\s+et\s+al\.?)*`;
-// A year, or a range of years (`2019-2021`, `2018–19`).
-const YEAR = String.raw`(?:(?:1[5-9]\d\d|20\d\d)(?:\s*[-–—]\s*(?:\d{4}|\d\d))?[a-z]?(?![\p{L}\p{N}])|n\.\s?d\.|in\s+press|forthcoming)`;
-const YEARS = String.raw`${YEAR}(?:,\s*${YEAR})*`;
+// One or more years (`2020`, `2020a`, `n.d.`, `in press`), comma-separated;
+// `range` is what may follow a year's digits.
+const years = (range: string): string => {
+  const year = String.raw`(?:(?:1[5-9]\d\d|20\d\d)${range}[a-z]?(?![\p{L}\p{N}])|n\.\s?d\.|in\s+press|forthcoming)`;
+  return String.raw`${year}(?:,\s*${year})*`;
+};
+// After a name in running text, single years only: a range there is far more
+// often a lifespan or a period (`Darwin (1809–1882)`, `Weimar Republic
+// (1919–1933)`) than a citation.
+const PROSE_YEARS = years('');
+// Inside an author-year bracket a year may be a range (`2019-2021`, `2018–19`).
+const CITED_YEARS = years(String.raw`(?:\s*[-–—]\s*(?:\d{4}|\d\d))?`);
 // A page after the year: `, p. 4`, `, ch. 2`, Harvard `: 45`, or a bare `, 45`.
 const PAGE_VALUE = String.raw`[\dIVXLCivxlc]+(?:\s*[-–—]\s*[\dIVXLCivxlc]+)?`;
 const PAGES = String.raw`(?:,\s*(?:pp?\.|paras?\.|chaps?\.|ch\.|sec\.|§)\s*${PAGE_VALUE}|:\s*\d+(?:\s*[-–—]\s*\d+)?|,\s*\d+(?:\s*[-–—]\s*\d+)?)?`;
 const LEAD = String.raw`(?:(?:see|e\.g\.|cf\.|i\.e\.|also),?\s+(?:also\s+)?)?`;
-const ONE_WORK = String.raw`${LEAD}${authors(SURNAME_ANY)},?\s+${YEARS}${PAGES}`;
+const ONE_WORK = String.raw`${LEAD}${authors(SURNAME_ANY)},?\s+${CITED_YEARS}${PAGES}`;
 
 // In priority order: a match that overlaps an earlier one is dropped, so a
 // DOI inside a doi.org link is reported once, as the link.
@@ -420,7 +429,7 @@ const RAW_PATTERNS: ReadonlyArray<readonly [RawCitationKind, RegExp]> = [
   ['author-year', new RegExp(String.raw`(?<!\\)\(\s*${ONE_WORK}(?:\s*;\s*${ONE_WORK})*\s*\)`, 'gu')],
   // `[Smith, 2020]`, but not a link (`[Smith, 2020](url)`, `[...][ref]`, `[...]: url`).
   ['author-year', new RegExp(String.raw`(?<!\\)\[\s*${ONE_WORK}(?:\s*;\s*${ONE_WORK})*\s*\](?![(\[:])`, 'gu')],
-  ['author-year', new RegExp(String.raw`(?<![\p{L}\p{N}])${NOT_AFTER}${authors(SURNAME_PROSE)}\s+\(\s*${YEARS}${PAGES}\s*\)`, 'gu')],
+  ['author-year', new RegExp(String.raw`(?<![\p{L}\p{N}])${NOT_AFTER}${authors(SURNAME_PROSE)}\s+\(\s*${PROSE_YEARS}${PAGES}\s*\)`, 'gu')],
 ];
 
 /** Drop sentence punctuation and unbalanced closing brackets from the end of an identifier. */
