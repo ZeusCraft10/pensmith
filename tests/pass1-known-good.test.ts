@@ -5,9 +5,10 @@
 // bibliography does: braced and unbraced particles, initials, given-first
 // names, "and others", consortium authors, journal abbreviations, LaTeX
 // italics against registry <i> and MathML, a missing subtitle, a year one
-// off, uppercase and doi.org DOIs, labelled PMIDs and ISBNs. A matcher change
-// that accuses one of them of being MIS-CITED or FABRICATED fails here. Its
-// twin for invented and wrong citations is tests/known-bad-citations.test.ts.
+// off, British spelling, uppercase and doi.org DOIs, labelled PMIDs and
+// ISBNs. A matcher change that accuses one of them of being MIS-CITED or
+// FABRICATED fails here. Its twin for invented and wrong citations is
+// tests/known-bad-citations.test.ts.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,7 +22,7 @@ const CORPUS = fileURLToPath(new URL('./fixtures/pass1-known-good.bib', import.m
 
 test('Pass 1: every entry of the known-good corpus is OK', async () => {
   const keys = [...readFileSync(CORPUS, 'utf8').matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
-  assert.ok(keys.length >= 12, `the corpus lists ${keys.length} entries`);
+  assert.ok(keys.length >= 13, `the corpus lists ${keys.length} entries`);
   const root = mkdtempSync(join(tmpdir(), 'pensmith-known-good-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
   const bibPath = join(root, '.paper', 'CITATIONS.bib');

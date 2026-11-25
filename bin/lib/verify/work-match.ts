@@ -130,6 +130,29 @@ function romanToNumber(t: string): number {
   return n;
 }
 
+// British spellings that neither the general rules below nor the typo
+// allowance reach: a letter in place of another ("defence", "sceptic"), which
+// is never forgiven as a typo; a word too short for the typo allowance
+// ("grey", "fibre"); or more than one letter ("sulphur", "programme").
+// Without them a correct citation in the other spelling is MIS-CITED.
+const SPELLING_VARIANTS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^(defen|offen|licen|preten)c/, '$1s'], // defence, offences, licensed, pretence
+  [/^practis/, 'practic'], // practise, practising
+  [/^artefact/, 'artifact'],
+  [/^sceptic/, 'skeptic'],
+  [/^leuco/, 'leuko'], // leucocyte, leucopenia
+  [/^mollusc/, 'mollusk'],
+  [/^enquir/, 'inquir'],
+  [/^despatch/, 'dispatch'],
+  [/^grey/, 'gray'], // grey matter, greyscale
+  [/sulph/, 'sulf'], // sulphur, disulphide
+  [/^fibre/, 'fiber'],
+  [/^plough/, 'plow'],
+  [/^programme(s?)$/, 'program$1'],
+  [/^ageing$/, 'aging'],
+  [/^haem(s?)$/, 'heme$1'],
+];
+
 /**
  * The comparison key of a title word: roman numerals as numbers, and British
  * and US spellings and plurals folded together, so "Modelling tumours" and
@@ -139,9 +162,12 @@ function wordKey(word: string): string {
   const t = word === 'vs' ? 'versus' : word;
   if (ROMAN.test(t)) return String(romanToNumber(t));
   if (/^\d+$/.test(t) || UNSPACED.test(t)) return t;
-  let k = t
+  let k = t;
+  for (const [uk, us] of SPELLING_VARIANTS) k = k.replace(uk, us);
+  k = k
     .replace(/our/g, 'or')
-    .replace(/([iy])s(e|ed|es|ing|ation|ations|er|ers)$/, '$1z$2')
+    // -ise and -yse before any ending they take: organisational, recognisable, analysable.
+    .replace(/([iy])s(e[ds]?|ing|ers?|ations?|ational(?:ly)?|abl[ey]|abilit(?:y|ies))$/, '$1z$2')
     .replace(/ll(ed|ing|er|ers)$/, 'l$1')
     .replace(/tre(s?)$/, 'ter$1')
     .replace(/ogue$/, 'og')

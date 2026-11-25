@@ -60,6 +60,40 @@ test('titles: a typo in a long word is tolerated, a different short word is not'
   assert.ok(!titleOk('Mouse models of disease', 'Moose models of disease'));
 });
 
+test('titles: British and US spellings are the same words, in either direction', () => {
+  // Many of these differ by one letter in place of another, which the typo
+  // allowance does not forgive, so each spelling has to be folded.
+  const pairs: Array<[string, string]> = [
+    ['Analysing behaviour in organisations', 'Analyzing behavior in organizations'],
+    ['Organisational culture and performance', 'Organizational culture and performance'],
+    ['Organisationally embedded routines', 'Organizationally embedded routines'],
+    ['Recognisable patterns in speech', 'Recognizable patterns in speech'],
+    ['Generalisability of clinical trials', 'Generalizability of clinical trials'],
+    ['Customisable and analysable data', 'Customizable and analyzable data'],
+    ['Host defence peptides in immunity', 'Host defense peptides in immunity'],
+    ['Software licence compliance', 'Software license compliance'],
+    ['Licencing of criminal offences', 'Licensing of criminal offenses'],
+    ['Pretence in defenceless children', 'Pretense in defenseless children'],
+    ['Motion artefacts in magnetic resonance imaging', 'Motion artifacts in magnetic resonance imaging'],
+    ['Sceptical attitudes toward vaccination', 'Skeptical attitudes toward vaccination'],
+    ['Scepticism and sceptics in science', 'Skepticism and skeptics in science'],
+    ['Practising medicine in rural areas', 'Practicing medicine in rural areas'],
+    ['Leucocyte migration in inflammation', 'Leukocyte migration in inflammation'],
+    ['Freshwater molluscs of Europe', 'Freshwater mollusks of Europe'],
+    ['An enquiry into human understanding', 'An inquiry into human understanding'],
+    ['Despatch of emergency ambulances', 'Dispatch of emergency ambulances'],
+    ['Grey matter volume in greyscale images', 'Gray matter volume in grayscale images'],
+    ['Sulphur metabolism and disulphide bonds', 'Sulfur metabolism and disulfide bonds'],
+    ['Dietary fibre in a school programme', 'Dietary fiber in a school program'],
+    ['Ageing and haem oxygenase', 'Aging and heme oxygenase'],
+    ['Conservation ploughing in clay soils', 'Conservation plowing in clay soils'],
+  ];
+  for (const [uk, us] of pairs) {
+    assert.ok(titleOk(uk, us), `"${uk}" against "${us}"`);
+    assert.ok(titleOk(us, uk), `"${us}" against "${uk}"`);
+  }
+});
+
 test('titles: one letter in place of another makes another word, however long', () => {
   assert.ok(!titleOk('Protein conformation in lipid membranes', 'Protein confirmation in lipid membranes'));
   assert.ok(!titleOk('Afferent pathways of the spinal cord', 'Efferent pathways of the spinal cord'));
