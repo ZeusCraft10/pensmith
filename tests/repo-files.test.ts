@@ -139,7 +139,7 @@ test('STYL-04: README style-match dual-use disclosure is present + honest (RED-b
 
 test('directory contract from D-21', () => {
   for (const d of [
-    'bin', 'bin/lib', 'bin/lib/migrations', 'hooks', 'skills', 'agents',
+    'bin', 'bin/lib', 'bin/lib/migrations', 'hooks', 'plugin', 'plugin/skills', 'agents',
     'workflows', 'templates', 'templates/citation-styles', 'references',
     'schema', 'tests', 'tests/fixtures', 'scripts',
   ]) {
@@ -184,7 +184,7 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   const hash = createHash('sha256').update(bytes).digest('hex');
   // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
-  const PINNED = '1bbcd00b925420e571eb2c694764e69423f0ba2afa3085987c1c3d5aba6507ff';
+  const PINNED = 'f489aa52837babc416f8eee972e134151687f49100fa02ebb6a9c82187354b2a';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

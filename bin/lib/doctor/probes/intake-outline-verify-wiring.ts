@@ -1,76 +1,35 @@
 // bin/lib/doctor/probes/intake-outline-verify-wiring.ts
 //
-// DOCT-05 (Plan 03-09 Task 9.1): intake/outline/verify wiring smoke probe.
+// DOCT-05: intake/outline/verify wiring smoke probe.
 //
-// Confirms the 6 Phase-3 per-section verbs are wired end-to-end across the
-// three surfaces that Plans 03-04..03-08 landed:
+// Confirms the per-section pipeline is wired in the running CLI:
+//   (a) the dispatcher registers new, research, outline, plan, write, verify;
+//   (b) bin/lib/drafter-input.ts exports `assertDrafterInput`.
 //
-//   (a) bin/pensmith.ts REAL_VERB_LOADERS includes:
-//         new, research, outline, plan, write, verify
-//       (`new` is the canonical UX02_VERBS key — workflows/new.md is the
-//        intake workflow body per CYCLE-3 NAMING NOTE.)
-//   (b) workflows/{new,research,outline,plan,write,verify}.md each has a
-//       `## Body` section (Plan 03-06 contract).
-//   (c) bin/lib/drafter-input.ts exports `assertDrafterInput` (Plan 03-07).
+// The workflow markdown bodies are a source-tree artifact, not something the
+// installed CLI reads, so their structure is checked by the test suite
+// (tests/workflow-bodies.test.ts), not here.
 //
-// D-19 read-only: probe only imports + parses files; no filesystem writes,
-//   no .paper/ touches, no network I/O.
-//
-// Failure modes surfaced as a FAIL with details listing every missing piece
-// so a single `pensmith doctor` invocation tells the operator exactly which
-// wiring regressed.
+// D-19 read-only: probe only imports modules; no filesystem writes, no .paper/
+// touches, no network I/O. A FAIL lists every missing piece so one
+// `pensmith doctor` run tells the operator exactly which wiring regressed.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-// Resolve workflow files relative to the package root (same find-up
-// pattern used by build-artifact-resolves.ts and prompt-loader.ts) so the
-// probe works under both `tsx` (bin/lib/doctor/probes/*.ts) and the
-// compiled dist build (dist/bin/lib/doctor/probes/*.js).
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue upward
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = findPkgRoot(HERE);
-
-// (a) REAL_VERB_LOADERS expected keys. `new` is the canonical UX02 key
-// even though the bin/cli implementation file is intake.ts (Plan 06+07
-// CYCLE-3 NAMING NOTE — workflows/new.md is the intake body until
-// UX02_VERBS renames the key).
+// `new` is the canonical verb key even though its implementation file is
+// bin/cli/intake.ts.
 const EXPECTED_VERB_KEYS = ['new', 'research', 'outline', 'plan', 'write', 'verify'] as const;
-
-// (b) Workflow files expected. Same canonical-name list — workflows/new.md
-// (not workflows/intake.md) is the intake workflow file at Plan 09 acceptance.
-const EXPECTED_WORKFLOW_FILES = ['new', 'research', 'outline', 'plan', 'write', 'verify'] as const;
 
 export const intakeOutlineVerifyWiringProbe: Probe = {
   id: 'intake-outline-verify-wiring',
   async run(): Promise<ProbeResult> {
     const failures: string[] = [];
 
-    // (a) REAL_VERB_LOADERS includes all 6 Phase-3 verbs.
+    // (a) The dispatcher's citty command exposes every pipeline verb.
     try {
       const dispatcher = (await import('../../../pensmith.js')) as {
         command?: { subCommands?: Record<string, unknown> };
       };
-      // The dispatcher exports `command` (a citty CommandDef) with
-      // subCommands populated by buildSubCommands(). REAL_VERB_LOADERS
-      // itself is private to the module, but its effect is observable on
-      // command.subCommands.
       const subs = dispatcher.command?.subCommands ?? {};
       for (const v of EXPECTED_VERB_KEYS) {
         if (!(v in subs)) {
@@ -83,20 +42,7 @@ export const intakeOutlineVerifyWiringProbe: Probe = {
       );
     }
 
-    // (b) Each workflow file exists and contains a `## Body` heading.
-    for (const v of EXPECTED_WORKFLOW_FILES) {
-      const wfPath = path.join(PKG_ROOT, 'workflows', `${v}.md`);
-      try {
-        const text = readFileSync(wfPath, 'utf8');
-        if (!/^## Body\s*$/m.test(text)) {
-          failures.push(`workflows/${v}.md missing '## Body' section`);
-        }
-      } catch {
-        failures.push(`workflows/${v}.md not found`);
-      }
-    }
-
-    // (c) bin/lib/drafter-input.ts exports assertDrafterInput.
+    // (b) bin/lib/drafter-input.ts exports assertDrafterInput.
     try {
       const di = (await import('../../drafter-input.js')) as {
         assertDrafterInput?: unknown;
@@ -116,15 +62,14 @@ export const intakeOutlineVerifyWiringProbe: Probe = {
         severity: 'FAIL',
         summary: 'Intake/outline/verify wiring incomplete',
         detail: failures.join('; '),
-        fix: 'Re-check Plan 03-06 (workflow bodies), Plan 03-07 (verb loaders + drafter-input), and the REAL_VERB_LOADERS map in bin/pensmith.ts.',
+        fix: 'Check the REAL_VERB_LOADERS map in bin/pensmith.ts and the drafter-input contract.',
       };
     }
 
     return {
       id: 'intake-outline-verify-wiring',
       severity: 'PASS',
-      summary:
-        'All 6 verbs (new, research, outline, plan, write, verify) wired in dispatcher + workflows + drafter contract.',
+      summary: 'All 6 pipeline verbs (new, research, outline, plan, write, verify) are wired, with the drafter contract.',
     };
   },
 };

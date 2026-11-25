@@ -190,7 +190,11 @@ function findPkgRoot(start: string): string {
   let cur = start;
   for (let i = 0; i < 8; i++) {
     try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
+      // package.json marks a source checkout; .claude-plugin/plugin.json marks
+      // the installed plugin, which ships no package.json.
+      for (const marker of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
+        if (statSync(path.join(cur, marker), { throwIfNoEntry: false })?.isFile()) return cur;
+      }
     } catch {
       // continue
     }
@@ -257,16 +261,20 @@ export function _resetWarnedForTest(): void {
 let cachedVersion: string | null = null;
 function pkgVersion(): string {
   if (cachedVersion !== null) return cachedVersion;
-  try {
-    // IN-03: same off-by-one as WARN_FILE — `..` × 2 from __dirname lands at
-    // dist/ post-build, producing a path that doesn't exist and silently
-    // returning '0.0.0' in the User-Agent header. Reuse PKG_ROOT.
-    const pkgPath = path.join(PKG_ROOT, 'package.json');
-    const raw = readFileSync(pkgPath, 'utf8');
-    const parsed = JSON.parse(raw) as { version?: string };
-    cachedVersion = parsed.version ?? '0.0.0';
-  } catch {
-    cachedVersion = '0.0.0';
+  // IN-03: reuse PKG_ROOT (a fixed-depth `..` lands in the wrong dir after
+  // build). A source checkout carries the version in package.json; the
+  // installed plugin carries it in .claude-plugin/plugin.json.
+  cachedVersion = '0.0.0';
+  for (const manifest of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
+    try {
+      const parsed = JSON.parse(readFileSync(path.join(PKG_ROOT, manifest), 'utf8')) as { version?: string };
+      if (parsed.version) {
+        cachedVersion = parsed.version;
+        break;
+      }
+    } catch {
+      // not this layout; try the next manifest
+    }
   }
   return cachedVersion;
 }

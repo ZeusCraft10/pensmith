@@ -44,9 +44,10 @@ import { fileURLToPath } from 'node:url';
 // ---------------------------------------------------------------------------
 // Locate the repo's templates/ dir relative to THIS module.
 // Same shape as bin/lib/citations.ts findPkgRoot — walk up from here until
-// we find package.json. This makes the loader robust under both `tsx` (where
-// the source lives at bin/lib/prompt-loader.ts) and the compiled dist build
-// (where it lives at dist/bin/lib/prompt-loader.js).
+// we find package.json (a source checkout) or .claude-plugin/plugin.json (the
+// installed plugin). This works under `tsx` (bin/lib/prompt-loader.ts), the
+// compiled build (dist/bin/lib/prompt-loader.js) and the plugin bundle
+// (plugin/dist/pensmith.mjs).
 // ---------------------------------------------------------------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,14 +55,15 @@ const __dirname = path.dirname(__filename);
 function findPkgRoot(start: string): string {
   let cur = start;
   for (let i = 0; i < 8; i++) {
-    try {
-      // statSync via require/readFileSync indirection avoids importing
-      // node:fs/promises here; we only need the sync presence check.
-      const probe = path.join(cur, 'package.json');
-      readFileSync(probe);
-      return cur;
-    } catch {
-      // continue upward
+    // package.json marks a source checkout; .claude-plugin/plugin.json marks
+    // the installed plugin, which ships no package.json.
+    for (const marker of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
+      try {
+        readFileSync(path.join(cur, marker));
+        return cur;
+      } catch {
+        // not here: try the next marker, then the parent directory
+      }
     }
     const next = path.dirname(cur);
     if (next === cur) break;

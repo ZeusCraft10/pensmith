@@ -341,6 +341,8 @@ export default [
       'tests/fixtures/lint-atomic-write-chokepoint-fixture.ts',
       'tests/fixtures/lint-paths-chokepoint-fixture.ts',
       'dist/**',
+      // Generated esbuild bundles (scripts/bundle.mjs); lint their sources instead.
+      'plugin/dist/**',
       'node_modules/**',
     ],
   },

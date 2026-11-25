@@ -1,10 +1,12 @@
 // bin/lib/doctor/probes/build-artifact-resolves.ts
 //
-// DOCT-05 Phase-2 substitute (per checker iter 2 + B4 user decision):
-//   statSync on dist/bin/pensmith.js (must be non-empty); then
-//   execFileSync(process.execPath, ['dist/bin/pensmith.js', '--version']) smoke-test.
-// D-15 severity: PASS when the artifact exists non-empty AND --version exits 0;
-//   FAIL when it is missing/empty OR the smoke exec fails.
+// Is this install complete? Two layouts exist: the plugin payload
+// (dist/pensmith.mjs bundle beside templates/ and references/) and a source
+// build (dist/bin/pensmith.js). The probe finds the CLI entry for whichever
+// layout it is running from, checks that `--version` exits 0, and checks the
+// runtime assets the CLI reads (prompt templates, CSL styles, reference copy).
+// D-15 severity: PASS when the entry runs and every asset is present; FAIL
+//   otherwise, naming what is missing.
 // D-19 read-only: statSync + execFileSync (read-only query), no writes.
 // Pitfall 8: NEVER exec() (shell-interpolation risk) — only execFileSync with argv array.
 
@@ -14,24 +16,19 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-// CR-02 fix: resolve build artifacts relative to THIS file, not process.cwd().
-// The PRD §3 / §19 Tier-2 contract guarantees `pensmith doctor` runs from
-// inside a user's paper directory — not from the pensmith repo root. Using
-// cwd-relative literals silently failed every Tier-2 user's first
-// `pensmith doctor` invocation outside the repo root. CI never caught this
-// because CI always runs from the repo root.
-//
-// Walk up from HERE until we find a directory containing package.json.
-// Fixed-depth `..` arithmetic does not work because this file ships at two
-// different depths: bin/lib/doctor/probes/*.ts under tsx (4 `..` to root)
-// and dist/bin/lib/doctor/probes/*.js after build (5 `..` to root). An
-// earlier fix used `..` × 4 unconditionally and produced a bogus
-// dist/dist/bin/pensmith.js path that no Tier-2 install would satisfy.
+// Resolve the install root relative to THIS file, never process.cwd():
+// `pensmith doctor` runs from inside a user's paper directory. Walk up rather
+// than using a fixed number of `..`, because this code runs at different
+// depths under tsx, in the compiled build and inside the plugin bundle.
 function findPkgRoot(start: string): string {
   let cur = start;
   for (let i = 0; i < 8; i++) {
     try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
+      // package.json marks a source checkout; .claude-plugin/plugin.json marks
+      // the installed plugin, which ships no package.json.
+      for (const marker of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
+        if (statSync(path.join(cur, marker), { throwIfNoEntry: false })?.isFile()) return cur;
+      }
     } catch {
       // continue
     }
@@ -45,8 +42,14 @@ function findPkgRoot(start: string): string {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = findPkgRoot(HERE);
-const BIN_REL = 'dist/bin/pensmith.js';
-const BIN = path.join(PKG_ROOT, BIN_REL);
+// Plugin bundle first, then the source build.
+const ENTRY_CANDIDATES = ['dist/pensmith.mjs', 'dist/bin/pensmith.js'];
+const REQUIRED_ASSETS = [
+  'templates/prompts/section-drafter.md',
+  'templates/citation-styles/apa.csl',
+  'references/honesty-framing.md',
+  'references/http-warnings.md',
+];
 
 function presentNonEmpty(p: string): { ok: boolean; size: number; reason?: string } {
   try {
@@ -68,34 +71,40 @@ function presentNonEmpty(p: string): { ok: boolean; size: number; reason?: strin
 export const buildArtifactResolvesProbe: Probe = {
   id: 'build-artifact-resolves',
   async run(): Promise<ProbeResult> {
-    const bin = presentNonEmpty(BIN);
-    if (!bin.ok) {
+    const entryRel = ENTRY_CANDIDATES.find((rel) => presentNonEmpty(path.join(PKG_ROOT, rel)).ok);
+    const missingAssets = REQUIRED_ASSETS.filter((rel) => !presentNonEmpty(path.join(PKG_ROOT, rel)).ok);
+    if (!entryRel || missingAssets.length > 0) {
+      const problems = [
+        ...(entryRel ? [] : [`no CLI entry (${ENTRY_CANDIDATES.join(' or ')}) under ${PKG_ROOT}`]),
+        ...missingAssets.map((rel) => `${rel} missing under ${PKG_ROOT}`),
+      ];
       return {
         id: 'build-artifact-resolves',
         severity: 'FAIL',
-        summary: `Build artifact missing: ${bin.reason ?? BIN_REL}`,
-        fix: 'Run `npm run build`.',
+        summary: `Install incomplete: ${problems.join('; ')}`,
+        fix: 'Reinstall the plugin, or run `npm run build` in a source checkout.',
       };
     }
+    const entry = path.join(PKG_ROOT, entryRel);
     try {
-      // execFileSync (NEVER exec) — argv array, no shell. 5s timeout.
-      execFileSync(process.execPath, [BIN, '--version'], {
+      // execFileSync (NEVER exec) — argv array, no shell. 10s timeout.
+      execFileSync(process.execPath, [entry, '--version'], {
         stdio: ['ignore', 'pipe', 'pipe'],
         encoding: 'utf8',
-        timeout: 5000,
+        timeout: 10_000,
       });
       return {
         id: 'build-artifact-resolves',
         severity: 'PASS',
-        summary: `Build artifact present (${BIN_REL}: ${bin.size}B) and \`pensmith --version\` exits 0.`,
+        summary: `CLI entry ${entryRel} runs and its ${REQUIRED_ASSETS.length} runtime assets are present.`,
       };
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       return {
         id: 'build-artifact-resolves',
         severity: 'FAIL',
-        summary: `Build artifacts exist but ${BIN_REL} --version failed to exit 0: ${reason}`,
-        fix: 'Run `npm run clean && npm run build`; investigate the build output.',
+        summary: `${entryRel} --version failed to exit 0: ${reason}`,
+        fix: 'Reinstall the plugin, or rebuild with `npm run build` in a source checkout.',
       };
     }
   },

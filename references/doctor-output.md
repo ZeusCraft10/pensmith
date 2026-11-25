@@ -46,7 +46,7 @@ in Plan 03-09 Task 9.1 — its locked copy is the `intake-outline-verify-wiring
 
 ### build-artifact-resolves (Phase 2 substitute for deferred DOCT-05)
 
-> Compiled dist/ build-artifact resolution probe — confirms dist/bin/pensmith.js exists and is non-empty. Phase 2 substitute for the originally deferred DOCT-05; remains active in Phase 3 alongside the real DOCT-05 wiring smoke (D-15).
+> Install completeness probe — finds the CLI entry for the running layout (dist/pensmith.mjs in the plugin, dist/bin/pensmith.js in a source build), confirms `--version` exits 0, and confirms the runtime assets the CLI reads (prompt templates, CSL styles, reference copy) are present. FAIL names what is missing.
 
 ### http-crossref-ping (D-03(d) cassette wiring)
 
@@ -54,7 +54,7 @@ in Plan 03-09 Task 9.1 — its locked copy is the `intake-outline-verify-wiring
 
 ### intake-outline-verify-wiring (DOCT-05)
 
-> Intake/outline/verify wiring smoke probe — confirms the 6 Phase-3 per-section verbs (new, research, outline, plan, write, verify) are wired end-to-end across the dispatcher (bin/pensmith.ts subCommands), workflow bodies (`workflows/{verb}.md` "## Body" section), and the drafter contract (bin/lib/drafter-input.ts assertDrafterInput export). FAIL lists every missing piece in `detail` so a single `pensmith doctor` invocation tells the operator exactly which wiring regressed. Probe is READ-ONLY per D-19 — no .paper/ side effects.
+> Intake/outline/verify wiring smoke probe — confirms the 6 Phase-3 per-section verbs (new, research, outline, plan, write, verify) are wired in the dispatcher (bin/pensmith.ts subCommands) and that the drafter contract (bin/lib/drafter-input.ts assertDrafterInput export) is present. FAIL lists every missing piece in `detail` so a single `pensmith doctor` invocation tells the operator exactly which wiring regressed. Probe is READ-ONLY per D-19 — no .paper/ side effects.
 
 ## JSON shape
 

@@ -2,11 +2,9 @@
 //
 // Wraps proper-lockfile@^4 (battle-tested, used by npm/yarn).
 //
-// CJS-shim necessity (RESEARCH §Key Finding #4 — BLOCKING):
-//   `import lockfile from 'proper-lockfile'` raises ERR_REQUIRE_ESM under
-//   tsx + node:test in this project's "type":"module" mode. proper-lockfile
-//   ships only CommonJS; the createRequire pattern below is the ONLY way to
-//   import it under our toolchain (Node 20.x + tsx + node:test).
+// proper-lockfile is CommonJS-only; Node's ESM loader exposes its
+// module.exports as the default import. A plain import (rather than a
+// createRequire call) lets the plugin bundler see and inline it.
 //
 // Lock dir (D-40 — OneDrive non-negotiable):
 //   Locks live in pensmithLockDir() (`%LOCALAPPDATA%\pensmith\locks` on
@@ -33,19 +31,13 @@
 //   - release(resource)               — unlock (recompute stub)
 //   - isLocked(resource)              — non-destructive check
 
-import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
+import lockfile from 'proper-lockfile';
 import { pensmithLockDir } from './paths.js';
 
-// CJS-shim — see "BLOCKING" note above. proper-lockfile is CommonJS-only.
-// The `as typeof import('proper-lockfile')` cast is a type-only operation
-// (TypeScript's `typeof import(...)` is the module's type signature) and
-// does not introduce a runtime ESM import.
-const require_ = createRequire(import.meta.url);
-const lockfile = require_('proper-lockfile') as typeof import('proper-lockfile');
 
 export interface LockOptions {
   /** Max wait before giving up acquisition (ms). Default 60_000. */

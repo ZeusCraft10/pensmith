@@ -5,13 +5,12 @@
 // `plan --revise` (a flag on the existing `plan` verb), NOT a 17th verb — the
 // locked-16 bijection is preserved.
 //
-// The 16-verb-length / subset invariants are un-skipped (they survive
-// implementation and would catch a 17th verb at any later wave). The
-// skill-file-content assertions are RED-by-skip on the skills landing in 07-04.
+// The plugin's one skill (plugin/skills/pensmith/SKILL.md) may only send
+// Claude to commands that exist.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 
@@ -19,13 +18,7 @@ function repoPath(rel: string): string {
   return fileURLToPath(new URL('../' + rel, import.meta.url));
 }
 
-const SKILL_FILES = [
-  repoPath('skills/pensmith.md'),
-  repoPath('skills/plan-section.md'),
-  repoPath('skills/write-section.md'),
-  repoPath('skills/verify-section.md'),
-];
-const skillsBuilt = existsSync(SKILL_FILES[0]!);
+const SKILL_FILES = [repoPath('plugin/skills/pensmith/SKILL.md')];
 
 const VERB_SET = new Set<string>(UX02_VERBS as readonly string[]);
 
@@ -58,41 +51,23 @@ test('UX-05: inline corrections (revise / swap-source / redo) map to the existin
   assert.ok(!VERB_SET.has('revise'), 'UX-05: "revise" must NOT be a 17th verb (it ships via plan --revise, per 04-04)');
 });
 
-// --- RED-by-skip presence guard ---
-test('UX-05: skill files presence is consistent with Wave-0 RED state', () => {
-  if (skillsBuilt) {
-    assert.ok(skillsBuilt, 'skills/*.md present — skill-target subset test active');
-  } else {
-    assert.ok(!skillsBuilt, 'Wave-0: skills/*.md not written yet (RED-by-skip; lands in 07-04)');
-  }
-});
-
 // === UX-05: every verb a skill body targets is a SUBSET of UX02_VERBS ===
 test('UX-05: the set of skill-mapped target verbs is a SUBSET of UX02_VERBS (no new verb names)',
-  { skip: !skillsBuilt }, () => {
-    // Collect candidate verb tokens the skills reference and assert each known
-    // verb-shaped reference is a member of the locked 16. We extract
-    // `pensmith:<verb>` / `pensmith <verb>` references from the skill bodies and
-    // require each to be a UX02 verb (or the `revise` correction, which maps to
-    // plan — asserted above to NOT be its own verb).
+  () => {
+    // Collect every command the skill tells Claude to run (`pensmith <verb>`
+    // inside backticks) and require each to be a real verb.
     const referenced = new Set<string>();
     for (const path of SKILL_FILES) {
-      if (!existsSync(path)) continue;
       const text = readFileSync(path, 'utf8');
-      const re = /pensmith[:\s]+([a-z][a-z-]*)/g;
+      const re = /`pensmith ([a-z][a-z-]*)/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(text)) !== null) {
         const token = m[1];
         if (token) referenced.add(token);
       }
     }
+    assert.ok(referenced.size >= 8, `expected the skill to reference the pipeline verbs, found: ${[...referenced].join(', ')}`);
     for (const token of referenced) {
-      // Allow the documented plumbing-skill suffixes (plan-section/write-section/
-      // verify-section) and the `revise` correction alias; everything else that
-      // looks like a verb dispatch MUST be a member of the locked 16.
-      const isPlumbingSuffix = /-section$/.test(token);
-      const isReviseAlias = token === 'revise';
-      if (isPlumbingSuffix || isReviseAlias) continue;
       assert.ok(
         VERB_SET.has(token),
         `UX-05: skill-referenced verb "${token}" must be a member of UX02_VERBS (no 17th verb)`,

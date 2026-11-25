@@ -60,7 +60,11 @@ function findPkgRoot(start: string): string {
   let cur = start;
   for (let i = 0; i < 8; i++) {
     try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
+      // package.json marks a source checkout; .claude-plugin/plugin.json marks
+      // the installed plugin, which ships no package.json.
+      for (const marker of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
+        if (statSync(path.join(cur, marker), { throwIfNoEntry: false })?.isFile()) return cur;
+      }
     } catch {
       // continue
     }
