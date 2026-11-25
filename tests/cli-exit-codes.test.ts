@@ -161,6 +161,20 @@ test('exit codes: compile exits 2 when it refuses, and moves an earlier compiled
   assert.match(r.stdout, /DRAFT\.stale\.md/, 'the refusal must say where the old draft went');
 });
 
+test('exit codes: compile still refuses with exit 2 when the earlier draft cannot be moved aside', () => {
+  const root = seedPaper([{ n: 1, slug: 'intro', draft: 'An invented claim [@ghost2020].\n', verification: FABRICATED }]);
+  writeFileSync(join(root, '.paper', 'DRAFT.md'), '# Old compiled paper\n');
+  // A non-empty folder where the old draft would go makes the move fail, as a
+  // file held open by another program can on Windows.
+  mkdirSync(join(root, '.paper', 'DRAFT.stale.md', 'in-the-way'), { recursive: true });
+  const r = runCli(['compile'], root);
+  assert.equal(r.status, 2, `a failed move must not turn the refusal into an error; stdout=${r.stdout} stderr=${r.stderr}`);
+  assert.match(r.stdout, /REFUSED/);
+  assert.match(r.stdout, /ghost2020/, 'the blocking issues must still be listed');
+  assert.match(r.stdout, /could not move the earlier compiled \.paper\/DRAFT\.md aside/, 'the user must be told the old draft is still there');
+  assert.equal(readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8'), '# Old compiled paper\n');
+});
+
 test('exit codes: compile exits 0 when every section is clean', () => {
   const root = seedPaper([{ n: 1, slug: 'intro', draft: 'A plain opening paragraph.\n', verification: CLEAN }]);
   const r = runCli(['compile'], root);

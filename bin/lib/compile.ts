@@ -239,7 +239,21 @@ async function refuse(paperRoot: string, result: CompileResult): Promise<Compile
   const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
   if (!existsSync(draftPath)) return result;
   const staleDraftPath = join(paperDir(paperRoot), 'DRAFT.stale.md');
-  await atomicRename(draftPath, staleDraftPath);
+  try {
+    await atomicRename(draftPath, staleDraftPath);
+  } catch (err) {
+    // On Windows a file another program holds open cannot be renamed. The
+    // refusal stands either way; the user has to know the old draft is still
+    // where done reads it.
+    const code = (err as NodeJS.ErrnoException).code ?? (err instanceof Error ? err.message : String(err));
+    return {
+      ...result,
+      refuseReasons: [
+        ...(result.refuseReasons ?? []),
+        `could not move the earlier compiled .paper/DRAFT.md aside (${code}); delete it before running 'pensmith done'`,
+      ],
+    };
+  }
   return { ...result, staleDraftPath };
 }
 
