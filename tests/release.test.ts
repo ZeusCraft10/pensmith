@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const script = fileURLToPath(new URL('../scripts/release.mjs', import.meta.url));
 
@@ -177,8 +177,10 @@ test('a later publish commits on top of the previous release and drops removed f
   commitAndTag(fx, 'v1.2.4');
   git(fx, ['push', '-q', 'origin', 'main', '--tags']);
   const clone = path.join(fx.root, 'ci');
-  git(fx, ['clone', '-q', '--depth', '1', '--branch', 'v1.2.4', `file://${fx.origin.replace(/\\/g, '/')}`, clone], fx.root);
+  // A file:// URL, because git ignores --depth for a plain local path.
+  git(fx, ['clone', '-q', '--depth', '1', '--branch', 'v1.2.4', pathToFileURL(fx.origin).href, clone], fx.root);
   const ci: Fixture = { ...fx, src: clone };
+  assert.equal(git(ci, ['rev-parse', '--is-shallow-repository']), 'true', 'like actions/checkout, a shallow clone');
   bundle(ci, 'build 1.2.4');
   const r = release(ci, 'publish', 'v1.2.4');
   assert.equal(r.status, 0, r.stderr);
