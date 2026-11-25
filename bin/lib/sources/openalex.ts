@@ -13,7 +13,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import { displayName, parseDisplayName, presentNames } from '../author-normalize.js';
-import { arxivFromDoi, normalizePmcid, normalizePmid } from '../doi.js';
+import { arxivFromDoi, bareArxivId, normalizePmcid, normalizePmid } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { askOaPdfs, askSource, contactParam, definedFields, firstString, isGone, RETRACTION_STATUS_TTL_MS, type OaPdfAnswer } from './work-record.js';
 
@@ -34,7 +34,7 @@ interface OpenAlexWork {
   publication_year?: number;
   authorships?: OpenAlexAuthor[];
   abstract_inverted_index?: Record<string, number[]>;
-  ids?: { pmid?: string; pmcid?: string };
+  ids?: { pmid?: string; pmcid?: string; arxiv?: string };
   biblio?: { volume?: string | null; issue?: string | null; first_page?: string | null; last_page?: string | null };
   primary_location?: { source?: { display_name?: string | null; type?: string | null; host_organization_name?: string | null } | null } | null;
 }
@@ -93,7 +93,7 @@ function toCandidate(item: OpenAlexWork): SourceCandidate | null {
 
   const citekey = generateCitekey({ authors, year });
   const doi = normalizeDoi(item.doi);
-  const arxiv = doi ? arxivFromDoi(doi) : null;
+  const arxiv = bareArxivId(/\/abs\/(.+)$/.exec(item.ids?.arxiv ?? '')?.[1] ?? '') ?? (doi ? arxivFromDoi(doi) : null);
   const venue = item.primary_location?.source;
 
   return {

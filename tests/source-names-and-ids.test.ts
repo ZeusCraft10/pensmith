@@ -70,6 +70,29 @@ test('OpenAlex: display names are split, and an arXiv DOI gives the arXiv ID', a
   assert.equal(v.arxiv, '1706.03762');
 });
 
+test('OpenAlex (a real record): "Stéfan van der Walt" keeps the particle in the family name, and the ids give the arXiv ID', async () => {
+  const c = await openalex.fetchById('doi:10.1109/MCSE.2011.37');
+  assert.ok(c, 'the recorded OpenAlex answer has the work');
+  assert.deepEqual(c.names, [
+    { family: 'van der Walt', given: 'Stéfan' },
+    { family: 'Colbert', given: 'Steven C.' },
+    { family: 'Varoquaux', given: 'Gael P.' },
+  ]);
+  assert.equal(c.citekey, 'vanderwalt2011');
+  assert.equal(c.arxiv, '1102.1523');
+  assert.equal(c.csl_type, 'article-journal');
+  assert.equal(c.container_title, 'Computing in Science & Engineering');
+  assert.deepEqual([c.volume, c.issue, c.page], ['13', '2', '22-30']);
+});
+
+test('Semantic Scholar (a real record): names are split and the arXiv ID is kept', async () => {
+  const c = await semanticscholar.fetchById('DOI:10.1109/MCSE.2011.37');
+  assert.ok(c, 'the recorded Semantic Scholar answer has the paper');
+  assert.deepEqual(c.names?.[0], { family: 'van der Walt', given: 'S.' }, 'Semantic Scholar writes "S. van der Walt"');
+  assert.equal(c.arxiv, '1102.1523');
+  assert.equal(c.doi, '10.1109/MCSE.2011.37');
+});
+
 test('Crossref: family and given come from the record\'s own fields', async () => {
   const hits = await crossref.search('Attention Is All You Need', { limit: 5 });
   assert.equal(hits[0]!.title, 'Is Attention All You Need?');
