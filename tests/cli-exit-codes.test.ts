@@ -9,11 +9,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { pensmithGlobalLibraryIndexPath } from '../bin/lib/paths.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -117,6 +118,37 @@ test('exit codes: verify exits 2 for a section number that is not a positive int
   assert.match(r.stderr, /positive integer/);
 });
 
+test('exit codes: verify exits 2 when there is no CITATIONS.bib to check against', () => {
+  const root = seedPaper([{ n: 1, slug: 'intro', draft: 'A claim [@real2020].\n', verification: CLEAN, status: 'written' }]);
+  rmSync(join(root, '.paper', 'CITATIONS.bib'));
+  const r = runCli(['verify', '1'], root);
+  assert.match(r.stdout, /CITATIONS\.bib missing/, r.stdout + r.stderr);
+  assert.equal(r.status, 2, 'verify with nothing to check against is a refusal');
+});
+
+test('exit codes: a quote nobody could check exits 0 but warns loudly on stderr', () => {
+  // The source resolves (Pass 1 OK from the recorded Crossref response), but
+  // there is no open-access text for it, so Pass 3 cannot check the quote.
+  const root = seedPaper(
+    [{
+      n: 1,
+      slug: 'intro',
+      draft: 'Engel and Calhoun report that "long-lived quantum coherence was observed in the photosynthetic complex at low temperature" [@engel2009].\n',
+      verification: CLEAN,
+      status: 'written',
+    }],
+    {
+      bib:
+        '@article{engel2009, title={Quantum coherence in photosynthetic complexes}, ' +
+        'author={Engel, Gregory and Calhoun, Tessa}, year={2009}, journal={Nature Physics}, doi={10.1038/nphys1170}}\n',
+    },
+  );
+  const r = runCli(['verify', '1'], root, { PENSMITH_OFFLINE: '0', PENSMITH_TEST_CASSETTES: '1' });
+  assert.match(r.stdout, /wrote unverifiable VERIFICATION\.md/, r.stdout + r.stderr);
+  assert.equal(r.status, 0, 'an unchecked quote does not block yet');
+  assert.match(r.stderr, /WARN — section 1 has quote\(s\) that could not be checked/, 'it must not look clean');
+});
+
 test('exit codes: compile exits 2 when it refuses, and moves an earlier compiled draft aside', () => {
   const root = seedPaper([{ n: 1, slug: 'intro', draft: 'An invented claim [@ghost2020].\n', verification: FABRICATED }]);
   // A compiled draft left over from an earlier, clean compile.
@@ -175,6 +207,25 @@ test('exit codes: open exits 2 for a paper name that does not exist', () => {
   const dir = mkdtempSync(join(tmpdir(), 'pensmith-exit-open-'));
   const r = runCli(['open', 'no-such-paper'], dir);
   assert.match(r.stdout, /no paper named/);
+  assert.equal(r.status, 2);
+});
+
+test('exit codes: open exits 2 when the paper folder no longer exists', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pensmith-exit-open-'));
+  const home = mkdtempSync(join(tmpdir(), 'pensmith-exit-open-home-'));
+  const homeEnv = { HOME: home, XDG_DATA_HOME: home, XDG_CONFIG_HOME: home, XDG_CACHE_HOME: home, LOCALAPPDATA: home };
+  const indexPath = pensmithGlobalLibraryIndexPath(process.platform, homeEnv);
+  mkdirSync(join(indexPath, '..'), { recursive: true });
+  const now = new Date().toISOString();
+  writeFileSync(
+    indexPath,
+    JSON.stringify({
+      $schemaVersion: 1,
+      entries: [{ id: 'gone', name: 'moved-paper', folderPath: join(dir, 'deleted'), status: 'outline', createdAt: now, updatedAt: now }],
+    }),
+  );
+  const r = runCli(['open', 'moved-paper'], dir, homeEnv);
+  assert.match(r.stdout, /folder not found for "moved-paper"/, r.stdout + r.stderr);
   assert.equal(r.status, 2);
 });
 

@@ -88,7 +88,17 @@ function cleanCompiledPaper(): string {
   return root;
 }
 
-function runDone(root: string, input: string | undefined): { status: number | null; stdout: string; stderr: string } {
+// Makes the CLI see a terminal on stdin and stderr while its stdin is a pipe
+// the test writes the answer into. With PENSMITH_PROMPT_MODE=numbered, done
+// then asks the export question on stderr and reads the answer from stdin,
+// exactly as it does for a person at a terminal.
+const FAKE_TERMINAL = 'data:text/javascript,process.stdin.isTTY=true;process.stderr.isTTY=true;';
+
+function runDone(
+  root: string,
+  input: string | undefined,
+  opts: { terminal?: boolean } = {},
+): { status: number | null; stdout: string; stderr: string } {
   const home = mkdtempSync(join(tmpdir(), 'pensmith-export-confirm-home-'));
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
@@ -97,7 +107,9 @@ function runDone(root: string, input: string | undefined): { status: number | nu
   delete env['GPTZERO_API_KEY'];
   env['PENSMITH_NO_LLM'] = '1';
   env['PENSMITH_OFFLINE'] = '1';
-  const r = spawnSync(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, 'done', '--format', 'md'], {
+  const preload = opts.terminal === true ? ['--import', FAKE_TERMINAL] : [];
+  if (opts.terminal === true) env['PENSMITH_PROMPT_MODE'] = 'numbered';
+  const r = spawnSync(process.execPath, [...preload, '--import', TSX_LOADER, PENSMITH_TS, 'done', '--format', 'md'], {
     cwd: root,
     env,
     encoding: 'utf8',
@@ -134,4 +146,35 @@ test('done without a terminal: an answer piped on stdin is not read as a confirm
   const r = runDone(root, 'nope\n');
   assert.equal(r.status, 3, `expected exit 3; stdout=${r.stdout} stderr=${r.stderr}`);
   assert.ok(!existsSync(join(root, '.paper', 'export')), "a piped 'nope' must not export the paper");
+});
+
+test('done at a terminal: answering no cancels with exit 2 and exports nothing', () => {
+  for (const answer of ['n\n', 'no\n', '\n']) {
+    const root = cleanCompiledPaper();
+    const r = runDone(root, answer, { terminal: true });
+    assert.match(r.stderr, /Export the paper\?/, `the question must be asked; stderr=${r.stderr}`);
+    assert.match(r.stdout, /export cancelled by user/, `answer ${JSON.stringify(answer)}: ${r.stdout}`);
+    assert.equal(r.status, 2, `answer ${JSON.stringify(answer)}: a declined export is a refusal`);
+    assert.ok(!existsSync(join(root, '.paper', 'export')), `answer ${JSON.stringify(answer)} must not export`);
+    assert.ok(!existsSync(join(root, '.paper', 'FINAL.md')), 'the paper must not be marked final');
+  }
+});
+
+test('done at a terminal: answers that are not y or n, or no answer at all, cancel with exit 2', () => {
+  for (const input of ['nope\nmaybe\nwhatever\n', '']) {
+    const root = cleanCompiledPaper();
+    const r = runDone(root, input, { terminal: true });
+    assert.match(r.stdout, /export cancelled by user/, `input ${JSON.stringify(input)}: ${r.stdout}${r.stderr}`);
+    assert.equal(r.status, 2, `input ${JSON.stringify(input)}`);
+    assert.ok(!existsSync(join(root, '.paper', 'export')), `input ${JSON.stringify(input)} must not export`);
+  }
+});
+
+test('done at a terminal: answering yes exports', () => {
+  // The guard for the cancel cases above: the same harness can export.
+  const root = cleanCompiledPaper();
+  const r = runDone(root, 'y\n', { terminal: true });
+  assert.equal(r.status, 0, `stdout=${r.stdout} stderr=${r.stderr}`);
+  assert.match(r.stdout, /pensmith done: exported /);
+  assert.ok(existsSync(join(root, '.paper', 'export')), 'the paper is exported');
 });
