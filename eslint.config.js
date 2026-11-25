@@ -214,6 +214,9 @@ export default [
       // Fails the first Unpaywall lookup or PDF fetch with a MockAgent to
       // prove Pass 3 asks again for the next quotation of the same source.
       'tests/pass3-source-lookup.test.ts',
+      // Serves a real PDF, redirects and private addresses with a MockAgent to
+      // prove Pass 3 reads PDF bytes, never caches them and keeps the SSRF guard.
+      'tests/pass3-pdf-fetch.test.ts',
       // Answers Pass 1's registry lookups with a MockAgent to check the live
       // request path: mailto, retries, doi.org redirects, Open Library gaps.
       'tests/sources/registry-lookups.test.ts',

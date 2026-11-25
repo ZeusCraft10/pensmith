@@ -144,13 +144,37 @@ export function askRegistry(
 }
 
 /**
+ * A registry's answer to "where is an open-access PDF of the work with this
+ * DOI?": the PDF links it lists, best first (possibly none), "no such work",
+ * or no answer.
+ */
+export type OaPdfAnswer =
+  | { kind: 'found'; urls: string[] }
+  | { kind: 'not_found' }
+  | { kind: 'unavailable'; detail: string };
+
+/** The distinct http(s) links among `values`, in order. */
+export function httpLinks(values: readonly unknown[]): string[] {
+  const out: string[] = [];
+  for (const v of values) {
+    if (typeof v === 'string' && /^https?:\/\//i.test(v) && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
+/**
  * The query parameter (`?mailto=…`, `&email=…`) that carries
  * PENSMITH_CONTACT_EMAIL to a registry's polite pool, or '' when no address is
  * configured, so nothing identifying is sent.
  */
 export function contactParam(name: 'mailto' | 'email', sep: '?' | '&'): string {
-  const email = process.env['PENSMITH_CONTACT_EMAIL']?.trim();
+  const email = contactEmail();
   return email ? `${sep}${name}=${encodeURIComponent(email)}` : '';
+}
+
+/** PENSMITH_CONTACT_EMAIL, or '' when it is not set. */
+export function contactEmail(): string {
+  return process.env['PENSMITH_CONTACT_EMAIL']?.trim() ?? '';
 }
 
 /** A year between 1500 and 2100 from a number or the start of a date string. */

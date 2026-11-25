@@ -21,7 +21,8 @@ export const contactEmailPresenceProbe: Probe = {
     return {
       id: 'contact-email-presence',
       severity: 'WARN',
-      summary: 'PENSMITH_CONTACT_EMAIL is not set — outbound HTTP will use a fallback User-Agent that may be rate-limited.',
+      summary: 'PENSMITH_CONTACT_EMAIL is not set — outbound HTTP will use a fallback User-Agent that may be rate-limited, ' +
+        'and Pass 3 finds open-access text through OpenAlex only (Unpaywall requires an email).',
       fix: 'Set PENSMITH_CONTACT_EMAIL to a contact email. See references/http-warnings.md.',
     };
   },

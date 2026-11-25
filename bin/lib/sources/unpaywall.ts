@@ -1,7 +1,10 @@
 // bin/lib/sources/unpaywall.ts — Unpaywall OA-status adapter (RSCH-04, T-3-13).
 //
 // Endpoint:
-//   fetchById:  GET https://api.unpaywall.org/v2/<doi>?email=<contact>
+//   fetchById, lookupOaPdfs:  GET https://api.unpaywall.org/v2/<doi>?email=<contact>
+//
+// Unpaywall refuses a request without an email (HTTP 422), so Pass 3 asks it
+// only when PENSMITH_CONTACT_EMAIL is set, after OpenAlex.
 //
 // Unpaywall is a DOI-lookup service — there is no native "search". We expose a
 // `search()` export for protocol compatibility but it always returns [] (the
@@ -13,7 +16,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { contactParam } from './work-record.js';
+import { askSource, contactParam, httpLinks, isGone, type OaPdfAnswer } from './work-record.js';
 
 const BASE = 'https://api.unpaywall.org';
 
@@ -38,6 +41,7 @@ interface UnpaywallResponse {
   is_oa?: boolean;
   z_authors?: UnpaywallAuthor[];
   best_oa_location?: UnpaywallOALocation;
+  oa_locations?: UnpaywallOALocation[];
 }
 
 function toCandidate(item: UnpaywallResponse): SourceCandidate | null {
@@ -110,4 +114,26 @@ export async function fetchById(doi: string): Promise<SourceCandidate | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The open-access PDFs Unpaywall lists for the work with `doi`, best first.
+ * Ask only with a contact email: without one Unpaywall answers 422, which
+ * reads as no answer.
+ */
+export function lookupOaPdfs(doi: string): Promise<OaPdfAnswer> {
+  const url = `${BASE}/v2/${encodeURIComponent(doi)}${contactParam('email', '?')}`;
+  return askSource<OaPdfAnswer>(
+    url,
+    { source: 'unpaywall' },
+    (res) => {
+      if (isGone(res.status)) return { kind: 'not_found' };
+      if (res.status !== 200) return null;
+      const item = JSON.parse(res.body) as UnpaywallResponse | null;
+      if (!item || typeof item !== 'object') return null;
+      const locations = [item.best_oa_location, ...(Array.isArray(item.oa_locations) ? item.oa_locations : [])];
+      return { kind: 'found', urls: httpLinks(locations.map((l) => l?.url_for_pdf)) };
+    },
+    (detail) => ({ kind: 'unavailable', detail }),
+  );
 }

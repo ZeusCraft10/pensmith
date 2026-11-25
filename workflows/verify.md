@@ -24,7 +24,7 @@ NOT_FOUND verdict escaping verify means a fabricated citation lands in the expor
 
 **Phase 3 stance (D-13 LOCKED)**: the verify path is 100% deterministic. The verdict is
 produced by registry lookups and a word-by-word metadata comparison (Pass 1, step 4)
-and `levenshteinSubstring` (Pass-3 quote integrity) alone. The dormant fuzzy-judge and quote-checker prompts
+and a word-for-word quotation match (Pass-3 quote integrity, `bin/lib/verify/quote-match.ts`) alone. The dormant fuzzy-judge and quote-checker prompts
 (Plan 05 hash-pins them) are calibrated for Phase 8 ambiguous-case tie-break only;
 they MUST NOT be referenced, loaded, or executed from this body in Phase 3.
 
@@ -82,13 +82,17 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
    - Quotes with fewer than 10 words are NOT extracted (the writer is responsible for inline-cite integrity at Pass-1 level for short attribution).
 
    For each extracted quote with an associated citekey:
-   - **(a)** Fetch OA PDF URL: `const oaUrl = sources.unpaywall.fetchById(doi)?.oa_pdf_url`.
-     If `!oaUrl` → `verdict = 'PDF_UNAVAILABLE'`, `reason = 'No OA PDF available for DOI ${doi} (Unpaywall returned no oa_pdf_url)'`.
-   - **(b)** Else fetch bytes: `const buf = await http.get(oaUrl)` (cassette-backed in CI).
-   - **(c)** Extract text: `const text = await extractPdfText(buf)` (the `bin/lib/pdf-text.ts` chokepoint per D-06 / Plan 03-02 Task 2.1).
-     If `text.replace(/\s/g, '').length < 50` → `verdict = 'TEXT_UNAVAILABLE'`, `reason = 'PDF appears image-only or scanned (<50 non-whitespace chars). Pass 3 cannot run.'`.
-   - **(d)** Else normalize + match: `const ratio = levenshteinSubstring(nfkcNormalize(quote), nfkcNormalize(text))`.
-     If `ratio >= QUOTE_LEV_THRESHOLD (0.95)` → `verdict = 'OK'`; else `verdict = 'NOT_FOUND'`.
+   - **(a)** Find the open-access PDF links (`bin/lib/verify/source-text.ts`): OpenAlex's
+     best open-access location and its other open-access locations, then Unpaywall's when
+     `PENSMITH_CONTACT_EMAIL` is set. If there are none → `verdict = 'PDF_UNAVAILABLE'`,
+     with a reason that names what each registry said (and says to set the email when it is unset).
+   - **(b)** Fetch the first link that serves a PDF: bytes (`bodyBytes`, never the text body or the
+     HTTP cache), through the SSRF guard, following redirects. A page served as HTML is not a PDF.
+   - **(c)** Extract text: `extractPdfText(bytes)` (the `bin/lib/pdf-text.ts` chokepoint).
+     If `text.replace(/\s/g, '').length < 50` → `verdict = 'TEXT_UNAVAILABLE'` (a scanned PDF).
+   - **(d)** Else match: `matchQuote(quote, prepareSource(text))`. Every quoted word must appear in
+     order; an ellipsis, a bracketed insertion, a left-out reference marker and PDF extraction
+     noise are allowed, a changed word never is. Found → `'OK'`; else `'NOT_FOUND'`.
 
    **Per-source Pass-3 status** (DETERMINISTIC, OpenCode HIGH #2 / Codex HIGH consensus #2 — 4-way discrimination):
    - If any quote has `verdict = 'NOT_FOUND'` → section Pass-3 FAILS for this source.

@@ -1,0 +1,242 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1556/012.2022.01524",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2024,
+              7,
+              29
+            ]
+          ],
+          "date-time": "2024-07-29T11:14:15Z",
+          "timestamp": 1722251655439
+        },
+        "reference-count": 6,
+        "publisher": "Akademiai Kiado Zrt.",
+        "issue": "2",
+        "content-domain": {
+          "domain": [
+            "akjournals.com"
+          ],
+          "crossmark-restriction": true
+        },
+        "short-container-title": [
+          "SScMath"
+        ],
+        "published-print": {
+          "date-parts": [
+            [
+              2022,
+              6,
+              20
+            ]
+          ]
+        },
+        "abstract": "<jats:p>Given a finite point set <jats:italic>P</jats:italic> in the plane, a subset S⊆P is called an <jats:italic>island</jats:italic> in <jats:italic>P</jats:italic> if conv(S) ⋂ <jats:italic>P = S</jats:italic>. We say that S ⊂ <jats:italic>P</jats:italic> is a <jats:italic>visible island</jats:italic> if the points in S are pairwise visible and S is an island in P. The famous Big-line Big-clique Conjecture states that for any <jats:italic>k ≥</jats:italic> 3 and <jats:italic>l</jats:italic> ≥ 4, there is an integer <jats:italic>n = n(k, l</jats:italic>), such that every finite set of at least <jats:italic>n</jats:italic> points in the plane contains <jats:italic>l</jats:italic> collinear points or <jats:italic>k</jats:italic> pairwise visible points. In this paper, we show that this conjecture is false for visible islands, by replacing each point in a Horton set by a triple of collinear points. Hence, there are arbitrarily large finite point sets in the plane with no 4 collinear members and no visible island of size 13.</jats:p>",
+        "DOI": "10.1556/012.2022.01524",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2022,
+              6,
+              7
+            ]
+          ],
+          "date-time": "2022-06-07T12:34:19Z",
+          "timestamp": 1654605259000
+        },
+        "page": "160-163",
+        "update-policy": "http://dx.doi.org/10.1556/policypage.crossmark.crossref.1",
+        "source": "Crossref",
+        "is-referenced-by-count": 0,
+        "title": [
+          "A Note on Visible Islands"
+        ],
+        "prefix": "10.1556",
+        "volume": "59",
+        "author": [
+          {
+            "given": "Sophie",
+            "family": "Leuchtner",
+            "sequence": "first",
+            "affiliation": [
+              {
+                "name": "University of California at San Diego, La Jolla, CA, 92093 USA"
+              }
+            ],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Carlos M.",
+            "family": "Nicolás",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Department of Mathematics, Virginia Tech., Blacksburg, VA, 24061 USA"
+              }
+            ],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Andrew",
+            "family": "Suk",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Department of Mathematics, University of California at San Diego, La Jolla, CA, 92093 USA"
+              }
+            ],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          }
+        ],
+        "member": "425",
+        "reference": [
+          {
+            "key": "ref0",
+            "doi-asserted-by": "publisher",
+            "unstructured": "[1] A. Abel , B. Ballinger , P. Bose , S. Collette , V. Dujmovic , F. Hurtado , S. D. Kominers , S. Lan-german , A. Pór and D. Wood . Every large point set contains many collinear points or an empty pentagon. Graphs and Combinatorics, 27:47-60, 2011.",
+            "DOI": "10.1007/s00373-010-0957-2"
+          },
+          {
+            "key": "ref1",
+            "doi-asserted-by": "publisher",
+            "unstructured": "[2] J. D. Horton . Sets with no empty convex 7-gons. Canad. Math. Bull., 26:482-484, 1983.",
+            "DOI": "10.4153/CMB-1983-077-8"
+          },
+          {
+            "key": "ref2",
+            "doi-asserted-by": "publisher",
+            "unstructured": "[3] J. Kára , A. Pór and D. Wood . On the chromatic number of the visibility graph of a set of points in the plane. Discrete Comput. Geom., 34:497-506, 2005.",
+            "DOI": "10.1007/s00454-005-1177-z"
+          },
+          {
+            "key": "ref3",
+            "doi-asserted-by": "publisher",
+            "unstructured": "[4] J. Matousek . Blocking Visibility for Points in General Position. Discrete Comput Geom, 42:219-223, 2009.",
+            "DOI": "10.1007/s00454-009-9185-z"
+          },
+          {
+            "key": "ref4",
+            "doi-asserted-by": "publisher",
+            "unstructured": "[5] J. Matousek . Lectures on Discrete Geometry. Springer-Verlag, New York, 2002.",
+            "DOI": "10.1007/978-1-4613-0039-7"
+          },
+          {
+            "key": "ref5",
+            "unstructured": "[6] A. Pór and D. Wood . On visibility and blockers. J. Comput. Geom., 1:29-40, 2010."
+          }
+        ],
+        "container-title": [
+          "Studia Scientiarum Mathematicarum Hungarica"
+        ],
+        "original-title": [],
+        "link": [
+          {
+            "URL": "https://akjournals.com/view/journals/012/59/2/article-p160.xml",
+            "content-type": "text/html",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://akjournals.com/downloadpdf/journals/012/59/2/article-p160.xml",
+            "content-type": "text/html",
+            "content-version": "vor",
+            "intended-application": "syndication"
+          },
+          {
+            "URL": "https://akjournals.com/downloadpdf/journals/012/59/2/article-p160.xml",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2024,
+              7,
+              29
+            ]
+          ],
+          "date-time": "2024-07-29T10:49:07Z",
+          "timestamp": 1722250147000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://akjournals.com/view/journals/012/59/2/article-p160.xml"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2022,
+              6,
+              20
+            ]
+          ]
+        },
+        "references-count": 6,
+        "journal-issue": {
+          "issue": "2"
+        },
+        "URL": "https://doi.org/10.1556/012.2022.01524",
+        "relation": {},
+        "ISSN": [
+          "0081-6906",
+          "1588-2896"
+        ],
+        "issn-type": [
+          {
+            "value": "0081-6906",
+            "type": "print"
+          },
+          {
+            "value": "1588-2896",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2022,
+              6,
+              20
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

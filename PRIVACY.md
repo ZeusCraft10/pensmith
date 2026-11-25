@@ -16,7 +16,7 @@ refuses private, loopback and link-local addresses.
 | --- | --- | --- |
 | `api.anthropic.com` | Intake clarifying questions, outline, section plans and drafts, the advisory verifier passes, and citation repair | The prompt for that step: your assignment and intake answers, the outline, the metadata of the sources assigned to the section, and the section draft. Needs `ANTHROPIC_API_KEY`. |
 | `api.openai.com` | The same steps, only if you configure the OpenAI-compatible provider instead | The same prompts. |
-| `api.openalex.org` | Research, adding a source, checking citations, and Pass 1's retraction cross-check for a cited DOI whose registry record does not show a retraction | Search terms from your topic, titles and DOIs. |
+| `api.openalex.org` | Research, adding a source, checking citations, Pass 1's retraction cross-check for a cited DOI whose registry record does not show a retraction, and Pass 3, to find the open-access PDF of a quoted source | Search terms from your topic, titles and DOIs. |
 | `api.crossref.org` | Research, adding a source, and Pass 1 of the verifier (every cited DOI) | DOIs and title searches. |
 | `api.datacite.org` | Pass 1, for a cited DOI Crossref does not hold (arXiv, Zenodo, figshare and other DataCite DOIs), or when Crossref could not be reached | That DOI. |
 | `doi.org` | Pass 1, for a cited DOI neither Crossref nor DataCite holds, or when Crossref or DataCite could not be reached; and re-checking how fresh an earlier verification is | `GET https://doi.org/<doi>` asking for the work's citation metadata. doi.org redirects that request to the DOI's registration agency, and pensmith follows only to the agencies' metadata services: `api.crossref.org`, `data.crosscite.org` and `api.datacite.org` (DataCite), `japanlinkcenter.org` (JaLC) and `data.medra.org` (mEDRA). Freshness re-checks send `HEAD https://doi.org/<doi>`. DOIs written as `dx.doi.org` links are normalised to this host. |
@@ -24,8 +24,8 @@ refuses private, loopback and link-local addresses.
 | `eutils.ncbi.nlm.nih.gov` | Research (PubMed), and Pass 1 for a source cited by its PubMed ID | Search terms and PubMed IDs. |
 | `openlibrary.org` | Pass 1, for a book cited by its ISBN | That ISBN. |
 | `api.semanticscholar.org` | Research | Search terms, and your Semantic Scholar key if you set one. |
-| `api.unpaywall.org` | Pass 3 of the verifier, to find open-access text for quoted sources | DOIs and your contact email (Unpaywall requires one). |
-| Publisher and repository hosts | Pass 3 (the open-access PDF or page an OpenAlex or Unpaywall record points to) and `pensmith add <url>` | A plain download request for that URL. |
+| `api.unpaywall.org` | Pass 3 of the verifier, to find open-access text for a quoted source OpenAlex has no PDF of, only when `PENSMITH_CONTACT_EMAIL` is set | DOIs and your contact email (Unpaywall requires one). |
+| Publisher and repository hosts | Pass 3 (the open-access PDF an OpenAlex or Unpaywall record points to, and the redirects it follows from there) and `pensmith add <url>` | A plain download request for that URL. Links to private or local addresses are refused. |
 | `html.duckduckgo.com` | The plagiarism check during `pensmith done` | A few short distinctive phrases taken from your draft. |
 | `api.gptzero.me` | The AI-likelihood score during `pensmith done`, only with `GPTZERO_API_KEY` set, after a consent prompt (in this alpha, `--yolo` also skips that prompt) | Your paper text, cut to 50 KB. |
 

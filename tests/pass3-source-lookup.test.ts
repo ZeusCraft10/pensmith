@@ -6,6 +6,9 @@
 // timed-out fetch then left every later quotation of that work
 // PDF_UNAVAILABLE, so a misquote further down the section was never checked:
 // verify called the section unverifiable instead of refusing it as NOT_FOUND.
+//
+// OpenAlex, which Pass 3 asks first, answers "no such work" here, so the PDF
+// link comes from Unpaywall (a contact email is set).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,7 +27,10 @@ delete process.env['PENSMITH_TEST_CASSETTES'];
 delete process.env['PENSMITH_OFFLINE'];
 
 const DOI = '10.1234/abc';
-const PDF_URL = 'https://oa.example.org/paper.pdf';
+// A public address written as an IP literal: the PDF link is fetched through
+// the SSRF guard, which then needs no DNS.
+const OA_ORIGIN = 'https://93.184.215.14';
+const PDF_URL = `${OA_ORIGIN}/paper.pdf`;
 const SOURCE = 'The quick brown fox jumps over the lazy dog while the farmer watches ' +
   'from the old wooden barn near the river bank every single morning.';
 
@@ -97,8 +103,10 @@ async function pass3With(failFirst: 'none' | 'unpaywall' | 'pdf'): Promise<{ ver
   agent.disableNetConnect();
   setGlobalDispatcher(agent);
   const ok: Counts = { unpaywall: 0, pdf: 0 };
+  agent.get('https://api.openalex.org').intercept({ path: (p) => p.startsWith('/works/doi:'), method: 'GET' })
+    .reply(404, 'not found').persist();
   const unpaywall = agent.get('https://api.unpaywall.org');
-  const oaHost = agent.get('https://oa.example.org');
+  const oaHost = agent.get(OA_ORIGIN);
   // An interceptor answers once; the persisting one registered after it answers the rest.
   if (failFirst === 'unpaywall') {
     unpaywall.intercept({ path: (p) => p.startsWith('/v2/'), method: 'GET' }).replyWithError(connectionRefused());
