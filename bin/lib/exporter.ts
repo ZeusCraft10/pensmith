@@ -1,49 +1,43 @@
-// bin/lib/exporter.ts
+// bin/lib/exporter.ts — the trace-free export (`pensmith done`).
 //
-// Zero-trace export (DONE-07 / TEST-10) — THE non-negotiable: no exported doc
-// carries a pensmith metadata trace, in ANY format. zeroTracePatch() is the
-// MANDATORY last step of every .docx export; zeroTracePdf() is the MANDATORY
-// last step of every .pdf export. Pandoc shellout via execFile (never exec).
-// md-only fallback when Pandoc/PDF-engine absent (DONE-06) — never throws.
-// Exports written to a DISTINCT export dir, never over the source artifacts.
+// Non-negotiable: no exported document carries a pensmith trace or a trace of
+// the machine it was made on, in any format. Each export is built in a fresh
+// staging folder inside .paper/, scrubbed, scanned by trace-scan.ts, and only
+// then moved into the export folder. Anything the scanner finds refuses the
+// export and nothing is written.
 //
-// WHY in-process scrubs (not just Pandoc flags):
-//   - .docx: even `--metadata author=""` leaves an empty-but-present field, and a
-//     source YAML header can inject a real name. zeroTracePatch loads the ZIP and
-//     blanks the FULL identifying field set across core.xml + app.xml, then sweeps
-//     EVERY non-binary entry (incl. _rels/.rels) for the literal 'pensmith'.
-//   - .pdf: the `--variable pdfcreator=/pdfproducer=` flags CANNOT strip the XMP
-//     stream the engine injects (06-RESEARCH Pitfall 3). pdf-lib's save()
-//     serializes ALL indirect objects regardless of reachability, so deleting the
-//     catalog /Metadata reference is NOT enough — the XMP stream OBJECT must be
-//     deleted from the context so save() never emits it (HIGH-C2-1). NO
-//     length-altering byte edits on the serialized PDF (the latin1 replace
-//     approach shifts xref offsets + /Length values and corrupts the file).
+// Formats:
+//   md     — always rendered here: one citeproc session over the whole paper
+//            (citation-js), so numeric styles number by first appearance.
+//   docx   — Pandoc with --citeproc, then docProps rebuilt from an allowlist.
+//   pdf    — Pandoc + a TeX engine, then the info dictionary and XMP removed.
+//   latex  — Pandoc --standalone when present (a file that compiles), else
+//            the offline writer below.
+// Pandoc runs inside the staging folder with relative file names, so no
+// absolute path reaches its metadata.
 //
-// Both scrubs run OFFLINE in-process (JSZip for docx, pure-JS pdf-lib for pdf),
-// so the gating zero-trace test passes on the build machine where Pandoc + the
-// PDF engine are absent.
+// A docx or pdf that cannot be made (no Pandoc, no TeX engine) is a refusal
+// that names the missing tool; it is never swapped for a Markdown file.
 //
-// D-07 chokepoint: all file output routes through atomicWriteFile / copyFile;
-// this module NEVER calls fs.writeFile-family methods directly.
+// All file writes go through the atomic-write chokepoint.
 
 import { execFile } from 'node:child_process';
 import * as fsp from 'node:fs/promises';
 import { existsSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path, { basename, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import JSZip from 'jszip';
-import { PDFDocument, PDFName } from 'pdf-lib';
-import { parseBib, renderStyle, renderInText } from './citations.js';
-import { atomicWriteFile } from './atomic-write.js';
+import { PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, PDFStream } from 'pdf-lib';
+import { renderCitationsInDocument, SUPPORTED_STYLES, type RenderedCitations } from './citations.js';
+import { atomicRename, atomicWriteFile, makeTempDir, removePath } from './atomic-write.js';
+import { findCitations, type Citation } from './citation-grammar.js';
+import { cslHtmlToLatex, cslHtmlToMarkdown } from './csl-html.js';
+import { readBibEntries, selectEntries, toBibtex, toRis, type CslEntry } from './export-bib.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
-import { paperDir } from './paths.js';
+import { homeDir, paperDir } from './paths.js';
+import { describeFinding, scanExportFile, type TraceFormat } from './trace-scan.js';
 
-// =====================================================================
-//   PKG_ROOT — locate templates/citation-styles/ relative to this file
-//   (same pattern as bin/lib/citations.ts lines 84-102)
-// =====================================================================
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -64,10 +58,7 @@ function findPkgRoot(start: string): string {
 
 const PKG_ROOT = findPkgRoot(__dirname);
 
-const execFileAsync = promisify(execFile);
-
-// Fixed epoch used for ZIP entry timestamps + dcterms normalization — keeps the
-// scrubbed .docx deterministic (Pitfall 6) and strips authoring-time metadata.
+// Fixed epoch for ZIP entry timestamps and docx dates: no authoring time ships.
 const EPOCH = new Date(0);
 const EPOCH_W3CDTF = '1970-01-01T00:00:00Z';
 
@@ -164,252 +155,260 @@ export async function runHumanizer(
 }
 
 // ---------------------------------------------------------------------------
-// zeroTracePatch — DOCX ZIP scrub (DONE-07 / T-06-04-01)
+// zeroTracePatch — rebuild a .docx's package metadata from an allowlist
 // ---------------------------------------------------------------------------
 
-// The FULL identifying field set blanked in docProps/core.xml (HIGH-2 — the
-// narrow set in a prior cycle MISSED dc:subject/dc:description/cp:category/
-// cp:contentStatus). Each is set to an empty element.
-const CORE_BLANK_TAGS = [
-  'dc:creator',
-  'dc:title',
-  'dc:subject',
-  'dc:description',
-  'cp:keywords',
-  'cp:category',
-  'cp:contentStatus',
-  'cp:lastModifiedBy',
-];
+const REL_OFFICE_DOCUMENT = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
+const REL_CORE = 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties';
+const REL_APP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties';
+const CT_CORE = 'application/vnd.openxmlformats-package.core-properties+xml';
+const CT_APP = 'application/vnd.openxmlformats-officedocument.extended-properties+xml';
+const CT_MAIN = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml';
+const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
-// The extended-property fields blanked in docProps/app.xml.
-const APP_BLANK_TAGS = ['Application', 'Company', 'Manager', 'Template'];
+// The only document properties an export carries: two fixed timestamps.
+const CORE_XML =
+  XML_DECL +
+  '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"' +
+  ' xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"' +
+  ' xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+  `<dcterms:created xsi:type="dcterms:W3CDTF">${EPOCH_W3CDTF}</dcterms:created>` +
+  `<dcterms:modified xsi:type="dcterms:W3CDTF">${EPOCH_W3CDTF}</dcterms:modified>` +
+  '</cp:coreProperties>';
+const APP_XML =
+  XML_DECL +
+  '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"' +
+  ' xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"></Properties>';
 
-/**
- * Blank an XML element `<ns:tag ...>...</ns:tag>` to `<ns:tag></ns:tag>`,
- * tolerating (a) attribute-bearing open tags, (b) multiline content, and
- * (c) the self-closing form `<ns:tag/>`. Escapes the tag name for the RegExp.
- */
-function blankXmlTag(xml: string, tag: string): string {
-  const esc = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Paired form: <tag ...> ... </tag>  (attributes optional, content any).
-  const paired = new RegExp(`<${esc}(\\s[^>]*)?>[\\s\\S]*?<\\/${esc}>`, 'g');
-  // Self-closing form: <tag ... />
-  const selfClosing = new RegExp(`<${esc}(\\s[^>]*)?\\/>`, 'g');
-  return xml.replace(paired, `<${tag}></${tag}>`).replace(selfClosing, `<${tag}></${tag}>`);
-}
-
-/**
- * Set a `<dcterms:created>`/`<dcterms:modified>` element to the fixed epoch,
- * preserving its attributes (e.g. `xsi:type="dcterms:W3CDTF"`).
- */
-function epochDctermsTag(xml: string, tag: string): string {
-  const esc = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const paired = new RegExp(`<${esc}((?:\\s[^>]*)?)>[\\s\\S]*?<\\/${esc}>`, 'g');
-  const selfClosing = new RegExp(`<${esc}((?:\\s[^>]*)?)\\/>`, 'g');
-  return xml
-    .replace(paired, (_m, attrs: string) => `<${tag}${attrs}>${EPOCH_W3CDTF}</${tag}>`)
-    .replace(selfClosing, (_m, attrs: string) => `<${tag}${attrs}>${EPOCH_W3CDTF}</${tag}>`);
-}
-
-/**
- * Heuristic: is this ZIP entry a binary part we must NOT string-sweep?
- *
- * MEDIUM-1 (cycle-3): the defense-in-depth 'pensmith' sweep must NOT run a
- * string replace over binary parts (media images, embedded fonts, thumbnails) —
- * doing so would corrupt the LIVE Pandoc docx path (the CI fixture has no binary
- * parts, but a real export may). We treat known binary subtrees + a NUL-byte
- * sniff as binary and pass those entries through untouched.
- */
-function isBinaryDocxEntry(name: string, text: string): boolean {
-  const lower = name.toLowerCase();
-  if (
-    lower.startsWith('word/media/') ||
-    lower.startsWith('word/embeddings/') ||
-    lower.startsWith('word/fonts/') ||
-    lower.startsWith('docprops/thumbnail') ||
-    /\.(png|jpe?g|gif|bmp|tiff?|emf|wmf|bin|ttf|otf|woff2?|eot)$/.test(lower)
-  ) {
-    return true;
+/** The attributes of each `<tag .../>` element in `xml`, raw (still escaped). */
+function elementAttrs(xml: string, tag: string): Array<Record<string, string>> {
+  const out: Array<Record<string, string>> = [];
+  for (const m of xml.matchAll(new RegExp(`<${tag}\\b([^>]*?)\\/?>`, 'g'))) {
+    const attrs: Record<string, string> = {};
+    for (const a of (m[1] ?? '').matchAll(/([A-Za-z_:][\w.:-]*)\s*=\s*"([^"]*)"/g)) attrs[a[1]!] = a[2]!;
+    out.push(attrs);
   }
-  // NUL byte → certainly not text we should string-edit.
-  return text.includes('\x00');
+  return out;
 }
 
 /**
- * zeroTracePatch — MANDATORY last step of every .docx export (DONE-07).
- *
- * Loads `docxPath` as a ZIP, blanks the FULL identifying field set in
- * docProps/core.xml + docProps/app.xml, epochs the dcterms timestamps, sweeps
- * EVERY non-binary entry (including non-.xml entries like `_rels/.rels`) for the
- * literal 'pensmith', and writes the result back atomically.
- *
- * Idempotent (running twice yields the same clean output) and tolerant (missing
- * core.xml/app.xml is skipped without error).
+ * Rebuild a .docx's package metadata from an allowlist (the mandatory last
+ * step of every docx export):
+ *   - every docProps/ part is dropped, custom.xml included, where Pandoc
+ *     records the --csl and --bibliography paths;
+ *   - core.xml and app.xml are written fresh with no names, titles,
+ *     application stamp or edit time;
+ *   - _rels/.rels keeps only the main document and those two parts, and
+ *     [Content_Types].xml is rewritten to match.
+ * The document body is not touched: the author's words are the author's.
+ * Idempotent.
  */
 export async function zeroTracePatch(docxPath: string): Promise<void> {
-  const buf = await fsp.readFile(docxPath);
-  const zip = await JSZip.loadAsync(buf);
+  const zip = await JSZip.loadAsync(await fsp.readFile(docxPath));
 
-  // (1) docProps/core.xml — blank the full identifying set + epoch timestamps.
-  const coreEntry = zip.file('docProps/core.xml');
-  if (coreEntry) {
-    let core = await coreEntry.async('string');
-    for (const tag of CORE_BLANK_TAGS) core = blankXmlTag(core, tag);
-    core = epochDctermsTag(core, 'dcterms:created');
-    core = epochDctermsTag(core, 'dcterms:modified');
-    zip.file('docProps/core.xml', core, { date: EPOCH });
+  const rels = (await zip.file('_rels/.rels')?.async('string')) ?? '';
+  const mainTarget =
+    elementAttrs(rels, 'Relationship').find((r) => r['Type'] === REL_OFFICE_DOCUMENT)?.['Target'] ?? 'word/document.xml';
+
+  for (const name of Object.keys(zip.files)) {
+    if (/^docprops\//i.test(name)) zip.remove(name);
   }
+  zip.file('docProps/core.xml', CORE_XML);
+  zip.file('docProps/app.xml', APP_XML);
 
-  // (2) docProps/app.xml — blank the extended-property identifying fields.
-  const appEntry = zip.file('docProps/app.xml');
-  if (appEntry) {
-    let app = await appEntry.async('string');
-    for (const tag of APP_BLANK_TAGS) app = blankXmlTag(app, tag);
-    zip.file('docProps/app.xml', app, { date: EPOCH });
-  }
+  zip.file(
+    '_rels/.rels',
+    XML_DECL +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      `<Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="${mainTarget}"/>` +
+      `<Relationship Id="rId2" Type="${REL_CORE}" Target="docProps/core.xml"/>` +
+      `<Relationship Id="rId3" Type="${REL_APP}" Target="docProps/app.xml"/>` +
+      '</Relationships>',
+  );
 
-  // (3) Defense-in-depth sweep — strip the literal 'pensmith' from non-binary
-  //     STRUCTURAL/metadata entries (incl. _rels/.rels, custom.xml, settings,
-  //     any non-content text part). Binary parts pass through untouched.
-  //
-  //     Audit #18: the sweep must NOT touch author-CONTENT parts. The tool
-  //     fingerprint only ever lands in metadata/structural parts (handled by
-  //     steps (1)/(2) and this sweep); the document body, headers, footers,
-  //     foot/endnotes and comments are the author's own prose. A paper that
-  //     legitimately discusses (or coincidentally uses) the word "pensmith"
-  //     must keep it — silently deleting it from the manuscript is corruption.
-  const AUTHOR_CONTENT = /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/i;
-  for (const [name, file] of Object.entries(zip.files)) {
-    if (file.dir) continue;
-    if (AUTHOR_CONTENT.test(name)) continue;
-    let text: string;
-    try {
-      text = await file.async('string');
-    } catch {
-      // Unreadable as string → treat as binary, leave untouched.
-      continue;
-    }
-    if (isBinaryDocxEntry(name, text)) continue;
-    if (/pensmith/i.test(text)) {
-      const swept = text.replace(/pensmith/gi, '');
-      zip.file(name, swept, { date: EPOCH });
-    }
-  }
-
-  const out = await zip.generateAsync({ type: 'nodebuffer' });
-  await atomicWriteFile(docxPath, out);
-}
-
-// ---------------------------------------------------------------------------
-// zeroTracePdf — PDF /Info clear + STRUCTURAL XMP-object delete (DONE-07 / T-06-04-02)
-// ---------------------------------------------------------------------------
-
-/**
- * zeroTracePdf — MANDATORY last step of every .pdf export (DONE-07, HIGH-C2-1).
- *
- * Loads `pdfPath` via pure-JS pdf-lib (no external engine), empties the /Info
- * document-info dictionary (Producer/Creator/Author/Title/Subject/Keywords),
- * and removes the XMP metadata stream STRUCTURALLY — capturing the catalog
- * /Metadata indirect ref and deleting the actual indirect stream OBJECT from the
- * context BEFORE save() (pdf-lib serializes ALL indirect objects regardless of
- * reachability, so deleting only the catalog reference leaves the <x:xmpmeta>
- * stream object in the context and save() still writes it — leaking BOTH
- * 'pensmith' AND the non-'pensmith' token 'Trace Sentinel'). Also drops the
- * catalog entry. Performs NO length-altering byte edits on the serialized PDF;
- * any literal-'pensmith' check is a READ-ONLY post-save assertion.
- *
- * Idempotent and tolerant: a PDF with no /Info or /Metadata is scrubbed without
- * error; never throws on a malformed-but-loadable PDF (other than the explicit
- * residual assertion, which signals an incomplete structural strip to fix).
- */
-export async function zeroTracePdf(pdfPath: string): Promise<void> {
-  const buf = await fsp.readFile(pdfPath);
-  // updateMetadata:false → do NOT let pdf-lib re-inject its own Producer/ModDate.
-  const pdf = await PDFDocument.load(buf, { updateMetadata: false });
-
-  // Empty the /Info document-info dictionary.
-  pdf.setTitle('');
-  pdf.setAuthor('');
-  pdf.setSubject('');
-  pdf.setKeywords([]);
-  pdf.setProducer('');
-  pdf.setCreator('');
-  // Normalize dates to the fixed epoch (determinism; not identifying trace).
-  try {
-    pdf.setCreationDate(EPOCH);
-    pdf.setModificationDate(EPOCH);
-  } catch {
-    // Some pdf-lib builds may reject epoch dates — non-fatal, dates are not trace.
-  }
-
-  // Remove the XMP metadata stream STRUCTURALLY (THE HIGH-C2-1 fix).
-  try {
-    const metaRef = pdf.catalog.get(PDFName.of('Metadata'));
-    if (metaRef) {
-      // Delete the ACTUAL indirect stream object so save() cannot serialize it.
-      pdf.context.delete(metaRef as Parameters<typeof pdf.context.delete>[0]);
-      // Also drop the catalog entry.
-      pdf.catalog.delete(PDFName.of('Metadata'));
-    }
-  } catch {
-    // A PDF with no /Metadata (or an unusual catalog) → nothing to remove.
-  }
-
-  // updateFieldAppearances:false → no incidental form mutation. NO post-save
-  // length-altering byte edit (that would shift xref offsets + /Length values
-  // and corrupt the file).
-  const bytes = await pdf.save({ updateFieldAppearances: false });
-  const out = Buffer.from(bytes);
-
-  // READ-ONLY defense-in-depth assertion: a residual 'pensmith' means the
-  // structural strip is incomplete and must be FIXED — never byte-edited away.
-  if (out.toString('latin1').toLowerCase().includes('pensmith')) {
-    throw new Error(
-      `zeroTracePdf: residual 'pensmith' after structural scrub of ${pdfPath} — ` +
-        `the XMP/Info strip is incomplete (fix the structural removal, do NOT byte-edit)`,
+  const types = (await zip.file('[Content_Types].xml')?.async('string')) ?? '';
+  const defaults = elementAttrs(types, 'Default');
+  if (defaults.length === 0) {
+    defaults.push(
+      { Extension: 'rels', ContentType: 'application/vnd.openxmlformats-package.relationships+xml' },
+      { Extension: 'xml', ContentType: 'application/xml' },
     );
   }
+  const overrides = elementAttrs(types, 'Override').filter((o) => {
+    const part = (o['PartName'] ?? '').replace(/^\//, '');
+    return part.length > 0 && !/^docprops\//i.test(part) && zip.file(part) !== null;
+  });
+  const main = mainTarget.replace(/^\//, '');
+  if (zip.file(main) && !overrides.some((o) => (o['PartName'] ?? '').replace(/^\//, '') === main)) {
+    overrides.push({ PartName: `/${main}`, ContentType: CT_MAIN });
+  }
+  overrides.push({ PartName: '/docProps/core.xml', ContentType: CT_CORE }, { PartName: '/docProps/app.xml', ContentType: CT_APP });
+  zip.file(
+    '[Content_Types].xml',
+    XML_DECL +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      defaults.map((d) => `<Default Extension="${d['Extension'] ?? ''}" ContentType="${d['ContentType'] ?? ''}"/>`).join('') +
+      overrides.map((o) => `<Override PartName="${o['PartName'] ?? ''}" ContentType="${o['ContentType'] ?? ''}"/>`).join('') +
+      '</Types>',
+  );
 
-  await atomicWriteFile(pdfPath, out);
+  for (const entry of Object.values(zip.files)) entry.date = EPOCH;
+  await atomicWriteFile(docxPath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
 }
 
 // ---------------------------------------------------------------------------
-// exportDraft — orchestration (DONE-06 + DONE-08 + per-format scrub wiring)
+// zeroTracePdf — remove the info dictionary, XMP and TeX producer keys
 // ---------------------------------------------------------------------------
-
-export type ExportFormat = 'docx' | 'pdf' | 'latex' | 'md';
-
-export interface ExportOptions {
-  /** Absolute (or cwd-relative) path to the source markdown draft. */
-  inputPath: string;
-  /** Override the export dir; defaults to `<paperDir>/export` (DISTINCT). */
-  outputDir?: string;
-  format: ExportFormat;
-  /** Project root for paperDir() resolution. */
-  paperRoot?: string;
-  /** Injectable Pandoc-presence flag (deterministic tests); defaults to live probe. */
-  pandocPresent?: boolean;
-  /** CSL style key for citation rendering (e.g. 'apa', 'ieee'). Resolved by
-   *  caller via resolveStyleName(discipline). When absent, citation rendering
-   *  is skipped entirely (back-compat: existing callers without style pass through
-   *  unchanged). */
-  style?: string;
-}
-
-export interface ExportResult {
-  outputPath: string;
-  format: ExportFormat;
-  pandocUsed: boolean;
-  bibCopied: boolean;
-  risCopied: boolean; // CITE-05 — CITATIONS.ris bundled alongside .bib
-}
 
 /**
- * Escape LaTeX-special characters in body text so a deterministic offline
- * md→tex conversion produces compilable output without a TeX toolchain.
- * Order matters: backslash first so the replacements we inject are not
- * re-escaped.
+ * Strip a PDF's metadata structurally (the mandatory last step of every pdf
+ * export). The info dictionary is replaced by an empty one, which removes
+ * /Producer, /Creator, /Title and TeX's /PTEX.Fullbanner banner together.
+ * Every XMP metadata stream is deleted as an object (pdf-lib writes every
+ * object it holds, reachable or not), and /Metadata and /PTEX.* keys are
+ * dropped from every dictionary. No byte-level edits: they would break the
+ * cross-reference offsets. Idempotent.
  */
+export async function zeroTracePdf(pdfPath: string): Promise<void> {
+  const pdf = await PDFDocument.load(await fsp.readFile(pdfPath), { updateMetadata: false });
+  const ctx = pdf.context;
+
+  const oldInfo = ctx.trailerInfo.Info;
+  if (oldInfo instanceof PDFRef) ctx.delete(oldInfo);
+  ctx.trailerInfo.Info = ctx.register(ctx.obj({}));
+
+  const metadataStreams: PDFRef[] = [];
+  for (const [ref, obj] of ctx.enumerateIndirectObjects()) {
+    const dict = obj instanceof PDFDict ? obj : obj instanceof PDFStream || obj instanceof PDFRawStream ? obj.dict : null;
+    if (!dict) continue;
+    if (dict.get(PDFName.of('Type')) === PDFName.of('Metadata')) metadataStreams.push(ref);
+    for (const key of dict.keys()) {
+      const k = key.asString();
+      if (k === '/Metadata' || k.startsWith('/PTEX.')) dict.delete(key);
+    }
+  }
+  pdf.catalog.delete(PDFName.of('Metadata'));
+  for (const ref of metadataStreams) ctx.delete(ref);
+
+  // Without object streams every dictionary is plain text in the file, so the
+  // trace scan (and anyone auditing the file) can read it.
+  await atomicWriteFile(pdfPath, Buffer.from(await pdf.save({ updateFieldAppearances: false, useObjectStreams: false })));
+}
+
+// ---------------------------------------------------------------------------
+// Export errors
+// ---------------------------------------------------------------------------
+
+export type ExportFailureKind =
+  /** Pandoc or the TeX engine the format needs is not installed. */
+  | 'missing-tool'
+  /** Pandoc, TeX or a scrub step failed. */
+  | 'tool-failed'
+  /** The finished file still carries a trace, so it was not written. */
+  | 'trace-found'
+  /** A citation names a work that is not in CITATIONS.bib. */
+  | 'unresolved-citation'
+  /** The bibliography or the requested style cannot be used. */
+  | 'invalid-input';
+
+/** Why an export did not happen. Nothing was written to the export folder. */
+export class ExportError extends Error {
+  constructor(
+    readonly kind: ExportFailureKind,
+    message: string,
+    readonly details: readonly string[] = [],
+  ) {
+    super(message);
+    this.name = 'ExportError';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Offline rendering: Markdown and LaTeX with document-level citeproc
+// ---------------------------------------------------------------------------
+
+/** The heading over the reference list, as each style names it. */
+function referencesHeading(style: string): string {
+  if (style === 'mla') return 'Works Cited';
+  if (style === 'chicago-notes-bib') return 'Bibliography';
+  return 'References';
+}
+
+// Private-use code points mark where rendered text goes, so the LaTeX writer
+// can escape the prose first and insert already-formatted citations after.
+const CITE = (i: number): string => `${i}`;
+const NOTE = (i: number): string => `${i}`;
+const REF = (i: number): string => `${i}`;
+const SENTINEL_RE = /(\d+)|(\d+)|(\d+)/g;
+
+/**
+ * `md` with each citation replaced by a marker. In a note style the marker
+ * goes after the punctuation that follows the citation, as notes are placed.
+ */
+function markCitations(md: string, cites: readonly Citation[], rendered: RenderedCitations): string {
+  let out = '';
+  let pos = 0;
+  cites.forEach((c, i) => {
+    let before = md.slice(pos, c.start);
+    pos = c.end;
+    if (!rendered.noteStyle) {
+      // A superscript citation (AMA) sits against the word it follows.
+      if ((rendered.citations[i] ?? '').startsWith('<sup>')) before = before.replace(/[ \t]+$/, '');
+      out += before + CITE(i);
+      return;
+    }
+    const inline = rendered.inline[i] ?? '';
+    if (!inline) before = before.replace(/[ \t]+$/, '');
+    out += before + (inline ? CITE(i) : '');
+    const punct = /^[.,;:!?]/.exec(md.slice(pos));
+    if (punct) {
+      out += punct[0];
+      pos += punct[0].length;
+    }
+    out += NOTE(i);
+  });
+  return out + md.slice(pos);
+}
+
+interface OfflineDoc {
+  marked: string;
+  rendered: RenderedCitations | null;
+  heading: string;
+}
+
+function prepareOffline(md: string, cites: readonly Citation[], entries: CslEntry[], style: string): OfflineDoc {
+  if (cites.length === 0) return { marked: md, rendered: null, heading: '' };
+  const rendered = renderCitationsInDocument(entries, style, cites);
+  let marked = markCitations(md, cites, rendered).replace(/\s+$/, '');
+  if (rendered.bibliography.length > 0) {
+    marked += `\n\n## ${referencesHeading(style)}\n\n${rendered.bibliography.map((_, j) => REF(j)).join('\n\n')}`;
+  }
+  return { marked: `${marked}\n`, rendered, heading: referencesHeading(style) };
+}
+
+/** A note is a sentence: its first letter is a capital ("See", not "see"). Skips leading tags. */
+function capitalize(html: string): string {
+  return html.replace(/^((?:<[^>]*>|[^\p{L}<])*)(\p{Ll})/u, (_m, pre: string, c: string) => pre + c.toUpperCase());
+}
+
+function renderMarkdown(doc: OfflineDoc): string {
+  const r = doc.rendered;
+  if (!r) return doc.marked;
+  const body = doc.marked.replace(SENTINEL_RE, (_m, c?: string, n?: string, ref?: string) => {
+    if (c !== undefined) {
+      const i = Number(c);
+      return cslHtmlToMarkdown(r.noteStyle ? (r.inline[i] ?? '') : (r.citations[i] ?? ''));
+    }
+    if (n !== undefined) return `[^${Number(n) + 1}]`;
+    return cslHtmlToMarkdown(r.bibliography[Number(ref)] ?? '');
+  });
+  if (!r.noteStyle) return body;
+  // In a note style every citation is a note, numbered in order.
+  const notes = r.citations.map((html, i) => `[^${i + 1}]: ${cslHtmlToMarkdown(capitalize(html))}`);
+  return `${body.replace(/\s+$/, '')}\n\n${notes.join('\n\n')}\n`;
+}
+
+/** Escape LaTeX's special characters in prose (backslash first). */
 function escapeLatex(s: string): string {
   return s
     .replace(/\\/g, '\\textbackslash{}')
@@ -419,352 +418,311 @@ function escapeLatex(s: string): string {
 }
 
 /**
- * Deterministic OFFLINE markdown→LaTeX writer (MEDIUM-2). Produces a REAL .tex
- * artifact with NO Pandoc dependency and NO generator comment (no `% pensmith`,
- * no `% Generated by`), so CI (Pandoc-absent) emits + scans an actual .tex file.
- *
- * Minimal but valid: an ATX `# ` heading becomes the document title; `## `/`### `
- * become \section/\subsection; blank-line-separated blocks become paragraphs.
- * This is intentionally conservative — the contract is "a real, comment-free,
- * trace-free .tex artifact", not full Markdown fidelity (Pandoc handles the rich
- * path when present).
+ * The offline Markdown→LaTeX writer, used when Pandoc is not installed. It
+ * writes a complete, compilable document: a leading `# ` heading becomes the
+ * title, `## `/`### ` become sections, other blocks become paragraphs, and
+ * citations, notes and references arrive already formatted.
  */
-function renderLatex(md: string): string {
-  const lines = md.split(/\r?\n/);
+function renderLatex(doc: OfflineDoc): string {
+  const lines = doc.marked.split(/\r?\n/);
   let title = '';
-  const bodyParts: string[] = [];
+  const body: string[] = [];
   let para: string[] = [];
-
-  const flushPara = (): void => {
+  const flush = (): void => {
     if (para.length > 0) {
-      bodyParts.push(escapeLatex(para.join(' ').trim()));
+      body.push(escapeLatex(para.join(' ').trim()));
       para = [];
     }
   };
-
   for (const raw of lines) {
     const line = raw.trimEnd();
-    if (/^#\s+/.test(line)) {
-      flushPara();
-      if (!title) title = line.replace(/^#\s+/, '').trim();
-      else bodyParts.push(`\\section{${escapeLatex(line.replace(/^#\s+/, '').trim())}}`);
-    } else if (/^##\s+/.test(line)) {
-      flushPara();
-      bodyParts.push(`\\section{${escapeLatex(line.replace(/^##\s+/, '').trim())}}`);
-    } else if (/^###\s+/.test(line)) {
-      flushPara();
-      bodyParts.push(`\\subsection{${escapeLatex(line.replace(/^###\s+/, '').trim())}}`);
+    const h = /^(#{1,3})\s+(.*)$/.exec(line);
+    if (h) {
+      flush();
+      const text = escapeLatex(h[2]!.trim());
+      if (h[1] === '#' && !title) title = text;
+      else if (h[1] === '###') body.push(`\\subsection{${text}}`);
+      else body.push(`\\section{${text}}`);
     } else if (line.trim() === '') {
-      flushPara();
+      flush();
     } else {
       para.push(line);
     }
   }
-  flushPara();
+  flush();
 
-  const preamble = [
-    '\\documentclass{article}',
-    '\\usepackage[utf8]{inputenc}',
-    title ? `\\title{${escapeLatex(title)}}` : '',
-    '\\begin{document}',
-    title ? '\\maketitle' : '',
-  ]
-    .filter((l) => l.length > 0)
-    .join('\n');
-
-  return `${preamble}\n\n${bodyParts.join('\n\n')}\n\n\\end{document}\n`;
-}
-
-/**
- * Single markdown-emit code path (used by both the format==='md' branch and the
- * Pandoc-absent fallback). Markdown is trace-free by construction — NO generator
- * comment is injected. Output goes into the distinct export dir via the
- * atomic-write chokepoint.
- */
-async function writeMarkdown(md: string, outputPath: string): Promise<void> {
-  await atomicWriteFile(outputPath, md);
-}
-
-// ---------------------------------------------------------------------------
-// resolveAndRenderCitations — offline fallback inline-cite resolver (REND-01/02)
-// ---------------------------------------------------------------------------
-
-/**
- * Replace `[@key]` / `[@key1; @key2]` Pandoc citation tokens in `md` with
- * CSL-formatted in-text citations and append a `## References` bibliography.
- *
- * D-19: all citation-js usage is delegated to `parseBib`, `renderStyle`, and
- * `renderInText` imported from `./citations.js`. No direct `citation-js` import.
- *
- * Pitfall-5 guards: missing/empty bib → return md unchanged (no throw).
- * Pitfall-1 guard: one `renderInText([entry], style)` call per entry so each
- *   citekey gets its own in-text string (not one combined string for all).
- * Pitfall-2 guard: `renderStyle(entries, style)` is called FIRST so
- *   `ensureStyleTemplate` registers `pensmith-${style}` before the in-text
- *   loop begins (ordering requirement — memoized via the registeredStyles Map
- *   in citations.ts; never throws "template already registered").
- * Pitfall-6 guard: multi-cite `[@a; @b]` regex splits on ';' and wraps in one
- *   paren pair.
- * Zero-trace: the `## References` heading contains no 'pensmith' literal.
- */
-async function resolveAndRenderCitations(
-  md: string,
-  bibPath: string,
-  style: string,
-): Promise<string> {
-  // Pitfall-5: missing bib → pass through unchanged.
-  if (!existsSync(bibPath)) return md;
-  const bibText = await fsp.readFile(bibPath, 'utf8');
-  if (!bibText.trim()) return md;
-
-  const entries = await parseBib(bibText);
-
-  // Memoized Style Template Registration ordering (PATTERNS.md):
-  // Call renderStyle FIRST so ensureStyleTemplate(style) runs before the
-  // per-key in-text loop — guarantees pensmith-${style} is registered.
-  const bibliography = await renderStyle(entries, style);
-
-  // Build a per-citekey in-text citation map (Pitfall-1: one entry at a time).
-  const intextMap = new Map<string, string>();
-  for (const entry of entries) {
-    const id = String((entry as { id?: unknown }).id ?? '');
-    if (!id) continue;
-    const formatted = (await renderInText([entry], style)).trim();
-    intextMap.set(id, formatted);
-  }
-
-  // Replace [@key] and [@key1; @key2] tokens (Pitfall-6: multi-cite).
-  // Strip locator suffix (e.g. [@smith2020 p. 5] → key 'smith2020') per Pandoc
-  // citation syntax: citekey ends at the first whitespace after the sigil.
-  const resolved = md.replace(/\[(@[^\]]+)\]/g, (_match, inner: string) => {
-    const keys = inner.split(';').map((k) => k.trim().replace(/^@/, '').replace(/\s.*$/, ''));
-    if (keys.length === 1) {
-      const key = keys[0]!;
-      return intextMap.get(key) ?? `[@${key}]`; // unknown key: leave as-is
+  const r = doc.rendered;
+  const latex = (html: string): string => cslHtmlToLatex(html, escapeLatex);
+  const text = body.join('\n\n').replace(SENTINEL_RE, (_m, c?: string, n?: string, ref?: string) => {
+    if (!r) return '';
+    if (c !== undefined) {
+      const i = Number(c);
+      return latex(r.noteStyle ? (r.inline[i] ?? '') : (r.citations[i] ?? ''));
     }
-    // Multi-key: strip outer parens from each formatted cite, wrap in one pair.
-    // Unknown key: preserve [@key] sentinel (not bare word) so unresolved citations
-    // are visibly wrong, not silently misrepresented as resolved surnames (WR-01).
-    const parts = keys.map((k) => {
-      const hit = intextMap.get(k);
-      if (!hit) return `[@${k}]`; // preserve the unresolved signal
-      return hit.replace(/^[(]|[)]$/g, '');
-    });
-    return '(' + parts.join('; ') + ')';
+    if (n !== undefined) return `\\footnote{${latex(capitalize(r.citations[Number(n)] ?? ''))}}`;
+    return latex(r.bibliography[Number(ref)] ?? '');
   });
 
-  // Append bibliography under ## References only when non-empty (Pitfall-5).
-  // ZERO-TRACE: heading is '## References' — never any 'pensmith' literal.
-  if (bibliography.trim()) {
-    return resolved + '\n\n## References\n\n' + bibliography;
-  }
-  return resolved;
+  const preamble = ['\\documentclass{article}', '\\usepackage[utf8]{inputenc}', '\\usepackage[T1]{fontenc}'];
+  if (title) preamble.push(`\\title{${title}}`, '\\author{}', '\\date{}');
+  preamble.push('\\begin{document}');
+  if (title) preamble.push('\\maketitle');
+  return `${preamble.join('\n')}\n\n${text}\n\n\\end{document}\n`;
 }
 
-/**
- * Offline citation-resolution wrapper shared by the markdown fallback and the
- * deterministic LaTeX writer (audit #19). When a style + a copied bib are
- * available it resolves `[@key]` tokens to CSL in-text citations and appends a
- * `## References` section; otherwise it returns `md` unchanged. Never throws —
- * malformed BibTeX or an unknown style logs and returns the draft as-is so
- * export always proceeds.
- */
-async function resolveCitationsOffline(
+// ---------------------------------------------------------------------------
+// Pandoc
+// ---------------------------------------------------------------------------
+
+interface PandocFailure {
+  code?: string | number;
+  killed?: boolean;
+  signal?: string;
+  stderr?: string;
+}
+
+function lastLines(s: string, n = 12): string {
+  return s.trim().split(/\r?\n/).slice(-n).join('\n');
+}
+
+async function runPandoc(args: string[], cwd: string, format: ExportFormat): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile('pandoc', args, { cwd, timeout: 180_000, maxBuffer: 16 * 1024 * 1024 }, (err, _stdout, stderr) => {
+      if (!err) {
+        resolve(String(stderr ?? ''));
+        return;
+      }
+      const e = err as unknown as PandocFailure;
+      const errText = String(stderr ?? e.stderr ?? '');
+      if (e.code === 'ENOENT') {
+        reject(new ExportError('missing-tool', 'Pandoc is not installed.'));
+      } else if (format === 'pdf' && (e.code === 47 || /not found\. Please select a different --pdf-engine/i.test(errText))) {
+        reject(new ExportError('missing-tool', 'No PDF engine is installed (Pandoc needs pdflatex or another TeX engine).', [lastLines(errText)]));
+      } else if (e.killed || e.signal) {
+        reject(new ExportError('tool-failed', 'Pandoc did not finish within 3 minutes.'));
+      } else {
+        reject(new ExportError('tool-failed', `Pandoc failed (exit ${String(e.code ?? '?')}).`, [lastLines(errText)]));
+      }
+    });
+  });
+}
+
+/** Turn unknown narrative `@word`s into plain text so Pandoc does not cite them. */
+function escapeUncited(md: string, ignored: readonly Citation[]): string {
+  let out = md;
+  for (const c of [...ignored].sort((a, b) => b.start - a.start)) {
+    out = `${out.slice(0, c.start)}\\${out.slice(c.start)}`;
+  }
+  return out;
+}
+
+async function pandocExport(
+  stage: string,
+  stem: string,
   md: string,
-  style: string | undefined,
-  bibCopied: boolean,
-  bibPath: string,
+  cites: readonly Citation[],
+  ignored: readonly Citation[],
+  style: string,
+  format: 'docx' | 'pdf' | 'latex',
 ): Promise<string> {
-  if (!(style && bibCopied)) return md;
-  try {
-    return await resolveAndRenderCitations(md, bibPath, style);
-  } catch {
-    process.stderr.write(
-      'pensmith export: citation rendering failed — exporting without inline citations.\n',
-    );
-    return md;
-  }
-}
+  let manuscript = escapeUncited(md, ignored).replace(/\s+$/, '');
+  if (cites.length > 0) manuscript += `\n\n## ${referencesHeading(style)}\n\n::: {#refs}\n:::`;
+  await atomicWriteFile(join(stage, 'manuscript.md'), `${manuscript}\n`);
 
-/**
- * Build the Pandoc argv (array — never a shell string; T-06-04 command-injection
- * mitigation). Base args carry zero-trace metadata flags as defense-in-depth;
- * the in-process scrub is the actual guarantee.
- *
- * Optional `citeOpts` appends `--citeproc --csl <path> --bibliography <path>`
- * when both fields are present. --citeproc precedes --csl/--bibliography
- * (Pitfall-3 ordering requirement).
- */
-function buildPandocArgs(
-  inputPath: string,
-  outputPath: string,
-  format: ExportFormat,
-  citeOpts?: { cslPath: string; bibPath: string },
-): string[] {
-  const to = format === 'latex' ? 'latex' : format;
+  const ext = format === 'latex' ? 'tex' : format;
+  const output = `${stem}.${ext}`;
   const args = [
-    inputPath,
+    'manuscript.md',
     '--from', 'markdown',
-    '--to', to,
-    '--output', outputPath,
-    '--metadata', 'title=',
-    '--metadata', 'author=',
-    '--metadata', 'date=',
+    '--to', format,
+    '--output', output,
+    // A leading `# Title` becomes the document title; sections become level 1.
+    '--shift-heading-level-by=-1',
+    // Keep the title and any author out of the PDF metadata LaTeX would write.
+    '--variable', 'title-meta=',
+    '--variable', 'author-meta=',
   ];
-  if (format === 'pdf') {
-    args.push('--variable', 'pdfcreator=', '--variable', 'pdfproducer=', '--variable', 'pdfauthor=');
+  if (format === 'latex') args.push('--standalone');
+  if (cites.length > 0) {
+    await atomicWriteFile(
+      join(stage, 'style.csl'),
+      await fsp.readFile(path.join(PKG_ROOT, 'templates', 'citation-styles', `${style}.csl`)),
+    );
+    args.push('--citeproc', '--csl', 'style.csl', '--bibliography', 'CITATIONS.bib');
   }
-  // REND-01/02 Pandoc path: --citeproc MUST precede --csl and --bibliography (Pitfall-3).
-  if (citeOpts?.cslPath && citeOpts?.bibPath) {
-    args.push('--citeproc', '--csl', citeOpts.cslPath, '--bibliography', citeOpts.bibPath);
+
+  const warnings = await runPandoc(args, stage, format);
+  const missing = [...warnings.matchAll(/Citeproc: citation (\S+) not found/g)].map((m) => m[1]!);
+  if (missing.length > 0) {
+    throw new ExportError('unresolved-citation', 'Pandoc found citations with no bibliography entry.', missing);
   }
-  return args;
+
+  const outPath = join(stage, output);
+  try {
+    if (format === 'docx') await zeroTracePatch(outPath);
+    else if (format === 'pdf') await zeroTracePdf(outPath);
+    else {
+      // Pandoc's LaTeX template signs the PDF it will make: pdfcreator={LaTeX via pandoc}.
+      const tex = await fsp.readFile(outPath, 'utf8');
+      await atomicWriteFile(outPath, tex.replace(/pdfcreator=\{LaTeX via pandoc\}/g, 'pdfcreator={}'));
+    }
+  } catch (err) {
+    throw new ExportError('tool-failed', `Could not remove the document metadata: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  await removePath(join(stage, 'manuscript.md'));
+  await removePath(join(stage, 'style.csl'));
+  return outPath;
+}
+
+// ---------------------------------------------------------------------------
+// exportDraft
+// ---------------------------------------------------------------------------
+
+export type ExportFormat = 'docx' | 'pdf' | 'latex' | 'md';
+
+export interface ExportOptions {
+  /** The manuscript to export (the compiled DRAFT.md or the humanized FINAL.md). */
+  inputPath: string;
+  /** The export folder; defaults to `<paperDir>/export`. */
+  outputDir?: string;
+  format: ExportFormat;
+  /** Project root for paperDir() resolution. */
+  paperRoot?: string;
+  /** Injectable Pandoc presence (deterministic tests); defaults to a live probe. */
+  pandocPresent?: boolean;
+  /** Citation style key (`apa`, `ieee`, ...). Defaults to `apa`. */
+  style?: string;
+}
+
+export interface ExportResult {
+  outputPath: string;
+  format: ExportFormat;
+  pandocUsed: boolean;
+  /** The exported bibliography files; absent when the paper cites nothing. */
+  bibPath?: string;
+  risPath?: string;
+  /** The keys the exported paper cites, in first-appearance order. */
+  citedKeys: string[];
+}
+
+const DELIVERABLE_EXTS = ['md', 'docx', 'pdf', 'tex'];
+
+function traceFormat(file: string): TraceFormat {
+  const ext = extname(file).slice(1);
+  return ext === 'tex' ? 'latex' : (ext as TraceFormat);
 }
 
 /**
- * exportDraft — orchestrate a single-format export (DONE-06 + DONE-08).
- *
- * Writes EVERY output into a DISTINCT export dir (default `<paperDir>/export`),
- * never `paperDir` itself — so an output never collides with the source
- * DRAFT.md/sections/CITATIONS.bib (MEDIUM-1). Behavior by format:
- *   - 'latex': deterministic OFFLINE md→tex writer (no Pandoc) → a REAL scanned
- *     .tex with NO generator comment. If Pandoc is present, the Pandoc latex
- *     path may be used, then any '% pensmith'/'% Generated' line is stripped.
- *   - 'md': single markdown-emit code path into the export dir.
- *   - 'docx'/'pdf' with Pandoc present: execFile pandoc with zero-trace flags,
- *     then the MANDATORY per-format scrub (zeroTracePatch / zeroTracePdf).
- *   - 'docx'/'pdf' with Pandoc (or the PDF engine) absent: md-only fallback +
- *     banner mentioning Pandoc; NEVER throws ENOENT.
- *
- * CITATIONS.bib is copied into the export dir BEFORE any pandoc shellout
- * (Pitfall-4 ordering) so --bibliography bibDst resolves. The copy guard
- * `bibSrc !== bibDst` + `existsSync(bibSrc)` stays unchanged (DONE-08).
- *
- * opts.style enables citation rendering: on the md-only/Pandoc-absent path
- * resolveAndRenderCitations resolves [@key] tokens and appends ## References.
- * On the Pandoc path --citeproc/--csl/--bibliography args are appended when
- * both style and bibCopied are true. (REND-01/02)
+ * Export one manuscript in one format. Builds every file in a staging folder,
+ * scans each for traces, then replaces the previous export with them. On any
+ * failure it throws an ExportError and leaves the export folder as it was.
  */
 export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   const { inputPath, format } = opts;
-  const exportDir = opts.outputDir ?? join(paperDir(opts.paperRoot), 'export');
-  await fsp.mkdir(exportDir, { recursive: true });
+  const paper = paperDir(opts.paperRoot);
+  const exportDir = opts.outputDir ?? join(paper, 'export');
+  const style = opts.style ?? 'apa';
+  if (!SUPPORTED_STYLES.includes(style)) {
+    throw new ExportError('invalid-input', `Unknown citation style '${style}'. Supported: ${SUPPORTED_STYLES.join(', ')}.`);
+  }
+  const stem = basename(inputPath, extname(inputPath));
+  const md = await fsp.readFile(inputPath, 'utf8');
+
+  // Citations and the works they cite. A bracketed citation of a key with no
+  // entry is refused; a narrative `@word` with no entry is ordinary text
+  // (a handle, an email-like word), as it would read in the source.
+  const bibPathSrc = join(paper, 'CITATIONS.bib');
+  const bibText = existsSync(bibPathSrc) ? await fsp.readFile(bibPathSrc, 'utf8') : '';
+  const all = findCitations(md);
+  let entries: CslEntry[] = [];
+  try {
+    entries = await readBibEntries(bibText);
+  } catch (err) {
+    if (all.some((c) => !c.narrative)) {
+      throw new ExportError('invalid-input', `CITATIONS.bib could not be read: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  const known = new Set(entries.map((e) => e.id));
+  const unknownCited = [...new Set(all.filter((c) => !c.narrative).flatMap((c) => c.items.map((i) => i.key)).filter((k) => !known.has(k)))];
+  if (unknownCited.length > 0) {
+    throw new ExportError('unresolved-citation', 'The paper cites works that are not in CITATIONS.bib.', unknownCited);
+  }
+  const cites = all.filter((c) => !c.narrative || known.has(c.items[0]!.key));
+  const ignored = all.filter((c) => c.narrative && !known.has(c.items[0]!.key));
+  const citedKeys = [...new Set(cites.flatMap((c) => c.items.map((i) => i.key)))];
+  const { entries: exported } = selectEntries(entries, citedKeys);
 
   const pandoc = opts.pandocPresent ?? isPandocPresent();
-  const stem = basename(inputPath, extname(inputPath));
-
-  // DONE-08 — copy CITATIONS.bib into the export dir BEFORE any pandoc shellout
-  // (Pitfall-4: --bibliography bibDst must resolve at pandoc call time).
-  // Guard: bibSrc !== bibDst && existsSync(bibSrc) — same as before, reordered.
-  let bibCopied = false;
-  const bibSrc = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
-  const bibDst = join(exportDir, 'CITATIONS.bib');
-  if (bibSrc !== bibDst && existsSync(bibSrc)) {
-    await fsp.copyFile(bibSrc, bibDst);
-    bibCopied = true;
+  if ((format === 'docx' || format === 'pdf') && !pandoc) {
+    throw new ExportError(
+      'missing-tool',
+      `Pandoc is not installed, so a .${format} cannot be made. Install Pandoc (https://pandoc.org/installing.html)` +
+        `${format === 'pdf' ? ' and a TeX engine' : ''}, or export with --format md.`,
+    );
   }
 
-  // Compute CSL path for Pandoc citeproc args and offline rendering.
-  // style is only meaningful when bibCopied (no bib → no citation rendering).
-  const style = opts.style;
-  const cslPath = style ? path.join(PKG_ROOT, 'templates', 'citation-styles', `${style}.csl`) : '';
-  const citeOpts =
-    style && bibCopied && existsSync(cslPath)
-      ? { cslPath, bibPath: bibDst }
-      : undefined;
+  const stage = await makeTempDir(paper, '.export-');
+  try {
+    const files: string[] = [];
+    if (exported.length > 0) {
+      await atomicWriteFile(join(stage, 'CITATIONS.bib'), toBibtex(exported));
+      await atomicWriteFile(join(stage, 'CITATIONS.ris'), toRis(exported));
+      files.push(join(stage, 'CITATIONS.bib'), join(stage, 'CITATIONS.ris'));
+    }
 
-  let outputPath: string;
-  let pandocUsed = false;
-
-  if (format === 'latex') {
-    // Deterministic OFFLINE md→tex — a real scanned artifact, no Pandoc needed.
-    outputPath = join(exportDir, `${stem}.tex`);
-    if (pandoc) {
-      try {
-        await execFileAsync('pandoc', buildPandocArgs(inputPath, outputPath, 'latex', citeOpts), {
-          timeout: 60_000,
-        });
-        // Defensively strip any generator/provenance comment line Pandoc emits.
-        const tex = await fsp.readFile(outputPath, 'utf8');
-        const cleaned = tex
-          .split(/\r?\n/)
-          .filter((l) => !/^\s*%\s*(pensmith|generated by)/i.test(l))
-          .join('\n');
-        await atomicWriteFile(outputPath, cleaned);
-        pandocUsed = true;
-      } catch {
-        // Pandoc latex path failed — fall through to the offline writer.
-        const md = await fsp.readFile(inputPath, 'utf8');
-        const resolved = await resolveCitationsOffline(md, style, bibCopied, bibDst);
-        await atomicWriteFile(outputPath, renderLatex(resolved));
-      }
+    let outputFile: string;
+    let pandocUsed = false;
+    if (format === 'md') {
+      outputFile = join(stage, `${stem}.md`);
+      await atomicWriteFile(outputFile, renderMarkdown(prepareOffline(md, cites, exported, style)));
+    } else if (format === 'latex' && !pandoc) {
+      outputFile = join(stage, `${stem}.tex`);
+      await atomicWriteFile(outputFile, renderLatex(prepareOffline(md, cites, exported, style)));
     } else {
-      // Audit #19: resolve [@key] tokens + append a References section BEFORE
-      // rendering — the offline .tex writer previously left citations as literal
-      // [@key] with no bibliography. Reuses the markdown fallback's resolver.
-      const md = await fsp.readFile(inputPath, 'utf8');
-      const resolved = await resolveCitationsOffline(md, style, bibCopied, bibDst);
-      await atomicWriteFile(outputPath, renderLatex(resolved));
-    }
-  } else if (format === 'md' || !pandoc) {
-    // md-only path (explicit md request OR Pandoc-absent fallback for docx/pdf).
-    if (!pandoc && format !== 'md') {
-      process.stdout.write('pensmith export: Pandoc not found — markdown-only fallback.\n');
-    }
-    outputPath = join(exportDir, `${stem}.md`);
-    const rawMd = await fsp.readFile(inputPath, 'utf8');
-    // REND-01/02 offline path: resolve [@key] tokens + append ## References.
-    // Only when style is set AND bib was copied (no bib → pass through unchanged).
-    const md = await resolveCitationsOffline(rawMd, style, bibCopied, bibDst);
-    await writeMarkdown(md, outputPath);
-  } else {
-    // Pandoc present + format is docx/pdf.
-    const ext = format === 'docx' ? 'docx' : 'pdf';
-    outputPath = join(exportDir, `${stem}.${ext}`);
-    try {
-      await execFileAsync('pandoc', buildPandocArgs(inputPath, outputPath, format, citeOpts), {
-        timeout: 60_000,
-      });
-      // MANDATORY per-format zero-trace scrub — the actual guarantee.
-      if (format === 'docx') await zeroTracePatch(outputPath);
-      else await zeroTracePdf(outputPath);
+      outputFile = await pandocExport(stage, stem, md, cites, ignored, style, format);
       pandocUsed = true;
-    } catch {
-      // A missing PDF engine (or any Pandoc failure) → md-only fallback, never throw.
-      process.stdout.write(
-        `pensmith export: ${format === 'pdf' ? 'PDF engine' : 'Pandoc'} not available — markdown-only fallback.\n`,
-      );
-      outputPath = join(exportDir, `${stem}.md`);
-      let md = await fsp.readFile(inputPath, 'utf8');
-      // REND-01/02 fallback from Pandoc failure: resolve citations offline.
-      if (style && bibCopied) {
-        try {
-          md = await resolveAndRenderCitations(md, bibDst, style);
-        } catch {
-          // Malformed BibTeX or unknown style → skip citation rendering, leave tokens raw.
-          // Never-throw guarantee: export proceeds on the unprocessed draft.
-          process.stderr.write(
-            'pensmith export: citation rendering failed — exporting without inline citations.\n',
-          );
-        }
-      }
-      await writeMarkdown(md, outputPath);
-      pandocUsed = false;
     }
-  }
+    files.push(outputFile);
 
-  // CITE-05 (DONE-08 extension): copy CITATIONS.ris into the export dir
-  // alongside .bib. Same pattern as bibCopied — same-path guard + existsSync
-  // guard so it never throws when the .ris is absent and never overwrites the
-  // source. RIS is plain-text bibliographic data with NO pensmith fingerprint
-  // (same zero-trace posture as .bib — no metadata to scrub).
-  let risCopied = false;
-  const risSrc = join(paperDir(opts.paperRoot), 'CITATIONS.ris');
-  const risDst = join(exportDir, 'CITATIONS.ris');
-  if (risSrc !== risDst && existsSync(risSrc)) {
-    await fsp.copyFile(risSrc, risDst);
-    risCopied = true;
-  }
+    // The last gate: every file that would ship is scanned.
+    const ctx = {
+      authorText: md,
+      bibliographicText: JSON.stringify(exported),
+      sensitivePaths: [homeDir(), paper, path.resolve(opts.paperRoot ?? process.cwd()), PKG_ROOT, tmpdir(), stage],
+    };
+    const findings = [];
+    for (const f of files) findings.push(...(await scanExportFile(f, traceFormat(f), ctx)));
+    if (findings.length > 0) {
+      throw new ExportError(
+        'trace-found',
+        'The exported file would carry a trace of pensmith or of this computer, so it was not written.',
+        findings.map(describeFinding),
+      );
+    }
 
-  return { outputPath, format, pandocUsed, bibCopied, risCopied };
+    // Replace the previous export: no stale file from an earlier run stays.
+    await fsp.mkdir(exportDir, { recursive: true });
+    for (const s of new Set(['DRAFT', 'FINAL', stem])) {
+      for (const ext of DELIVERABLE_EXTS) await removePath(join(exportDir, `${s}.${ext}`));
+    }
+    await removePath(join(exportDir, 'CITATIONS.bib'));
+    await removePath(join(exportDir, 'CITATIONS.ris'));
+    const published = new Map<string, string>();
+    for (const f of files) {
+      const dest = join(exportDir, basename(f));
+      await atomicRename(f, dest);
+      published.set(basename(f), dest);
+    }
+
+    return {
+      outputPath: published.get(basename(outputFile))!,
+      format,
+      pandocUsed,
+      ...(published.has('CITATIONS.bib') ? { bibPath: published.get('CITATIONS.bib')! } : {}),
+      ...(published.has('CITATIONS.ris') ? { risPath: published.get('CITATIONS.ris')! } : {}),
+      citedKeys,
+    };
+  } finally {
+    await removePath(stage);
+  }
 }

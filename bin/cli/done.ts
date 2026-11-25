@@ -17,10 +17,11 @@
 // plagiarism issues exist, and ONLY --yolo skips it. The answer defaults to no.
 // With no terminal to ask in, done exits 3 with the pending decision as JSON.
 //
-// Exports go to the exporter's DISTINCT export dir (default `.paper/export/`) —
-// done.ts MUST NOT pass `outputDir=paperDir(paperRoot)`, so the md-fallback
-// never overwrites the source DRAFT.md and the verb-level zero-trace scan
-// targets a real distinct deliverable (cycle-2 MEDIUM).
+// Exports go to the exporter's DISTINCT export dir (default `.paper/export/`),
+// never over the source DRAFT.md. The format defaults to docx when Pandoc is
+// installed and to md otherwise; an explicit docx/pdf that cannot be made is
+// refused. A failed export (ExportError) writes nothing and does not mark the
+// paper done: a refusal exits 2, a crashed tool exits 1.
 
 import { defineCommand } from 'citty';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
@@ -30,15 +31,16 @@ import { runPass3 } from '../lib/verify/pass3.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport, renderHonestySkipped } from '../lib/honesty.js';
-import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
+import { exportDraft, ExportError, runHumanizer, type ExportFormat } from '../lib/exporter.js';
 import { paperDir } from '../lib/paths.js';
 import { parseIntakeMd } from '../lib/intake-parse.js';
-import { resolveStyleName, parseBibtex } from '../lib/citations.js';
+import { parseBibtex, resolveStyleName } from '../lib/citations.js';
+import { isPandocPresent } from '../lib/ecosystem-presence.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
 import { extractCitekeys } from '../lib/citation-token.js';
 import { parseVerdictRows } from '../lib/verify/verdict-rows.js';
-import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
+import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 
 // ---------------------------------------------------------------------------
@@ -631,8 +633,7 @@ export const doneCommand = defineCommand({
     },
     format: {
       type: 'string',
-      description: 'Export format: docx | pdf | latex | md.',
-      default: 'docx',
+      description: 'Export format: docx | pdf | latex | md (default: docx when Pandoc is installed, otherwise md).',
     },
     raw: {
       type: 'boolean',
@@ -671,6 +672,25 @@ export const doneCommand = defineCommand({
       );
       process.exitCode = EXIT_REFUSED;
       return { ok: false, blocked: true };
+    }
+
+    // The format, settled before any audit work: a format that cannot be made
+    // here is refused now, not after the user has confirmed the export.
+    const pandoc = isPandocPresent();
+    const requested = typeof args.format === 'string' && args.format.length > 0 ? args.format : undefined;
+    if (requested !== undefined && !VALID_FORMATS.has(requested)) {
+      process.stdout.write(`pensmith done: unknown export format '${requested}' — use docx, pdf, latex or md.\n`);
+      process.exitCode = EXIT_REFUSED;
+      return { ok: false };
+    }
+    const format: ExportFormat = (requested as ExportFormat | undefined) ?? (pandoc ? 'docx' : 'md');
+    if ((format === 'docx' || format === 'pdf') && !pandoc) {
+      process.stdout.write(
+        `pensmith done: Pandoc is not installed, so a .${format} cannot be made. Nothing was exported.\n` +
+          `  Install Pandoc (https://pandoc.org/installing.html)${format === 'pdf' ? ' and a TeX engine' : ''}, or export with --format md.\n`,
+      );
+      process.exitCode = EXIT_REFUSED;
+      return { ok: false };
     }
 
     // 1. DONE-01 whole-paper Pass 4 (orphan audit). 2. DONE-02 plagiarism.
@@ -723,10 +743,6 @@ export const doneCommand = defineCommand({
       }
     }
 
-    const format: ExportFormat = VALID_FORMATS.has(String(args.format))
-      ? (String(args.format) as ExportFormat)
-      : 'docx';
-
     // 6. DONE-09 export-confirmation gate. Pass-2 UNSUPPORTED is read from the
     //    section VERIFICATION.md files (the load-bearing disk→gate feed, HIGH-3).
     const pass2Results = readSectionUnsupported(paperRoot);
@@ -758,28 +774,28 @@ export const doneCommand = defineCommand({
       return { ok: false };
     }
 
-    // 7. DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir. Leave
-    //    outputDir UNSET so the md-fallback never overwrites the source DRAFT.md.
+    // 7. DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir.
 
-    // Resolve discipline → CSL style from INTAKE.md (never-throw: missing or
-    // unparseable INTAKE.md leaves style undefined; citation rendering is skipped).
-    // Mirrors the draft-read never-throw at lines 388-399.
-    const intakePath = join(paperDir(paperRoot), 'INTAKE.md');
-    let style: string | undefined;
+    // The citation style follows the discipline in INTAKE.md (apa without one).
+    let intake = '';
     try {
-      const intakeText = readFileSync(intakePath, 'utf8');
-      const { discipline } = parseIntakeMd(intakeText);
-      style = resolveStyleName(discipline);
+      intake = readFileSync(join(paperDir(paperRoot), 'INTAKE.md'), 'utf8');
     } catch {
-      // Missing or unparseable INTAKE.md → style undefined → citation rendering is skipped.
+      // no intake: the default style
     }
+    const citation = { style: resolveStyleName(parseIntakeMd(intake).discipline) };
 
-    const result = await exportDraft({
-      inputPath: finalPath ?? draftPath,
-      format,
-      paperRoot,
-      ...(style !== undefined ? { style } : {}),
-    });
+    let result: Awaited<ReturnType<typeof exportDraft>>;
+    try {
+      result = await exportDraft({ inputPath: finalPath ?? draftPath, format, paperRoot, pandocPresent: pandoc, style: citation.style });
+    } catch (err) {
+      if (!(err instanceof ExportError)) throw err;
+      process.stdout.write(`pensmith done: export failed — ${err.message} Nothing was exported.\n`);
+      for (const d of err.details) process.stdout.write(`  ${d.replace(/\n/g, '\n  ')}\n`);
+      // A tool that crashed is an error; everything else is a refusal.
+      process.exitCode = err.kind === 'tool-failed' ? EXIT_ERROR : EXIT_REFUSED;
+      return { ok: false, exportFailed: err.kind };
+    }
 
     // Write the whole-paper VERIFICATION.md (a SOURCE artifact, not the export dir).
     const verificationPath = join(paperDir(paperRoot), 'VERIFICATION.md');
@@ -801,7 +817,12 @@ export const doneCommand = defineCommand({
       await atomicWriteFile(finalMdPath, finalPath !== null ? readFileSync(finalPath, 'utf8') : draftMd);
     }
 
-    process.stdout.write(`pensmith done: exported ${result.outputPath}\n`);
+    process.stdout.write(`pensmith done: exported ${result.outputPath} (${citation.style} citations)\n`);
+    if (requested === undefined && !pandoc) {
+      process.stdout.write(
+        'pensmith done: Pandoc is not installed, so the paper was exported as Markdown. Install Pandoc to get a .docx.\n',
+      );
+    }
     return { ok: true, ...result };
   },
 });

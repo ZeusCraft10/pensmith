@@ -105,6 +105,14 @@ export function localDataDir(
 }
 
 /**
+ * The user's home folder: $HOME (USERPROFILE on Windows) when set, else the
+ * OS answer. The export trace scanner looks for it in exported files.
+ */
+export function homeDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.HOME ?? env.USERPROFILE ?? os.homedir();
+}
+
+/**
  * Returns the pensmith app data directory: `<localDataDir>/pensmith`.
  * This is the root for `locks/`, `http-cache/`, `library.json`,
  * checkpoints, session logs, etc.

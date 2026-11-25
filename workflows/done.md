@@ -17,8 +17,8 @@ required:
   - humanizer skill
 
 degrade_if_missing:
-  - if no Pandoc: markdown-only export (latex is still produced via the offline md→tex writer; docx/pdf fall back to a markdown deliverable in the export dir)
-  - if no PDF engine: markdown-only fallback for the pdf format (never an ENOENT crash)
+  - if no Pandoc: with no --format the export is Markdown (and done says so); latex uses the offline writer; an explicit --format docx or pdf is refused with exit 2, naming Pandoc — never swapped for a Markdown file
+  - if no PDF engine: --format pdf is refused with exit 2, naming the missing TeX engine
   - if no humanizer skill: skip the humanize step (banner + null) and skip the 'after' honesty score — the export proceeds on DRAFT.md, never fails
   - if no GPTZERO_API_KEY: skip the honesty score (the report emits the skip banner, never a fabricated percent)
 </capability_check>
@@ -49,9 +49,11 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
 ## Outputs
 
 - The exported deliverable in the DISTINCT export dir (default `.paper/export/`):
-  `DRAFT.docx` / `DRAFT.pdf` / `DRAFT.tex` / `DRAFT.md` per `--format` (with the
-  Pandoc-absent markdown fallback) — carrying ZERO pensmith trace.
-- `.paper/export/CITATIONS.bib` — the bundled bibliography (DONE-08).
+  `DRAFT.docx` / `DRAFT.pdf` / `DRAFT.tex` / `DRAFT.md` per `--format` (default:
+  docx when Pandoc is installed, otherwise md) — carrying ZERO pensmith trace.
+  Each run replaces the previous export; nothing from an earlier run stays.
+- `.paper/export/CITATIONS.bib` and `CITATIONS.ris` — the works the paper
+  cites, and only those (DONE-08, CITE-05).
 - `.paper/VERIFICATION.md` — a SOURCE artifact (not in the export dir) carrying
   the honesty report (DONE-04, framed verbatim), the plagiarism section
   (DONE-02), and the whole-paper Pass-4 orphan summary (DONE-01).
@@ -98,12 +100,16 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
    take the answer back from Tier 1, a user who wants to export runs
    `pensmith done` in their own terminal and answers the prompt there.
 
-7. **Export + mandatory scrub** (DONE-06/07/08): `exportDraft` into the DISTINCT
-   export dir (`outputDir` LEFT UNSET so the md-fallback never overwrites the
-   source `DRAFT.md`). docx → `zeroTracePatch`; pdf → `zeroTracePdf`; latex →
-   the offline md→tex writer (no generator comment); md → the trace-free body.
-   Bundle `.paper/export/CITATIONS.bib`. Then write the source
-   `.paper/VERIFICATION.md` (honesty + plagiarism + Pass-4 sections).
+7. **Export + mandatory scrub + trace scan** (DONE-06/07/08): `exportDraft`
+   builds the files in a staging folder inside `.paper/`, then moves them into
+   the DISTINCT export dir. docx/pdf/latex
+   run Pandoc with relative paths (latex with `--standalone`); docx →
+   `zeroTracePatch` (docProps rebuilt from an allowlist, custom.xml dropped);
+   pdf → `zeroTracePdf` (info dictionary, XMP and TeX banners removed); md →
+   one document-level citeproc session. The trace scanner then reads every
+   file that would ship; a finding refuses the export (exit 2) and nothing is
+   written. A Pandoc failure prints Pandoc's own message and exits 1. Only
+   after a successful export is the source `.paper/VERIFICATION.md` written.
 
 8. **Shell fallback** (TIER-06 equivalence path): `pensmith done [--yolo]
    [--format docx|pdf|latex|md] [--raw]`.

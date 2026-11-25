@@ -191,6 +191,22 @@ export async function atomicRename(fromPath: string, toPath: string): Promise<vo
 }
 
 /**
+ * Delete a file or folder (recursively); a missing path is not an error.
+ * Lives here so a dry run cannot delete anything either.
+ */
+export async function removePath(targetPath: string): Promise<void> {
+  assertWritable(targetPath);
+  await fsp.rm(targetPath, { recursive: true, force: true });
+}
+
+/** Create a new, empty, uniquely named folder inside `parent`. */
+export async function makeTempDir(parent: string, prefix: string): Promise<string> {
+  assertWritable(path.join(parent, prefix));
+  await fsp.mkdir(parent, { recursive: true });
+  return fsp.mkdtemp(path.join(parent, prefix));
+}
+
+/**
  * Append `line` to `targetPath` using O_APPEND. POSIX guarantees writes
  * <= PIPE_BUF bytes (4096 on Linux) are atomic under concurrent O_APPEND.
  * Caller is responsible for keeping line size under PIPE_BUF and including
