@@ -228,6 +228,16 @@ test('the installed CLI prints its version through a symlinked shim', () => {
   assert.equal(r.stdout.trim(), pkg.version);
 });
 
+test('the bundled CLI runs through a symlink to the bundle itself, as npm link and package.json bin create', { skip: process.platform === 'win32' && 'npm creates .cmd shims on Windows, not symlinks' }, () => {
+  const copy = installedCopy();
+  const linkDir = mkdtempSync(path.join(tmpdir(), 'pensmith-npm-link-'));
+  const link = path.join(linkDir, 'pensmith');
+  symlinkSync(path.join(copy, 'dist', 'pensmith.mjs'), link);
+  const r = spawnSync(link, ['--version'], { cwd: linkDir, encoding: 'utf8', timeout: 60_000 });
+  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+  assert.equal(r.stdout.trim(), pkg.version, 'the entry-point check must survive the symlink');
+});
+
 test('the installed CLI finds its runtime assets: doctor reports the install as complete', () => {
   const copy = installedCopy();
   const cwd = mkdtempSync(path.join(tmpdir(), 'pensmith-doctor-cwd-'));

@@ -8,6 +8,7 @@
 //      list exactly 1 skill, 1 hook and no MCP servers
 //   3. run the installed `pensmith --version`, and on POSIX the checkout's
 //      plugin/bin/pensmith through a symlink, the way a PATH entry reaches it
+//   4. `npm link` the checkout into a throwaway prefix and run the linked bin
 //
 // Exits 1 on the first failed check.
 
@@ -80,6 +81,18 @@ if (!isWindows) {
   const v = run(link, ['--version'], { cwd: linkDir });
   check('plugin/bin/pensmith --version through a symlink', v.status === 0 && v.stdout.trim() === version, v.out);
   rmSync(linkDir, { recursive: true, force: true });
+}
+
+// 4. `npm link` from the checkout into a throwaway prefix, then run the linked bin.
+{
+  const prefix = mkdtempSync(path.join(tmpdir(), 'pensmith-npm-prefix-'));
+  const npmEnv = { ...process.env, npm_config_prefix: prefix };
+  const link = run('npm', ['link', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: repoRoot, env: npmEnv, shell: isWindows });
+  check('npm link into a temporary prefix', link.status === 0, link.out);
+  const bin = isWindows ? path.join(prefix, 'pensmith.cmd') : path.join(prefix, 'bin', 'pensmith');
+  const v = isWindows ? run('cmd.exe', ['/d', '/c', bin, '--version']) : run(bin, ['--version']);
+  check('pensmith --version through the npm link', v.status === 0 && v.stdout.trim() === version, v.out);
+  rmSync(prefix, { recursive: true, force: true });
 }
 
 console.log('plugin smoke passed');
