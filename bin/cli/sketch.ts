@@ -6,8 +6,8 @@
 // that thesis to the existing `new` (intake) verb via dispatchVerb.
 //
 // LOAD-BEARING no-advance invariant (Pitfall 6 / T-08-04-05): sketch MUST NOT
-// call initState, MUST NOT mkdir .paper/, and MUST NOT call initLibrary anywhere
-// in the Socratic loop or on decline. State creation lives in ONE place (the
+// call initState, MUST NOT mkdir .paper/, and MUST NOT write the library
+// (updateLibrary) anywhere in the Socratic loop or on decline. State creation lives in ONE place (the
 // `new` verb), preserving the section-as-phase isolation contract. A DECLINED
 // sketch leaves the working directory byte-unchanged.
 //

@@ -88,7 +88,7 @@ export interface BibEntry extends Record<string, unknown> {
   title?: string | string[];
   DOI?: string;
   retracted?: boolean;
-  // writeBibtex records a retracted source as BibTeX `note = {RETRACTED}`;
+  // The library writes a retracted work's entry with `note = {RETRACTED}`;
   // citation-js keeps the note but has no `retracted` flag to restore.
   note?: string;
 }

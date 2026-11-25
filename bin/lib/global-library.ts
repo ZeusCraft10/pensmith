@@ -94,10 +94,9 @@ function log(): SessionLogger {
  * CURRENT_GLOBAL_LIBRARY_VERSION and entries=[], ONLY if it does not already
  * exist. Returns the seeded library.
  *
- * KEY DIFFERENCE from library.ts initLibrary: this is AUTO-INIT semantics —
- * when the index already exists it is a NO-OP (returns the seeded shape without
- * touching disk), NOT an AlreadyExists throw. intake/list/open all call into
- * the registry on first use without a pre-existing index.
+ * When the index already exists this is a NO-OP (returns the seeded shape
+ * without touching disk), not an error: intake/list/open all call into the
+ * registry on first use without a pre-existing index.
  *
  * The existence-check runs INSIDE the lock (BLOCKER-01 discipline) so two
  * concurrent inits cannot both observe ENOENT and both seed.
@@ -193,9 +192,9 @@ export async function loadGlobalLibrary(): Promise<GlobalLibrary> {
  *   4. GlobalLibrarySchema.parse the result
  *   5. atomicWriteFile the result
  *
- * KEY DIFFERENCE from library.ts addEntry: UPSERT, NOT reject-on-duplicate.
- * intake (08-05) re-registers a paper on every run and lifecycle progress
- * updates an existing entry — a duplicate id is the UPDATE case, not an error.
+ * An UPSERT, not reject-on-duplicate: intake re-registers a paper on every
+ * run and lifecycle progress updates an existing entry, so a duplicate id is
+ * the update case, not an error.
  *
  * The whole read-decide-write runs inside ONE lock so two concurrent callers
  * cannot both observe the pre-write state (the library.ts 10-concurrent
