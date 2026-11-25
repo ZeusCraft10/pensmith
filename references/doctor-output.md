@@ -36,7 +36,7 @@ in Plan 03-09 Task 9.1 — its locked copy is the `intake-outline-verify-wiring
 > Runtime config provider API-key resolvability — WARN if no provider has its env-var set. Per-provider `{name, apiKeyEnv, present:boolean}` shape only — the resolved value never leaves loadRuntimeConfig (symmetric to T-01-07 / D-12).
 
 ### zotero-mcp-presence (DOCT-02 ecosystem)
-> Zotero MCP server configured where Claude Code reads MCP servers: ~/.claude.json (or $CLAUDE_CONFIG_DIR/.claude.json; user scope and the project's local scope), the project's .mcp.json, and installed plugins — WARN if not configured or if ZOTERO_API_KEY is unset. Optional.
+> Zotero MCP server configured where Claude Code reads MCP servers: ~/.claude.json (or $CLAUDE_CONFIG_DIR/.claude.json; user scope and the project's local scope), the project's .mcp.json, and installed plugins — WARN if not configured or if ZOTERO_API_KEY is unset. Optional: research does not read from Zotero yet in this alpha.
 
 ### pandoc-presence (DOCT-02 ecosystem)
 > Pandoc binary on PATH — WARN if not found. Required by Phase 10 export.

@@ -49,8 +49,16 @@ test('README makes none of the claims the code does not back', () => {
     [/dist\/mcp|MCP wiring|(ships|includes|provides) an MCP server/i, 'there is no MCP server'],
     [/offline[- ]by[- ]default/i, 'production network mode is not offline by default'],
     [/Skills \+ an MCP/i, 'there is no MCP server'],
+    [/(lets|allows) research (to )?(pull|read)|research (can |will )?(pulls?|reads?) from (a |your )?Zotero/i,
+      'research does not read from Zotero in this alpha'],
   ];
   for (const [re, why] of banned) assert.ok(!re.test(readme), `README must not claim ${re}: ${why}`);
+});
+
+test('README says research does not read from Zotero yet', () => {
+  const row = readme.split('\n').find((l) => l.startsWith('| `ZOTERO_API_KEY`'));
+  assert.ok(row, 'README must document ZOTERO_API_KEY');
+  assert.match(row, /research does not read from Zotero yet/i);
 });
 
 /** Hosts named in string literals of modules that send requests through bin/lib/http.ts. */

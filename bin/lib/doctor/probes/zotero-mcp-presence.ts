@@ -23,6 +23,11 @@ import { isZoteroMcpPresent, zoteroMcpConfigLocations } from '../../ecosystem-pr
 // ever reaches probe output.
 const API_KEY_ENV = 'ZOTERO_API_KEY';
 
+// The zotero-mcp adapter returns [] unless a test-only client is injected, so
+// research does not read from Zotero in this alpha. Every outcome says so, and
+// none may imply Zotero is a research source.
+const NOT_A_SOURCE_YET = 'research does not read from Zotero yet in this alpha';
+
 // Where Claude Code keeps MCP server configs (shown in the WARN `detail` so
 // users see where we looked).
 function candidatePaths(): string[] {
@@ -50,7 +55,7 @@ export const zoteroMcpPresenceProbe: Probe = {
       return {
         id: 'zotero-mcp-presence',
         severity: 'WARN',
-        summary: 'Zotero MCP server not configured — citations and research verbs (Phase 3+) will be offline-only.',
+        summary: `Zotero MCP server not configured (optional; ${NOT_A_SOURCE_YET}).`,
         detail: `Checked: ${candidatePaths().join(', ')}`,
         fix: 'Add a Zotero MCP server to Claude Code (`claude mcp add`), then set ZOTERO_API_KEY.',
       };
@@ -62,16 +67,16 @@ export const zoteroMcpPresenceProbe: Probe = {
       return {
         id: 'zotero-mcp-presence',
         severity: 'WARN',
-        summary: `Zotero MCP configured but ${API_KEY_ENV} not set — Zotero sources will be skipped.`,
+        summary: `Zotero MCP configured but ${API_KEY_ENV} not set (optional; ${NOT_A_SOURCE_YET}).`,
         detail: `Checked: ${candidatePaths().join(', ')}. ${API_KEY_ENV} not found in env.`,
-        fix: `Set ${API_KEY_ENV} in your environment so Zotero sources can be pulled during research.`,
+        fix: `Set ${API_KEY_ENV} in your environment if your Zotero MCP server needs it.`,
       };
     }
 
     return {
       id: 'zotero-mcp-presence',
       severity: 'PASS',
-      summary: 'Zotero MCP configured and authenticated',
+      summary: `Zotero MCP server configured; ${NOT_A_SOURCE_YET}.`,
     };
   },
 };

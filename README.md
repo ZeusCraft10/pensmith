@@ -152,7 +152,7 @@ In this alpha, `pensmith done` skips the humanize step (see [Status](#status)).
 | `PENSMITH_COST_CAP_USD` | The session cost cap the `--yolo` pre-flight checks against (default 5). |
 | `PENSMITH_S2_API_KEY` | *Optional.* Semantic Scholar API key. |
 | `GPTZERO_API_KEY` | *Optional.* Enables the AI-likelihood score during `pensmith done`, after a consent prompt. |
-| `ZOTERO_API_KEY` | *Optional.* Lets research pull from a Zotero MCP server configured in Claude Code. |
+| `ZOTERO_API_KEY` | *Optional.* Doctor reports whether a Zotero MCP server is configured; research does not read from Zotero yet in this alpha. |
 
 [PRIVACY.md](PRIVACY.md) lists every host pensmith contacts, when, and what it sends.
 

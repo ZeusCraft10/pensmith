@@ -20,11 +20,17 @@ import {
   isHumanizerSkillPresent,
   zoteroMcpConfigLocations,
 } from '../bin/lib/ecosystem-presence.js';
+import { zoteroMcpPresenceProbe } from '../bin/lib/doctor/probes/zotero-mcp-presence.js';
 
-const saved = { home: process.env['HOME'], userprofile: process.env['USERPROFILE'], cfg: process.env['CLAUDE_CONFIG_DIR'] };
+const saved = {
+  home: process.env['HOME'],
+  userprofile: process.env['USERPROFILE'],
+  cfg: process.env['CLAUDE_CONFIG_DIR'],
+  zotero: process.env['ZOTERO_API_KEY'],
+};
 
 afterEach(() => {
-  for (const [k, v] of [['HOME', saved.home], ['USERPROFILE', saved.userprofile], ['CLAUDE_CONFIG_DIR', saved.cfg]] as const) {
+  for (const [k, v] of [['HOME', saved.home], ['USERPROFILE', saved.userprofile], ['CLAUDE_CONFIG_DIR', saved.cfg], ['ZOTERO_API_KEY', saved.zotero]] as const) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
@@ -128,4 +134,23 @@ test('malformed config files never throw', () => {
   writeFileSync(path.join(home, '.claude', 'plugins', 'installed_plugins.json'), 'null');
   assert.equal(isZoteroMcpPresent(project), false);
   assert.equal(isHumanizerSkillPresent(project), false);
+});
+
+test('the doctor Zotero probe never claims research reads from Zotero', async () => {
+  // research does not read from Zotero in this alpha (the adapter returns []
+  // unless a test-only client is injected), so no probe outcome may imply it.
+  const outcomes: Record<string, string> = {};
+  const { home } = freshHome();
+  delete process.env['ZOTERO_API_KEY'];
+  outcomes['absent'] = JSON.stringify(await zoteroMcpPresenceProbe.run());
+  writeJson(path.join(home, '.claude.json'), { mcpServers: { zotero: { command: 'zotero-mcp' } } });
+  outcomes['configured, no key'] = JSON.stringify(await zoteroMcpPresenceProbe.run());
+  process.env['ZOTERO_API_KEY'] = 'dummy-not-a-secret';
+  const pass = await zoteroMcpPresenceProbe.run();
+  outcomes['configured with key'] = JSON.stringify(pass);
+  assert.equal(pass.severity, 'PASS', 'a configured server with its key set is a PASS');
+  for (const [state, out] of Object.entries(outcomes)) {
+    assert.match(out, /research does not read from Zotero yet/i, `${state}: say research does not use Zotero yet`);
+    assert.doesNotMatch(out, /authenticated|pulled|pull from|offline-only/i, `${state}: must not imply Zotero is a research source: ${out}`);
+  }
 });
