@@ -1,15 +1,117 @@
 # Contributing to Pensmith
 
-Pensmith is in v0.1.0 development. The full CONTRIBUTING guide lands in Phase 2 alongside the tier-contract test gate.
+Pensmith is in alpha (0.3.0-alpha.1) and in the middle of a planned rebuild;
+the current phase plan lives in `docs/plans/`. You need Node.js 22.12 or
+newer.
+
+```bash
+npm ci
+npm run check    # prebuild · lint · typecheck · build · bundle · tests
+```
+
+## What CI runs
+
+`.github/workflows/ci.yml` runs on Node 22 and 24, on Linux, macOS and
+Windows. Every step must pass:
+
+1. `npm run lint` and `npm run typecheck`.
+2. `npm run build` (tsc with `tsconfig.build.json`, which leaves tests out).
+3. `npm run bundle`: builds the plugin bundle the tests and the smoke run
+   against. It is never committed (see [The plugin payload](#the-plugin-payload)).
+4. `npm run test:coverage`: the test suite, with coverage thresholds from
+   `.c8rc.json`, and stdin closed so nothing waits on a TTY.
+5. `node scripts/plugin-smoke.mjs`, with the Claude Code CLI installed:
+   `claude plugin validate plugin --strict`, `claude plugin validate . --strict`,
+   a marketplace add + install into a throwaway `CLAUDE_CONFIG_DIR` that must
+   list 1 skill, 1 hook and no MCP servers, a second install of the same tree
+   through a git source with `core.autocrlf=true` that must keep every file
+   byte for byte, and `pensmith --version` run installed, through a symlink
+   and through `npm link`.
+6. The working tree is still clean afterwards.
+
+Run `npm run smoke:plugin` locally if you have `claude` on your `PATH`.
+
+## The plugin payload
+
+`plugin/` is the only thing a plugin install copies, and Claude Code runs no
+build or `npm install` for it. So:
+
+- `plugin/dist/pensmith.mjs` and `plugin/dist/hook.mjs` are minified esbuild
+  bundles with every dependency inlined, and `plugin/templates/`,
+  `plugin/references/` and `plugin/LICENSE` are copies. `npm run bundle`
+  generates all of them. They are gitignored and never committed: a release
+  publishes the built `plugin/` on the `release` branch, which is what users
+  install. Tests that need the bundle fail with "run `npm run bundle`" when it
+  is missing; `npm run check` builds it before the tests.
+- The rest is written by hand: `.claude-plugin/plugin.json`, the one skill
+  (`skills/pensmith/SKILL.md`), `hooks/hooks.json`, the `bin/` shims, and
+  `README.md`. On the release branch `plugin/` is the whole repository, so its
+  README is the one people (and the plugin directory) see there.
+- Keep `plugin/` free of `package.json` and lockfiles.
+- Code that locates `templates/` or `references/` must treat a directory with
+  `.claude-plugin/plugin.json` as the package root, because the payload has no
+  `package.json` (tests/plugin-package.test.ts checks this).
+
+The SessionStart hook (`hooks/session-start.ts`) runs in every project where
+the plugin is enabled. It must stay silent and write nothing unless the
+session's directory has a `.paper/` folder.
+
+## Releasing
+
+Users install the plugin from the `release` branch: the entry in
+`.claude-plugin/marketplace.json` points there. That branch holds only the
+built `plugin/` payload, one commit per release, and its history is kept. To
+cut a release:
+
+1. Set the new version in `package.json` (`npm version --no-git-tag-version
+   <version>` also updates the lockfile) and in
+   `plugin/.claude-plugin/plugin.json`. The two must match. Run
+   `npm run check`: it names any other file that still carries the old
+   version, such as the README's status line. Commit the bump on `main`.
+2. Tag that commit with `v` and the version, and push the tag:
+
+   ```bash
+   git tag v0.3.0-alpha.2
+   git push origin v0.3.0-alpha.2
+   ```
+
+3. `.github/workflows/release.yml` runs on the tag. It fails unless the tag
+   matches both versions, runs `npm ci`, `npm run check` and the plugin smoke,
+   then `node scripts/release.mjs publish <tag>`: that commits the built
+   `plugin/` as `release <tag>` on top of the previous release commit and
+   pushes the `release` branch as a fast-forward, never forced. It refuses a
+   version that is not newer than the last release, so a late or re-created
+   tag cannot move installs back. Last, it creates a GitHub Release for the
+   tag.
+
+To rehearse the publish step without touching GitHub, run it in a scratch
+clone whose `origin` is a scratch bare repository: `npm ci && npm run bundle`,
+tag the checked-out commit, run `node scripts/release.mjs publish <tag>`, and
+check out the bare repository's `release` branch.
 
 ## Architectural chokepoints (Phase 0+)
 
-Two lint-enforced chokepoints exist from Phase 0 onward. Violating them fails CI:
+Lint-enforced chokepoints. Violating them fails CI; add rules rather than
+disabling them.
 
-1. **HTTP imports**: `fetch`, `http`, `https`, `node:http`, `node:https`, `undici` may only be imported from `bin/lib/http.ts`. Every other module routes through that file.
-2. **DOI regex**: The literal regex `/^10\./` may only appear in `bin/lib/doi.ts`. DOI normalization is a single chokepoint per `.planning/research/PITFALLS.md` Pitfall 2.
+1. **HTTP**: `fetch`, `http`, `https`, `node:http`, `node:https` and `undici`
+   may only be imported from `bin/lib/http.ts`. Every request goes through it.
+2. **DOI regex**: the literal regex `/^10\./` may only appear in
+   `bin/lib/doi.ts`.
+3. **State writes** go through `bin/lib/atomic-write.ts`.
+4. **User data paths** (home directory, `LOCALAPPDATA`, `XDG_DATA_HOME`) go
+   through `bin/lib/paths.ts`.
 
-See `eslint.config.js` for the rules and `tests/lint-chokepoint.test.ts` for the regression gate.
+See `eslint.config.js` for the rules and `tests/lint-chokepoint.test.ts` for
+the regression gate.
+
+## Docs that are checked
+
+- The README command table is generated from each command's own CLI
+  definition. After changing a command's description or arguments, run
+  `npm run docs:verbs`; `tests/docs.test.ts` fails when the table is stale.
+- `PRIVACY.md` must name every host the shipped code sends requests to.
+  Adding a source adapter or endpoint means adding a row to its table.
 
 ## Locked copy files (SHA-256 byte-pinned)
 
@@ -38,108 +140,61 @@ byte-pinned in `tests/repo-files.test.ts`. They are regenerated via
 re-pin the hash in the same PR if a regeneration is intentional. A silently
 changed fixture could mask a real zero-trace regression, so drift is a CI failure.
 
-## Quick checklist before opening a PR
-
-- `npm run check` is green locally
-- CI matrix (linux-x64, macos-arm64, windows-x64 × Node 20.10) is green
-- No new HTTP / DOI chokepoint violations
-
 ## Tier contract — do not skip
 
-Pensmith ships as a Claude Code plugin (Tier 1: MCP server `dist/mcp/server.js`) AND
-as a portable Node CLI (Tier 2: `dist/bin/pensmith.js`). The two tiers MUST expose
-the same observable behavior for the operations declared in `tests/tier-contract.test.ts`.
-This is the load-bearing property of the project.
+Pensmith runs in two places: as a Claude Code plugin (Tier 1) and as a
+command-line tool (Tier 2). Both run the same CLI, so there is one
+implementation of every step.
 
 ### What the tier contract guarantees
 
-For the operations covered in Phase 2:
-- `paper://capabilities` (MCP resource, Tier 1) and `pensmith doctor --json` (CLI, Tier 2)
-  report the same boolean facts about the host environment (same env vars present,
-  same sync-folder warnings).
-- `paper://capabilities` content is presence-flag booleans only — NEVER a resolved
-  key value. D-12 lint enforces this at build time; `tests/tier-contract.test.ts`
-  Case B enforces it at runtime.
-- `paper_advance_section` is idempotent: applying the same `{paperRoot, n, toState}`
-  twice produces byte-identical tool output and the resulting `paper://state` is
-  unchanged on the second call. Asserted by `tests/tier-contract.test.ts` Case C.
-  (Per TIER-02 / D-13 the snake_case tool name is `paper_advance_section`; the
-  Phase-2 tool surface ships 6 such granular tools — there is no generic
-  `state.update`.)
+- The plugin's skill only sends Claude to commands the CLI registers
+  (`tests/nl-triggers.test.ts`), and the plugin's `pensmith` is the bundled
+  CLI built from the same sources (`npm run bundle`, before the tests).
+- Each command produces its declared artifacts when run through the built CLI
+  in a temporary paper folder (`tests/tier-contract.test.ts`).
+- Comparing what Tier 1 does step by step against Tier 2 (action-trace
+  equivalence) arrives with the planned action stream.
 
-### The four merge-gate layers
+### The merge gates
 
-All four MUST be green on every PR. If any one is red, do not merge — fix the
-underlying issue.
+1. **CI step:** every step listed under [What CI runs](#what-ci-runs), on all
+   six OS and Node combinations.
+2. **Branch protection:** in the GitHub repository settings, require those
+   checks to pass before merging into `main`. If you fork pensmith, set up the
+   same protection.
+3. **Preflight:** `claude plugin validate` and the isolated install in
+   `scripts/plugin-smoke.mjs`, which check what Claude Code itself accepts.
+4. **Prose:** this section. `tests/repo-files.test.ts` keeps it in place.
 
-1. **CI step (layer 1):** `.github/workflows/ci.yml` runs `npm run test:tier-contract`
-   on linux-x64, macos-arm64, windows-x64 (per D-22 — 3-OS matrix). Failure blocks
-   merge.
+### Discipline rule: fix the code, don't loosen the test
 
-2. **Branch protection (layer 2):** Configured in GitHub repo settings →
-   Settings → Branches → main → "Require status checks to pass before merging".
-   The required checks include the matrix's tier-contract step on all 3 OSes.
-   This is a one-time setup; if you're forking pensmith, ask the maintainer
-   to add the same protection on your fork.
+When a contract test or a lint chokepoint fails, the default fix is to change
+the shipped code so it does the right thing. Not acceptable:
 
-3. **Preflight (layer 3):** `node scripts/validate-plugin-manifest.cjs` asserts
-   presence of `hooks/`, `workflows/` (exactly 16 .md files with `<capability_check>`
-   blocks — one per UX-02 canonical verb per CONTEXT D-05, matched by the 02-06
-   hooks-workflows plan), `dist/mcp/server.js`, and the `.claude-plugin/*.json`
-   shapes. Runs in CI after `npm test`.
+- a "normalizer" that reshapes output so a check passes;
+- loosening an assertion, or skipping or todo-marking a test;
+- an `// eslint-disable-next-line` to silence a chokepoint.
 
-4. **Prose (layer 4 — this section):** The "Tier contract — do not skip" section
-   in `CONTRIBUTING.md`. The Phase 2 D-24 lock keeps this section intact.
-   `tests/repo-files.test.ts` asserts its presence.
+If a test pins behaviour that is genuinely wrong, fix the test in the same
+change and say why in the commit message.
 
-### Wave 1 lint chokepoints (the file you're not allowed to write)
+## Recorded HTTP cassettes
 
-Three AST-walk ESLint rules scoped to `mcp/**/*.ts` catch the most common
-"leaked-secret" / "broke-the-tier-contract" mistakes at build time. **A failing
-chokepoint is the SIGNAL you tried to do something the architecture forbids.**
-The fix is never to disable the rule. The fix is to write the code differently.
+Tests run against recorded responses under `tests/fixtures/cassettes/`, so
+CI makes no live requests. Two tests guard the recordings:
 
-- **D-09 thin-shim** (`tests/lint-thin-shim.test.ts`): every MCP tool handler is
-  ≤30 statements and cannot import `node:fs` / `node:http` / `node:https` /
-  `node:net` / `node:tls` / `node:child_process`. All real work goes through
-  `bin/lib/*` chokepoints. If you find yourself wanting fs in `mcp/`, you want
-  a new `bin/lib/<thing>.ts` helper that the handler calls.
+- `cassette-size`: every cassette file is at most 51200 bytes. Narrow a
+  recording (drop irrelevant fields) rather than raising the cap.
+- `cassette-no-leak`: no cassette may carry `Authorization`, `Cookie`,
+  `Set-Cookie` or `X-Api-Key` headers, or a contact address or key in a
+  recorded query string (`mailto=`, `email=`, `api_key=`). The recorder strips
+  those parameters before writing.
 
-- **D-10 mcp-no-network** (`tests/lint-mcp-no-network.test.ts`): no
-  `net.createServer`, `http.createServer`, `https.createServer`,
-  `tls.createServer`, or raw `new Server({...})`. MCP runs over stdio only.
-  Adding a network listener inside mcp/** is a category error — your code
-  will never be reached because the only transport pensmith wires is
-  `StdioServerTransport`.
-
-- **D-12 capabilities-no-leak** (`tests/lint-capabilities-noleak.test.ts`): no
-  computed `process.env[<expr>]` reads and no inline calls to
-  `getProviderApiKey()` / `getOpenAlexApiKey()` / `loadRuntimeConfig()` inside
-  `mcp/**`. The `paper://capabilities` resource emits only boolean presence
-  flags. If you need to know whether a key is set in an MCP handler, expose
-  the boolean through `paper://state` (which is loaded from
-  non-mcp code that does have access to runtime.ts).
-
-### Discipline rule: fix the tiers, don't write a normalizer
-
-When a tier-contract test fails (or a lint chokepoint fires), **the default fix
-is to make the two tiers agree by changing the shipped code in one of them**.
-
-The fixes that are NOT acceptable:
-- Adding a runtime "capabilitiesNormalizer" / "responseShaper" that strips
-  offending fields before emit. This buries the bug in transformation
-  layers and makes future divergence invisible.
-- Loosening the assertion (e.g. changing `assert.deepEqual` to `assert.ok(... !== undefined)`).
-- Skipping the test (`test.skip(...)`) or marking it `test.todo(...)`.
-- Adding an `// eslint-disable-next-line` directive to silence a chokepoint.
-
-The fixes that ARE acceptable, in order of preference:
-1. Fix the SHIPPED code so the two tiers actually do the same thing.
-2. Update the tier-contract test to reflect a deliberate, documented architectural
-   change — this requires updating the corresponding D-decision in `.planning/phases/<N>/<N>-CONTEXT.md`
-   and getting the change reviewed.
-3. Mark the test as known-failing with a tracking issue and a deadline.
-   Acceptable only with maintainer sign-off; not the right path 95% of the time.
+`.github/workflows/cassette-refresh.yml` is meant to re-record them weekly,
+but it does not re-record anything yet (it re-runs the tier-contract suite).
+Until a real recorder lands, record new cassettes by hand and review the diff
+for personal data before committing.
 
 ## Network modes
 
@@ -170,74 +225,3 @@ sets `PENSMITH_REQUIRE_EXPORT_TOOLS=1`, which turns a missing tool into a
 failure. Set it locally when you change the exporter, so a skipped test is not
 mistaken for a pass.
 
-## Cassette Refresh Workflow
-
-PR-time CI (`.github/workflows/ci.yml`) runs in cassette mode against recorded
-HTTP cassettes under `tests/fixtures/cassettes/`. This keeps PR builds fast
-(no live network) and hermetic (no flaky external dependencies blocking
-contributor PRs).
-
-A separate workflow (`.github/workflows/cassette-refresh.yml`) re-records
-those cassettes against the live registrars on a weekly schedule and opens a
-PR with the refreshed fixtures.
-
-### When cassettes need a manual refresh
-
-- A registrar shipped a schema change (new field, renamed field, format
-  change) and the offline tests are failing locally with a parse error.
-- A new fixture row was added to `known-good-fixture/CITATIONS.bib` and the
-  adapter needs a recording for that DOI.
-- The weekly cron PR has been sitting for > 14 days without merge.
-
-### How to trigger a refresh
-
-**Option A — manual workflow dispatch (preferred):**
-
-1. Go to **Actions → Cassette Refresh → Run workflow** in the GitHub UI.
-2. Pick the `main` branch.
-3. The workflow re-records all cassettes and opens a PR. Review the diff,
-   confirm no PII / API tokens leaked into recorded headers, then merge.
-
-**Option B — local re-record (only if you have the registrar contact-email
-secret and need to inspect the diff before pushing):**
-
-```bash
-export PENSMITH_NETWORK_TESTS=1
-export PENSMITH_REFRESH_CASSETTES=1
-export PENSMITH_CONTACT_EMAIL=you@example.com  # required by Crossref/OpenAlex polite-pool
-npm run build
-npm run test:cassettes -- --refresh
-git diff tests/fixtures/cassettes/
-```
-
-### Permissions reminder
-
-The cassette-refresh workflow declares **job-level** permissions:
-
-```yaml
-permissions:
-  contents: write
-  pull-requests: write
-```
-
-This is REQUIRED — the repo-default `contents: read` would silently fail to
-push the refresh branch and the `peter-evans/create-pull-request@v6` action
-would 403 on PR open. If you fork this repo, replicate the same job-level
-permissions block; do NOT promote them to repo-wide `contents: write`.
-
-### Cassette byte-size cap (D-25)
-
-Every recorded cassette file MUST be ≤ 51200 bytes. The `cassette-size`
-test enforces this on every PR; the refresh PR will fail CI if a registrar
-returned an unexpectedly large response. If that happens, narrow the
-recording (drop irrelevant fields) rather than raising the cap.
-
-### Sensitive-header scan (T-3-02 / T-01-07)
-
-The `cassette-no-leak` test scans every committed cassette for
-`Authorization`, `Cookie`, `Set-Cookie`, and `X-Api-Key` headers, and for
-contact addresses or keys in recorded query strings (`mailto=`, `email=`,
-`api_key=`). The recorder strips those parameters before writing. The
-refresh workflow must NEVER commit a cassette that carries one. If the
-refresh PR diff shows any such header, abort the merge and fix the
-recorder before re-running.

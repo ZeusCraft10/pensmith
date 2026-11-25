@@ -11,38 +11,33 @@
 // boolean-derived message — it NEVER interpolates process.env['ZOTERO_API_KEY']
 // (the value) into any string.
 //
-// NOTE: this probe composes its OWN `isZoteroMcpPresent() && !!key` check inline
+// NOTE: this probe composes its OWN `configured && !!key` check inline
 // rather than calling the adapter's key-only isZoteroAuthenticated() (which is
 // decoupled from FS-presence per the H3 fix). The coupling is intentional: the
 // probe must distinguish ABSENT from CONFIGURED_NO_AUTH to report REAL state.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { isZoteroMcpPresent } from '../../ecosystem-presence.js';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { zoteroMcpScan } from '../../ecosystem-presence.js';
 
 // T-01-07: the env-var NAME (never its value) is the only key-derived token that
 // ever reaches probe output.
 const API_KEY_ENV = 'ZOTERO_API_KEY';
 
-// Standard locations where Claude MCP server configs live (kept here for
-// the WARN-path `detail` text so users see where we looked).
-function candidatePaths(): string[] {
-  const home = homedir();
-  return [
-    join(home, '.claude', 'mcp_servers.json'),
-    join(home, '.config', 'claude', 'mcp_servers.json'),
-  ];
-}
+// The zotero-mcp adapter returns [] unless a test-only client is injected, so
+// research does not read from Zotero in this alpha. Every outcome says so, and
+// none may imply Zotero is a research source.
+const NOT_A_SOURCE_YET = 'research does not read from Zotero yet in this alpha';
 
 export const zoteroMcpPresenceProbe: Probe = {
   id: 'zotero-mcp-presence',
   async run(): Promise<ProbeResult> {
     // CR-01: share the FS-presence detection with bin/lib/capabilities.ts via
     // ecosystem-presence.ts so both tiers report the same boolean. Tri-state:
-    //   configured     = Zotero MCP server in a known Claude MCP config.
+    //   configured     = Zotero MCP server in a Claude Code MCP config.
     //   authenticated  = configured AND ZOTERO_API_KEY present (boolean-only).
-    const configured = isZoteroMcpPresent();
+    // `checked` is where Claude Code keeps MCP server configs, shown in the
+    // WARN `detail` so users see where we looked.
+    const { checked, present: configured } = zoteroMcpScan();
     // T-01-07: boolean presence ONLY — the value is never read into a variable
     // that could reach output. D-12: DOT-ACCESS env read (not a computed
     // process.env[var] index) keeps this probe inside the doctor-probe chokepoint
@@ -56,9 +51,9 @@ export const zoteroMcpPresenceProbe: Probe = {
       return {
         id: 'zotero-mcp-presence',
         severity: 'WARN',
-        summary: 'Zotero MCP server not configured — citations and research verbs (Phase 3+) will be offline-only.',
-        detail: `Checked: ${candidatePaths().join(', ')}`,
-        fix: 'See https://github.com/<zotero-mcp-org>/zotero-mcp for installation. Then add to your Claude MCP config.',
+        summary: `Zotero MCP server not configured (optional; ${NOT_A_SOURCE_YET}).`,
+        detail: `Checked: ${checked.join(', ')}`,
+        fix: 'Add a Zotero MCP server to Claude Code (`claude mcp add`), then set ZOTERO_API_KEY.',
       };
     }
 
@@ -68,16 +63,16 @@ export const zoteroMcpPresenceProbe: Probe = {
       return {
         id: 'zotero-mcp-presence',
         severity: 'WARN',
-        summary: `Zotero MCP configured but ${API_KEY_ENV} not set — Zotero sources will be skipped.`,
-        detail: `Checked: ${candidatePaths().join(', ')}. ${API_KEY_ENV} not found in env.`,
-        fix: `Set ${API_KEY_ENV} in your environment so Zotero sources can be pulled during research.`,
+        summary: `Zotero MCP configured but ${API_KEY_ENV} not set (optional; ${NOT_A_SOURCE_YET}).`,
+        detail: `Checked: ${checked.join(', ')}. ${API_KEY_ENV} not found in env.`,
+        fix: `Set ${API_KEY_ENV} in your environment if your Zotero MCP server needs it.`,
       };
     }
 
     return {
       id: 'zotero-mcp-presence',
       severity: 'PASS',
-      summary: 'Zotero MCP configured and authenticated',
+      summary: `Zotero MCP server configured; ${NOT_A_SOURCE_YET}.`,
     };
   },
 };

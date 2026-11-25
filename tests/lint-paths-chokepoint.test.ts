@@ -20,12 +20,14 @@
 //       not just that the rule shape works in theory.
 //
 // The W0 fixture (`tests/fixtures/lint-paths-chokepoint-fixture.ts`) has
-// exactly 4 violations: os.homedir(), LOCALAPPDATA, XDG_DATA_HOME, APPDATA.
+// 6 violations: os.homedir(), LOCALAPPDATA, XDG_DATA_HOME, APPDATA, and a bare
+// `import { homedir }` plus its `homedir()` call (test 3).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ESLint } from 'eslint';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 
 test('paths chokepoint flags all 4 fixture violations (inline rule)', async () => {
   const eslint = new ESLint({
@@ -101,4 +103,25 @@ test('PROJECT eslint.config.js flags paths violations on the fixture', async () 
     restrictedSyntaxCount >= 4,
     `project eslint.config.js must flag all 4 paths violations on fixture; got ${restrictedSyntaxCount} no-restricted-syntax messages, total: ${JSON.stringify(ruleIds)}`,
   );
+});
+
+// A named import (`import { homedir } from 'node:os'`) and its bare call slip
+// past the `os.homedir` member selector, which is how Claude-config path logic
+// once bypassed bin/lib/paths.ts.
+test('PROJECT eslint.config.js flags a bare homedir import and call', async () => {
+  const projectConfigUrl = new URL('../eslint.config.js', import.meta.url);
+  const projectConfig = ((await import(projectConfigUrl.href)) as { default: Record<string, unknown>[] }).default;
+  const fixturePath = path.resolve('tests/fixtures/lint-paths-chokepoint-fixture.ts');
+  const lines = readFileSync(fixturePath, 'utf8').split('\n');
+  const importLine = lines.findIndex((l) => l.startsWith('import { homedir }')) + 1;
+  const callLine = lines.findIndex((l) => /= homedir\(\)/.test(l)) + 1;
+  assert.ok(importLine > 0 && callLine > 0, 'fixture must hold a bare homedir import and call');
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: projectConfig.filter((e) => !(Object.keys(e).length === 1 && 'ignores' in e)) as never,
+  });
+  const [result] = await eslint.lintFiles([fixturePath]);
+  const flagged = new Set((result?.messages ?? []).filter((m) => m.ruleId === 'no-restricted-syntax').map((m) => m.line));
+  assert.ok(flagged.has(importLine), `the bare homedir import (line ${importLine}) must be flagged; flagged lines: ${[...flagged].join(', ')}`);
+  assert.ok(flagged.has(callLine), `the bare homedir() call (line ${callLine}) must be flagged; flagged lines: ${[...flagged].join(', ')}`);
 });

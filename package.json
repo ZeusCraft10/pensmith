@@ -1,55 +1,44 @@
 {
   "name": "pensmith",
-  "version": "0.1.0-dev",
+  "version": "0.3.0-alpha.1",
   "description": "Structured research-and-drafting assistant for academic papers — verifies every citation against the live source. Two-tier: Claude Code plugin + portable Node CLI.",
   "license": "AGPL-3.0-or-later",
   "author": "Akhil Achanta <akhilachanta8@gmail.com>",
   "type": "module",
   "engines": {
-    "node": ">=20.10.0"
+    "node": ">=22.12.0"
   },
   "packageManager": "npm@10.9.0",
   "bin": {
-    "pensmith": "dist/bin/pensmith.js"
+    "pensmith": "plugin/dist/pensmith.mjs"
   },
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",
     "prebuild": "node scripts/prebuild.mjs",
-    "build": "tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "prebundle": "node scripts/prebuild.mjs",
+    "bundle": "node scripts/bundle.mjs",
+    "smoke:plugin": "node scripts/plugin-smoke.mjs",
+    "docs:verbs": "tsx scripts/verb-table.ts",
     "dev": "tsx",
     "pensmith": "tsx bin/pensmith.ts",
-    "validate:manifests": "node scripts/validate-plugin-manifest.cjs",
-    "test:tier-contract": "node scripts/run-tests.mjs tests/tier-contract/preflight.test.ts tests/tier-contract.test.ts",
     "test:cassettes": "node scripts/run-tests.mjs tests/tier-contract.test.ts",
-    "check": "npm run prebuild && npm run lint && npm run typecheck && npm run build && npm run test:tier-contract && npm test && npm run validate:manifests",
+    "check": "npm run prebuild && npm run lint && npm run typecheck && npm run build && npm run bundle && npm test",
     "test:coverage": "c8 node scripts/run-tests.mjs"
   },
   "files": [
-    "dist/",
-    "skills/",
-    "agents/",
-    "workflows/",
-    "templates/",
-    "references/",
-    "hooks/",
-    ".claude-plugin/",
-    ".mcp.json",
+    "plugin/",
     "README.md",
     "PRIVACY.md",
     "LICENSE"
   ],
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.93",
     "@clack/prompts": "^0.7",
-    "@modelcontextprotocol/sdk": "^1.29",
     "citation-js": "0.7.22",
     "citty": "^0.2.2",
-    "doi-regex": "^0.1.17",
     "jszip": "^3.10.1",
-    "openai": "^4",
-    "p-retry": "^6",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "1.1.1",
     "proper-lockfile": "^4",
@@ -59,12 +48,15 @@
     "zod": "^3.23"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "nock": "^14",
+    "@anthropic-ai/sdk": "^0.93.0",
+    "@types/node": "^22.20.5",
     "@types/proper-lockfile": "^4",
     "c8": "^11.0.0",
+    "esbuild": "0.27.7",
     "eslint": "^9.0.0",
     "fast-check": "^3",
+    "nock": "^14",
+    "openai": "^4.104.0",
     "tsx": "^4.0.0",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.0.0"

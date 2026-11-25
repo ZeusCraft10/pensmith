@@ -39,38 +39,11 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { packageRoot } from './paths.js';
 
-// ---------------------------------------------------------------------------
-// Locate the repo's templates/ dir relative to THIS module.
-// Same shape as bin/lib/citations.ts findPkgRoot — walk up from here until
-// we find package.json. This makes the loader robust under both `tsx` (where
-// the source lives at bin/lib/prompt-loader.ts) and the compiled dist build
-// (where it lives at dist/bin/lib/prompt-loader.js).
-// ---------------------------------------------------------------------------
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      // statSync via require/readFileSync indirection avoids importing
-      // node:fs/promises here; we only need the sync presence check.
-      const probe = path.join(cur, 'package.json');
-      readFileSync(probe);
-      return cur;
-    } catch {
-      // continue upward
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(__dirname);
+// templates/ resolves against the install root (paths.ts packageRoot), which
+// is right under tsx, in the compiled build and in the plugin bundle.
+const PKG_ROOT = packageRoot();
 
 /**
  * SHA-256 hashes for each `templates/prompts/<slug>.md` file.

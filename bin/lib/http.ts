@@ -55,11 +55,11 @@
 import { request, getGlobalDispatcher, EnvHttpProxyAgent, Pool, type Dispatcher } from 'undici';
 import { createHash } from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns/promises';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { pensmithHttpCacheDir } from './paths.js';
+import { packageRoot, pensmithHttpCacheDir } from './paths.js';
+import { VERSION } from './version.generated.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { retry, parseRetryAfter } from './retry.js';
 import { isOfflineMode, isCassetteMode, OfflineEgressError } from './network-mode.js';
@@ -334,31 +334,10 @@ export async function checkSsrf(
   }
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// IN-03 fix: this file ships at two different depths — bin/lib/http.ts under
-// tsx, dist/bin/lib/http.js after build. Fixed-depth `..` × N produced
-// `dist/references/http-warnings.md` (nonexistent) post-build, silently
-// degrading the WARN banner to the short fallback. Same defect-class as CR-02
-// for the doctor probes; same shape of fix — walk up from HERE until we hit
-// the directory that owns package.json. See bin/lib/doctor/probes/
-// build-artifact-resolves.ts for the original rationale.
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-const PKG_ROOT = findPkgRoot(__dirname);
+// IN-03: resolve references/ against the install root (paths.ts
+// packageRoot), not a fixed-depth `..` × N, which lands in the wrong dir
+// after a build and silently degrades the WARN banner to the short fallback.
+const PKG_ROOT = packageRoot();
 
 // ============================================================
 //   WARN-once for missing contact email
@@ -412,30 +391,13 @@ export function _resetWarnedForTest(): void {
 // ============================================================
 //   User-Agent
 // ============================================================
-let cachedVersion: string | null = null;
-function pkgVersion(): string {
-  if (cachedVersion !== null) return cachedVersion;
-  try {
-    // IN-03: same off-by-one as WARN_FILE — `..` × 2 from __dirname lands at
-    // dist/ post-build, producing a path that doesn't exist and silently
-    // returning '0.0.0' in the User-Agent header. Reuse PKG_ROOT.
-    const pkgPath = path.join(PKG_ROOT, 'package.json');
-    const raw = readFileSync(pkgPath, 'utf8');
-    const parsed = JSON.parse(raw) as { version?: string };
-    cachedVersion = parsed.version ?? '0.0.0';
-  } catch {
-    cachedVersion = '0.0.0';
-  }
-  return cachedVersion;
-}
-
 function userAgent(): string {
   const email = process.env.PENSMITH_CONTACT_EMAIL?.trim();
   if (!email) {
     warnNoEmailOnce();
-    return `pensmith/${pkgVersion()} (no-contact)`;
+    return `pensmith/${VERSION} (no-contact)`;
   }
-  return `pensmith/${pkgVersion()} (${email})`;
+  return `pensmith/${VERSION} (${email})`;
 }
 
 // ============================================================

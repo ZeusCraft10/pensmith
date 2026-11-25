@@ -56,9 +56,9 @@
 // preserving the D-19 LOCKED chokepoint singleton: bin/lib/citations.ts
 // remains the SOLE source whose body contains `from 'citation-js'`.
 //
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { packageRoot } from './paths.js';
 
 // `citation-js@0.7` ships a single default-export class; the `plugins`
 // registry hangs off the class (`Cite.plugins`). A `import { plugins }`
@@ -79,31 +79,9 @@ const plugins = Cite.plugins;
 export { Cite };
 
 // =====================================================================
-//   Locate apa.csl relative to package root (mirrors bin/lib/http.ts)
+//   Locate apa.csl relative to the install root (paths.ts packageRoot)
 // =====================================================================
-// This file ships at two depths: bin/lib/citations.ts under tsx, and
-// dist/bin/lib/citations.js after build. Fixed-depth `..` × N would
-// land in the wrong dir post-build (same defect class as IN-03 in
-// http.ts). Walk up from HERE until we find package.json.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(__dirname);
+const PKG_ROOT = packageRoot();
 
 // =====================================================================
 //   Memoized N-style custom-template registration (Pitfall #4 / Pitfall 1)

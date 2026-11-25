@@ -2,11 +2,9 @@
 //
 // Wraps proper-lockfile@^4 (battle-tested, used by npm/yarn).
 //
-// CJS-shim necessity (RESEARCH §Key Finding #4 — BLOCKING):
-//   `import lockfile from 'proper-lockfile'` raises ERR_REQUIRE_ESM under
-//   tsx + node:test in this project's "type":"module" mode. proper-lockfile
-//   ships only CommonJS; the createRequire pattern below is the ONLY way to
-//   import it under our toolchain (Node 20.x + tsx + node:test).
+// proper-lockfile is CommonJS-only; Node's ESM loader exposes its
+// module.exports as the default import. A plain import (rather than a
+// createRequire call) lets the plugin bundler see and inline it.
 //
 // Lock dir (D-40 — OneDrive non-negotiable):
 //   Locks live in pensmithLockDir() (`%LOCALAPPDATA%\pensmith\locks` on
@@ -30,22 +28,15 @@
 // Public API (D-26):
 //   - withLock(resource, fn, opts?)   — acquire, run, release (try/finally)
 //   - tryAcquire(resource, opts?)     — returns release(); caller manages
-//   - release(resource)               — unlock (recompute stub)
 //   - isLocked(resource)              — non-destructive check
 
-import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
+import lockfile from 'proper-lockfile';
 import { pensmithLockDir } from './paths.js';
 
-// CJS-shim — see "BLOCKING" note above. proper-lockfile is CommonJS-only.
-// The `as typeof import('proper-lockfile')` cast is a type-only operation
-// (TypeScript's `typeof import(...)` is the module's type signature) and
-// does not introduce a runtime ESM import.
-const require_ = createRequire(import.meta.url);
-const lockfile = require_('proper-lockfile') as typeof import('proper-lockfile');
 
 export interface LockOptions {
   /** Max wait before giving up acquisition (ms). Default 60_000. */
@@ -157,47 +148,6 @@ export async function tryAcquire(
   const stub = await stubFor(resource);
   const release = await lockfile.lock(stub, buildPlfOpts(opts));
   return release;
-}
-
-/**
- * Release the lock for `resource` if held by this process. Unlike the
- * release() returned from tryAcquire(), this recomputes the stub path and
- * calls proper-lockfile.unlock() — it should ONLY be used for cleanup of
- * orphaned locks held by the current process. Prefer the per-acquisition
- * release function returned from tryAcquire / withLock.
- */
-export async function release(resource: string): Promise<void> {
-  const stub = await stubFor(resource);
-  await lockfile.unlock(stub);
-}
-
-/**
- * Best-effort release of an ORPHANED lock for `resource` — including one held
- * by another (now-defunct) process. proper-lockfile.unlock() only succeeds for
- * a lock held in THIS process's in-memory registry; cross-process it throws
- * ENOTACQUIRED and leaves the on-disk `${stub}.lock` directory in place. The
- * Stop hook fires when the session is halting, so any pensmith lock is by
- * definition orphaned — this clears it.
- *
- * Strategy: try the proper-lockfile unlock first (clean path for an
- * in-process holder); if that rejects, remove the `${stub}.lock` directory
- * directly. Both steps swallow their own errors — this never rejects, so the
- * caller (Stop hook, inside Promise.allSettled) cannot be tripped by it.
- */
-export async function forceRelease(resource: string): Promise<void> {
-  const stub = await stubFor(resource);
-  try {
-    await lockfile.unlock(stub);
-    return;
-  } catch {
-    // Not held by this process (ENOTACQUIRED) or already gone — fall through
-    // to remove the on-disk lock directory directly.
-  }
-  try {
-    await fsp.rm(`${stub}.lock`, { recursive: true, force: true });
-  } catch {
-    /* nothing to remove / inaccessible — best-effort, never throw */
-  }
 }
 
 /**

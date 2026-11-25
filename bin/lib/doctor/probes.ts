@@ -26,7 +26,6 @@ export interface Probe {
 }
 
 import { nodeVersionProbe } from './probes/node-version.js';
-import { mcpSdkPresenceProbe } from './probes/mcp-sdk-presence.js';
 import { zoteroMcpPresenceProbe } from './probes/zotero-mcp-presence.js';
 import { pandocPresenceProbe } from './probes/pandoc-presence.js';
 import { humanizerSkillPresenceProbe } from './probes/humanizer-skill-presence.js';
@@ -40,7 +39,6 @@ import { intakeOutlineVerifyWiringProbe } from './probes/intake-outline-verify-w
 export function defaultProbes(): Probe[] {
   return [
     nodeVersionProbe,
-    mcpSdkPresenceProbe,
     zoteroMcpPresenceProbe,
     pandocPresenceProbe,
     humanizerSkillPresenceProbe,

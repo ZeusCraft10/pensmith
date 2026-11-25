@@ -47,7 +47,6 @@ export interface LoadOptions<TSchema extends z.ZodTypeAny> {
     | 'state'
     | 'library'
     | 'global-library'
-    | 'checkpoint'
     | 'session-log'
     | 'runtime-config';
   currentVersion: number;

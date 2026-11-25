@@ -1,16 +1,13 @@
 # Doctor Output Strings (locked — D-18)
 
 This file is the SINGLE source of truth for `/pensmith doctor` (DOCT-01..04, DOCT-07
-+ DOCT-02 ecosystem probes) user-facing prose. `bin/cli/doctor.ts` reads these
-strings at module load. The Tier-1 MCP `paper://capabilities` resource consumes
-the same Record shape (severities only — no copy strings persisted across the wire).
-Drift between the locked copy and the rendered output is a regression — pinned
-by sha256 hash in `tests/repo-files.test.ts`.
++ DOCT-02 ecosystem probes) user-facing prose. Drift between the locked copy and
+the rendered output is a regression — pinned by sha256 hash in
+`tests/repo-files.test.ts`.
 
 The Phase-3 wiring-smoke probe (intake-outline-verify-wiring, DOCT-05) lands
 in Plan 03-09 Task 9.1 — its locked copy is the `intake-outline-verify-wiring
-(DOCT-05)` section below. The tier-equivalence assertion is the tier-contract
-Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this file.
+(DOCT-05)` section below.
 
 ## TTY render — header
 
@@ -27,13 +24,10 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 ## Probe summary copy (locked per-probe)
 
 ### node-version (DOCT-01)
-> Node.js runtime version probe — pensmith requires >=20.10.0.
-
-### mcp-sdk-presence (DOCT-01 wiring)
-> MCP server build artifact presence — dist/mcp/server.js must exist and be non-empty.
+> Node.js runtime version probe — pensmith requires >=22.12.0.
 
 ### contact-email-presence (DOCT-03)
-> PENSMITH_CONTACT_EMAIL environment variable presence — see references/http-warnings.md for the full WARN copy. (Canonical probe id per 02-05 line 45; 02-07 Case A reads `probes['contact-email-presence']`.)
+> PENSMITH_CONTACT_EMAIL environment variable presence — see references/http-warnings.md for the full WARN copy. (Canonical probe id per 02-05 line 45.)
 
 ### sync-folder-detection (DOCT-04)
 > .paper/ inside cloud sync folder (OneDrive / iCloud / Dropbox / Google Drive) detection — WARN if matched.
@@ -42,17 +36,17 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 > Runtime config provider API-key resolvability — WARN if no provider has its env-var set. Per-provider `{name, apiKeyEnv, present:boolean}` shape only — the resolved value never leaves loadRuntimeConfig (symmetric to T-01-07 / D-12).
 
 ### zotero-mcp-presence (DOCT-02 ecosystem)
-> Zotero MCP server reachable via the user's ~/.claude/.mcp.json — WARN if not configured. Optional dependency surfaced for Phase 3+ intake.
+> Zotero MCP server configured where Claude Code reads MCP servers: ~/.claude.json (or $CLAUDE_CONFIG_DIR/.claude.json; user scope and the project's local scope), the project's .mcp.json, and installed plugins — WARN if not configured or if ZOTERO_API_KEY is unset. Optional: research does not read from Zotero yet in this alpha.
 
 ### pandoc-presence (DOCT-02 ecosystem)
 > Pandoc binary on PATH — WARN if not found. Required by Phase 10 export.
 
 ### humanizer-skill-presence (DOCT-02 ecosystem)
-> Humanizer skill at ~/.claude/skills/humanizer/ — WARN if missing. Optional Phase 8 dependency.
+> Humanizer skill installed as a user skill (~/.claude/skills/humanizer/, or under $CLAUDE_CONFIG_DIR), a project skill (.claude/skills/humanizer/) or a plugin skill — WARN if missing. Optional.
 
 ### build-artifact-resolves (Phase 2 substitute for deferred DOCT-05)
 
-> Compiled dist/ build-artifact resolution probe — confirms dist/bin/pensmith.js and dist/mcp/server.js exist and are non-empty. Phase 2 substitute for the originally deferred DOCT-05; remains active in Phase 3 alongside the real DOCT-05 wiring smoke (D-15).
+> Install completeness probe — finds the CLI entry for the running layout (dist/pensmith.mjs in the plugin, dist/bin/pensmith.js in a source build), confirms `--version` exits 0, and confirms the runtime assets the CLI reads (prompt templates, CSL styles, reference copy) are present. FAIL names what is missing.
 
 ### http-crossref-ping (D-03(d) cassette wiring)
 
@@ -60,7 +54,7 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 
 ### intake-outline-verify-wiring (DOCT-05)
 
-> Intake/outline/verify wiring smoke probe — confirms the 6 Phase-3 per-section verbs (new, research, outline, plan, write, verify) are wired end-to-end across the dispatcher (bin/pensmith.ts subCommands), workflow bodies (`workflows/{verb}.md` "## Body" section), and the drafter contract (bin/lib/drafter-input.ts assertDrafterInput export). FAIL lists every missing piece in `detail` so a single `pensmith doctor` invocation tells the operator exactly which wiring regressed. Probe is READ-ONLY per D-19 — no .paper/ side effects.
+> Intake/outline/verify wiring smoke probe — confirms the 6 Phase-3 per-section verbs (new, research, outline, plan, write, verify) are wired in the dispatcher (bin/pensmith.ts subCommands) and that the drafter contract (bin/lib/drafter-input.ts assertDrafterInput export) is present. FAIL lists every missing piece in `detail` so a single `pensmith doctor` invocation tells the operator exactly which wiring regressed. Probe is READ-ONLY per D-19 — no .paper/ side effects.
 
 ## JSON shape
 
@@ -71,7 +65,6 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
   "schemaVersion": 1,
   "probes": {
     "node-version":             { "id": "...", "severity": "PASS|WARN|FAIL|SKIP", "summary": "...", "detail": "...", "fix": "..." },
-    "mcp-sdk-presence":         { "..." : "..." },
     "contact-email-presence":   { "..." : "..." },
     "sync-folder-detection":    { "..." : "..." },
     "runtime-config-presence":  { "..." : "..." },
@@ -87,9 +80,6 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 ```
 
 Keys under `probes` = `probe.id` (per D-20 — Record keyed by id, NOT an Array).
-The tier-contract test (02-07 Case A) compares Tier 1 `paper://capabilities`
-and Tier 2 `doctor --json` for capability-fact equivalence — the **boolean
-facts** must agree, even though the SHAPES differ by design.
 
 (Do NOT edit the wording above without also updating the SHA-256 hash pin in
 tests/repo-files.test.ts. The hash pin is the canonical drift sentinel.)

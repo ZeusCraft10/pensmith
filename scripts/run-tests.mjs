@@ -7,15 +7,15 @@
 //     `tests/**/*.test.ts` — the literal string is passed to Node, which
 //     interprets it as a single non-existent file and silently runs zero
 //     tests (vacuous pass). This is a Pitfall 8 cross-platform landmine.
-//   - Node 20.10 (D-10) lacks native `--test` glob support; that lands in
-//     Node 21+. We cannot wait for it.
+//   - `node --test` glob expansion differs between Node versions and shells;
+//     enumerating the files here keeps every supported platform identical.
 //   - This script enumerates `tests/**/*.test.ts` programmatically via
 //     fs.readdir({recursive:true}), passes the matched files explicitly to
 //     `node --import tsx --test`, and exits 1 if zero matches are found
 //     (mitigates vacuous-pass failure mode).
 //
-// CI assertion: the workflow greps the stdout of `npm test` for the
-// "discovered N test files" line and asserts N >= 1.
+// The runner exits 1 itself when it discovers zero test files, so a broken
+// glob can never pass vacuously; CI needs no separate check.
 
 import { readdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
@@ -26,30 +26,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const testsDir = path.join(repoRoot, 'tests');
 
-// Manual recursive walker — does NOT rely on Dirent.parentPath (Node 20.12+)
-// or Dirent.path (Node 20.5+ for recursive readdir). We use a depth-first
-// traversal where the parent path is tracked explicitly. This works on any
-// supported Node version (engines.node = ">=20.10.0"). See
-// 00-CONTEXT.md D-10 + RESEARCH.md Pitfall 8: vacuous-pass mitigation.
+// Every *.test.ts file under tests/, at any depth (a missing tests/ dir
+// finds none, which fails below).
 async function discoverTestFiles(dir) {
-  const matches = [];
   let entries;
   try {
-    entries = await readdir(dir, { withFileTypes: true });
+    entries = await readdir(dir, { recursive: true, withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return matches;
+    if (err && err.code === 'ENOENT') return [];
     throw err;
   }
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      const sub = await discoverTestFiles(full);
-      for (const m of sub) matches.push(m);
-    } else if (entry.isFile() && entry.name.endsWith('.test.ts')) {
-      matches.push(full);
-    }
-  }
-  return matches;
+  return entries.filter((e) => e.isFile() && e.name.endsWith('.test.ts')).map((e) => path.join(e.parentPath, e.name));
 }
 
 // Explicit test files may be passed (npm run test:tier-contract); otherwise

@@ -1,6 +1,6 @@
 {
   "reporter": ["text", "lcov"],
-  "include": ["bin/**", "hooks/**", "mcp/**"],
+  "include": ["bin/**", "hooks/**"],
   "exclude": ["tests/**", "scripts/**", "**/*.d.ts", "dist/**"],
   "all": true,
   "check-coverage": true,

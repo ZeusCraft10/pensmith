@@ -17,9 +17,9 @@
 //     log payload, the cost ledger, stdout, or a return value (presence-check
 //     only at the call boundary).
 
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { packageRoot } from './paths.js';
 import { fetch as httpFetch } from './http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
 import { assertBudget, appendCost } from './budget.js';
@@ -49,29 +49,8 @@ export interface HonestyBackend {
 // ============================================================
 //   Locked honest-framing copy (read VERBATIM — never inlined)
 // ============================================================
-// This module ships at two depths: bin/lib/honesty.ts under tsx, and
-// dist/bin/lib/honesty.js after build. Fixed-depth `..` × N would land in the
-// wrong dir post-build (IN-03 defect class). Walk up from HERE until we find
-// the directory that owns package.json, then resolve references/ relative to
-// that. EXACT shape copied from bin/lib/http.ts findPkgRoot + loadWarnString.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-const PKG_ROOT = findPkgRoot(__dirname);
+// references/ resolves against the install root (paths.ts packageRoot).
+const PKG_ROOT = packageRoot();
 const FRAMING_FILE = path.join(PKG_ROOT, 'references', 'honesty-framing.md');
 
 let framingNote: string | null = null;

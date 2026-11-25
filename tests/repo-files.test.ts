@@ -28,15 +28,11 @@ test('root config files exist', () => {
     'README-DEV.md',
     'CONTRIBUTING.md',
     'eslint.config.js',
-    'mcp/server.ts',
     'scripts/run-tests.mjs',
     'references/doctor-output.md',
-    // 02-06: hooks/.gitkeep replaced by real TIER-03 hook modules.
-    'hooks/hooks.json',
+    // The one plugin hook (SessionStart) and the context it builds.
     'hooks/session-start.ts',
-    'hooks/pre-compact.ts',
-    'hooks/post-tool-use.ts',
-    'hooks/stop.ts',
+    'hooks/session-context.ts',
   ]) {
     assert.ok(fs.existsSync(path.resolve(f)), `missing required file: ${f}`);
   }
@@ -48,10 +44,10 @@ test('package.json contract', () => {
   assert.equal(pkg['type'], 'module');
   assert.equal(pkg['license'], 'AGPL-3.0-or-later');
   const engines = pkg['engines'] as Record<string, string> | undefined;
-  assert.equal(engines?.['node'], '>=20.10.0');
+  assert.equal(engines?.['node'], '>=22.12.0');
   assert.equal(pkg['packageManager'], 'npm@10.9.0');
   const scripts = pkg['scripts'] as Record<string, string> | undefined;
-  for (const s of ['lint', 'typecheck', 'test', 'build', 'dev', 'validate:manifests', 'check']) {
+  for (const s of ['lint', 'typecheck', 'test', 'build', 'dev', 'check']) {
     assert.ok(scripts && scripts[s], `package.json missing script: ${s}`);
   }
   assert.equal(scripts?.['test'], 'node scripts/run-tests.mjs',
@@ -105,7 +101,6 @@ test('PRIVACY and README-DEV structure checks (README stubs removed — Phase 16
   assert.match(read('PRIVACY.md'), /No telemetry/i);
   // README-DEV — unchanged
   assert.match(read('README-DEV.md'), /npm run build/);
-  assert.match(read('README-DEV.md'), /dist\/mcp\/server\.js/);
   // CONTRIBUTING — unchanged
   const c = read('CONTRIBUTING.md');
   assert.match(c, /bin\/lib\/http\.ts/);
@@ -144,7 +139,7 @@ test('STYL-04: README style-match dual-use disclosure is present + honest (RED-b
 
 test('directory contract from D-21', () => {
   for (const d of [
-    'bin', 'bin/lib', 'bin/lib/migrations', 'mcp', 'hooks', 'skills', 'agents',
+    'bin', 'bin/lib', 'bin/lib/migrations', 'hooks', 'plugin', 'plugin/skills', 'agents',
     'workflows', 'templates', 'templates/citation-styles', 'references',
     'schema', 'tests', 'tests/fixtures', 'scripts',
   ]) {
@@ -189,7 +184,7 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   const hash = createHash('sha256').update(bytes).digest('hex');
   // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
-  const PINNED = 'e43c0cd7fd8b04cd079ace0f56e7d7d67d871ab3e04fbdaef0eb29a599aa020a';
+  const PINNED = '09aaf8da874921c5a8913c7d72e3ba3d406682a7fce4764d209c8864f03e0271';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
@@ -254,7 +249,6 @@ test('references/doctor-output.md retains all probe section anchors (Phase 2 + P
   const copy = read('references/doctor-output.md');
   assert.match(copy, /# Doctor Output Strings \(locked — D-18\)/);
   assert.match(copy, /node-version \(DOCT-01\)/);
-  assert.match(copy, /mcp-sdk-presence \(DOCT-01 wiring\)/);
   assert.match(copy, /contact-email-presence \(DOCT-03\)/);
   assert.match(copy, /sync-folder-detection \(DOCT-04\)/);
   assert.match(copy, /runtime-config-presence \(DOCT-07\)/);
@@ -381,16 +375,16 @@ for (const pin of PENDING_HASH_PINS) {
   });
 }
 
-// CF-D24: Guard the D-24-locked "Tier contract — do not skip" section in CONTRIBUTING.md.
-// If a future contributor (human or AI) deletes or rewords the section, this test catches
-// it before merge. The Phase 2 D-24 lock makes this section non-negotiable.
+// CF-D24: Guard the "Tier contract — do not skip" section in CONTRIBUTING.md.
+// If a future contributor (human or AI) deletes the section or stops naming the
+// real merge gates, this test catches it before merge.
 test('CF-D24: CONTRIBUTING.md has Tier contract — do not skip section with locked headings', () => {
   const src = readFileSync('CONTRIBUTING.md', 'utf8');
   const required = [
+    '## What CI runs',
     '## Tier contract — do not skip',
     '### What the tier contract guarantees',
-    '### The four merge-gate layers',
-    '### Wave 1 lint chokepoints',
+    '### The merge gates',
     '### Discipline rule',
   ];
   for (const heading of required) {
@@ -399,15 +393,19 @@ test('CF-D24: CONTRIBUTING.md has Tier contract — do not skip section with loc
       `CONTRIBUTING.md missing locked heading: "${heading}". This section is D-24-locked; do not delete.`,
     );
   }
-  // Each Wave 1 chokepoint must be named:
-  assert.match(src, /D-09.*thin-shim/s, 'D-09 thin-shim must be named');
-  assert.match(src, /D-10.*mcp-no-network|mcp-no-network.*D-10/s, 'D-10 mcp-no-network must be named');
-  assert.match(src, /D-12.*capabilities-no-leak|capabilities-no-leak.*D-12/s, 'D-12 capabilities-no-leak must be named');
+  // The gates CI really runs must be named:
+  assert.match(src, /claude plugin validate plugin --strict/, 'the plugin validation gate must be named');
+  assert.match(src, /`npm run bundle`/, 'the bundle build CI runs before the tests must be named');
+  // The bundle is built, never committed, so there is no stale-bundle check to describe.
+  assert.ok(!/bundle:check|commit the result/.test(src), 'CONTRIBUTING.md must not describe a committed bundle');
+  assert.match(src, /plugin-smoke\.mjs/, 'the isolated-install smoke must be named');
   // The four merge-gate layers must be named:
   assert.match(src, /CI step/, 'merge-gate layer 1 (CI step) must be named');
   assert.match(src, /branch protection/i, 'merge-gate layer 2 (branch protection) must be named');
-  assert.match(src, /preflight|validate-plugin-manifest/i, 'merge-gate layer 3 (preflight) must be named');
+  assert.match(src, /preflight/i, 'merge-gate layer 3 (preflight) must be named');
   assert.match(src, /prose|this section/i, 'merge-gate layer 4 (prose) must be named');
+  // Gates that no longer exist must not be described:
+  assert.ok(!/validate-plugin-manifest|mcp-no-network|thin-shim|dist\/mcp/.test(src), 'CONTRIBUTING.md must not describe removed MCP-era gates');
   // Phase 0 chokepoints section preserved:
   assert.match(src, /Architectural chokepoints \(Phase 0\+\)/, 'Phase 0 chokepoints section must be preserved');
 });

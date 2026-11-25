@@ -23,10 +23,9 @@
 
 import { execFile } from 'node:child_process';
 import * as fsp from 'node:fs/promises';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path, { basename, dirname, extname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { PDFDict, PDFDocument, PDFName, PDFRef, PDFStream } from 'pdf-lib';
 import { cslFilePath, renderCitationsInDocument, SUPPORTED_STYLES, type RenderedCitations } from './citations.js';
@@ -35,28 +34,11 @@ import { citedKeys, findCitations, type Citation } from './citation-grammar.js';
 import { cslHtmlToLatex, cslHtmlToMarkdown, escapeLatexText } from './csl-html.js';
 import { readBibEntries, selectEntries, toBibtex, toRis, type CslEntry } from './export-bib.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
-import { homeDirs, paperDir, realPath } from './paths.js';
+import { homeDirs, packageRoot, paperDir, realPath } from './paths.js';
 import { describeFinding, EPOCH_W3CDTF, scanExportBuffer, type TraceFormat } from './trace-scan.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(__dirname);
+// PKG_ROOT — templates/citation-styles/ resolves against the install root.
+const PKG_ROOT = packageRoot();
 
 // Fixed epoch for ZIP entry timestamps and docx dates (EPOCH_W3CDTF, shared
 // with the trace scanner): no authoring time ships.

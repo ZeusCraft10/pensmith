@@ -262,12 +262,12 @@ function enqueue(work: () => Promise<void>): void {
 }
 
 // ---------------------------------------------------------------------------
-// Module-level flush (HOOK-04 — the Stop hook needs this).
+// Module-level flush.
 //
 // `chain` is the single module-scope write queue shared by EVERY logger handle
 // (each handle's close() awaits the same `chain`). closeSessionLog() drains
-// that queue without needing a handle — the Stop hook calls it inside
-// Promise.allSettled alongside lock release. If no logger ever opened, `chain`
+// that queue without needing a handle, so a short-lived process (such as the
+// SessionStart hook) can flush before it exits. If no logger ever opened, `chain`
 // is the initial resolved promise, so this resolves immediately. enqueue()
 // installs `work` as both fulfil + reject handlers so a prior rejected write
 // never breaks the chain — awaiting it here therefore never rejects.

@@ -1,0 +1,20 @@
+#!/bin/sh
+# pensmith — run the bundled CLI (dist/pensmith.mjs) with the Node.js on PATH.
+#
+# Claude Code puts this directory on the Bash tool's PATH; users may also link
+# it into ~/.local/bin or reach it through npm link. Follow any symlinks to
+# the real file so dist/ is found beside it, and hand node the physical path.
+self="$0"
+while [ -L "$self" ]; do
+  target=$(readlink "$self")
+  case "$target" in
+    /*) self="$target" ;;
+    *) self="$(dirname "$self")/$target" ;;
+  esac
+done
+root=$(cd -P "$(dirname "$self")/.." && pwd -P) || exit 1
+if ! command -v node >/dev/null 2>&1; then
+  echo "pensmith: Node.js 22.12 or newer is required, but 'node' is not on PATH." >&2
+  exit 1
+fi
+exec node "$root/dist/pensmith.mjs" "$@"
