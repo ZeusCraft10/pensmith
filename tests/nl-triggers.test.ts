@@ -22,11 +22,12 @@ const SKILL_FILES = [repoPath('plugin/skills/pensmith/SKILL.md')];
 
 const VERB_SET = new Set<string>(UX02_VERBS as readonly string[]);
 
-// === UX-05 / T-07-02: the locked-16 bijection is exactly 16 (no 17th verb) ===
+// === UX-05 / T-07-02: the verb list is exactly UX-02's 16 plus `ack` ===
 // Un-skipped: this invariant survives implementation and is the standing guard
 // that adding the skills/plumbing namespace did NOT introduce a 17th verb.
-test('UX-05 / T-07-02: UX02_VERBS.length === 16 (no 17th verb introduced)', () => {
-  assert.equal(UX02_VERBS.length, 16, 'T-07-02: the locked-16 bijection must stay at exactly 16 verbs');
+test('UX-05 / T-07-02: UX02_VERBS.length === 17 (UX-02\'s 16 plus ack; no other verb introduced)', () => {
+  assert.equal(UX02_VERBS.length, 17, 'T-07-02: the verb list must stay at exactly 17 verbs (UX-02\'s 16 plus ack)');
+  assert.ok((UX02_VERBS as readonly string[]).includes('ack'), 'the 17th verb is ack');
 });
 
 // === UX-05: revise / swap-source / redo route to the EXISTING `plan` verb ===
@@ -74,5 +75,5 @@ test('UX-05: the set of skill-mapped target verbs is a SUBSET of UX02_VERBS (no 
       );
     }
     // The length invariant must still hold after the skills landed.
-    assert.equal(UX02_VERBS.length, 16, 'UX-05: adding the skills namespace must NOT change UX02_VERBS.length');
+    assert.equal(UX02_VERBS.length, 17, 'UX-05: adding the skills namespace must NOT change UX02_VERBS.length');
   });

@@ -525,6 +525,15 @@ export function sectionVerification(
   return path.join(strictSectionDir(n, slug, root), 'VERIFICATION.md');
 }
 
+/** A section's acknowledged verdicts (bin/lib/verify/acknowledgements.ts). */
+export function sectionAcknowledgements(
+  n: number,
+  slug: string,
+  root: string = projectRoot(),
+): string {
+  return path.join(strictSectionDir(n, slug, root), 'ACKNOWLEDGEMENTS.json');
+}
+
 export function sectionResearch(
   n: number,
   slug: string,

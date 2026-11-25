@@ -1,12 +1,14 @@
 // bin/lib/verbs.ts
 //
-// WR-03: single source of truth for the UX-02 16-verb list. Imported by:
+// WR-03: single source of truth for the verb list. Imported by:
 //   - bin/pensmith.ts                (citty subCommands keys)
 //   - scripts/verb-table.ts          (the README command table, one row per verb)
 //   - tests/cli-verbs.test.ts        (assertion against runtime introspection)
 //
-// REQUIREMENTS.md UX-02 line 61 is the spec — keep this list in step with
-// REQUIREMENTS.md and the workflows/*.md filenames.
+// The first sixteen are REQUIREMENTS.md UX-02 (PRD §5.2). `ack` is the
+// seventeenth: the only way to let a RETRACTED citation the paper must cite
+// pass, with the author's reason (bin/cli/ack.ts). Keep the list in step with
+// the workflows/*.md filenames.
 
 import { levenshtein } from './fuzzy.js';
 
@@ -27,6 +29,7 @@ export const UX02_VERBS = [
   'open',
   'sketch',
   'add',
+  'ack',
 ] as const;
 
 export type Ux02Verb = (typeof UX02_VERBS)[number];
@@ -34,7 +37,7 @@ export type Ux02Verb = (typeof UX02_VERBS)[number];
 /**
  * Words users type for a verb under another name. The dispatcher rewrites the
  * alias to its verb before parsing, so the alias takes exactly the verb's
- * arguments and the 16-verb command table stays unchanged.
+ * arguments and the command table stays unchanged.
  */
 export const VERB_ALIASES: Readonly<Record<string, Ux02Verb>> = {
   intake: 'new',

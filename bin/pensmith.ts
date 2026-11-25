@@ -21,13 +21,13 @@
 // bin/pensmith.ts — Tier 2 dispatcher.
 //
 // D-03: citty@^0.2.2 (locked).
-// D-05: exactly 16 verbs from REQUIREMENTS.md UX-02 — doctor (real) + 15 stubs.
-//   Phase 6+ verbs like `export`/`citations`/`humanize`/`gpt-zero`/`plagiarism`
-//   are sub-commands under `compile`/`verify`, NOT first-class verbs in v0.1.0.
+// D-05: the 16 verbs of REQUIREMENTS.md UX-02, plus `ack` (acknowledge a
+//   RETRACTED citation). Words like `export`/`humanize`/`gpt-zero`/`plagiarism`
+//   are aliases or parts of other verbs, not verbs of their own.
 // Pitfall 7 — DO NOT console.log here; this binary is the CLI, not
 // the MCP server, but consistency matters for future stdio surfaces.
 //
-// WR-03 + WR-06 (cross-AI review): the 16-verb list is owned by
+// WR-03 + WR-06 (cross-AI review): the verb list is owned by
 // bin/lib/verbs.ts (UX02_VERBS); this dispatcher builds subCommands by
 // iterating that array, so a verb added there is auto-registered here.
 // tests/cli-verbs.test.ts imports the exported `command` and introspects
@@ -111,6 +111,7 @@ export const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyComman
   // both are already members of the locked-16 UX02_VERBS).
   sketch: () => import('./cli/sketch.js').then((m) => m.sketchCommand),
   add: () => import('./cli/add.js').then((m) => m.addCommand),
+  ack: () => import('./cli/ack.js').then((m) => m.ackCommand),
 };
 
 /** The CommandDef for `verb`: its real loader, or the Phase 2 stub. */
@@ -236,11 +237,12 @@ function hasFlag(argv: string[], flag: string): boolean {
 }
 
 /**
- * Read-only verbs that incur NO model/network cost. The --yolo cap pre-flight
- * must not hard-refuse these (audit #24): inspecting status/library/health or
- * opening a paper should work even over an over-cap project.
+ * Verbs that incur NO model/network cost. The --yolo cap pre-flight must not
+ * hard-refuse these (audit #24): inspecting status/library/health, opening a
+ * paper or recording an acknowledgement should work even over an over-cap
+ * project.
  */
-const READ_ONLY_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor', 'open']);
+const READ_ONLY_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor', 'open', 'ack']);
 
 /**
  * Whether the --yolo cost-cap pre-flight should run for this argv (audit #24).

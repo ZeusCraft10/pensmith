@@ -55,7 +55,7 @@ workflow body below is the prompt that drives the verb under both Tier 1
 
 4. **Evaluate candidates** (RSCH-02 second half): invoke `templates/prompts/source-evaluator.md` (D-12 LOCKED slug) on the deduped `SourceCandidate[]` → keep/reject verdicts with rationale. Filter on `keep: true`.
 
-5. **Cross-check retractions** (`bin/lib/sources/retraction-cross-check.ts`): mark each surviving candidate whose own record shows a retraction — Crossref `updated-by` with a retraction, partial retraction, withdrawal or removal notice (Retraction Watch's data among them), OpenAlex `is_retracted`, PubMed's "Retracted Publication" type, or a "RETRACTED:" / "WITHDRAWN:" title — with `retracted: true` and `retraction_details`. No request is made. Do **NOT** silently drop it: `writeBibtex` records it as `note = {RETRACTED}`, and verify reports a citation of it as RETRACTED, which blocks.
+5. **Cross-check retractions** (`bin/lib/sources/retraction-cross-check.ts`): mark each surviving candidate whose own record shows a retraction — Crossref `updated-by` with a retraction, partial retraction, withdrawal or removal notice (Retraction Watch's data among them), OpenAlex `is_retracted`, PubMed's "Retracted Publication" type, or a "RETRACTED:" / "WITHDRAWN:" title — with `retracted: true` and `retraction_details`. No request is made. Do **NOT** silently drop it: `writeBibtex` records it as `note = {RETRACTED}`, and verify reports a citation of it as RETRACTED, which blocks until the author acknowledges it with `pensmith ack`.
 
    **Retraction surfacing (Codex MEDIUM consensus #19 — locked)**: after the cross-check, if ANY candidate has `retracted: true`, the workflow emits a WARN line to stderr in the literal form:
 

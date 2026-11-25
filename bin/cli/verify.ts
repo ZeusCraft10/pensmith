@@ -30,7 +30,7 @@ import { runPass2, renderPass2Section } from '../lib/verify/pass2.js';
 import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
 import { parseBibByCitekey } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { sectionDraft, sectionVerification, sectionPlan, paperDir } from '../lib/paths.js';
+import { sectionAcknowledgements, sectionDraft, sectionVerification, sectionPlan, paperDir } from '../lib/paths.js';
 import {
   citationWarnings,
   isBlockingVerdict,
@@ -39,6 +39,7 @@ import {
   renderPass3VerdictRow,
   unattributedWarning,
 } from '../lib/verify/verdict-rows.js';
+import { readAcknowledgements } from '../lib/verify/acknowledgements.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
@@ -131,7 +132,14 @@ export const verifyCommand = defineCommand({
     // Pass 1 still runs, and every key the draft cites is FABRICATED.
     const bibText = readFileSync(bibPath, 'utf8');
     const bibIsEmpty = bibText.trim().length === 0;
-    const pass1 = await runPass1(draftMd, bibPath);
+    // The section's acknowledged retractions (`pensmith ack`). An unreadable
+    // file lifts nothing; say so, since the author thinks it does.
+    const ackPath = sectionAcknowledgements(n, slug);
+    const acks = readAcknowledgements(ackPath);
+    if (acks.unreadable) {
+      process.stderr.write(`pensmith verify: WARN — ${ackPath} could not be read, so no acknowledgement in it applies.\n`);
+    }
+    const pass1 = await runPass1(draftMd, bibPath, { acknowledgements: acks.acknowledgements, section: n });
     // Widened value type (additive): carries title/author/abstract so Pass 2
     // (claim support) has source metadata. runPass3 reads only DOI, so the
     // widening is backward-compatible with the runPass3 call below.
@@ -230,7 +238,8 @@ export const verifyCommand = defineCommand({
     }
 
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
-    // A work under an expression of concern passes but must not look clean.
+    // A retracted work cited with an acknowledgement, or one under an
+    // expression of concern, passes but must not look clean.
     for (const w of citationWarnings(parseVerdictRowDetails(lines.join('\n')), `section ${n}`)) {
       process.stderr.write(`pensmith verify: WARN — ${w}.\n`);
     }

@@ -6,8 +6,9 @@
 // already returned: Crossref's `updated-by` (and a notice the publisher put on
 // the work itself, `update-to` its own DOI), PubMed's "Retracted Publication"
 // type, and a "RETRACTED:" / "WITHDRAWN:" title, with OpenAlex `is_retracted`
-// as a cross-check. RETRACTED blocks compile and export; an expression of
-// concern only warns.
+// as a cross-check. RETRACTED blocks compile and export until the author
+// acknowledges that one citation with `pensmith ack`; an expression of concern
+// only warns.
 //
 // Every registry answer here is a real recording (tests/fixtures/cassettes):
 // Crossref, PubMed and OpenAlex for Wakefield 1998, a PLOS ONE article under an
@@ -16,6 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -97,6 +99,8 @@ function row(root: string, key: string, n = 1, slug = 'intro'): string {
 const planStatus = (root: string, n = 1, slug = 'intro'): unknown =>
   parseFrontmatter(readFileSync(join(secDir(root, n, slug), 'PLAN.md'), 'utf8')).frontmatter['status'];
 
+const ackFile = (root: string, n = 1, slug = 'intro'): string => join(secDir(root, n, slug), 'ACKNOWLEDGEMENTS.json');
+const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
 
 // ---------------------------------------------------------------------------
 //   Detection
@@ -112,7 +116,8 @@ test('Wakefield 1998, cited by its DOI, is RETRACTED through the real verify, an
   assert.match(r, /10\.1016\/s0140-6736\(10\)60175-4/i);
   assert.match(r, /2010/);
   assert.match(r, /Crossref/);
-  // The way out is another source, never --yolo.
+  // The way out names this section and key, and never --yolo.
+  assert.match(r, /pensmith ack 1 wakefield1998 --reason/);
   assert.doesNotMatch(v.out + verification(root), /--yolo/);
   assert.match(verification(root), /^Status: failed$/m);
   assert.equal(planStatus(root), 'failed');
@@ -167,10 +172,129 @@ test('--yolo never waives RETRACTED', () => {
   assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false);
 });
 
+// ---------------------------------------------------------------------------
+//   Acknowledgement
+// ---------------------------------------------------------------------------
+
+const REASON = 'This section is about the retraction itself.';
+
+test('pensmith ack records the acknowledgement in the section folder, bound to the key and the DOI hash; verify then passes with a warning', () => {
+  const root = seedPaper(WAKEFIELD);
+  assert.equal(cli(root, 'verify', '1', '--slug', 'intro').status, 2);
+
+  const a = cli(root, 'ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', REASON);
+  assert.equal(a.status, 0, a.out);
+  assert.match(a.out, /pensmith verify 1/);
+  const recorded = JSON.parse(readFileSync(ackFile(root), 'utf8')) as {
+    acknowledgements: Array<Record<string, unknown>>;
+  };
+  assert.equal(recorded.acknowledgements.length, 1);
+  const ack = recorded.acknowledgements[0]!;
+  assert.equal(ack['kind'], 'retracted');
+  assert.equal(ack['citekey'], 'wakefield1998');
+  assert.equal(ack['reason'], REASON);
+  assert.equal(ack['work_sha256'], sha256('doi:10.1016/s0140-6736(97)11096-0'));
+
+  const v = cli(root, 'verify', '1', '--slug', 'intro');
+  assert.equal(v.status, 0, v.out);
+  const r = row(root, 'wakefield1998');
+  assert.match(r, /\*\*RETRACTED_ACKNOWLEDGED\*\*/);
+  assert.ok(r.includes(REASON), r);
+  assert.match(verification(root), /^Status: verified$/m);
+  assert.equal(planStatus(root), 'verified');
+  assert.match(v.out, /WARN.*retracted/i);
+
+  // compile accepts it and says so.
+  const c = cli(root, 'compile');
+  assert.equal(c.status, 0, c.out);
+  assert.match(c.out, /WARN.*wakefield1998.*retracted/i);
+});
+
+test('an acknowledgement does not carry over to another work cited under the same key', () => {
+  const root = seedPaper(WAKEFIELD);
+  cli(root, 'verify', '1', '--slug', 'intro');
+  assert.equal(cli(root, 'ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', REASON).status, 0);
+  // The key now names a different retracted work.
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), withdrawn('wakefield1998'));
+  const v = cli(root, 'verify', '1', '--slug', 'intro');
+  assert.equal(v.status, 2, v.out);
+  assert.match(row(root, 'wakefield1998'), /\*\*RETRACTED\*\*/);
+});
+
+test('an acknowledgement covers its own section only', () => {
+  const root = seedPaper(WAKEFIELD, 2);
+  cli(root, 'verify', '1', '--slug', 'intro');
+  cli(root, 'verify', '2', '--slug', 'body');
+  assert.equal(cli(root, 'ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', REASON).status, 0);
+  assert.equal(cli(root, 'verify', '1', '--slug', 'intro').status, 0);
+  const v2 = cli(root, 'verify', '2', '--slug', 'body');
+  assert.equal(v2.status, 2, v2.out);
+  assert.match(row(root, 'wakefield1998', 2, 'body'), /\*\*RETRACTED\*\*/);
+  assert.equal(existsSync(ackFile(root, 2, 'body')), false);
+});
+
+test('a section verified with an acknowledged retraction that goes stale is re-verified by compile with the acknowledgement', () => {
+  const root = seedPaper(WAKEFIELD);
+  cli(root, 'verify', '1', '--slug', 'intro');
+  cli(root, 'ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', REASON);
+  assert.equal(cli(root, 'verify', '1', '--slug', 'intro').status, 0);
+  appendFileSync(join(secDir(root), 'DRAFT.md'), '\nA closing sentence added after verification.\n');
+  const c = cli(root, 'compile');
+  assert.equal(c.status, 0, c.out);
+  assert.match(c.out, /stale/);
+});
+
 test('a stale section citing a work under an expression of concern still compiles', () => {
   const root = seedPaper(CONCERN);
   assert.equal(cli(root, 'verify', '1', '--slug', 'intro').status, 0);
   appendFileSync(join(secDir(root), 'DRAFT.md'), '\nA closing sentence added after verification.\n');
   const c = cli(root, 'compile');
   assert.equal(c.status, 0, c.out);
+});
+
+test('ack refuses without a reason, for a key verify did not find RETRACTED, and for a key not in the bibliography', () => {
+  const root = seedPaper(WAKEFIELD + CONCERN);
+  cli(root, 'verify', '1', '--slug', 'intro');
+  for (const [args, why] of [
+    [['ack', '1', 'wakefield1998', '--slug', 'intro'], /reason/i],
+    [['ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', '   '], /reason/i],
+    [['ack', '1', 'feng2013', '--slug', 'intro', '--reason', REASON], /not RETRACTED|no RETRACTED/],
+    [['ack', '1', 'ghost2099', '--slug', 'intro', '--reason', REASON], /CITATIONS\.bib/],
+  ] as Array<[string[], RegExp]>) {
+    const r = cli(root, ...args);
+    assert.equal(r.status, 2, `${args.join(' ')}\n${r.out}`);
+    assert.match(r.out, why);
+    assert.equal(existsSync(ackFile(root)), false, `${args.join(' ')} must write nothing`);
+  }
+});
+
+test('ack before verify has nothing to acknowledge', () => {
+  const root = seedPaper(WAKEFIELD);
+  const r = cli(root, 'ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', REASON);
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.out, /pensmith verify 1/);
+  assert.equal(existsSync(ackFile(root)), false);
+});
+
+test('ack --dry-run writes nothing', () => {
+  const root = seedPaper(WAKEFIELD);
+  cli(root, 'verify', '1', '--slug', 'intro');
+  const r = cli(root, 'ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', REASON, '--dry-run');
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /ACKNOWLEDGEMENTS\.json/);
+  assert.equal(existsSync(ackFile(root)), false);
+});
+
+test('an unreadable ACKNOWLEDGEMENTS.json lifts nothing: verify still blocks and says why, and ack will not overwrite it', () => {
+  const root = seedPaper(WAKEFIELD);
+  cli(root, 'verify', '1', '--slug', 'intro');
+  writeFileSync(ackFile(root), '{ "acknowledgements": [ { "citekey": "wakefield1998"');
+  const v = cli(root, 'verify', '1', '--slug', 'intro');
+  assert.equal(v.status, 2, v.out);
+  assert.match(row(root, 'wakefield1998'), /\*\*RETRACTED\*\*/);
+  assert.match(v.out, /WARN.*ACKNOWLEDGEMENTS\.json could not be read/);
+  const a = cli(root, 'ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', REASON);
+  assert.equal(a.status, 2, a.out);
+  assert.match(a.out, /could not be read/);
+  assert.equal(readFileSync(ackFile(root), 'utf8'), '{ "acknowledgements": [ { "citekey": "wakefield1998"');
 });

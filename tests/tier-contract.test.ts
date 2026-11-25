@@ -1097,8 +1097,8 @@ test('tier-contract: add parity — dispatchable in both tiers, assigned_sources
 //     verbs present, and NO colon-prefix or -section alias leaked into the
 //     Tier-2 locked-16 (the [07-04] three-guard pattern — the plumbing namespace
 //     stays a Tier-1-only alias onto the locked 16). ---
-test('tier-contract: 16-verb bijection re-asserted — list/open/sketch/add present, no alias leak (T-08-06-01)', () => {
-  assert.equal(UX02_VERBS.length, 16, 'the locked-16 bijection must stay at exactly 16 verbs after the four bodies land');
+test('tier-contract: 17-verb bijection re-asserted — list/open/sketch/add present, no alias leak (T-08-06-01)', () => {
+  assert.equal(UX02_VERBS.length, 17, 'the verb list must stay at exactly 17 verbs (UX-02\'s 16 plus ack) after the four bodies land');
   for (const verb of PROMOTED_VERBS) {
     assert.ok(
       (UX02_VERBS as readonly string[]).includes(verb),
@@ -1112,7 +1112,7 @@ test('tier-contract: 16-verb bijection re-asserted — list/open/sketch/add pres
   }
   // No duplicates — the set size equals the list length (a 17th verb sneaking in
   // as a dup would be caught here too).
-  assert.equal(new Set(UX02_VERBS).size, 16, 'UX02_VERBS must contain 16 DISTINCT verbs (no duplicate/17th leak)');
+  assert.equal(new Set(UX02_VERBS).size, 17, 'UX02_VERBS must contain 17 DISTINCT verbs (no duplicate or unplanned verb)');
 });
 
 // ============================================================================
@@ -1141,8 +1141,8 @@ test('tier-contract: verb-shortcut parity — next/status/resume live in BOTH ti
   assert.match(skill, /`pensmith next`/, 'Tier 1: the pensmith skill must use `pensmith next`');
 });
 
-test('tier-contract: no 17th verb — UX02_VERBS stays at exactly 16 (T-07-02)', () => {
-  assert.equal(UX02_VERBS.length, 16, 'the locked-16 bijection must stay at exactly 16 verbs after the namespace lands');
+test('tier-contract: no unplanned verb — UX02_VERBS stays at exactly 17 (T-07-02)', () => {
+  assert.equal(UX02_VERBS.length, 17, 'the verb list must stay at exactly 17 verbs (UX-02\'s 16 plus ack) after the namespace lands');
   // No colon-prefix verb leaked into the Tier-2 locked-16 list.
   for (const v of UX02_VERBS) {
     assert.ok(!v.includes(':'), `UX02_VERBS must not contain a colon-prefix plumbing name, got "${v}"`);
@@ -1190,10 +1190,10 @@ test('tier-contract: research — emits CITATIONS.ris alongside CITATIONS.bib (C
   );
 });
 
-test('tier-contract: 16-verb bijection re-asserted — no zotero/ris/style verb leak, zotero-mcp confined to the sources registry (T-10-04-03)', () => {
-  // The locked-16 set is unchanged by the Phase-10 library/source surfaces.
-  assert.equal(UX02_VERBS.length, 16, 'the locked-16 bijection must stay at exactly 16 verbs after the Phase-10 surfaces land');
-  assert.equal(new Set(UX02_VERBS).size, 16, 'UX02_VERBS must contain 16 DISTINCT verbs (no duplicate/17th leak)');
+test('tier-contract: 17-verb bijection re-asserted — no zotero/ris/style verb leak, zotero-mcp confined to the sources registry (T-10-04-03)', () => {
+  // The verb set is unchanged by the Phase-10 library/source surfaces.
+  assert.equal(UX02_VERBS.length, 17, 'the verb list must stay at exactly 17 verbs (UX-02\'s 16 plus ack) after the Phase-10 surfaces land');
+  assert.equal(new Set(UX02_VERBS).size, 17, 'UX02_VERBS must contain 17 DISTINCT verbs (no duplicate or unplanned verb)');
 
   // NO Phase-10 library/source token leaked into the verb set. zotero-mcp,
   // zotero, ris, and style are surfaces (a source provider, a library writer,

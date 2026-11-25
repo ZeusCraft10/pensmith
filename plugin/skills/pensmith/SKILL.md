@@ -59,7 +59,8 @@ Read the exit status of every pensmith command.
 - **Exit 0**: the step finished. Continue. If pensmith warned about an
   UNATTRIBUTED quotation (ten or more words with no citation), tell the
   user: they either cite its source or confirm it is their own data or an
-  epigraph.
+  epigraph. If it warned about a work under an expression of concern, or a
+  retracted work the user acknowledged, tell the user that too.
 - **Exit 1**: unexpected error. Show the user the error text and stop.
 - **Exit 2**: blocked or refused. Common causes: the verifier found a
   citation it could not confirm (FABRICATED, MIS-CITED, quote NOT_FOUND,
@@ -73,7 +74,11 @@ Read the exit status of every pensmith command.
   verify again; UNRESOLVED means retry once the registry is reachable, or,
   for an entry with no identifier, tell the user which source needs one. For
   RAW_CITATION and UNPARSEABLE, revise names what to rewrite; show the user
-  and let them decide.
+  and let them decide. For RETRACTED, tell the user the work was retracted;
+  the usual fix is another source. Only when the user says the paper must
+  cite the retracted work (for example, it discusses the retraction), run
+  `pensmith ack N <citekey> --reason "<their reason, in their words>"`, then
+  verify again. Never acknowledge a retraction on your own.
 - **Exit 3**: pensmith needs a decision or answers from the user before it
   can continue, such as approving the outline, confirming the export, or answering
   intake questions. The command prints a JSON object describing what it is

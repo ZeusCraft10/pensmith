@@ -26,9 +26,10 @@ import { runCompile, type ReVerifyInput, type ReVerifyResult } from '../lib/comp
 import { runPass1 } from '../lib/verify/pass1.js';
 import { runPass3 } from '../lib/verify/pass3.js';
 import { parseBibByCitekey } from '../lib/citations.js';
-import { sectionDraft, paperDir } from '../lib/paths.js';
+import { sectionAcknowledgements, sectionDraft, paperDir } from '../lib/paths.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isBlockingVerdict } from '../lib/verify/verdict-rows.js';
+import { readAcknowledgements } from '../lib/verify/acknowledgements.js';
 
 /**
  * Production staleness re-verify seam (D-08 — Pass 1 + Pass 3 ONLY). Runs the
@@ -50,7 +51,9 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
     return { passed: false, failingCitekeys: [] };
   }
   // An empty CITATIONS.bib is an empty library: every cited key is FABRICATED.
-  const pass1 = await runPass1(draftMd, bibPath);
+  // The section's acknowledgements apply here as they do in verify.
+  const { acknowledgements } = readAcknowledgements(sectionAcknowledgements(input.n, input.slug, paperRoot));
+  const pass1 = await runPass1(draftMd, bibPath, { acknowledgements, section: input.n });
   const bibByCitekey = await parseBibByCitekey<{ DOI?: string }>(bibText);
   const pass3 = await runPass3(draftMd, bibByCitekey);
 

@@ -29,7 +29,7 @@ import { stripMarkup } from './work-match.js';
 
 /** What a record says about the work's standing. */
 export interface RetractionSignal {
-  /** `retracted` blocks; `concern` warns. */
+  /** `retracted` blocks (unless acknowledged); `concern` warns. */
   kind: 'retracted' | 'concern';
   /** One clause for a verdict reason: "Retraction, 2010-02-06, notice 10.1016/…". */
   what: string;

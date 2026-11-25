@@ -7,7 +7,7 @@
 // path that slips past the dispatcher still cannot change a file.
 
 import { join, relative, sep } from 'node:path';
-import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
+import { paperDir, sectionAcknowledgements, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { parseSectionNumber, resolveSectionSlug } from './section-slug.js';
 import type { Ux02Verb } from './verbs.js';
 
@@ -43,10 +43,11 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
   const n = parseSectionNumber(args['n']);
   const slugArg = typeof args['slug'] === 'string' ? args['slug'] : undefined;
   const slug = n === null ? null : resolveSectionSlug(paperRoot, n, slugArg);
-  const sec = (file: 'PLAN.md' | 'DRAFT.md' | 'VERIFICATION.md'): string => {
+  const sec = (file: 'PLAN.md' | 'DRAFT.md' | 'VERIFICATION.md' | 'ACKNOWLEDGEMENTS.json'): string => {
     if (n === null || slug === null) return `.paper/sections/<N>/${file}`;
     if (file === 'PLAN.md') return rel(sectionPlan(n, slug, paperRoot));
     if (file === 'DRAFT.md') return rel(sectionDraft(n, slug, paperRoot));
+    if (file === 'ACKNOWLEDGEMENTS.json') return rel(sectionAcknowledgements(n, slug, paperRoot));
     return rel(sectionVerification(n, slug, paperRoot));
   };
   const command = ['pensmith', verb, ...(n === null ? [] : [String(n)])].join(' ');
@@ -157,6 +158,15 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
         model: NO_MODEL,
         network: 'Crossref and the other registries',
         asks: 'remap sections to the new source',
+      };
+    case 'ack':
+      return {
+        command: typeof args['citekey'] === 'string' ? `${command} ${args['citekey']}` : command,
+        summary: 'Record that this section cites a RETRACTED work knowingly, with your reason.',
+        reads: [paper('CITATIONS.bib'), sec('VERIFICATION.md')],
+        writes: [sec('ACKNOWLEDGEMENTS.json')],
+        model: NO_MODEL,
+        network: NO_NETWORK,
       };
     case 'sketch':
       return {

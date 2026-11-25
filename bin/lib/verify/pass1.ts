@@ -8,7 +8,9 @@
 //   - whether the entry's title, authors, year and journal match the record
 //     the registry returned (bin/lib/verify/work-match.ts);
 //   - whether the work is retracted: recorded so in CITATIONS.bib, said so by
-//     the record itself, or listed so by OpenAlex (bin/lib/verify/retraction.ts).
+//     the record itself, or listed so by OpenAlex (bin/lib/verify/retraction.ts),
+//     and whether the author acknowledged citing it in this section
+//     (bin/lib/verify/acknowledgements.ts).
 //
 // The verdicts:
 //   OK          the registry's record matches the entry;
@@ -21,6 +23,8 @@
 //               or the only registry for it does not hold every work;
 //   RETRACTED   the entry matches a work that was retracted, withdrawn or
 //               removed;
+//   RETRACTED_ACKNOWLEDGED  the same, and the author acknowledged citing it
+//               here (`pensmith ack`): it does not block, and every verb warns;
 //   EXPRESSION_OF_CONCERN   the entry matches a work its publisher has
 //               published an expression of concern about: it does not block,
 //               and every verb warns.
@@ -35,6 +39,7 @@ import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { lookupRetraction } from '../sources/openalex.js';
 import { describeSignal, recordRetraction, withoutRetractionLabel, type RetractionSignal } from './retraction.js';
+import { findRetractionAck, workBinding, type Acknowledgement } from './acknowledgements.js';
 import {
   citedKeys,
   findCitations,
@@ -58,7 +63,14 @@ export { renderFreshnessTable } from './freshness.js';
 // both block until rewritten as a `[@key]` citation.
 export type Pass1Verdict =
   | 'OK' | 'MIS-CITED' | 'FABRICATED' | 'UNRESOLVED' | 'RAW_CITATION' | 'UNPARSEABLE'
-  | 'RETRACTED' | 'EXPRESSION_OF_CONCERN';
+  | 'RETRACTED' | 'RETRACTED_ACKNOWLEDGED' | 'EXPRESSION_OF_CONCERN';
+
+export interface Pass1Options {
+  /** The acknowledgements recorded in the section being verified. */
+  acknowledgements?: readonly Acknowledgement[];
+  /** The section's number, for the `pensmith ack` command a RETRACTED reason gives. */
+  section?: number;
+}
 
 export interface Pass1Result {
   citekey: string;
@@ -116,14 +128,25 @@ function missDetail(id: WorkId, r: Exclude<IdResolution, { kind: 'found' }>): st
   return `${id.shown} could not be checked (${failed})${said}`;
 }
 
-/** What one citation is checked under. */
+/** What one citation is checked under: its key, the work it binds to, and any acknowledgement. */
 interface CiteContext {
   ck: string;
+  ack: Acknowledgement | undefined;
+  section: number | undefined;
 }
 
-/** The verdict for a citation of a retracted work. */
+/**
+ * The verdict for a citation of a retracted work: RETRACTED, or, when the
+ * author acknowledged citing it here, RETRACTED_ACKNOWLEDGED with their reason.
+ */
 function retractedResult(ctx: CiteContext, what: string, titleJW = 0, authorJW = 0): Pass1Result {
-  return result(ctx.ck, 'RETRACTED', `${what} — cite another source`, titleJW, authorJW);
+  if (ctx.ack) {
+    return result(ctx.ck, 'RETRACTED_ACKNOWLEDGED',
+      `${what}; acknowledged ${ctx.ack.acknowledged_at.slice(0, 10)}: "${ctx.ack.reason}"`, titleJW, authorJW);
+  }
+  return result(ctx.ck, 'RETRACTED',
+    `${what} — cite another source; if the paper discusses the retraction, acknowledge this citation with ` +
+    `\`pensmith ack ${ctx.section ?? '<N>'} ${ctx.ck} --reason "<why>"\``, titleJW, authorJW);
 }
 
 /**
@@ -185,6 +208,7 @@ async function verdictForCitekey(
   ck: string,
   claimed: BibEntry | undefined,
   fields: Record<string, string> | undefined,
+  opts: Pass1Options,
 ): Promise<Pass1Result> {
   if (!claimed) {
     return result(ck, 'FABRICATED', 'citekey not in .paper/CITATIONS.bib (drafter invented)');
@@ -193,14 +217,26 @@ async function verdictForCitekey(
   if (!work.title || work.authors.length === 0) {
     return result(ck, 'MIS-CITED', 'claimed citation metadata incomplete (empty title or no authors)');
   }
-  const ctx: CiteContext = { ck };
+  const ctx: CiteContext = {
+    ck,
+    ack: findRetractionAck(opts.acknowledgements ?? [], ck, workBinding(claimed, fields)),
+    section: opts.section,
+  };
   // A retraction recorded when the source was added (the boolean on an
   // in-memory candidate, or the `note = {RETRACTED}` a bib round trip keeps)
-  // blocks without a lookup, offline too.
-  if (claimed.retracted === true || claimed.note === 'RETRACTED') {
+  // blocks without a lookup, offline too. Once acknowledged, the entry is
+  // still checked like any other.
+  const stored = claimed.retracted === true || claimed.note === 'RETRACTED';
+  if (stored && !ctx.ack) {
     return retractedResult(ctx, 'the work was recorded as retracted in CITATIONS.bib (note = {RETRACTED}) when it was added');
   }
-  return checkIdentifiers(ctx, claimed, fields, work);
+  const r = await checkIdentifiers(ctx, claimed, fields, work);
+  // The record no longer says so, but the bibliography does: the
+  // acknowledgement is what lets it pass.
+  if (stored && (r.verdict === 'OK' || r.verdict === 'EXPRESSION_OF_CONCERN')) {
+    return retractedResult(ctx, `the work was recorded as retracted in CITATIONS.bib when it was added; ${r.reason}`, r.titleJW, r.authorJW);
+  }
+  return r;
 }
 
 /** Look the entry up by its identifiers and compare it with the record found. */
@@ -291,6 +327,8 @@ export function pass1CitedKeys(draftMd: string): string[] {
 /**
  * Pass-1 verdicts for a draft: one per cited key, then one per citation that
  * is not a Pandoc citation (typed as text, or a key that does not parse).
+ * `opts.acknowledgements` are the section's, so an acknowledged retraction
+ * reads the same to verify, compile's re-check and anything else that asks.
  *
  * 100% deterministic — no LLM, no narration, no side effects beyond the
  * registry reads.
@@ -298,6 +336,7 @@ export function pass1CitedKeys(draftMd: string): string[] {
 export async function runPass1(
   draftMd: string,
   citationsBibPath: string,
+  opts: Pass1Options = {},
 ): Promise<Pass1Result[]> {
   const bib = await readBib(citationsBibPath);
   const cites = findCitations(draftMd);
@@ -305,7 +344,7 @@ export async function runPass1(
 
   const results: Pass1Result[] = [];
   for (const ck of citedKeys(cites)) {
-    const r = await verdictForCitekey(ck, bib.entries.get(ck), bib.fields.get(ck));
+    const r = await verdictForCitekey(ck, bib.entries.get(ck), bib.fields.get(ck), opts);
     // `@word` in running text is a citation to Pandoc; when it was meant as
     // text (a handle), the fix is an escape, not a new source.
     if (r.verdict === 'FABRICATED' && !bib.entries.has(ck) && !bracketed.has(ck)) {

@@ -16,12 +16,12 @@
  * a DOI, arXiv ID, PMID or author-year citation typed as text, and UNPARSEABLE
  * a bracketed citation with no key that parses: neither can be checked until
  * it is written as a `[@key]` citation. RETRACTED is a citation of a retracted
- * work.
+ * work, until the author acknowledges it with `pensmith ack`.
  *
- * Two verdicts do not block, and every verb that reads them warns:
+ * Three verdicts do not block, and every verb that reads them warns:
  * UNATTRIBUTED (a long quotation with no citation, which may be the author's
- * own data or an epigraph, so the section is unverifiable) and
- * EXPRESSION_OF_CONCERN.
+ * own data or an epigraph, so the section is unverifiable),
+ * RETRACTED_ACKNOWLEDGED and EXPRESSION_OF_CONCERN.
  */
 const BLOCKING_VERDICTS = new Set([
   'FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'RETRACTED', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE',
@@ -29,6 +29,7 @@ const BLOCKING_VERDICTS = new Set([
 
 /** Non-blocking Pass-1 verdicts compile and done warn about, and what each means. */
 const WARNING_VERDICTS: Readonly<Record<string, string>> = {
+  RETRACTED_ACKNOWLEDGED: 'is a retracted work, cited with your acknowledgement',
   EXPRESSION_OF_CONCERN: 'is a work under an expression of concern',
 };
 
@@ -172,8 +173,9 @@ export function verdictGate(verificationMd: string, where: string): { reasons: s
 }
 
 /**
- * A warning for each citation that passes but must not look clean: a work
- * under an expression of concern. `where` names the section.
+ * A warning for each citation that passes but must not look clean: a
+ * retracted work cited with the author's acknowledgement, or a work under an
+ * expression of concern. `where` names the section.
  */
 export function citationWarnings(rows: readonly VerdictRow[], where: string): string[] {
   return rows
