@@ -51,8 +51,9 @@ jobs:
         shell: bash
         run: npm run test:coverage < /dev/null
 
+      # Exact version the plugin smoke was last verified with; bump deliberately.
       - name: Install the Claude Code CLI
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.331
 
       # claude plugin validate (plugin and marketplace, --strict), an isolated
       # marketplace add + install that must show 1 skill and 1 hook, and

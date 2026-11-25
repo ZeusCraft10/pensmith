@@ -26,7 +26,9 @@ test('CI runs on Node 22 and 24 on Linux, macOS and Windows', () => {
 });
 
 test('CI installs the Claude Code CLI and runs the plugin smoke', () => {
-  assert.match(runs, /npm install -g @anthropic-ai\/claude-code/);
+  // Pinned to an exact version known to pass the smoke, so a Claude Code
+  // release cannot turn CI red (or green) on its own.
+  assert.match(runs, /npm install -g @anthropic-ai\/claude-code@\d+\.\d+\.\d+(\s|$)/, 'pin the Claude Code CLI to an exact version');
   assert.match(runs, /node scripts\/plugin-smoke\.mjs/);
   const smoke = readFileSync(new URL('../scripts/plugin-smoke.mjs', import.meta.url), 'utf8');
   for (const needle of ["'validate', target, '--strict'", "'marketplace', 'add'", "'install', 'pensmith@pensmith'", "'details', 'pensmith@pensmith'", 'symlinkSync']) {
