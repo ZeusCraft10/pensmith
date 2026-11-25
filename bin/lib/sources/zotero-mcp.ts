@@ -32,7 +32,6 @@ import { generateCitekey } from '../citekey.js';
 import { displayName, nameFromParts, parseDisplayName, presentNames } from '../author-normalize.js';
 import { arxivFromDoi, bareArxivId, normalizeIsbn } from '../doi.js';
 import type { CslName, SourceCandidate } from '../schemas/source-candidate.js';
-import { definedFields } from './work-record.js';
 
 /**
  * A single Zotero creator. The real MCP payload varies by server, so every
@@ -140,6 +139,7 @@ function toCandidate(item: ZoteroItem): SourceCandidate | null {
   const arxivNote = /\barxiv:\s*(\S+)/i.exec(String(item.extra ?? ''))?.[1] ?? '';
   const arxivUrl = /arxiv\.org\/abs\/([^\s?#]+)/i.exec(String(item.url ?? ''))?.[1] ?? '';
   const arxiv = bareArxivId(arxivNote) ?? bareArxivId(arxivUrl) ?? (doi ? arxivFromDoi(doi) : null);
+  const isbn = normalizeIsbn(String(item.ISBN ?? ''));
 
   return {
     source: 'zotero-mcp',
@@ -149,10 +149,8 @@ function toCandidate(item: ZoteroItem): SourceCandidate | null {
     authors,
     names,
     year,
-    ...definedFields({
-      arxiv: arxiv ?? undefined,
-      isbn: normalizeIsbn(String(item.ISBN ?? '')) ?? undefined,
-    }),
+    ...(arxiv ? { arxiv } : {}),
+    ...(isbn ? { isbn } : {}),
     abstract: item.abstractNote,
     retracted: false,
     last_verified: new Date().toISOString(),
