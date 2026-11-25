@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchTitle, matchWork, stripMarkup, venuesMatch, type ClaimedWork } from '../bin/lib/verify/work-match.js';
+import { matchTitle, matchWork, stripMarkup, venuesMatch, withoutRetractionLabel, type ClaimedWork } from '../bin/lib/verify/work-match.js';
 import type { WorkName, WorkRecord } from '../bin/lib/sources/work-record.js';
 
 function record(over: Partial<WorkRecord>): WorkRecord {
@@ -182,4 +182,15 @@ test('journals: abbreviations and acronyms match; a different journal does not',
   assert.ok(!matchWork({ ...base, venue: 'Nature' }, article).ok);
   assert.ok(matchWork({ ...base, venue: 'arXiv preprint arXiv:2001.00001' }, article).ok, 'a preprint venue is not compared');
   assert.ok(matchWork({ ...base, venue: 'Nature' }, { ...article, journalArticle: false }).ok, 'only a journal article\'s journal is compared');
+});
+
+test('titles: matchWork compares titles as given; a "RETRACTED:" label is set aside by Pass 1, not here', () => {
+  // Pass 1 (verdictForRecord) strips the label from both titles before it
+  // calls matchWork, and reads it as a retraction. A caller that does not
+  // strip it sees a different title.
+  const authors = names({ family: 'Roe', given: 'Jane' });
+  assert.ok(!matchWork({ title: 'RETRACTED: A study', authors }, record({ title: 'A study', authors })).ok);
+  assert.ok(!matchWork({ title: 'A study', authors }, record({ title: 'RETRACTED: A study', authors })).ok);
+  assert.ok(matchWork({ title: withoutRetractionLabel('RETRACTED: A study'), authors },
+    record({ title: withoutRetractionLabel('Retracted Article: A study'), authors })).ok);
 });

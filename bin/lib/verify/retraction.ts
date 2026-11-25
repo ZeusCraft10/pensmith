@@ -22,7 +22,7 @@
 // OpenAlex `is_retracted` is a cross-check Pass 1 asks for when the record
 // says nothing (bin/lib/sources/openalex.ts lookupRetraction).
 
-import { normalizeDoi, sameDoi } from '../doi.js';
+import { sameDoi } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import type { RegistryName, WorkRecord } from '../sources/work-record.js';
 import { RETRACTION_LABEL, stripMarkup } from './work-match.js';
@@ -112,8 +112,7 @@ function crossrefSignals(raw: Record<string, unknown>, by: RegistryName): Retrac
     if (!kind) return;
     // Crossref often lists one notice twice (from the publisher and from
     // Retraction Watch); say it once.
-    const doiKey = typeof u.DOI === 'string' ? (normalizeDoi(u.DOI) ?? u.DOI.toLowerCase()) : '';
-    const key = `${kind}|${type}|${doiKey}`;
+    const key = `${kind}|${type}|${String(u.DOI ?? '').toLowerCase()}`;
     if (seen.has(key)) return;
     seen.add(key);
     out.push({ kind, what: describeUpdate(u, type), by });

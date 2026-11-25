@@ -51,7 +51,7 @@ import { isOfflineMode } from '../network-mode.js';
 import { oneLine } from './verdict-rows.js';
 import { normalizeDoi, sameDoi } from '../doi.js';
 import { cslDateYear, cslNames, firstString, nameFromDisplay, type WorkName, type WorkRecord } from '../sources/work-record.js';
-import { matchWork, type ClaimedWork } from './work-match.js';
+import { matchWork, withoutRetractionLabel, type ClaimedWork } from './work-match.js';
 import { registryList, resolveId, workIdentifiers, type IdResolution, type WorkId } from './resolve.js';
 
 export type { FreshnessResult } from './freshness.js';
@@ -171,7 +171,12 @@ async function retractionOf(record: WorkRecord, id: WorkId): Promise<{ retracted
 /** The verdict for an entry claiming `work`, whose identifier `id` led to `record`. */
 async function verdictForRecord(ctx: CiteContext, work: ClaimedWork, id: WorkId, record: WorkRecord): Promise<Pass1Result> {
   const ck = ctx.ck;
-  const m = matchWork(work, record);
+  // A "RETRACTED:" label a publisher put on the title is not part of it, on
+  // either side.
+  const m = matchWork(
+    { ...work, title: withoutRetractionLabel(work.title) },
+    { ...record, title: withoutRetractionLabel(record.title) },
+  );
   const source = `the ${record.registry} record for ${id.shown}`;
   const notes = m.notes.length > 0 ? ` (${m.notes.join('; ')})` : '';
   // A registry may answer an alias DOI with the work's canonical DOI.

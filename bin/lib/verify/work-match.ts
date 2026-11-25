@@ -7,8 +7,7 @@
 // list. So Pass 1 compares the entry with the registry's record:
 //
 //   title    the same words in the same order, after markup, entities, case,
-//            punctuation, hyphenation and British/US spelling are set aside,
-//            and a "RETRACTED:" label a publisher put on either title;
+//            punctuation, hyphenation and British/US spelling are set aside;
 //            a missing subtitle on either side is fine; every number and roman
 //            numeral must match ("Part I" is not "Part II", "K-12" not "K-13");
 //            a stopword may be left out but not swapped for another ("to"
@@ -543,14 +542,11 @@ const PREPRINT_VENUE = /\b(?:arxiv|biorxiv|medrxiv|chemrxiv|psyarxiv|ssrn|resear
 // ---------------------------------------------------------------------------
 
 /** Compare a bibliography entry with the record a registry returned for its identifier. */
-export function matchWork(claimed: ClaimedWork, given: WorkRecord): WorkMatch {
+export function matchWork(claimed: ClaimedWork, record: WorkRecord): WorkMatch {
   const problems: string[] = [];
   const notes: string[] = [];
-  // A "RETRACTED:" label a publisher put on the title is not part of it, on
-  // either side.
-  const record: WorkRecord = { ...given, title: withoutRetractionLabel(given.title) };
 
-  const title = matchTitle(withoutRetractionLabel(claimed.title), record);
+  const title = matchTitle(claimed.title, record);
   if (!title.ok) {
     const theirs = plain(wholeTitle(record));
     problems.push(`the title is not the one ${record.registry} gives ("${theirs}")`);

@@ -282,3 +282,15 @@ test('runPass1Unit: a name that starts with a comma is compared as written, not 
   }
   assert.equal(unit(', Smith', ', Smith').verdict, 'OK');
 });
+
+test('runPass1Unit: a record title labelled "RETRACTED:" is a title mismatch there, never OK', () => {
+  // runPass1Unit has no retraction check of its own. The label is set aside
+  // only by runPass1, which then reads it as RETRACTED (tests/retraction.test.ts,
+  // tests/sources/retraction-signals.test.ts); here it stays a blocking verdict.
+  const r = runPass1Unit({
+    claimed: { title: 'Tidal Heating in Icy Moons', authors: ['Jane Roe'], doi: '10.5555/x' },
+    actual: { title: 'RETRACTED: Tidal Heating in Icy Moons', authors: ['Jane Roe'], doi: '10.5555/x' },
+  });
+  assert.equal(r.verdict, 'MIS-CITED', r.reason);
+  assert.match(r.reason, /the title is not the one Crossref gives \("RETRACTED: Tidal Heating in Icy Moons"\)/);
+});
