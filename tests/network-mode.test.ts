@@ -259,6 +259,29 @@ test('offline mode: Pass 1 yields UNRESOLVED, never OK or FABRICATED, with zero 
   });
 });
 
+test('offline mode: Pass 1 says UNRESOLVED for an entry with no DOI; only an invented citekey is FABRICATED', async () => {
+  // A book or an arXiv preprint may carry no DOI. Offline nothing was looked up,
+  // so calling it FABRICATED would accuse a real source. A citekey missing from
+  // the bibliography is a local fact and stays FABRICATED.
+  await inMode({ PENSMITH_OFFLINE: '1' }, async (agent) => {
+    const dir = tmpDir('pensmith-offline-p1-nodoi-');
+    const bibPath = path.join(dir, 'CITATIONS.bib');
+    fs.writeFileSync(
+      bibPath,
+      '@book{kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n' +
+        '  author = {Kuhn, Thomas S.},\n  publisher = {University of Chicago Press},\n  year = {1962}\n}\n',
+    );
+    const { runPass1 } = await import('../bin/lib/verify/pass1.js');
+    const results = await runPass1('Paradigms shift [@kuhn1962]; see also [@invented2020].\n', bibPath);
+    const byKey = new Map(results.map((r) => [r.citekey, r]));
+    assert.equal(byKey.get('kuhn1962')?.verdict, 'UNRESOLVED', `got ${JSON.stringify(byKey.get('kuhn1962'))}`);
+    assert.match(byKey.get('kuhn1962')?.reason ?? '', /offline/);
+    assert.doesNotMatch(byKey.get('kuhn1962')?.reason ?? '', /undefined/);
+    assert.equal(byKey.get('invented2020')?.verdict, 'FABRICATED');
+    assert.deepEqual(agent.requests, []);
+  });
+});
+
 test('offline mode: Pass 3 and the freshness probe make zero requests and say skipped (offline)', async () => {
   await inMode({ PENSMITH_OFFLINE: '1' }, async (agent) => {
     const { runPass3 } = await import('../bin/lib/verify/pass3.js');

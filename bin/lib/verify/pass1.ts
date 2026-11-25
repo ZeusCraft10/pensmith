@@ -137,19 +137,23 @@ async function verdictForCitekey(
       reason: 'cited a retracted work (per Retraction Watch cross-check at research time)',
     };
   }
+
+  // Offline (--offline / --dry-run): nothing can be looked up. Saying OK would
+  // pass an unchecked citation and FABRICATED would accuse a real one. This sits
+  // above the no-DOI check because an entry without a DOI (a book, a preprint)
+  // may still be resolvable by other identifiers once the network is back.
+  if (isOfflineMode()) {
+    const what = claimed.DOI ? `DOI ${claimed.DOI}` : 'this entry';
+    return {
+      citekey: ck, verdict: 'UNRESOLVED', titleJW: 0, authorJW: 0,
+      reason: `registry not queried (offline) — re-run verify with network access to check ${what}`,
+    };
+  }
+
   if (!claimed.DOI) {
     return {
       citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
       reason: 'no DOI in citation entry (cannot verify upstream)',
-    };
-  }
-
-  // Offline (--offline / --dry-run): nothing can be looked up. Saying OK would
-  // pass an unchecked citation and FABRICATED would accuse a real one.
-  if (isOfflineMode()) {
-    return {
-      citekey: ck, verdict: 'UNRESOLVED', titleJW: 0, authorJW: 0,
-      reason: `registry not queried (offline) — re-run verify with network access to check DOI ${claimed.DOI}`,
     };
   }
 
