@@ -336,10 +336,10 @@ function referencesHeading(style: string): string {
 
 // Private-use code points mark where rendered text goes, so the LaTeX writer
 // can escape the prose first and insert already-formatted citations after.
-const CITE = (i: number): string => `${i}`;
-const NOTE = (i: number): string => `${i}`;
-const REF = (i: number): string => `${i}`;
-const SENTINEL_RE = /(\d+)|(\d+)|(\d+)/g;
+const CITE = (i: number): string => `\uE000${i}\uE001`;
+const NOTE = (i: number): string => `\uE002${i}\uE003`;
+const REF = (i: number): string => `\uE004${i}\uE005`;
+const SENTINEL_RE = /\uE000(\d+)\uE001|\uE002(\d+)\uE003|\uE004(\d+)\uE005/g;
 
 /**
  * `md` with each citation replaced by a marker. In a note style the marker
@@ -391,20 +391,30 @@ function capitalize(html: string): string {
   return html.replace(/^((?:<[^>]*>|[^\p{L}<])*)(\p{Ll})/u, (_m, pre: string, c: string) => pre + c.toUpperCase());
 }
 
+/** `count` footnote labels 1, 2, ... skipping every label the manuscript already uses. */
+function freeNoteLabels(md: string, count: number): string[] {
+  const taken = new Set([...md.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!.toLowerCase()));
+  const out: string[] = [];
+  for (let n = 1; out.length < count; n++) if (!taken.has(String(n))) out.push(String(n));
+  return out;
+}
+
 function renderMarkdown(doc: OfflineDoc): string {
   const r = doc.rendered;
   if (!r) return doc.marked;
+  // In a note style every citation is a note, numbered in order around the
+  // author's own footnotes.
+  const labels = r.noteStyle ? freeNoteLabels(doc.marked, r.citations.length) : [];
   const body = doc.marked.replace(SENTINEL_RE, (_m, c?: string, n?: string, ref?: string) => {
     if (c !== undefined) {
       const i = Number(c);
       return cslHtmlToMarkdown(r.noteStyle ? (r.inline[i] ?? '') : (r.citations[i] ?? ''));
     }
-    if (n !== undefined) return `[^${Number(n) + 1}]`;
+    if (n !== undefined) return `[^${labels[Number(n)]}]`;
     return cslHtmlToMarkdown(r.bibliography[Number(ref)] ?? '');
   });
   if (!r.noteStyle) return body;
-  // In a note style every citation is a note, numbered in order.
-  const notes = r.citations.map((html, i) => `[^${i + 1}]: ${cslHtmlToMarkdown(capitalize(html))}`);
+  const notes = r.citations.map((html, i) => `[^${labels[i]}]: ${cslHtmlToMarkdown(capitalize(html))}`);
   return `${body.replace(/\s+$/, '')}\n\n${notes.join('\n\n')}\n`;
 }
 

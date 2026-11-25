@@ -88,6 +88,24 @@ test('Chicago notes: citations become footnotes and the list is a Bibliography',
   assert.doesNotMatch(md, /\[@/);
 });
 
+test('Chicago notes: citation notes never take a label the author\'s own footnotes use', async () => {
+  const manuscript = '# T\n\n## Intro\n\nA claim.[^1] Another [@zeta2020].\n\nA third [@alpha2019].[^2]\n\n[^1]: My own aside.\n\n[^2]: A second aside.\n';
+  const root = compiledPaper({ bib: BIB, compiled: manuscript, sections: [{ slug: 'intro', title: 'Intro', draft: 'x\n' }] });
+  const res = await exportDraft({ inputPath: join(root, '.paper', 'DRAFT.md'), format: 'md', paperRoot: root, pandocPresent: false, style: 'chicago-notes-bib' });
+  const md = readFileSync(res.outputPath, 'utf8');
+  const defined = [...md.matchAll(/^\[\^([^\]]+)\]:/gm)].map((m) => m[1]!);
+  assert.equal(new Set(defined).size, defined.length, `a footnote label is defined twice:\n${md}`);
+  const used = [...md.matchAll(/\[\^([^\]]+)\](?!:)/g)].map((m) => m[1]!);
+  assert.equal(new Set(used).size, used.length, `a footnote label is used twice:\n${md}`);
+  for (const label of used) assert.ok(defined.includes(label), `[^${label}] has no note:\n${md}`);
+  assert.equal(defined.length, 4, md);
+  assert.match(md, /^\[\^1\]: My own aside\.$/m, 'the author\'s note keeps its label and text');
+  assert.match(md, /^\[\^2\]: A second aside\.$/m);
+  const zeta = /Another\.\[\^([^\]]+)\]/.exec(md)?.[1];
+  assert.ok(zeta && zeta !== '1' && zeta !== '2', md);
+  assert.match(md, new RegExp(`^\\[\\^${zeta}\\]: Zed Zeta`, 'm'), md);
+});
+
 test('MLA: the list is Works Cited', async () => {
   const md = await exportMd('mla');
   assert.match(md, /^## Works Cited$/m, md);
