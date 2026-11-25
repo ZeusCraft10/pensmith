@@ -23,8 +23,10 @@ Windows. Every step must pass:
 5. `node scripts/plugin-smoke.mjs`, with the Claude Code CLI installed:
    `claude plugin validate plugin --strict`, `claude plugin validate . --strict`,
    a marketplace add + install into a throwaway `CLAUDE_CONFIG_DIR` that must
-   list 1 skill, 1 hook and no MCP servers, and `pensmith --version` run
-   installed, through a symlink and through `npm link`.
+   list 1 skill, 1 hook and no MCP servers, a second install of the same tree
+   through a git source with `core.autocrlf=true` that must keep every file
+   byte for byte, and `pensmith --version` run installed, through a symlink
+   and through `npm link`.
 6. The working tree is still clean afterwards.
 
 Run `npm run smoke:plugin` locally if you have `claude` on your `PATH`.

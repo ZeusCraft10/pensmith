@@ -44,6 +44,12 @@ test('CI installs the Claude Code CLI and runs the plugin smoke', () => {
   for (const needle of ['payloadTree(', 'checkoutTree(', "source: './plugin'", 'assertBuilt(']) {
     assert.ok(smoke.includes(needle), `plugin-smoke.mjs must use ${needle}`);
   }
+  // Claude Code installs the real entry with a git clone that follows the
+  // user's git config, so the smoke also installs through a git source with
+  // Windows' default core.autocrlf=true and compares every file.
+  for (const needle of ["source: 'url'", 'autocrlf = true', 'byte for byte']) {
+    assert.ok(smoke.includes(needle), `plugin-smoke.mjs must install through a git source (${needle})`);
+  }
   assert.ok(!/'marketplace', 'add', repoRoot/.test(smoke), 'adding the checkout itself would install the published release, not this build');
 });
 

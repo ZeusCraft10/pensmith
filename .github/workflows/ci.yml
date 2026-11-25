@@ -56,7 +56,8 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code@2.1.331
 
       # claude plugin validate (plugin and marketplace, --strict), an isolated
-      # marketplace add + install that must show 1 skill and 1 hook, and
+      # marketplace add + install that must show 1 skill and 1 hook, the same
+      # tree installed through a git source with core.autocrlf=true, and
       # `pensmith --version` installed and through a symlink.
       - name: Plugin validate + isolated install smoke
         run: node scripts/plugin-smoke.mjs

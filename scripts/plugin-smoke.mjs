@@ -13,17 +13,21 @@
 //      exactly 1 skill, 1 hook and no MCP servers
 //   4. run the installed `pensmith --version`, and on POSIX the checkout's
 //      plugin/bin/pensmith through a symlink, the way a PATH entry reaches it
-//   5. `npm link` the checkout into a throwaway prefix and run the linked bin
+//   5. commit that tree as the `release` branch of a throwaway repository and
+//      install it again through a git source, the way the real entry is
+//      installed, with core.autocrlf=true (the Windows default): every file
+//      must arrive byte for byte, and the installed `pensmith --version` run
+//   6. `npm link` the checkout into a throwaway prefix and run the linked bin
 //
 // The real marketplace installs the release branch from GitHub, which holds
 // the last published release; the local marketplace makes the install test
 // this build instead. Exits 1 on the first failed check.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertBuilt, checkoutTree, git, payloadTree } from './release-tree.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,6 +44,25 @@ function run(cmd, args, opts = {}) {
     ...opts,
   });
   return { status: res.status, out: `${res.stdout ?? ''}${res.stderr ?? ''}`, stdout: res.stdout ?? '', error: res.error };
+}
+
+/** Files under `dir`, as posix paths relative to it. */
+function filesUnder(dir, prefix = '') {
+  const out = [];
+  for (const entry of readdirSync(path.join(dir, prefix), { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) out.push(...filesUnder(dir, rel));
+    else out.push(rel);
+  }
+  return out;
+}
+
+/** Run the installed plugin's shim (pensmith.cmd on Windows) with --version. */
+function installedVersion(configDir) {
+  const installed = JSON.parse(readFileSync(path.join(configDir, 'plugins', 'installed_plugins.json'), 'utf8'));
+  const installPath = installed.plugins['pensmith@pensmith'][0].installPath;
+  const shim = path.join(installPath, 'bin', isWindows ? 'pensmith.cmd' : 'pensmith');
+  return { installPath, ...(isWindows ? run('cmd.exe', ['/d', '/c', shim, '--version']) : run(shim, ['--version'])) };
 }
 
 function check(label, ok, detail = '') {
@@ -102,11 +125,50 @@ try {
   check('exactly 1 hook (SessionStart)', /Hooks \(1\)\s+SessionStart/.test(details.out), details.out);
   check('no MCP servers', /MCP servers \(0\)/.test(details.out), details.out);
 
-  const installed = JSON.parse(readFileSync(path.join(env.CLAUDE_CONFIG_DIR, 'plugins', 'installed_plugins.json'), 'utf8'));
-  const installPath = installed.plugins['pensmith@pensmith'][0].installPath;
-  const shim = path.join(installPath, 'bin', isWindows ? 'pensmith.cmd' : 'pensmith');
-  const v = isWindows ? run('cmd.exe', ['/d', '/c', shim, '--version']) : run(shim, ['--version']);
+  const v = installedVersion(env.CLAUDE_CONFIG_DIR);
   check('installed pensmith --version', v.status === 0 && v.stdout.trim() === version, v.out);
+
+  // 5. The same tree through a git source. Claude Code clones a git source
+  // with the user's git config, as it does the real github entry, so set the
+  // Windows default core.autocrlf=true in a throwaway global config.
+  const commitEnv = {
+    ...process.env,
+    GIT_AUTHOR_NAME: 'pensmith smoke',
+    GIT_AUTHOR_EMAIL: 'smoke@example.invalid',
+    GIT_COMMITTER_NAME: 'pensmith smoke',
+    GIT_COMMITTER_EMAIL: 'smoke@example.invalid',
+  };
+  const commit = git([`--git-dir=${objects}`, 'commit-tree', tree, '-m', 'release smoke'], { env: commitEnv });
+  git([`--git-dir=${objects}`, 'update-ref', 'refs/heads/release', commit]);
+  const gitHome = path.join(sandbox, 'git-home');
+  mkdirSync(gitHome);
+  writeFileSync(path.join(gitHome, '.gitconfig'), '[core]\n\tautocrlf = true\n');
+  const gitEnv = {
+    ...env,
+    CLAUDE_CONFIG_DIR: path.join(sandbox, 'git-config'),
+    HOME: gitHome,
+    USERPROFILE: gitHome,
+    GIT_CONFIG_GLOBAL: path.join(gitHome, '.gitconfig'),
+  };
+  mkdirSync(gitEnv.CLAUDE_CONFIG_DIR);
+  const gitMarket = path.join(sandbox, 'git-marketplace');
+  mkdirSync(path.join(gitMarket, '.claude-plugin'), { recursive: true });
+  const gitManifest = { ...manifest, plugins: manifest.plugins.map((p) => ({ ...p, source: { source: 'url', url: pathToFileURL(objects).href, ref: 'release' } })) };
+  writeFileSync(path.join(gitMarket, '.claude-plugin', 'marketplace.json'), `${JSON.stringify(gitManifest, null, 2)}\n`);
+  const gitAdd = run('claude', ['plugin', 'marketplace', 'add', gitMarket], { cwd: sandbox, env: gitEnv });
+  check('claude plugin marketplace add <local marketplace with a git source>', gitAdd.status === 0, gitAdd.out);
+  const gitInstall = run('claude', ['plugin', 'install', 'pensmith@pensmith'], { cwd: sandbox, env: gitEnv });
+  check('claude plugin install pensmith@pensmith from the git source (core.autocrlf=true)', gitInstall.status === 0, gitInstall.out);
+  const cloned = installedVersion(gitEnv.CLAUDE_CONFIG_DIR);
+  const changed = filesUnder(releaseDir).filter((f) => {
+    try {
+      return !readFileSync(path.join(cloned.installPath, f)).equals(readFileSync(path.join(releaseDir, f)));
+    } catch {
+      return true;
+    }
+  });
+  check('the git-installed plugin has every file byte for byte', changed.length === 0, `changed or missing: ${changed.join(', ')}`);
+  check('git-installed pensmith --version', cloned.status === 0 && cloned.stdout.trim() === version, cloned.out);
 } finally {
   rmSync(sandbox, { recursive: true, force: true });
 }
@@ -121,7 +183,7 @@ if (!isWindows) {
   rmSync(linkDir, { recursive: true, force: true });
 }
 
-// 5. `npm link` from the checkout into a throwaway prefix, then run the linked bin.
+// 6. `npm link` from the checkout into a throwaway prefix, then run the linked bin.
 {
   const prefix = mkdtempSync(path.join(tmpdir(), 'pensmith-npm-prefix-'));
   const npmEnv = { ...process.env, npm_config_prefix: prefix };

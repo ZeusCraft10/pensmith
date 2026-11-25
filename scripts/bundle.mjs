@@ -14,13 +14,10 @@ import { build } from 'esbuild';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ASSET_DIRS, ASSET_FILES } from './release-tree.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(repoRoot, 'plugin');
-
-// Asset trees copied verbatim into the payload (source dir → payload dir).
-const ASSET_DIRS = ['templates', 'references'];
-const ASSET_FILES = ['LICENSE'];
 
 // ESM output has no require/__dirname/__filename. Bundled CommonJS packages
 // still reference them, so give the bundle real ones under private names and
