@@ -13,9 +13,9 @@
 // writeBibtex (the two chokepoints it must route through). existsSync alone is
 // insufficient. Until 08-06 wires it, every test SKIPS so `npm test` stays GREEN.
 //
-// Offline: PENSMITH_NETWORK_TESTS is NOT set, so isOfflineMode() is true and the
-// crossref adapter serves the committed tests/fixtures/cassettes/crossref/
-// add-doi.json cassette. The DOI under test is 10.1038/nphys1170.
+// Cassette mode (PENSMITH_TEST_CASSETTES=1): http.ts answers the crossref lookup
+// from the committed tests/fixtures/cassettes/crossref/add-doi.json cassette.
+// The DOI under test is 10.1038/nphys1170.
 //
 // TYPECHECK NOTE: the not-yet-built verb is imported via a runtime URL.href
 // specifier so `tsc --noEmit` stays clean while the module is absent.
@@ -54,7 +54,7 @@ interface AddMod {
 async function mkProjectWithSection(): Promise<{ root: string; planPath: string; n: number; slug: string }> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-add-'));
   process.env.PENSMITH_NO_LLM = '1';
-  delete process.env.PENSMITH_NETWORK_TESTS; // ensure offline cassette mode
+  process.env.PENSMITH_TEST_CASSETTES = '1'; // replay committed cassettes, never live
 
   const { initState, initSection } = await import('../bin/lib/state.js');
   const { sectionPlan } = await import('../bin/lib/paths.js');

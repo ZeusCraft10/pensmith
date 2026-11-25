@@ -107,6 +107,7 @@ async function withFreshState<T>(
   const savedAnthropicKey = process.env['ANTHROPIC_API_KEY'];
   const savedOpenaiKey = process.env['OPENAI_API_KEY'];
   const savedEmail = process.env['PENSMITH_CONTACT_EMAIL'];
+  const savedCassettes = process.env['PENSMITH_TEST_CASSETTES'];
 
   // Save cwd and dispatcher
   const origCwd = process.cwd();
@@ -117,6 +118,10 @@ async function withFreshState<T>(
   process.env['XDG_DATA_HOME'] = tmpRoot;
   process.env['HOME'] = tmpRoot;
   process.env['PENSMITH_CONTACT_EMAIL'] = 'test@example.org';
+  // These in-process tests drive http.ts's live transport against the MockAgent
+  // below (net connect disabled), so they run in live mode, not cassette replay.
+  // The spawned-CLI tests further down keep the runner's cassette mode.
+  delete process.env['PENSMITH_TEST_CASSETTES'];
 
   // Apply extra env overrides (undefined = delete)
   for (const [k, v] of Object.entries(extraEnv)) {
@@ -157,6 +162,8 @@ async function withFreshState<T>(
     else process.env['OPENAI_API_KEY'] = savedOpenaiKey;
     if (savedEmail === undefined) delete process.env['PENSMITH_CONTACT_EMAIL'];
     else process.env['PENSMITH_CONTACT_EMAIL'] = savedEmail;
+    if (savedCassettes === undefined) delete process.env['PENSMITH_TEST_CASSETTES'];
+    else process.env['PENSMITH_TEST_CASSETTES'] = savedCassettes;
 
     await fsp.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
   }

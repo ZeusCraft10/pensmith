@@ -6,8 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readdirSync } from 'node:fs';
 
 const ADAPTER = 'retraction-watch';
 const adapterPath = new URL(`../../bin/lib/sources/${ADAPTER}.ts`, import.meta.url);
@@ -80,17 +79,16 @@ test(`${ADAPTER} CR-02: fetchById for a DOI with no cassette entry returns null 
 });
 
 // ---------------------------------------------------------------------------
-// CR-02 (belt): verify that the empty-array guard is in the retraction-watch source.
-// This structural assertion documents the fix location so a future refactor that
-// removes the guard will fail this test loudly rather than silently re-introducing
-// the empty-dir bypass.
+// CR-02 (belt): cassette replay moved out of the adapter into http.ts, so the
+// old source-grep for the adapter's empty-array guard no longer has anything to
+// pin. The invariant it protected — "no recording never reads as
+// un-retracted-and-verified" — now lives in replayCassette: an unrecorded
+// lookup is a miss (thrown), which the adapter turns into null.
 // ---------------------------------------------------------------------------
-test(`${ADAPTER} CR-02: source code contains the empty-cassette array guard (cassettes.length === 0)`, () => {
-  const adapterTsPath = fileURLToPath(new URL(`../../bin/lib/sources/${ADAPTER}.ts`, import.meta.url));
-  assert.ok(existsSync(adapterTsPath), `bin/lib/sources/${ADAPTER}.ts must exist`);
-  const src = readFileSync(adapterTsPath, 'utf8');
-  assert.ok(
-    /cassettes\.length\s*===\s*0/.test(src),
-    'CR-02: retraction-watch.ts must contain the empty-cassette guard (cassettes.length === 0) to prevent silent GATE-03 bypass',
+test(`${ADAPTER} CR-02: an unrecorded retraction lookup is a cassette miss, never an empty pass`, async () => {
+  const { replayCassette } = await import('../../bin/lib/http-mock.js');
+  assert.throws(
+    () => replayCassette('GET', 'https://api.labs.crossref.org/data/retractions?filter=record:10.0000%2Fno-cassette-cr02'),
+    /no cassette recorded/,
   );
 });

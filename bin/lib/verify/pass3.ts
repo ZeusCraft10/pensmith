@@ -27,6 +27,7 @@ import { nfkcNormalize } from '../normalize.js';
 import { extractPdfText } from '../pdf-text.js';
 import { sources } from '../sources/index.js';
 import { fetch as httpFetch } from '../http.js';
+import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
 import { extractQuotes } from '../quote-extractor.js';
 
 export type Pass3Verdict = 'OK' | 'NOT_FOUND' | 'PDF_UNAVAILABLE' | 'TEXT_UNAVAILABLE';
@@ -48,8 +49,7 @@ interface BibLike {
  * Run Pass-3 against every quote in `draftMd`, looking up source PDFs via
  * the bib map.
  *
- * Pure deterministic except for the HTTP fetches (cassette-served in offline
- * test mode via http-mock.ts).
+ * Pure deterministic except for the HTTP fetches.
  */
 export async function runPass3(
   draftMd: string,
@@ -67,6 +67,16 @@ export async function runPass3(
         citekey: q.citekey, quoteSnippet: snippet,
         verdict: 'PDF_UNAVAILABLE', levRatio: 0,
         reason: 'No DOI for citekey — cannot fetch OA PDF',
+      });
+      continue;
+    }
+
+    // Offline: no source text can be fetched, so the quote is unchecked.
+    if (isOfflineMode()) {
+      results.push({
+        citekey: q.citekey, quoteSnippet: snippet,
+        verdict: 'PDF_UNAVAILABLE', levRatio: 0,
+        reason: `${OFFLINE_SKIP_NOTE}: source text not fetched — re-run verify with network access`,
       });
       continue;
     }

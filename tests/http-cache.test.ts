@@ -29,6 +29,11 @@ import {
 import { pensmithHttpCacheDir } from '../bin/lib/paths.js';
 import { atomicWriteFile } from '../bin/lib/atomic-write.js';
 
+// These tests drive http.ts's live transport against an undici MockAgent with
+// net connect disabled, so they run in live mode, not cassette replay (each
+// test file runs in its own process, so this does not leak).
+delete process.env['PENSMITH_TEST_CASSETTES'];
+
 interface Cassette {
   request: { method: string; url: string };
   responses: Array<{

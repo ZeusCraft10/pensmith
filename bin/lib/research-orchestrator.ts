@@ -34,6 +34,7 @@ import { assignUniqueCitekeys } from './bibtex-write.js';
 import { complete } from './anthropic.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
 import { escapeTemplateTokens } from './intake-parse.js';
+import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
 
 // ---------------------------------------------------------------------------
 // Injectable adapter registry seam (mirrors zotero-mcp.ts setZoteroClientForTest).
@@ -349,6 +350,12 @@ export async function runResearchOrchestrator(
     // When called from tests without explicit queries, derive a default query
     // from the topic string (the topic-disambiguator step belongs to research.ts).
     queries = [topic];
+  }
+
+  // Offline: no adapter may be queried. Say so instead of reporting "0 found".
+  if (isOfflineMode()) {
+    process.stderr.write(`pensmith research: source discovery ${OFFLINE_SKIP_NOTE} — no registry was queried.\n`);
+    return [];
   }
 
   // Short-circuit: test-only forced candidates (zero-candidate path simulation).

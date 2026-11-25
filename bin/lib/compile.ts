@@ -296,7 +296,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
       // Refuse-gate (COMP-01 / GATE-02): any failing verdict blocks.
       for (const ck of parseVerdictRows(verificationMd)) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): citation [@${ck}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`);
+        refuseReasons.push(`section ${os.n} (${os.slug}): citation [@${ck}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND/UNRESOLVED)`);
       }
 
       // Staleness (COMP-01 / D-08): recompute the per-section hash.

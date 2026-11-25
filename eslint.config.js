@@ -26,6 +26,13 @@
 
 import tseslint from 'typescript-eslint';
 
+// bin/lib/http-mock.ts reads tests/fixtures. Production code must never import
+// it; bin/lib/http.ts loads it lazily, and only under PENSMITH_TEST_CASSETTES=1.
+const HTTP_MOCK_PATTERN = {
+  group: ['**/http-mock', '**/http-mock.js', '**/http-mock.ts'],
+  message: 'http-mock is test-only (cassette replay). Production code must not import it; http.ts loads it lazily in test runs.',
+};
+
 export default [
   ...tseslint.configs.recommended,
 
@@ -100,6 +107,36 @@ export default [
     },
   },
 
+  // === Test-fixture isolation for production code ===
+  // Same restricted paths as above, plus the cassette module.
+  {
+    files: ['bin/**/*.ts', 'mcp/**/*.ts', 'hooks/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: 'undici',     message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'http',       message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'node:http',  message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'https',      message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'node:https', message: 'Import HTTP only via bin/lib/http.ts' },
+          {
+            name: 'pdf-parse',
+            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts (D-06, T-3-11 chokepoint). All PDF text extraction routes through that single wrapper.',
+          },
+          {
+            name: 'pdf-parse/lib/pdf-parse.js',
+            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts (D-06 ENOENT workaround). Other code MUST go through bin/lib/pdf-text.ts.',
+          },
+          {
+            name: 'citation-js',
+            message: 'citation-js must only be imported from bin/lib/citations.ts (D-19 chokepoint). All BibTeX parsing and APA rendering routes through that single wrapper.',
+          },
+        ],
+        patterns: [HTTP_MOCK_PATTERN],
+      }],
+    },
+  },
+
   // === HTTP chokepoint EXEMPTION for bin/lib/http.ts (lands Phase 1) ===
   {
     files: ['bin/lib/http.ts'],
@@ -126,6 +163,7 @@ export default [
           },
           // pdf-parse is ALLOWED in this file only (exempted by omission from the list).
         ],
+        patterns: [HTTP_MOCK_PATTERN],
       }],
     },
   },
@@ -154,6 +192,7 @@ export default [
           },
           // citation-js is ALLOWED in this file only (exempted by omission from the list).
         ],
+        patterns: [HTTP_MOCK_PATTERN],
       }],
     },
   },
@@ -192,6 +231,9 @@ export default [
       // audit #29: must import undici MockAgent to reply with binary bytes and
       // assert http.ts exposes byte-faithful bodyBytes (no other way to test it).
       'tests/http-binary-body.test.ts',
+      // Counts requests with a MockAgent to prove offline and cassette modes
+      // never reach the network and live mode does.
+      'tests/network-mode.test.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

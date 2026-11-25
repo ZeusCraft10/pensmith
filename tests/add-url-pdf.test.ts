@@ -3,9 +3,8 @@
 // #12: a URL ending in .pdf matched the local-PDF branch and crashed
 //      fs.readFile(path.resolve(url)) with an unhandled ENOENT — URL-PDF
 //      ingestion was dead. URLs now route to the URL branch BEFORE the local one.
-// #11: the URL branch's httpFetch(source:'generic') is not cassette-backed, so
-//      `--dry-run`/offline `add <url>` made a live network call. It is now refused
-//      in offline mode (zero external calls).
+// #11: `--dry-run`/offline `add <url>` used to make a live network call. It is
+//      now refused in offline mode (zero external calls).
 // #30: a missing/unreadable local .pdf dumped a raw ENOENT stack trace; it now
 //      yields a friendly diagnostic.
 
@@ -27,7 +26,7 @@ interface RunResult { status: number | null; stdout: string; stderr: string }
 function runCli(args: string[], cwd: string): RunResult {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  env['PENSMITH_NETWORK_TESTS'] = ''; // force offline (isOfflineMode: !== '1')
+  env['PENSMITH_OFFLINE'] = '1'; // offline: every request refused
   env['PENSMITH_NO_LLM'] = '1';
   const r = spawnSync(
     process.execPath,

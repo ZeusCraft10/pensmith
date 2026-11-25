@@ -28,7 +28,7 @@ import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pa
 import { runPass3 } from '../lib/verify/pass3.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
-import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
+import { scoreHonesty, renderHonestyReport, renderHonestySkipped } from '../lib/honesty.js';
 import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
 import { paperDir } from '../lib/paths.js';
 import { parseIntakeMd } from '../lib/intake-parse.js';
@@ -269,7 +269,7 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
     // Blocking verdicts — same parser + blocking set compile uses.
     for (const ck of parseVerdictRows(md)) {
       reasons.push(
-        `section ${name}: citation [@${ck}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`,
+        `section ${name}: citation [@${ck}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND/UNRESOLVED)`,
       );
     }
   }
@@ -634,7 +634,7 @@ export const doneCommand = defineCommand({
     // skip banner, NEVER a fabricated percent (T-06-05-05).
     const honestyReport =
       before === null
-        ? 'Pensmith honesty check: skipped (no GPTZero API key set or backend unavailable).'
+        ? renderHonestySkipped()
         : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
 
     // GATE-04: re-verify humanized FINAL.md before export (HARD block, BEFORE runDoneGate).

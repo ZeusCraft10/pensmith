@@ -28,6 +28,11 @@ import {
   _resetBucketsForTest,
 } from '../bin/lib/http.js';
 
+// These tests drive http.ts's live transport against an undici MockAgent with
+// net connect disabled, so they run in live mode, not cassette replay (each
+// test file runs in its own process, so this does not leak).
+delete process.env['PENSMITH_TEST_CASSETTES'];
+
 // ------------------------------------------------------------------
 // Cassette helper (subset — same shape as tests/http.test.ts)
 // ------------------------------------------------------------------

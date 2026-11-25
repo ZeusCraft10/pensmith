@@ -3,7 +3,7 @@
 // THIN ORCHESTRATOR (compile.ts shape): ingest ONE new source mid-paper and
 // optionally remap it onto sections. No business logic lives here beyond
 // input-type detection + composing the existing chokepoints:
-//   - DOI  → crossrefFetchById(normalizeDoi(source))   (offline cassette-backed)
+//   - DOI  → crossrefFetchById(normalizeDoi(source))
 //   - PDF  → readFile → extractPdfText (pdf-parse → pymupdf fallback, 08-03) →
 //            title heuristic → crossrefSearch(title, {limit:1})
 //   - URL  → httpFetch (D-06 chokepoint, NEVER raw fetch) → sniff Content-Type:
@@ -42,7 +42,7 @@ import { paperDir, sectionPlan } from '../lib/paths.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { loadState } from '../lib/state.js';
 import { fetch as httpFetch } from '../lib/http.js';
-import { isOfflineMode } from '../lib/http-mock.js';
+import { isOfflineMode } from '../lib/network-mode.js';
 
 /** True for an http(s) URL — used to route URL ingestion away from the local-PDF
  *  branch (audit #12: a URL ending in .pdf must NOT be read as a local file). */
@@ -63,6 +63,14 @@ function extractTitleHeuristic(text: string): string | undefined {
   }
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length >= 8 ? flat.slice(0, 200) : undefined;
+}
+
+/** Refusal for a path that needs the network while offline / --dry-run. */
+function reportOffline(what: string): void {
+  process.stderr.write(
+    `pensmith add: ${what} requires network access and is disabled in ` +
+    `offline / --dry-run mode. Source NOT added.\n`,
+  );
 }
 
 /** Scrape a DOI out of an HTML body's citation <meta> tags (best-effort). */
@@ -195,6 +203,10 @@ export const addCommand = defineCommand({
 
     if (isDoi(source)) {
       const norm = normalizeDoi(source);
+      if (isOfflineMode()) {
+        reportOffline('DOI lookup');
+        return { ok: false };
+      }
       candidate = norm ? await crossrefFetchById(norm) : null;
     } else if (isHttpUrl(source)) {
       // URL path — checked BEFORE the local-PDF branch (audit #12: a URL ending
@@ -203,12 +215,7 @@ export const addCommand = defineCommand({
       // (T-08-04-02): the hostname is DNS-resolved and RFC1918/loopback/link-local
       // addresses are blocked before the socket connects (source:'generic').
       if (isOfflineMode()) {
-        // audit #11: --dry-run / offline mode must make ZERO external calls. URL
-        // ingestion is the one add path with no cassette, so refuse it here.
-        process.stderr.write(
-          `pensmith add: URL ingestion requires network access and is disabled in ` +
-          `offline / --dry-run mode. Source NOT added.\n`,
-        );
+        reportOffline('URL ingestion');
         candidate = null;
       } else {
         try {
@@ -241,6 +248,10 @@ export const addCommand = defineCommand({
         const buf = await fs.promises.readFile(path.resolve(source));
         const text = await extractPdfText(buf); // pdf-parse → pymupdf fallback (08-03)
         const title = extractTitleHeuristic(text);
+        if (title && isOfflineMode()) {
+          reportOffline('looking up the PDF by title');
+          return { ok: false };
+        }
         if (title) {
           const hits = await crossrefSearch(title, { limit: 1 });
           candidate = hits[0] ?? null;

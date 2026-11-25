@@ -10,8 +10,9 @@
 // change will break the round-trip test (tests/verdict-rows.test.ts) rather
 // than silently nulling the blocking set.
 
-/** Verdicts that block compile (mirrors REFUSING_VERDICTS in compile.ts:62). */
-const BLOCKING_VERDICTS = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND']);
+/** Verdicts that block compile and export. UNRESOLVED means the registry was
+ *  not consulted (offline) — an unchecked citation never passes. */
+const BLOCKING_VERDICTS = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNRESOLVED']);
 
 /**
  * Render a Pass-1 verdict row (writer side — verify.ts).
@@ -58,7 +59,7 @@ export function renderPass3VerdictRow(
  * the Source Freshness table (RSCH-10) does NOT pollute the blocking set (Pitfall 2).
  *
  * Returns only citekeys whose verdict is in BLOCKING_VERDICTS (FABRICATED / MIS-CITED /
- * NOT_FOUND). Safe to call on any string, including ''.
+ * NOT_FOUND / UNRESOLVED). Safe to call on any string, including ''.
  */
 export function parseVerdictRows(verificationMd: string): string[] {
   const out: string[] = [];

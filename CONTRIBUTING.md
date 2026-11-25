@@ -141,12 +141,26 @@ The fixes that ARE acceptable, in order of preference:
 3. Mark the test as known-failing with a tracking issue and a deadline.
    Acceptable only with maintainer sign-off; not the right path 95% of the time.
 
+## Network modes
+
+Pensmith talks to the real registries by default. Two switches change that:
+
+| Mode | How it is set | What `bin/lib/http.ts` does |
+|---|---|---|
+| live | nothing set (every user) | real requests; honours `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` |
+| offline | `--offline`, `--dry-run`, or `PENSMITH_OFFLINE=1` | refuses every request; lookups report "skipped (offline)" and citations `UNRESOLVED` |
+| cassette | `PENSMITH_TEST_CASSETTES=1`, set by `scripts/run-tests.mjs` | answers from `tests/fixtures/cassettes/`, matched by request; an unrecorded request fails, it never borrows another record |
+
+`npm test` always runs in cassette mode, so a test that needs a registry
+response needs a recording of that exact request. `PENSMITH_NETWORK_TESTS=1`
+opts the runner out of cassettes for a live lane.
+
 ## Cassette Refresh Workflow
 
-PR-time CI (`.github/workflows/ci.yml`) is OFFLINE — it runs against recorded
-HTTP cassettes under `tests/fixtures/cassettes/` for the Crossref, OpenAlex,
-and Unpaywall adapters. This keeps PR builds fast (no live network) and
-hermetic (no flaky external dependencies blocking contributor PRs).
+PR-time CI (`.github/workflows/ci.yml`) runs in cassette mode against recorded
+HTTP cassettes under `tests/fixtures/cassettes/`. This keeps PR builds fast
+(no live network) and hermetic (no flaky external dependencies blocking
+contributor PRs).
 
 A separate workflow (`.github/workflows/cassette-refresh.yml`) re-records
 those cassettes against the live registrars on a weekly schedule and opens a
@@ -206,7 +220,9 @@ recording (drop irrelevant fields) rather than raising the cap.
 ### Sensitive-header scan (T-3-02 / T-01-07)
 
 The `cassette-no-leak` test scans every committed cassette for
-`Authorization`, `Cookie`, `Set-Cookie`, and `X-Api-Key` headers. The
+`Authorization`, `Cookie`, `Set-Cookie`, and `X-Api-Key` headers, and for
+contact addresses or keys in recorded query strings (`mailto=`, `email=`,
+`api_key=`). The recorder strips those parameters before writing. The
 refresh workflow must NEVER commit a cassette that carries one. If the
 refresh PR diff shows any such header, abort the merge and fix the
 recorder before re-running.

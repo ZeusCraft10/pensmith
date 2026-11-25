@@ -72,7 +72,7 @@ writeFileSync(ASSIGNMENT, [
 const childEnv = {
   ...process.env,
   PENSMITH_NO_LLM: '1',           // LLM calls -> offline placeholder (zero egress)
-  PENSMITH_NETWORK_TESTS: '',     // source adapters -> cassettes (offline)
+  PENSMITH_TEST_CASSETTES: '1',   // HTTP answered from committed cassettes (zero egress)
   PENSMITH_DRY_RUN: '1',          // advisory marker
   LOCALAPPDATA: DATA,             // Windows data root -> isolated temp
   XDG_DATA_HOME: DATA,            // POSIX data root  -> isolated temp

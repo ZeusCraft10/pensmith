@@ -13,7 +13,6 @@
 // already enforces per-source.
 
 import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteFile } from '../http-mock.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -144,17 +143,6 @@ export async function search(
   opts: { limit?: number } = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('arxiv', 'query-attention');
-    if (!cassette) return [];
-    const searchEntry = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('search_query='),
-    );
-    if (!searchEntry) return [];
-    const body = String(searchEntry.response ?? '');
-    return parseFeed(body);
-  }
-
   const url = `${BASE}/api/query?search_query=${encodeURIComponent(query)}&max_results=${limit}`;
   try {
     const res = await httpFetch(url, { source: 'arxiv' });
@@ -167,28 +155,6 @@ export async function search(
 }
 
 export async function fetchById(id: string): Promise<SourceCandidate | null> {
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('arxiv', 'query-attention');
-    if (!cassette) return null;
-    // Direct match on id_list=<id>
-    const direct = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes(`id_list=${id}`),
-    );
-    if (direct) {
-      const body = String(direct.response ?? '');
-      const results = parseFeed(body);
-      return results[0] ?? null;
-    }
-    // Fallback: first entry from the search cassette.
-    const searchEntry = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('search_query='),
-    );
-    if (!searchEntry) return null;
-    const body = String(searchEntry.response ?? '');
-    const results = parseFeed(body);
-    return results[0] ?? null;
-  }
-
   const url = `${BASE}/api/query?id_list=${encodeURIComponent(id)}`;
   try {
     const res = await httpFetch(url, { source: 'arxiv' });

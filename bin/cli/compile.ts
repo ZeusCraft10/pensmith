@@ -31,8 +31,8 @@ import { sectionDraft, paperDir } from '../lib/paths.js';
 /**
  * Production staleness re-verify seam (D-08 — Pass 1 + Pass 3 ONLY). Runs the
  * deterministic verifiers for the stale section and reports whether any blocking
- * verdict surfaced. NEVER wires Pass 2/4 (advisory, Phase 5). Reuses the same
- * cassette-backed paths as `pensmith verify` in offline CI.
+ * verdict surfaced. NEVER wires Pass 2/4 (advisory, Phase 5). Uses the same
+ * Pass 1 / Pass 3 functions as `pensmith verify`.
  */
 async function productionReVerify(paperRoot: string, input: ReVerifyInput): Promise<ReVerifyResult> {
   const draftPath = sectionDraft(input.n, input.slug, paperRoot);

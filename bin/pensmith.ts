@@ -198,7 +198,8 @@ export const command = defineCommand({
   // Four global flags declared so `--help` documents them; the LOAD-BEARING
   // application is the argv pre-parse below (NOT a root run() — H2).
   args: {
-    'dry-run': { type: 'boolean', description: 'Zero external API calls; use cassette fixtures + offline LLM placeholder.', default: false },
+    'dry-run': { type: 'boolean', description: 'No network requests (implies --offline) and the placeholder LLM path.', default: false },
+    offline: { type: 'boolean', description: 'Refuse every network request; lookups report "skipped (offline)" and citations UNRESOLVED.', default: false },
     estimate: { type: 'boolean', description: 'Project token + USD cost; do not execute.', default: false },
     yolo: { type: 'boolean', description: 'Skip outline + export approval gates.', default: false },
     'show-prompts': { type: 'boolean', description: 'Echo every LLM prompt to stderr.', default: false },
@@ -290,10 +291,14 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   // (a) --show-prompts → mirror prompts to stderr (BEFORE any LLM call).
   if (hasFlag(argv, 'show-prompts')) setMirrorPromptsToStderr(true);
 
-  // (b) --dry-run → gate BOTH egress channels via env the existing code honors.
+  // (b) --offline / --dry-run → http.ts refuses every request (network-mode.ts).
+  //     --dry-run also keeps the LLM call sites on their placeholder path so a
+  //     dry run needs no key.
+  if (hasFlag(argv, 'offline') || hasFlag(argv, 'dry-run')) {
+    process.env['PENSMITH_OFFLINE'] = '1';
+  }
   if (hasFlag(argv, 'dry-run')) {
-    process.env['PENSMITH_NETWORK_TESTS'] = ''; // source adapters → cassettes (isOfflineMode()===true)
-    process.env['PENSMITH_NO_LLM'] = '1'; // LLM call sites (pass2/pass4) → offline placeholder, ZERO egress
+    process.env['PENSMITH_NO_LLM'] = '1';
     process.env['PENSMITH_DRY_RUN'] = '1'; // advisory marker only — NOT itself a gate
   }
 

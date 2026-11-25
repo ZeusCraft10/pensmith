@@ -115,17 +115,22 @@ function manySections(count: number): Array<{ n: number; slug: string }> {
 }
 
 // ===========================================================================
-// Un-skipped: isOfflineMode() is the adapter offline gate --dry-run rides for
-// SOURCE adapters. PR-time CI never sets PENSMITH_NETWORK_TESTS, so it is true.
+// isOfflineMode() is the egress gate --dry-run / --offline set through
+// PENSMITH_OFFLINE. It is false by default: production is live. (This test
+// used to pin "offline unless PENSMITH_NETWORK_TESTS=1", which made every real
+// user run on test cassettes.)
 // ===========================================================================
-test('ERGO-01: isOfflineMode() is true when PENSMITH_NETWORK_TESTS !== "1"', async () => {
-  const prev = process.env['PENSMITH_NETWORK_TESTS'];
-  delete process.env['PENSMITH_NETWORK_TESTS'];
+test('ERGO-01: isOfflineMode() is false by default and true only under PENSMITH_OFFLINE=1', async () => {
+  const prev = process.env['PENSMITH_OFFLINE'];
+  const mod = await import('../bin/lib/network-mode.js');
   try {
-    const mod = (await import('../bin/lib/http-mock.js')) as { isOfflineMode: () => boolean };
-    assert.equal(mod.isOfflineMode(), true, 'ERGO-01: offline-by-default adapter gate');
+    delete process.env['PENSMITH_OFFLINE'];
+    assert.equal(mod.isOfflineMode(), false, 'ERGO-01: live by default');
+    process.env['PENSMITH_OFFLINE'] = '1';
+    assert.equal(mod.isOfflineMode(), true, 'ERGO-01: --dry-run / --offline gate');
   } finally {
-    if (prev !== undefined) process.env['PENSMITH_NETWORK_TESTS'] = prev;
+    if (prev === undefined) delete process.env['PENSMITH_OFFLINE'];
+    else process.env['PENSMITH_OFFLINE'] = prev;
   }
 });
 
@@ -379,8 +384,9 @@ test('H3 / C2-H3: `verify <N> --dry-run` with a fake key makes ZERO network call
     const res = runCli(['verify', '1', '--slug', 'intro', '--dry-run'], root, {
       // A FAKE key present — this is the path that WOULD egress absent the guard.
       ANTHROPIC_API_KEY: 'sk-fake-test-key',
-      // Force adapters offline (defense-in-depth): never set network tests.
-      PENSMITH_NETWORK_TESTS: undefined,
+      // Defense-in-depth: replay cassettes rather than go live if the dry-run
+      // gate ever regressed.
+      PENSMITH_TEST_CASSETTES: '1',
     });
     // Non-vacuous: the verify LLM-calling path ran with a key present, yet
     // --dry-run (which sets PENSMITH_NO_LLM) must keep pass2/pass4 on the

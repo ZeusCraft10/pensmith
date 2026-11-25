@@ -58,6 +58,7 @@ import { fileURLToPath } from 'node:url';
 import { pensmithHttpCacheDir } from './paths.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { retry, parseRetryAfter } from './retry.js';
+import { isOfflineMode, isCassetteMode, OfflineEgressError } from './network-mode.js';
 
 // ============================================================
 //   Proxy-aware dispatcher
@@ -97,7 +98,6 @@ function dispatcherForRequest(): Dispatcher {
   }
   return proxyAgent.agent;
 }
-
 
 // ============================================================
 //   SSRF guard — HARD-02 (T-15-02)
@@ -688,6 +688,14 @@ const RETRYABLE_ERR_CODES: ReadonlySet<string> = new Set([
  */
 export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpResponse> {
   const method: 'GET' | 'POST' | 'HEAD' = opts.method ?? 'GET';
+
+  // --- 0. Network mode ---
+  // Offline refuses before the cache, DNS or a socket: nothing leaves the
+  // machine, and nothing cached is served as if it had just been checked.
+  if (isOfflineMode()) throw new OfflineEgressError(url);
+  // Test runs answer from committed cassettes and never touch the network.
+  if (isCassetteMode()) return replayFromCassette(method, url);
+
   const headers: Record<string, string> = {
     'user-agent': userAgent(),
     accept: 'application/json',
@@ -707,8 +715,8 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   // --- 2. Single dispatch helper (excluding bucket / retry) ---
   // HARD-02: for untrusted (source==='generic') URLs, run the SSRF pre-flight
   // guard before connecting. Trusted hardcoded API hosts (crossref/openalex/
-  // arxiv/pubmed/s2/unpaywall/retraction-watch/gptzero/ddg) bypass the guard
-  // so offline cassette tests and internal calls are unaffected.
+  // arxiv/pubmed/s2/unpaywall/retraction-watch/gptzero/ddg) skip the DNS
+  // pre-flight because their URLs are built from constants, not user input.
   //
   // IN-02: an explicit `untrusted: false` in opts overrides the source==='generic'
   // default. This lets callers that use source='generic' for rate-bucket purposes
@@ -812,6 +820,25 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     });
   }
   return response;
+}
+
+/**
+ * Answer a request from the committed test cassettes (PENSMITH_TEST_CASSETTES=1
+ * only). The module is loaded lazily so a production run never reads
+ * tests/fixtures. A request with no recording rejects with CassetteMissError,
+ * which adapters treat like any transport failure (null / no results).
+ */
+async function replayFromCassette(method: string, url: string): Promise<HttpResponse> {
+  const { replayCassette } = await import('./http-mock.js');
+  const r = replayCassette(method, url);
+  const body = method === 'HEAD' ? '' : r.body;
+  return {
+    status: r.status,
+    headers: r.headers,
+    body,
+    bodyBytes: Buffer.from(body, 'utf8'),
+    cached: false,
+  };
 }
 
 // ============================================================

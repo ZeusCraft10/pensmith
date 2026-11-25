@@ -6,7 +6,8 @@
 // lands honesty.ts and these turn GREEN.
 //
 // Covers:
-//   - DONE-04: GPTZero score via offline cassette; absent GPTZERO_API_KEY → null.
+//   - DONE-04: GPTZero score through the real consented POST, answered from the
+//     committed cassette in test runs; absent GPTZERO_API_KEY → null.
 //   - DONE-04: the rendered honest-framing NOTE is read VERBATIM from the locked
 //     references/honesty-framing.md (proving the copy is rendered from the locked
 //     file, not inlined). This is the core-non-negotiable guard.
@@ -94,23 +95,31 @@ test('honesty: absent GPTZERO_API_KEY → scoreHonesty returns null (skip-clean)
   },
 );
 
-test('honesty: scoreHonesty (offline cassette + key) → { aiProbability:0.82, classification:AI_ONLY, backend:gptzero } (DONE-04)',
+// This used to read the cassette directly with no consent and no request, which
+// is how production showed a canned 82% to every user. The score now comes only
+// from the consented POST through http.ts; the test runner answers that POST
+// from the committed cassette.
+test('honesty: consented GPTZero POST (cassette-answered) → { aiProbability:0.82, classification:AI_ONLY, backend:gptzero } (DONE-04)',
   { skip: !existsSync(honestySrcPath) },
   async () => {
     const mod = await import(honestyModUrl.href) as {
-      scoreHonesty: (t: string) => Promise<{ aiProbability: number; classification: string; backend: string } | null>;
+      scoreHonestyWithOptions: (t: string, o?: { consentGranted?: boolean }) => Promise<{ aiProbability: number; classification: string; backend: string } | null>;
     };
     const saved = process.env['GPTZERO_API_KEY'];
+    const savedMode = process.env['PENSMITH_TEST_CASSETTES'];
     process.env['GPTZERO_API_KEY'] = 'test-key-offline';
+    process.env['PENSMITH_TEST_CASSETTES'] = '1';
     try {
-      const result = await mod.scoreHonesty('some text');
-      assert.ok(result, 'offline cassette must yield a score');
+      const result = await mod.scoreHonestyWithOptions('some text', { consentGranted: true });
+      assert.ok(result, 'the cassette-answered POST must yield a score');
       assert.equal(result!.aiProbability, 0.82);
       assert.equal(result!.classification, 'AI_ONLY');
       assert.equal(result!.backend, 'gptzero');
     } finally {
       if (saved === undefined) delete process.env['GPTZERO_API_KEY'];
       else process.env['GPTZERO_API_KEY'] = saved;
+      if (savedMode === undefined) delete process.env['PENSMITH_TEST_CASSETTES'];
+      else process.env['PENSMITH_TEST_CASSETTES'] = savedMode;
     }
   },
 );
@@ -263,9 +272,9 @@ test('HARD-05: consent declined (non-TTY default) → scoreHonesty returns null 
     // Set a fake API key so key-absence guard doesn't short-circuit.
     const saved = process.env['GPTZERO_API_KEY'];
     process.env['GPTZERO_API_KEY'] = 'test-key-hard05-consent';
-    // Force offline so no real POST.
-    const savedNet = process.env['PENSMITH_NETWORK_TESTS'];
-    delete process.env['PENSMITH_NETWORK_TESTS'];
+    // Cassette replay, so even a regression could not POST to the real service.
+    const savedMode = process.env['PENSMITH_TEST_CASSETTES'];
+    process.env['PENSMITH_TEST_CASSETTES'] = '1';
 
     try {
       // consentGranted=false → must return null without POST.
@@ -274,8 +283,8 @@ test('HARD-05: consent declined (non-TTY default) → scoreHonesty returns null 
     } finally {
       if (saved === undefined) delete process.env['GPTZERO_API_KEY'];
       else process.env['GPTZERO_API_KEY'] = saved;
-      if (savedNet === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
-      else process.env['PENSMITH_NETWORK_TESTS'] = savedNet;
+      if (savedMode === undefined) delete process.env['PENSMITH_TEST_CASSETTES'];
+      else process.env['PENSMITH_TEST_CASSETTES'] = savedMode;
     }
   },
 );

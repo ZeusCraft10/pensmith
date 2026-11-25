@@ -39,6 +39,7 @@ import { getProviderApiKey } from '../lib/runtime.js';
 import { ask } from '../lib/prompts.js';
 import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
 import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
+import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../lib/network-mode.js';
 
 // ---------------------------------------------------------------------------
 // Hash-pin enforcement (D-12 defense-in-depth).
@@ -96,6 +97,16 @@ export const researchCommand = defineCommand({
     const libraryPath = path.join(paperDir(), 'LIBRARY.json');
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
     const risPath = path.join(paperDir(), 'CITATIONS.ris');
+
+    // Offline (--offline / --dry-run): research is nothing but network calls.
+    // Stop before the LLM and before any write, so an existing library is never
+    // replaced by an empty one.
+    if (isOfflineMode()) {
+      process.stdout.write(
+        `pensmith research: ${OFFLINE_SKIP_NOTE} — no sources were queried; LIBRARY.json and CITATIONS.bib left unchanged.\n`,
+      );
+      return { ok: false, mode: 'offline' };
+    }
 
     // GEN-06 fail-loud probe: assert a key is configured before doing any LLM work.
     // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE

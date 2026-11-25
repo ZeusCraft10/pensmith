@@ -4,8 +4,10 @@
 //   1. issues an HTTP HEAD against https://doi.org/<doi> (via the bin/lib/http.ts
 //      chokepoint — never a direct undici/fetch), and
 //   2. cross-checks the DOI against the Retraction Watch adapter
-//      (bin/lib/sources/retraction-watch.ts::fetchById — a REAL cassette-backed
-//      adapter, NOT a Phase-3 stub).
+//      (bin/lib/sources/retraction-watch.ts::fetchById).
+//
+// Offline (--offline / --dry-run) neither probe runs; the result says
+// "skipped (offline)" so the table never implies the source was checked.
 //
 // WARN-only policy (D-10 / PRD §14):
 //   - DOI HEAD 200            → ok, no warning
@@ -23,7 +25,7 @@
 
 import { normalizeDoi } from '../doi.js';
 import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteFile } from '../http-mock.js';
+import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
 import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
 import { Semaphore } from '../budget.js';
 
@@ -45,34 +47,14 @@ export interface FreshnessResult {
   doi: string | null;
   /** Zero or more advisory warnings. Empty array == no staleness signal. */
   warnings: FreshnessWarning[];
+  /** Set when the probes did not run, so an empty `warnings` means "not checked". */
+  skipped?: 'offline';
 }
 
 function debug(msg: string): void {
   if (process.env['PENSMITH_DEBUG'] === '1') {
     process.stderr.write(`[freshness] ${msg}\n`);
   }
-}
-
-/**
- * Offline HEAD lookup against the doi-head cassette family. In offline mode
- * (the PR-time default) bin/lib/http.ts is bypassed exactly as the
- * retraction-watch adapter bypasses it — nock@14 cannot intercept undici, so
- * adapters read cassettes directly. Returns the HTTP status, or null when no
- * cassette matches (treated as transport noise, NOT staleness).
- */
-function offlineHeadStatus(doi: string): number | null {
-  // The path the live HEAD would hit: /<doi>. We match across all doi-head
-  // cassette files by exact path equality.
-  const target = `/${doi}`;
-  for (const basename of ['head-ok', 'head-404']) {
-    const cassette = loadCassetteFile('doi-head', basename);
-    if (!cassette) continue;
-    const hit = cassette.find(
-      (c) => String(c.method).toUpperCase() === 'HEAD' && c.path === target,
-    );
-    if (hit) return hit.status;
-  }
-  return null;
 }
 
 /**
@@ -92,43 +74,33 @@ export async function probeFreshness(
     debug(`citekey=${citekey} doi=${JSON.stringify(doi)} failed normalization — skipping HEAD`);
   }
 
+  if (normalized && isOfflineMode()) {
+    return { citekey, doi: normalized, warnings, skipped: 'offline' };
+  }
+
   if (normalized) {
     // --- DOI HEAD probe ---
-    if (isOfflineMode()) {
-      const status = offlineHeadStatus(normalized);
-      if (status === null) {
-        // No cassette match == no real HTTP response == transport noise. SILENT.
-        debug(`citekey=${citekey} doi=${normalized} no HEAD cassette — silent (transport noise)`);
-      } else if (status >= 400) {
+    try {
+      // HEAD goes ONLY to doi.org (SSRF mitigation), 10s timeout, 1 retry
+      // via the http chokepoint's built-in retry wrapper.
+      const res = await httpFetch(`https://doi.org/${normalized}`, {
+        method: 'HEAD',
+        timeoutMs: 10_000,
+      });
+      if (res.status >= 400) {
         warnings.push({
           probe: 'DOI HEAD',
           status: 'WARN',
-          detail: `DOI HEAD returned ${status} — source may be stale or moved`,
+          detail: `DOI HEAD returned ${res.status} — source may be stale or moved`,
         });
       }
-    } else {
-      try {
-        // HEAD goes ONLY to doi.org (SSRF mitigation), 10s timeout, 1 retry
-        // via the http chokepoint's built-in retry wrapper.
-        const res = await httpFetch(`https://doi.org/${normalized}`, {
-          method: 'HEAD',
-          timeoutMs: 10_000,
-        });
-        if (res.status >= 400) {
-          warnings.push({
-            probe: 'DOI HEAD',
-            status: 'WARN',
-            detail: `DOI HEAD returned ${res.status} — source may be stale or moved`,
-          });
-        }
-      } catch (err) {
-        // Transport error (ECONNREFUSED / ETIMEDOUT / DNS) is network noise,
-        // NOT source staleness (D-10). Silent — optional DEBUG only.
-        debug(`citekey=${citekey} doi=${normalized} HEAD transport error: ${String(err)} — silent`);
-      }
+    } catch (err) {
+      // Transport error (ECONNREFUSED / ETIMEDOUT / DNS) is network noise,
+      // NOT source staleness (D-10). Silent — optional DEBUG only.
+      debug(`citekey=${citekey} doi=${normalized} HEAD transport error: ${String(err)} — silent`);
     }
 
-    // --- Retraction Watch cross-check (real cassette-backed adapter) ---
+    // --- Retraction Watch cross-check ---
     try {
       const hit = await retractionWatchFetchById(normalized);
       if (hit) {
@@ -179,6 +151,10 @@ export function renderFreshnessTable(results: ReadonlyArray<FreshnessResult>): s
     return lines.join('\n');
   }
   for (const r of results) {
+    if (r.skipped === 'offline') {
+      lines.push(`| ${r.citekey} | DOI HEAD | skipped | ${OFFLINE_SKIP_NOTE} |`);
+      continue;
+    }
     if (r.warnings.length === 0) {
       lines.push(`| ${r.citekey} | DOI HEAD | ok | |`);
       continue;

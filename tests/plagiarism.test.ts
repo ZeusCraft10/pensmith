@@ -9,9 +9,12 @@
 // offline DDG HTML search via the committed cassette, advisory-never-throws, and
 // the VERIFICATION.md render section.
 //
-// Offline by construction: isOfflineMode() is true unless PENSMITH_NETWORK_TESTS=1,
-// so runPlagiarism reads tests/fixtures/cassettes/duckduckgo/html-search.json and
-// never touches the network.
+// Cassette mode (set by the test runner): http.ts answers each phrase's search
+// from tests/fixtures/cassettes/duckduckgo/html-search.json when the request was
+// recorded, and nothing else gets hits. The synthetic cassette is keyed by the
+// request the extractor really sends for the draft below ("transformer relies
+// solely attention mechanisms"); it used to carry a query no phrase could
+// produce and only matched through a first-entry fallback.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -59,7 +62,7 @@ test('plagiarism: extractDistinctivePhrases returns <=10 phrases each >=5 words 
   },
 );
 
-test('plagiarism: runPlagiarism (offline cassette) returns matches with >=2 result URLs (DONE-02)',
+test('plagiarism: runPlagiarism (cassette-answered search) returns matches with >=2 result URLs (DONE-02)',
   { skip: !existsSync(plagiarismSrcPath) },
   async () => {
     const mod = await import(plagiarismModUrl.href) as {

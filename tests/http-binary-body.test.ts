@@ -10,6 +10,11 @@ import assert from 'node:assert/strict';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
 import { fetch, _resetBucketsForTest } from '../bin/lib/http.js';
 
+// These tests drive http.ts's live transport against an undici MockAgent with
+// net connect disabled, so they run in live mode, not cassette replay (each
+// test file runs in its own process, so this does not leak).
+delete process.env['PENSMITH_TEST_CASSETTES'];
+
 test('audit #29: bodyBytes is byte-faithful for binary content the UTF-8 body corrupts', async () => {
   const prev: Dispatcher = getGlobalDispatcher();
   const agent = new MockAgent();

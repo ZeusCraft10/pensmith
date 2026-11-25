@@ -52,16 +52,27 @@ async function discoverTestFiles(dir) {
   return matches;
 }
 
-const files = await discoverTestFiles(testsDir);
+// Explicit test files may be passed (npm run test:tier-contract); otherwise
+// every tests/**/*.test.ts is run.
+const explicit = process.argv.slice(2).filter((a) => a.endsWith('.test.ts'));
+const files = explicit.length > 0
+  ? explicit.map((f) => path.resolve(repoRoot, f))
+  : await discoverTestFiles(testsDir);
 console.log(`discovered ${files.length} test files`);
 if (files.length === 0) {
   console.error('FATAL: zero *.test.ts files found under tests/. Failing to avoid vacuous CI pass.');
   process.exit(1);
 }
 
+// Tests answer HTTP from the committed cassettes. Production never sets this
+// variable, so real users always get the live registries. The live test lane
+// opts out with PENSMITH_NETWORK_TESTS=1.
+const env = { ...process.env };
+if (env.PENSMITH_NETWORK_TESTS !== '1') env.PENSMITH_TEST_CASSETTES = '1';
+
 // Spawn `node --import tsx --test <files>` and inherit stdio.
 const args = ['--import', 'tsx', '--test', ...files];
-const child = spawn(process.execPath, args, { stdio: 'inherit', cwd: repoRoot });
+const child = spawn(process.execPath, args, { stdio: 'inherit', cwd: repoRoot, env });
 child.on('exit', (code, signal) => {
   if (signal) { console.error(`test runner killed by signal ${signal}`); process.exit(1); }
   process.exit(code ?? 1);

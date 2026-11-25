@@ -30,11 +30,15 @@ import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
 import { extractCitedKeysForVerification } from '../citation-token.js';
+import { isOfflineMode } from '../network-mode.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
 
-export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED';
+// UNRESOLVED: the registry was not (or could not be) consulted, so the
+// citation is neither confirmed nor refuted. It blocks like the others; the fix
+// is to re-run verify with network access.
+export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED' | 'UNRESOLVED';
 
 export interface Pass1Result {
   citekey: string;
@@ -125,8 +129,8 @@ async function verdictForCitekey(
   // `note = {RETRACTED}` (the on-disk .paper/CITATIONS.bib path). Without the
   // `note` check, every bib-sourced retracted work passes Pass-1 (the boolean is
   // undefined after the citation-js round-trip) and the stored-retraction block
-  // is dead — leaving only the live Retraction Watch re-query, which is null
-  // offline. Mirrors compile.ts:482.
+  // is dead — leaving only the live Retraction Watch re-query. Mirrors
+  // compile.ts:482.
   if (claimed.retracted || claimed.note === 'RETRACTED') {
     return {
       citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
@@ -137,6 +141,15 @@ async function verdictForCitekey(
     return {
       citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
       reason: 'no DOI in citation entry (cannot verify upstream)',
+    };
+  }
+
+  // Offline (--offline / --dry-run): nothing can be looked up. Saying OK would
+  // pass an unchecked citation and FABRICATED would accuse a real one.
+  if (isOfflineMode()) {
+    return {
+      citekey: ck, verdict: 'UNRESOLVED', titleJW: 0, authorJW: 0,
+      reason: `registry not queried (offline) — re-run verify with network access to check DOI ${claimed.DOI}`,
     };
   }
 
@@ -227,7 +240,7 @@ async function verdictForCitekey(
  *   3. For each, call verdictForCitekey and collect the result.
  *
  * 100% deterministic — no LLM, no narration, no side effects beyond the
- * Crossref HTTP read (cassette-served in offline test mode).
+ * Crossref HTTP read.
  */
 export async function runPass1(
   draftMd: string,

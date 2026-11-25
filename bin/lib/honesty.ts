@@ -8,6 +8,7 @@
 //
 // The module mirrors bin/lib/plagiarism.ts + bin/lib/verify/pass2.ts:
 //   - key-absence / offline guard → clean null skip, NEVER a crash (advisory);
+//     offline prints "skipped (offline)" and never shows a number;
 //   - http.ts as the SOLE network chokepoint (source 'generic', noCache true);
 //   - assertBudget BEFORE the live scored API call (ARCH-10 financial boundary);
 //   - defensive response parse (unexpected shape / non-200 / parse error → null,
@@ -20,7 +21,7 @@ import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetch as httpFetch } from './http.js';
-import { isOfflineMode, loadCassetteFile } from './http-mock.js';
+import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
 import { assertBudget, appendCost } from './budget.js';
 import { ask } from './prompts.js';
 
@@ -184,8 +185,6 @@ function loadDisclosureNote(): string {
 // ============================================================
 
 const GPTZERO_URL = 'https://api.gptzero.me/v2/predict/text';
-const GPTZERO_SCOPE = 'https://api.gptzero.me';
-const GPTZERO_PATH = '/v2/predict/text';
 
 // Paper-level honesty budget gate (ARCH-10). GPTZero is not a token-metered LLM;
 // the score runs at most twice per paper (before/after humanize). We model a
@@ -224,17 +223,6 @@ function parseGptzeroResponse(raw: unknown): HonestyScore | null {
   }
 }
 
-/** Read the matching GPTZero cassette response object (offline branch). */
-function offlineGptzeroResponse(): unknown {
-  const cassettes = loadCassetteFile('gptzero', 'predict-text');
-  if (!cassettes || cassettes.length === 0) return null;
-  const match =
-    cassettes.find(
-      (c) => c.scope === GPTZERO_SCOPE && c.path === GPTZERO_PATH && c.method === 'POST',
-    ) ?? cassettes[0];
-  return match?.response ?? null;
-}
-
 /** Options for scoreWithGptzero (HARD-05 consent seam). */
 export interface GptzeroScoringOptions {
   /** When true, skip the consent gate (approval-gates design: --yolo skips). */
@@ -256,8 +244,8 @@ export interface GptzeroScoringOptions {
  *     NEVER exit-3/block (Pitfall 6 / RESEARCH A4).
  *     opts.consentGranted bypasses ask() for test injection.
  *   - Size cap (HARD-05) — input truncated to GPTZERO_MAX_BYTES with a note.
- *   - offline (PENSMITH_NETWORK_TESTS !== '1') → read the gptzero cassette and
- *     parse it defensively; no network call is made.
+ *   - offline (--offline / --dry-run) → "skipped (offline)" and null; no
+ *     request, no disclosure, never a canned score.
  *   - live → assertBudget BEFORE the call (paper-scoped cap), then httpFetch
  *     POST with the x-api-key header through the http.ts chokepoint; status
  *     !== 200 → null; parse defensively; appendCost AFTER a successful call.
@@ -282,13 +270,12 @@ async function scoreWithGptzero(
     return null;
   }
 
-  // Offline branch MUST NOT touch the network (no disclosure/consent needed —
-  // cassette replay involves zero data egress to any external service).
+  // Offline: nothing is sent, so there is nothing to disclose or consent to,
+  // and no score to show.
   if (isOfflineMode()) {
-    return parseGptzeroResponse(offlineGptzeroResponse());
+    process.stdout.write(`pensmith: GPTZero honesty score ${OFFLINE_SKIP_NOTE}.\n`);
+    return null;
   }
-
-  // Live branch only beyond this point (PENSMITH_NETWORK_TESTS=1).
 
   // HARD-05 Step 1: Disclosure — always shown before a live POST attempt,
   // even if the user later declines. Copy is read VERBATIM from the locked
@@ -331,7 +318,6 @@ async function scoreWithGptzero(
     );
   }
 
-  // Live branch — only reached with PENSMITH_NETWORK_TESTS=1 (never in CI).
   try {
     // ARCH-10 pre-call gate: assertBudget BEFORE the scored API call. A
     // BudgetExceededError here aborts the call (financial-safety boundary) and
@@ -430,8 +416,8 @@ export function selectBackend(config?: { honestyBackend?: string }): HonestyBack
 
 /**
  * Compute the detection-aware honesty score for `text`. Resolves the backend
- * via selectBackend (DONE-05) and delegates to it. Absent key / offline-no-
- * cassette / unexpected response → null (clean skip). Advisory by construction
+ * via selectBackend (DONE-05) and delegates to it. Absent key / offline /
+ * unexpected response → null (clean skip). Advisory by construction
  * — never throws, never blocks export.
  */
 export async function scoreHonesty(
@@ -453,6 +439,14 @@ export async function scoreHonestyWithOptions(
   opts?: GptzeroScoringOptions,
 ): Promise<HonestyScore | null> {
   return scoreWithGptzero(text, opts);
+}
+
+/** The report line when no score was produced. Says why when the reason is
+ *  offline mode, so the report never blames a missing key for a skipped call. */
+export function renderHonestySkipped(): string {
+  return isOfflineMode()
+    ? `Pensmith honesty check: ${OFFLINE_SKIP_NOTE}.`
+    : 'Pensmith honesty check: skipped (no GPTZero API key set or backend unavailable).';
 }
 
 // ============================================================

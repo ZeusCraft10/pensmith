@@ -12,7 +12,6 @@
 // the replacement auth mechanism.
 
 import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteFile } from '../http-mock.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -86,18 +85,6 @@ export async function search(
   opts: { limit?: number } = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('openalex', 'works-attention');
-    if (!cassette) return [];
-    const searchEntry = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('/works?search='),
-    );
-    if (!searchEntry) return [];
-    const body = searchEntry.response as { results?: OpenAlexWork[] };
-    const results = body?.results ?? [];
-    return results.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
-  }
-
   const url = `${BASE}/works?search=${encodeURIComponent(query)}&per-page=${limit}${mailtoParam('&')}`;
   try {
     const res = await httpFetch(url, { source: 'openalex' });
@@ -111,29 +98,6 @@ export async function search(
 }
 
 export async function fetchById(id: string): Promise<SourceCandidate | null> {
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('openalex', 'works-attention');
-    if (!cassette) return null;
-    // Direct cassette match by /works/<id>.
-    const direct = cassette.find(
-      (c) =>
-        c.method === 'GET' &&
-        (c.path === `/works/${id}` || c.path.startsWith(`/works/${id}?`)),
-    );
-    if (direct) {
-      return toCandidate(direct.response as OpenAlexWork);
-    }
-    // Fallback: first result from the search cassette so test ids like
-    // 'W2741809807' still get a SourceCandidate-shaped return.
-    const search = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('/works?search='),
-    );
-    if (!search) return null;
-    const results = (search.response as { results?: OpenAlexWork[] })?.results ?? [];
-    const first = results[0];
-    return first ? toCandidate(first) : null;
-  }
-
   // CR-03 fix: if no contact email, omit the query string entirely (?mailto= is the only param here).
   const mp = mailtoParam('?');
   const url = `${BASE}/works/${encodeURIComponent(id)}${mp}`;

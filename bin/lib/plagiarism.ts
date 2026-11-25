@@ -5,7 +5,7 @@
 //
 // The check extracts distinctive 5+-word n-grams from the compiled draft
 // (deterministic, no LLM), queries the DuckDuckGo HTML endpoint through the
-// http.ts chokepoint (offline cassette in CI), parses result links, and renders
+// http.ts chokepoint, parses result links, and renders
 // a `## Plagiarism Check (DONE-02)` section for VERIFICATION.md. It is advisory
 // by construction: there is no blocking verdict, transport errors are swallowed
 // to DEBUG as noise, and an empty result array == no plagiarism signal. Only the
@@ -20,7 +20,7 @@
 // browser-like headers; rate-limit / transport errors are swallowed advisory.
 
 import { fetch as httpFetch } from './http.js';
-import { isOfflineMode, loadCassetteFile } from './http-mock.js';
+import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
 import { Semaphore } from './budget.js';
 
 // ============================================================
@@ -51,6 +51,9 @@ export interface PlagiarismMatch {
 export interface PlagiarismResult {
   phrase: string;
   matches: string[];
+  /** Set when the phrase was never searched. Empty `matches` then means "not
+   *  checked", not "no match", and must be shown that way. */
+  skipped?: 'offline';
 }
 
 // ============================================================
@@ -186,9 +189,7 @@ function ddgUrl(phrase: string): string {
 }
 
 /**
- * Parse DuckDuckGo HTML into the list of organic result links. Pure function,
- * shared by BOTH the offline-cassette and the live-network branches so they
- * cannot diverge.
+ * Parse DuckDuckGo HTML into the list of organic result links. Pure function.
  *
  * Implementation is regex/String ONLY — no DOM, no eval, no innerHTML
  * (T-06-02-02 / V5 input validation). Matches the organic `result__a` anchor
@@ -222,47 +223,19 @@ export function parseDdgHtml(html: string): PlagiarismMatch[] {
 }
 
 /**
- * Read the duckduckgo cassette and return its response HTML string, or null when
- * no usable cassette entry exists. Prefers an entry whose path matches the live
- * query (`?q=<encoded-phrase>`); otherwise falls back to the single committed
- * entry for deterministic offline behavior.
- */
-function offlineDdgHtml(phrase: string): string | null {
-  const cassettes = loadCassetteFile('duckduckgo', 'html-search');
-  if (!cassettes || cassettes.length === 0) return null;
-  const wantQ = `q=${encodeURIComponent(phrase)}`;
-  const match =
-    cassettes.find((c) => typeof c.path === 'string' && c.path.includes(wantQ)) ??
-    cassettes[0];
-  if (!match || typeof match.response !== 'string') return null;
-  return match.response;
-}
-
-/**
- * Query one phrase against DuckDuckGo (offline cassette or live http.ts), parse
- * the result anchors, and return the result URLs. Never throws — transport
- * errors are swallowed to DEBUG and yield an empty array for that phrase
- * (advisory contract, mirrors verify/freshness.ts).
+ * Query one phrase against DuckDuckGo through http.ts, parse the result
+ * anchors, and return the result URLs. Never throws — transport errors are
+ * swallowed to DEBUG and yield an empty array for that phrase (advisory
+ * contract, mirrors verify/freshness.ts).
  */
 async function queryPhrase(phrase: string): Promise<string[]> {
   try {
-    let html: string | null;
-    if (isOfflineMode()) {
-      // Offline branch MUST NOT touch the network.
-      html = offlineDdgHtml(phrase);
-      if (html === null) {
-        debug(`no cassette entry for phrase=${JSON.stringify(phrase)} — empty matches`);
-        return [];
-      }
-    } else {
-      const resp = await httpFetch(ddgUrl(phrase), {
-        source: 'generic',
-        noCache: true,
-        headers: DDG_HEADERS,
-      });
-      html = resp.body;
-    }
-    return parseDdgHtml(html).map((hit) => hit.url);
+    const resp = await httpFetch(ddgUrl(phrase), {
+      source: 'generic',
+      noCache: true,
+      headers: DDG_HEADERS,
+    });
+    return parseDdgHtml(resp.body).map((hit) => hit.url);
   } catch (err) {
     // Transport / parse error is scrape noise, NOT a plagiarism signal. Swallow
     // advisory — the check never throws and never blocks export by itself.
@@ -287,6 +260,10 @@ export async function runPlagiarism(
   const maxPhrases = opts?.maxPhrases ?? 10;
   const phrases = extractDistinctivePhrases(draftMd, 5, maxPhrases);
   if (phrases.length === 0) return [];
+  // Offline: report every phrase as not searched rather than as "no matches".
+  if (isOfflineMode()) {
+    return phrases.map((phrase) => ({ phrase, matches: [], skipped: 'offline' as const }));
+  }
   const sem = new Semaphore(DDG_FAN_OUT);
   return Promise.all(
     phrases.map((phrase) =>
@@ -318,9 +295,11 @@ export function renderPlagiarismSection(
   }
   for (const r of results) {
     const cell =
-      r.matches.length === 0
-        ? '_(no matches)_'
-        : r.matches.map((u) => `<${u}>`).join('<br>');
+      r.skipped === 'offline'
+        ? OFFLINE_SKIP_NOTE
+        : r.matches.length === 0
+          ? '_(no matches)_'
+          : r.matches.map((u) => `<${u}>`).join('<br>');
     // Escape pipes in the phrase so a literal `|` cannot break the table.
     const phraseCell = r.phrase.replace(/\|/g, '\\|');
     lines.push(`| ${phraseCell} | ${cell} |`);

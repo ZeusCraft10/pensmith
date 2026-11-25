@@ -5,11 +5,10 @@
  * top level, so a production install (npm install -g pensmith, which omits
  * devDependencies) can load http-mock.ts without crashing.
  *
- * The 7 production adapters (crossref, arxiv, openalex, pubmed,
- * retraction-watch, semanticscholar, unpaywall) plus honesty.ts,
- * plagiarism.ts, and freshness.ts all import http-mock.ts and call ONLY the
- * three nock-free functions: isOfflineMode(), loadCassetteFile(),
- * loadCassetteDir(). Those three functions must remain callable without nock.
+ * http.ts loads http-mock.ts lazily in test runs (PENSMITH_TEST_CASSETTES=1)
+ * and calls replayCassette(); tests call loadCassetteFile() and
+ * scrubRecordedPath(). None of these may need nock, which is only for the
+ * recorder.
  *
  * RED-by-skip guard (08-00 convention): while http-mock.ts still has a
  * top-level `import nock from 'nock'` the lazy-nock refactor has not landed
@@ -70,7 +69,7 @@ test('DOCS-03 Test A: http-mock.ts has no top-level import nock (lazy-import ref
   );
 });
 
-test('DOCS-03 Test B: production-facing functions (isOfflineMode/loadCassetteFile/loadCassetteDir) are callable without nock', {
+test('DOCS-03 Test B: replay and fixture helpers (replayCassette/loadCassetteFile/scrubRecordedPath) are callable without nock', {
   skip: hasTopLevelNockImport
     ? 'Plan 02 has not yet landed: http-mock.ts still has a top-level `import nock from \'nock\'`. ' +
       'This test will open once the lazy-import refactor removes the top-level nock import.'
@@ -82,20 +81,17 @@ test('DOCS-03 Test B: production-facing functions (isOfflineMode/loadCassetteFil
 
   // This import must not throw even without nock in production (no top-level nock import).
   const mod = await import(moduleUrl.href) as {
-    isOfflineMode: () => boolean;
-    loadCassetteDir: (adapter: string) => unknown[] | null;
+    replayCassette: (method: string, url: string) => { status: number; body: string };
     loadCassetteFile: (adapter: string, basename: string) => unknown[] | null;
+    scrubRecordedPath: (p: string) => string;
   };
 
-  // isOfflineMode() — pure env check, always callable
-  const offline = mod.isOfflineMode();
-  assert.ok(typeof offline === 'boolean', 'isOfflineMode() must return a boolean');
-
-  // loadCassetteDir() — returns null when adapter dir doesn't exist (no throw)
-  const dir = mod.loadCassetteDir('crossref');
-  assert.ok(
-    dir === null || Array.isArray(dir),
-    'loadCassetteDir(\'crossref\') must return null or an array (never throw on missing dir)',
+  // replayCassette() — a recorded request replays; an unrecorded one throws a miss.
+  const hit = mod.replayCassette('GET', 'https://api.crossref.org/works/10.1038%2Fnphys1170');
+  assert.equal(hit.status, 200);
+  assert.throws(
+    () => mod.replayCassette('GET', 'https://api.crossref.org/works/10.9999%2Fnot-recorded'),
+    /no cassette recorded/,
   );
 
   // loadCassetteFile() — returns null when file doesn't exist (no throw)
@@ -105,4 +101,6 @@ test('DOCS-03 Test B: production-facing functions (isOfflineMode/loadCassetteFil
     null,
     'loadCassetteFile(\'crossref\', \'__nonexistent_test_sentinel__\') must return null for a missing cassette',
   );
+
+  assert.equal(mod.scrubRecordedPath('/v2/x?email=a%40b.c'), '/v2/x');
 });

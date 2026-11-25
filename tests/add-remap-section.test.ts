@@ -6,8 +6,8 @@
 // resolved from OUTLINE.md for section N; if it can't be resolved, the remap is
 // skipped rather than applied to all.
 //
-// Offline: PENSMITH_NETWORK_TESTS unset → crossref serves the committed
-// add-doi.json cassette (DOI 10.1038/nphys1170).
+// Cassette mode: http.ts answers from the committed add-doi.json cassette
+// (DOI 10.1038/nphys1170).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +27,7 @@ interface AddMod {
 async function mkTwoSectionProject(withOutline: boolean): Promise<{ root: string; intro: string; methods: string }> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-remap25-'));
   process.env['PENSMITH_NO_LLM'] = '1';
-  delete process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_TEST_CASSETTES'] = '1';
 
   const { initState, initSection } = await import('../bin/lib/state.js');
   const { sectionPlan, paperDir } = await import('../bin/lib/paths.js');

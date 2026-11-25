@@ -21,7 +21,7 @@ function runNew(cwd: string): { status: number | null; stdout: string; stderr: s
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   env['PENSMITH_NO_LLM'] = '1';
-  env['PENSMITH_NETWORK_TESTS'] = '';
+  env['PENSMITH_TEST_CASSETTES'] = '1';
   const r = spawnSync(
     process.execPath,
     ['--import', TSX_LOADER, PENSMITH_TS, 'new', '--yolo'],

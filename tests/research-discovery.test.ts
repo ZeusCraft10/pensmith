@@ -22,8 +22,9 @@
 // ("OneDrive - Roanoke College") which cause %20-encoded readFileSync paths to
 // throw, silently skipping tests locally while running untested on CI.
 //
-// Offline mode (T-12-W0-02): PENSMITH_NO_LLM=1 set at module top; PENSMITH_NETWORK_TESTS
-// NOT set → isOfflineMode() returns true → adapter cassettes fire; zero live calls.
+// Offline LLM + cassette HTTP (T-12-W0-02): PENSMITH_NO_LLM=1 set at module top;
+// the test runner sets PENSMITH_TEST_CASSETTES=1, so http.ts replays the committed
+// cassettes and makes zero live calls.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,8 +35,7 @@ import { fileURLToPath } from 'node:url';
 
 // ---- Offline gate (T-12-W0-02) -------------------------------------------------
 // Set BEFORE any dynamic import so the LLM mock + adapter cassettes short-circuit
-// before any network or real LLM call. PENSMITH_NETWORK_TESTS is deliberately NOT
-// set → isOfflineMode() returns true.
+// before any network or real LLM call.
 process.env['PENSMITH_NO_LLM'] = '1';
 
 // ---- Path helpers (T-12-W0-01) -------------------------------------------------
@@ -99,6 +99,11 @@ The paper should cover self-attention, multi-head attention, and transformer arc
 Target discipline: computer science / machine learning.
 `.trim();
 
+// Cassette replay answers only recorded requests, so the topic (which becomes the
+// search query under PENSMITH_NO_LLM) must be one the crossref / openalex /
+// semanticscholar cassettes were recorded with.
+const RECORDED_TOPIC = 'attention mechanisms';
+
 // ---- Module URLs (dynamic import — resolved after env overrides) ----------------
 // These module URLs are declared here but only imported inside test bodies where
 // the skip-guard is active, so they are never imported (and thus never throw) when
@@ -149,7 +154,7 @@ test(
 
     const candidates = await mod.runResearchOrchestrator!({
       assignment: FIXTURE_ASSIGNMENT,
-      topic: 'attention mechanisms in neural networks',
+      topic: RECORDED_TOPIC,
       discipline: 'cs',
       paperRoot: root,
     });
@@ -192,7 +197,7 @@ test(
 
     const candidates = await mod.runResearchOrchestrator!({
       assignment: FIXTURE_ASSIGNMENT,
-      topic: 'attention mechanisms in neural networks',
+      topic: RECORDED_TOPIC,
       discipline: 'cs',
       paperRoot: root,
     });
@@ -252,7 +257,7 @@ test(
     try {
       candidates = await mod.runResearchOrchestrator!({
         assignment: FIXTURE_ASSIGNMENT,
-        topic: 'attention mechanisms in neural networks',
+        topic: RECORDED_TOPIC,
         discipline: 'cs',
         paperRoot: root,
       });
