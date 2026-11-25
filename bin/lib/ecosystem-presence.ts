@@ -1,29 +1,27 @@
 // bin/lib/ecosystem-presence.ts
 //
-// CR-01 fix: shared ecosystem-presence detection used by BOTH capabilities.ts
-// (MCP tier) AND the doctor probes (CLI tier). Per D-21 ("fix the tiers, not
-// the test"), `paper://capabilities` MUST report real booleans for
-// pandoc/zotero/humanizer/onedrive — not undefined placeholders — so the
-// tier-contract test's MCP-vs-CLI fact equivalence holds on any machine
-// where these tools are installed (e.g., macos-latest CI runners that ship
-// pandoc preinstalled).
+// Shared ecosystem-presence detection for the doctor probes, the capability
+// facts and the Zotero source adapter. Every function is a read-only query
+// (path checks, JSON reads, `pandoc --version`): no writes, no locks.
 //
-// Each function returns `{ present: boolean, detail?: string }`. The doctor
-// probes wrap this with PASS/WARN severity + fix text; capabilities.ts uses
-// the boolean directly.
+// It lives apart from capabilities.ts so the doctor probes can use it without
+// an import cycle (probes/ -> probes.ts -> capabilities.ts -> probes/).
 //
-// This module exists to AVOID a circular import: probes/ -> ../probes.ts ->
-// capabilities.ts -> probes/ would cycle. Extracting the pure detection
-// helpers here keeps capabilities.ts and the probes both downstream of a
-// shared, dependency-free module.
-//
-// D-19 read-only: every function in this module is pure path/exists/spawn
-// query — no writes, no atomicWriteFile, no withLock.
+// Claude Code keeps MCP servers and skills in these places, and these are the
+// places we look:
+//   - user config: $CLAUDE_CONFIG_DIR/.claude.json, else ~/.claude.json
+//     (top-level `mcpServers` = user scope; `projects[<dir>].mcpServers` =
+//     local scope); user skills under $CLAUDE_CONFIG_DIR/skills, else
+//     ~/.claude/skills;
+//   - the project: <cwd>/.mcp.json and <cwd>/.claude/skills;
+//   - installed plugins: each installPath in
+//     <config dir>/plugins/installed_plugins.json (its .mcp.json, its
+//     plugin.json `mcpServers`, its skills/).
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { isInsideSyncFolder, paperDir } from './paths.js';
 
 /**
@@ -44,45 +42,98 @@ export function isPandocPresent(): boolean {
   }
 }
 
-/**
- * Probe whether a Zotero MCP server is configured in any of the standard
- * Claude MCP config locations. Best-effort — absence is WARN, not FAIL.
- */
-export function isZoteroMcpPresent(): boolean {
-  const home = homedir();
-  const paths = [
-    join(home, '.claude', 'mcp_servers.json'),
-    join(home, '.config', 'claude', 'mcp_servers.json'),
-  ];
-  for (const p of paths) {
-    if (!existsSync(p)) continue;
-    try {
-      const raw = readFileSync(p, 'utf8');
-      const parsed = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
-      const servers = parsed.mcpServers ?? {};
-      const names = Object.keys(servers);
-      if (names.some((n) => /zotero/i.test(n))) return true;
-    } catch {
-      // Malformed JSON — keep checking the next path.
+/** Claude Code's config directory: $CLAUDE_CONFIG_DIR, else ~/.claude. */
+function claudeConfigDir(): string {
+  const env = process.env['CLAUDE_CONFIG_DIR'];
+  return env && env.length > 0 ? env : join(homedir(), '.claude');
+}
+
+/** Claude Code's user config file: $CLAUDE_CONFIG_DIR/.claude.json, else ~/.claude.json. */
+function claudeJsonPath(): string {
+  const env = process.env['CLAUDE_CONFIG_DIR'];
+  return env && env.length > 0 ? join(env, '.claude.json') : join(homedir(), '.claude.json');
+}
+
+function readJson(p: string): unknown {
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as unknown;
+  } catch {
+    return undefined; // absent or malformed: treat as "nothing configured here"
+  }
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/** Server names under an `mcpServers` object, or [] when it is not one. */
+function serverNames(container: unknown): string[] {
+  if (!isRecord(container)) return [];
+  const servers = container['mcpServers'];
+  return isRecord(servers) ? Object.keys(servers) : [];
+}
+
+/** installPath of every installed plugin (all scopes). */
+function installedPluginDirs(): string[] {
+  const registry = readJson(join(claudeConfigDir(), 'plugins', 'installed_plugins.json'));
+  if (!isRecord(registry) || !isRecord(registry['plugins'])) return [];
+  const dirs: string[] = [];
+  for (const installs of Object.values(registry['plugins'])) {
+    if (!Array.isArray(installs)) continue;
+    for (const inst of installs) {
+      if (isRecord(inst) && typeof inst['installPath'] === 'string' && isAbsolute(inst['installPath'])) {
+        dirs.push(inst['installPath']);
+      }
     }
+  }
+  return dirs;
+}
+
+/** Every MCP config Claude Code would read for a session in `cwd`. */
+export function zoteroMcpConfigLocations(cwd: string = process.cwd()): string[] {
+  const plugins = installedPluginDirs().flatMap((dir) => [join(dir, '.mcp.json'), join(dir, '.claude-plugin', 'plugin.json')]);
+  return [claudeJsonPath(), join(cwd, '.mcp.json'), ...plugins];
+}
+
+/**
+ * Whether a Zotero MCP server is configured for a session in `cwd`, in any
+ * scope Claude Code reads. Best-effort: absence is a WARN, never a FAIL.
+ */
+export function isZoteroMcpPresent(cwd: string = process.cwd()): boolean {
+  const isZotero = (name: string): boolean => /zotero/i.test(name);
+  const userConfig = readJson(claudeJsonPath());
+  if (serverNames(userConfig).some(isZotero)) return true;
+  if (isRecord(userConfig) && isRecord(userConfig['projects'])) {
+    const projects = userConfig['projects'];
+    const here = resolve(cwd);
+    for (const [dir, entry] of Object.entries(projects)) {
+      if (resolve(dir) === here && serverNames(entry).some(isZotero)) return true;
+    }
+  }
+  for (const p of zoteroMcpConfigLocations(cwd).slice(1)) {
+    if (serverNames(readJson(p)).some(isZotero)) return true;
   }
   return false;
 }
 
-/**
- * Probe whether the humanizer skill is installed at the standard path.
- * Present iff the directory exists, is a directory, and is non-empty.
- */
-export function isHumanizerSkillPresent(): boolean {
-  const skillPath = join(homedir(), '.claude', 'skills', 'humanizer');
-  if (!existsSync(skillPath)) return false;
-  try {
-    const stat = statSync(skillPath);
-    if (!stat.isDirectory()) return false;
-    return readdirSync(skillPath).length > 0;
-  } catch {
-    return false;
-  }
+/** Every directory a `humanizer` skill could be loaded from for a session in `cwd`. */
+export function humanizerSkillLocations(cwd: string = process.cwd()): string[] {
+  return [
+    join(claudeConfigDir(), 'skills', 'humanizer'),
+    join(cwd, '.claude', 'skills', 'humanizer'),
+    ...installedPluginDirs().map((dir) => join(dir, 'skills', 'humanizer')),
+  ];
+}
+
+/** Whether a non-empty `humanizer` skill directory exists in any of those places. */
+export function isHumanizerSkillPresent(cwd: string = process.cwd()): boolean {
+  return humanizerSkillLocations(cwd).some((dir) => {
+    try {
+      return existsSync(dir) && statSync(dir).isDirectory() && readdirSync(dir).length > 0;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**

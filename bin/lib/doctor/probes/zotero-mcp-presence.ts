@@ -17,22 +17,16 @@
 // probe must distinguish ABSENT from CONFIGURED_NO_AUTH to report REAL state.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { isZoteroMcpPresent } from '../../ecosystem-presence.js';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { isZoteroMcpPresent, zoteroMcpConfigLocations } from '../../ecosystem-presence.js';
 
 // T-01-07: the env-var NAME (never its value) is the only key-derived token that
 // ever reaches probe output.
 const API_KEY_ENV = 'ZOTERO_API_KEY';
 
-// Standard locations where Claude MCP server configs live (kept here for
-// the WARN-path `detail` text so users see where we looked).
+// Where Claude Code keeps MCP server configs (shown in the WARN `detail` so
+// users see where we looked).
 function candidatePaths(): string[] {
-  const home = homedir();
-  return [
-    join(home, '.claude', 'mcp_servers.json'),
-    join(home, '.config', 'claude', 'mcp_servers.json'),
-  ];
+  return zoteroMcpConfigLocations();
 }
 
 export const zoteroMcpPresenceProbe: Probe = {
@@ -40,7 +34,7 @@ export const zoteroMcpPresenceProbe: Probe = {
   async run(): Promise<ProbeResult> {
     // CR-01: share the FS-presence detection with bin/lib/capabilities.ts via
     // ecosystem-presence.ts so both tiers report the same boolean. Tri-state:
-    //   configured     = Zotero MCP server in a known Claude MCP config.
+    //   configured     = Zotero MCP server in a Claude Code MCP config.
     //   authenticated  = configured AND ZOTERO_API_KEY present (boolean-only).
     const configured = isZoteroMcpPresent();
     // T-01-07: boolean presence ONLY — the value is never read into a variable
@@ -58,7 +52,7 @@ export const zoteroMcpPresenceProbe: Probe = {
         severity: 'WARN',
         summary: 'Zotero MCP server not configured — citations and research verbs (Phase 3+) will be offline-only.',
         detail: `Checked: ${candidatePaths().join(', ')}`,
-        fix: 'See https://github.com/<zotero-mcp-org>/zotero-mcp for installation. Then add to your Claude MCP config.',
+        fix: 'Add a Zotero MCP server to Claude Code (`claude mcp add`), then set ZOTERO_API_KEY.',
       };
     }
 
