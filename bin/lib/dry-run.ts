@@ -70,7 +70,7 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       return {
         command,
         summary: 'Find sources for the topic and screen them into the library.',
-        reads: [paper('INTAKE.md')],
+        reads: [paper('INTAKE.md'), paper('LIBRARY.json'), paper('CITATIONS.bib')],
         writes: [paper('LIBRARY.json'), paper('CITATIONS.bib'), paper('CITATIONS.ris')],
         model: 'topic scoping and source screening calls',
         network: `${MODEL_PROVIDER}; OpenAlex, Crossref, arXiv, PubMed and Semantic Scholar`,
@@ -156,11 +156,11 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
     case 'add':
       return {
         command,
-        summary: 'Add one source (DOI, PDF or URL) to the bibliography.',
-        reads: [typeof args['source'] === 'string' ? args['source'] : 'the source'],
-        writes: [paper('CITATIONS.bib'), 'section PLAN.md files, if remapped'],
+        summary: 'Add a source (DOI, arXiv ID, PDF, URL, .bib or CSL-JSON file) to the library.',
+        reads: [typeof args['source'] === 'string' ? args['source'] : 'the source', paper('LIBRARY.json'), paper('CITATIONS.bib')],
+        writes: [paper('LIBRARY.json'), paper('CITATIONS.bib'), paper('CITATIONS.ris'), `${paper('sources')}/ (a PDF's text)`, 'section PLAN.md files, if remapped'],
         model: NO_MODEL,
-        network: 'Crossref and the other registries',
+        network: 'Crossref and arXiv (for a PDF with no identifier of its own, a Crossref search for its title line)',
         asks: 'remap sections to the new source',
       };
     case 'ack':

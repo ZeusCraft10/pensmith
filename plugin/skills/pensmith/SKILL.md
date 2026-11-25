@@ -44,7 +44,7 @@ specific step:
 | `pensmith verify N` | Check every citation and quote in section N. |
 | `pensmith compile` | Assemble the verified sections into one draft. |
 | `pensmith done` | Final audit and export; the user confirms. |
-| `pensmith add` | Add a source by DOI, PDF or URL. |
+| `pensmith add` | Add a source by DOI, arXiv ID, PDF, URL, or a .bib or CSL-JSON file. |
 | `pensmith list` / `pensmith open` | List papers, switch the active one. |
 | `pensmith resume` | Pick up the active paper where it stopped. |
 | `pensmith sketch` | Explore a thesis before starting a paper. |
