@@ -502,13 +502,31 @@ const STYLE_ALIASES: ReadonlyMap<string, string> = new Map([
   ['ieee', 'ieee'], ['ama', 'ama'], ['vancouver', 'vancouver'], ['harvard', 'harvard'],
 ]);
 
+// Words around a style's name that do not change the style, removed from the
+// end one at a time: "APA (7th ed.)", "MLA 9th edition", "IEEE style",
+// "Harvard referencing". Each CSL file follows the current edition.
+const STYLE_NAME_TAILS: readonly RegExp[] = [
+  /[\s.,;:]+$/,
+  /\s*\((?:\d+(?:st|nd|rd|th)?\s*)?(?:ed\.?|edition)?\)$/,
+  /\s+(?:ed\.?|edition)$/,
+  /\s+(?:citation\s+)?(?:style|format|referencing)$/,
+  /\s+\d+(?:st|nd|rd|th)?$/,
+];
+
 /**
  * The style key for a style name as a person writes it ("Chicago (Author-Date)",
- * "APA 7", "vancouver"), or null when pensmith has no CSL file for it.
+ * "APA 7th edition", "IEEE style", "vancouver"), or null when pensmith has no
+ * CSL file for it.
  */
 export function normalizeStyleName(name: string): string | null {
-  const key = name.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.]$/, '');
-  return STYLE_ALIASES.get(key) ?? null;
+  let key = name.trim().toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ');
+  for (;;) {
+    const hit = STYLE_ALIASES.get(key);
+    if (hit) return hit;
+    const shorter = STYLE_NAME_TAILS.reduce((k, re) => (k === key ? k.replace(re, '') : k), key);
+    if (shorter === key || shorter.length === 0) return null;
+    key = shorter;
+  }
 }
 
 /**

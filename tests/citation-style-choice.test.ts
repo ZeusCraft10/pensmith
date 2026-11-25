@@ -84,6 +84,19 @@ test('the clarifier\'s eight style names all map to a shipped style', () => {
   assert.equal(normalizeStyleName('turabian'), null);
 });
 
+test('a style name with an edition, "style" or "referencing" maps too; Chicago\'s two systems stay apart', () => {
+  const cases: Array<[string, string]> = [
+    ['APA 7th edition', 'apa'], ['APA (7th ed.)', 'apa'], ['APA, 7th ed.', 'apa'], ['apa 7th ed', 'apa'],
+    ['MLA 9th edition', 'mla'], ['MLA (9th edition)', 'mla'], ['MLA 8th ed.', 'mla'],
+    ['IEEE style', 'ieee'], ['IEEE citation style', 'ieee'], ['Vancouver style', 'vancouver'], ['Harvard referencing', 'harvard'],
+    ['Chicago (Author-Date)', 'chicago-author-date'], ['Chicago author-date style', 'chicago-author-date'],
+    ['Chicago notes-bibliography style', 'chicago-notes-bib'], ['Chicago 17th edition', 'chicago-notes-bib'],
+  ];
+  for (const [name, key] of cases) assert.equal(normalizeStyleName(name), key, name);
+  assert.equal(normalizeStyleName('Turabian 9th edition'), null);
+  assert.equal(normalizeStyleName('style'), null);
+});
+
 test('pensmith new --citation-style persists the choice to config.toml; an unknown style is refused', () => {
   const dir = mkdtempSync(join(tmpdir(), 'pensmith-style-new-'));
   const r = runCli(['new', '--citation-style', 'AMA'], dir);
