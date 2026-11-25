@@ -7,15 +7,20 @@
 // under the same citekey, its authors read back into name objects the way
 // its adapter writes them. An entry with no title or no citekey (the shape of
 // an early placeholder that no command wrote) has nothing to cite and is
-// dropped. An older pensmith also wrote LIBRARY.json as a bare array; that is
-// read the same way.
+// dropped. An entry no DOI, arXiv ID, PMID, PMC ID or ISBN names (a candidate
+// known only by an OpenAlex or Semantic Scholar ID) is left out as research
+// leaves such works out: nothing could verify it, and the old writer had left
+// it out of CITATIONS.bib. Its key is kept in `retired_keys`, so no other work
+// is given it, and the library warns about it when it writes the upgrade. An
+// older pensmith also wrote LIBRARY.json as a bare array; that is read the
+// same way.
 //
 // Works added by an older `pensmith add` were written to CITATIONS.bib only;
 // the library reads them in from the bibliography the first time it writes
 // (bin/lib/library.ts), keeping each entry's text as it was.
 
 import { bareArxivId, normalizePmid } from '../../doi.js';
-import { itemFromCandidate } from '../../library-item.js';
+import { itemFromCandidate, itemIdentities } from '../../library-item.js';
 import type { LibraryItem } from '../../schemas/library.js';
 import type { SourceCandidate } from '../../schemas/source-candidate.js';
 
@@ -60,8 +65,19 @@ function migrateEntry(raw: unknown, now: string): LibraryItem | null {
   return itemFromCandidate(candidate, citekey, at, { provenance: [{ source, id: candidate.id, at }] });
 }
 
+/** A v1 entry the migration left out because no identifier names it. */
+export interface LeftOut {
+  citekey: string;
+  title: string;
+}
+
 /** Migrate a v1 LIBRARY.json value (or a bare array of entries) to v2. */
 export function migrate(input: unknown, now: string = new Date().toISOString()): unknown {
+  return migrateWithReport(input, now).library;
+}
+
+/** migrate, and the entries it left out because no identifier names them. */
+export function migrateWithReport(input: unknown, now: string = new Date().toISOString()): { library: unknown; leftOut: LeftOut[] } {
   const entries = Array.isArray(input)
     ? input
     : Array.isArray((input as { entries?: unknown } | null)?.entries)
@@ -69,14 +85,23 @@ export function migrate(input: unknown, now: string = new Date().toISOString()):
       : [];
   const seen = new Set<string>();
   const items: LibraryItem[] = [];
+  const leftOut: LeftOut[] = [];
   for (const raw of entries) {
     const item = migrateEntry(raw, now);
     // Research gave every candidate a distinct key; a repeat would make two
     // works answer to one citation, so only the first keeps it.
     if (!item || seen.has(item.id)) continue;
     seen.add(item.id);
-    items.push(item);
+    if (itemIdentities(item).length === 0) leftOut.push({ citekey: item.id, title: item.title });
+    else items.push(item);
   }
   // Only research wrote a v1 library, so research has run.
-  return { $schemaVersion: 2, entries: items, bibtex_preamble: [], researched_at: now };
+  const library = {
+    $schemaVersion: 2,
+    entries: items,
+    bibtex_preamble: [],
+    researched_at: now,
+    ...(leftOut.length > 0 ? { retired_keys: leftOut.map((l) => l.citekey) } : {}),
+  };
+  return { library, leftOut };
 }

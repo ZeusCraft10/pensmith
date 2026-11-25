@@ -157,6 +157,41 @@ test('a v1 LIBRARY.json (research candidates) migrates to v2 items under the sam
   assert.deepEqual(readLibrarySync(root)?.entries.map((e) => e.id), ['vaswani2017', 'aj1998', 'devlin2018']);
 });
 
+test('a v1 entry no identifier names is left out, with a warning at the first write, and its key is given to no other work', async () => {
+  // Research stores only works with a DOI, arXiv ID, PMID, PMC ID or ISBN;
+  // a v1 library also held candidates known only by an OpenAlex ID, which
+  // the old writer left out of CITATIONS.bib.
+  const root = mkRoot();
+  const v1 = {
+    $schemaVersion: 1,
+    entries: [
+      { source: 'crossref', id: '10.1000/kept', doi: '10.1000/kept', title: 'A Kept Work', authors: ['Wu, Yuxin'], year: 2017, retracted: false, last_verified: AT, citekey: 'wu2017', raw: null },
+      { source: 'openalex', id: 'https://openalex.org/W99', title: 'Known Only To OpenAlex', authors: ['Jane Smith'], year: 2020, retracted: false, last_verified: AT, citekey: 'smith2020', raw: null },
+    ],
+  };
+  fs.writeFileSync(path.join(root, '.paper', 'LIBRARY.json'), JSON.stringify(v1));
+  assert.deepEqual((await loadLibrary(root)).entries.map((e) => e.id), ['wu2017']);
+
+  const stderr: string[] = [];
+  const write = process.stderr.write.bind(process.stderr);
+  const capture = (chunk: string | Uint8Array): boolean => { stderr.push(String(chunk)); return true; };
+  process.stderr.write = capture as typeof process.stderr.write;
+  try {
+    // Another Smith 2020 work, found later.
+    await addToLibrary(root, [cand({ title: 'A Different Smith Paper', doi: '10.1000/smith', authors: ['Smith, Jane'], year: 2020 })]);
+    assert.match(stderr.join(''), /smith2020.*Known Only To OpenAlex/s, stderr.join(''));
+    stderr.length = 0;
+    await addToLibrary(root, [cand({ title: 'Yet Another Work', doi: '10.1000/yet' })]);
+    assert.equal(stderr.join(''), '', 'the warning is given once, when the library is upgraded');
+  } finally {
+    process.stderr.write = write;
+  }
+  const keys = (await loadLibrary(root)).entries.map((e) => e.id).sort();
+  assert.deepEqual(keys, ['smith2020a', 'wu2017', 'wu2017a'], 'smith2020 named another work; it is not reused');
+  const bib = fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  assert.doesNotMatch(bib, /Known Only To OpenAlex/);
+});
+
 test('a newer LIBRARY.json than this build supports is refused, not misread', async () => {
   const root = mkRoot();
   fs.writeFileSync(path.join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 999, entries: [] }));

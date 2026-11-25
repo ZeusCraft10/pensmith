@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { loadAndMigrate, type Migration } from './migrations/loader.js';
-import { migrate as v1ToV2 } from './migrations/library/v1_to_v2.js';
+import { migrate as v1ToV2, migrateWithReport as v1ToV2WithReport, type LeftOut } from './migrations/library/v1_to_v2.js';
 import { paperDir } from './paths.js';
 import { generateCitekey } from './citekey.js';
 import { freeCitekey, itemBibtex, libraryBibtex, splitBibtex } from './bibtex-write.js';
@@ -62,14 +62,24 @@ function isMissing(err: unknown): boolean {
   return e?.code === 'ENOENT' || e?.cause?.code === 'ENOENT';
 }
 
-async function readFrom(file: string): Promise<Library> {
+/** The library in `file`; `leftOut` gathers the v1 entries a migration left out. */
+async function readFrom(file: string, leftOut?: LeftOut[]): Promise<Library> {
+  const migrations: Record<number, Migration> = leftOut
+    ? {
+      1: (v) => {
+        const r = v1ToV2WithReport(v);
+        leftOut.push(...r.leftOut);
+        return r.library;
+      },
+    }
+    : MIGRATIONS;
   try {
     return (await loadAndMigrate({
       file,
       schema: LibrarySchema,
       schemaName: 'library',
       currentVersion: CURRENT_LIBRARY_VERSION,
-      migrations: MIGRATIONS,
+      migrations,
     })) as Library;
   } catch (err) {
     if (isMissing(err)) return emptyLibrary();
@@ -200,7 +210,8 @@ export async function updateLibrary<T>(root: string, fn: (lib: Library, at: stri
   const paper = paperDir(root);
   const bibPath = join(paper, 'CITATIONS.bib');
   return withLock(file, async () => {
-    const lib = await readFrom(file);
+    const leftOut: LeftOut[] = [];
+    const lib = await readFrom(file, leftOut);
     const at = new Date().toISOString();
     const bibText = existsSync(bibPath) ? await fsp.readFile(bibPath, 'utf8') : '';
     await readInBibliography(lib, bibText, at);
@@ -211,8 +222,20 @@ export async function updateLibrary<T>(root: string, fn: (lib: Library, at: stri
     await atomicWriteFile(file, JSON.stringify(valid, null, 2) + '\n');
     await atomicWriteFile(bibPath, libraryBibtex(valid));
     await atomicWriteFile(join(paper, 'CITATIONS.ris'), libraryRis(valid));
+    if (leftOut.length > 0) {
+      process.stderr.write(
+        `pensmith: WARN — LIBRARY.json was upgraded, leaving out ${leftOut.length} source(s) with no DOI, arXiv ID, ` +
+        `PubMed ID or ISBN, which nothing could verify (they were not in CITATIONS.bib either): ` +
+        `${leftOut.map((l) => `${l.citekey} ("${l.title}")`).join(', ')}. Their keys are not given to other works.\n`,
+      );
+    }
     return result;
   });
+}
+
+/** Every key a new work may not be given, lowercased: the library's, and those it retired. */
+function takenKeys(lib: Library): Set<string> {
+  return new Set([...lib.entries.map((e) => e.id), ...(lib.retired_keys ?? [])].map((k) => k.toLowerCase()));
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +365,7 @@ export function mergeCandidates(lib: Library, candidates: SourceCandidate[], at:
 
   const byIdentity = new Map<string, LibraryItem>();
   for (const item of lib.entries) for (const k of itemIdentities(item)) if (!byIdentity.has(k)) byIdentity.set(k, item);
-  const taken = new Set(lib.entries.map((e) => e.id.toLowerCase()));
+  const taken = takenKeys(lib);
 
   const provenanceOf = (c: SourceCandidate): Provenance[] => [
     { source: c.source, id: c.id, at },
@@ -435,7 +458,7 @@ export async function importBibliography(lib: Library, rawText: string, at: stri
   const preamble = blocks.filter((b) => b.type === 'string' || b.type === 'preamble').map((b) => b.text.trim());
   for (const p of preamble) if (!lib.bibtex_preamble.includes(p)) lib.bibtex_preamble.push(p);
   const bib = await parseBib(text);
-  const taken = new Set(lib.entries.map((e) => e.id.toLowerCase()));
+  const taken = takenKeys(lib);
   const result: ImportResult = { works: [], unidentified: [] };
   for (const b of blocks) {
     if (b.key === '' || b.type === 'comment') continue;
@@ -497,7 +520,7 @@ function normalizedCsl(raw: Record<string, unknown>): Record<string, unknown> {
  * has it, else under a key made from its first author and year.
  */
 export function importCslJson(lib: Library, items: unknown[], at: string, file: string): ImportResult {
-  const taken = new Set(lib.entries.map((e) => e.id.toLowerCase()));
+  const taken = takenKeys(lib);
   const result: ImportResult = { works: [], unidentified: [] };
   for (const raw of items) {
     if (!raw || typeof raw !== 'object') continue;

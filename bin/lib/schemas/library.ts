@@ -96,6 +96,11 @@ export const Schema = z.object({
    * from the file being there.
    */
   researched_at: z.string().optional(),
+  /**
+   * Keys works had that the library no longer holds (a v1 entry no identifier
+   * named). A draft or plan may still name one, so no other work is given it.
+   */
+  retired_keys: z.array(z.string().min(1)).optional(),
 });
 
 export type Library = z.infer<typeof Schema>;
