@@ -13,8 +13,8 @@
 //   6. Call runResearchOrchestrator (adapter fan-out + dedup + source-evaluator).
 //   7. Candidate approval gate (default-ON): multiselect prune; --yolo → keep all;
 //      zero-candidates → skip gate; non-TTY → ApprovalUnavailableError / exit-3.
-//   8. Mark the candidates their own records show as retracted, then merge
-//      them into .paper/LIBRARY.json (bin/lib/library.ts), which writes
+//   8. Merge the approved candidates (marked retracted where their own
+//      records say so) into .paper/LIBRARY.json (bin/lib/library.ts), which writes
 //      CITATIONS.bib and CITATIONS.ris from it. A work the library already
 //      holds keeps its citekey, and nothing already in it (a source added with
 //      `pensmith add`, an entry edited by hand) is removed or rewritten.
@@ -30,7 +30,6 @@ import { z } from 'zod';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { addToLibrary } from '../lib/library.js';
 import { paperDir } from '../lib/paths.js';
-import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
 import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
@@ -295,9 +294,9 @@ export const researchCommand = defineCommand({
       );
     }
 
-    // Each candidate's own record says whether it is retracted; the library
-    // keeps the flag, and CITATIONS.bib carries it as note = {RETRACTED}.
-    crossCheckRetractions(finalCandidates);
+    // The orchestrator marked each candidate its own record shows as
+    // retracted; the library keeps the flag, and CITATIONS.bib carries it as
+    // note = {RETRACTED}.
     const merged = await addToLibrary(process.cwd(), finalCandidates, { preference: sourcePreferenceFor(discipline) });
     const added = merged.works.filter((w) => w.status === 'added').length;
 

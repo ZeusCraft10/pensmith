@@ -19,7 +19,8 @@
 //   - source-evaluator parse failure → keep ALL deduped candidates + WARN (T-11-10).
 //   - SourceCandidateSchema.safeParse per adapter result element (T-11-10).
 //   - Injectable adapter-registry seam for offline tests.
-//   - Does NOT mark retractions or write the library — bin/cli/research.ts does.
+//   - Marks each record its own data shows as retracted before merging (no
+//     request is made); does NOT write the library — bin/cli/research.ts does.
 //
 // Threat mitigations:
 //   T-12-01: defensive Zod safeParse on all LLM JSON outputs.
@@ -36,6 +37,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { assignUniqueCitekeys } from './bibtex-write.js';
 import { groupCandidates } from './library.js';
+import { crossCheckRetractions } from './sources/retraction-cross-check.js';
 import { packageRoot } from './paths.js';
 import { complete } from './anthropic.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
@@ -249,8 +251,8 @@ export interface ResearchOrchestratorOptions {
  *   6. Calls the source-evaluator LLM step (defensive fallback: keep all on failure).
  *   7. Returns the final SourceCandidate[].
  *
- * Does NOT mark retractions or write the library: bin/cli/research.ts does,
- * after the user approves the candidates.
+ * Does NOT write the library: bin/cli/research.ts does, after the user
+ * approves the candidates.
  *
  * @param queries  Array of query strings from the chosen topic-disambiguator scope.
  * @param opts     Orchestrator options including topic/discipline/assignment context.
@@ -388,6 +390,10 @@ export async function runResearchOrchestrator(
     return [];
   }
 
+  // Each record says for itself whether the work is retracted; that is read
+  // before the records of one work are merged, so a retraction only a
+  // non-preferred source's record shows is kept.
+  crossCheckRetractions(allRaw);
   // One candidate per work: records sharing an identifier are merged.
   const { works, skipped } = groupCandidates(allRaw, sourcePreferenceFor(discipline));
   if (skipped.length > 0) {

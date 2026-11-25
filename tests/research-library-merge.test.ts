@@ -94,3 +94,28 @@ test('the discipline\'s source preference decides whose record of a work the lib
   assert.deepEqual(keptFrom('computer-science'), ['semanticscholar', 'openalex', 'crossref']);
   assert.deepEqual(keptFrom('other'), ['crossref', 'openalex', 'semanticscholar']);
 });
+
+test('a retraction only one source\'s record shows survives the merge of a work\'s records', async (t) => {
+  // OpenAlex's record (preferred under `other`) says nothing; PubMed's lists
+  // the article as a Retracted Publication.
+  const { runResearchOrchestrator } = await import('../bin/lib/research-orchestrator.js');
+  // The source evaluator is a model call; with none, every candidate is kept.
+  const savedNoLlm = process.env['PENSMITH_NO_LLM'];
+  process.env['PENSMITH_NO_LLM'] = '1';
+  t.after(() => {
+    if (savedNoLlm === undefined) delete process.env['PENSMITH_NO_LLM'];
+    else process.env['PENSMITH_NO_LLM'] = savedNoLlm;
+  });
+  const base = { title: 'A Retracted Study', authors: ['Roe, Jane'], year: 2019, doi: '10.0000/merged-retraction', retracted: false, last_verified: '2026-11-25T00:00:00.000Z', citekey: 'roe2019' };
+  const works = await runResearchOrchestrator(['merged retraction'], {
+    topic: 'merged retraction',
+    discipline: 'other',
+    __adapterRegistry: {
+      openalex: { search: async () => [{ ...base, source: 'openalex' as const, id: 'https://openalex.org/W1', raw: { is_retracted: false } }] },
+      pubmed: { search: async () => [{ ...base, source: 'pubmed' as const, id: '31000002', pmid: '31000002', raw: { uid: '31000002', pubtype: ['Journal Article', 'Retracted Publication'] } }] },
+    },
+  });
+  assert.equal(works.length, 1, 'one work');
+  assert.equal(works[0]!.source, 'openalex', 'its metadata from the preferred source');
+  assert.equal(works[0]!.retracted, true, 'retracted, as PubMed\'s record says');
+});
