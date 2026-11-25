@@ -80,7 +80,7 @@ export const SENSITIVE_HEADERS: ReadonlySet<string> = new Set([
 
 // Query parameters that identify the caller rather than the records asked for.
 // They are stripped when recording and ignored when matching.
-// tests/cassette-no-leak.test.ts imports this same set to scan the committed files.
+// tests/cassette-no-leak.test.ts keeps its own list and checks each name is here.
 export const IDENTIFYING_PARAMS: ReadonlySet<string> = new Set([
   'mailto', 'email', 'api_key', 'apikey', 'key', 'token',
 ]);

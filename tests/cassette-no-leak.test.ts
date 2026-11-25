@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { IDENTIFYING_PARAMS, SENSITIVE_HEADERS } from '../bin/lib/http-mock.js';
+import { IDENTIFYING_PARAMS as RECORDER_IDENTIFYING_PARAMS, SENSITIVE_HEADERS } from '../bin/lib/http-mock.js';
 
 const CASSETTE_ROOT = fileURLToPath(
   new URL('../tests/fixtures/cassettes', import.meta.url),
@@ -85,6 +85,21 @@ test('cassette-no-leak: no committed cassette carries SENSITIVE_HEADERS (T-3-02 
 // Contact addresses and keys travel in query strings (OpenAlex `mailto=`,
 // Unpaywall `email=`), which header scrubbing never sees. Recorded paths must
 // carry none of them, and the recorder must strip them before writing.
+//
+// This list is the test's own, not the recorder's set: a name dropped from the
+// recorder is still caught in a committed cassette, and the test below fails.
+const IDENTIFYING_PARAMS = ['mailto', 'email', 'api_key', 'apikey', 'key', 'token'];
+
+test('cassette-no-leak: the recorder strips every identifying query param this test scans for', async () => {
+  const { scrubRecordedPath } = await import('../bin/lib/http-mock.js');
+  for (const name of IDENTIFYING_PARAMS) {
+    assert.ok(
+      RECORDER_IDENTIFYING_PARAMS.has(name),
+      `?${name}= is missing from IDENTIFYING_PARAMS in bin/lib/http-mock.ts, so the recorder would write it`,
+    );
+    assert.equal(scrubRecordedPath(`/v1/x?q=foo&${name}=SECRET`), '/v1/x?q=foo', `the recorder keeps ?${name}=`);
+  }
+});
 
 test('cassette-no-leak: no committed cassette path carries a contact address or key in its query string', () => {
   for (const file of walkDir(CASSETTE_ROOT)) {
