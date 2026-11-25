@@ -71,6 +71,15 @@ test('compile: a section that already starts with a heading is not given a secon
   assert.equal(draft, '# Paper\n\n## Introduction\n\nBody one.\n\n## Results\n\nBody two.\n\n### Detail\n\nMore.\n');
 });
 
+test('compile: a "# " line inside a fenced code block is code, not a heading to move', async () => {
+  const draft = '# Results\n\nRun:\n\n```sh\n# a shell comment\nmake\n```\n\n~~~\n## not a heading\n~~~\n\n## Detail\n\nMore.\n';
+  const root = seed('Paper', [{ slug: 'results', title: 'Results', draft }]);
+  assert.equal(
+    await compiled(root),
+    '# Paper\n\n## Results\n\nRun:\n\n```sh\n# a shell comment\nmake\n```\n\n~~~\n## not a heading\n~~~\n\n### Detail\n\nMore.\n',
+  );
+});
+
 test('compile: with no paper title in the outline, sections still get headings', async () => {
   const root = seed('', [{ slug: 'intro', title: 'Introduction', draft: 'Body.\n' }]);
   assert.equal(await compiled(root), '## Introduction\n\nBody.\n');

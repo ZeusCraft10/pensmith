@@ -52,6 +52,7 @@ import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
 import { writeBibtex } from './bibtex-write.js';
 import { parseBib } from './citations.js';
+import { codeRanges } from './citation-grammar.js';
 import {
   renderCompileReport,
   type TransitionEntry,
@@ -144,11 +145,17 @@ function normalizeTrailingNewline(s: string): string {
  * `draft` under a `## <title>` heading. A draft that already opens with a
  * heading keeps it; one that opens with a top-level `# ` heading has all its
  * headings moved down a level, so the paper title stays the only `# `.
+ * A `#` line inside a code block is code and stays as it is.
  */
 function withSectionHeading(draft: string, title: string): string {
   const body = draft.replace(/^\s+/, '');
   if (/^#{2,6}\s/.test(body)) return body;
-  if (/^#\s/.test(body)) return body.replace(/^(#{1,5})(?=\s)/gm, '#$1');
+  if (/^#\s/.test(body)) {
+    const code = codeRanges(body);
+    return body.replace(/^(#{1,5})(?=\s)/gm, (m: string, hashes: string, at: number) =>
+      code.some(([a, b]) => at >= a && at < b) ? m : `#${hashes}`,
+    );
+  }
   return title.trim() ? `## ${title.trim()}\n\n${body}` : body;
 }
 

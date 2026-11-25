@@ -151,7 +151,7 @@ function parseItem(part: string): CiteItem | null {
 }
 
 /** Character ranges of inline code spans and fenced code blocks. */
-function codeRanges(md: string): Array<[number, number]> {
+export function codeRanges(md: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   const fence = /^(?: {0,3})(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^(?: {0,3})\1[`~]*[ \t]*$|(?![\s\S]))/gm;
   for (const m of md.matchAll(fence)) ranges.push([m.index, m.index + m[0].length]);
