@@ -23,6 +23,7 @@ import assert from 'node:assert/strict';
 import * as fsp from 'node:fs/promises';
 import * as fs from 'node:fs';
 import path from 'node:path';
+import { VERSION } from '../bin/lib/version.generated.js';
 import os from 'node:os';
 import {
   MockAgent,
@@ -210,7 +211,7 @@ test('http: User-Agent contains pensmith/{version} and the email', async () => {
         });
       try {
         await fetch(cassette.request.url, { source: 'crossref' });
-        assert.match(observedUA, /^pensmith\//, `UA should start with pensmith/, got "${observedUA}"`);
+        assert.ok(observedUA.startsWith(`pensmith/${VERSION} `), `UA should start with pensmith/${VERSION}, got "${observedUA}"`);
         assert.match(observedUA, /\(test@example\.org\)/, 'UA should contain the email');
       } finally {
         await agent.close();

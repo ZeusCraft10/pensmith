@@ -197,6 +197,26 @@ test('the first publish creates the release branch with the built payload at its
   assert.equal(git(fx, ['branch', '--list', 'release']), '');
 });
 
+test('publish refuses a .gitattributes anywhere in the payload', (t) => {
+  // The release branch's root .gitattributes turns line-ending conversion off.
+  // A nested one would turn it back on for its directory, so an autocrlf
+  // checkout would rewrite hash-pinned prompt templates with CRLF.
+  for (const file of ['plugin/.gitattributes', 'plugin/skills/old/.gitattributes', 'templates/.gitattributes']) {
+    const fx = fixture();
+    t.after(() => rmSync(fx.root, { recursive: true, force: true }));
+    setVersion(fx, '1.2.4');
+    put(path.join(fx.src, ...file.split('/')), '*.md text eol=crlf\n');
+    commitAndTag(fx, 'v1.2.4');
+    git(fx, ['push', '-q', 'origin', 'main', '--tags']);
+    bundle(fx, 'build 1.2.4');
+    const r = release(fx, 'publish', 'v1.2.4');
+    assert.notEqual(r.status, 0, `${file} must be refused`);
+    const shown = file.startsWith('plugin/') ? file : `plugin/${file}`;
+    assert.ok(r.stderr.includes(`${shown} would change how the release branch checks out its files`), `${file}: ${r.stderr}`);
+    assert.equal(releaseFiles(fx), null, `${file}: nothing may be published`);
+  }
+});
+
 test('a later publish commits on top of the previous release and drops removed files', (t) => {
   const fx = fixture();
   t.after(() => rmSync(fx.root, { recursive: true, force: true }));
