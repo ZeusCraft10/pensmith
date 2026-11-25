@@ -13,9 +13,13 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { askSource, contactParam, httpLinks, isGone, RETRACTION_STATUS_TTL_MS, type OaPdfAnswer } from './work-record.js';
+import { askOaPdfs, askSource, contactParam, isGone, RETRACTION_STATUS_TTL_MS, type OaPdfAnswer } from './work-record.js';
 
 const BASE = 'https://api.openalex.org';
+
+/** The URL of the OpenAlex record of the work with `doi`, with only the `select`ed fields. */
+const workByDoi = (doi: string, select: string): string =>
+  `${BASE}/works/doi:${encodeURIComponent(doi)}?select=${select}${contactParam('mailto', '&')}`;
 
 interface OpenAlexAuthor {
   author?: { display_name?: string };
@@ -117,9 +121,8 @@ export type RetractionAnswer =
  * readable 200 is unavailable, and says nothing either way.
  */
 export function lookupRetraction(doi: string): Promise<RetractionAnswer> {
-  const url = `${BASE}/works/doi:${encodeURIComponent(doi)}?select=id,doi,title,is_retracted${contactParam('mailto', '&')}`;
   return askSource<RetractionAnswer>(
-    url,
+    workByDoi(doi, 'id,doi,title,is_retracted'),
     { source: 'openalex', cacheTtlMs: RETRACTION_STATUS_TTL_MS },
     (res) => {
       if (isGone(res.status)) return { kind: 'not_found' };
@@ -142,18 +145,11 @@ interface OpenAlexLocation {
  * needs no contact email, so Pass 3 asks it first.
  */
 export function lookupOaPdfs(doi: string): Promise<OaPdfAnswer> {
-  const url = `${BASE}/works/doi:${encodeURIComponent(doi)}?select=id,doi,best_oa_location,locations${contactParam('mailto', '&')}`;
-  return askSource<OaPdfAnswer>(
-    url,
+  return askOaPdfs<{ best_oa_location?: OpenAlexLocation | null; locations?: OpenAlexLocation[] }>(
+    workByDoi(doi, 'id,doi,best_oa_location,locations'),
     { source: 'openalex' },
-    (res) => {
-      if (isGone(res.status)) return { kind: 'not_found' };
-      if (res.status !== 200) return null;
-      const work = JSON.parse(res.body) as { best_oa_location?: OpenAlexLocation | null; locations?: OpenAlexLocation[] } | null;
-      if (!work || typeof work !== 'object') return null;
-      const locations = [work.best_oa_location, ...(Array.isArray(work.locations) ? work.locations : [])];
-      return { kind: 'found', urls: httpLinks(locations.filter((l) => l?.is_oa !== false).map((l) => l?.pdf_url)) };
-    },
-    (detail) => ({ kind: 'unavailable', detail }),
+    (work) => [work.best_oa_location, ...(Array.isArray(work.locations) ? work.locations : [])]
+      .filter((l) => l?.is_oa !== false)
+      .map((l) => l?.pdf_url),
   );
 }

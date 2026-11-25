@@ -9,29 +9,28 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shortQuoteFound } from '../bin/lib/verify/pass3.js';
 import { extractQuotes } from '../bin/lib/quote-extractor.js';
 import { matchQuote } from '../bin/lib/verify/quote-match.js';
 
 const SOURCE = 'In every cohort we studied, the effect of the treatment is robust to the choice of baseline.';
 
 test('short quote: found word for word, ignoring case', () => {
-  assert.equal(shortQuoteFound('The effect of the treatment', SOURCE), true);
+  assert.equal(matchQuote('The effect of the treatment', SOURCE).found, true);
 });
 
 test('short quote: one changed word is not found', () => {
-  assert.equal(shortQuoteFound('the effect of the drug', SOURCE), false);
+  assert.equal(matchQuote('the effect of the drug', SOURCE).found, false);
 });
 
 test('short quote: an ellipsis, in any spelling, joins parts that appear in order', () => {
   for (const q of ['the effect ... is robust', 'the effect … is robust', 'the effect [...] is robust', 'the effect...is robust']) {
-    assert.equal(shortQuoteFound(q, SOURCE), true, q);
+    assert.equal(matchQuote(q, SOURCE).found, true, q);
   }
 });
 
 test('short quote: parts around an ellipsis in the wrong order, or one changed, are not found', () => {
-  assert.equal(shortQuoteFound('is robust ... the effect', SOURCE), false);
-  assert.equal(shortQuoteFound('the effect ... is weak', SOURCE), false);
+  assert.equal(matchQuote('is robust ... the effect', SOURCE).found, false);
+  assert.equal(matchQuote('the effect ... is weak', SOURCE).found, false);
 });
 
 // An ellipsis may only stand for a few words of the same sentence. Matched
@@ -42,50 +41,50 @@ const SPLICE_SOURCE = 'We found the treatment effective in most cohorts. ' +
   'Earlier work reported that the placebo was ineffective.';
 
 test('short quote: parts around an ellipsis far apart in the source are not found', () => {
-  assert.equal(shortQuoteFound('the treatment ... was ineffective', SPLICE_SOURCE), false);
+  assert.equal(matchQuote('the treatment ... was ineffective', SPLICE_SOURCE).found, false);
   // Far apart with no full stop between them, as in text extracted from a
   // table or a page without punctuation.
   const runOn = 'the treatment ' + 'and the cohorts and the sites '.repeat(8) + 'was ineffective';
-  assert.equal(shortQuoteFound('the treatment ... was ineffective', runOn), false);
+  assert.equal(matchQuote('the treatment ... was ineffective', runOn).found, false);
   const close = 'the treatment ' + 'and the cohorts and the sites '.repeat(2) + 'was ineffective';
-  assert.equal(shortQuoteFound('the treatment ... was ineffective', close), true);
+  assert.equal(matchQuote('the treatment ... was ineffective', close).found, true);
 });
 
 test('short quote: parts around an ellipsis taken from different sentences are not found', () => {
   const near = 'We found the treatment effective. The placebo was ineffective.';
-  assert.equal(shortQuoteFound('the treatment ... was ineffective', near), false);
-  assert.equal(shortQuoteFound('the treatment … was ineffective', near), false);
+  assert.equal(matchQuote('the treatment ... was ineffective', near).found, false);
+  assert.equal(matchQuote('the treatment … was ineffective', near).found, false);
 });
 
 test('short quote: a one-word part around an ellipsis is too little to place', () => {
   const src = 'Nothing about the drug was conclusive; it is unclear whether any of it is safe.';
-  assert.equal(shortQuoteFound('the drug ... is ... safe', src), false);
+  assert.equal(matchQuote('the drug ... is ... safe', src).found, false);
 });
 
 test('short quote: parts match whole words only', () => {
-  assert.equal(shortQuoteFound('he effect of the', SOURCE), false);
-  assert.equal(shortQuoteFound('the effect of the treat', SOURCE), false);
-  assert.equal(shortQuoteFound('he effect ... is robust', SOURCE), false);
+  assert.equal(matchQuote('he effect of the', SOURCE).found, false);
+  assert.equal(matchQuote('the effect of the treat', SOURCE).found, false);
+  assert.equal(matchQuote('he effect ... is robust', SOURCE).found, false);
 });
 
 test('short quote: an ellipsis is not a word, so two words around one are too few', () => {
-  assert.equal(shortQuoteFound('effect ... robust', SOURCE), false);
-  assert.equal(shortQuoteFound('... is robust ...', SOURCE), false);
+  assert.equal(matchQuote('effect ... robust', SOURCE).found, false);
+  assert.equal(matchQuote('... is robust ...', SOURCE).found, false);
 });
 
 test('short quote: a faithful ellipsis within one sentence is still found', () => {
   // `e.g.` and `Fig.` are not sentence ends.
   const src = 'The effect, as e.g. Smith and Lee showed in Fig. 2 across three sites, is robust to the choice of baseline.';
-  assert.equal(shortQuoteFound('the effect ... is robust', src), true);
-  assert.equal(shortQuoteFound('... is robust to the choice', src), true);
+  assert.equal(matchQuote('the effect ... is robust', src).found, true);
+  assert.equal(matchQuote('... is robust to the choice', src).found, true);
   // Punctuation the omission left behind does not count against the quote.
-  assert.equal(shortQuoteFound('the effect, ... is robust', src), true);
+  assert.equal(matchQuote('the effect, ... is robust', src).found, true);
 });
 
 test('short quote: the quotation Pass 3 checks is not found when spliced', () => {
   const [q] = extractQuotes('As reported, "the treatment ... was ineffective" [@smith2020, p. 4].');
   assert.equal(q?.citekey, 'smith2020');
-  assert.equal(shortQuoteFound(q!.text, SPLICE_SOURCE), false);
+  assert.equal(matchQuote(q!.text, SPLICE_SOURCE).found, false);
 });
 
 test('short quote: an ellipsis is not counted as a quoted word', () => {
@@ -93,7 +92,7 @@ test('short quote: an ellipsis is not counted as a quoted word', () => {
   // the ten words that make an uncited quotation unattributed.
   const [q] = extractQuotes('They found "the effect ... is robust to the choice of baseline" [@k].');
   assert.equal(q?.citekey, 'k');
-  assert.equal(shortQuoteFound(q!.text, SOURCE), true);
+  assert.equal(matchQuote(q!.text, SOURCE).found, true);
   assert.deepEqual(extractQuotes('They found "the effect ... is robust to the choice of baseline".'), []);
   // Two words and an ellipsis are too few to check.
   assert.deepEqual(extractQuotes('They found "effect ... robust" [@k].'), []);

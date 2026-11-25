@@ -16,12 +16,13 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
-import { askSource, contactParam, httpLinks, isGone, type OaPdfAnswer } from './work-record.js';
+import { askOaPdfs, contactParam, type OaPdfAnswer } from './work-record.js';
 
 const BASE = 'https://api.unpaywall.org';
 
 // The contact email is read when each URL is built; contactParam leaves the
 // ?email= param out when PENSMITH_CONTACT_EMAIL is unset.
+const recordUrl = (doi: string): string => `${BASE}/v2/${encodeURIComponent(doi)}${contactParam('email', '?')}`;
 
 interface UnpaywallAuthor {
   given?: string;
@@ -104,9 +105,8 @@ export async function search(
 }
 
 export async function fetchById(doi: string): Promise<SourceCandidate | null> {
-  const url = `${BASE}/v2/${encodeURIComponent(doi)}${contactParam('email', '?')}`;
   try {
-    const res = await httpFetch(url, { source: 'unpaywall' });
+    const res = await httpFetch(recordUrl(doi), { source: 'unpaywall' });
     if (res.status !== 200) return null;
     const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
     return toCandidate(body as UnpaywallResponse);
@@ -121,18 +121,6 @@ export async function fetchById(doi: string): Promise<SourceCandidate | null> {
  * reads as no answer.
  */
 export function lookupOaPdfs(doi: string): Promise<OaPdfAnswer> {
-  const url = `${BASE}/v2/${encodeURIComponent(doi)}${contactParam('email', '?')}`;
-  return askSource<OaPdfAnswer>(
-    url,
-    { source: 'unpaywall' },
-    (res) => {
-      if (isGone(res.status)) return { kind: 'not_found' };
-      if (res.status !== 200) return null;
-      const item = JSON.parse(res.body) as UnpaywallResponse | null;
-      if (!item || typeof item !== 'object') return null;
-      const locations = [item.best_oa_location, ...(Array.isArray(item.oa_locations) ? item.oa_locations : [])];
-      return { kind: 'found', urls: httpLinks(locations.map((l) => l?.url_for_pdf)) };
-    },
-    (detail) => ({ kind: 'unavailable', detail }),
-  );
+  return askOaPdfs<UnpaywallResponse>(recordUrl(doi), { source: 'unpaywall' }, (item) =>
+    [item.best_oa_location, ...(Array.isArray(item.oa_locations) ? item.oa_locations : [])].map((l) => l?.url_for_pdf));
 }

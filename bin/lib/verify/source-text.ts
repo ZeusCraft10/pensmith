@@ -11,8 +11,8 @@
 // The link comes from a registry record, not from pensmith, so it is fetched
 // as an untrusted URL: the SSRF guard checks it and every redirect hop.
 
-import { fetch as httpFetch } from '../http.js';
-import { extractPdfText } from '../pdf-text.js';
+import { fetch as httpFetch, isTextContentType, SsrfBlockedError } from '../http.js';
+import { extractPdfText, isImageOnlyText } from '../pdf-text.js';
 import { lookupOaPdfs as openAlexPdfs } from '../sources/openalex.js';
 import { lookupOaPdfs as unpaywallPdfs } from '../sources/unpaywall.js';
 import { contactEmail, unavailableDetail, type OaPdfAnswer } from '../sources/work-record.js';
@@ -22,20 +22,14 @@ import { prepareSource, type QuoteSource } from './quote-match.js';
 const MAX_LINKS = 3;
 /** Redirects followed from one link. */
 const MAX_REDIRECTS = 5;
-/** Below this many non-space characters a PDF is taken to be scanned images. */
-const MIN_TEXT_CHARS = 50;
-
-const TEXT_TYPE = /^\s*(?:text\/|application\/(?:[\w.-]+\+)?(?:json|xml)\b)/i;
 
 /** Whether a response is a PDF: not served as text, and starting with the PDF header. */
 function isPdf(bytes: Buffer, contentType: string): boolean {
-  if (TEXT_TYPE.test(contentType)) return false;
-  const at = bytes.subarray(0, 1024).indexOf('%PDF-');
-  return at !== -1;
+  return !isTextContentType(contentType) && bytes.subarray(0, 1024).includes('%PDF-');
 }
 
 /** The bytes of the PDF at `url`, following redirects, or why there are none. */
-export async function fetchPdf(url: string): Promise<{ bytes: Buffer } | { reason: string }> {
+async function fetchPdf(url: string): Promise<{ bytes: Buffer } | { reason: string }> {
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     let res;
@@ -47,8 +41,7 @@ export async function fetchPdf(url: string): Promise<{ bytes: Buffer } | { reaso
         headers: { accept: 'application/pdf,*/*;q=0.5' },
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      return { reason: msg.startsWith('SSRF guard') ? 'refused: the link points to a private or local address' : unavailableDetail(err) };
+      return { reason: err instanceof SsrfBlockedError ? 'refused: the link points to a private or local address' : unavailableDetail(err) };
     }
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers['location'];
@@ -75,13 +68,20 @@ export type SourceText =
   /** `noLinks`: no registry listed an open-access PDF, so nothing was fetched. */
   | { kind: 'none'; scanned: boolean; noLinks: boolean; reason: string };
 
+/** A text found: the PDF link it came from, and the text prepared for matching. */
+export type FoundText = Extract<SourceText, { kind: 'text' }>;
+
 /**
- * The text of the first PDF among `urls` that gives one. `seen` holds the
- * texts already read in this run, by link; a failure is not kept, so the next
- * quotation of the same work tries again.
+ * The text of the first PDF among `urls` that gives one, adding why each
+ * other link failed to `failures`. `seen` holds the texts already read in
+ * this run, by link; a failure is not kept, so the next quotation of the same
+ * work tries again.
  */
-async function firstPdfText(urls: readonly string[], seen: Map<string, QuoteSource>): Promise<SourceText> {
-  const failures: string[] = [];
+async function firstPdfText(
+  urls: readonly string[],
+  seen: Map<string, QuoteSource>,
+  failures: string[],
+): Promise<FoundText | { kind: 'none'; scanned: boolean }> {
   let scanned = false;
   for (const url of urls) {
     const known = seen.get(url);
@@ -98,7 +98,7 @@ async function firstPdfText(urls: readonly string[], seen: Map<string, QuoteSour
       failures.push(`${url}: the PDF could not be read (${err instanceof Error ? err.message : String(err)})`);
       continue;
     }
-    if (text.replace(/\s/g, '').length < MIN_TEXT_CHARS) {
+    if (isImageOnlyText(text)) {
       scanned = true;
       failures.push(`${url}: the PDF appears to be scanned images, with no text to check`);
       continue;
@@ -107,7 +107,7 @@ async function firstPdfText(urls: readonly string[], seen: Map<string, QuoteSour
     seen.set(url, source);
     return { kind: 'text', url, source };
   }
-  return { kind: 'none', scanned, noLinks: urls.length === 0, reason: failures.join('; ') };
+  return { kind: 'none', scanned };
 }
 
 /** The PDF links a registry's answer lists, noting in `notes` why it lists none. */
@@ -130,12 +130,11 @@ export async function openAccessText(doi: string, seen: Map<string, QuoteSource>
   const failures: string[] = [];
   const tried = new Set<string>();
   let scanned = false;
-  const fromRegistry = async (registry: string, answer: OaPdfAnswer): Promise<SourceText | null> => {
+  const fromRegistry = async (registry: string, answer: OaPdfAnswer): Promise<FoundText | null> => {
     const urls = linksFrom(registry, answer, notes).filter((u) => !tried.has(u)).slice(0, MAX_LINKS);
     for (const u of urls) tried.add(u);
-    const got = await firstPdfText(urls, seen);
+    const got = await firstPdfText(urls, seen, failures);
     if (got.kind === 'text') return got;
-    if (got.reason) failures.push(got.reason);
     scanned ||= got.scanned;
     return null;
   };

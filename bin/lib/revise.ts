@@ -157,10 +157,11 @@ export class ApprovalUnavailableError extends Error {
 interface FailingCitation {
   citekey: string;
   reason: string;
-  /** For a misquotation (a Pass-3 row), the start of the quotation. */
-  quote?: string;
-  /** For a misquotation, the other cited works Pass 3 found it in. */
-  foundIn?: string[];
+  /**
+   * For a misquotation (a Pass-3 row): the start of the quotation, and the
+   * other cited works Pass 3 found it in.
+   */
+  misquoted?: { start: string; foundIn: string[] };
 }
 
 /**
@@ -175,8 +176,8 @@ export function firstFailingCitation(verificationMd: string): FailingCitation | 
   if (!row) return null;
   const failing: FailingCitation = { citekey: row.citekey, reason: `${row.verdict}: ${row.detail}` };
   if (row.quote !== undefined) {
-    failing.quote = row.quote;
-    failing.foundIn = rows.filter((r) => r.verdict === 'OK' && r.quote === row.quote && r.citekey !== row.citekey).map((r) => r.citekey);
+    const foundIn = rows.filter((r) => r.verdict === 'OK' && r.quote === row.quote && r.citekey !== row.citekey).map((r) => r.citekey);
+    failing.misquoted = { start: row.quote, foundIn };
   }
   return failing;
 }
@@ -194,7 +195,7 @@ function unrepairableRows(verificationMd: string): VerdictRow[] {
 function claimContext(draftMd: string, failing: FailingCitation): string {
   const cites = findCitations(draftMd);
   // For a misquotation, the sentence with that quotation in it.
-  const q = failing.quote === undefined ? undefined : quotationsOf(draftMd, failing.citekey, failing.quote, cites)[0];
+  const q = failing.misquoted && quotationsOf(draftMd, failing.citekey, failing.misquoted.start, cites)[0];
   if (q?.citation) {
     const [s, e] = sentenceSpan(draftMd, Math.min(q.start, q.citation.start), Math.max(q.end, q.citation.end), cites);
     return draftMd.slice(s, e).trim();
@@ -407,16 +408,14 @@ function patchFor(
     const patched = renameCitedKey(draftMd, flagged, proposal.replacement_citekey as string);
     return patched === draftMd ? { refused: 'the swap changed nothing in DRAFT.md' } : { patched, removed: [] };
   }
-  // A misquotation: the quotation goes, and the work stays cited where Pass 1 confirmed it.
-  if (failing.quote !== undefined) {
-    const { text, removed } = withoutQuotations(draftMd, flagged, { start: failing.quote, foundIn: failing.foundIn ?? [] });
-    if (text === draftMd) {
-      return { refused: `the draft no longer holds the quotation "${failing.quote}…" cited to ${flagged} — re-run verify` };
-    }
-    return { patched: text, removed };
+  // A misquotation: the quotation goes, and the work stays cited where Pass 1
+  // confirmed it. A failed citation: the quotations it alone supports go, then the key.
+  const { text, removed } = withoutQuotations(draftMd, flagged, failing.misquoted);
+  if (failing.misquoted) {
+    return text === draftMd
+      ? { refused: `the draft no longer holds the quotation "${failing.misquoted.start}…" cited to ${flagged} — re-run verify` }
+      : { patched: text, removed };
   }
-  // A failed citation: the quotations it alone supports go, then the key.
-  const { text, removed } = withoutQuotations(draftMd, flagged);
   if (citationsOf(text, flagged).some((c) => c.narrative)) {
     return { refused: `@${flagged} is a narrative citation in running text; removing it would break the sentence — edit DRAFT.md by hand or swap it` };
   }
@@ -650,7 +649,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     }
 
     await applyProposal(draftPath, planPath, patch.patched);
-    const what = failing.quote !== undefined ? 'the misquotation'
+    const what = failing.misquoted ? 'the misquotation'
       : patch.removed.length === 1 ? 'the quotation it alone supported' : `${patch.removed.length} passages with quotations it alone supported`;
     const deleted = patch.removed.length === 0 ? '' : ` Deleted ${what}: "${excerpt(patch.removed[0]!)}".`;
     return {

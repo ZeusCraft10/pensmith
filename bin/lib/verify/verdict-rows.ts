@@ -112,8 +112,8 @@ export interface VerdictRow {
 // that holds ` ("` (text from the draft) does not fit the Pass-3 form, so it
 // is read as Pass 1. The `^\s*-\s*` anchor leaves the pipe tables of the
 // advisory sections alone.
-const PASS3_ROW = /^\s*-\s*(.+?) \("(.*)"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
-const PASS1_ROW = /^\s*-\s*(.+?):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
+const PASS3_ROW = /^\s*-\s*(?<key>.+?) \("(?<quote>.*)"\):\s*\*\*(?<verdict>[A-Z_-]+)\*\*\s*(?<detail>.*)$/;
+const PASS1_ROW = /^\s*-\s*(?<key>.+?):\s*\*\*(?<verdict>[A-Z_-]+)\*\*\s*(?<detail>.*)$/;
 // The `name=value` scores the renderers put before a row's reason, and the
 // dash after them.
 const ROW_SCORES = /^(?:\w+=[\d.]+(?:,\s*)?)+\s*—\s*/;
@@ -125,19 +125,19 @@ export function parseVerdictRowDetails(verificationMd: string): VerdictRow[] {
     const quote = line.indexOf(' ("');
     const colon = line.indexOf(': **');
     const pass3 = quote !== -1 && (colon === -1 || quote < colon) ? PASS3_ROW.exec(line) : null;
-    const m = pass3 ? [pass3[0], pass3[1], pass3[3], pass3[4]] : PASS1_ROW.exec(line);
-    if (!m) continue;
-    const verdict = m[2]!;
-    const detail = m[3]!.replace(/^—\s*/, '').trim();
+    const g = (pass3 ?? PASS1_ROW.exec(line))?.groups;
+    if (!g) continue;
+    const verdict = g['verdict']!;
+    const detail = g['detail']!.replace(/^—\s*/, '').trim();
     const row: VerdictRow = {
-      citekey: m[1]!.trim(),
+      citekey: g['key']!.trim(),
       verdict,
       detail,
       reason: detail.replace(ROW_SCORES, ''),
       blocking: BLOCKING_VERDICTS.has(verdict),
     };
     // The renderer ends the snippet with an ellipsis (U+2026).
-    if (pass3) row.quote = pass3[2]!.replace(/…$/, '');
+    if (g['quote'] !== undefined) row.quote = g['quote'].replace(/…$/, '');
     out.push(row);
   }
   return out;

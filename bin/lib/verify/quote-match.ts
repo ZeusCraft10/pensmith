@@ -32,7 +32,7 @@
 // substring search on the source key followed by a check of word boundaries.
 // That stays close to linear on a book-length source.
 
-import { sentenceEnds } from '../citation-grammar.js';
+import { sentenceEnds, upperBound } from '../citation-grammar.js';
 
 /**
  * A quotation of fewer quoted words than this is a term, not a quotation, and
@@ -42,13 +42,13 @@ export const MIN_SHORT_WORDS = 3;
 /** Each part around an ellipsis needs this many quoted words, or it is found almost anywhere. */
 const MIN_PART_WORDS = 2;
 /** The most source text an ellipsis may stand for within one sentence. */
-export const MAX_ELIDED_CHARS = 150;
+const MAX_ELIDED_CHARS = 150;
 /** The most source text an ellipsis between two long parts may stand for, across sentences. */
-export const MAX_ELIDED_PASSAGE_CHARS = 1000;
+const MAX_ELIDED_PASSAGE_CHARS = 1000;
 /** Parts of at least this many words may have an ellipsis between them that crosses sentences. */
-export const PASSAGE_PART_WORDS = 5;
+const PASSAGE_PART_WORDS = 5;
 /** The most source words a bracketed insertion may replace. */
-export const MAX_BRACKET_WORDS = 3;
+const MAX_BRACKET_WORDS = 3;
 /** How many places in a run of N quoted words may differ in word spacing only: ceil(N / this). */
 const WORDS_PER_SPACING_SLIP = 3;
 /** Candidate placements tried per quotation before giving up, against pathological sources. */
@@ -236,18 +236,6 @@ function keyed(tokens: Token[]): Keyed {
   return { tokens, key: parts.join(''), kStart, kEnd, wordBreaks: Int32Array.from(wordBreaks), softBreaks: Int32Array.from(softBreaks) };
 }
 
-/** Index of the first value of ascending `a` greater than `x`. */
-function upperBound(a: ArrayLike<number>, x: number): number {
-  let lo = 0;
-  let hi = a.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (a[mid]! <= x) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
-}
-
 /** The values of ascending `a` strictly between `lo` and `hi`. */
 function between(a: Int32Array, lo: number, hi: number): Int32Array {
   return a.subarray(upperBound(a, lo), upperBound(a, hi - 1));
@@ -270,6 +258,8 @@ function tokensAt(k: Keyed, x: number): Token[] {
 export interface QuoteSource {
   readonly text: string;
   readonly keyed: Keyed;
+  /** Where each token starts in `text`, ascending. */
+  readonly tokenStart: Int32Array;
   /** The token starting and ending at each key offset, or -1. */
   readonly startAt: Int32Array;
   readonly endAt: Int32Array;
@@ -285,9 +275,11 @@ export function prepareSource(rawText: string): QuoteSource {
   const text = clean(rawText, 'source');
   const { tokens, marks: found } = tokenize(text);
   const k = keyed(tokens);
+  const tokenStart = new Int32Array(k.tokens.length);
   const startAt = new Int32Array(k.key.length + 1).fill(-1);
   const endAt = new Int32Array(k.key.length + 1).fill(-1);
   for (let i = 0; i < k.tokens.length; i += 1) {
+    tokenStart[i] = k.tokens[i]!.start;
     startAt[k.kStart[i]!] = i;
     endAt[k.kEnd[i]!] = i;
   }
@@ -297,7 +289,7 @@ export function prepareSource(rawText: string): QuoteSource {
     if (here) here.push(m.key);
     else marks.set(m.at, [m.key]);
   }
-  return { text, keyed: k, startAt, endAt, marks };
+  return { text, keyed: k, tokenStart, startAt, endAt, marks };
 }
 
 function sentenceEndBetween(src: QuoteSource, from: number, to: number): boolean {
@@ -343,22 +335,23 @@ const countWords = (tokens: readonly Token[]): number => tokens.filter((t) => t.
 
 interface Part {
   pieces: Piece[];
-  /** brackets[j] is what the bracket before pieces[j + 1] holds. */
-  brackets: string[];
+  /** gaps[j] is the bracket between pieces[j] and pieces[j + 1]. */
+  gaps: Gap[];
   words: number;
 }
 
 /**
  * A quotation's parts between ellipses, each split into pieces at its
- * bracketed insertions, and whether it has a bracket that stands for source
- * words. An editorial note ([sic]) goes; a bracket inside a word ([T]he,
- * help[s]) keeps its letters.
+ * bracketed insertions, whether it has a bracket that stands for source
+ * words, and how many quoted words it has in all. An editorial note ([sic])
+ * goes; a bracket inside a word ([T]he, help[s]) keeps its letters.
  */
-function quoteParts(cleaned: string): { parts: Part[]; bracket: boolean } {
+function quoteParts(cleaned: string): { parts: Part[]; bracket: boolean; words: number } {
   const parts: Part[] = [];
   let bracket = false;
+  let words = 0;
   for (const text of cleaned.split(ELLIPSIS)) {
-    const part: Part = { pieces: [], brackets: [], words: 0 };
+    const part: Part = { pieces: [], gaps: [], words: 0 };
     // What the brackets since the last piece hold; one between two pieces is a gap.
     let held = '';
     const addPiece = (segment: string): void => {
@@ -366,11 +359,14 @@ function quoteParts(cleaned: string): { parts: Part[]; bracket: boolean } {
       // Markers alone are kept only after a piece: before the first, they lie
       // in the author's lead-in, like a bracket there.
       if (tokens.length === 0 && (marks.length === 0 || part.pieces.length === 0)) return;
-      const words = countWords(tokens);
-      if (part.pieces.length > 0) part.brackets.push(held);
+      const pieceWords = countWords(tokens);
+      if (part.pieces.length > 0) {
+        const { tokens: t } = tokenize(held);
+        part.gaps.push({ kind: 'bracket', negation: hasNegation(t, 0, t.length, held) });
+      }
       held = '';
-      part.pieces.push({ ...keyed(tokens), words, slips: Math.ceil(words / WORDS_PER_SPACING_SLIP), marks });
-      part.words += words;
+      part.pieces.push({ ...keyed(tokens), words: pieceWords, slips: Math.ceil(pieceWords / WORDS_PER_SPACING_SLIP), marks });
+      part.words += pieceWords;
     };
     let cur = '';
     let last = 0;
@@ -389,9 +385,12 @@ function quoteParts(cleaned: string): { parts: Part[]; bracket: boolean } {
       }
     }
     addPiece(cur + text.slice(last));
-    if (part.pieces.length > 0) parts.push(part);
+    if (part.pieces.length > 0) {
+      parts.push(part);
+      words += part.words;
+    }
   }
-  return { parts, bracket };
+  return { parts, bracket, words };
 }
 
 /**
@@ -400,14 +399,14 @@ function quoteParts(cleaned: string): { parts: Part[]; bracket: boolean } {
  * not a word.
  */
 export function checkedWordCount(quote: string): number {
-  return quoteParts(clean(quote, 'quote')).parts.reduce((n, p) => n + p.words, 0);
+  return quoteParts(clean(quote, 'quote')).words;
 }
 
 /** A quotation's pieces and the gaps between them, or why it cannot be checked. */
 function planQuote(cleaned: string): Plan | string {
-  const { parts, bracket } = quoteParts(cleaned);
+  const { parts, bracket, words } = quoteParts(cleaned);
   const plan: Plan = { pieces: [], gaps: [], ellipsis: parts.length > 1, bracket };
-  if (parts.reduce((n, p) => n + p.words, 0) < MIN_SHORT_WORDS) {
+  if (words < MIN_SHORT_WORDS) {
     return `cannot be checked: fewer than ${MIN_SHORT_WORDS} quoted words outside brackets and ellipses`;
   }
   if (plan.ellipsis && parts.some((p) => p.words < MIN_PART_WORDS)) {
@@ -420,11 +419,7 @@ function planQuote(cleaned: string): Plan | string {
       plan.gaps.push({ kind: 'ellipsis', passage });
     }
     part.pieces.forEach((p, j) => {
-      if (j > 0) {
-        const held = part.brackets[j - 1]!;
-        const { tokens } = tokenize(held);
-        plan.gaps.push({ kind: 'bracket', negation: hasNegation(tokens, 0, tokens.length, held) });
-      }
+      if (j > 0) plan.gaps.push(part.gaps[j - 1]!);
       plan.pieces.push(p);
     });
   });
@@ -589,15 +584,11 @@ function matchPlan(src: QuoteSource, plan: Plan): { found: boolean; leftOut?: st
       } else {
         // The next part may start no further than the ellipsis allows.
         const limit = s.tokens[prevLast]!.end + (gap.passage ? MAX_ELIDED_PASSAGE_CHARS : MAX_ELIDED_CHARS);
-        let lo = next;
-        let hi = n;
-        while (lo < hi) {
-          const mid = (lo + hi) >> 1;
-          if (s.tokens[mid]!.start <= limit) lo = mid + 1;
-          else hi = mid;
-        }
-        if (lo === next) return false;
-        lastStart = s.kStart[lo - 1]!;
+        // The first token that starts past `limit`: at least `next`, since
+        // every token up to prevLast starts before `limit`.
+        const past = upperBound(src.tokenStart, limit);
+        if (past === next) return false;
+        lastStart = s.kStart[past - 1]!;
       }
     }
     // Search only as far as a placement can count. Searching on to the end of

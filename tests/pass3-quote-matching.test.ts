@@ -13,7 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { runPass3Unit, shortQuoteFound } from '../bin/lib/verify/pass3.js';
+import { runPass3Unit } from '../bin/lib/verify/pass3.js';
 import { matchQuote, prepareSource } from '../bin/lib/verify/quote-match.js';
 import { extractPdfText } from '../bin/lib/pdf-text.js';
 
@@ -213,10 +213,10 @@ test('PDF extraction noise is accepted: hyphenation, ligatures, soft hyphens, ru
 });
 
 test('short quotations follow the same rules', () => {
-  assert.equal(shortQuoteFound('did not reduce mortality', SOURCE), true);
-  assert.equal(shortQuoteFound('did reduce mortality', SOURCE), false);
-  assert.equal(shortQuoteFound('by 2.4 days', SOURCE), true);
-  assert.equal(shortQuoteFound('by 2.5 days', SOURCE), false);
+  assert.equal(matchQuote('did not reduce mortality', SOURCE).found, true);
+  assert.equal(matchQuote('did reduce mortality', SOURCE).found, false);
+  assert.equal(matchQuote('by 2.4 days', SOURCE).found, true);
+  assert.equal(matchQuote('by 2.5 days', SOURCE).found, false);
 });
 
 // ---------------------------------------------------------------------------

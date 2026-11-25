@@ -288,6 +288,15 @@ function isPrivateIp(addr: string): boolean {
   return false;
 }
 
+/** The SSRF guard refused a URL before any connection was made. */
+export class SsrfBlockedError extends Error {
+  readonly code = 'PENSMITH_SSRF_BLOCKED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'SsrfBlockedError';
+  }
+}
+
 /**
  * SSRF pre-flight guard (HARD-02 / T-15-02).
  *
@@ -308,11 +317,11 @@ export async function checkSsrf(
   try {
     parsed = new URL(url);
   } catch {
-    throw new Error(`SSRF guard: invalid URL "${url}"`);
+    throw new SsrfBlockedError(`SSRF guard: invalid URL "${url}"`);
   }
 
   if (!SSRF_ALLOWED_SCHEMES.has(parsed.protocol)) {
-    throw new Error(`SSRF guard: scheme "${parsed.protocol}" not allowed — only http/https permitted`);
+    throw new SsrfBlockedError(`SSRF guard: scheme "${parsed.protocol}" not allowed — only http/https permitted`);
   }
 
   let addrs: Array<{ address: string; family: number }>;
@@ -320,14 +329,14 @@ export async function checkSsrf(
     addrs = await resolveFn(parsed.hostname);
   } catch (e) {
     // Fail-CLOSED for untrusted URLs: resolver error → block, not pass.
-    throw new Error(
+    throw new SsrfBlockedError(
       `SSRF guard: DNS lookup failed for "${parsed.hostname}" (blocked, fail-closed): ${String(e)}`,
     );
   }
 
   for (const { address } of addrs) {
     if (isPrivateIp(address)) {
-      throw new Error(
+      throw new SsrfBlockedError(
         `SSRF guard: "${parsed.hostname}" resolves to private/reserved IP ${address} — blocked (RFC1918/loopback/link-local)`,
       );
     }
@@ -788,8 +797,13 @@ function isRetryable(err: unknown, method: string): boolean {
 // answers), text/*, or a JSON or XML type such as application/vnd.api+json.
 const TEXT_CONTENT_TYPE = /^\s*(?:text\/|application\/(?:[\w.-]+\+)?(?:json|xml)\b|application\/(?:javascript|x-bibtex|x-research-info-systems)\b)/i;
 
+/** Whether `contentType` names a text body: text/*, JSON, XML, or a bibliographic text format. */
+export function isTextContentType(contentType: string): boolean {
+  return TEXT_CONTENT_TYPE.test(contentType);
+}
+
 function isTextContent(contentType: string | undefined): boolean {
-  return !contentType || TEXT_CONTENT_TYPE.test(contentType);
+  return !contentType || isTextContentType(contentType);
 }
 
 // ============================================================

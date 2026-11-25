@@ -25,7 +25,7 @@
 // the known-bad-quotes corpus.
 
 import { matchQuote, type QuoteSource } from './quote-match.js';
-import { openAccessText } from './source-text.js';
+import { openAccessText, type FoundText } from './source-text.js';
 import { workIdentifiers } from './resolve.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
 import { extractQuotes } from '../quote-extractor.js';
@@ -49,14 +49,6 @@ interface BibLike {
 }
 
 /**
- * Whether a short quotation appears word for word in `sourceText`. Short and
- * long quotations follow the same rules (bin/lib/verify/quote-match.ts).
- */
-export function shortQuoteFound(quote: string, sourceText: string): boolean {
-  return matchQuote(quote, sourceText).found;
-}
-
-/**
  * Run Pass 3 on every quotation in `draftMd`, finding each cited work's
  * open-access PDF through its DOI in `bibByCitekey`.
  *
@@ -68,10 +60,11 @@ export async function runPass3(
 ): Promise<Pass3Result[]> {
   const quotes = extractQuotes(draftMd);
   const results: Pass3Result[] = [];
-  // The texts read in this run, by PDF link. Only a success is kept: a failed
-  // lookup or fetch for one quotation must not leave a later quotation of the
-  // same work unchecked, so the next one asks again.
+  // The texts read in this run, by PDF link and by DOI. Only a success is
+  // kept: a failed lookup or fetch for one quotation must not leave a later
+  // quotation of the same work unchecked, so the next one asks again.
   const texts = new Map<string, QuoteSource>();
+  const byDoi = new Map<string, FoundText>();
 
   for (const q of quotes) {
     const snippet = q.text.slice(0, 40);
@@ -101,12 +94,13 @@ export async function runPass3(
       continue;
     }
 
-    const got = await openAccessText(doi, texts);
+    const got = byDoi.get(doi) ?? await openAccessText(doi, texts);
     if (got.kind === 'none') {
       if (got.noLinks) push('PDF_UNAVAILABLE', `No OA PDF available for DOI ${doi}: ${got.reason}`);
       else push(got.scanned ? 'TEXT_UNAVAILABLE' : 'PDF_UNAVAILABLE', `PDF fetch/parse failed: ${got.reason}`);
       continue;
     }
+    byDoi.set(doi, got);
     const match = matchQuote(q.text, got.source);
     push(match.found ? 'OK' : 'NOT_FOUND', `quote ${match.reason}, checked against the OA PDF ${got.url}`);
   }
@@ -120,7 +114,6 @@ export async function runPass3(
 export function runPass3Unit(input: {
   claimedQuote: string;
   pdfText: string;
-}): { verdict: Pass3Verdict; levRatio: number } {
-  const found = matchQuote(input.claimedQuote, input.pdfText).found;
-  return { verdict: found ? 'OK' : 'NOT_FOUND', levRatio: found ? 1 : 0 };
+}): { verdict: Pass3Verdict } {
+  return { verdict: matchQuote(input.claimedQuote, input.pdfText).found ? 'OK' : 'NOT_FOUND' };
 }

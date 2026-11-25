@@ -154,12 +154,36 @@ export type OaPdfAnswer =
   | { kind: 'unavailable'; detail: string };
 
 /** The distinct http(s) links among `values`, in order. */
-export function httpLinks(values: readonly unknown[]): string[] {
+function httpLinks(values: readonly unknown[]): string[] {
   const out: string[] = [];
   for (const v of values) {
     if (typeof v === 'string' && /^https?:\/\//i.test(v) && !out.includes(v)) out.push(v);
   }
   return out;
+}
+
+/**
+ * Ask a registry at `url` for the open-access PDFs of one work: `links` picks
+ * the PDF links out of the JSON record it answers with, best first. A 404 or
+ * 410 is "no such work"; anything else that is not a readable 200 is no answer.
+ */
+export function askOaPdfs<R extends object>(
+  url: string,
+  opts: FetchOptions,
+  links: (record: R) => readonly unknown[],
+): Promise<OaPdfAnswer> {
+  return askSource<OaPdfAnswer>(
+    url,
+    opts,
+    (res) => {
+      if (isGone(res.status)) return { kind: 'not_found' };
+      if (res.status !== 200) return null;
+      const record = JSON.parse(res.body) as unknown;
+      if (!record || typeof record !== 'object') return null;
+      return { kind: 'found', urls: httpLinks(links(record as R)) };
+    },
+    (detail) => ({ kind: 'unavailable', detail }),
+  );
 }
 
 /**

@@ -69,10 +69,13 @@ export const MAX_PDF_BYTES = 50 * 1024 * 1024; // 50 MB
  */
 export const PDF_TIMEOUT_MS = 30_000;
 
+/** Whether `text` has too few non-space characters to be more than a scanned PDF's images. */
+export function isImageOnlyText(text: string): boolean {
+  return text.replace(/\s/g, '').length < IMAGE_ONLY_TEXT_THRESHOLD;
+}
+
 function isImageOnlyResult(text: string, numpages: number): boolean {
-  if (numpages < 1) return false;
-  const nonWhitespaceLength = text.replace(/\s/g, '').length;
-  return nonWhitespaceLength < IMAGE_ONLY_TEXT_THRESHOLD;
+  return numpages >= 1 && isImageOnlyText(text);
 }
 
 /** Result fields this chokepoint consumes from pdf-parse. */
@@ -179,10 +182,7 @@ export async function extractPdfText(buf: Buffer | Uint8Array): Promise<string> 
       // child_process surface isn't loaded on the common (healthy-PDF) path.
       const { pymupdfShellout } = await import('./pymupdf-shellout.js');
       const fallbackText = await pymupdfShellout(input);
-      if (
-        fallbackText !== null &&
-        fallbackText.replace(/\s/g, '').length >= IMAGE_ONLY_TEXT_THRESHOLD
-      ) {
+      if (fallbackText !== null && !isImageOnlyText(fallbackText)) {
         // PyMuPDF recovered real text from the scanned/image-only PDF.
         return fallbackText;
       }

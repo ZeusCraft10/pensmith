@@ -395,16 +395,22 @@ export function paragraphBreaks(md: string): number[] {
   return [...md.matchAll(BLANK_LINE)].map((m) => m.index + m[0].length);
 }
 
-/** Offset of the paragraph that holds `at`: just after the last blank line that ends at or before it. */
-function paragraphStart(breaks: readonly number[], at: number): number {
+/** Index of the first value of ascending `a` greater than `x` (`a.length` when none is). */
+export function upperBound(a: ArrayLike<number>, x: number): number {
   let lo = 0;
-  let hi = breaks.length;
+  let hi = a.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (breaks[mid]! <= at) lo = mid + 1;
+    if (a[mid]! <= x) lo = mid + 1;
     else hi = mid;
   }
-  return lo > 0 ? breaks[lo - 1]! : 0;
+  return lo;
+}
+
+/** Offset of the paragraph that holds `at`: just after the last blank line that ends at or before it. */
+function paragraphStart(breaks: readonly number[], at: number): number {
+  const i = upperBound(breaks, at);
+  return i > 0 ? breaks[i - 1]! : 0;
 }
 
 /**
