@@ -122,3 +122,9 @@ test('the smoother placeholders {{cite_K_M}} are never read as citations or cita
   assert.deepEqual(findRawCitations(md), []);
   assert.deepEqual(findUnparseableCitations(md), []);
 });
+
+test('quotes: a link or image title is not a quotation', () => {
+  const title = 'a long link title of well over ten words that nobody would call a quotation';
+  assert.deepEqual(quotes(`See [the source](https://example.org/a "${title}") and ![fig](f.png "${title}").`), []);
+  assert.deepEqual(quotes(`See [the source][ref].\n\n[ref]: https://example.org/a "${title}"\n`), []);
+});

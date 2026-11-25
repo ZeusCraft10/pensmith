@@ -484,6 +484,18 @@ export interface Quote {
 
 const CLOSERS: Readonly<Record<string, string>> = { '"': '"”', '“': '”"', "'": "'’", '‘': '’\'' };
 
+/**
+ * Character ranges of link and image destinations with their titles
+ * (`](url "title")`) and of link reference definitions (`[ref]: url "title"`):
+ * a title is not a quotation.
+ */
+function linkTargetRanges(md: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  for (const m of md.matchAll(/\]\((?:[^()\n]|\([^()\n]*\))*\)/g)) ranges.push([m.index, m.index + m[0].length]);
+  for (const m of md.matchAll(/^ {0,3}\[[^\]\n]+\]:[^\n]*$/gm)) ranges.push([m.index, m.index + m[0].length]);
+  return ranges;
+}
+
 function quoteText(inner: string): string {
   let text = inner;
   for (const c of findCitations(inner).reverse()) text = text.slice(0, c.start) + text.slice(c.end);
@@ -567,11 +579,13 @@ function inlineAttribution(md: string, start: number, end: number, cites: readon
  * after it, then before it, in the same sentence. A block quote takes the
  * citation inside it, a citation opening the next paragraph, or one in a
  * paragraph that introduces it with a colon. Apostrophes (`don't`,
- * `authors'`) and quote marks inside code are not quotations.
+ * `authors'`), quote marks inside code and link titles are not quotations.
  */
 export function findQuotes(md: string, cites: readonly Citation[] = findCitations(md)): Quote[] {
   const skip = codeRanges(md);
   const inCode = (i: number): boolean => skip.some(([a, b]) => i >= a && i < b);
+  const links = linkTargetRanges(md);
+  const inLinkTarget = (i: number): boolean => links.some(([a, b]) => i >= a && i < b);
   const out: Quote[] = [];
 
   const blocks = blockQuoteSpans(md, inCode);
@@ -585,7 +599,7 @@ export function findQuotes(md: string, cites: readonly Citation[] = findCitation
   for (let i = 0; i < md.length; i += 1) {
     const open = md[i]!;
     const closers = CLOSERS[open];
-    if (!closers || inCode(i) || inBlockOrCite(i)) continue;
+    if (!closers || inCode(i) || inBlockOrCite(i) || inLinkTarget(i)) continue;
     const prev = i > 0 ? md[i - 1]! : ' ';
     const next = md[i + 1];
     if (next === undefined || /\s/.test(next)) continue;

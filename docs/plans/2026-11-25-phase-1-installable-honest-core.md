@@ -46,6 +46,7 @@ Defaults (the owner may revise these later):
   - Blocking: `FABRICATED`, `MIS-CITED`, `NOT_FOUND` (quote), `RETRACTED` (unless acknowledged), `UNRESOLVED` (registry unreachable; retry), `RAW_CITATION` / `UNPARSEABLE`.
   - Advisory: Pass 2 and Pass 4 (until Phase 3).
   - `UNVERIFIABLE` (no OA text for a quote) does not block in Phase 1, but must surface loudly.
+  - `UNATTRIBUTED` (a quotation of ten or more words with no citation) does not block in Phase 1 either: it may be the author's own data or an epigraph, which no source can confirm. The section is `unverifiable`, verify, compile and done each warn, and GATE-04 blocks a quotation the humanizer separated from its citation or reworded. Owner to rule whether it should block, with a per-quote acknowledgement (as for claim support and RETRACTED) as the way out.
 - **Tests:**
   - Write a failing regression test first, from the ISSUES.md failure scenario.
   - Prefer behavioural tests that drive the real CLI or real functions over structure or hash pins.

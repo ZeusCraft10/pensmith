@@ -30,7 +30,7 @@ import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
 import { parseBibOrEmpty } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir } from '../lib/paths.js';
-import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
+import { renderPass1VerdictRow, renderPass3VerdictRow, unattributedWarning } from '../lib/verify/verdict-rows.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
@@ -138,13 +138,15 @@ export const verifyCommand = defineCommand({
     // retraction-watch hit surfaces as an advisory table row, not a block.
     const freshness = await runFreshnessForDraft(draftMd, bibPath);
 
-    // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
-    // any PDF_UNAVAILABLE/TEXT_UNAVAILABLE → status: unverifiable; else verified.
-    // A draft that cites nothing against an empty library has nothing to
-    // check: unverifiable, as before, but recorded like any other verdict.
-    const hasFail = pass1.some((r) => r.verdict !== 'OK')
-      || pass3.some((r) => r.verdict === 'NOT_FOUND' || r.verdict === 'UNATTRIBUTED');
-    const hasUnverifiable = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE')
+    // Aggregate: any Pass-1 verdict other than OK, or a quote NOT_FOUND →
+    // status: failed. A quote nothing could check (no source text, or no
+    // citation at all) → status: unverifiable. Else verified. A draft that
+    // cites nothing against an empty library has nothing to check:
+    // unverifiable, as before, but recorded like any other verdict.
+    const hasFail = pass1.some((r) => r.verdict !== 'OK') || pass3.some((r) => r.verdict === 'NOT_FOUND');
+    const sourceTextMissing = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
+    const unattributed = pass3.filter((r) => r.verdict === 'UNATTRIBUTED').length;
+    const hasUnverifiable = sourceTextMissing || unattributed > 0
       || (bibIsEmpty && pass1.length === 0 && pass3.length === 0);
     const status: 'verified' | 'failed' | 'unverifiable' = hasFail
       ? 'failed'
@@ -216,12 +218,15 @@ export const verifyCommand = defineCommand({
     }
 
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
+    // What nobody could check does not block yet, but must not look clean.
+    if (unattributed > 0) {
+      process.stderr.write(`pensmith verify: WARN — ${unattributedWarning(`section ${n}`, unattributed)}; see ${verifPath}.\n`);
+    }
     if (status === 'failed') {
       // A blocking verdict: compile and done will refuse this section.
       process.exitCode = EXIT_REFUSED;
-    } else if (status === 'unverifiable') {
-      // Does not block yet, but what nobody could check must not look clean.
-      const what = pass3.length > 0
+    } else if (status === 'unverifiable' && (sourceTextMissing || unattributed === 0)) {
+      const what = sourceTextMissing
         ? 'has quote(s) that could not be checked against source text'
         : 'cites nothing, and CITATIONS.bib is empty';
       process.stderr.write(`pensmith verify: WARN — section ${n} ${what}; see ${verifPath}.\n`);

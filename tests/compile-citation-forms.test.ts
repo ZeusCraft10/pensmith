@@ -163,3 +163,16 @@ test('compile: a section whose VERIFICATION.md says Status: failed is refused ev
   assert.ok(result.refuseReasons?.some((r) => /section 1 \(intro\).*Status is 'failed'/.test(r)), JSON.stringify(result.refuseReasons));
   assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false, 'no DRAFT.md is written');
 });
+
+test('compile: a quotation with no citation does not block compile, but compile warns about it', async () => {
+  const root = seedPaper(INTRO, BODY);
+  setIntroVerification(
+    root,
+    '# VERIFICATION (Section 1, intro)\n\nStatus: unverifiable\n\n' +
+      '- (no citation) ("I just did not feel like the system cared…"): **UNATTRIBUTED** — lev=0.000 — a direct quotation with no citation\n',
+  );
+  const warnings: string[] = [];
+  const result = await runCompile({ paperRoot: root, onWarn: (m) => warnings.push(m) });
+  assert.equal(result.refused, false, JSON.stringify(result.refuseReasons));
+  assert.ok(warnings.some((w) => /section 1 \(intro\).*1 quotation with no citation/.test(w)), warnings.join('\n'));
+});

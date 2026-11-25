@@ -115,3 +115,20 @@ test('export gate: UNSUPPORTED (advisory Pass-2 pipe row) does NOT block', () =>
   const r = runExportBlockingGate(root);
   assert.equal(r.blocked, false, `UNSUPPORTED is advisory, must not block; reasons: ${r.reasons.join('; ')}`);
 });
+
+test('export gate: a quotation with no citation does not block export, but is reported as a warning', () => {
+  const unattributed = [
+    'Status: unverifiable',
+    '',
+    '## Pass-3',
+    '- (no citation) ("I just did not feel like the system cared…"): **UNATTRIBUTED** — lev=0.000 — a direct quotation with no citation',
+    '',
+  ].join('\n');
+  const root = seed([
+    { name: '01-intro', verification: CLEAN },
+    { name: '02-body', verification: unattributed },
+  ]);
+  const r = runExportBlockingGate(root);
+  assert.equal(r.blocked, false, `UNATTRIBUTED does not block; reasons: ${r.reasons.join('; ')}`);
+  assert.ok(r.warnings.some((w) => /02-body.*1 quotation with no citation/.test(w)), r.warnings.join('; '));
+});

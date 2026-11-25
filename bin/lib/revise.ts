@@ -453,7 +453,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
       const named = other.map((r) => `${r.citekey} (${r.verdict})`).join('; ');
       const why =
         `Section ${opts.n} has blocking verdict(s) revise cannot repair by swapping or removing a citekey: ${named}. ` +
-        'Rewrite a raw or broken citation as [@key], cite or unquote an unattributed quotation, ' +
+        'Rewrite a raw or broken citation as [@key], ' +
         'or re-run verify with network access for UNRESOLVED; then verify again.';
       return { ...base, message: `${base.message} ${why}`.trim() };
     }

@@ -16,7 +16,8 @@
 //   - NOT_FOUND      — match ratio < QUOTE_LEV_THRESHOLD (a short quote: not found verbatim)
 //   - PDF_UNAVAILABLE — no DOI or no Unpaywall OA URL
 //   - TEXT_UNAVAILABLE — PDF parsed but appears image-only (<50 non-WS chars)
-//   - UNATTRIBUTED   — a long quotation that cites nothing, so no source can be checked
+//   - UNATTRIBUTED   — a long quotation that cites nothing, so no source can be
+//                      checked (does not block; the section is unverifiable)
 //
 // CYCLE-2 H-4 signature lock:
 //   `runPass3(draftMd, bibByCitekey)` is the canonical entrypoint.
@@ -66,7 +67,8 @@ export async function runPass3(
       results.push({
         citekey: NO_CITATION_KEY, quoteSnippet: snippet,
         verdict: 'UNATTRIBUTED', levRatio: 0,
-        reason: 'a direct quotation with no citation, so no source can be checked — cite its source as [@key, p. N] or remove the quotation marks',
+        reason: 'a direct quotation with no citation, so no source can be checked — if it quotes a source, ' +
+          'cite it as [@key, p. N]; your own data (an interview, a participant) or an epigraph can stay, but check it yourself',
       });
       continue;
     }

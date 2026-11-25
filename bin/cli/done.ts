@@ -28,6 +28,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { runPass3 } from '../lib/verify/pass3.js';
+import { extractQuotes } from '../lib/quote-extractor.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport, renderHonestySkipped } from '../lib/honesty.js';
@@ -46,7 +47,12 @@ import { isPandocPresent } from '../lib/ecosystem-presence.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
 import { citedKeys, findCitations, findRawCitations, findUnparseableCitations } from '../lib/citation-grammar.js';
-import { BLOCKING_VERDICT_LIST, describeVerdictRow, parseVerdictRowDetails } from '../lib/verify/verdict-rows.js';
+import {
+  BLOCKING_VERDICT_LIST,
+  describeVerdictRow,
+  parseVerdictRowDetails,
+  unattributedWarning,
+} from '../lib/verify/verdict-rows.js';
 import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderFile, isPlaceholderText } from '../lib/placeholder.js';
 
@@ -204,6 +210,8 @@ export async function runWholePaperPass4(paperRoot: string): Promise<Pass4Result
 export interface ExportBlock {
   blocked: boolean;
   reasons: string[];
+  /** What does not block but nothing checked: quotations with no citation. */
+  warnings: string[];
 }
 
 /**
@@ -233,6 +241,7 @@ export interface ExportBlock {
  */
 export function runExportBlockingGate(paperRoot: string, compiledText?: string): ExportBlock {
   const reasons: string[] = [];
+  const warnings: string[] = [];
   const sectionsDir = join(paperDir(paperRoot), 'sections');
 
   let dirNames: string[] = [];
@@ -260,6 +269,7 @@ export function runExportBlockingGate(paperRoot: string, compiledText?: string):
         ...reasons,
         "no verified sections found under .paper/sections/ — this DRAFT.md was not produced by a gated compile; run 'pensmith compile' first",
       ],
+      warnings,
     };
   }
 
@@ -294,14 +304,17 @@ export function runExportBlockingGate(paperRoot: string, compiledText?: string):
       reasons.push(`section ${name}: VERIFICATION.md Status is 'failed'`);
     }
     // Blocking verdicts — same parser + blocking set compile uses.
-    for (const row of parseVerdictRowDetails(md).filter((r) => r.blocking)) {
+    const rows = parseVerdictRowDetails(md);
+    for (const row of rows.filter((r) => r.blocking)) {
       reasons.push(
         `section ${name}: ${describeVerdictRow(row)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`,
       );
     }
+    const unattributed = rows.filter((r) => r.verdict === 'UNATTRIBUTED').length;
+    if (unattributed > 0) warnings.push(unattributedWarning(`section ${name}`, unattributed));
   }
 
-  return { blocked: reasons.length > 0, reasons };
+  return { blocked: reasons.length > 0, reasons, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -470,15 +483,35 @@ function nonPandocCitations(md: string): string[] {
   return [...findRawCitations(md, cites), ...findUnparseableCitations(md, cites)].map((c) => c.raw);
 }
 
+/** The entries of `after` left once each entry of `before` has matched one of them: what `after` adds. */
+function addedEntries(after: readonly string[], before: readonly string[]): string[] {
+  const left = [...before];
+  return after.filter((x) => {
+    const i = left.indexOf(x);
+    if (i === -1) return true;
+    left.splice(i, 1);
+    return false;
+  });
+}
+
+/** The text of every long quotation in `md` with no citation. */
+function unattributedQuotes(md: string): string[] {
+  return extractQuotes(md).filter((q) => q.unattributed).map((q) => q.text);
+}
+
 /**
  * Re-verify the humanized FINAL.md immediately before export (GATE-04).
  *
  * (a) Citation diff: the keys FINAL.md cites, in any Pandoc form, MUST equal
  *     the keys draftMd cites, and FINAL.md must not add a citation typed as
  *     text or a broken one. Any add/drop/swap is a HARD block.
- * (b) Pass-3 quote re-check on finalMd against the FULL CITATIONS.bib
- *     (Pitfall 4 — NOT filtered by DRAFT keys); an absent or empty bib is an
- *     empty library. Any NOT_FOUND or UNATTRIBUTED quote → HARD block.
+ * (b) A quotation with no citation does not block, but the humanizer must
+ *     leave it as the draft had it: one it separated from its citation, or
+ *     whose words it changed, is a HARD block.
+ * (c) Pass-3 quote re-check on finalMd against the whole CITATIONS.bib, not
+ *     only the works the draft cites, so a quote moved onto another work is
+ *     still checked; an absent or empty bib is an empty library. Any
+ *     NOT_FOUND quote is a HARD block.
  *
  * Never throws. Returns { passed: boolean; reason: string }.
  */
@@ -487,19 +520,13 @@ export async function reCheckFinalMd(
   draftMd: string,
   bibPath: string,
 ): Promise<{ passed: boolean; reason: string }> {
-  // Step (a): citation diff (runs FIRST — Pitfall 5).
+  // Step (a): the citation diff runs first, so its reason is the one reported.
   const finalKeys = new Set(citedKeys(findCitations(finalMd)));
   const draftKeys = new Set(citedKeys(findCitations(draftMd)));
 
   const added = [...finalKeys].filter((k) => !draftKeys.has(k));
   const dropped = [...draftKeys].filter((k) => !finalKeys.has(k));
-  const draftRaw = nonPandocCitations(draftMd);
-  const addedRaw = nonPandocCitations(finalMd).filter((r) => {
-    const i = draftRaw.indexOf(r);
-    if (i === -1) return true;
-    draftRaw.splice(i, 1);
-    return false;
-  });
+  const addedRaw = addedEntries(nonPandocCitations(finalMd), nonPandocCitations(draftMd));
 
   if (added.length > 0 || dropped.length > 0 || addedRaw.length > 0) {
     const parts: string[] = [];
@@ -512,9 +539,17 @@ export async function reCheckFinalMd(
     };
   }
 
-  // Step (b): Pass-3 quote re-check only when the citations match. An absent
-  // or empty bib is an empty library: a quotation that lost its citation is
-  // still caught.
+  // Step (b): quotations with no citation, which need no bibliography.
+  const changedUnattributed = addedEntries(unattributedQuotes(finalMd), unattributedQuotes(draftMd));
+  if (changedUnattributed.length > 0) {
+    const detail = changedUnattributed.map((t) => `no citation "${t.slice(0, 40)}"`).join('; ');
+    return {
+      passed: false,
+      reason: `Pass-3 quote UNATTRIBUTED in humanized FINAL.md and not word for word in DRAFT.md: ${detail}`,
+    };
+  }
+
+  // Step (c): Pass-3 quote re-check only when the citations match.
   let bibText = '';
   try {
     if (existsSync(bibPath)) bibText = readFileSync(bibPath, 'utf8');
@@ -522,7 +557,6 @@ export async function reCheckFinalMd(
     bibText = '';
   }
 
-  // Build bibByCitekey from the FULL CITATIONS.bib (Pitfall 4).
   let bibByCitekey: Map<string, { DOI?: string }>;
   try {
     const bibEntries = await parseBibOrEmpty(bibText);
@@ -554,14 +588,12 @@ export async function reCheckFinalMd(
     };
   }
 
-  const notFound = pass3Results.filter((r) => r.verdict === 'NOT_FOUND' || r.verdict === 'UNATTRIBUTED');
+  const notFound = pass3Results.filter((r) => r.verdict === 'NOT_FOUND');
   if (notFound.length > 0) {
-    const detail = notFound
-      .map((r) => `${r.verdict === 'UNATTRIBUTED' ? 'no citation' : `[@${r.citekey}]`} "${r.quoteSnippet}"`)
-      .join('; ');
+    const detail = notFound.map((r) => `[@${r.citekey}] "${r.quoteSnippet}"`).join('; ');
     return {
       passed: false,
-      reason: `Pass-3 quote ${[...new Set(notFound.map((r) => r.verdict))].join('/')} in humanized FINAL.md: ${detail}`,
+      reason: `Pass-3 quote NOT_FOUND in humanized FINAL.md: ${detail}`,
     };
   }
 
@@ -694,6 +726,7 @@ export const doneCommand = defineCommand({
       process.exitCode = EXIT_REFUSED;
       return { ok: false, blocked: true };
     }
+    for (const w of blocking.warnings) process.stderr.write(`pensmith done: WARN — ${w}.\n`);
 
     // The format, settled before any audit work: a format that cannot be made
     // here is refused now, not after the user has confirmed the export.

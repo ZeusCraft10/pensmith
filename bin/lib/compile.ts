@@ -63,7 +63,12 @@ import {
   type StalenessEntry,
 } from './compile-report.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
-import { BLOCKING_VERDICT_LIST, describeVerdictRow, parseVerdictRowDetails } from './verify/verdict-rows.js';
+import {
+  BLOCKING_VERDICT_LIST,
+  describeVerdictRow,
+  parseVerdictRowDetails,
+  unattributedWarning,
+} from './verify/verdict-rows.js';
 import { isPlaceholderText } from './placeholder.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
@@ -369,9 +374,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         refuseReasons.push(`section ${os.n} (${os.slug}): VERIFICATION.md Status is 'failed'`);
       }
       // Refuse-gate: any blocking verdict row blocks, and is named.
-      for (const row of parseVerdictRowDetails(verificationMd).filter((r) => r.blocking)) {
+      const rows = parseVerdictRowDetails(verificationMd);
+      for (const row of rows.filter((r) => r.blocking)) {
         refuseReasons.push(`section ${os.n} (${os.slug}): ${describeVerdictRow(row)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`);
       }
+      const unattributed = rows.filter((r) => r.verdict === 'UNATTRIBUTED').length;
+      if (unattributed > 0) warn(`WARN: ${unattributedWarning(`section ${os.n} (${os.slug})`, unattributed)}`);
 
       // Staleness (COMP-01 / D-08): recompute the per-section hash.
       const freshHash = computeDraftHash(sec.draftBytes, sec.assignedSources);

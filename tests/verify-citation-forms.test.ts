@@ -127,10 +127,26 @@ for (const [form, draft, key] of QUOTE_FORMS) {
   });
 }
 
-test('verify: a long quotation with no citation is UNATTRIBUTED and blocks', async () => {
-  const r = await verifyDraft(`# Intro\n\nSomeone once said "${QUOTE}" but nobody knows who.\n`);
-  assertBlocked(r, /\("coherence plays no role[^\n]*\*\*UNATTRIBUTED\*\*/);
-});
+// A long quotation with no citation cannot be checked against anything. It
+// may be a source quoted without its citation, or the author's own data (an
+// interview, a participant) or an epigraph. It does not block in this phase,
+// but the section is not "verified" and verify says so.
+const UNATTRIBUTED_FORMS: Array<[string, string]> = [
+  ['a quotation nobody is credited with', `Someone once said "${QUOTE}" but nobody knows who.`],
+  ['a participant quote from the author\'s own interviews', 'Participants often said "I just did not feel like the system cared about me or my family at all" in interviews.'],
+  ['an epigraph block quote', '> The whole of science is nothing more than a refinement of everyday thinking, as anyone will tell you.\n\nThis section reviews the field.'],
+];
+
+for (const [what, draft] of UNATTRIBUTED_FORMS) {
+  test(`verify: ${what} is UNATTRIBUTED, which leaves the section unverifiable and warns, but does not block`, async () => {
+    const r = await verifyDraft(`# Intro\n\n${draft}\n`);
+    assert.match(r.verification, /^- \(no citation\) \("[^\n]*\*\*UNATTRIBUTED\*\*/m, r.verification);
+    assert.match(r.verification, /^Status: unverifiable$/m, r.verification);
+    assert.equal(r.status, 0, `an unattributed quotation alone does not block\n${r.out}`);
+    assert.equal(r.plan['status'], 'unverifiable');
+    assert.match(r.out, /WARN — section 1 has 1 quotation with no citation/, r.out);
+  });
+}
 
 // An earlier run's mark: a section verified against this exact hash.
 const VERIFIED_PLAN = WRITTEN_PLAN.replace('status: written', "status: verified\nverified_against_draft_hash: 'earlier-run'");

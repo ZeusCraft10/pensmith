@@ -56,20 +56,22 @@ parsing the prose output.
 
 Read the exit status of every pensmith command.
 
-- **Exit 0**: the step finished. Continue.
+- **Exit 0**: the step finished. Continue. If pensmith warned about an
+  UNATTRIBUTED quotation (ten or more words with no citation), tell the
+  user: they either cite its source or confirm it is their own data or an
+  epigraph.
 - **Exit 1**: unexpected error. Show the user the error text and stop.
 - **Exit 2**: blocked or refused. Common causes: the verifier found a
   citation it could not confirm (FABRICATED, MIS-CITED, quote NOT_FOUND,
   RETRACTED, or UNRESOLVED when a registry could not be reached), a citation
-  or quotation it cannot check at all (RAW_CITATION for a DOI or
-  "(Author, 2020)" typed as text, UNPARSEABLE for a broken `[@key]`,
-  UNATTRIBUTED for a long quotation with no citation), an approval
+  it cannot check at all (RAW_CITATION for a DOI or "(Author, 2020)"
+  typed as text, UNPARSEABLE for a broken `[@key]`), an approval
   was refused, or the input was invalid. Report the reason as pensmith states it. Never
   edit `DRAFT.md`, `VERIFICATION.md` or the bibliography to make a check pass.
   A flagged citation is fixed with `pensmith plan N --revise`, then write and
   verify again; UNRESOLVED means retry once the registry is reachable. For
-  RAW_CITATION, UNPARSEABLE and UNATTRIBUTED, revise names what to rewrite;
-  show the user and let them decide.
+  RAW_CITATION and UNPARSEABLE, revise names what to rewrite; show the user
+  and let them decide.
 - **Exit 3**: pensmith needs a decision or answers from the user before it
   can continue, such as approving the outline, confirming the export, or answering
   intake questions. The command prints a JSON object describing what it is

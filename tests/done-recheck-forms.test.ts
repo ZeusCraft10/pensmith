@@ -49,3 +49,19 @@ test('GATE-04: a long quotation the humanizer left without its citation blocks, 
   assert.equal(r.passed, false);
   assert.match(r.reason, /UNATTRIBUTED|no citation/);
 });
+
+const PARTICIPANT = 'I just did not feel like the system cared about me or my family at all';
+
+test('GATE-04: a quotation with no citation that the humanizer left word for word passes', async () => {
+  const draft = `Participants often said "${PARTICIPANT}" in interviews.`;
+  const finalMd = `In interviews, participants often said "${PARTICIPANT}".`;
+  assert.deepEqual(await reCheckFinalMd(finalMd, draft, bibPath()), { passed: true, reason: '' });
+});
+
+test('GATE-04: a quotation with no citation whose words the humanizer changed blocks', async () => {
+  const draft = `Participants often said "${PARTICIPANT}" in interviews.`;
+  const finalMd = `Participants often said "${PARTICIPANT.replace('cared about', 'cared for')}" in interviews.`;
+  const r = await reCheckFinalMd(finalMd, draft, bibPath());
+  assert.equal(r.passed, false);
+  assert.match(r.reason, /no citation/);
+});

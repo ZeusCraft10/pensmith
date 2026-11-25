@@ -13,13 +13,16 @@
 /**
  * Verdicts that block compile and export. UNRESOLVED means the registry was
  * not consulted (offline): an unchecked citation never passes. RAW_CITATION is
- * a DOI, arXiv ID, PMID or author-year citation typed as text, UNPARSEABLE a
- * bracketed citation with no key that parses, and UNATTRIBUTED a long direct
- * quotation with no citation: none of them can be checked until it is
- * written as a `[@key]` citation.
+ * a DOI, arXiv ID, PMID or author-year citation typed as text, and UNPARSEABLE
+ * a bracketed citation with no key that parses: neither can be checked until
+ * it is written as a `[@key]` citation.
+ *
+ * UNATTRIBUTED (a long quotation with no citation) does not block. It may be
+ * the author's own data or an epigraph, which no source can confirm, so it
+ * leaves the section unverifiable and every verb that reads it warns.
  */
 const BLOCKING_VERDICTS = new Set([
-  'FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE', 'UNATTRIBUTED',
+  'FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNRESOLVED', 'RAW_CITATION', 'UNPARSEABLE',
 ]);
 
 /** Verdicts on text that is not a `[@key]` citation, so the row's key is that text. */
@@ -120,6 +123,16 @@ export function parseVerdictRowDetails(verificationMd: string): VerdictRow[] {
  */
 export function parseVerdictRows(verificationMd: string): string[] {
   return parseVerdictRowDetails(verificationMd).filter((r) => r.blocking).map((r) => r.citekey);
+}
+
+/**
+ * The warning for `count` quotations with no citation in `where`, shared by
+ * verify, compile and done so each says the same thing.
+ */
+export function unattributedWarning(where: string, count: number): string {
+  const what = count === 1 ? '1 quotation' : `${count} quotations`;
+  return `${where} has ${what} with no citation, which nothing checked — ` +
+    'cite a quoted source as [@key, p. N]; check your own data or an epigraph yourself';
 }
 
 /** How a refusal names what a blocking row is about: `[@key]`, or the quoted text. */

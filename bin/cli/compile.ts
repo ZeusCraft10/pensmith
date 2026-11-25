@@ -58,7 +58,7 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
 
   const failing: string[] = [];
   for (const r of pass1) if (r.verdict !== 'OK') failing.push(r.citekey);
-  for (const r of pass3) if (r.verdict === 'NOT_FOUND' || r.verdict === 'UNATTRIBUTED') failing.push(r.citekey);
+  for (const r of pass3) if (r.verdict === 'NOT_FOUND') failing.push(r.citekey);
   return { passed: failing.length === 0, failingCitekeys: [...new Set(failing)] };
 }
 
