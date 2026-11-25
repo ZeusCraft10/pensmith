@@ -17,6 +17,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
+import { unavailableDetail, yearOf, type Lookup, type WorkName, type WorkRecord } from './work-record.js';
 
 const BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
 
@@ -33,7 +34,12 @@ interface PubmedRecord {
   title?: string;
   authors?: PubmedAuthor[];
   pubdate?: string;
+  epubdate?: string;
+  source?: string;
+  fulljournalname?: string;
   articleids?: PubmedArticleId[];
+  /** Set instead of the fields above when the PMID does not exist. */
+  error?: string;
 }
 
 function parseYear(pubdate: string | undefined): number | undefined {
@@ -142,4 +148,51 @@ export async function fetchById(pmid: string): Promise<SourceCandidate | null> {
   } catch {
     return null;
   }
+}
+
+/** A PubMed author: "Vaswani A" (surname, then initials) or a collective name. */
+function pubmedName(a: PubmedAuthor): WorkName | null {
+  const name = String(a.name ?? '').trim();
+  if (!name) return null;
+  return a.authtype === 'CollectiveName' ? { literal: name } : { text: name };
+}
+
+/**
+ * Ask PubMed for the article with `pmid`. esummary answers an unknown PMID
+ * with an `error` entry, which is not_found; any other failure is unavailable.
+ */
+export async function lookupPmid(pmid: string): Promise<Lookup> {
+  const url = `${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`;
+  let res;
+  try {
+    res = await httpFetch(url, { source: 'pubmed' });
+  } catch (err) {
+    return { kind: 'unavailable', registry: 'PubMed', detail: unavailableDetail(err) };
+  }
+  if (res.status !== 200) return { kind: 'unavailable', registry: 'PubMed', detail: `HTTP ${res.status}` };
+  let rec: PubmedRecord | undefined;
+  try {
+    const body = JSON.parse(res.body) as EsummaryResponse & { error?: string };
+    if (typeof body.error === 'string') return { kind: 'not_found', registry: 'PubMed', authoritative: true };
+    rec = recordsFromEsummary(body, [pmid])[0];
+  } catch {
+    rec = undefined;
+  }
+  if (rec?.error) return { kind: 'not_found', registry: 'PubMed', authoritative: true };
+  const title = String(rec?.title ?? '').trim();
+  if (!rec || !title) return { kind: 'unavailable', registry: 'PubMed', detail: 'unreadable response' };
+  const years = [yearOf(parseYear(rec.pubdate)), yearOf(parseYear(rec.epubdate))]
+    .filter((y): y is number => y !== undefined);
+  const record: WorkRecord = {
+    registry: 'PubMed',
+    title,
+    authors: (rec.authors ?? []).map(pubmedName).filter((n): n is WorkName => n !== null),
+    years: [...new Set(years)],
+    venues: [rec.fulljournalname, rec.source].filter((v): v is string => typeof v === 'string' && v.trim() !== ''),
+    journalArticle: true,
+    raw: rec,
+  };
+  const doi = extractDoi(rec);
+  if (doi) record.doi = doi;
+  return { kind: 'found', registry: 'PubMed', record };
 }

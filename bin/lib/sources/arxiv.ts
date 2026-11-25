@@ -1,20 +1,24 @@
-// bin/lib/sources/arxiv.ts — arXiv adapter (RSCH-03, RSCH-04, T-3-13).
+// bin/lib/sources/arxiv.ts — arXiv adapter.
 //
 // Endpoints:
-//   search:     GET https://export.arxiv.org/api/query?search_query=<encoded>&max_results=20
-//   fetchById:  GET https://export.arxiv.org/api/query?id_list=<arxiv-id>
+//   search:      GET https://export.arxiv.org/api/query?search_query=<encoded>&max_results=20
+//   fetchById /
+//   lookupArxiv: GET https://export.arxiv.org/api/query?id_list=<arxiv-id>
 //
 // Atom-XML response. We parse with a tiny regex-based extractor instead of
 // pulling in fast-xml-parser / xml2js — keeps zero extra deps and the shape
 // is simple/stable (entry > id|title|published|author>name|arxiv:doi).
 //
-// RESEARCH note: arXiv has no polite-pool, no auth — the only courtesy is
-// the documented 3-second rate limit which our chokepoint (bin/lib/http.ts)
-// already enforces per-source.
+// arXiv has no polite pool and no key. Its terms ask for at most one request
+// every three seconds, which bin/lib/http.ts enforces for this source.
+//
+// An unknown ID gives an empty feed; a malformed one gives HTTP 400 and an
+// entry whose id is an api/errors link. Neither is a paper.
 
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
+import { unavailableDetail, yearOf, type Lookup, type WorkRecord } from './work-record.js';
 
 // https only: search terms and IDs must never travel in cleartext.
 const BASE = 'https://export.arxiv.org';
@@ -23,6 +27,7 @@ interface ArxivEntry {
   id: string;
   title: string;
   published: string | undefined;
+  updated: string | undefined;
   authors: string[];
   doi: string | undefined;
 }
@@ -66,6 +71,8 @@ function parseEntry(entryXml: string): ArxivEntry | null {
 
   const publishedRaw = extractOne(entryXml, 'published');
   const published = publishedRaw ? decodeXmlEntities(publishedRaw) : undefined;
+  const updatedRaw = extractOne(entryXml, 'updated');
+  const updated = updatedRaw ? decodeXmlEntities(updatedRaw) : undefined;
 
   // <author><name>…</name></author>: extract all <name> tags inside <author>.
   const authorBlocks = extractAll(entryXml, 'author');
@@ -80,7 +87,12 @@ function parseEntry(entryXml: string): ArxivEntry | null {
   const doiRaw = extractOne(entryXml, 'arxiv:doi');
   const doi = doiRaw ? decodeXmlEntities(doiRaw) : undefined;
 
-  return { id, title, published, authors, doi };
+  return { id, title, published, updated, authors, doi };
+}
+
+/** The error entry arXiv returns for a malformed ID is not a paper. */
+function isErrorEntry(e: ArxivEntry): boolean {
+  return /\/api\/errors/.test(e.id);
 }
 
 function toCandidate(entry: ArxivEntry): SourceCandidate | null {
@@ -131,12 +143,15 @@ function parseFeed(xml: string): SourceCandidate[] {
     );
     return [];
   }
-  const entries = extractAll(xml, 'entry');
-  return entries
-    .map(parseEntry)
-    .filter((e): e is ArxivEntry => e !== null)
+  return parseEntries(xml)
     .map(toCandidate)
     .filter((c): c is SourceCandidate => c !== null);
+}
+
+function parseEntries(xml: string): ArxivEntry[] {
+  return extractAll(xml, 'entry')
+    .map(parseEntry)
+    .filter((e): e is ArxivEntry => e !== null && !isErrorEntry(e));
 }
 
 export async function search(
@@ -166,4 +181,41 @@ export async function fetchById(id: string): Promise<SourceCandidate | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Ask arXiv for the paper with `id` (`1706.03762`, `cs.CL/0301012`, with or
+ * without a version). An empty feed or arXiv's error entry is not_found; any
+ * other failure is unavailable.
+ */
+export async function lookupArxiv(id: string): Promise<Lookup> {
+  const url = `${BASE}/api/query?id_list=${encodeURIComponent(id)}`;
+  let res;
+  try {
+    res = await httpFetch(url, { source: 'arxiv' });
+  } catch (err) {
+    return { kind: 'unavailable', registry: 'arXiv', detail: unavailableDetail(err) };
+  }
+  const body = typeof res.body === 'string' ? res.body : String(res.body ?? '');
+  if (res.status !== 200 && !(res.status === 400 && /\/api\/errors/.test(body))) {
+    return { kind: 'unavailable', registry: 'arXiv', detail: `HTTP ${res.status}` };
+  }
+  if (body.length > ARXIV_MAX_BODY_BYTES || !/<feed\b/.test(body)) {
+    return { kind: 'unavailable', registry: 'arXiv', detail: 'unreadable response' };
+  }
+  const entry = parseEntries(body)[0];
+  if (!entry) return { kind: 'not_found', registry: 'arXiv', authoritative: true };
+  // A preprint is dated by its first version and by later ones; a
+  // bibliography may give either year.
+  const years = [yearOf(entry.published), yearOf(entry.updated)].filter((y): y is number => y !== undefined);
+  const record: WorkRecord = {
+    registry: 'arXiv',
+    title: entry.title,
+    authors: entry.authors.map((text) => ({ text })),
+    years: [...new Set(years)],
+    venues: [],
+    journalArticle: false,
+    raw: entry,
+  };
+  return { kind: 'found', registry: 'arXiv', record };
 }

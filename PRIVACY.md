@@ -18,10 +18,12 @@ refuses private, loopback and link-local addresses.
 | `api.openai.com` | The same steps, only if you configure the OpenAI-compatible provider instead | The same prompts. |
 | `api.openalex.org` | Research, adding a source, checking citations | Search terms from your topic, titles and DOIs. |
 | `api.crossref.org` | Research, adding a source, and Pass 1 of the verifier (every cited DOI) | DOIs and title searches. |
+| `api.datacite.org` | Pass 1, for a cited DOI Crossref does not hold (arXiv, Zenodo, figshare and other DataCite DOIs) | That DOI. |
 | `api.labs.crossref.org` | The verifier's retraction check | DOIs. |
-| `doi.org` | Re-checking how fresh an earlier verification is | `HEAD https://doi.org/<doi>` for cited DOIs. DOIs written as `dx.doi.org` links are normalised to this host. |
-| `export.arxiv.org` | Research | Search terms. |
-| `eutils.ncbi.nlm.nih.gov` | Research (PubMed) | Search terms. |
+| `doi.org` | Pass 1, for a cited DOI neither Crossref nor DataCite holds; and re-checking how fresh an earlier verification is | `GET https://doi.org/<doi>` asking for the work's citation metadata. doi.org redirects that request to the DOI's registration agency, and pensmith follows only to the agencies' metadata services: `api.crossref.org`, `data.crosscite.org` and `api.datacite.org` (DataCite), `japanlinkcenter.org` (JaLC) and `data.medra.org` (mEDRA). Freshness re-checks send `HEAD https://doi.org/<doi>`. DOIs written as `dx.doi.org` links are normalised to this host. |
+| `export.arxiv.org` | Research, and Pass 1 for a source cited by its arXiv ID | Search terms and arXiv IDs. At most one request every three seconds, as arXiv asks. |
+| `eutils.ncbi.nlm.nih.gov` | Research (PubMed), and Pass 1 for a source cited by its PubMed ID | Search terms and PubMed IDs. |
+| `openlibrary.org` | Pass 1, for a book cited by its ISBN | That ISBN. |
 | `api.semanticscholar.org` | Research | Search terms, and your Semantic Scholar key if you set one. |
 | `api.unpaywall.org` | Pass 3 of the verifier, to find open-access text for quoted sources | DOIs and your contact email (Unpaywall requires one). |
 | Publisher and repository hosts | Pass 3 (the open-access PDF or page an OpenAlex or Unpaywall record points to) and `pensmith add <url>` | A plain download request for that URL. |
@@ -29,8 +31,9 @@ refuses private, loopback and link-local addresses.
 | `api.gptzero.me` | The AI-likelihood score during `pensmith done`, only with `GPTZERO_API_KEY` set, after a consent prompt (in this alpha, `--yolo` also skips that prompt) | Your paper text, cut to 50 KB. |
 
 When `PENSMITH_CONTACT_EMAIL` is set, requests to the scholarly registries
-carry it in the `User-Agent` header, as their polite-use policies ask. It is
-not stored or logged.
+carry it in the `User-Agent` header, and requests to Crossref and OpenAlex
+also carry it as a `mailto` parameter, as their polite-use policies ask. It is
+not stored or logged. When it is not set, nothing identifying is sent.
 
 Pensmith does not contact Zotero itself. It only reads your Claude Code
 config to see whether a Zotero MCP server is set up there.

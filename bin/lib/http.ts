@@ -405,10 +405,13 @@ function userAgent(): string {
 // ============================================================
 export type HttpSource =
   | 'crossref'
+  | 'datacite'
+  | 'doi'
   | 'openalex'
   | 'unpaywall'
   | 'arxiv'
   | 'pubmed'
+  | 'openlibrary'
   | 'semanticscholar'
   | 'retraction-watch'
   | 'generic';
@@ -464,9 +467,12 @@ const ONE_DAY_MS = 24 * 3_600_000;
 const ONE_HOUR_MS = 3_600_000;
 const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   crossref: 7 * ONE_DAY_MS,
+  datacite: 7 * ONE_DAY_MS,
+  doi: 7 * ONE_DAY_MS,
   openalex: 7 * ONE_DAY_MS,
   arxiv: 7 * ONE_DAY_MS,
   pubmed: 7 * ONE_DAY_MS,
+  openlibrary: 7 * ONE_DAY_MS,
   unpaywall: 1 * ONE_DAY_MS,
   semanticscholar: 7 * ONE_DAY_MS,
   'retraction-watch': 1 * ONE_DAY_MS,
@@ -487,10 +493,17 @@ const NEGATIVE_RESPONSE_TTL_MS = ONE_HOUR_MS;
 // ============================================================
 const RPS_BY_SOURCE: Record<HttpSource, number> = {
   crossref: 50,
+  // DataCite allows 3000 requests per 5 minutes from one address.
+  datacite: 10,
+  // doi.org and the agency metadata hosts it redirects to; no published limit.
+  doi: 5,
   openalex: 10,
   unpaywall: 10,
-  arxiv: 1,
+  // arXiv's API terms: no more than one request every three seconds.
+  arxiv: 1 / 3,
+  // E-utilities without an API key: three requests a second.
   pubmed: 3,
+  openlibrary: 1,
   // S2 anonymous rate-limit is 100 RPM (~1.7 RPS); keep conservative at 1 RPS.
   // With an API key it bumps to 1 RPS per partner (same effective limit here).
   semanticscholar: 1,
@@ -580,7 +593,9 @@ function bucketFor(src: HttpSource): TokenBucket {
   let b = BUCKETS[src];
   if (!b) {
     const rps = RPS_BY_SOURCE[src];
-    b = new TokenBucket(rps, rps);
+    // At least one token of capacity: a source slower than one request a
+    // second (arXiv) would otherwise never hold a whole token.
+    b = new TokenBucket(Math.max(1, rps), rps);
     BUCKETS[src] = b;
   }
   return b;
