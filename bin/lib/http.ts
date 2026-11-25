@@ -48,7 +48,7 @@
 // Bucket acquire happens AFTER the cache short-circuit and INSIDE the
 // retry's `fn` so 429-retry re-pays the rate cost.
 
-import { request, getGlobalDispatcher, setGlobalDispatcher, Agent } from 'undici';
+import { request, getGlobalDispatcher, EnvHttpProxyAgent, type Dispatcher } from 'undici';
 import { createHash } from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { readFileSync, statSync } from 'node:fs';
@@ -59,11 +59,45 @@ import { pensmithHttpCacheDir } from './paths.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { retry, parseRetryAfter } from './retry.js';
 
-// Touch the optional Agent reference so verbatimModuleSyntax does not strip
-// it; we may use it in Phase 2 when wiring connection pooling.
-void getGlobalDispatcher;
-void setGlobalDispatcher;
-void Agent;
+// ============================================================
+//   Proxy-aware dispatcher
+// ============================================================
+// undici's default dispatcher ignores HTTP_PROXY / HTTPS_PROXY / NO_PROXY, so on
+// proxy-only university and corporate networks every registry call failed at
+// connect and Pass 1 then called every citation FABRICATED. EnvHttpProxyAgent
+// reads those variables (upper- or lower-case). It is rebuilt when they change.
+//
+// A dispatcher installed globally after this module loaded (a test MockAgent,
+// or a host application's own agent) is used as-is instead.
+//
+// The SSRF guard below still resolves untrusted hostnames locally before the
+// request is made. With a proxy in the path the proxy performs the final DNS
+// resolution, so the local check is a pre-flight filter, not a guarantee about
+// the address the proxy connects to.
+const initialGlobalDispatcher: Dispatcher = getGlobalDispatcher();
+let proxyAgent: { env: string; agent: Dispatcher } | null = null;
+
+function proxyEnvFingerprint(): string {
+  const e = process.env;
+  return [
+    e['http_proxy'] ?? e['HTTP_PROXY'] ?? '',
+    e['https_proxy'] ?? e['HTTPS_PROXY'] ?? '',
+    e['no_proxy'] ?? e['NO_PROXY'] ?? '',
+  ].join('\n');
+}
+
+function dispatcherForRequest(): Dispatcher {
+  const installed = getGlobalDispatcher();
+  if (installed !== initialGlobalDispatcher) return installed;
+  const env = proxyEnvFingerprint();
+  if (!proxyAgent || proxyAgent.env !== env) {
+    const previous = proxyAgent?.agent;
+    proxyAgent = { env, agent: new EnvHttpProxyAgent() };
+    void previous?.close().catch(() => { /* idle sockets only */ });
+  }
+  return proxyAgent.agent;
+}
+
 
 // ============================================================
 //   SSRF guard — HARD-02 (T-15-02)
@@ -698,6 +732,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       headers,
       headersTimeout: timeoutMs,
       bodyTimeout: timeoutMs,
+      dispatcher: dispatcherForRequest(),
     };
     if (opts.body !== undefined) {
       reqInit.body = opts.body;
