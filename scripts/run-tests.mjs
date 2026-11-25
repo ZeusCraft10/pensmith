@@ -14,8 +14,8 @@
 //     `node --import tsx --test`, and exits 1 if zero matches are found
 //     (mitigates vacuous-pass failure mode).
 //
-// CI assertion: the workflow greps the stdout of `npm test` for the
-// "discovered N test files" line and asserts N >= 1.
+// The runner exits 1 itself when it discovers zero test files, so a broken
+// glob can never pass vacuously; CI needs no separate check.
 
 import { readdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';

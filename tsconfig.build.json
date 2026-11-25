@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts"],
+  "exclude": ["dist", "node_modules", "tests", "mcp/__fixtures__/**/*"]
+}
