@@ -12,7 +12,8 @@
 //   - arXiv and PubMed each say "no such paper" in their own way (an empty
 //     feed or an api/errors entry; an esummary `error` entry). Only that is
 //     not_found, and only that makes an arXiv-only or PMID-only entry
-//     FABRICATED; no answer is UNRESOLVED.
+//     FABRICATED; no answer, or a refusal such as a proxy's 403, is
+//     UNRESOLVED.
 
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -149,6 +150,8 @@ test('Pass 1: a valid ISBN Open Library does not list is UNRESOLVED, not FABRICA
 
 const ATOM = { 'content-type': 'application/atom+xml; charset=utf-8' };
 const JSON_HEADERS = { 'content-type': 'application/json' };
+// What an egress proxy or a refusing server sends instead of the registry's answer.
+const PLAIN = { 'content-type': 'text/plain; charset=utf-8' };
 
 // The head of the feed arXiv sends (as in the recorded id_list=1706.03762
 // answer), with no entry: arXiv's answer for an ID it does not hold.
@@ -180,21 +183,21 @@ const arxivErrorFeed = (id: string): string => `<?xml version="1.0" encoding="UT
 </feed>`;
 
 /** Answer GET export.arxiv.org/api/query?id_list=<id> (and only that) with `status` and `body`. */
-function arxivAnswers(id: string, status: number, body: string): void {
+function arxivAnswers(id: string, status: number, body: string, headers: Record<string, string> = ATOM): void {
   agent.get('https://export.arxiv.org')
     .intercept({ path: (p) => p === `/api/query?id_list=${encodeURIComponent(id)}`, method: 'GET' })
-    .reply(status, body, { headers: ATOM })
+    .reply(status, body, { headers })
     .persist();
 }
 
 /** Answer GET eutils esummary for `pmid` (and only that) with `status` and `body`. */
-function pubmedAnswers(pmid: string, status: number, body: string): void {
+function pubmedAnswers(pmid: string, status: number, body: string, headers: Record<string, string> = JSON_HEADERS): void {
   agent.get('https://eutils.ncbi.nlm.nih.gov')
     .intercept({
       path: (p) => p.startsWith('/entrez/eutils/esummary.fcgi?') && p.includes(`id=${pmid}&`),
       method: 'GET',
     })
-    .reply(status, body, { headers: JSON_HEADERS })
+    .reply(status, body, { headers })
     .persist();
 }
 
@@ -220,6 +223,19 @@ test('arXiv: a 503 that outlasts the retries is unavailable, not not_found', { t
   assert.deepEqual(await lookupArxiv('2501.00001'), { kind: 'unavailable', registry: 'arXiv', detail: 'HTTP 503' });
 });
 
+// A status http.ts does not retry (an egress proxy's 403, a 404, a 400 with no
+// error feed) is returned to the lookup, not thrown. It says nothing about
+// the paper, so it is unavailable too.
+test('arXiv: a 403 is unavailable, not not_found', async () => {
+  arxivAnswers('2501.00002', 403, 'Forbidden', PLAIN);
+  assert.deepEqual(await lookupArxiv('2501.00002'), { kind: 'unavailable', registry: 'arXiv', detail: 'HTTP 403' });
+});
+
+test('arXiv: a 400 without an api/errors entry is unavailable, not not_found', async () => {
+  arxivAnswers('2501.00003', 400, 'Bad Request', PLAIN);
+  assert.deepEqual(await lookupArxiv('2501.00003'), { kind: 'unavailable', registry: 'arXiv', detail: 'HTTP 400' });
+});
+
 test('arXiv: search and fetchById do not read the error entry as a paper', async () => {
   arxivAnswers('2501.9999y', 200, arxivErrorFeed('2501.9999y'));
   assert.equal(await arxivFetchById('2501.9999y'), null);
@@ -238,6 +254,11 @@ test('PubMed: an esummary error entry for the PMID is not_found', async () => {
 test('PubMed: a 503 that outlasts the retries is unavailable, not not_found', { timeout: 60_000 }, async () => {
   pubmedAnswers('39999998', 503, 'Service Unavailable');
   assert.deepEqual(await lookupPmid('39999998'), { kind: 'unavailable', registry: 'PubMed', detail: 'HTTP 503' });
+});
+
+test('PubMed: a 403 is unavailable, not not_found', async () => {
+  pubmedAnswers('39999996', 403, 'Forbidden', PLAIN);
+  assert.deepEqual(await lookupPmid('39999996'), { kind: 'unavailable', registry: 'PubMed', detail: 'HTTP 403' });
 });
 
 test('PubMed: an error about the request rather than the PMID is unavailable, not not_found', async () => {
@@ -294,4 +315,18 @@ test('Pass 1: a PMID-only entry is UNRESOLVED, not FABRICATED, when PubMed does 
   const r = await pass1For(pmidOnly('39999998'));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
   assert.match(r.reason, /PMID 39999998 could not be checked \(PubMed: HTTP 503\)/);
+});
+
+test('Pass 1: an arXiv-only entry is UNRESOLVED, not FABRICATED, when arXiv refuses with a 403', async () => {
+  arxivAnswers('2501.99999', 403, 'Forbidden', PLAIN);
+  const r = await pass1For(arxivOnly('2501.99999'));
+  assert.equal(r.verdict, 'UNRESOLVED', r.reason);
+  assert.match(r.reason, /arXiv:2501\.99999 could not be checked \(arXiv: HTTP 403\)/);
+});
+
+test('Pass 1: a PMID-only entry is UNRESOLVED, not FABRICATED, when PubMed refuses with a 403', async () => {
+  pubmedAnswers('39999996', 403, 'Forbidden', PLAIN);
+  const r = await pass1For(pmidOnly('39999996'));
+  assert.equal(r.verdict, 'UNRESOLVED', r.reason);
+  assert.match(r.reason, /PMID 39999996 could not be checked \(PubMed: HTTP 403\)/);
 });
