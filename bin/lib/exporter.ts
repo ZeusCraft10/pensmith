@@ -29,44 +29,18 @@
 
 import { execFile } from 'node:child_process';
 import * as fsp from 'node:fs/promises';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path, { basename, extname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import JSZip from 'jszip';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { parseBib, renderStyle, renderInText } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
-import { paperDir } from './paths.js';
+import { packageRoot, paperDir } from './paths.js';
 
-// =====================================================================
-//   PKG_ROOT — locate templates/citation-styles/ relative to this file
-//   (same pattern as bin/lib/citations.ts lines 84-102)
-// =====================================================================
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      // package.json marks a source checkout; .claude-plugin/plugin.json marks
-      // the installed plugin, which ships no package.json.
-      for (const marker of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
-        if (statSync(path.join(cur, marker), { throwIfNoEntry: false })?.isFile()) return cur;
-      }
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(__dirname);
+// PKG_ROOT — templates/citation-styles/ resolves against the install root.
+const PKG_ROOT = packageRoot();
 
 const execFileAsync = promisify(execFile);
 

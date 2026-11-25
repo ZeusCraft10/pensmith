@@ -13,35 +13,13 @@
 import type { Probe, ProbeResult } from '../probes.js';
 import { statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { packageRoot } from '../../paths.js';
 
-// Resolve the install root relative to THIS file, never process.cwd():
-// `pensmith doctor` runs from inside a user's paper directory. Walk up rather
-// than using a fixed number of `..`, because this code runs at different
-// depths under tsx, in the compiled build and inside the plugin bundle.
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      // package.json marks a source checkout; .claude-plugin/plugin.json marks
-      // the installed plugin, which ships no package.json.
-      for (const marker of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
-        if (statSync(path.join(cur, marker), { throwIfNoEntry: false })?.isFile()) return cur;
-      }
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  // Fall back to start; the probe will report FAIL with a clear summary.
-  return start;
-}
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = findPkgRoot(HERE);
+// The install root, never process.cwd(): `pensmith doctor` runs from inside a
+// user's paper directory. If no root is found the checks below FAIL with a
+// clear summary.
+const PKG_ROOT = packageRoot();
 // Plugin bundle first, then the source build.
 const ENTRY_CANDIDATES = ['dist/pensmith.mjs', 'dist/bin/pensmith.js'];
 const REQUIRED_ASSETS = [
@@ -51,28 +29,19 @@ const REQUIRED_ASSETS = [
   'references/http-warnings.md',
 ];
 
-function presentNonEmpty(p: string): { ok: boolean; size: number; reason?: string } {
+function isNonEmpty(p: string): boolean {
   try {
-    const s = statSync(p);
-    if (s.size === 0) return { ok: false, size: 0, reason: `${p} exists but is empty` };
-    return { ok: true, size: s.size };
-  } catch (err) {
-    // IN-01: classify the failure so an operator can act. ENOENT = build is
-    // missing (run `npm run build`); EACCES = file exists but pensmith can't
-    // read it (permission/ACL problem, not a missing artifact). Anything else
-    // surfaces verbatim so unknown errno states don't disappear into "not found".
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return { ok: false, size: 0, reason: `${p} not found` };
-    if (code === 'EACCES') return { ok: false, size: 0, reason: `${p} permission denied (EACCES)` };
-    return { ok: false, size: 0, reason: `${p} stat failed (${code ?? 'unknown'})` };
+    return statSync(p).size > 0;
+  } catch {
+    return false;
   }
 }
 
 export const buildArtifactResolvesProbe: Probe = {
   id: 'build-artifact-resolves',
   async run(): Promise<ProbeResult> {
-    const entryRel = ENTRY_CANDIDATES.find((rel) => presentNonEmpty(path.join(PKG_ROOT, rel)).ok);
-    const missingAssets = REQUIRED_ASSETS.filter((rel) => !presentNonEmpty(path.join(PKG_ROOT, rel)).ok);
+    const entryRel = ENTRY_CANDIDATES.find((rel) => isNonEmpty(path.join(PKG_ROOT, rel)));
+    const missingAssets = REQUIRED_ASSETS.filter((rel) => !isNonEmpty(path.join(PKG_ROOT, rel)));
     if (!entryRel || missingAssets.length > 0) {
       const problems = [
         ...(entryRel ? [] : [`no CLI entry (${ENTRY_CANDIDATES.join(' or ')}) under ${PKG_ROOT}`]),

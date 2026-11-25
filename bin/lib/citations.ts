@@ -70,9 +70,9 @@
 // happens at compile time via Pandoc. citations.ts renders only the
 // reference list (bibliography). Phase 6 compile verb wires Pandoc.
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { packageRoot } from './paths.js';
 
 // `citation-js@0.7` ships a single default-export class; the `plugins`
 // registry hangs off the class (`Cite.plugins`). A `import { plugins }`
@@ -91,35 +91,9 @@ const plugins = Cite.plugins;
 export { Cite };
 
 // =====================================================================
-//   Locate apa.csl relative to package root (mirrors bin/lib/http.ts)
+//   Locate apa.csl relative to the install root (paths.ts packageRoot)
 // =====================================================================
-// This file ships at two depths: bin/lib/citations.ts under tsx, and
-// dist/bin/lib/citations.js after build. Fixed-depth `..` × N would
-// land in the wrong dir post-build (same defect class as IN-03 in
-// http.ts). Walk up from HERE until we find package.json.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      // package.json marks a source checkout; .claude-plugin/plugin.json marks
-      // the installed plugin, which ships no package.json.
-      for (const marker of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
-        if (statSync(path.join(cur, marker), { throwIfNoEntry: false })?.isFile()) return cur;
-      }
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(__dirname);
+const PKG_ROOT = packageRoot();
 
 // =====================================================================
 //   Memoized N-style custom-template registration (Pitfall #4 / Pitfall 1)

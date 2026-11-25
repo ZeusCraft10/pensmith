@@ -6,6 +6,8 @@
 // claudeJsonPath) are home-directory logic too, so they live here. The eslint
 // chokepoint at eslint.config.js (D-41) enforces it. The forward-declared
 // per-file exemption block in eslint.config.js permits these calls here.
+// The install root the runtime assets resolve against (packageRoot) is
+// computed here too, once for every module that needs it.
 //
 // Platform layout (per D-40, D-43, RESEARCH §RQ-7):
 //   Windows:  %LOCALAPPDATA%\pensmith\
@@ -23,8 +25,10 @@
 //   one of these sync roots.
 
 import { createHash } from 'node:crypto';
+import { statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // ---------------------------------------------------------------------------
 // Bare-slug validation (Phase 3 Plan 03-03 Task 3.3 / T-3-12 mitigation).
@@ -192,6 +196,41 @@ export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
 export function claudeJsonPath(env: NodeJS.ProcessEnv = process.env): string {
   const dir = env['CLAUDE_CONFIG_DIR'];
   return dir && dir.length > 0 ? path.join(dir, '.claude.json') : path.join(os.homedir(), '.claude.json');
+}
+
+// package.json marks a source checkout; .claude-plugin/plugin.json marks the
+// installed plugin, which ships no package.json.
+const PACKAGE_ROOT_MARKERS = ['package.json', path.join('.claude-plugin', 'plugin.json')];
+
+function findPkgRoot(start: string): string {
+  let cur = start;
+  for (let i = 0; i < 8; i++) {
+    for (const marker of PACKAGE_ROOT_MARKERS) {
+      try {
+        if (statSync(path.join(cur, marker), { throwIfNoEntry: false })?.isFile()) return cur;
+      } catch {
+        // unreadable: try the next marker, then the parent directory
+      }
+    }
+    const next = path.dirname(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return start;
+}
+
+let pkgRoot: string | undefined;
+
+/**
+ * The directory pensmith is installed in: the source checkout, or the
+ * installed plugin. Runtime assets (templates/, references/) and the CLI entry
+ * resolve against it, never against process.cwd(), which is the user's paper
+ * directory. It is found by walking up from this module, not with a fixed
+ * number of `..`, because this module runs at different depths: bin/lib/
+ * under tsx, dist/bin/lib/ after a build, and plugin/dist/ inside the bundle.
+ */
+export function packageRoot(): string {
+  return (pkgRoot ??= findPkgRoot(path.dirname(fileURLToPath(import.meta.url))));
 }
 
 /**

@@ -39,40 +39,11 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { packageRoot } from './paths.js';
 
-// ---------------------------------------------------------------------------
-// Locate the repo's templates/ dir relative to THIS module.
-// Same shape as bin/lib/citations.ts findPkgRoot — walk up from here until
-// we find package.json (a source checkout) or .claude-plugin/plugin.json (the
-// installed plugin). This works under `tsx` (bin/lib/prompt-loader.ts), the
-// compiled build (dist/bin/lib/prompt-loader.js) and the plugin bundle
-// (plugin/dist/pensmith.mjs).
-// ---------------------------------------------------------------------------
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    // package.json marks a source checkout; .claude-plugin/plugin.json marks
-    // the installed plugin, which ships no package.json.
-    for (const marker of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
-      try {
-        readFileSync(path.join(cur, marker));
-        return cur;
-      } catch {
-        // not here: try the next marker, then the parent directory
-      }
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(__dirname);
+// templates/ resolves against the install root (paths.ts packageRoot), which
+// is right under tsx, in the compiled build and in the plugin bundle.
+const PKG_ROOT = packageRoot();
 
 /**
  * SHA-256 hashes for each `templates/prompts/<slug>.md` file.

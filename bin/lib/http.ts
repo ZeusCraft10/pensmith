@@ -51,11 +51,11 @@
 import { request, getGlobalDispatcher, setGlobalDispatcher, Agent } from 'undici';
 import { createHash } from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns/promises';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { pensmithHttpCacheDir } from './paths.js';
+import { packageRoot, pensmithHttpCacheDir } from './paths.js';
+import { VERSION } from './version.generated.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { retry, parseRetryAfter } from './retry.js';
 
@@ -176,35 +176,10 @@ export async function checkSsrf(
   }
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// IN-03 fix: this file ships at two different depths — bin/lib/http.ts under
-// tsx, dist/bin/lib/http.js after build. Fixed-depth `..` × N produced
-// `dist/references/http-warnings.md` (nonexistent) post-build, silently
-// degrading the WARN banner to the short fallback. Same defect-class as CR-02
-// for the doctor probes; same shape of fix — walk up from HERE until we hit
-// the directory that owns package.json. See bin/lib/doctor/probes/
-// build-artifact-resolves.ts for the original rationale.
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      // package.json marks a source checkout; .claude-plugin/plugin.json marks
-      // the installed plugin, which ships no package.json.
-      for (const marker of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
-        if (statSync(path.join(cur, marker), { throwIfNoEntry: false })?.isFile()) return cur;
-      }
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-const PKG_ROOT = findPkgRoot(__dirname);
+// IN-03: resolve references/ against the install root (paths.ts
+// packageRoot), not a fixed-depth `..` × N, which lands in the wrong dir
+// after a build and silently degrades the WARN banner to the short fallback.
+const PKG_ROOT = packageRoot();
 
 // ============================================================
 //   WARN-once for missing contact email
@@ -258,34 +233,13 @@ export function _resetWarnedForTest(): void {
 // ============================================================
 //   User-Agent
 // ============================================================
-let cachedVersion: string | null = null;
-function pkgVersion(): string {
-  if (cachedVersion !== null) return cachedVersion;
-  // IN-03: reuse PKG_ROOT (a fixed-depth `..` lands in the wrong dir after
-  // build). A source checkout carries the version in package.json; the
-  // installed plugin carries it in .claude-plugin/plugin.json.
-  cachedVersion = '0.0.0';
-  for (const manifest of ['package.json', path.join('.claude-plugin', 'plugin.json')]) {
-    try {
-      const parsed = JSON.parse(readFileSync(path.join(PKG_ROOT, manifest), 'utf8')) as { version?: string };
-      if (parsed.version) {
-        cachedVersion = parsed.version;
-        break;
-      }
-    } catch {
-      // not this layout; try the next manifest
-    }
-  }
-  return cachedVersion;
-}
-
 function userAgent(): string {
   const email = process.env.PENSMITH_CONTACT_EMAIL?.trim();
   if (!email) {
     warnNoEmailOnce();
-    return `pensmith/${pkgVersion()} (no-contact)`;
+    return `pensmith/${VERSION} (no-contact)`;
   }
-  return `pensmith/${pkgVersion()} (${email})`;
+  return `pensmith/${VERSION} (${email})`;
 }
 
 // ============================================================
