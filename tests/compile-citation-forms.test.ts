@@ -134,3 +134,32 @@ test('compile CLI: a stale section re-verified against an empty CITATIONS.bib is
   assert.match(r.stdout, /ghost2099/);
   assert.doesNotMatch(r.stderr, /parseBib|invalid BibTeX/);
 });
+
+/** Replace section 1's VERIFICATION.md with `md`. */
+function setIntroVerification(root: string, md: string): void {
+  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), md);
+}
+
+test('compile: a FABRICATED row for a key with Pandoc punctuation refuses compile and names the key', async () => {
+  const root = seedPaper(INTRO, BODY);
+  setIntroVerification(
+    root,
+    '# VERIFICATION (Section 1, intro)\n\nStatus: failed\n\n' +
+      '- ghost.2099:v2: **FABRICATED** — titleJW=0.00, authorJW=0.00 — not in CITATIONS.bib\n' +
+      '- a/b+c: **FABRICATED** — titleJW=0.00, authorJW=0.00 — not in CITATIONS.bib\n',
+  );
+  const result = await runCompile({ paperRoot: root, onWarn: () => {} });
+  assert.equal(result.refused, true);
+  const reasons = (result.refuseReasons ?? []).join('\n');
+  assert.match(reasons, /\[@ghost\.2099:v2\] has a blocking verdict/, reasons);
+  assert.match(reasons, /\[@a\/b\+c\] has a blocking verdict/, reasons);
+});
+
+test('compile: a section whose VERIFICATION.md says Status: failed is refused even when no verdict row parses', async () => {
+  const root = seedPaper(INTRO, BODY);
+  setIntroVerification(root, '# VERIFICATION (Section 1, intro)\n\nStatus: failed\n\n* a row in a shape the parser does not read\n');
+  const result = await runCompile({ paperRoot: root, onWarn: () => {} });
+  assert.equal(result.refused, true);
+  assert.ok(result.refuseReasons?.some((r) => /section 1 \(intro\).*Status is 'failed'/.test(r)), JSON.stringify(result.refuseReasons));
+  assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false, 'no DRAFT.md is written');
+});

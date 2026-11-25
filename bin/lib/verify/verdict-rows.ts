@@ -32,6 +32,15 @@ export const BLOCKING_VERDICT_LIST = [...BLOCKING_VERDICTS].join('/');
 export const NO_CITATION_KEY = '(no citation)';
 
 /**
+ * `s` on one line. The parser reads one row per line, so a key copied from a
+ * hard-wrapped draft (`Engel and\nFleming (2007)`) must not carry its line
+ * break into the row, or the row stops parsing and nothing blocks.
+ */
+export function oneLine(s: string): string {
+  return s.replace(/\s+/g, ' ');
+}
+
+/**
  * Render a Pass-1 verdict row (writer side — verify.ts).
  *
  * Output format (byte-identical to verify.ts:155):
@@ -44,7 +53,7 @@ export function renderPass1VerdictRow(
   authorJW: number,
   reason: string,
 ): string {
-  return `- ${citekey}: **${verdict}** — titleJW=${titleJW.toFixed(2)}, authorJW=${authorJW.toFixed(2)} — ${reason}`;
+  return `- ${oneLine(citekey)}: **${verdict}** — titleJW=${titleJW.toFixed(2)}, authorJW=${authorJW.toFixed(2)} — ${oneLine(reason)}`;
 }
 
 /**
@@ -62,7 +71,7 @@ export function renderPass3VerdictRow(
   levRatio: number,
   reason: string,
 ): string {
-  return `- ${citekey} ("${quoteSnippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}`;
+  return `- ${oneLine(citekey)} ("${oneLine(quoteSnippet)}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${oneLine(reason)}`;
 }
 
 /** One verdict row of a VERIFICATION.md body. */
@@ -77,10 +86,12 @@ export interface VerdictRow {
 
 // `- <key>: **VERDICT** <detail>` (Pass 1) and `- <key> ("<quote>…"): **VERDICT**
 // <detail>` (Pass 3). The key runs up to its delimiter, so every Pandoc key
-// character (`.`, `/`, `:`, `+` ...) is kept. A row is Pass 3 when ` ("` comes
-// before the first `: **`; a quote snippet may itself hold `: **`, so a Pass-3
-// row takes the bold verdict after the last `"): `. The `^\s*-\s*` anchor
-// leaves the pipe tables of the advisory sections alone.
+// character (`.`, `/`, `:`, `+` ...) is kept. A row is read as Pass 3 when
+// ` ("` comes before the first `: **`; a quote snippet may itself hold `: **`,
+// so a Pass-3 row takes the bold verdict after the last `"): `. A Pass-1 key
+// that holds ` ("` (text from the draft) does not fit the Pass-3 form, so it
+// is read as Pass 1. The `^\s*-\s*` anchor leaves the pipe tables of the
+// advisory sections alone.
 const PASS3_ROW = /^\s*-\s*(.+?) \(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
 const PASS1_ROW = /^\s*-\s*(.+?):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/;
 
@@ -90,7 +101,7 @@ export function parseVerdictRowDetails(verificationMd: string): VerdictRow[] {
   for (const line of verificationMd.split(/\r?\n/)) {
     const quote = line.indexOf(' ("');
     const colon = line.indexOf(': **');
-    const m = (quote !== -1 && (colon === -1 || quote < colon) ? PASS3_ROW : PASS1_ROW).exec(line);
+    const m = (quote !== -1 && (colon === -1 || quote < colon) ? PASS3_ROW.exec(line) : null) ?? PASS1_ROW.exec(line);
     if (!m) continue;
     const verdict = m[2]!;
     out.push({

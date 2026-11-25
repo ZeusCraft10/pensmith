@@ -363,7 +363,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         continue; // skip the failing-citekey parse AND staleness check; section is already refused
       }
 
-      // Refuse-gate (COMP-01 / GATE-02): any failing verdict blocks.
+      // A section verify failed never compiles, even when no verdict row
+      // parses: rows that drift from the parser must not read as clean.
+      if (/^Status:\s*failed\b/im.test(verificationMd)) {
+        refuseReasons.push(`section ${os.n} (${os.slug}): VERIFICATION.md Status is 'failed'`);
+      }
+      // Refuse-gate: any blocking verdict row blocks, and is named.
       for (const row of parseVerdictRowDetails(verificationMd).filter((r) => r.blocking)) {
         refuseReasons.push(`section ${os.n} (${os.slug}): ${describeVerdictRow(row)} has a blocking verdict (${BLOCKING_VERDICT_LIST})`);
       }

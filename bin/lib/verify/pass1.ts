@@ -37,6 +37,7 @@ import {
   type RawCitationKind,
 } from '../citation-grammar.js';
 import { isOfflineMode } from '../network-mode.js';
+import { oneLine } from './verdict-rows.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
@@ -303,16 +304,18 @@ export async function runPass1(
     }
     results.push(r);
   }
+  // The row key for text that is not a citation is the text itself, on one
+  // line: a draft wrapped mid-citation must still give a row compile reads.
   for (const raw of findRawCitations(draftMd, cites)) {
     results.push({
-      citekey: raw.raw, verdict: 'RAW_CITATION', titleJW: 0, authorJW: 0,
+      citekey: oneLine(raw.raw), verdict: 'RAW_CITATION', titleJW: 0, authorJW: 0,
       reason: `${RAW_WHAT[raw.kind]}, which nothing checks — cite the work as [@key] from CITATIONS.bib ` +
         `(add it with \`pensmith add\` if it is missing); if it is not a citation, ${RAW_ESCAPE[raw.kind]}`,
     });
   }
   for (const u of findUnparseableCitations(draftMd, cites)) {
     results.push({
-      citekey: u.raw, verdict: 'UNPARSEABLE', titleJW: 0, authorJW: 0,
+      citekey: oneLine(u.raw), verdict: 'UNPARSEABLE', titleJW: 0, authorJW: 0,
       reason: 'a bracketed citation with no key that parses (a citekey starts right after @) — fix the key',
     });
   }
