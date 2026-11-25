@@ -36,7 +36,7 @@
 
 import * as fsp from 'node:fs/promises';
 import { z } from 'zod';
-import { atomicWriteFile } from '../atomic-write.js';
+import { atomicWriteFile, isDryRun } from '../atomic-write.js';
 
 export type Migration = (input: unknown) => unknown;
 
@@ -129,7 +129,8 @@ export async function loadAndMigrate<TSchema extends z.ZodTypeAny>(
   // diskVersion) AND the caller opted in. Default writeBack:false leaves
   // disk untouched even if migrations ran — useful for read-only replay
   // tools and dry-run validators.
-  if (v !== diskVersion && opts.writeBack === true) {
+  // A dry run uses the upgraded value in memory and leaves the file as it is.
+  if (v !== diskVersion && opts.writeBack === true && !isDryRun()) {
     // Audit #35: append the trailing newline every other JSON writer emits
     // (state.ts, library.ts) so a migrated file stays byte-consistent with a
     // freshly-written one — no spurious "\ No newline at end of file" git diff.

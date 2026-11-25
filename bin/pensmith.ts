@@ -57,6 +57,7 @@ import { setMirrorPromptsToStderr } from './lib/session-log.js';
 import { projectEstimate } from './lib/estimator.js';
 import { resolveNextAction, type RouterDecision } from './lib/router.js';
 import { describeStep, renderDryRun } from './lib/dry-run.js';
+import { isDryRun } from './lib/atomic-write.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 import { EXIT_ERROR, EXIT_OK, EXIT_REFUSED } from './lib/exit-codes.js';
 
@@ -240,7 +241,7 @@ const READ_ONLY_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor'
  */
 export function shouldRunYoloCapPreflight(argv: string[]): boolean {
   if (!hasFlag(argv, 'yolo')) return false;
-  if (hasFlag(argv, 'estimate') || hasFlag(argv, 'dry-run')) return false;
+  if (hasFlag(argv, 'estimate') || hasFlag(argv, 'dry-run') || isDryRun()) return false;
   if (argv.includes('--version') || argv.includes('--help') || argv.includes('-h')) return false;
   const v = firstVerb(argv);
   if (v !== null && READ_ONLY_VERBS.has(v)) return false;
@@ -363,13 +364,13 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   // (b) --offline / --dry-run → http.ts refuses every request (network-mode.ts).
   //     --dry-run also makes the write chokepoint refuse every write
   //     (atomic-write.ts), as a backstop: a dry run never runs a verb at all.
-  if (hasFlag(argv, 'offline') || hasFlag(argv, 'dry-run')) {
+  //     PENSMITH_DRY_RUN=1 in the environment counts as --dry-run, since the
+  //     write chokepoint honours it either way.
+  if (hasFlag(argv, 'dry-run')) process.env['PENSMITH_DRY_RUN'] = '1';
+  if (hasFlag(argv, 'offline') || isDryRun()) {
     process.env['PENSMITH_OFFLINE'] = '1';
   }
-  if (hasFlag(argv, 'dry-run')) {
-    process.env['PENSMITH_NO_LLM'] = '1';
-    process.env['PENSMITH_DRY_RUN'] = '1';
-  }
+  if (isDryRun()) process.env['PENSMITH_NO_LLM'] = '1';
 
   // (c) H1 / C2-H1 YOLO CAP PRE-FLIGHT — runs WHENEVER --yolo is present for a
   //     COST-INCURRING execution (write/plan/verify/research/compile/done/revise,
@@ -416,7 +417,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   const verb = firstVerb(argv);
 
   // --dry-run: say what would run and stop before any verb runs.
-  if (hasFlag(argv, 'dry-run')) {
+  if (isDryRun()) {
     process.exitCode = await runDryRun(argv, verb);
     return;
   }

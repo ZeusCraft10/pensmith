@@ -46,7 +46,13 @@ async function countingListener(): Promise<Listener> {
 
 interface RunResult { status: number | null; stdout: string; stderr: string }
 
-function runCli(args: string[], cwd: string, home: string, proxyUrl: string): Promise<RunResult> {
+function runCli(
+  args: string[],
+  cwd: string,
+  home: string,
+  proxyUrl: string,
+  extraEnv: Record<string, string> = {},
+): Promise<RunResult> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   for (const k of ['PENSMITH_TEST_CASSETTES', 'PENSMITH_OFFLINE', 'PENSMITH_NO_LLM', 'PENSMITH_DRY_RUN']) delete env[k];
@@ -57,6 +63,7 @@ function runCli(args: string[], cwd: string, home: string, proxyUrl: string): Pr
   env['ANTHROPIC_API_KEY'] = 'sk-ant-fake-dry-run-test';
   env['GPTZERO_API_KEY'] = 'fake-gptzero-dry-run-test';
   for (const k of ['HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA']) env[k] = home;
+  Object.assign(env, extraEnv);
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, ...args], { cwd, env });
     let stdout = '';
@@ -135,13 +142,14 @@ async function assertDryRunChangesNothing(
   args: string[],
   root: string,
   expect: RegExp[],
+  extraEnv: Record<string, string> = {},
 ): Promise<RunResult> {
   const home = mkdtempSync(join(tmpdir(), 'pensmith-dry-run-home-'));
   const before = snapshot(root);
   const homeBefore = snapshot(home);
   const listener = await countingListener();
   try {
-    const r = await runCli(args, root, home, listener.url);
+    const r = await runCli(args, root, home, listener.url, extraEnv);
     assert.equal(r.status, 0, `pensmith ${args.join(' ')}: stdout=${r.stdout} stderr=${r.stderr}`);
     assert.match(r.stdout, /dry run/i, `pensmith ${args.join(' ')} must say it is a dry run: ${r.stdout}`);
     for (const re of expect) assert.match(r.stdout, re, `pensmith ${args.join(' ')}: ${r.stdout}`);
@@ -185,6 +193,28 @@ test('dry run: bare `pensmith`, `next` and `resume` name the step the router wou
   for (const args of [['--dry-run'], ['next', '--dry-run'], ['resume', '--dry-run']]) {
     await assertDryRunChangesNothing(args, root, [/the next step is `pensmith plan 2`/, /\.paper\/sections\/02-methods\/PLAN\.md/]);
   }
+});
+
+test('dry run: an old-format STATE.json is read as upgraded but not rewritten', async () => {
+  const root = paperMidway();
+  // A v1 STATE.json: reading it runs a migration, which normally saves the
+  // upgraded file. A dry run must use the upgrade in memory only.
+  writeFileSync(
+    join(root, 'STATE.json'),
+    JSON.stringify({
+      $schemaVersion: 1,
+      paperId: '22222222-2222-2222-2222-222222222222',
+      createdAt: '2026-11-01T00:00:00.000Z',
+      sections: [{ n: 1, slug: 'intro', state: 'verified' }, { n: 2, slug: 'methods', state: 'planned' }],
+    }),
+  );
+  await assertDryRunChangesNothing(['--dry-run'], root, [/the next step is `pensmith plan 2`/]);
+});
+
+test('dry run: PENSMITH_DRY_RUN=1 in the environment is a dry run too', async () => {
+  // Otherwise the verb would run, call the model, and only then fail to save.
+  const root = paperMidway();
+  await assertDryRunChangesNothing(['write', '1'], root, [/would run `pensmith write 1`/], { PENSMITH_DRY_RUN: '1' });
 });
 
 test('dry run: `new --from` in an empty folder creates no paper', async () => {
