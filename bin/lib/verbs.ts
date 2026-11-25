@@ -50,12 +50,12 @@ export const VERB_ALIASES: Readonly<Record<string, Ux02Verb>> = {
  * They used to fall through to the router, which ran a different step.
  */
 const NOT_A_VERB_HINTS: Readonly<Record<string, string>> = {
-  revise: 'to repair a flagged citation run `pensmith plan <N> --revise`',
-  humanize: 'humanizing runs inside `pensmith done`',
-  score: 'the GPTZero score runs inside `pensmith done`',
-  'gpt-zero': 'the GPTZero score runs inside `pensmith done`',
-  gptzero: 'the GPTZero score runs inside `pensmith done`',
-  plagiarism: 'the plagiarism check runs inside `pensmith done`',
+  revise: 'To repair a flagged citation, run `pensmith plan <N> --revise`',
+  humanize: 'Humanizing runs inside `pensmith done`',
+  score: 'The GPTZero score runs inside `pensmith done`',
+  'gpt-zero': 'The GPTZero score runs inside `pensmith done`',
+  gptzero: 'The GPTZero score runs inside `pensmith done`',
+  plagiarism: 'The plagiarism check runs inside `pensmith done`',
 };
 
 function isVerb(word: string): word is Ux02Verb {
