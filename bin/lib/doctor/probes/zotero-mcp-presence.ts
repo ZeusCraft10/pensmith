@@ -11,13 +11,13 @@
 // boolean-derived message — it NEVER interpolates process.env['ZOTERO_API_KEY']
 // (the value) into any string.
 //
-// NOTE: this probe composes its OWN `isZoteroMcpPresent() && !!key` check inline
+// NOTE: this probe composes its OWN `configured && !!key` check inline
 // rather than calling the adapter's key-only isZoteroAuthenticated() (which is
 // decoupled from FS-presence per the H3 fix). The coupling is intentional: the
 // probe must distinguish ABSENT from CONFIGURED_NO_AUTH to report REAL state.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { isZoteroMcpPresent, zoteroMcpConfigLocations } from '../../ecosystem-presence.js';
+import { zoteroMcpScan } from '../../ecosystem-presence.js';
 
 // T-01-07: the env-var NAME (never its value) is the only key-derived token that
 // ever reaches probe output.
@@ -28,12 +28,6 @@ const API_KEY_ENV = 'ZOTERO_API_KEY';
 // none may imply Zotero is a research source.
 const NOT_A_SOURCE_YET = 'research does not read from Zotero yet in this alpha';
 
-// Where Claude Code keeps MCP server configs (shown in the WARN `detail` so
-// users see where we looked).
-function candidatePaths(): string[] {
-  return zoteroMcpConfigLocations();
-}
-
 export const zoteroMcpPresenceProbe: Probe = {
   id: 'zotero-mcp-presence',
   async run(): Promise<ProbeResult> {
@@ -41,7 +35,9 @@ export const zoteroMcpPresenceProbe: Probe = {
     // ecosystem-presence.ts so both tiers report the same boolean. Tri-state:
     //   configured     = Zotero MCP server in a Claude Code MCP config.
     //   authenticated  = configured AND ZOTERO_API_KEY present (boolean-only).
-    const configured = isZoteroMcpPresent();
+    // `checked` is where Claude Code keeps MCP server configs, shown in the
+    // WARN `detail` so users see where we looked.
+    const { checked, present: configured } = zoteroMcpScan();
     // T-01-07: boolean presence ONLY — the value is never read into a variable
     // that could reach output. D-12: DOT-ACCESS env read (not a computed
     // process.env[var] index) keeps this probe inside the doctor-probe chokepoint
@@ -56,7 +52,7 @@ export const zoteroMcpPresenceProbe: Probe = {
         id: 'zotero-mcp-presence',
         severity: 'WARN',
         summary: `Zotero MCP server not configured (optional; ${NOT_A_SOURCE_YET}).`,
-        detail: `Checked: ${candidatePaths().join(', ')}`,
+        detail: `Checked: ${checked.join(', ')}`,
         fix: 'Add a Zotero MCP server to Claude Code (`claude mcp add`), then set ZOTERO_API_KEY.',
       };
     }
@@ -68,7 +64,7 @@ export const zoteroMcpPresenceProbe: Probe = {
         id: 'zotero-mcp-presence',
         severity: 'WARN',
         summary: `Zotero MCP configured but ${API_KEY_ENV} not set (optional; ${NOT_A_SOURCE_YET}).`,
-        detail: `Checked: ${candidatePaths().join(', ')}. ${API_KEY_ENV} not found in env.`,
+        detail: `Checked: ${checked.join(', ')}. ${API_KEY_ENV} not found in env.`,
         fix: `Set ${API_KEY_ENV} in your environment if your Zotero MCP server needs it.`,
       };
     }

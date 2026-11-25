@@ -2,8 +2,9 @@
 //
 // DOCT-07: Runtime config provider API-key resolvability probe.
 // D-12 / T-01-07 / cross-AI cycle-2 HIGH #2:
-//   - Delegates to loadCapabilityFacts() (the SINGLE authorised composition site
-//     for runtime config + process.env presence checks — shared with mcp/).
+//   - Delegates to loadProviderCapabilities() in bin/lib/capabilities.ts (the
+//     SINGLE authorised composition site for runtime config + process.env
+//     presence checks).
 //   - Only boolean `present` and env-var NAME escape this probe.
 //   - The resolved API key value NEVER appears in any probe output, log line,
 //     error message, or detail string.
@@ -15,29 +16,26 @@
 //   const present = typeof v === 'string' && v.length > 0;
 //   // `v` is out of scope. Only `present` (boolean) is used onward.
 // This probe does NOT use that pattern directly — it delegates to
-// loadCapabilityFacts() which applies the pattern internally, keeping
-// both mcp/ and bin/lib/doctor/ in sync from a single source.
+// bin/lib/capabilities.ts, which applies the pattern internally.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { loadCapabilityFacts } from '../../capabilities.js';
+import { loadProviderCapabilities } from '../../capabilities.js';
 
 export const runtimeConfigPresenceProbe: Probe = {
   id: 'runtime-config-presence',
   async run(): Promise<ProbeResult> {
     // D-12 / T-01-07 / cross-AI cycle-2 HIGH #2: this probe MUST delegate
-    // to the SAME helper that mcp/ uses (bin/lib/capabilities.ts::
-    // loadCapabilityFacts). Re-implementing env presence here would create
-    // a second composition site for runtime config + process.env[...],
-    // which 02-07 Case A would have no way to keep in sync with mcp/.
-    // The helper returns CapabilityFacts.providers as a readonly array of
-    // { name, api_key_env, present } — exactly the shape we serialize here.
-    const facts = await loadCapabilityFacts();
-    // Re-key from snake_case (capability-fact shape — owned by 02-04's
-    // loadCapabilityFacts and consumed unmodified by mcp/) to the doctor's
+    // to bin/lib/capabilities.ts. Re-implementing env presence here would
+    // create a second composition site for runtime config + process.env[...].
+    // The helper returns CapabilityFacts.providers' shape, a readonly array
+    // of { name, api_key_env, present }, and nothing else: the ecosystem
+    // facts loadCapabilityFacts() adds are doctor probes of their own.
+    const capabilities = await loadProviderCapabilities();
+    // Re-key from snake_case (the capability-fact shape) to the doctor's
     // historical detail shape { name, apiKeyEnv, present }. 02-07's
     // extractCliFacts JSON.parses this detail string into an object array
     // and reads p.present per element — no regex parsing.
-    const providers = facts.providers.map((p) => ({
+    const providers = capabilities.map((p) => ({
       name: p.name,
       apiKeyEnv: p.api_key_env,
       present: p.present,

@@ -19,7 +19,7 @@
 //     plugin.json `mcpServers`, its skills/).
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { claudeConfigDir, claudeJsonPath, isInsideSyncFolder, paperDir } from './paths.js';
 
@@ -76,31 +76,43 @@ function installedPluginDirs(): string[] {
   return dirs;
 }
 
+/** The project's and the installed plugins' MCP configs for a session in `cwd` (the user config aside). */
+function otherMcpConfigs(cwd: string): string[] {
+  const plugins = installedPluginDirs().flatMap((dir) => [join(dir, '.mcp.json'), join(dir, '.claude-plugin', 'plugin.json')]);
+  return [join(cwd, '.mcp.json'), ...plugins];
+}
+
 /** Every MCP config Claude Code would read for a session in `cwd`. */
 export function zoteroMcpConfigLocations(cwd: string = process.cwd()): string[] {
-  const plugins = installedPluginDirs().flatMap((dir) => [join(dir, '.mcp.json'), join(dir, '.claude-plugin', 'plugin.json')]);
-  return [claudeJsonPath(), join(cwd, '.mcp.json'), ...plugins];
+  return [claudeJsonPath(), ...otherMcpConfigs(cwd)];
+}
+
+const isZotero = (name: string): boolean => /zotero/i.test(name);
+
+/** Whether the user config at `file` has a Zotero server at user scope, or at local scope for `cwd`. */
+function userConfigHasZotero(file: string, cwd: string): boolean {
+  const userConfig = readJson(file);
+  if (serverNames(userConfig).some(isZotero)) return true;
+  if (!isRecord(userConfig) || !isRecord(userConfig['projects'])) return false;
+  const here = resolve(cwd);
+  return Object.entries(userConfig['projects']).some(([dir, entry]) => resolve(dir) === here && serverNames(entry).some(isZotero));
 }
 
 /**
- * Whether a Zotero MCP server is configured for a session in `cwd`, in any
- * scope Claude Code reads. Best-effort: absence is a WARN, never a FAIL.
+ * The MCP configs a session in `cwd` reads (`checked`, for the doctor's
+ * detail) and whether any of them configures a Zotero server, in one pass.
+ * Best-effort: absence is a WARN, never a FAIL.
  */
+export function zoteroMcpScan(cwd: string = process.cwd()): { checked: string[]; present: boolean } {
+  const userFile = claudeJsonPath();
+  const others = otherMcpConfigs(cwd);
+  const present = userConfigHasZotero(userFile, cwd) || others.some((p) => serverNames(readJson(p)).some(isZotero));
+  return { checked: [userFile, ...others], present };
+}
+
+/** Whether a Zotero MCP server is configured for a session in `cwd`, in any scope Claude Code reads. */
 export function isZoteroMcpPresent(cwd: string = process.cwd()): boolean {
-  const isZotero = (name: string): boolean => /zotero/i.test(name);
-  const userConfig = readJson(claudeJsonPath());
-  if (serverNames(userConfig).some(isZotero)) return true;
-  if (isRecord(userConfig) && isRecord(userConfig['projects'])) {
-    const projects = userConfig['projects'];
-    const here = resolve(cwd);
-    for (const [dir, entry] of Object.entries(projects)) {
-      if (resolve(dir) === here && serverNames(entry).some(isZotero)) return true;
-    }
-  }
-  for (const p of zoteroMcpConfigLocations(cwd).slice(1)) {
-    if (serverNames(readJson(p)).some(isZotero)) return true;
-  }
-  return false;
+  return zoteroMcpScan(cwd).present;
 }
 
 /** Every directory a `humanizer` skill could be loaded from for a session in `cwd`. */
@@ -112,15 +124,23 @@ export function humanizerSkillLocations(cwd: string = process.cwd()): string[] {
   ];
 }
 
-/** Whether a non-empty `humanizer` skill directory exists in any of those places. */
-export function isHumanizerSkillPresent(cwd: string = process.cwd()): boolean {
-  return humanizerSkillLocations(cwd).some((dir) => {
+/** The humanizer skill locations for `cwd`, and whether any is a non-empty directory, in one pass. */
+export function humanizerSkillScan(cwd: string = process.cwd()): { locations: string[]; present: boolean } {
+  const locations = humanizerSkillLocations(cwd);
+  const present = locations.some((dir) => {
     try {
-      return existsSync(dir) && statSync(dir).isDirectory() && readdirSync(dir).length > 0;
+      // Throws for a missing directory or a file, so only a non-empty directory counts.
+      return readdirSync(dir).length > 0;
     } catch {
       return false;
     }
   });
+  return { locations, present };
+}
+
+/** Whether a non-empty `humanizer` skill directory exists in any of those places. */
+export function isHumanizerSkillPresent(cwd: string = process.cwd()): boolean {
+  return humanizerSkillScan(cwd).present;
 }
 
 /**

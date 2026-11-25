@@ -41,26 +41,39 @@ function envPresent(name: string): boolean {
   return typeof v === 'string' && v.length > 0;
 }
 
+type RuntimeConfig = Awaited<ReturnType<typeof loadRuntimeConfig>>;
+
+/** Each configured provider's name, key env-var NAME and whether that env var is set. */
+function providerCapabilities(cfg: RuntimeConfig): readonly ProviderCapability[] {
+  // cfg.providers is a Record<string, Provider> (z.record in runtime-config schema).
+  return Object.values(cfg.providers ?? {}).map((p) => ({
+    name: p.name,
+    api_key_env: p.apiKeyEnv,
+    present: envPresent(p.apiKeyEnv),
+  }));
+}
+
+/**
+ * Just the provider part of the capability facts, for callers that need
+ * nothing else (the doctor's runtime-config probe): it skips the ecosystem
+ * probes, which the doctor runs as probes of their own.
+ */
+export async function loadProviderCapabilities(): Promise<readonly ProviderCapability[]> {
+  return providerCapabilities(await loadRuntimeConfig());
+}
+
 /**
  * Build the capability facts record from runtime config + env presence checks.
  *
- * This is the SINGLE authorised site to combine loadRuntimeConfig() with
- * process.env[...] presence flags.
+ * This module is the SINGLE authorised site to combine loadRuntimeConfig()
+ * with process.env[...] presence flags.
  *
  * The returned record contains only booleans, env-var NAMES, and provider names.
  * No resolved api-key values ever appear in the return shape.
  */
 export async function loadCapabilityFacts(): Promise<CapabilityFacts> {
   const cfg = await loadRuntimeConfig();
-
-  // cfg.providers is a Record<string, Provider> (z.record in runtime-config schema).
-  const providerEntries = Object.values(cfg.providers ?? {});
-
-  const providers: readonly ProviderCapability[] = providerEntries.map((p) => ({
-    name: p.name,
-    api_key_env: p.apiKeyEnv,
-    present: envPresent(p.apiKeyEnv),
-  }));
+  const providers = providerCapabilities(cfg);
 
   // The ecosystem probes are read-only (spawn `pandoc --version`, statSync,
   // readdirSync, a path-substring check). A probe that throws reads as

@@ -58,13 +58,11 @@ test(`${ADAPTER}: 'zotero-mcp' registered in sources after import (RSCH-06 SC3 l
 // (c) PRESENT+AUTHENTICATED used-as-source leg — the H1 executable proof.
 //     Feature-detects setZoteroClientForTest so it skips cleanly until 10-03 ships
 //     the seam (no TypeError). Encodes the CANONICAL GATE PREDICATE (10-03 STEP B):
-//       (1) presence:  if (!isZoteroMcpPresent() && _client === null) return [];
+//       (1) no-client: if (_client === null) return [];
 //       (2) auth:      if (!isZoteroAuthenticated()) return [];   // KEY-ONLY: !!process.env['ZOTERO_API_KEY']
-//       (3) no-client: if (_client === null) return [];
-//       (4) try { pull via _client.search -> map(toCandidate).filter } catch { return []; }
-//     An injected _client is itself a valid presence signal (gate 1) and auth is
-//     KEY-ONLY (gate 2), so injecting a fake client + setting ZOTERO_API_KEY reaches
-//     normalization on CI even though isZoteroMcpPresent() is filesystem-FALSE.
+//       (3) try { pull via _client.search -> map(toCandidate).filter } catch { return []; }
+//     Auth is KEY-ONLY (gate 2), so injecting a fake client + setting ZOTERO_API_KEY
+//     reaches normalization on CI with no Zotero MCP server configured on disk.
 test(`${ADAPTER}.search() pulls+normalizes via injected client when present+authenticated (RSCH-06 SC3 leg c)`, async (t) => {
   if (skip) {
     t.skip('adapter not yet built (Plan 10-03)');

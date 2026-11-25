@@ -3,16 +3,16 @@
 // DOCT-02d: Humanizer skill presence probe.
 // D-15 severity: PASS when a non-empty `humanizer` skill directory exists as a
 //   user, project or plugin skill; WARN otherwise (optional dependency).
-// D-19 read-only: existsSync + statSync + readdirSync only, no writes.
+// D-19 read-only: readdirSync only, no writes.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { humanizerSkillLocations, isHumanizerSkillPresent } from '../../ecosystem-presence.js';
+import { humanizerSkillScan } from '../../ecosystem-presence.js';
 
 export const humanizerSkillPresenceProbe: Probe = {
   id: 'humanizer-skill-presence',
   async run(): Promise<ProbeResult> {
-    const locations = humanizerSkillLocations();
-    if (isHumanizerSkillPresent()) {
+    const { locations, present } = humanizerSkillScan();
+    if (present) {
       return {
         id: 'humanizer-skill-presence',
         severity: 'PASS',

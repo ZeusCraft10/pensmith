@@ -1,14 +1,15 @@
 // bin/lib/sources/zotero-mcp.ts — RSCH-06 Zotero MCP source provider.
 //
 // Zotero is a SOURCE PROVIDER + DOCTOR PROBE, never a verb (no 17th verb). This
-// adapter is the EXECUTABLE "used-as-source when present" path: when Zotero MCP
-// is present (OR a client is injected) AND ZOTERO_API_KEY is set AND a client is
-// wired, search() PULLS items from the Zotero source and NORMALIZES each one to
-// the SAME SourceCandidate shape every other adapter returns (source:'zotero-mcp')
-// so they flow into the research pipeline (scoring + RSCH-11 retraction
-// cross-check). When the path is absent+no-client OR unauthenticated OR no client
-// is wired, search() returns [] so research continues on the other 7 adapters
-// (ARCH-03). search() NEVER throws — absence MUST NOT break research.
+// adapter is the EXECUTABLE "used-as-source" path: when a client is wired AND
+// ZOTERO_API_KEY is set, search() PULLS items from the Zotero source and
+// NORMALIZES each one to the SAME SourceCandidate shape every other adapter
+// returns (source:'zotero-mcp') so they flow into the research pipeline
+// (scoring + RSCH-11 retraction cross-check). When no client is wired OR the key
+// is unset, search() returns [] so research continues on the other 7 adapters
+// (ARCH-03). search() NEVER throws — absence MUST NOT break research. Whether a
+// Zotero MCP server is configured on disk is the doctor's question, not this
+// adapter's: without a client there is nothing to pull from either way.
 //
 // Transport reality (RESEARCH §Anti-Patterns; Assumption A4): a real MCP tool
 // call is issued from the Tier-1 workflow body (Claude Code Task tool), not from
@@ -27,7 +28,6 @@
 //   - T-01-07 no-leak: ZOTERO_API_KEY is checked as a BOOLEAN only — its value is
 //     NEVER logged, persisted, or interpolated into any string.
 
-import { isZoteroMcpPresent } from '../ecosystem-presence.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -85,7 +85,7 @@ export function setZoteroClientForTest(client: ZoteroClient | null): void {
  * boolean presence of the env var ONLY — NEVER the value.
  *
  * NOTE: the doctor probe (bin/lib/doctor/probes/zotero-mcp-presence.ts) does NOT
- * call this helper — it composes its own `isZoteroMcpPresent() && !!key` check so
+ * call this helper — it composes its own `configured && !!key` check so
  * it can distinguish ABSENT from CONFIGURED_NO_AUTH and report REAL FS+key state.
  */
 export function isZoteroAuthenticated(): boolean {
@@ -152,32 +152,25 @@ function toCandidate(item: ZoteroItem): SourceCandidate | null {
  * Pull + normalize Zotero items into SourceCandidate[].
  *
  * >>> CANONICAL GATE PREDICATE — SINGLE SOURCE OF TRUTH (H3 fix) <<<
- * This is the ONE authoritative definition of the presence + auth gating.
- * 10-00 Task 2 leg (c) quotes this block VERBATIM as its test contract. The four
- * steps below MUST stay in this exact order.
+ * This is the ONE authoritative definition of the client + auth gating.
+ * tests/sources/zotero-mcp.test.ts leg (c) restates this block as its test
+ * contract. The three steps below MUST stay in this order.
  *
  * The KEY contract: NEVER throw, ALWAYS return an array; and on the
- * present(-or-injected)+authenticated+client path it ACTUALLY normalizes real
- * items into SourceCandidate[] (the H1 fix).
+ * client+authenticated path it ACTUALLY normalizes real items into
+ * SourceCandidate[] (the H1 fix).
  */
 export async function search(query: string, limit = 10): Promise<SourceCandidate[]> {
-  // (1) PRESENCE GATE — an injected _client is itself a valid presence signal, so a CI
-  //     test that calls setZoteroClientForTest(fakeClient) reaches normalization even
-  //     though isZoteroMcpPresent() is filesystem-FALSE on CI; real Tier-1 presence
-  //     (isZoteroMcpPresent()) ALSO passes this gate. Absent AND no client → [].
-  if (!isZoteroMcpPresent() && _client === null) return []; // absent + no client → non-breaking []
+  // (1) NO-CLIENT GATE — nothing is wired to pull from (Tier-2 default, or Tier-1
+  //     before the workflow body injects one), whatever MCP config is on disk. This
+  //     keeps absence non-breaking and makes the (3) _client deref safe.
+  if (_client === null) return []; // no client wired → non-breaking []
 
-  // (2) AUTH GATE — DECOUPLED from FS-presence (H3): the key alone authorizes the pull,
-  //     so the injected-client CI path is authorizable with just ZOTERO_API_KEY. On the
-  //     real path, the presence gate above already short-circuits the absent case.
+  // (2) AUTH GATE — the key alone authorizes the pull (H3), so the injected-client
+  //     CI path is authorizable with just ZOTERO_API_KEY.
   if (!isZoteroAuthenticated()) return []; // no ZOTERO_API_KEY → skip (Pitfall 6)
 
-  // (3) NO-CLIENT GATE — present(+auth) but the client is not yet wired (real Tier-1
-  //     before the workflow body injects, or Tier-2 default). Preserves absence-non-
-  //     breaking on the un-wired real path and makes the (4) _client deref safe.
-  if (_client === null) return []; // present+auth but no client wired → []
-
-  // (4) PULL + NORMALIZE — reached only when a client is present AND authenticated.
+  // (3) PULL + NORMALIZE — reached only when a client is wired AND authenticated.
   try {
     const items = await _client.search(query, limit);
     return items.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
