@@ -56,7 +56,22 @@ test('titles: one changed content word or number makes a different work', () => 
 
 test('titles: a typo in a long word is tolerated, a different short word is not', () => {
   assert.ok(titleOk('Attnetion mechanisms in neural translation', 'Attention mechanisms in neural translation'));
+  assert.ok(titleOk('Attenion mechanisms in neural translation', 'Attention mechanisms in neural translation'), 'a letter left out');
   assert.ok(!titleOk('Mouse models of disease', 'Moose models of disease'));
+});
+
+test('titles: one letter in place of another makes another word, however long', () => {
+  assert.ok(!titleOk('Protein conformation in lipid membranes', 'Protein confirmation in lipid membranes'));
+  assert.ok(!titleOk('Afferent pathways of the spinal cord', 'Efferent pathways of the spinal cord'));
+  assert.ok(!titleOk('Adsorption of water on silica', 'Absorption of water on silica'));
+});
+
+test('titles: a stopword may be left out, but not swapped for another', () => {
+  assert.ok(!titleOk('Learning to rank', 'Learning from rank'));
+  assert.ok(!titleOk('Transition to democracy in Spain', 'Transition from democracy in Spain'));
+  assert.ok(!titleOk('Cats and dogs', 'Cats or dogs'));
+  assert.ok(titleOk('Pretraining deep bidirectional transformers', 'Pre-training of Deep Bidirectional Transformers'), 'one left out');
+  assert.ok(titleOk('A theory of justice', 'The Theory of Justice'), 'an article for an article');
 });
 
 test('titles in scripts without spaces are compared character by character', () => {
@@ -124,6 +139,8 @@ test('journals: abbreviations and acronyms match; a different journal does not',
   assert.ok(venuesMatch('PNAS', 'Proceedings National Academy Sciences'));
   assert.ok(venuesMatch('J. Am. Chem. Soc.', 'Journal of the American Chemical Society'));
   assert.ok(venuesMatch('The Lancet', 'Lancet'));
+  assert.ok(venuesMatch('J. Neurosci.', 'Journal of Neuroscience'));
+  assert.ok(!venuesMatch('Neuron', 'Journal of Neuroscience'), 'an abbreviation is the word cut short, or keeps its first and last letters');
   assert.ok(!venuesMatch('Nature', 'Science'));
   assert.ok(!venuesMatch('Journal of Biology', 'Journal of Chemistry'));
   const base = { title: 'A study', authors: names({ family: 'Doe', given: 'J.' }) };

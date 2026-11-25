@@ -10,6 +10,11 @@
 //            punctuation, hyphenation and British/US spelling are set aside;
 //            a missing subtitle on either side is fine; every number and roman
 //            numeral must match ("Part I" is not "Part II", "K-12" not "K-13");
+//            a stopword may be left out but not swapped for another ("to"
+//            for "from"); one slip (two letters swapped, one left out) is
+//            forgiven in a word of seven letters or more, but not one letter
+//            in place of another, which is how "conformation" becomes
+//            "confirmation";
 //   authors  the first author is the record's first author, and every other
 //            author the entry names is an author of the work; surnames are
 //            compared without particles ("van der Walt" is "Walt"), and
@@ -17,7 +22,11 @@
 //   year     within one year of a year the record gives (online-first and
 //            print dates differ);
 //   journal  for a journal article, the entry's journal shares a word or an
-//            abbreviation with the record's.
+//            abbreviation with the record's. This catches a different journal,
+//            not a sister one: "Nature" passes for "Nature Physics", "Cell"
+//            for "Cell Reports" and "Phys. Rev." for any Physical Review
+//            journal, because a stricter test would block the many real ways
+//            proceedings and long journal names are written.
 //
 // Raw string similarity was the wrong tool: Jaro-Winkler on whole titles let
 // sibling papers that differ by one word through, and blocked real ones whose
@@ -158,11 +167,30 @@ function osa(a: string, b: string): number {
   return Math.min(2, d[a.length]![b.length]!);
 }
 
-/** Two word keys name the same word: equal, or one typo apart in a long word. */
+/**
+ * `a` and `b` differ by one slip of the keyboard: two adjacent letters
+ * swapped, or one letter left out or added. One letter typed in place of
+ * another is not a slip here: it turns real words into other real ones
+ * ("conformation" and "confirmation", "afferent" and "efferent").
+ */
+function oneSlip(a: string, b: string): boolean {
+  if (a.length === b.length) {
+    let i = 0;
+    while (i < a.length && a[i] === b[i]) i++;
+    return i + 1 < a.length && a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
+  }
+  const [s, l] = a.length < b.length ? [a, b] : [b, a];
+  if (l.length - s.length !== 1) return false;
+  let i = 0;
+  while (i < s.length && s[i] === l[i]) i++;
+  return s.slice(i) === l.slice(i + 1);
+}
+
+/** Two word keys name the same word: equal, or one slip apart in a long word. */
 function sameWord(a: string, b: string): boolean {
   if (a === b) return true;
   if (/\d/.test(a) || /\d/.test(b) || a.length < 7 || b.length < 7) return false;
-  return osa(a, b) <= 1;
+  return oneSlip(a, b);
 }
 
 // Words a title can gain or lose without becoming another title.
@@ -170,46 +198,73 @@ const TITLE_STOPWORDS: ReadonlySet<string> = new Set([
   'a', 'an', 'the', 'of', 'and', 'or', 'in', 'on', 'at', 'for', 'to', 'with', 'by', 'from', 'as',
   'via', 'into', 'its', 'de', 'la', 'le', 'les', 'el', 'der', 'die', 'das', 'und', 'et', 'du', 'des',
 ]);
+// Stopwords that may also stand in for one another ("A theory" and "The
+// theory"). Any other stopword may be left out, but swapping it for another
+// changes the title ("Learning to rank", "Learning from rank").
+const ARTICLES: ReadonlySet<string> = new Set(['a', 'an', 'the', 'la', 'le', 'les', 'el', 'der', 'die', 'das']);
 
 // ---------------------------------------------------------------------------
 //   Titles
 // ---------------------------------------------------------------------------
 
 interface TitleAlignment {
-  /** Content words on either side left without a counterpart. */
+  /** Content words on either side left without a counterpart, plus stopwords swapped for others. */
   unmatched: number;
   content: number;
 }
+
+// Which sides have left a stopword (other than an article) unmatched since
+// the last pair of matched words.
+const SKIP_A = 1;
+const SKIP_B = 2;
 
 /**
  * Align two titles word by word. Words match 1:1, or one word matches two
  * adjacent words joined ("pretraining" and "pre-training", "alphasynuclein"
  * and "alpha synuclein"). A stopword may go unmatched; a content word may not.
+ * Between two matched words, stopwords left out on both sides are one
+ * stopword swapped for another, which counts as an unmatched word, unless
+ * they are articles.
  */
 function alignTitles(a: string[], b: string[]): TitleAlignment {
   const ka = a.map(wordKey);
   const kb = b.map(wordKey);
-  const cost = (t: string): number => (TITLE_STOPWORDS.has(t) ? 0 : 1);
+  const content = (t: string): boolean => !TITLE_STOPWORDS.has(t);
   const n = a.length;
   const m = b.length;
-  // dp[i][j]: fewest unmatched content words aligning a[i..] with b[j..].
-  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  // dp[f][i][j]: fewest unmatched words aligning a[i..] with b[j..], when the
+  // stopwords skipped since the last match are those flagged in f.
+  const dp: number[][][] = [0, 1, 2, 3].map(() => Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0)));
+  // Leave word t of one side unmatched: its cost and the flags it leaves.
+  const skip = (t: string, f: number, mine: number, theirs: number): [number, number] => {
+    if (content(t)) return [1, f];
+    if (ARTICLES.has(t)) return [0, f];
+    return [f === theirs ? 1 : 0, f | mine];
+  };
   for (let i = n; i >= 0; i--) {
     for (let j = m; j >= 0; j--) {
-      if (i === n && j === m) continue;
-      let best = Infinity;
-      if (i < n) best = Math.min(best, dp[i + 1]![j]! + cost(a[i]!));
-      if (j < m) best = Math.min(best, dp[i]![j + 1]! + cost(b[j]!));
-      if (i < n && j < m) {
-        if (sameWord(ka[i]!, kb[j]!)) best = Math.min(best, dp[i + 1]![j + 1]!);
-        if (j + 1 < m && sameWord(ka[i]!, wordKey(b[j]! + b[j + 1]!))) best = Math.min(best, dp[i + 1]![j + 2]!);
-        if (i + 1 < n && sameWord(wordKey(a[i]! + a[i + 1]!), kb[j]!)) best = Math.min(best, dp[i + 2]![j + 1]!);
+      for (let f = 0; f < 4; f++) {
+        if (i === n && j === m) continue;
+        let best = Infinity;
+        if (i < n) {
+          const [c, g] = skip(a[i]!, f, SKIP_A, SKIP_B);
+          best = Math.min(best, dp[g]![i + 1]![j]! + c);
+        }
+        if (j < m) {
+          const [c, g] = skip(b[j]!, f, SKIP_B, SKIP_A);
+          best = Math.min(best, dp[g]![i]![j + 1]! + c);
+        }
+        if (i < n && j < m) {
+          if (sameWord(ka[i]!, kb[j]!)) best = Math.min(best, dp[0]![i + 1]![j + 1]!);
+          if (j + 1 < m && sameWord(ka[i]!, wordKey(b[j]! + b[j + 1]!))) best = Math.min(best, dp[0]![i + 1]![j + 2]!);
+          if (i + 1 < n && sameWord(wordKey(a[i]! + a[i + 1]!), kb[j]!)) best = Math.min(best, dp[0]![i + 2]![j + 1]!);
+        }
+        dp[f]![i]![j] = best;
       }
-      dp[i]![j] = best;
     }
   }
-  const content = Math.max(a.filter((t) => cost(t)).length, b.filter((t) => cost(t)).length);
-  return { unmatched: dp[0]![0]!, content };
+  const words = Math.max(a.filter(content).length, b.filter(content).length);
+  return { unmatched: dp[0]![0]![0]!, content: words };
 }
 
 /** The numbers a title states, roman numerals included, sorted. */
@@ -419,11 +474,17 @@ function isSubsequence(short: string, long: string): boolean {
   return i === short.length;
 }
 
-/** "phys" and "physical", "natl" and "national": one is an abbreviation of the other. */
+/**
+ * One word abbreviates the other: it is the word cut short ("phys",
+ * "physical"), or it keeps the word's first and last letters and some
+ * between ("natl", "national"; "mgmt", "management"). Any subsequence would
+ * also let "neuron" stand for "neuroscience".
+ */
 function abbreviates(a: string, b: string): boolean {
   if (a === b) return true;
   const [s, l] = a.length <= b.length ? [a, b] : [b, a];
-  return s.length >= 3 && s[0] === l[0] && isSubsequence(s, l);
+  if (s.length < 3 || s[0] !== l[0]) return false;
+  return l.startsWith(s) || (s[s.length - 1] === l[l.length - 1] && isSubsequence(s, l));
 }
 
 function initials(t: string[]): string {
