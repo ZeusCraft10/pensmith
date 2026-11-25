@@ -43,25 +43,30 @@ export async function renderVerbTable(): Promise<string> {
   return rows.join('\n');
 }
 
+/** Where the table sits between the markers, or null when they are missing or out of order. */
+function tableBounds(readme: string): { start: number; end: number } | null {
+  const marker = readme.indexOf(TABLE_START);
+  const end = readme.indexOf(TABLE_END);
+  if (marker === -1 || end === -1 || end < marker) return null;
+  return { start: marker + TABLE_START.length, end };
+}
+
 /** The README section between the markers, or null when the markers are missing. */
 export function extractTable(readme: string): string | null {
-  const start = readme.indexOf(TABLE_START);
-  const end = readme.indexOf(TABLE_END);
-  if (start === -1 || end === -1 || end < start) return null;
-  return readme.slice(start + TABLE_START.length, end).trim();
+  const bounds = tableBounds(readme);
+  return bounds ? readme.slice(bounds.start, bounds.end).trim() : null;
 }
 
 const readmeUrl = new URL('../README.md', import.meta.url);
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const readme = readFileSync(readmeUrl, 'utf8');
-  if (extractTable(readme) === null) {
+  const bounds = tableBounds(readme);
+  if (!bounds) {
     console.error(`README.md has no ${TABLE_START} … ${TABLE_END} block`);
     process.exit(1);
   }
-  const start = readme.indexOf(TABLE_START) + TABLE_START.length;
-  const end = readme.indexOf(TABLE_END);
-  const next = `${readme.slice(0, start)}\n${await renderVerbTable()}\n${readme.slice(end)}`;
+  const next = `${readme.slice(0, bounds.start)}\n${await renderVerbTable()}\n${readme.slice(bounds.end)}`;
   writeFileSync(readmeUrl, next);
   console.log('README.md command table regenerated');
 }

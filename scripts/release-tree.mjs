@@ -6,19 +6,29 @@
 // so the repository's own index and working tree are never touched.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+/**
+ * The bundles `npm run bundle` builds (scripts/bundle.mjs), by entry point and
+ * payload path. `executable` ones ship with mode 100755.
+ */
+export const BUNDLES = [
+  // Executable so `npm link` / package.json `bin` can run it directly.
+  { entry: 'bin/pensmith.ts', out: 'dist/pensmith.mjs', executable: true },
+  { entry: 'hooks/session-start.ts', out: 'dist/hook.mjs', executable: false },
+];
+
 /** Payload files `npm run bundle` builds. They are gitignored, so they must be built first. */
-export const BUILT_FILES = ['dist/pensmith.mjs', 'dist/hook.mjs'];
+export const BUILT_FILES = BUNDLES.map((b) => b.out);
 
 /** Root directories and files `npm run bundle` copies into the payload at the same path. */
 export const ASSET_DIRS = ['templates', 'references'];
 export const ASSET_FILES = ['LICENSE'];
 
 /** Payload files that must be executable once installed, whatever the filesystem reports. */
-const EXECUTABLES = ['bin/pensmith', 'dist/pensmith.mjs'];
+const EXECUTABLES = ['bin/pensmith', ...BUNDLES.filter((b) => b.executable).map((b) => b.out)];
 
 // Claude Code installs the release branch with a plain `git clone`, which
 // follows the user's git config. Without this file, core.autocrlf=true (the
@@ -42,6 +52,14 @@ export function git(args, opts = {}) {
   if (res.error) throw res.error;
   if (res.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${(res.stderr || res.stdout).trim()}`);
   return res.stdout.trim();
+}
+
+/** Files under `dir`, as posix paths relative to it; none when `dir` does not exist. */
+export function filesUnder(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((e) => !e.isDirectory())
+    .map((e) => path.relative(dir, path.join(e.parentPath, e.name)).split(path.sep).join('/'));
 }
 
 /** Throw unless `pluginDir` holds the built bundles. */
@@ -77,8 +95,12 @@ function payloadFiles(pluginDir) {
     .filter(Boolean)
     .map((f) => (f.startsWith(prefix) ? f.slice(prefix.length) : f));
   const files = [...new Set([...tracked, ...BUILT_FILES])].sort();
-  if (files.includes('.gitattributes')) {
-    throw new Error('plugin/.gitattributes would be replaced by the release branch\'s own; remove it from plugin/');
+  // The release branch's root .gitattributes turns line-ending conversion off
+  // for every file. A root one here would be replaced by it, and a nested one
+  // would turn conversion back on for its directory.
+  const attributes = files.filter((f) => path.posix.basename(f) === '.gitattributes');
+  if (attributes.length > 0) {
+    throw new Error(`${attributes.map((f) => `plugin/${f}`).join(', ')} would change how the release branch checks out its files; remove it from the payload`);
   }
   const missing = files.filter((f) => !existsSync(path.join(work, f)));
   if (missing.length > 0) {
@@ -93,7 +115,6 @@ function payloadFiles(pluginDir) {
  * the tree id.
  */
 export function payloadTree(gitDir, pluginDir) {
-  assertBuilt(pluginDir);
   const files = payloadFiles(pluginDir);
   const work = path.resolve(pluginDir);
   const base = [`--git-dir=${path.resolve(gitDir)}`];

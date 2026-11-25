@@ -11,10 +11,10 @@
 // scripts/release.mjs). Edit the sources, then re-run this script.
 
 import { build } from 'esbuild';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ASSET_DIRS, ASSET_FILES } from './release-tree.mjs';
+import { ASSET_DIRS, ASSET_FILES, BUNDLES, filesUnder } from './release-tree.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(repoRoot, 'plugin');
@@ -30,14 +30,6 @@ const ESM_SHIMS = [
   'const require = __pensmithCreateRequire(import.meta.url);',
   'const __pensmithFilename = __pensmithFileURLToPath(import.meta.url);',
   'const __pensmithDirnameValue = __pensmithDirname(__pensmithFilename);',
-].join('\n');
-
-// npm link, global installs and PATH symlinks start the CLI through a symlink.
-// Node resolves import.meta.url to the real file but leaves argv[1] as the
-// link, so normalise argv[1] before the entry-point check compares the two.
-const ARGV_REALPATH = [
-  "import { realpathSync as __pensmithRealpathSync } from 'node:fs';",
-  'try { if (process.argv[1]) process.argv[1] = __pensmithRealpathSync(process.argv[1]); } catch { /* keep argv as given */ }',
 ].join('\n');
 
 // pdf-parse picks its pdf.js build with a template-literal require, which
@@ -112,9 +104,6 @@ const noBufferConstructor = {
           }
           src = src.replace(from, to);
         }
-        if (src.includes('new Buffer(')) {
-          throw new Error(`${args.path} still calls new Buffer(); add it to BUFFER_PATCHES in scripts/bundle.mjs`);
-        }
         return { contents: src, loader: 'js' };
       });
     }
@@ -143,25 +132,15 @@ const common = {
   // userland package of the same API instead.
   alias: { punycode: 'punycode/' },
   define: { __dirname: '__pensmithDirnameValue', __filename: '__pensmithFilename' },
+  banner: { js: ESM_SHIMS },
   plugins: [pdfParsePin, noBufferConstructor],
 };
-
-const BUNDLES = [
-  // Executable so `npm link` / package.json `bin` can run it directly.
-  { entry: 'bin/pensmith.ts', out: 'dist/pensmith.mjs', banner: `${ESM_SHIMS}\n${ARGV_REALPATH}`, executable: true },
-  { entry: 'hooks/session-start.ts', out: 'dist/hook.mjs', banner: ESM_SHIMS, executable: false },
-];
 
 /** Every generated file: payload-relative path → contents. */
 async function generate() {
   const files = new Map();
   for (const b of BUNDLES) {
-    const result = await build({
-      ...common,
-      entryPoints: [b.entry],
-      outfile: path.join(pluginDir, b.out),
-      banner: { js: b.banner },
-    });
+    const result = await build({ ...common, entryPoints: [b.entry], outfile: path.join(pluginDir, b.out) });
     const [output] = result.outputFiles;
     if (output.text.includes('new Buffer(')) {
       throw new Error(`${b.out} calls new Buffer(), which prints DEP0005 for users; patch it in BUFFER_PATCHES`);
@@ -169,7 +148,7 @@ async function generate() {
     files.set(b.out, Buffer.from(output.contents));
   }
   for (const dir of ASSET_DIRS) {
-    for (const rel of walk(path.join(repoRoot, dir))) {
+    for (const rel of filesUnder(path.join(repoRoot, dir))) {
       files.set(path.posix.join(dir, rel), readFileSync(path.join(repoRoot, dir, rel)));
     }
   }
@@ -177,34 +156,12 @@ async function generate() {
   return files;
 }
 
-/** Files under `dir`, as posix paths relative to it. */
-function walk(dir, prefix = '') {
-  const out = [];
-  if (!existsSync(dir)) return out;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) out.push(...walk(path.join(dir, entry.name), rel));
-    else out.push(rel);
-  }
-  return out;
-}
-
-/** Generated payload files currently on disk (hand-written payload files excluded). */
-function existingGenerated() {
-  const found = [];
-  for (const top of ['dist', ...ASSET_DIRS]) {
-    for (const rel of walk(path.join(pluginDir, top))) found.push(`${top}/${rel}`);
-  }
-  for (const f of ASSET_FILES) if (existsSync(path.join(pluginDir, f))) found.push(f);
-  return found;
-}
-
 const files = await generate();
 
-// Drop generated files whose source is gone, then write the fresh set.
-for (const rel of existingGenerated()) {
-  if (!files.has(rel)) rmSync(path.join(pluginDir, rel));
-}
+// Everything under these payload paths is generated. Clear them only once the
+// build has succeeded, so files whose source is gone are dropped, then write
+// the fresh set.
+for (const top of ['dist', ...ASSET_DIRS, ...ASSET_FILES]) rmSync(path.join(pluginDir, top), { recursive: true, force: true });
 for (const [rel, contents] of files) {
   const p = path.join(pluginDir, rel);
   mkdirSync(path.dirname(p), { recursive: true });

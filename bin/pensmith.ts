@@ -404,9 +404,18 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
 // CLI-style invocation: `node dist/bin/pensmith.js <verb>` dispatches.
 // Guarded so importing this module from tests (WR-06: tests/cli-verbs.test.ts
 // introspects command.subCommands at runtime) does NOT auto-run.
-// Same pathToFileURL + import.meta.url comparison pattern as mcp/server.ts —
-// naive `file://${process.argv[1]}` fails on Windows for relative argv[1].
+// npm link, global installs and PATH symlinks start the CLI through a symlink:
+// Node resolves import.meta.url to the real file but leaves argv[1] as the
+// link, so compare against argv[1]'s real path. pathToFileURL, not a naive
+// `file://${process.argv[1]}`, which fails on Windows for relative argv[1].
+import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+let invokedAs = process.argv[1] ?? '';
+try {
+  if (invokedAs) invokedAs = realpathSync(invokedAs);
+} catch {
+  // keep argv as given
+}
+if (import.meta.url === pathToFileURL(invokedAs).href) {
   void dispatch();
 }

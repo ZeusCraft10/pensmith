@@ -77,11 +77,8 @@ function parseArgs(argv) {
 
 function publish({ root, tag, version, remote, branch }) {
   const pluginDir = path.join(root, 'plugin');
-  try {
-    assertBuilt(pluginDir);
-  } catch (err) {
-    fail(err.message);
-  }
+  // Name the missing build before any of the checks below.
+  assertBuilt(pluginDir);
   // The payload is built from the working tree, so it must be the tagged
   // source, unmodified, for the release to be what the tag says.
   const head = git(['rev-parse', 'HEAD'], { cwd: root });

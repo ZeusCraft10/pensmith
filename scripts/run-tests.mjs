@@ -26,30 +26,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const testsDir = path.join(repoRoot, 'tests');
 
-// Manual recursive walker — does NOT rely on Dirent.parentPath (Node 20.12+)
-// or Dirent.path (Node 20.5+ for recursive readdir). We use a depth-first
-// traversal where the parent path is tracked explicitly. This works on any
-// supported Node version (engines.node = ">=22.12.0"). See
-// 00-CONTEXT.md D-10 + RESEARCH.md Pitfall 8: vacuous-pass mitigation.
+// Every *.test.ts file under tests/, at any depth (a missing tests/ dir
+// finds none, which fails below).
 async function discoverTestFiles(dir) {
-  const matches = [];
   let entries;
   try {
-    entries = await readdir(dir, { withFileTypes: true });
+    entries = await readdir(dir, { recursive: true, withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return matches;
+    if (err && err.code === 'ENOENT') return [];
     throw err;
   }
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      const sub = await discoverTestFiles(full);
-      for (const m of sub) matches.push(m);
-    } else if (entry.isFile() && entry.name.endsWith('.test.ts')) {
-      matches.push(full);
-    }
-  }
-  return matches;
+  return entries.filter((e) => e.isFile() && e.name.endsWith('.test.ts')).map((e) => path.join(e.parentPath, e.name));
 }
 
 const files = await discoverTestFiles(testsDir);
