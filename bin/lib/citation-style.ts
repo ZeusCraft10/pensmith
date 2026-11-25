@@ -7,12 +7,12 @@
 //   3. the discipline's preset in templates/presets/disciplines.json.
 // A choice pensmith has no CSL file for is reported and the preset is used.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parse as parseToml } from 'smol-toml';
 import { normalizeStyleName, resolveStyleName, SUPPORTED_STYLES } from './citations.js';
 import { parseIntakeMd } from './intake-parse.js';
 import { paperDir } from './paths.js';
+import { readProjectConfig } from './project-config.js';
 
 export interface ResolvedStyle {
   /** A style key with a bundled CSL file. */
@@ -26,15 +26,10 @@ export interface ResolvedStyle {
 /** `[project] citation_style` from the paper's config.toml, if any. */
 function configuredStyle(paperRoot: string): string | null {
   // config.toml lives at the project root today; .paper/config.toml is read too.
+  // An unreadable config.toml gives no choice; the preset applies.
   for (const file of [path.join(paperDir(paperRoot), 'config.toml'), path.join(paperRoot, 'config.toml')]) {
-    if (!existsSync(file)) continue;
-    try {
-      const cfg = parseToml(readFileSync(file, 'utf8')) as { project?: { citation_style?: unknown } };
-      const v = cfg.project?.citation_style;
-      if (typeof v === 'string' && v.trim()) return v.trim();
-    } catch {
-      // An unreadable config.toml gives no choice; the preset applies.
-    }
+    const v = readProjectConfig(file)['citation_style'];
+    if (typeof v === 'string' && v.trim()) return v.trim();
   }
   return null;
 }
@@ -53,7 +48,6 @@ export function resolveCitationStyle(paperRoot: string): ResolvedStyle {
   } catch {
     // no intake yet
   }
-  const preset = resolveStyleName(parseIntakeMd(intake).discipline);
   const warnings: string[] = [];
   const choices: Array<[string | null, ResolvedStyle['source']]> = [
     [configuredStyle(paperRoot), 'config.toml'],
@@ -67,6 +61,8 @@ export function resolveCitationStyle(paperRoot: string): ResolvedStyle {
       `citation style '${choice}' is not supported (from ${source}); supported styles: ${SUPPORTED_STYLES.join(', ')}.`,
     );
   }
+  // Only when no usable choice was made is the discipline preset looked up.
+  const preset = resolveStyleName(parseIntakeMd(intake).discipline);
   return {
     style: preset,
     source: 'discipline preset',

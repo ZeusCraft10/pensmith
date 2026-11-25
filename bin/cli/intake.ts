@@ -47,6 +47,7 @@ export function __setInterpolateForTest(
   };
 }
 import { paperDir } from '../lib/paths.js';
+import { readProjectConfig } from '../lib/project-config.js';
 import { initState, loadState, StateAlreadyExistsError } from '../lib/state.js';
 import { registerPaperInGlobalLibrary } from '../lib/global-library.js';
 import { artifactText } from '../lib/placeholder.js';
@@ -67,24 +68,12 @@ import {
  */
 function resolvePaperMeta(cwd: string): { name: string; class: string } {
   const name = path.basename(cwd) || 'Untitled paper';
-  let klass = 'Unfiled';
-  try {
-    const cfgPath = path.join(cwd, 'config.toml');
-    if (existsSync(cfgPath)) {
-      const cfg = parseToml(readFileSync(cfgPath, 'utf8')) as {
-        project?: { class?: unknown; title?: unknown };
-      };
-      const c = cfg.project?.class;
-      if (typeof c === 'string' && c.trim()) klass = c.trim();
-      const t = cfg.project?.title;
-      if (typeof t === 'string' && t.trim()) {
-        return { name: t.trim(), class: klass };
-      }
-    }
-  } catch {
-    // best-effort: a malformed config.toml must not break intake.
-  }
-  return { name, class: klass };
+  // best-effort: a malformed config.toml must not break intake.
+  const project = readProjectConfig(path.join(cwd, 'config.toml'));
+  const c = project['class'];
+  const klass = typeof c === 'string' && c.trim() ? c.trim() : 'Unfiled';
+  const t = project['title'];
+  return { name: typeof t === 'string' && t.trim() ? t.trim() : name, class: klass };
 }
 
 /**
@@ -149,19 +138,10 @@ function resolvePiiRedact(
 ): { on: boolean; argSet: boolean } {
   // CLI arg WINS (explicit user intent for this run).
   if (typeof argValue === 'boolean') return { on: argValue, argSet: true };
-  // Else fall back to config.toml [project] pii_redaction (best-effort).
-  try {
-    const cfgPath = path.join(cwd, 'config.toml');
-    if (existsSync(cfgPath)) {
-      const cfg = parseToml(readFileSync(cfgPath, 'utf8')) as {
-        project?: { pii_redaction?: unknown };
-      };
-      if (cfg.project?.pii_redaction === true) return { on: true, argSet: false };
-    }
-  } catch {
-    // best-effort — a malformed config.toml defaults PII OFF (opt-in).
-  }
-  return { on: false, argSet: false };
+  // Else fall back to config.toml [project] pii_redaction (best-effort: a
+  // malformed config.toml defaults PII OFF, since it is opt-in).
+  const fromConfig = readProjectConfig(path.join(cwd, 'config.toml'))['pii_redaction'] === true;
+  return { on: fromConfig, argSet: false };
 }
 
 /**

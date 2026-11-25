@@ -23,8 +23,8 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parse as parseToml } from 'smol-toml';
 import { paperDir } from '../lib/paths.js';
+import { readProjectConfig } from '../lib/project-config.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
 
 /** The educator-mode goal enum (resolved Open-Q2). */
@@ -33,22 +33,12 @@ export type Goal = 'draft' | 'learning' | 'both';
 /**
  * Read the educator-mode `goal` from config.toml `[project] goal`. Best-effort:
  * a missing/malformed config.toml or an unrecognized value defaults to 'draft'.
- * NEVER throws (existsSync + try/catch). This is the SINGLE shared goal-read
+ * NEVER throws (readProjectConfig). This is the SINGLE shared goal-read
  * helper — write.ts + the four goal-aware callers all import it (L5).
  */
 export function readGoalFromConfig(paperRoot: string): Goal {
-  try {
-    const cfgPath = path.join(paperRoot, 'config.toml');
-    if (!existsSync(cfgPath)) return 'draft';
-    const cfg = parseToml(readFileSync(cfgPath, 'utf8')) as {
-      project?: { goal?: unknown };
-    };
-    const g = cfg.project?.goal;
-    if (g === 'learning' || g === 'both' || g === 'draft') return g;
-    return 'draft';
-  } catch {
-    return 'draft';
-  }
+  const g = readProjectConfig(path.join(paperRoot, 'config.toml'))['goal'];
+  return g === 'learning' || g === 'both' || g === 'draft' ? g : 'draft';
 }
 
 /**
