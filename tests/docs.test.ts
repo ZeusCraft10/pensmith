@@ -6,6 +6,8 @@
 //   - README states the alpha status, that Tier-1 drafting needs an API key in
 //     this phase, and install steps that match the plugin layout;
 //   - README makes none of the claims the audit found false;
+//   - README names exactly the verdicts that block compile and export, as the
+//     verdict parser compile and done use decides them;
 //   - PRIVACY.md names every host the shipped code sends requests to.
 
 import { test } from 'node:test';
@@ -14,6 +16,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderVerbTable, extractTable } from '../scripts/verb-table.js';
+import {
+  parseVerdictRows,
+  renderPass1VerdictRow,
+  renderPass3VerdictRow,
+} from '../bin/lib/verify/verdict-rows.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const read = (rel: string): string => readFileSync(path.join(repoRoot, rel), 'utf8');
@@ -84,9 +91,58 @@ test('README makes none of the claims the code does not back', () => {
     [/Skills \+ an MCP/i, 'there is no MCP server'],
     [/(lets|allows) research (to )?(pull|read)|research (can |will )?(pulls?|reads?) from (a |your )?Zotero/i,
       'research does not read from Zotero in this alpha'],
-    [/verifier could not confirm/i, 'only FABRICATED, MIS-CITED and quote NOT_FOUND block; an unconfirmed citation does not'],
   ];
   for (const [re, why] of banned) assert.ok(!re.test(readme), `README must not claim ${re}: ${why}`);
+});
+
+// Every verdict name the verifier writes or the design names. A verdict that is
+// not listed here but is named in README's verifier section is checked too.
+const KNOWN_VERDICTS = [
+  'OK', 'FABRICATED', 'MIS-CITED', 'RETRACTED', 'UNRESOLVED',
+  'NOT_FOUND', 'PDF_UNAVAILABLE', 'TEXT_UNAVAILABLE',
+];
+const VERDICT_TOKEN = /`([A-Z][A-Z_-]+)`/g;
+const verdictsIn = (md: string): string[] => [...md.matchAll(VERDICT_TOKEN)].map((m) => m[1]!);
+
+/** Does a verdict row carrying `verdict` block compile and export? Asks the parser compile and done use. */
+function blocks(verdict: string): boolean {
+  const rows = [
+    renderPass1VerdictRow('k1', verdict, 1, 1, 'r'),
+    renderPass3VerdictRow('k3', 'quote', verdict, 1, 'r'),
+  ].join('\n');
+  return parseVerdictRows(rows).length > 0;
+}
+
+test('README names exactly the verdicts that block compile and export', () => {
+  const verifier = section(readme, 'The citation verifier');
+  const candidates = [...new Set([...KNOWN_VERDICTS, ...verdictsIn(verifier)])];
+  const blocking = candidates.filter(blocks);
+  assert.ok(blocking.length > 0, 'the verdict parser must block on some verdict');
+
+  const intro = readme.split('\n').find((l) => l.startsWith('What makes it different'));
+  assert.ok(intro, 'README must say up front what blocks compile and export');
+  assert.deepEqual(
+    [...new Set(verdictsIn(intro))].sort(),
+    [...blocking].sort(),
+    'the README intro must name every blocking verdict and no other',
+  );
+
+  const rows = verifier.split('\n').filter((l) => /^\| \*\*Pass/.test(l));
+  assert.ok(rows.length > 0, 'README must have the verifier table');
+  const inBlockingRows = rows.filter((r) => /\|\s*Yes\s*\|\s*$/.test(r)).flatMap(verdictsIn);
+  const inOtherRows = rows.filter((r) => !/\|\s*Yes\s*\|\s*$/.test(r)).flatMap(verdictsIn);
+  for (const v of blocking) {
+    assert.ok(inBlockingRows.includes(v), `the verifier table must list \`${v}\` in a row that blocks`);
+  }
+  for (const v of inBlockingRows) assert.ok(blocks(v), `the verifier table says \`${v}\` blocks, but it does not`);
+  for (const v of inOtherRows) assert.ok(!blocks(v), `the verifier table says \`${v}\` does not block, but it does`);
+
+  if (!blocks('UNRESOLVED')) {
+    assert.ok(
+      !/verifier could not confirm/i.test(readme) && !/could not (be )?confirm|unconfirmed/i.test(intro),
+      'an UNRESOLVED (unconfirmed) citation does not block on this code, so README must not say it does',
+    );
+  }
 });
 
 test('README says research does not read from Zotero yet', () => {
