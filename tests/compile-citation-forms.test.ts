@@ -18,6 +18,7 @@ import { runCompile, type SmoothBoundaryInput } from '../bin/lib/compile.js';
 import { parseBib } from '../bin/lib/citations.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { isolatedCliEnv } from './lib/cli-env.js';
+import { writeVerificationFixture, type VerificationSpec } from './lib/verification-fixture.js';
 
 const entry = (key: string, family: string, year: number): string =>
   `@article{${key},\n  title = {Work by ${family}},\n  author = {${family}, A.},\n  year = {${year}},\n  doi = {10.1000/${key.toLowerCase()}}\n}\n`;
@@ -57,7 +58,8 @@ function seedPaper(intro: string, body: string, bib = BIB, fresh = true): string
       join(dir, 'PLAN.md'),
       ['---', `section: ${n}`, `slug: ${slug}`, `title: ${slug}`, 'depends_on: []', 'assigned_sources: []', `verified_against_draft_hash: '${hash}'`, 'status: verified', '---', '', `# ${slug}`, ''].join('\n'),
     );
-    writeFileSync(join(dir, 'VERIFICATION.md'), `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: verified\n`);
+    // Clean verdicts, recorded for this draft or, when not fresh, an earlier one.
+    writeVerificationFixture(dir, { n, slug, draft: fresh ? draft : `${draft}\nAn earlier sentence.\n` });
   };
   seed(1, 'intro', intro);
   seed(2, 'body', body);
@@ -135,42 +137,42 @@ test('compile CLI: a stale section re-verified against an empty CITATIONS.bib is
   assert.doesNotMatch(r.stderr, /parseBib|invalid BibTeX/);
 });
 
-/** Replace section 1's VERIFICATION.md with `md`. */
-function setIntroVerification(root: string, md: string): void {
-  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), md);
+/** Replace the verdicts recorded for section 1. */
+function setIntroVerification(root: string, spec: Omit<VerificationSpec, 'n' | 'slug' | 'draft'>): void {
+  const dir = join(root, '.paper', 'sections', '01-intro');
+  writeVerificationFixture(dir, { n: 1, slug: 'intro', draft: readFileSync(join(dir, 'DRAFT.md')), ...spec });
 }
 
-test('compile: a FABRICATED row for a key with Pandoc punctuation refuses compile and names the key', async () => {
+test('compile: a FABRICATED verdict for a key with Pandoc punctuation refuses compile and names the key', async () => {
   const root = seedPaper(INTRO, BODY);
-  setIntroVerification(
-    root,
-    '# VERIFICATION (Section 1, intro)\n\nStatus: failed\n\n' +
-      '- ghost.2099:v2: **FABRICATED** — titleJW=0.00, authorJW=0.00 — not in CITATIONS.bib\n' +
-      '- a/b+c: **FABRICATED** — titleJW=0.00, authorJW=0.00 — not in CITATIONS.bib\n',
-  );
+  setIntroVerification(root, {
+    citations: [
+      { citekey: 'ghost.2099:v2', verdict: 'FABRICATED', reason: 'not in CITATIONS.bib' },
+      { citekey: 'a/b+c', verdict: 'FABRICATED', reason: 'not in CITATIONS.bib' },
+    ],
+  });
   const result = await runCompile({ paperRoot: root, onWarn: () => {} });
   assert.equal(result.refused, true);
   const reasons = (result.refuseReasons ?? []).join('\n');
-  assert.match(reasons, /\[@ghost\.2099:v2\] has a blocking verdict/, reasons);
-  assert.match(reasons, /\[@a\/b\+c\] has a blocking verdict/, reasons);
+  assert.match(reasons, /\[@ghost\.2099:v2\] is FABRICATED/, reasons);
+  assert.match(reasons, /\[@a\/b\+c\] is FABRICATED/, reasons);
 });
 
-test('compile: a section whose VERIFICATION.md says Status: failed is refused even when no verdict row parses', async () => {
+test('compile: a section verify failed is refused even when no verdict blocks', async () => {
   const root = seedPaper(INTRO, BODY);
-  setIntroVerification(root, '# VERIFICATION (Section 1, intro)\n\nStatus: failed\n\n* a row in a shape the parser does not read\n');
+  setIntroVerification(root, { status: 'failed', reason: 'the draft cites none of its assigned sources' });
   const result = await runCompile({ paperRoot: root, onWarn: () => {} });
   assert.equal(result.refused, true);
-  assert.ok(result.refuseReasons?.some((r) => /section 1 \(intro\).*Status is 'failed'/.test(r)), JSON.stringify(result.refuseReasons));
+  assert.ok(result.refuseReasons?.some((r) => /section 1 \(intro\).*verify failed this section — the draft cites none/.test(r)), JSON.stringify(result.refuseReasons));
   assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false, 'no DRAFT.md is written');
 });
 
 test('compile: a quotation with no citation does not block compile, but compile warns about it', async () => {
   const root = seedPaper(INTRO, BODY);
-  setIntroVerification(
-    root,
-    '# VERIFICATION (Section 1, intro)\n\nStatus: unverifiable\n\n' +
-      '- (no citation) ("I just did not feel like the system cared…"): **UNATTRIBUTED** — lev=0.000 — a direct quotation with no citation\n',
-  );
+  setIntroVerification(root, {
+    status: 'unverifiable',
+    quotes: [{ citekey: '(no citation)', quote: 'I just did not feel like the system cared', verdict: 'UNATTRIBUTED', reason: 'a direct quotation with no citation' }],
+  });
   const warnings: string[] = [];
   const result = await runCompile({ paperRoot: root, onWarn: (m) => warnings.push(m) });
   assert.equal(result.refused, false, JSON.stringify(result.refuseReasons));

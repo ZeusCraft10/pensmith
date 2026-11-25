@@ -22,6 +22,7 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { atomicAppendFile, atomicRename, atomicWriteFile, DryRunWriteError } from '../bin/lib/atomic-write.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeVerificationFixture } from './lib/verification-fixture.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -130,7 +131,7 @@ function paperMidway(): string {
     `---\nsection: 1\nslug: intro\ntitle: Introduction\nstatus: verified\nassigned_sources: [real2020]\nverified_against_draft_hash: ${hash}\n---\n## Brief\n\nHand-edited plan.\n`,
   );
   writeFileSync(join(pdir, 'sections', '01-intro', 'DRAFT.md'), PLAN_VERIFIED_DRAFT);
-  writeFileSync(join(pdir, 'sections', '01-intro', 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n\n- real2020: **OK** — titleJW=1.00, authorJW=1.00 — ok\n');
+  writeVerificationFixture(join(pdir, 'sections', '01-intro'), { n: 1, slug: 'intro', draft: PLAN_VERIFIED_DRAFT, assignedSources: ['real2020'] });
   writeFileSync(
     join(pdir, 'sections', '02-methods', 'PLAN.md'),
     '---\nsection: 2\nslug: methods\ntitle: Methods\nstatus: planned\nassigned_sources: []\n---\n## Brief\n\nDescribe the methods.\n',
@@ -149,7 +150,7 @@ function paperReadyToCompile(): string {
     join(sdir, 'PLAN.md'),
     `---\nsection: 2\nslug: methods\ntitle: Methods\nstatus: verified\nassigned_sources: []\nverified_against_draft_hash: ${computeDraftHash(Buffer.from(METHODS_DRAFT), [])}\n---\n## Brief\n\nDescribe the methods.\n`,
   );
-  writeFileSync(join(sdir, 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n\n## Pass-3\n');
+  writeVerificationFixture(sdir, { n: 2, slug: 'methods', draft: METHODS_DRAFT });
   return root;
 }
 

@@ -33,8 +33,8 @@ import { checkCitationsAndQuotes } from '../lib/verify/check-text.js';
 import {
   bibEntryHashes,
   buildVerificationRecord,
+  decideStatus,
   writeVerification,
-  type VerificationStatus,
 } from '../lib/verify/verification-record.js';
 import {
   sectionAcknowledgements,
@@ -44,7 +44,7 @@ import {
   sectionPlan,
   paperDir,
 } from '../lib/paths.js';
-import { citationWarnings, isBlockingVerdict, unattributedWarning } from '../lib/verify/verdict-rows.js';
+import { citationWarnings, unattributedWarning } from '../lib/verify/verdict-rows.js';
 import { readAcknowledgements } from '../lib/verify/acknowledgements.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
@@ -166,23 +166,11 @@ export const verifyCommand = defineCommand({
     });
     const cited = pass1CitedKeys(draftMd);
 
-    // Aggregate: any verdict that blocks compile (isBlockingVerdict) → failed.
-    // A quote nothing could check (no source text, or no citation at all) →
-    // unverifiable. Else verified. A draft that cites nothing against an empty
-    // library has nothing to check: unverifiable. A draft that cites none of
-    // the sources its plan assigns was checked against nothing it was meant
-    // to rest on: failed, so it is redrafted rather than compiled.
-    const hasFail = [...pass1, ...pass3].some((r) => isBlockingVerdict(r.verdict));
-    const sourceTextMissing = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
-    const unattributed = pass3.filter((r) => r.verdict === 'UNATTRIBUTED').length;
-    const uncited = cited.length === 0 && assignedSources.length > 0;
-    const nothingToCheck = bibIsEmpty && pass1.length === 0 && pass3.length === 0;
-    const hasUnverifiable = sourceTextMissing || unattributed > 0 || nothingToCheck;
-    const status: VerificationStatus = hasFail || uncited ? 'failed' : (hasUnverifiable ? 'unverifiable' : 'verified');
-    const reason = uncited
-      ? `the draft cites none of its assigned sources (${assignedSources.join(', ')}), so none of its claims was checked — ` +
-        `redraft it with citations (\`pensmith write ${n}\`), or empty assigned_sources in PLAN.md if the section needs none`
-      : undefined;
+    // The status, from the verdicts (decideStatus): a blocking verdict, or a
+    // draft citing none of its assigned sources, fails the section.
+    const { status, reason, sourceTextMissing, unattributed, nothingToCheck } = decideStatus({
+      section: n, pass1, pass3, citedKeys: cited, assignedSources, bibIsEmpty,
+    });
 
     // The advisory passes run after the status is set and never change it.
     // Pass 2 / Pass 4 load their own prompts inside their modules, so this

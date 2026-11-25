@@ -2,8 +2,9 @@
 //
 // RED-first: bin/lib/compile.ts does not exist yet.
 //
-// D-08 (LOCKED): when a section's verified_against_draft_hash no longer matches
-// computeDraftHash(currentDraftBytes, sources), the section is STALE. Compile
+// D-08 (LOCKED): when the draft hash a section's VERIFICATION.json records no
+// longer matches computeDraftHash(currentDraftBytes, sources), the section is
+// STALE. Compile
 //   - emits a WARN ("section <N> stale — re-verifying"),
 //   - auto-re-verifies that section with Pass 1 + Pass 3 ONLY (NEVER Pass 2/4),
 //   - on all-pass: continues, records the event under
@@ -23,13 +24,14 @@ import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { bibForDrafts } from './lib/bib-fixture.js';
+import { writeVerificationFixture } from './lib/verification-fixture.js';
 
 interface SectionSpec {
   n: number;
   slug: string;
   draft: string;
   assignedSources: string[];
-  /** When true, store a deliberately-mismatched hash so the section is STALE. */
+  /** When true, the verdicts are recorded for an earlier draft, so the section is STALE. */
   stale: boolean;
 }
 
@@ -68,20 +70,11 @@ function seedPaper(specs: SectionSpec[]): string {
         '',
       ].join('\n'),
     );
-    // A clean VERIFICATION.md so the fresh sections pass the verdict gate.
-    writeFileSync(
-      join(dir, 'VERIFICATION.md'),
-      [
-        `# VERIFICATION (Section ${s.n}, ${s.slug})`,
-        '',
-        'Status: verified',
-        '',
-        '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
-        '',
-        ...s.assignedSources.map((ck) => `- ${ck}: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed`),
-        '',
-      ].join('\n'),
-    );
+    // Clean verdicts, recorded for the current draft or, when stale, for an
+    // earlier one.
+    writeVerificationFixture(dir, {
+      n: s.n, slug: s.slug, draft: s.stale ? `${s.draft}\nA sentence cut since verify.\n` : s.draft, assignedSources: s.assignedSources,
+    });
   }
   return root;
 }

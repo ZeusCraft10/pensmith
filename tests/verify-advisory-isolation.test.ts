@@ -24,12 +24,18 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const verifyPath = fileURLToPath(new URL('../bin/cli/verify.ts', import.meta.url));
+const recordPath = fileURLToPath(new URL('../bin/lib/verify/verification-record.ts', import.meta.url));
 
 test('advisory-isolation (A): bin/cli/verify.ts never sets hasFail/status from a pass2/pass4 expression (VRFY-07)', () => {
   const src = readFileSync(verifyPath, 'utf-8');
 
-  // The blocking machinery must still exist (sanity: we are guarding the right file).
-  assert.ok(src.includes('hasFail'), 'verify.ts must still compute the blocking hasFail flag');
+  // The status comes from decideStatus (verification-record.ts), which is
+  // given Pass 1 and Pass 3 only (sanity: we are guarding the right code).
+  assert.ok(/decideStatus\(/.test(src), 'verify.ts must take its status from decideStatus');
+  const record = readFileSync(recordPath, 'utf-8');
+  const decide = record.slice(record.indexOf('export interface StatusInput'), record.indexOf('export interface VerificationInput'));
+  assert.ok(decide.includes('hasFail'), 'decideStatus must still compute the blocking hasFail flag');
+  assert.ok(!/pass[24]/i.test(decide.replace(/pass1|pass3/gi, '')), 'decideStatus must never see a Pass 2 or Pass 4 result');
 
   // No assignment of hasFail / status from a pass2/pass4 expression.
   assert.ok(!/hasFail\s*=.*pass[24]/.test(src), 'hasFail must NOT be assigned from a pass2/pass4 expression (advisory-only)');

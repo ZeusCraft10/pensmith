@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertEquivalent } from './lib/assert-tier-equivalent.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeVerificationFixture } from './lib/verification-fixture.js';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 import { pensmithDataDir } from '../bin/lib/paths.js';
 import { sources } from '../bin/lib/sources/index.js';
@@ -672,10 +673,7 @@ function seedCompileFixture(): string {
       join(dir, 'PLAN.md'),
       ['---', `section: ${n}`, `slug: ${slug}`, `title: ${title}`, 'depends_on: []', 'assigned_sources: []', `verified_against_draft_hash: '${hash}'`, 'status: verified', '---', '', `# ${title}`, ''].join('\n'),
     );
-    writeFileSync(
-      join(dir, 'VERIFICATION.md'),
-      [`# VERIFICATION (Section ${n}, ${slug})`, '', 'Status: verified', '', '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)', '', '', ''].join('\n'),
-    );
+    writeVerificationFixture(dir, { n, slug, draft });
   };
   seed(1, 'one', 'One');
   seed(2, 'two', 'Two');

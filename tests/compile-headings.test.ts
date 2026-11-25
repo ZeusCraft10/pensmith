@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeVerificationFixture } from './lib/verification-fixture.js';
 
 function seed(title: string, sections: Array<{ slug: string; title: string; draft: string }>): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-compile-headings-'));
@@ -37,7 +38,7 @@ function seed(title: string, sections: Array<{ slug: string; title: string; draf
       join(dir, 'PLAN.md'),
       `---\nsection: ${i + 1}\nslug: ${s.slug}\nstatus: verified\nassigned_sources: []\nverified_against_draft_hash: '${computeDraftHash(Buffer.from(s.draft), [])}'\n---\n`,
     );
-    writeFileSync(join(dir, 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n');
+    writeVerificationFixture(dir, { n: i + 1, slug: s.slug, draft: s.draft });
   });
   return root;
 }

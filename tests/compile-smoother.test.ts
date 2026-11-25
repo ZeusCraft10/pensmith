@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile, type SmoothBoundaryInput } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeVerificationFixture } from './lib/verification-fixture.js';
 
 function seedN(n: number): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-compile-smoother-'));
@@ -41,10 +42,7 @@ function seedN(n: number): string {
       join(dir, 'PLAN.md'),
       ['---', `section: ${i}`, `slug: ${slug}`, `title: Section ${i}`, 'depends_on: []', 'assigned_sources: []', `verified_against_draft_hash: '${hash}'`, 'status: verified', '---', '', `# Section ${i}`, ''].join('\n'),
     );
-    writeFileSync(
-      join(dir, 'VERIFICATION.md'),
-      [`# VERIFICATION (Section ${i}, ${slug})`, '', 'Status: verified', '', '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)', '', '', ''].join('\n'),
-    );
+    writeVerificationFixture(dir, { n: i, slug, draft });
   }
   return root;
 }

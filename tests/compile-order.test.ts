@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeVerificationFixture } from './lib/verification-fixture.js';
 
 interface Sec {
   n: number;
@@ -66,10 +67,7 @@ function seed(secs: Sec[]): string {
         '',
       ].join('\n'),
     );
-    writeFileSync(
-      join(dir, 'VERIFICATION.md'),
-      [`# VERIFICATION (Section ${s.n}, ${s.slug})`, '', 'Status: verified', '', '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)', '', '', ''].join('\n'),
-    );
+    writeVerificationFixture(dir, { n: s.n, slug: s.slug, draft: s.draft });
   }
   return root;
 }

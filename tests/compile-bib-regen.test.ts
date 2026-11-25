@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { parseBib } from '../bin/lib/citations.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeVerificationFixture } from './lib/verification-fixture.js';
 
 const SEED_BIB = `@article{smith2020,
   title = {A Real Title},
@@ -68,10 +69,7 @@ function seed(): string {
       join(dir, 'PLAN.md'),
       ['---', `section: ${n}`, `slug: ${slug}`, `title: ${slug}`, 'depends_on: []', `assigned_sources: [${sources.map((k) => `'${k}'`).join(', ')}]`, `verified_against_draft_hash: '${hash}'`, 'status: verified', '---', '', `# ${slug}`, ''].join('\n'),
     );
-    writeFileSync(
-      join(dir, 'VERIFICATION.md'),
-      [`# VERIFICATION (Section ${n}, ${slug})`, '', 'Status: verified', '', '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)', '', `- ${sources[0]}: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed`, '', ''].join('\n'),
-    );
+    writeVerificationFixture(dir, { n, slug, draft, assignedSources: sources });
   };
   seedSec(1, 'intro', '# Intro\n\nA grounded claim [@smith2020].\n', ['smith2020']);
   seedSec(2, 'body', '# Body\n\nAnother grounded claim [@jones2019].\n', ['jones2019']);
@@ -130,10 +128,7 @@ test('audit #17: a DOI-less source (book, ISBN only) survives bib regen', async 
     join(dir, 'PLAN.md'),
     ['---', 'section: 1', 'slug: intro', 'title: intro', 'depends_on: []', "assigned_sources: ['kuhn1962']", `verified_against_draft_hash: '${hash}'`, 'status: verified', '---', '', '# intro', ''].join('\n'),
   );
-  writeFileSync(
-    join(dir, 'VERIFICATION.md'),
-    ['# VERIFICATION (Section 1, intro)', '', 'Status: verified', '', '## Pass-1', '', '- kuhn1962: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed', '', ''].join('\n'),
-  );
+  writeVerificationFixture(dir, { n: 1, slug: 'intro', draft, assignedSources: ['kuhn1962'] });
 
   const result = await runCompile({ paperRoot: root, yolo: true });
   assert.equal(result.refused, false);

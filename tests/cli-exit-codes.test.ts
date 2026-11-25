@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { pensmithGlobalLibraryIndexPath } from '../bin/lib/paths.js';
+import { writeVerificationFixture, type CitationSpec } from './lib/verification-fixture.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -47,7 +48,8 @@ interface SectionSpec {
   n: number;
   slug: string;
   draft: string;
-  verification: string;
+  /** The Pass-1 verdicts recorded for the draft. */
+  verification: CitationSpec[];
   status?: string;
 }
 
@@ -87,13 +89,13 @@ function seedPaper(sections: SectionSpec[], opts: { bib?: string } = {}): string
       join(dir, 'PLAN.md'),
       `---\nsection: ${s.n}\nslug: ${s.slug}\nstatus: ${s.status ?? 'verified'}\nassigned_sources: []\nverified_against_draft_hash: ${hash}\n---\n# ${s.slug}\n`,
     );
-    writeFileSync(join(dir, 'VERIFICATION.md'), s.verification);
+    writeVerificationFixture(dir, { n: s.n, slug: s.slug, draft: s.draft, citations: s.verification });
   }
   return root;
 }
 
-const CLEAN = 'Status: verified\n\n## Pass-1\n\n## Pass-3\n';
-const FABRICATED = 'Status: failed\n\n## Pass-1\n\n- ghost2020: **FABRICATED** — titleJW=0.00, authorJW=0.00 — not in CITATIONS.bib\n';
+const CLEAN: CitationSpec[] = [];
+const FABRICATED: CitationSpec[] = [{ citekey: 'ghost2020', verdict: 'FABRICATED', reason: 'not in CITATIONS.bib' }];
 
 test('exit codes: verify exits 2 when the section fails verification', () => {
   const root = seedPaper([{ n: 1, slug: 'intro', draft: 'An invented claim [@ghost2020].\n', verification: CLEAN, status: 'written' }], {

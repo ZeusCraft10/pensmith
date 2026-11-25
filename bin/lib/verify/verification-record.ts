@@ -132,6 +132,54 @@ export function quoteId(text: string): string {
   return sha256(text).slice(0, 12);
 }
 
+/** The facts a section's status is decided from, and the decision. */
+export interface StatusInput {
+  section: number;
+  pass1: readonly Pass1Result[];
+  pass3: readonly Pass3Result[];
+  /** The keys the draft cites (pass1CitedKeys). */
+  citedKeys: readonly string[];
+  assignedSources: readonly string[];
+  bibIsEmpty: boolean;
+}
+
+export interface StatusDecision {
+  status: VerificationStatus;
+  reason?: string;
+  /** Quotations whose source text could not be read. */
+  sourceTextMissing: boolean;
+  /** Quotations that cite nothing. */
+  unattributed: number;
+  /** Nothing cited, nothing quoted, and an empty library. */
+  nothingToCheck: boolean;
+}
+
+/**
+ * A section's status from its verdicts. Any blocking verdict fails it. A
+ * draft that cites none of the sources its plan assigns fails too: none of
+ * its claims was checked against what it was meant to rest on. A quotation
+ * nothing could check (no source text, or no citation) leaves it
+ * unverifiable, as does a draft citing nothing against an empty library.
+ * Otherwise it is verified.
+ */
+export function decideStatus(input: StatusInput): StatusDecision {
+  const hasFail = [...input.pass1, ...input.pass3].some((r) => isBlockingVerdict(r.verdict));
+  const sourceTextMissing = input.pass3.some((r) => UNCHECKED_QUOTE.has(r.verdict));
+  const unattributed = input.pass3.filter((r) => r.verdict === 'UNATTRIBUTED').length;
+  const uncited = input.citedKeys.length === 0 && input.assignedSources.length > 0;
+  const nothingToCheck = input.bibIsEmpty && input.pass1.length === 0 && input.pass3.length === 0;
+  const status: VerificationStatus = hasFail || uncited
+    ? 'failed'
+    : (sourceTextMissing || unattributed > 0 || nothingToCheck ? 'unverifiable' : 'verified');
+  const decision: StatusDecision = { status, sourceTextMissing, unattributed, nothingToCheck };
+  if (uncited) {
+    decision.reason =
+      `the draft cites none of its assigned sources (${input.assignedSources.join(', ')}), so none of its claims was checked — ` +
+      `redraft it with citations (\`pensmith write ${input.section}\`), or empty assigned_sources in PLAN.md if the section needs none`;
+  }
+  return decision;
+}
+
 export interface VerificationInput {
   section: number;
   slug: string;

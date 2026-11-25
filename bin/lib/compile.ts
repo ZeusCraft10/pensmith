@@ -10,15 +10,17 @@
 //   0. Acquire .paper/.compile.lock for the WHOLE run (§P-6 — no mid-pipeline
 //      race on the output files).
 //   1. parseOutline; for each section in OUTLINE order (sort by n — D-11):
-//        - read PLAN.md frontmatter (assigned_sources, verified_against_draft_hash,
-//          slug) + the section's DRAFT.md bytes + its VERIFICATION.md.
-//        - REFUSE-GATE (COMP-01): any FABRICATED / MIS-CITED / quote-NOT_FOUND
-//          verdict in VERIFICATION.md → collect a refuse reason naming the
-//          section + citekey.
-//        - STALENESS (COMP-01 / D-08): if verified_against_draft_hash !=
-//          computeDraftHash(draftBytes, assigned_sources) → WARN + re-verify
-//          (Pass 1 + Pass 3 ONLY, NEVER Pass 2/4). A re-verify failure adds a
-//          refuse reason; an all-pass records a Compile-Staleness-Resolved event.
+//        - read PLAN.md frontmatter (assigned_sources, slug), the section's
+//          DRAFT.md bytes and the verdicts verify recorded in VERIFICATION.json
+//          (never the Markdown report rendered from them).
+//        - REFUSE-GATE (COMP-01): no record, a record verify could not check,
+//          a failed status, or any blocking verdict → collect a refuse reason
+//          naming the section and the citation.
+//        - STALENESS (COMP-01 / D-08): when the draft, its assigned sources, a
+//          cited CITATIONS.bib entry or the acknowledgements changed since the
+//          record was made → WARN + re-verify (Pass 1 + Pass 3 ONLY, NEVER
+//          Pass 2/4). A re-verify failure adds a refuse reason; an all-pass
+//          records a Compile-Staleness-Resolved event.
 //      If ANY refuse reason was collected, REFUSE: do NOT write .paper/DRAFT.md,
 //      and move a DRAFT.md left by an earlier compile aside to DRAFT.stale.md.
 //   2. Concatenate section drafts in OUTLINE order (COMP-02), each normalized to
@@ -34,7 +36,8 @@
 //      only) and citation density (warn-only vs discipline target).
 //   4. Refuse if the manuscript cites a work CITATIONS.bib does not hold, else
 //      regenerate .paper/CITATIONS.bib from the cited works; atomicWriteFile
-//      DRAFT.md + COMPILE-REPORT.md.
+//      DRAFT.md + COMPILE-REPORT.md, then COMPILE-MANIFEST.json, the hashes
+//      done checks before it exports (bin/lib/compile-manifest.ts).
 //
 // The smoother + re-verify transports are injectable seams so CI never touches a
 // live model/network. Production callers (bin/cli/compile.ts) wire the real
@@ -48,7 +51,6 @@ import { parseOutline, type ParsedOutlineSection } from './outline-parse.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { atomicRename, atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
-import { computeDraftHash } from './draft-hash.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
 import { writeBibtex } from './bibtex-write.js';
@@ -70,8 +72,17 @@ import {
   type StalenessEntry,
 } from './compile-report.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
-import { verdictGate } from './verify/verdict-rows.js';
 import { isPlaceholderText } from './placeholder.js';
+import { parseBibForPass1, type Bib } from './verify/pass1.js';
+import { readAcknowledgements } from './verify/acknowledgements.js';
+import {
+  bibEntryHashes,
+  readVerificationRecord,
+  sha256,
+  verificationGate,
+  verificationStaleness,
+} from './verify/verification-record.js';
+import { writeCompileManifest, type ManifestSection } from './compile-manifest.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -89,6 +100,8 @@ export interface SmoothBoundaryInput {
 export interface ReVerifyInput {
   n: number;
   slug: string;
+  /** The section's DRAFT.md as compile read it: the text it will compile. */
+  draft?: string;
   /** Present ONLY so a test can prove Pass 2/4 are never wired here. */
   runPass2?: () => void;
   runPass4?: () => void;
@@ -98,6 +111,10 @@ export interface ReVerifyResult {
   passed: boolean;
   /** Citekeys that re-verify flagged (named in the refuse reason on failure). */
   failingCitekeys: string[];
+  /** The refusal for each blocking verdict, when the seam gives them; replaces the citekey list. */
+  reasons?: string[];
+  /** What passes but must not look clean (an acknowledged retraction, a quotation with no citation). */
+  warnings?: string[];
 }
 
 export interface RunCompileOpts {
@@ -138,11 +155,12 @@ export interface CompileResult {
 interface LoadedSection {
   outline: ParsedOutlineSection;
   slug: string;
+  /** The section folder. */
+  dir: string;
   /** Normalized to exactly one trailing '\n'. */
   draft: string;
   draftBytes: Buffer;
   assignedSources: string[];
-  storedHash: string | null;
 }
 
 /** Normalize a draft to end in exactly one '\n' (§F). */
@@ -252,16 +270,14 @@ async function loadSection(
   const assignedSources = Array.isArray(frontmatter['assigned_sources'])
     ? (frontmatter['assigned_sources'] as unknown[]).map(String)
     : [];
-  const rawHash = frontmatter['verified_against_draft_hash'];
-  const storedHash = typeof rawHash === 'string' ? rawHash : null;
 
   return {
     outline: outlineSection,
     slug: outlineSection.slug,
+    dir,
     draft: normalizeTrailingNewline(draftBytes.toString('utf8')),
     draftBytes,
     assignedSources,
-    storedHash,
   };
 }
 
@@ -331,90 +347,108 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     }
     const ordered = outline.sections.slice().sort((a, b) => a.n - b.n);
 
+    // The bibliography, read once: each record's cited entries are compared
+    // with it, and the manuscript's citations are checked against it.
+    const bibPath = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
+    const bibText = existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '';
+    let bib: Bib;
+    try {
+      bib = await parseBibForPass1(bibText);
+    } catch (err) {
+      return refuse(opts.paperRoot, {
+        refused: true,
+        refuseReasons: [`.paper/CITATIONS.bib could not be read (${err instanceof Error ? err.message : String(err)}) — fix it, then verify again`],
+        sectionsCount: 0,
+        staleResolvedCount: 0,
+      });
+    }
+
     const loaded: LoadedSection[] = [];
     const refuseReasons: string[] = [];
     const stalenessResolved: StalenessEntry[] = [];
+    const manifestSections: ManifestSection[] = [];
 
     for (const os of ordered) {
+      const where = `section ${os.n} (${os.slug})`;
       const sec = await loadSection(opts.paperRoot, os);
       if (!sec) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): missing PLAN.md or DRAFT.md`);
+        refuseReasons.push(`${where}: missing PLAN.md or DRAFT.md`);
         continue;
       }
       if (isPlaceholderText(sec.draft)) {
         refuseReasons.push(
-          `section ${os.n} (${os.slug}): DRAFT.md is placeholder text, not a draft (PENSMITH_NO_LLM) — ` +
+          `${where}: DRAFT.md is placeholder text, not a draft (PENSMITH_NO_LLM) — ` +
           `re-run 'pensmith write ${os.n}' with a model configured`,
         );
         continue;
       }
       loaded.push(sec);
 
-      const verifPath = join(
-        paperDir(opts.paperRoot), 'sections', `${String(os.n).padStart(2, '0')}-${os.slug}`, 'VERIFICATION.md',
-      );
-      const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : '';
-
-      // GATE-01 (Phase 14): fail closed on missing/empty/unparseable VERIFICATION.md.
-      // A section that was never verified must NEVER compile.
-      // 'Status: unverifiable' passes this check (Pitfall 3) — those sections
-      // proceed with zero verdict rows (no blocking citekeys) and compile normally.
-      const hasStatus = /^Status:\s*\S/m.test(verificationMd);
-      if (!hasStatus) {
+      // GATE-01: the verdicts verify recorded. A section with none was never
+      // verified and never compiles; VERIFICATION.md is only their rendering.
+      const read = readVerificationRecord(join(sec.dir, 'VERIFICATION.json'));
+      if (!read.ok) {
         refuseReasons.push(
-          `section ${os.n} (${os.slug}): no verifiable VERIFICATION.md (section never verified or verifier output unreadable)`,
+          read.problem === 'missing'
+            ? `${where}: never verified (no VERIFICATION.json) — run 'pensmith verify ${os.n}'`
+            : `${where}: its recorded verdicts could not be read (${read.detail}) — run 'pensmith verify ${os.n}'`,
         );
-        continue; // skip the failing-citekey parse AND staleness check; section is already refused
+        continue;
       }
-
-      // A section verify failed never compiles, even when no verdict row
-      // parses: rows that drift from the parser must not read as clean.
-      if (/^Status:\s*failed\b/im.test(verificationMd)) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): VERIFICATION.md Status is 'failed'`);
+      const record = read.record;
+      if (record.section !== os.n || record.slug !== os.slug) {
+        refuseReasons.push(`${where}: VERIFICATION.json is the record of section ${record.section} (${record.slug}) — run 'pensmith verify ${os.n}'`);
+        continue;
       }
-      // Refuse-gate: any blocking verdict row blocks, and is named.
-      const gate = verdictGate(verificationMd, `section ${os.n} (${os.slug})`);
+      // Refuse-gate: a section verify did not pass, or any blocking verdict,
+      // whatever the status says.
+      const gate = verificationGate(record, where);
       refuseReasons.push(...gate.reasons);
       for (const w of gate.warnings) warn(`WARN: ${w}`);
+      if (gate.reasons.length > 0) continue;
 
-      // Staleness (COMP-01 / D-08): recompute the per-section hash.
-      const freshHash = computeDraftHash(sec.draftBytes, sec.assignedSources);
-      if (sec.storedHash !== freshHash) {
-        warn(`WARN: section ${os.n} (${os.slug}) stale — re-verifying (Pass 1+3)`);
+      // Staleness (COMP-01 / D-08): the record must still describe the section.
+      const stale = verificationStaleness(record, {
+        draftBytes: sec.draftBytes,
+        assignedSources: sec.assignedSources,
+        bib,
+        acknowledgementsSha256: readAcknowledgements(join(sec.dir, 'ACKNOWLEDGEMENTS.json')).sha256,
+      });
+      if (stale.length > 0) {
+        warn(`WARN: ${where} stale (${stale.join('; ')}) — re-verifying (Pass 1+3)`);
+        // Without a seam a stale section is a re-verify failure: it never
+        // escapes unverified. The seam checks the text compile will use.
         const reVerify =
           opts.reVerify ??
           (async () => ({ passed: false, failingCitekeys: [] } as ReVerifyResult));
-        // SEAM DESIGN NOTE (WR-03 / Phase 14): the staleness re-verify path trusts
-        // the seam's boolean `result.passed` rather than routing fresh verdicts through
-        // parseVerdictRows / GATE-02. This means a production reVerify implementation
-        // with a bug that returns { passed: true, failingCitekeys: [] } when there are
-        // actually failing citekeys (e.g. a network timeout misclassified as clean)
-        // would bypass GATE-02 for the re-verified section.
-        //
-        // The seam contract requires that a production reVerify:
-        //   (a) writes updated verdict rows to the section's VERIFICATION.md, AND
-        //   (b) only returns { passed: true } when parseVerdictRows on the written
-        //       VERIFICATION.md would return an empty failing-citekey set.
-        // Enforce this in integration tests: assert that a passing reVerify produces
-        // a VERIFICATION.md whose verdict rows parse clean through parseVerdictRows.
-        // A buggy reVerify that skips (b) can bypass GATE-02 — it is a contractual
-        // obligation of the production implementation, not enforced here structurally.
-        const result = await reVerify({ n: os.n, slug: os.slug });
+        const result = await reVerify({ n: os.n, slug: os.slug, draft: sec.draftBytes.toString('utf8') });
+        for (const w of result.warnings ?? []) warn(`WARN: ${w}`);
         if (!result.passed) {
-          const named =
-            result.failingCitekeys.length > 0
-              ? result.failingCitekeys.map((ck) => `[@${ck}]`).join(', ')
-              : '(stale, re-verify failed)';
-          refuseReasons.push(`section ${os.n} (${os.slug}): staleness re-verify FAILED — ${named}`);
-        } else {
-          stalenessResolved.push({
-            section: `${os.n} (${os.slug})`,
-            prior_hash: (sec.storedHash ?? 'null').slice(0, 12),
-            new_hash: freshHash.slice(0, 12),
-            re_verify_passed: true,
-          });
+          if (result.reasons && result.reasons.length > 0) {
+            refuseReasons.push(...result.reasons);
+          } else {
+            const named =
+              result.failingCitekeys.length > 0
+                ? result.failingCitekeys.map((ck) => `[@${ck}]`).join(', ')
+                : '(stale, re-verify failed)';
+            refuseReasons.push(`${where}: staleness re-verify FAILED — ${named}`);
+          }
+          continue;
         }
+        stalenessResolved.push({
+          section: `${os.n} (${os.slug})`,
+          prior_hash: (record.draft_hash ?? 'null').slice(0, 12),
+          new_hash: sha256(sec.draftBytes).slice(0, 12),
+          re_verify_passed: true,
+        });
       }
+      manifestSections.push({
+        n: os.n,
+        slug: os.slug,
+        draft_sha256: sha256(sec.draftBytes),
+        verification_sha256: read.sha256,
+        re_verified: stale.length > 0,
+      });
     }
 
     // REFUSE: no DRAFT.md write, no bib regen (COMP-01 — bad citation never escapes).
@@ -541,8 +575,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     // export as a raw token with no reference, so it refuses here. A
     // narrative `@word` with no entry is text: compile reads the citations
     // through the same function the exporter does.
-    const bibPath = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
-    const bibEntries = await parseBibOrEmpty(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '');
+    const bibEntries = await parseBibOrEmpty(bibText);
     const inBib = new Set(bibEntries.map((e) => String(e['id'] ?? '')));
     const missing = exportCitations(compiled, inBib).unknownCited;
     if (missing.length > 0) {
@@ -572,6 +605,22 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       staleness_resolved: stalenessResolved,
     });
     await atomicWriteFile(reportPath, report);
+
+    // What done checks before it exports: the manuscript, each section's draft
+    // and recorded verdicts, and each cited entry of the bibliography as
+    // compile left it.
+    const bibAfter = await parseBibForPass1(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '');
+    const bibHashes: Record<string, string> = {};
+    for (const [key, hash] of Object.entries(bibEntryHashes(citedKeys(findCitations(compiled)), bibAfter))) {
+      if (hash !== null) bibHashes[key] = hash;
+    }
+    await writeCompileManifest(opts.paperRoot, {
+      $schemaVersion: 1,
+      compiled_at: new Date().toISOString(),
+      draft_sha256: sha256(Buffer.from(compiled, 'utf8')),
+      sections: manifestSections,
+      bib_entries: bibHashes,
+    });
 
     return {
       refused: false,

@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { runCompile, type SmoothBoundaryInput } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { bibForDrafts } from './lib/bib-fixture.js';
+import { writeVerificationFixture } from './lib/verification-fixture.js';
 
 function seedTwoSection(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-token-protect-'));
@@ -48,10 +49,7 @@ function seedTwoSection(): string {
       join(dir, 'PLAN.md'),
       ['---', `section: ${n}`, `slug: ${slug}`, `title: ${slug}`, 'depends_on: []', `assigned_sources: [${sources.map((k) => `'${k}'`).join(', ')}]`, `verified_against_draft_hash: '${hash}'`, 'status: verified', '---', '', `# ${slug}`, ''].join('\n'),
     );
-    writeFileSync(
-      join(dir, 'VERIFICATION.md'),
-      [`# VERIFICATION (Section ${n}, ${slug})`, '', 'Status: verified', '', '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)', '', `- ${sources[0]}: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed`, '', ''].join('\n'),
-    );
+    writeVerificationFixture(dir, { n, slug, draft, assignedSources: sources });
   };
   seed(1, 'intro', '# Intro\n\nThe last paragraph of the intro cites [@smith2020].\n', ['smith2020']);
   seed(2, 'body', '# Body\n\nThe first paragraph of the body cites [@jones2019].\n', ['jones2019']);
