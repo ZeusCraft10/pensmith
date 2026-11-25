@@ -11,6 +11,12 @@
 // Code spans and fenced code blocks are skipped: Pandoc does not read
 // citations there either.
 //
+// Every part of pensmith that reads citations reads them here: the verifier,
+// compile, the export, the humanizer gate and revise. The module also finds
+// what a reader would take for a citation but Pandoc would not render as one
+// (a DOI or `(Author, 2020)` typed as text, a `[@ key]` that does not parse),
+// and the direct quotations in a draft with the citation each is attributed to.
+//
 // PURE module: no I/O.
 
 /** One cited work inside a cluster. */
@@ -224,4 +230,327 @@ export function citedKeys(cites: readonly Citation[]): string[] {
   const seen = new Set<string>();
   for (const c of cites) for (const it of c.items) seen.add(it.key);
   return [...seen];
+}
+
+// ---------------------------------------------------------------------------
+// Sentences
+// ---------------------------------------------------------------------------
+
+// A full stop after one of these is not the end of a sentence.
+const ABBREVIATIONS: ReadonlySet<string> = new Set([
+  'al', 'e.g', 'i.e', 'cf', 'vs', 'viz', 'dr', 'mr', 'mrs', 'ms', 'prof', 'st', 'jr', 'sr',
+  'fig', 'figs', 'no', 'nos', 'vol', 'vols', 'p', 'pp', 'ch', 'chap', 'sec', 'eq', 'approx', 'ca',
+]);
+
+// `.`, `!` or `?`, closing quotes or brackets, then space and a capital or an
+// opening mark: the end of a sentence.
+const SENTENCE_END = /[.!?]["”’')\]]*(?=\s+[\p{Lu}\p{N}"“‘'[@])/gu;
+
+/** Offset of the paragraph that holds `at`: just after the last blank line before it. */
+function paragraphStart(md: string, at: number): number {
+  let from = 0;
+  for (const m of md.slice(0, at).matchAll(/\n[ \t]*\n/g)) from = m.index + m[0].length;
+  return from;
+}
+
+/**
+ * The sentence of `md` that holds [start, end), as [sentenceStart, sentenceEnd).
+ * A sentence never crosses a blank line. A full stop inside a citation
+ * (`p. 5`), after an abbreviation or initial, or inside [start, end) itself
+ * does not end one.
+ */
+export function sentenceSpan(
+  md: string,
+  start: number,
+  end: number,
+  cites: readonly Citation[] = findCitations(md),
+): [number, number] {
+  const paraStart = paragraphStart(md, start);
+  const afterBreak = md.slice(end).search(/\n[ \t]*\n/);
+  const paraEnd = afterBreak === -1 ? md.length : end + afterBreak;
+  const masked = (i: number): boolean =>
+    (i >= start && i < end) || cites.some((c) => i >= c.start && i < c.end);
+
+  let s = paraStart;
+  let e = paraEnd;
+  const para = md.slice(paraStart, paraEnd);
+  for (const m of para.matchAll(SENTENCE_END)) {
+    const at = paraStart + m.index;
+    if (masked(at)) continue;
+    if (md[at] === '.') {
+      const word = /([\p{L}.]+)$/u.exec(md.slice(paraStart, at))?.[1] ?? '';
+      if (word.length === 1 || ABBREVIATIONS.has(word.toLowerCase())) continue;
+    }
+    const boundary = at + m[0].length;
+    if (boundary <= start) s = boundary;
+    else if (at >= end) { e = boundary; break; }
+  }
+  return [s, e];
+}
+
+// ---------------------------------------------------------------------------
+// Citations written as text
+// ---------------------------------------------------------------------------
+
+/** What kind of identifier or citation a RawCitation is. */
+export type RawCitationKind = 'doi' | 'arxiv' | 'pmid' | 'author-year';
+
+/**
+ * A citation typed as plain text: a DOI, arXiv ID or PMID, or an author-year
+ * citation such as `(Smith, 2020)`. Pandoc renders these as ordinary words, so
+ * nothing in them is checked against a bibliography; the verifier blocks them
+ * until each is written as a `[@key]` citation.
+ */
+export interface RawCitation {
+  kind: RawCitationKind;
+  start: number;
+  end: number;
+  raw: string;
+}
+
+// Words that sit before a year in brackets but are not names.
+const NOT_A_NAME = String.raw`(?!(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|Spring|Summer|Autumn|Fall|Winter|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|In|On|At|The|This|That|These|Those|Since|From|By|Until|Till|During|Before|After|Circa|Fiscal|Figure|Fig|Table|Version|Volume|Vol|Issue|Edition|Chapter|Section|Part|Year)(?![\p{L}\p{M}'’-]))`;
+const PARTICLE = String.raw`(?:(?:van|von|der|den|de|del|della|di|da|du|dos|das|le|la|ten|ter)\s+){0,3}`;
+// A surname in brackets may be an acronym (`WHO`); in running text it must
+// have a lower-case letter, so `World War II (1939)` is not a citation.
+const SURNAME_ANY = String.raw`${PARTICLE}${NOT_A_NAME}\p{Lu}[\p{L}\p{M}'’-]*[\p{L}\p{M}]`;
+const SURNAME_PROSE = String.raw`${PARTICLE}${NOT_A_NAME}\p{Lu}(?=[\p{L}\p{M}'’-]*\p{Ll})[\p{L}\p{M}'’-]*[\p{L}\p{M}]`;
+const authors = (name: string): string =>
+  String.raw`${name}(?:(?:,\s*|\s+)(?:and|&)\s+${name}|,\s+${name}|\s+et\s+al\.?)*`;
+const YEAR = String.raw`(?:(?:1[5-9]\d\d|20\d\d)[a-z]?(?![\p{L}\p{N}])|n\.\s?d\.|in\s+press|forthcoming)`;
+const YEARS = String.raw`${YEAR}(?:,\s*${YEAR})*`;
+const PAGES = String.raw`(?:,\s*(?:pp?\.|paras?\.|chaps?\.|ch\.|sec\.|§)\s*[\dIVXLCivxlc]+(?:\s*[-–—]\s*[\dIVXLCivxlc]+)?)?`;
+const LEAD = String.raw`(?:(?:see|e\.g\.|cf\.|i\.e\.|also),?\s+(?:also\s+)?)?`;
+const ONE_WORK = String.raw`${LEAD}${authors(SURNAME_ANY)},?\s+${YEARS}${PAGES}`;
+
+// In priority order: a match that overlaps an earlier one is dropped, so a
+// DOI inside a doi.org link is reported once, as the link.
+const RAW_PATTERNS: ReadonlyArray<readonly [RawCitationKind, RegExp]> = [
+  ['doi', /\bhttps?:\/\/(?:dx\.)?doi\.org\/\S+/giu],
+  ['arxiv', /\bhttps?:\/\/(?:www\.|export\.)?arxiv\.org\/(?:abs|pdf)\/\S+/giu],
+  ['pmid', /\bhttps?:\/\/(?:www\.)?(?:pubmed\.ncbi\.nlm\.nih\.gov|ncbi\.nlm\.nih\.gov\/(?:pubmed|pmc\/articles))\/\S+/giu],
+  ['doi', /\bdoi:\s*10\.\d{4,9}\/\S+/giu],
+  ['doi', /(?<![\p{L}\p{N}_./])10\.\d{4,9}\/\S+/gu],
+  ['arxiv', /\barxiv:\s*(?:\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[a-z]{2})?\/\d{7}(?:v\d+)?)/giu],
+  ['pmid', /\bPMID:?\s*\d{1,9}\b/giu],
+  ['pmid', /\b(?:PMCID:?\s*)?PMC\d{4,9}\b/giu],
+  ['author-year', new RegExp(String.raw`(?<!\\)\(\s*${ONE_WORK}(?:\s*;\s*${ONE_WORK})*\s*\)`, 'gu')],
+  ['author-year', new RegExp(String.raw`(?<![\p{L}\p{N}])${authors(SURNAME_PROSE)}\s+\(\s*${YEARS}${PAGES}\s*\)`, 'gu')],
+];
+
+/** Drop sentence punctuation and unbalanced closing brackets from the end of an identifier. */
+function trimIdentifier(raw: string): string {
+  let s = raw;
+  for (;;) {
+    const last = s.at(-1);
+    if (last === undefined) return s;
+    const count = (ch: string): number => s.split(ch).length - 1;
+    if ('.,;:!?\'"’”>}'.includes(last)) s = s.slice(0, -1);
+    else if (last === ')' && count('(') < count(')')) s = s.slice(0, -1);
+    else if (last === ']' && count('[') < count(']')) s = s.slice(0, -1);
+    else return s;
+  }
+}
+
+/**
+ * Every DOI, arXiv ID, PMID and author-year citation typed as text in `md`,
+ * in document order. Text inside code, inside a Pandoc citation (a key may
+ * look like a DOI) and a bracket escaped as `\(` is skipped.
+ */
+export function findRawCitations(md: string, cites: readonly Citation[] = findCitations(md)): RawCitation[] {
+  const skip = codeRanges(md);
+  const taken: Array<[number, number]> = [
+    ...skip,
+    ...cites.map((c): [number, number] => [c.start, c.end]),
+  ];
+  const overlaps = (a: number, b: number): boolean => taken.some(([x, y]) => a < y && b > x);
+  const out: RawCitation[] = [];
+  for (const [kind, re] of RAW_PATTERNS) {
+    for (const m of md.matchAll(re)) {
+      const raw = kind === 'author-year' ? m[0] : trimIdentifier(m[0]);
+      const start = m.index;
+      const end = start + raw.length;
+      if (raw.length === 0 || overlaps(start, end)) continue;
+      out.push({ kind, start, end, raw });
+      taken.push([start, end]);
+    }
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/** A bracketed group that was meant as a citation but has no key that parses. */
+export interface UnparsedCitation {
+  start: number;
+  end: number;
+  raw: string;
+}
+
+/**
+ * Bracketed groups with an `@` where a citation key should start (`[@ key]`,
+ * `[@]`, `[-@]`) that parse as no citation. Pandoc would print them as they
+ * stand, so they must not pass as text. An `@` inside a word, as in an email
+ * address, is not a citation.
+ */
+export function findUnparseableCitations(md: string, cites: readonly Citation[] = findCitations(md)): UnparsedCitation[] {
+  const skip = codeRanges(md);
+  const out: UnparsedCitation[] = [];
+  for (const m of md.matchAll(/\[([^[\]]*@[^[\]]*)\]/g)) {
+    const start = m.index;
+    const end = start + m[0].length;
+    if (skip.some(([a, b]) => start >= a && start < b)) continue;
+    if (start > 0 && md[start - 1] === '\\') continue;
+    if (md[end] === '(') continue;
+    if (cites.some((c) => !c.narrative && c.start === start)) continue;
+    for (const a of m[1]!.matchAll(/(^|[\s;])-?@/g)) {
+      const at = start + 1 + a.index + a[0].length - 1;
+      if (cites.some((c) => c.narrative && c.start === at)) continue;
+      out.push({ start, end, raw: m[0] });
+      break;
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Direct quotations
+// ---------------------------------------------------------------------------
+
+/** A direct quotation and the citation it is attributed to. */
+export interface Quote {
+  kind: 'inline' | 'block';
+  /** Span of the quotation, quote marks or `>` markers included. */
+  start: number;
+  end: number;
+  /** The quoted words: citations inside removed, whitespace collapsed, closing punctuation dropped. */
+  text: string;
+  /** The citation the quotation is attributed to, or null when there is none. */
+  citation: Citation | null;
+}
+
+const CLOSERS: Readonly<Record<string, string>> = { '"': '"”', '“': '”"', "'": "'’", '‘': '’\'' };
+
+function quoteText(inner: string): string {
+  let text = inner;
+  for (const c of findCitations(inner).reverse()) text = text.slice(0, c.start) + text.slice(c.end);
+  return text.replace(/\s+/g, ' ').trim().replace(/[\s.,;:]+$/u, '');
+}
+
+interface Line { start: number; end: number; text: string }
+
+function splitLines(md: string): Line[] {
+  const lines: Line[] = [];
+  let pos = 0;
+  for (;;) {
+    const nl = md.indexOf('\n', pos);
+    const end = nl === -1 ? md.length : nl;
+    lines.push({ start: pos, end, text: md.slice(pos, end) });
+    if (nl === -1) return lines;
+    pos = nl + 1;
+  }
+}
+
+/** Markdown block quotes: runs of `>` lines and their lazy continuation lines. */
+function blockQuoteSpans(md: string, inCode: (i: number) => boolean): Array<{ start: number; end: number; inner: string }> {
+  const lines = splitLines(md);
+  const out: Array<{ start: number; end: number; inner: string }> = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const first = lines[i]!;
+    if (!/^ {0,3}>/.test(first.text) || inCode(first.start)) continue;
+    const body: string[] = [];
+    let j = i;
+    for (; j < lines.length; j += 1) {
+      const l = lines[j]!;
+      if (/^ {0,3}>/.test(l.text)) body.push(l.text.replace(/^ {0,3}> ?/, ''));
+      else if (l.text.trim() !== '' && (body.at(-1) ?? '').trim() !== '') body.push(l.text);
+      else break;
+    }
+    const last = lines[j - 1]!;
+    out.push({ start: first.start, end: last.end, inner: body.join('\n') });
+    i = j - 1;
+  }
+  return out;
+}
+
+/** The citation a block quotation is attributed to. */
+function blockAttribution(md: string, start: number, end: number, cites: readonly Citation[]): Citation | null {
+  // A citation inside the block, usually on its last line.
+  const inside = cites.filter((c) => c.start >= start && c.start < end);
+  if (inside.length > 0) return inside.at(-1)!;
+  // A citation that opens the next paragraph: `[@key, p. 4]` on its own line.
+  const next = end + (/^\s*/.exec(md.slice(end))?.[0].length ?? 0);
+  const opening = cites.find((c) => c.start === next);
+  if (opening) return opening;
+  // The paragraph before introduces it: `As @key argues:`.
+  const before = md.slice(0, start).replace(/\s+$/, '');
+  if (before.endsWith(':')) {
+    const from = paragraphStart(md, before.length);
+    const intro = cites.filter((c) => c.start >= from && c.end <= before.length);
+    if (intro.length > 0) return intro.at(-1)!;
+  }
+  return null;
+}
+
+/** The citation an inline quotation is attributed to. */
+function inlineAttribution(md: string, start: number, end: number, cites: readonly Citation[]): Citation | null {
+  // Right after the closing mark: `"..." [@key, p. 4]`, `"...," [@key]`, `"..." (p. 4) [@key]`.
+  const tail = /^[\s,.;:]*(?:\([^()\n]{0,40}\)[\s,.;:]*)?/.exec(md.slice(end))?.[0] ?? '';
+  const direct = cites.find((c) => c.start === end + tail.length);
+  if (direct) return direct;
+  const inner = cites.filter((c) => c.start > start && c.end <= end);
+  if (inner.length > 0) return inner.at(-1)!;
+  const [s, e] = sentenceSpan(md, start, end, cites);
+  const following = cites.find((c) => c.start >= end && c.start < e);
+  if (following) return following;
+  const preceding = cites.filter((c) => c.start >= s && c.end <= start);
+  return preceding.at(-1) ?? null;
+}
+
+/**
+ * Every direct quotation in `md`, in document order: block quotes, and text in
+ * straight or curly, double or single quote marks. Each is attributed to the
+ * citation right after it, a citation inside it, or else the nearest citation
+ * after it, then before it, in the same sentence. A block quote takes the
+ * citation inside it, a citation opening the next paragraph, or one in a
+ * paragraph that introduces it with a colon. Apostrophes (`don't`,
+ * `authors'`) and quote marks inside code are not quotations.
+ */
+export function findQuotes(md: string, cites: readonly Citation[] = findCitations(md)): Quote[] {
+  const skip = codeRanges(md);
+  const inCode = (i: number): boolean => skip.some(([a, b]) => i >= a && i < b);
+  const out: Quote[] = [];
+
+  const blocks = blockQuoteSpans(md, inCode);
+  for (const b of blocks) {
+    out.push({ kind: 'block', start: b.start, end: b.end, text: quoteText(b.inner), citation: blockAttribution(md, b.start, b.end, cites) });
+  }
+  const inBlockOrCite = (i: number): boolean =>
+    blocks.some((b) => i >= b.start && i < b.end) || cites.some((c) => i >= c.start && i < c.end);
+
+  const isWordChar = (ch: string | undefined): boolean => ch !== undefined && /[\p{L}\p{N}]/u.test(ch);
+  for (let i = 0; i < md.length; i += 1) {
+    const open = md[i]!;
+    const closers = CLOSERS[open];
+    if (!closers || inCode(i) || inBlockOrCite(i)) continue;
+    const prev = i > 0 ? md[i - 1]! : ' ';
+    const next = md[i + 1];
+    if (next === undefined || /\s/.test(next)) continue;
+    if ((open === '"' || open === "'") && !/[\s([{—–\-/]/.test(prev)) continue;
+    if ((open === "'" || open === '‘') && !/\p{L}/u.test(next)) continue;
+    let close = -1;
+    for (let j = i + 1; j < md.length; j += 1) {
+      if (md[j] === '\n' && /^\n[ \t]*\n/.test(md.slice(j))) break;
+      if (!closers.includes(md[j]!) || /\s/.test(md[j - 1]!) || isWordChar(md[j + 1])) continue;
+      close = j;
+      break;
+    }
+    if (close === -1) continue;
+    const start = i;
+    const end = close + 1;
+    const text = quoteText(md.slice(i + 1, close));
+    if (text.length > 0) {
+      out.push({ kind: 'inline', start, end, text, citation: inlineAttribution(md, start, end, cites) });
+    }
+    i = close;
+  }
+  return out.sort((a, b) => a.start - b.start);
 }
