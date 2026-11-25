@@ -23,9 +23,9 @@
 
 import { execFile } from 'node:child_process';
 import * as fsp from 'node:fs/promises';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import path, { basename, extname, join } from 'node:path';
+import path, { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, PDFStream } from 'pdf-lib';
@@ -607,6 +607,16 @@ export interface ExportResult {
 
 const DELIVERABLE_EXTS = ['md', 'docx', 'pdf', 'tex'];
 
+/** `p` resolved, through symlinks where it exists, so two spellings of one folder compare equal. */
+function realPath(p: string): string {
+  const abs = path.resolve(p);
+  try {
+    return realpathSync.native(abs);
+  } catch {
+    return abs;
+  }
+}
+
 function traceFormat(file: string): TraceFormat {
   const ext = extname(file).slice(1);
   return ext === 'tex' ? 'latex' : (ext as TraceFormat);
@@ -626,6 +636,16 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     throw new ExportError('invalid-input', `Unknown citation style '${style}'. Supported: ${SUPPORTED_STYLES.join(', ')}.`);
   }
   const stem = basename(inputPath, extname(inputPath));
+  // Each export replaces DRAFT.*, FINAL.*, <stem>.* and CITATIONS.* in the
+  // export folder, so it must not be the paper folder (the canonical
+  // CITATIONS.bib) or the folder that holds the manuscript itself.
+  const target = realPath(exportDir);
+  if (target === realPath(paper) || target === realPath(dirname(inputPath))) {
+    throw new ExportError(
+      'invalid-input',
+      `The export folder ${exportDir} holds the manuscript or the paper's own files, which an export would replace. Choose another folder.`,
+    );
+  }
   const md = await fsp.readFile(inputPath, 'utf8');
 
   // Citations and the works they cite. A bracketed citation of a key with no

@@ -1,15 +1,15 @@
 // tests/exporter.test.ts — exportDraft's contract without Pandoc.
 //
 //   - The export goes to a distinct folder (default .paper/export/), never onto
-//     the source DRAFT.md (DONE-06).
+//     the source DRAFT.md.
 //   - A .docx or .pdf without Pandoc is refused with a typed error that names
 //     Pandoc. It used to be swapped for a Markdown file that was reported as
 //     the export.
 //   - The exported CITATIONS.bib and CITATIONS.ris are built from the works
-//     the paper cites (DONE-08, CITE-05). They used to be copies of the
+//     the paper cites. They used to be copies of the
 //     research-time files, which hold every uncited candidate.
 //   - Offline rendering resolves every citation and appends the reference
-//     list (REND-01/02/03), on the committed known-good fixture.
+//     list, on the committed known-good fixture.
 // Real Pandoc output is covered by tests/export-pandoc-trace.test.ts.
 
 import { test } from 'node:test';
@@ -35,7 +35,7 @@ function seedPaper(slug: string, draft = '# Draft\n\nA clean draft that cites on
   return { root, inputPath };
 }
 
-test('exporter: a docx or pdf without Pandoc is refused with a typed error and nothing is written (DONE-06)', async () => {
+test('exporter: a docx or pdf without Pandoc is refused with a typed error and nothing is written', async () => {
   for (const format of ['docx', 'pdf'] as const) {
     const { root, inputPath } = seedPaper(`nopandoc-${format}`);
     await assert.rejects(
@@ -46,7 +46,7 @@ test('exporter: a docx or pdf without Pandoc is refused with a typed error and n
   }
 });
 
-test('exporter: the export goes to a distinct folder and never overwrites the source DRAFT.md (DONE-06)', async () => {
+test('exporter: the export goes to a distinct folder and never overwrites the source DRAFT.md', async () => {
   const { root, inputPath } = seedPaper('distinct');
   const before = readFileSync(inputPath, 'utf8');
   const res = await exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false });
@@ -56,7 +56,27 @@ test('exporter: the export goes to a distinct folder and never overwrites the so
   assert.equal(readFileSync(inputPath, 'utf8'), before, 'the source is untouched');
 });
 
-test('exporter: the exported CITATIONS.bib holds the cited works only (DONE-08)', async () => {
+test('exporter: an export folder that would replace the manuscript or the canonical bibliography is refused', async () => {
+  const { root, inputPath } = seedPaper('collide');
+  const draft = readFileSync(inputPath, 'utf8');
+  const canonicalBib = join(root, '.paper', 'CITATIONS.bib');
+  const bib = readFileSync(canonicalBib, 'utf8');
+  const refused = (err: unknown): boolean => err instanceof ExportError && err.kind === 'invalid-input';
+  // The paper folder itself, however it is spelled.
+  for (const outputDir of [join(root, '.paper'), `${join(root, '.paper', 'sections')}/..`, `${join(root, '.paper')}/`]) {
+    await assert.rejects(exportDraft({ inputPath, outputDir, format: 'md', paperRoot: root, pandocPresent: false }), refused, outputDir);
+  }
+  // The folder that holds the manuscript being exported.
+  const elsewhere = mkdtempSync(join(tmpdir(), 'pensmith-exporter-elsewhere-'));
+  const manuscript = join(elsewhere, 'FINAL.md');
+  writeFileSync(manuscript, draft);
+  await assert.rejects(exportDraft({ inputPath: manuscript, outputDir: elsewhere, format: 'md', paperRoot: root, pandocPresent: false }), refused);
+  assert.equal(readFileSync(inputPath, 'utf8'), draft, 'the source DRAFT.md is untouched');
+  assert.equal(readFileSync(manuscript, 'utf8'), draft, 'the manuscript is untouched');
+  assert.equal(readFileSync(canonicalBib, 'utf8'), bib, 'the canonical CITATIONS.bib is untouched');
+});
+
+test('exporter: the exported CITATIONS.bib holds the cited works only', async () => {
   const { root, inputPath } = seedPaper('bib');
   const res = await exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false });
   assert.equal(res.bibPath, join(root, '.paper', 'export', 'CITATIONS.bib'));
@@ -66,7 +86,7 @@ test('exporter: the exported CITATIONS.bib holds the cited works only (DONE-08)'
   assert.deepEqual(res.citedKeys, ['x2020']);
 });
 
-test('exporter: the exported CITATIONS.ris is built from the cited works, never copied from research (CITE-05)', async () => {
+test('exporter: the exported CITATIONS.ris is built from the cited works, never copied from research', async () => {
   const { root, inputPath } = seedPaper('ris');
   writeFileSync(join(root, '.paper', 'CITATIONS.ris'), 'TY  - JOUR\nID  - fabricated\nTI  - Fake\nER  - \n');
   const res = await exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false });
@@ -76,7 +96,7 @@ test('exporter: the exported CITATIONS.ris is built from the cited works, never 
   assert.doesNotMatch(ris, /fabricated|y2021/);
 });
 
-test('exporter: a paper that cites nothing ships no bibliography files (CITE-05)', async () => {
+test('exporter: a paper that cites nothing ships no bibliography files', async () => {
   const { root, inputPath } = seedPaper('nocites', '# Draft\n\nNo citations here.\n');
   const res = await exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false });
   assert.equal(res.bibPath, undefined);
@@ -86,7 +106,7 @@ test('exporter: a paper that cites nothing ships no bibliography files (CITE-05)
 });
 
 // ---------------------------------------------------------------------------
-// REND-01/02/03 on the committed known-good fixture (offline, APA)
+// The committed known-good fixture, rendered offline in APA
 // ---------------------------------------------------------------------------
 
 const FIXTURE_DIR = fileURLToPath(new URL('./fixtures/known-good-fixture', import.meta.url));
@@ -102,7 +122,7 @@ async function exportFixture(format: 'md' | 'latex'): Promise<string> {
   return readFileSync(res.outputPath, 'utf8');
 }
 
-test('exporter: REND-01/02/03 offline — no raw [@key], APA in-text forms, a References list naming Vaswani', async () => {
+test('exporter: offline — no raw [@key], APA in-text forms, a References list naming Vaswani', async () => {
   const fixtureMd = readFileSync(join(FIXTURE_DIR, 'section.md'), 'utf8');
   assert.ok(fixtureMd.includes('[@vaswani2017attention p. 2]'), 'the fixture carries a locator citation');
   const rendered = await exportFixture('md');
