@@ -76,6 +76,10 @@ const common = {
   logLevel: 'warning',
   // Cassette recording loads nock lazily and only under the test runner.
   external: ['nock'],
+  // Old whatwg-url/tr46 (under citation-js's fetch) require Node's deprecated
+  // punycode core module, which prints DEP0040 on every run; bundle the
+  // userland package of the same API instead.
+  alias: { punycode: 'punycode/' },
   define: { __dirname: '__pensmithDirnameValue', __filename: '__pensmithFilename' },
   plugins: [pdfParsePin],
 };

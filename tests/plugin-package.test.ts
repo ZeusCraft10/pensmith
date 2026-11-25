@@ -157,7 +157,11 @@ test('the committed bundles and runtime assets are present', () => {
     const ignored = spawnSync('git', ['check-ignore', '-q', '--no-index', `plugin/${f}`], { cwd: repoRoot });
     assert.equal(ignored.status, 1, `plugin/${f} must not be gitignored`);
   }
-  assert.match(readFileSync(at('dist', 'pensmith.mjs'), 'utf8'), /^#!\/usr\/bin\/env node\n/);
+  const cli = readFileSync(at('dist', 'pensmith.mjs'), 'utf8');
+  assert.match(cli, /^#!\/usr\/bin\/env node\n/);
+  // Node prints a DEP0040 warning to the user's terminal when the deprecated
+  // punycode core module loads; the bundle must use the userland package.
+  assert.ok(!/__require\("punycode"\)/.test(cli), 'the CLI bundle must not load the punycode core module');
   for (const dir of ['templates/prompts', 'templates/citation-styles', 'templates/presets', 'references']) {
     const src = readdirSync(path.join(repoRoot, dir)).sort();
     assert.deepEqual(readdirSync(at(dir)).sort(), src, `plugin/${dir} must mirror ${dir}`);
