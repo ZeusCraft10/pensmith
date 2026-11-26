@@ -11,8 +11,10 @@
 // is printed above the title, and took a cited title with its byline below
 // the PDF's own title and text. The fix for that refused papers with a
 // notice or a running head above their title, took a reference set authors
-// first for a byline above a title, and read "Cheng," as "Chen". Each case
-// runs on the recorded Crossref and arXiv answers.
+// first for a byline above a title, and read "Cheng," as "Chen". Its fix
+// then took a cited title below the PDF's own title whenever the PDF's
+// byline did not read as names, and took the first of two works sharing a
+// title. Each case runs on the recorded Crossref and arXiv answers.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -226,4 +228,106 @@ test('a family name is not read as a shorter one, so a shared title goes to the 
   assert.equal(await doiOf([title, 'Ana Ruiz', 'Abstract We extend the sampling of Hanna, Ruiz and others.']), '10.0000/pensmith-shared-title-hanna');
   // An affiliation letter set against a name in the byline still names its author.
   assert.equal(await doiOf([title, 'Li Chena,∗, Ana Ruizb', 'Abstract We sample graph signals.']), '10.0000/pensmith-shared-title-chen');
+});
+
+// A first page can set a cited work's title, byline and DOI below its own
+// title and byline. That used to be refused only when the PDF's own byline
+// read as names, and many real bylines do not: an initial, an affiliation on
+// the line, an email, "by", a degree, non-Latin names, names run together by
+// pdf.js. So a line above the title that could be a title counts against it
+// unless it is page furniture, prose or the work's own byline.
+const OWN_TITLE = 'Some Remarks on Array Computing in Python';
+const CITED_AUTHORS = 'S. van der Walt, S. C. Colbert, G. Varoquaux';
+
+for (const byline of [
+  ['J. Roe'],
+  ['John Roe, University of Somewhere'],
+  ['John Roe (University of Somewhere)'],
+  ['John Roe∗ Google Brain jroe@google.com'],
+  ['by John Roe'],
+  ['John Roe, Ph.D.'],
+  ['王 伟'],
+  ['John Roe Jane Doe Max Mustermann Erika Musterfrau'],
+  ['John Roe, Editor-in-Chief, Department of Physics, University of Somewhere'],
+  ['Jane Roe, Editor-in-Chief', 'Department of Physics, University of Somewhere'],
+]) {
+  test(`a cited title below the PDF's own title and the byline "${byline.join(' / ')}" is not the PDF's own`, async () => {
+    assert.doesNotMatch(await workOf([OWN_TITLE, ...byline, CITED, CITED_AUTHORS, NUMPY_DOI]), /NumPy/);
+  });
+}
+
+test('a cited title below a sentence heading that names its authors is not the PDF\'s own', async () => {
+  assert.doesNotMatch(await workOf(['A comment on the paper by van der Walt and colleagues in this issue', CITED, CITED_AUTHORS, NUMPY_DOI]), /NumPy/);
+});
+
+test('a PDF whose identity is in doubt is refused with the command that adds it by its DOI', async () => {
+  const r = await hydrateFromText([OWN_TITLE, 'J. Roe', CITED, CITED_AUTHORS, NUMPY_DOI].join('\n'));
+  assert.equal(r.kind, 'none');
+  assert.match(r.kind === 'none' ? r.reason : '', /pensmith add <doi>/);
+});
+
+test('a correction, an editor\'s note, a review or a withdrawal notice is not the work it names', async () => {
+  for (const label of ['Author Correction', 'Publisher Correction', 'Editor\'s Note', 'Editors’ Note', 'Review of', 'Withdrawal Notice', 'Withdrawal']) {
+    assert.doesNotMatch(await workOf([label, CITED, OWN_BYLINE, NUMPY_DOI]), /NumPy/, label);
+  }
+});
+
+test('a label above a byline printed above the title does not hide the paper\'s authors', async () => {
+  for (const label of [['Research Article'], ['Open Access'], ['Research Article', 'Open Access']]) {
+    assert.match(await workOf([...label, OWN_BYLINE, CITED, NUMPY_DOI]), /NumPy/, label.join(' / '));
+  }
+  // Another work's title is still not a label.
+  assert.doesNotMatch(await workOf(['Deep Nets for Arrays', OWN_BYLINE, CITED, NUMPY_DOI]), /NumPy/);
+});
+
+// A synthetic record (10.0000 test prefix) by Wei Liu and Jun Zhu: family
+// names of three letters, which an Elsevier byline sets with an affiliation
+// letter against them ("Liua,∗").
+test('a byline whose short family names carry affiliation letters names the paper\'s authors', async () => {
+  const lines = ['Sampling graph signals on sensor networks', 'Wei Liua,∗, Jun Zhub', 'doi:10.0000/pensmith-short-family-names'];
+  assert.equal(await workOf(lines), 'Sampling graph signals on sensor networks');
+});
+
+test('works sharing a title whose authors the PDF names equally are refused, not decided by the order of the hits', async () => {
+  const r = await hydrateFromText(['Graph signals on sparse sensor networks', 'Ana Ruiz', 'Abstract We sample graph signals.'].join('\n'));
+  assert.equal(r.kind, 'none', JSON.stringify(r.kind === 'found' ? r.candidate.doi : r));
+  assert.match(r.kind === 'none' ? r.reason : '', /pensmith add <doi>/);
+  // A family name printed whole is matched before one read without its last letter.
+  const hanna = await hydrateFromText(['Graph signals on sparse sensor networks', 'Sam Hanna, Ana Ruiz', 'Abstract We sample graph signals.'].join('\n'));
+  assert.equal(hanna.kind === 'found' ? hanna.candidate.doi : hanna.kind, '10.0000/pensmith-shared-title-hanna');
+});
+
+test('a publisher\'s labels, running heads and editor lines above a paper\'s title still let its printed DOI name it', async () => {
+  for (const header of [
+    ['PLOS ONE', 'RESEARCH ARTICLE'],
+    ['Cognitive Science', 'A Multidisciplinary Journal'],
+    ['Communicated by Jane Roe'],
+    ['Editorial Board Member Jane Roe handled this article'],
+    ['Annual Review of Psychology', 'Editor\'s Choice'],
+    ['Bioinformatics, 36(1), 2020, 1–8', 'Advance Access Publication Date: 1 May 2019', 'Original Paper', 'Sequence analysis'],
+    ['Article', 'Psychological Science', '2019, Vol. 30(1) 3–17', '© The Author(s) 2018', 'Article reuse guidelines:', 'sagepub.com/journals-permissions'],
+    ['Nature Human Behaviour', 'Article'],
+    ['Brain and Language', 'Short Communication'],
+    ['Highlights', 'Graphical Abstract'],
+    ['Version of Record', 'Accepted Manuscript'],
+    ['Workshop Track - ICLR 2018'],
+    ['Check for updates'],
+  ]) {
+    assert.match(await workOf([...header, CITED, OWN_BYLINE, NUMPY_DOI]), /NumPy/, header.join(' / '));
+  }
+});
+
+test('prose above a paper\'s title, and its own byline there, do not count against it', async () => {
+  // A reprint notice: a sentence, then a line that starts in lower case.
+  assert.match(
+    await workOf(['Personal use of this material is permitted.', 'reprinted from Computing in Science & Engineering with permission', CITED, OWN_BYLINE, NUMPY_DOI]),
+    /NumPy/,
+  );
+  // IEEE's notice, whose sentence runs on to a line that starts with a capital.
+  assert.match(
+    await workOf(['© 2011 IEEE. Personal use of this material is permitted. Permission from', 'IEEE must be obtained for all other uses', CITED, OWN_BYLINE, NUMPY_DOI]),
+    /NumPy/,
+  );
+  // The byline above the title, and an author named again below it.
+  assert.match(await workOf([OWN_BYLINE, CITED, 'Correspondence: Gael Varoquaux, INRIA Saclay', NUMPY_DOI]), /NumPy/);
 });

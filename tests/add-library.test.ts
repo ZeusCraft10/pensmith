@@ -331,6 +331,25 @@ test('add <pdf> refuses a cited title printed in the body with its byline and DO
   assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
 });
 
+test('add <pdf> refuses a cited title set below the PDF\'s own title and a byline that reads as no names, and names add <doi>', async () => {
+  // A commentary's first page: its own title, a byline of one initial and a
+  // surname, then the NumPy paper's title, authors and DOI.
+  const root = project();
+  const pdf = await pdfOf(root, [
+    'Some Remarks on Array Computing in Python',
+    'J. Roe',
+    'The NumPy Array: A Structure for Efficient Numerical Computation',
+    'S. van der Walt, S. C. Colbert, G. Varoquaux',
+    'doi:10.1109/MCSE.2011.37',
+  ]);
+  const r = cli(root, ['add', pdf, '--yolo']);
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.out, /NOT added/, r.out);
+  assert.match(r.out, /`pensmith add <doi>`/, r.out);
+  assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
+  assert.equal(existsSync(join(root, '.paper', 'LIBRARY.json')), false, 'nothing was written');
+});
+
 test('add <pdf> takes the printed DOI of a paper whose byline numbers its authors\' affiliations', async () => {
   const root = project();
   const pdf = await pdfOf(root, [

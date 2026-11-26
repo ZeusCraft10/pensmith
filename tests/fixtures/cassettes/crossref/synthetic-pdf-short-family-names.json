@@ -1,0 +1,27 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/pensmith-short-family-names",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/pensmith-short-family-names",
+        "type": "journal-article",
+        "title": ["Sampling graph signals on sensor networks"],
+        "author": [
+          { "given": "Wei", "family": "Liu", "sequence": "first", "affiliation": [] },
+          { "given": "Jun", "family": "Zhu", "sequence": "additional", "affiliation": [] }
+        ],
+        "container-title": ["Journal of Test Fixtures"],
+        "issued": { "date-parts": [[2022]] },
+        "volume": "7",
+        "page": "1-12"
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

@@ -10,14 +10,19 @@
 //     its title printed word for word as whole lines of the PDF's title block
 //     (the lines before the abstract), with its authors named in the lines
 //     next to it, as a paper prints its own title and byline, and with
-//     nothing above it showing another work: a first page can also print
-//     cited works' DOIs, titles and authors below its own title and byline,
-//     and a notice (an erratum, a comment) prints those of the work it is
-//     about;
+//     nothing above it that could be another work's title: a first page can
+//     also print cited works' DOIs, titles and authors below its own title
+//     and byline, and a notice (an erratum, a comment) prints those of the
+//     work it is about. Only what is recognisably page furniture, a label or
+//     prose may sit above the title, since many real bylines read as no
+//     names at all, and an unread byline is no evidence that no other work
+//     is there;
 //   - failing that, by a Crossref title search, whose hit is accepted only
 //     when its whole title heads the PDF in the same way, word for word, and
 //     one of its authors is named in the opening; of several such hits, the
-//     one with most of its authors named.
+//     one with most of its authors named, and none when two tie.
+// Whenever the identity is in doubt the PDF is refused, and the user adds the
+// work by its DOI.
 // Jaro-Winkler on titles is not used: it scores "Climate change and mental
 // health" 0.93 against "Climate change and human health".
 // Only the title line leaves the machine for that search; the PDF's text stays
@@ -175,23 +180,48 @@ function wordsAfter(block: readonly string[], opening: readonly string[], last: 
 }
 
 /**
- * Whether the block above line `first` shows that another work heads the
- * PDF: a notice, or a title followed by a byline that names someone who is
- * not one of `c`'s authors (the PDF's own title and byline, with a cited
- * work's set below them). What else sits above a paper's title (a permission
- * notice, a template's header, a running head, an article-type label) names
- * no one, so it does not count against the title below it.
+ * Whether the block above line `first` could show that another work heads
+ * the PDF: a notice, a line that names someone who is not one of `c`'s
+ * authors, or any line that could be a title and is not recognisably page
+ * furniture (a permission notice, a template's header, a running head, an
+ * article-type label), prose, or `c`'s own byline. The PDF's own title and
+ * byline, with a cited work's set below them, look like that, and the PDF's
+ * byline may be one no rule reads as names ("J. Roe", "John Roe, University
+ * of Somewhere", "王 伟"), so only what is known not to be a title is let
+ * through.
  */
 function anotherWorkAbove(c: SourceCandidate, block: readonly string[], first: number): boolean {
   const above = block.slice(0, first);
   return above.some(
-    (line, i) => NOTICE.test(line) || (titleLike(line) && above.slice(i + 1, i + 1 + BYLINE_LINES).some((l) => namesSomeoneElse(c, l))),
+    (line, i) =>
+      NOTICE.test(line) ||
+      (!label(line) && (namesSomeoneElse(c, line) || (titleLike(line) && !proseAt(above, i) && !bylineOf(c, line)))),
   );
 }
 
 /** Whether `line` reads as a byline and names someone who is not one of `c`'s authors. */
 function namesSomeoneElse(c: SourceCandidate, line: string): boolean {
   return bylineNames(line)?.some((name) => shareNamed(c, bylineWords(name)) === 0) ?? false;
+}
+
+/** Whether `line` reads as a byline that names only `c`'s authors. */
+function bylineOf(c: SourceCandidate, line: string): boolean {
+  return bylineNames(line)?.every((name) => shareNamed(c, bylineWords(name)) > 0) ?? false;
+}
+
+// The end of a line a sentence runs on from: a comma, or a lower-case word
+// that cannot end a sentence ("... hereby grants permission to").
+const RUNS_ON = /(?:,|\b(?:a|an|and|as|at|by|for|from|in|of|on|or|that|the|to|which|with))\s*$/u;
+
+/**
+ * Whether line `i` of `lines` is prose, not a title: it starts with a word in
+ * lower case ("reproduce the tables ...", "by John Roe"; not "mRNA" or
+ * "e-Science"), ends in a full stop, or carries on the sentence of the line
+ * before it.
+ */
+function proseAt(lines: readonly string[], i: number): boolean {
+  const line = lines[i]!;
+  return /^[^\p{L}]*\p{Ll}[\p{Ll}'’]*(?![\p{L}-])/u.test(line) || /\.\s*$/.test(line) || (i > 0 && RUNS_ON.test(lines[i - 1]!));
 }
 
 /** The BYLINE_LINES lines of the block right above line `first`, where a byline printed above a title is. */
@@ -227,12 +257,57 @@ const REFERENCE_TAIL = /\b\d+\s*\(\s*\d+(?:\s*[-–]\s*\d+)?\s*\)|\bpp?\.\s*\d|\
 // reply, a retraction notice, a review or an obituary prints that work's
 // title, authors and DOI. A retracted work's own stamp ("RETRACTED ARTICLE")
 // is not one: the retraction check flags the work itself.
+// "Review of" is a notice only as a label of its own, or before a quoted
+// title: "Review of Economic Studies" is a journal's running head.
 const NOTICE =
-  /^\W*(?:errat(?:um|a)|corrigend(?:um|a)|correction|addendum|comments? on|commentary on|reply to|response to|retraction|expression of concern|book reviews?|news (?:&|and) views|in memoriam)\b/i;
+  /^\W*(?:errat(?:um|a)|corrigend(?:um|a)|correction|(?:author|publisher)(?:['’]s)? correction|addendum|comments? on|commentary on|reply to|response to|retraction|withdrawal(?: notice)?|expression of concern|editor(?:['’]s|s['’])? note|book reviews?|review of(?=\W*$|\s*[:"“‘'«])|news (?:&|and) views|in memoriam)\b/i;
 
-/** Whether `line` is page furniture: too short or too long for a title, or a line NOT_A_TITLE names (a link, a licence, an identifier, a journal's citation line). */
+/**
+ * Whether `line` is page furniture: too short or too long for a title, a line
+ * NOT_A_TITLE names (a link, a licence, an identifier, a journal's citation
+ * line), or a label. A notice is not.
+ */
 function furniture(line: string): boolean {
-  return !NOTICE.test(line) && !titleLike(line);
+  return !NOTICE.test(line) && (!titleLike(line) || label(line));
+}
+
+// Words labels and venues' names print that NOT_A_NAME leaves out, since a
+// byline can print them as a name ("Short", "Case", "Press").
+const LABEL_WORDS = new Set(
+  [
+    // article types and labels
+    'brief short long case trial systematic meta mini full length regular position primer commentary data descriptor',
+    'check updates press graphical record reuse guidelines',
+    // venues and subjects
+    'ieee acm siam plos one pattern recognition current directions trends advances annual surveys magazine archives',
+    'multidisciplinary interdisciplinary brain language human behaviour behavior sequence gene genome bioinformatics',
+  ]
+    .join(' ')
+    .split(' '),
+);
+// Lower-case words a label or a venue's name joins its words with ("Journal
+// of", "Featured in Physics", "Physical Review A").
+const JOINING = new Set(['a', 'an', 'and', 'at', 'for', 'from', 'in', 'of', 'on', 'the', 'to', 'with']);
+
+/**
+ * Whether `line` is a label, a venue's name or a subject heading, which names
+ * no one and is no work's title: each of its words is one NOT_A_NAME or
+ * LABEL_WORDS lists, a joining word, a number, or, in a line that is not all
+ * capitals, an acronym ("Research Article", "Open Access", "CC BY 4.0",
+ * "IEEE Transactions on Pattern Analysis and Machine Intelligence",
+ * "Workshop track - ICLR 2016").
+ */
+function label(line: string): boolean {
+  const tokens = line.normalize('NFC').replace(/['’]s\b/gu, '').match(/[\p{L}\p{N}]+/gu) ?? [];
+  const mixedCase = /\p{Ll}/u.test(line);
+  let labelled = false;
+  for (const t of tokens) {
+    const w = normalizeForFuzzy(t);
+    if (JOINING.has(w) || /^\p{N}+$/u.test(t) || (mixedCase && /^\p{Lu}{2,6}$/u.test(t))) continue;
+    if (!NOT_A_NAME.has(w) && !LABEL_WORDS.has(w)) return false;
+    labelled = true;
+  }
+  return labelled;
 }
 
 // Affiliation marks set against a name: digits, superscripts, symbols.
@@ -309,11 +384,12 @@ function wholeTitleOf(c: SourceCandidate): string {
 // Lines on a first page that are not the title: links, licences, journal
 // furniture ("Neural Networks 61 (2015) 85–117", "Contents lists available
 // at ScienceDirect", "Published as a conference paper at ICLR 2019",
-// "Behavioral and Brain Sciences (2017), Page 1 of 72"), templates' headers
-// ("Noname manuscript No.", "Typeset using LATEX"), a permission notice,
-// identifiers.
+// "Behavioral and Brain Sciences (2017), Page 1 of 72", "Bioinformatics,
+// 36(1), 2020", "Advance Access Publication Date"), templates' headers
+// ("Noname manuscript No.", "Typeset using LATEX"), a permission notice, the
+// editor who handled the paper ("Communicated by ..."), identifiers.
 const NOT_A_TITLE =
-  /https?:\/\/|www\.|©|\bcopyright\b|\blicen[cs]e|\bdoi\b|\barxiv\b|\bissn\b|\bpreprint\b|\bjournal of\b|\bproceedings\b|\bvol(?:ume)?\.?\s*\d|\bpp\.\s*\d|\d\s*\((?:1[89]|20)\d\d\)|\((?:1[89]|20)\d\d\)[\s,.:;]*\d|\breceived\b|\baccepted\b|\bsciencedirect\b|\bcontents lists available\b|\bpublished (?:as|in|online|by)\b|\bunder review\b|\bto appear in\b|\bpage \d+ of \d+\b|\bnoname manuscript\b|\bwill be inserted by the editor\b|\btypeset using\b|^\W*draft version\b|\bauthor manuscript\b|\bhereby grants?\b|\bgrants? permission\b|\bproper attribution\b|^\W*special (?:issue|section)\b|\bthis (?:article|paper) is part of\b|^\W*retracted article\W*$|^\W*\d+\W*$/i;
+  /https?:\/\/|www\.|©|\bcopyright\b|\blicen[cs]e|\bdoi\b|\barxiv\b|\bissn\b|\bpreprint\b|\bjournal of\b|\bproceedings\b|\bvol(?:ume)?\.?\s*\d|\bpp\.\s*\d|\d\s*\((?:1[89]|20)\d\d\)|\((?:1[89]|20)\d\d\)[\s,.:;]*\d|\breceived\b|\baccepted\b|\bsciencedirect\b|\bcontents lists available\b|\bpublished (?:as|in|online|by)\b|\bunder review\b|\bto appear in\b|\bpage \d+ of \d+\b|\bnoname manuscript\b|\bwill be inserted by the editor\b|\btypeset using\b|^\W*draft version\b|\bauthor manuscript\b|\bhereby grants?\b|\bgrants? permission\b|\bproper attribution\b|^\W*special (?:issue|section)\b|\bthis (?:article|paper) is part of\b|^\W*retracted article\W*$|^\W*\d+\W*$|^\W*(?:communicated|edited|handled|recommended) by\b|\bhandled (?:this|the) (?:article|paper|manuscript)\b|\b\d+\s*\(\s*\d+(?:\s*[-–]\s*\d+)?\s*\)\s*[,:]|\bpublication date\b|\badvance access\b|\b[a-z0-9-]+\.(?:com|org|net|edu|gov)\//i;
 
 /** Whether `line` can be a title: 8 to 300 characters, and not page furniture. */
 function titleLike(line: string): boolean {
@@ -336,10 +412,12 @@ function nameWords(text: string): Set<string> {
 
 /**
  * The words of a byline: those of nameWords, and a word with an affiliation
- * letter set against it ("Walta,∗", "Varoquauxc") also without that letter.
- * Only a to d, the letters of a first few affiliations, and only before a
- * comma, a mark or the line's end, so "Cheng," is not read as "Chen", nor
- * "Clarke," as "Clark".
+ * letter set against it ("Walta,∗", "Liua,∗", "Varoquauxc") also without
+ * that letter. Only a to d, the letters of a first few affiliations, and
+ * only before a comma, a mark or the line's end, so "Cheng," is not read as
+ * "Chen", nor "Clarke," as "Clark". "Hanna," is also read as "Hann", so a
+ * work whose family names are printed whole is ranked above one matched
+ * without a letter (rankHits).
  */
 function bylineWords(text: string): Set<string> {
   const out = new Set<string>();
@@ -348,7 +426,7 @@ function bylineWords(text: string): Set<string> {
       const w = m[0];
       out.add(w);
       const next = line[m.index + w.length];
-      if (w.length > 4 && /[a-d]$/.test(w) && (next === undefined || /[,;*∗†‡§¶✉]/u.test(next))) out.add(w.slice(0, -1));
+      if (w.length >= 4 && /[a-d]$/.test(w) && (next === undefined || /[,;*∗†‡§¶✉]/u.test(next))) out.add(w.slice(0, -1));
     }
   }
   return out;
@@ -414,10 +492,10 @@ export async function hydrateFromText(text: string): Promise<Hydration> {
   }
   const others = notes.length ? `, and ${notes.join('; ')}` : '';
   const title = titleLine(block);
-  if (!title) return { kind: 'none', reason: `no title line could be read from the PDF${others}` };
+  if (!title) return { kind: 'none', reason: `no title line could be read from the PDF${others}${ADD_BY_ID}` };
   const hits = await crossrefSearch(title, { limit: 5 });
-  let best: { hit: SourceCandidate; named: number } | undefined;
   const openingNames = nameWords(openingText);
+  const ranked: RankedHit[] = [];
   for (const hit of hits) {
     const heads = titleSpans(wholeTitleOf(hit), block).filter(
       ([first, last]) => !anotherWorkAbove(hit, block, first) || bylineAbove(hit, block, first, opening[last + 1]),
@@ -431,13 +509,32 @@ export async function hydrateFromText(text: string): Promise<Hydration> {
       for (const w of wordsAfter(block, opening, last)) inText.add(w);
     }
     const named = shareNamed(hit, inText);
-    if (named > 0 && (!best || named > best.named)) best = { hit, named };
+    if (named > 0) ranked.push({ hit, named, whole: shareNamed(hit, openingNames) });
+  }
+  const [best, next] = ranked.sort(rankHits);
+  if (best && next && rankHits(best, next) === 0) {
+    return {
+      kind: 'none',
+      reason:
+        `Crossref has several works titled "${title}" whose authors the PDF names alike ` +
+        `(${[best, next].map((r) => r.hit.doi ?? r.hit.title).join(', ')})${others}${ADD_BY_ID}`,
+    };
   }
   if (best) return { kind: 'found', candidate: best.hit, via: `a Crossref title search for "${title}"` };
-  return {
-    kind: 'none',
-    reason:
-      `Crossref has no work titled "${title}" by an author the PDF names${others}` +
-      ' — add it by its DOI or arXiv ID instead',
-  };
+  return { kind: 'none', reason: `Crossref has no work titled "${title}" by an author the PDF names${others}${ADD_BY_ID}` };
+}
+
+// What a refused PDF's reason ends with: the way to add the work anyway.
+const ADD_BY_ID = ' — add it by its DOI instead: `pensmith add <doi>` (or `pensmith add <arXiv ID>`)';
+
+/** A Crossref hit whose title heads the PDF: the share of its authors named (`named`), and of those printed whole, not read without an affiliation letter (`whole`). */
+interface RankedHit {
+  hit: SourceCandidate;
+  named: number;
+  whole: number;
+}
+
+/** Most authors named first; of those, most named with their family name printed whole ("Hanna," is Hanna's before it is Hann's). */
+function rankHits(a: RankedHit, b: RankedHit): number {
+  return b.named - a.named || b.whole - a.whole;
 }
