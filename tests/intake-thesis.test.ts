@@ -11,7 +11,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readAssignment, readIntake, THESIS_MARK } from '../bin/lib/intake-record.js';
@@ -181,4 +181,21 @@ test("an assignment that ends with its own 'Thesis:' line keeps it when a thesis
   const again = runCli(['new', '--thesis', '', '--answers', JSON.stringify(ALL)], dir);
   assert.equal(again.status, 0, again.stdout + again.stderr);
   assert.equal(keptAssignment(dir), own);
+});
+
+test("with PII redaction on, --thesis '' on a paper whose kept assignment is only a thesis removes its raw text too", () => {
+  // PROJECT.md went, and INTAKE.raw.local kept the unredacted thesis, with
+  // the address redaction had taken out, for an assignment that no longer exists.
+  const dir = tmp();
+  const thesis = 'Jane Roe (jane.roe@example.com) argues that SM raises anxiety.';
+  const first = runCli(['new', '--pii-redact', '--thesis', thesis], dir);
+  assert.equal(first.status, 3, first.stdout + first.stderr);
+  const raw = join(dir, '.paper', 'INTAKE.raw.local');
+  assert.match(readFileSync(raw, 'utf8'), /jane\.roe@example\.com/);
+  assert.doesNotMatch(keptAssignment(dir), /jane\.roe@example\.com/);
+
+  const cleared = runCli(['new', '--pii-redact', '--thesis', ''], dir);
+  assert.equal(cleared.status, 3, cleared.stdout + cleared.stderr);
+  assert.equal(keptAssignment(dir), '', 'no assignment is kept');
+  assert.equal(existsSync(raw), false, 'nor its raw text');
 });

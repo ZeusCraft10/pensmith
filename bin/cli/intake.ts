@@ -564,8 +564,12 @@ export const intakeCommand = defineCommand({
       // The raw text goes only to INTAKE.raw.local; everything else sees the redacted text.
       assignment = await keepAssignment(cwd, rawAssignment, piiRedact, brought !== '' || rawAssignment !== keptRaw);
     } else {
-      // The kept text was only a thesis, and this run clears it.
-      if (keptStored !== null) await removePath(projectMd);
+      // The kept text was only a thesis, and this run clears it, with the
+      // raw text PII redaction kept of it.
+      if (keptStored !== null) {
+        await removePath(projectMd);
+        await removePath(rawAssignmentFile(cwd));
+      }
       if (_ask || canAskInTerminal(process.stdout)) {
         const typed = await (_ask ?? askInTerminal)({
           id: 'assignment',
