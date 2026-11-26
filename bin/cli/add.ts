@@ -31,7 +31,7 @@
 import { defineCommand } from 'citty';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { extractPdfText } from '../lib/pdf-text.js';
+import { extractPdfText, MAX_PDF_BYTES } from '../lib/pdf-text.js';
 import { bareArxivId, isDoi, normalizeDoi } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
@@ -109,7 +109,8 @@ async function ingest(source: string): Promise<Ingested> {
     if (abs && bareArxivId(abs)) return { kind: 'work', hydration: await hydrateArxiv(abs) };
     try {
       // noCache: a PDF must be read as the bytes served, never as cached text.
-      const res = await httpFetch(source, { source: 'generic', noCache: true });
+      // A response past the PDF size limit is refused while it downloads.
+      const res = await httpFetch(source, { source: 'generic', noCache: true, maxBodyBytes: MAX_PDF_BYTES });
       const ct = (res.headers['content-type'] ?? '').toLowerCase();
       if (ct.includes('application/pdf') || source.toLowerCase().endsWith('.pdf')) {
         return await fromPdf(res.bodyBytes ?? Buffer.from(res.body, 'binary'), source);

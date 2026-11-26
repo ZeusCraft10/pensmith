@@ -189,6 +189,30 @@ export class HttpDeadlineError extends Error {
   }
 }
 
+/** A response body grew past the size the request allowed. */
+export class ResponseTooLargeError extends Error {
+  readonly code = 'PENSMITH_HTTP_TOO_LARGE';
+  readonly limitBytes: number;
+  constructor(url: string, limitBytes: number) {
+    super(`http: the response from ${new URL(url).host} is larger than ${limitBytes} bytes`);
+    this.name = 'ResponseTooLargeError';
+    this.limitBytes = limitBytes;
+  }
+}
+
+/**
+ * A request that may already have reached the server, unanswered, was asked
+ * for again. An API SDK retries a failed fetch on its own; for a POST that
+ * could start a second billed generation, so the retry is refused instead.
+ */
+export class RequestNotResentError extends Error {
+  readonly code = 'PENSMITH_HTTP_NOT_RESENT';
+  constructor(url: string) {
+    super(`http: not sending the request to ${new URL(url).host} again; the first attempt may have reached it`);
+    this.name = 'RequestNotResentError';
+  }
+}
+
 /**
  * Wait for the response head, but never longer than `timeoutMs` in total.
  * undici's headersTimeout starts only once a connection exists, and through a
@@ -455,6 +479,11 @@ export interface FetchOptions {
   timeoutMs?: number;
   /** Skip the cache entirely (read AND write). */
   noCache?: boolean;
+  /**
+   * The most bytes the response body may have, default DEFAULT_MAX_BODY_BYTES.
+   * Past it the request fails with ResponseTooLargeError, without reading on.
+   */
+  maxBodyBytes?: number;
   /** Skip the retry wrapper (fire-and-fail). */
   noRetry?: boolean;
   /**
@@ -752,6 +781,32 @@ async function writeCache(key: string, response: HttpResponse): Promise<void> {
 //   Constants
 // ============================================================
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** The default limit on one response body: far above any registry answer. */
+export const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024;
+
+/** Refuse a response whose declared length is already past `limit`. */
+function assertDeclaredLength(contentLength: unknown, url: string, limit: number): void {
+  const declared = Number(Array.isArray(contentLength) ? contentLength[0] : contentLength);
+  if (Number.isFinite(declared) && declared > limit) throw new ResponseTooLargeError(url, limit);
+}
+
+/** Read `body` whole, failing as soon as it passes `limit` bytes. */
+async function readCapped(body: Dispatcher.ResponseData['body'], url: string, limit: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let received = 0;
+  for await (const chunk of body) {
+    const buf = chunk as Buffer;
+    received += buf.length;
+    if (received > limit) {
+      body.destroy();
+      throw new ResponseTooLargeError(url, limit);
+    }
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks, received);
+}
+
 const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503, 504]);
 
 // Audit #22: the Retry-After value is server-controlled, so it MUST be bounded.
@@ -826,8 +881,13 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   // Offline refuses before the cache, DNS or a socket: nothing leaves the
   // machine, and nothing cached is served as if it had just been checked.
   if (isOfflineMode()) throw new OfflineEgressError(url);
+  const maxBodyBytes = opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   // Test runs answer from committed cassettes and never touch the network.
-  if (isCassetteMode()) return replayFromCassette(method, url);
+  if (isCassetteMode()) {
+    const replayed = await replayFromCassette(method, url);
+    if ((replayed.bodyBytes?.length ?? 0) > maxBodyBytes) throw new ResponseTooLargeError(url, maxBodyBytes);
+    return replayed;
+  }
 
   const headers: Record<string, string> = {
     'user-agent': userAgent(),
@@ -888,10 +948,16 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     const { statusCode, headers: rh, body } = await withDeadline(
       pending, url, timeoutMs, abort, tunnels,
     );
-    // Read the raw bytes ONCE (audit #29). `text` is the UTF-8 decode for text
-    // consumers (byte-identical to the prior body.text()); `bodyBytes` preserves
-    // the exact bytes for binary content (PDFs fetched by URL).
-    const bodyBytes = Buffer.from(await body.arrayBuffer());
+    // Read the raw bytes ONCE (audit #29), stopping at the size limit. `text`
+    // is the UTF-8 decode for text consumers; `bodyBytes` preserves the exact
+    // bytes for binary content (PDFs fetched by URL).
+    try {
+      assertDeclaredLength(rh['content-length'], url, maxBodyBytes);
+    } catch (e) {
+      body.destroy();
+      throw e;
+    }
+    const bodyBytes = await readCapped(body, url, maxBodyBytes);
     const text = bodyBytes.toString('utf8');
     const flatHeaders: Record<string, string> = {};
     for (const [k, v] of Object.entries(rh)) {
@@ -959,6 +1025,154 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     });
   }
   return response;
+}
+
+// ============================================================
+//   Public: chokepointFetch (a WHATWG fetch for API SDKs)
+// ============================================================
+
+export interface ChokepointFetchOptions {
+  /** The rate bucket the requests take. */
+  source: HttpSource;
+  /**
+   * How long the response head may take, counting connection and proxy tunnel
+   * setup, and how long the body may then go quiet between chunks.
+   */
+  timeoutMs: number;
+  /** The most bytes one response body may have (ResponseTooLargeError past it). */
+  maxBodyBytes: number;
+  /**
+   * Run the SSRF pre-flight. An SDK talks to the endpoint the user configured
+   * (a local model server is a valid one), so callers pass false.
+   */
+  untrusted: boolean;
+}
+
+/** Statuses whose response cannot carry a body (the Response constructor refuses one). */
+const NULL_BODY_STATUSES: ReadonlySet<number> = new Set([101, 204, 205, 304]);
+
+function requestBody(body: RequestInit['body']): string | Buffer | undefined {
+  if (body == null) return undefined;
+  if (typeof body === 'string') return body;
+  if (body instanceof ArrayBuffer) return Buffer.from(body);
+  if (ArrayBuffer.isView(body)) return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+  throw new TypeError('chokepointFetch: only string and byte request bodies are supported');
+}
+
+function responseHeaders(raw: Record<string, string | string[] | undefined>): Headers {
+  const out = new Headers();
+  for (const [k, v] of Object.entries(raw)) {
+    if (Array.isArray(v)) for (const item of v) out.append(k, item);
+    else if (v !== undefined) out.append(k, v);
+  }
+  return out;
+}
+
+/** A stream of `body` that errors with ResponseTooLargeError once it passes `limit` bytes. */
+function cappedStream(body: Dispatcher.ResponseData['body'], url: string, limit: number): ReadableStream<Uint8Array> {
+  const chunks = body[Symbol.asyncIterator]();
+  let received = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { value, done } = await chunks.next();
+        if (done) {
+          controller.close();
+          return;
+        }
+        const buf = value as Buffer;
+        received += buf.length;
+        if (received > limit) {
+          body.destroy();
+          controller.error(new ResponseTooLargeError(url, limit));
+          return;
+        }
+        controller.enqueue(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
+      } catch (e) {
+        controller.error(e);
+      }
+    },
+    cancel() {
+      body.destroy();
+    },
+  });
+}
+
+/**
+ * A `fetch` for an API SDK (the Anthropic SDK takes one), routed through this
+ * chokepoint: offline refusal, cassette replay in tests, the proxy-aware
+ * dispatcher, the rate bucket and the per-attempt deadline all apply, and the
+ * response body is streamed, never buffered, under a size limit.
+ *
+ * It does not retry or cache: the SDK retries 429, 529 and 5xx answers
+ * itself, honouring retry-after. What it adds is the rule fetch() applies to a
+ * POST: once a request has missed its deadline after it may have reached the
+ * server, this fetch refuses to send it again (RequestNotResentError), so an
+ * SDK retry cannot start a second billed generation. Make one per logical
+ * request, so that rule covers exactly that request's retries.
+ */
+export function chokepointFetch(opts: ChokepointFetchOptions): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
+  let mayHaveDelivered = false;
+  return async (input, init = {}) => {
+    if (typeof input !== 'string' && !(input instanceof URL)) {
+      throw new TypeError('chokepointFetch: pass the URL and a RequestInit, not a Request');
+    }
+    const url = input.toString();
+    const method = (init.method ?? 'GET').toUpperCase();
+    if (isOfflineMode()) throw new OfflineEgressError(url);
+    const idempotent = IDEMPOTENT_METHODS.has(method);
+    if (mayHaveDelivered && !idempotent) throw new RequestNotResentError(url);
+
+    if (isCassetteMode()) {
+      const r = await replayFromCassette(method, url);
+      const bytes = r.bodyBytes ?? Buffer.from(r.body, 'utf8');
+      if (bytes.length > opts.maxBodyBytes) throw new ResponseTooLargeError(url, opts.maxBodyBytes);
+      return new Response(NULL_BODY_STATUSES.has(r.status) ? null : bytes, { status: r.status, headers: r.headers });
+    }
+
+    const headers: Record<string, string> = {};
+    new Headers(init.headers).forEach((value, key) => { headers[key] = value; });
+    const body = requestBody(init.body);
+
+    await bucketFor(opts.source).acquire();
+    if (opts.untrusted) await checkSsrf(url);
+    const abort = new AbortController();
+    const signal = init.signal ? AbortSignal.any([init.signal, abort.signal]) : abort.signal;
+    const reqInit: Parameters<typeof request>[1] = {
+      method: method as Dispatcher.HttpMethod,
+      headers,
+      headersTimeout: opts.timeoutMs,
+      bodyTimeout: opts.timeoutMs,
+      dispatcher: dispatcherForRequest(),
+      signal,
+    };
+    if (body !== undefined) reqInit.body = body;
+    const firstTunnel = tunnelSeq + 1;
+    const pending = request(url, reqInit);
+    const tunnels = { first: firstTunnel, last: tunnelSeq };
+    let head: Awaited<typeof pending>;
+    try {
+      head = await withDeadline(pending, url, opts.timeoutMs, abort, tunnels);
+    } catch (e) {
+      if (e instanceof HttpDeadlineError && e.mayHaveReachedServer && !idempotent) mayHaveDelivered = true;
+      throw e;
+    }
+    const { statusCode, headers: rh, body: resBody } = head;
+    try {
+      assertDeclaredLength(rh['content-length'], url, opts.maxBodyBytes);
+    } catch (e) {
+      resBody.destroy();
+      throw e;
+    }
+    if (NULL_BODY_STATUSES.has(statusCode)) {
+      resBody.destroy();
+      return new Response(null, { status: statusCode, headers: responseHeaders(rh) });
+    }
+    return new Response(cappedStream(resBody, url, opts.maxBodyBytes), {
+      status: statusCode,
+      headers: responseHeaders(rh),
+    });
+  };
 }
 
 /**

@@ -11,8 +11,8 @@
 // The link comes from a registry record, not from pensmith, so it is fetched
 // as an untrusted URL: the SSRF guard checks it and every redirect hop.
 
-import { fetch as httpFetch, SsrfBlockedError } from '../http.js';
-import { extractPdfText, isImageOnlyText } from '../pdf-text.js';
+import { fetch as httpFetch, ResponseTooLargeError, SsrfBlockedError } from '../http.js';
+import { extractPdfText, isImageOnlyText, MAX_PDF_BYTES } from '../pdf-text.js';
 import { lookupOaPdfs as openAlexPdfs } from '../sources/openalex.js';
 import { lookupOaPdfs as unpaywallPdfs } from '../sources/unpaywall.js';
 import { contactEmail, unavailableDetail, type OaPdfAnswer } from '../sources/work-record.js';
@@ -45,10 +45,14 @@ async function fetchPdf(url: string): Promise<{ bytes: Buffer } | { reason: stri
         source: 'generic',
         untrusted: true,
         noCache: true,
+        // A PDF past the extraction limit is refused while it downloads.
+        maxBodyBytes: MAX_PDF_BYTES,
         headers: { accept: 'application/pdf,*/*;q=0.5' },
       });
     } catch (err) {
-      return { reason: err instanceof SsrfBlockedError ? 'refused: the link points to a private or local address' : unavailableDetail(err) };
+      if (err instanceof SsrfBlockedError) return { reason: 'refused: the link points to a private or local address' };
+      if (err instanceof ResponseTooLargeError) return { reason: `the PDF is larger than ${MAX_PDF_BYTES / (1024 * 1024)} MB` };
+      return { reason: unavailableDetail(err) };
     }
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers['location'];
