@@ -1,0 +1,541 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=visible%20islands%20point%20sets&retmode=json&retmax=4",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "6",
+        "retmax": "4",
+        "retstart": "0",
+        "idlist": [
+          "37822542",
+          "32702841",
+          "31282087",
+          "27867788"
+        ],
+        "translationset": [
+          {
+            "from": "visible",
+            "to": "\"visibilities\"[All Fields] OR \"visibility\"[All Fields] OR \"visible\"[All Fields] OR \"visibles\"[All Fields]"
+          },
+          {
+            "from": "islands",
+            "to": "\"island's\"[All Fields] OR \"islands\"[MeSH Terms] OR \"islands\"[All Fields] OR \"island\"[All Fields]"
+          },
+          {
+            "from": "point",
+            "to": "\"point\"[All Fields] OR \"point's\"[All Fields] OR \"pointed\"[All Fields] OR \"pointing\"[All Fields] OR \"pointings\"[All Fields] OR \"points\"[All Fields]"
+          }
+        ],
+        "querytranslation": "(\"visibilities\"[All Fields] OR \"visibility\"[All Fields] OR \"visible\"[All Fields] OR \"visibles\"[All Fields]) AND (\"island s\"[All Fields] OR \"islands\"[MeSH Terms] OR \"islands\"[All Fields] OR \"island\"[All Fields]) AND (\"point\"[All Fields] OR \"point s\"[All Fields] OR \"pointed\"[All Fields] OR \"pointing\"[All Fields] OR \"pointings\"[All Fields] OR \"points\"[All Fields]) AND \"sets\"[All Fields]"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    }
+  },
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=37822542%2C32702841%2C31282087%2C27867788&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "27867788": {
+          "uid": "27867788",
+          "pubdate": "2016 Sep",
+          "epubdate": "2016 Sep 17",
+          "source": "J Geophys Res Planets",
+          "authors": [
+            {
+              "name": "Fraeman AA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ehlmann BL",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Arvidson RE",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Edwards CS",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Grotzinger JP",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Milliken RE",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Quinn DP",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Rice MS",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Rice MS",
+          "title": "The stratigraphy and evolution of lower Mount Sharp from spectral, morphological, and thermophysical orbital data sets.",
+          "sorttitle": "stratigraphy and evolution of lower mount sharp from spectral morphological and thermophysical orbital data sets",
+          "volume": "121",
+          "issue": "9",
+          "pages": "1713-1736",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101661797",
+          "issn": "2169-9097",
+          "essn": "2169-9100",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "27867788"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC5101845"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC5101845;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1002/2016JE005095"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "JGRE20565"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2016/06/01 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2016/08/24 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2016/08/26 00:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2016/11/22 06:00"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2016/11/22 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2016/11/22 06:01"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2016/11/09 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 70,
+          "fulljournalname": "Journal of geophysical research. Planets",
+          "elocationid": "",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2016/09/01 00:00",
+          "sortfirstauthor": "Fraeman AA",
+          "vernaculartitle": ""
+        },
+        "31282087": {
+          "uid": "31282087",
+          "pubdate": "2020 Jul",
+          "epubdate": "2019 Jul 7",
+          "source": "Am J Hum Biol",
+          "authors": [
+            {
+              "name": "Brewis A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wutich A",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Wutich A",
+          "title": "Stigma: A biocultural proposal for integrating evolutionary and political-economic approaches.",
+          "sorttitle": "stigma a biocultural proposal for integrating evolutionary and political economic approaches",
+          "volume": "32",
+          "issue": "4",
+          "pages": "e23290",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "8915029",
+          "issn": "1042-0533",
+          "essn": "1520-6300",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "31282087"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1002/ajhb.23290"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2019/04/02 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2019/05/08 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2019/06/10 00:00"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2019/07/10 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2021/06/29 06:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2019/07/09 06:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "American journal of human biology : the official journal of the Human Biology Council",
+          "elocationid": "doi: 10.1002/ajhb.23290",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2020/07/01 00:00",
+          "sortfirstauthor": "Brewis A",
+          "vernaculartitle": ""
+        },
+        "32702841": {
+          "uid": "32702841",
+          "pubdate": "2020 Jul 17",
+          "epubdate": "",
+          "source": "Medicine (Baltimore)",
+          "authors": [
+            {
+              "name": "Huang HL",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hong SH",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Tsai YC",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Tsai YC",
+          "title": "Approaches to text mining for analyzing treatment plan of quit smoking with free-text medical records: A PRISMA-compliant meta-analysis.",
+          "sorttitle": "approaches to text mining for analyzing treatment plan of quit smoking with free text medical records a prisma compliant meta analysis",
+          "volume": "99",
+          "issue": "29",
+          "pages": "e20999",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "2985248R",
+          "issn": "0025-7974",
+          "essn": "1536-5964",
+          "pubtype": [
+            "Journal Article",
+            "Meta-Analysis"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "32702841"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC7373589"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC7373589;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1097/MD.0000000000020999"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "00005792-202007170-00036"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "entrez",
+              "date": "2020/07/25 06:00"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2020/07/25 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2020/08/04 06:00"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2020/07/17 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 23,
+          "fulljournalname": "Medicine",
+          "elocationid": "doi: 10.1097/MD.0000000000020999",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2020/07/17 00:00",
+          "sortfirstauthor": "Huang HL",
+          "vernaculartitle": ""
+        },
+        "37822542": {
+          "uid": "37822542",
+          "pubdate": "2023",
+          "epubdate": "2023 Sep 26",
+          "source": "Front Public Health",
+          "authors": [
+            {
+              "name": "Amul GGH",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mallari EU",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Arda JRY",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Santiago AJA",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Santiago AJA",
+          "title": "Graphic health warnings and plain packaging in the Philippines: results of online and household surveys.",
+          "sorttitle": "graphic health warnings and plain packaging in the philippines results of online and household surveys",
+          "volume": "11",
+          "issue": "",
+          "pages": "1207779",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101616579",
+          "issn": "",
+          "essn": "2296-2565",
+          "pubtype": [
+            "Journal Article",
+            "Research Support, Non-U.S. Gov't"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "37822542"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC10562603"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC10562603;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3389/fpubh.2023.1207779"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2023/04/18 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2023/08/29 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2023/11/02 12:44"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2023/10/12 06:43"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2023/10/12 04:05"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2023/09/26 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 31,
+          "fulljournalname": "Frontiers in public health",
+          "elocationid": "doi: 10.3389/fpubh.2023.1207779",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2023/09/26 00:00",
+          "sortfirstauthor": "Amul GGH",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "37822542",
+          "32702841",
+          "31282087",
+          "27867788"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    }
+  }
+]

@@ -225,3 +225,25 @@ sets `PENSMITH_REQUIRE_EXPORT_TOOLS=1`, which turns a missing tool into a
 failure. Set it locally when you change the exporter, so a skipped test is not
 mistaken for a pass.
 
+## The journey test
+
+`tests/journey.test.ts` runs the whole pipeline from an empty folder holding
+`assignment.txt`, through bare `pensmith` only: before each step a
+`pensmith --dry-run` must leave `.paper/` unchanged, and each question the
+CLI stops for (exit 3) is answered as a user accepting its suggestion. The
+model is scripted (`tests/lib/journey-generator.ts`, loaded into the CLI
+process with `node --import`, so every call still goes through
+`complete()`), and every registry answer is a real recording. It checks the
+router's steps, that the assignment is kept, that each section sees and
+cites only its assigned works, the export, and that a hand edit of the
+compiled draft or a swapped bibliography entry makes `pensmith done` exit 2.
+
+The main CI matrix has no Pandoc, so there the journey exports Markdown, with
+Pandoc taken off `PATH`. The export lane runs the same journey with
+`PENSMITH_REQUIRE_EXPORT_TOOLS=1`, which exports a `.docx` and fails when
+Pandoc is missing. Neither run skips.
+
+When a change to a step's prompt or answer contract breaks the journey,
+update the script's answer for that step; when research or verify asks a
+registry something new, record that request (see the cassette rules above).
+

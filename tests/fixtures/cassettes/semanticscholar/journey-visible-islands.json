@@ -1,0 +1,15 @@
+[
+  {
+    "scope": "https://api.semanticscholar.org",
+    "method": "GET",
+    "path": "/graph/v1/paper/search?query=visible%20islands%20point%20sets&limit=4&fields=title%2Cauthors%2Cyear%2CexternalIds%2Cabstract",
+    "status": 429,
+    "response": {
+      "message": "Too Many Requests. Please wait and try again or apply for a key for higher rate limits. https://www.semanticscholar.org/product/api#api-key-form",
+      "code": "429"
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

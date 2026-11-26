@@ -4,7 +4,9 @@ name: Export
 # Pandoc and TeX add to a file. The main CI matrix has neither tool, so the
 # tests that drive them skip there. This lane installs both and makes those
 # tests mandatory: a missing tool fails instead of skipping. It also checks
-# that the citation grammar reads the same keys Pandoc renders.
+# that the citation grammar reads the same keys Pandoc renders, and runs the
+# journey test (assignment to export through bare `pensmith`) to a .docx; the
+# main matrix runs the same journey to Markdown.
 
 on:
   push:
@@ -49,3 +51,4 @@ jobs:
           tests/export-non-latin.test.ts
           tests/exporter.test.ts
           tests/citation-grammar-pandoc-parity.test.ts
+          tests/journey.test.ts
