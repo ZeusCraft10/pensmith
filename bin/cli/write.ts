@@ -325,11 +325,10 @@ export const writeCommand = defineCommand({
 
       const paperRoot = process.cwd();
 
-      // Audit M2: a missing or section-less OUTLINE.md must yield a friendly
-      // diagnostic, not a raw parseOutline stack trace from the wave orchestrator
-      // (write-orchestrator.ts calls parseOutline, which throws "no section
-      // table" on an absent/placeholder outline). Pre-check here and degrade
-      // gracefully, mirroring `done`'s "run 'pensmith compile' first" stance.
+      // A missing, placeholder, hand-edited or section-less outline is
+      // reported here with its reason, rather than as an error thrown by the
+      // wave orchestrator (write-orchestrator.ts reads the list with
+      // readOutlineOrThrow).
       const outline = readOutline(paperRoot);
       if (!outline.ok || outline.outline.sections.length === 0) {
         process.stderr.write(

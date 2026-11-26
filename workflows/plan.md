@@ -36,13 +36,13 @@ The implementation lives in `bin/cli/plan.ts` (created by Plan 07).
 
 ## Body
 
-1. **Parse args**: `pensmith plan <N>` — `N` is the 1-based section number. Read `.paper/OUTLINE.md` to resolve the slug for `N`.
+1. **Parse args**: `pensmith plan <N>` — `N` is the 1-based section number. Its slug comes from the outline (`.paper/OUTLINE.json`, read through `bin/lib/outline-read.ts`; while a hand edit of OUTLINE.md waits for `pensmith outline` to check it, the list as last checked).
 
 2. **Read inputs** (read-only): section `N` of the outline (`bin/lib/outline-read.ts`: its title, purpose, `depends_on`, word target and the outline's assigned sources), the topic and discipline from `.paper/INTAKE.json`, the briefs of the planned sections it depends on, and the works in `.paper/LIBRARY.json` (citekey, title, year, first author).
 
 3. **Run the planner** with `templates/prompts/section-planner.md` as structured output (`SectionPlanSchema` in `bin/cli/plan.ts`): `{assigned_sources, claims: [{claim, sources}], brief, voice}`.
 
-4. **Check it, and the status contract** (`SectionStateSchema` in `bin/lib/schemas/state.ts`): every assigned source is a citekey LIBRARY.json holds, every claim's sources are among them, and the brief is not empty; a failing plan is sent back once with the problems, then refused with exit 2 and nothing written. An outline entry not planned yet is `stub`, and a finished plan is `planned`, which the router sends on to `write`. A PLAN.md with no status counts as `stub`. Plan only a `stub` (or a missing PLAN.md); a section with any other status already has a plan, and `pensmith plan <N>` refuses it with exit 2 unless `--force` is given.
+4. **Check it, and the status contract** (`SectionStateSchema` in `bin/lib/schemas/state.ts`): every assigned source is a citekey LIBRARY.json holds, every claim's sources are among them, and the brief is not empty; a failing plan is sent back once with the problems, then refused with exit 2 and nothing written. An outline entry not planned yet is `stub`, and a finished plan is `planned`, which the router sends on to `write`. A PLAN.md with no status counts as `stub`. Plan only a `stub` (or a missing PLAN.md); a section with any other status already has a plan, and `pensmith plan <N>` refuses it with exit 2 unless `--force` is given. A PLAN.md whose frontmatter cannot be read (a YAML error, an unclosed block) is refused the same way. When `.paper/LIBRARY.json` cannot be read, plan refuses before asking the planner.
 
 5. **Write `<sectionPlan(n, slug)>`** = `.paper/sections/<NN>-<slug>/PLAN.md` via `bin/lib/atomic-write.ts`. Code writes the frontmatter (`section`, `slug`, `title` and `depends_on` from the outline, the checked `assigned_sources`, `status: 'planned'`, `verified_against_draft_hash: null`); the body is `## Brief`, a `Voice:` line and `## Claims`.
 

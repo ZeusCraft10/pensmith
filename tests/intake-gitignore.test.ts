@@ -50,13 +50,15 @@ test('an existing .paper/.gitignore keeps every line of its own and gains only t
   const custom = '# my custom ignore\nsecrets.txt\nINTAKE.raw.local\n';
   writeFileSync(gi, custom);
 
-  runNew(root);
+  const res = runNew(root);
+  assert.equal(res.status, 0, `stderr=${res.stderr}`);
   // The user's file is kept as it was; the raw-PII pattern and the added PDF
   // texts (sources/) it did not cover are appended once.
   const after = readFileSync(gi, 'utf8');
   assert.ok(after.startsWith(custom), after);
   assert.equal(after.slice(custom.length), '*.local\nsources/\n');
-  runNew(root);
+  const again = runNew(root);
+  assert.equal(again.status, 0, `stderr=${again.stderr}`);
   assert.equal(readFileSync(gi, 'utf8'), after, 'a second run adds nothing');
 });
 

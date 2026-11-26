@@ -35,7 +35,7 @@ below is the prompt that drives the verb under both Tier 1 (Task/MCP) and Tier 2
 
 ## Body
 
-1. **Read inputs**: `.paper/INTAKE.json` (topic, discipline, length, counterargument), the assignment in `.paper/PROJECT.md`, and the works in `.paper/LIBRARY.json`.
+1. **Read inputs**: `.paper/INTAKE.json` (topic, discipline, length, counterargument), the assignment in `.paper/PROJECT.md`, and the works in `.paper/LIBRARY.json`. When LIBRARY.json cannot be read, outline exits 2 before asking for an outline.
 
 2. **Generate the outline** with `templates/prompts/outline-author.md`, as structured output (`ProposedOutlineSchema` in `bin/lib/outline-store.ts`): `{title, thesis, sections: [{slug, title, purpose, depends_on, word_target, assigned_sources, counterargument}]}`. pensmith numbers the sections in order.
 
@@ -43,6 +43,6 @@ below is the prompt that drives the verb under both Tier 1 (Task/MCP) and Tier 2
 
 4. **APPROVAL GATE** (PRD non-negotiable): show the rendered outline. Unless `--yolo` was typed by the user, ask for approval (AskUserQuestion in Tier 1, a terminal prompt in Tier 2); with no terminal the CLI exits 3.
 
-5. **Write** `OUTLINE.json`, `OUTLINE.md`, STATE.json's sections and the stub PLAN.md files. A section folder no section names any more is reported and left in place. An existing outline is not regenerated without `--force`; a hand edit of OUTLINE.md (or a hand-written OUTLINE.md) is checked by the same rules and taken in by `pensmith outline`, and until then the router sends the paper back to outline.
+5. **Write** `OUTLINE.json`, `OUTLINE.md`, STATE.json's sections and the stub PLAN.md files. A section folder no section names any more is reported and left in place. An existing outline is not regenerated without `--force`; a hand edit of OUTLINE.md (or a hand-written OUTLINE.md) is checked by the same rules and taken in by `pensmith outline`, and until then the router sends the paper back to outline. A hand-written OUTLINE.md with no OUTLINE.json is read with the same structure, heading and source checks.
 
 6. **Shell fallback (TIER-06)**: `pensmith outline [--yolo] [--force] [--no-counter]`.

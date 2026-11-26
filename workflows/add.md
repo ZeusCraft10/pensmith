@@ -76,7 +76,7 @@ bodies).
 4. **Remap approval gate** (ERGO-06, approval-gates-default-on): remap when
    `--remap` is set OR (not `--yolo` AND the user confirms via the gate). When
    `--section`/`--slug` are supplied, remap that one section; otherwise iterate
-   every section in STATE.json. The remap is idempotent (a citekey already
+   every section of the outline (`.paper/OUTLINE.json`). The remap is idempotent (a citekey already
    present is skipped) and touches ONLY `assigned_sources[]`.
 
 5. **Shell fallback** (TIER-06 equivalence path): `pensmith add <doi|pdf|url>
