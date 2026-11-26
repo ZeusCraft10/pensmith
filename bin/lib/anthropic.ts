@@ -9,8 +9,9 @@
 //   3. the provider, model, effort and token limits come from runtime.json
 //      (bin/lib/llm-config.ts) and the role's defaults;
 //   4. the API key is read from the provider's environment variable;
-//   5. the budget is checked against what was spent plus this call's
-//      estimate, before anything is sent (bin/lib/budget.ts);
+//   5. the paper's cost cap is checked against everything the paper has
+//      spent plus this call's estimate, before anything is sent
+//      (bin/lib/budget.ts);
 //   6. the generator runs: generators/anthropic.ts on the official SDK, or
 //      generators/openai.ts for OpenAI-compatible servers, both through
 //      bin/lib/http.ts;
@@ -25,7 +26,7 @@
 // request header.
 
 import { loadRuntimeConfig, getProviderApiKey, MissingApiKeyError } from './runtime.js';
-import { appendCost, assertBudget } from './budget.js';
+import { appendCost, assertWithinCostCap } from './budget.js';
 import type { BudgetSpec } from './budget.js';
 import { estimateCost } from './pricing.js';
 import { noLlmPlaceholderText } from './placeholder.js';
@@ -74,15 +75,10 @@ export interface CompleteOptions {
   effort?: Effort;
   /** A JSON Schema the answer must follow; the parsed answer is returned as `json`. */
   jsonSchema?: Record<string, unknown>;
-  /** Per-scope budget cap in USD. Defaults to DEFAULT_CAP_USD. */
-  scopeCapUsd?: number;
   /** Labels for the cost ledger row. */
   scope?: BudgetSpec['scope'];
   scopeId?: string;
 }
-
-/** Default per-scope budget cap in USD. */
-const DEFAULT_CAP_USD = 0.50;
 
 export interface CompleteResult {
   /** The answer's text (thinking left out). */
@@ -198,7 +194,7 @@ function assertMessages(messages: CompleteOptions['messages']): void {
  * Make one model call, under the rules in the file header.
  *
  * @throws MissingApiKeyError — the provider's key variable is not set
- * @throws BudgetExceededError — the call could take its scope past its cap
+ * @throws CostCapExceededError — the call could take the paper past its cost cap
  * @throws OfflineEgressError — offline, and the call would need the network
  * @throws TruncatedError / RefusalError / ProviderError / GenerationError —
  *   the call did not give a usable answer (its cost is still recorded)
@@ -233,10 +229,10 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
   }]);
+  await assertWithinCostCap(estimateUsd);
+
   const scope = opts.scope ?? 'task';
   const scopeId = opts.scopeId ?? call.role;
-  await assertBudget({ scope, scopeId, cap: opts.scopeCapUsd ?? DEFAULT_CAP_USD }, estimateUsd);
-
   let result;
   try {
     result = await generator.generate({

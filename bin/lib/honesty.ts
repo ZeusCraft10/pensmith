@@ -22,7 +22,7 @@ import path from 'node:path';
 import { packageRoot } from './paths.js';
 import { fetch as httpFetch } from './http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
-import { assertBudget, appendCost } from './budget.js';
+import { assertBudget, assertWithinCostCap, appendCost } from './budget.js';
 import { confirmOrNo } from './prompts.js';
 
 // ============================================================
@@ -304,6 +304,9 @@ async function scoreWithGptzero(
       { scope: 'paper', scopeId: HONESTY_BUDGET_SCOPE_ID, cap: HONESTY_PAPER_CAP_DEFAULT },
       HONESTY_CALL_EST_USD,
     );
+    // The score is paid like a model call, so it counts against the paper's
+    // cost cap too.
+    await assertWithinCostCap(HONESTY_CALL_EST_USD);
 
     const resp = await httpFetch(GPTZERO_URL, {
       method: 'POST',

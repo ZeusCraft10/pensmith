@@ -52,7 +52,6 @@ interface CompleteOptions {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   model?: string;
   maxTokens?: number;
-  scopeCapUsd?: number;
   scope?: 'paper' | 'section' | 'task';
   scopeId?: string;
 }
@@ -331,11 +330,11 @@ test('T-11-01: complete() returns offline mock text under PENSMITH_NO_LLM=1 with
 });
 
 // ---------------------------------------------------------------------------
-// T-11-02: complete() calls assertBudget BEFORE any HTTP call.
-// Seed COSTS.jsonl over cap → BudgetExceededError must fire with no MockAgent
-// interception triggered.
+// T-11-02: complete() checks the paper's cost cap BEFORE any HTTP call.
+// Seed COSTS.jsonl at the default $5 cap → CostCapExceededError must fire with
+// no MockAgent interception triggered.
 // ---------------------------------------------------------------------------
-test('T-11-02: complete() raises BudgetExceededError BEFORE any HTTP call when budget exceeded', async (t) => {
+test('T-11-02: complete() raises CostCapExceededError BEFORE any HTTP call when the paper is at its cost cap', async (t) => {
   if (!(await transportReady())) {
     t.skip('anthropic.ts not yet built — skip T-11-02');
     return;
@@ -346,8 +345,7 @@ test('T-11-02: complete() raises BudgetExceededError BEFORE any HTTP call when b
     // Set a key so MissingApiKeyError is not the failure mode
     process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test-budget-gate-key';
 
-    // Seed .paper/COSTS.jsonl with spend already over the cap we'll pass.
-    // We seed $1.00 of spend; we'll call complete with scopeCapUsd=0.01.
+    // Seed .paper/COSTS.jsonl with the whole default cap already spent.
     const costsPath = path.join(tmpRoot, '.paper', 'COSTS.jsonl');
     const costRecord = JSON.stringify({
       ts: new Date().toISOString(),
@@ -357,32 +355,26 @@ test('T-11-02: complete() raises BudgetExceededError BEFORE any HTTP call when b
       model: 'claude-opus-5-5',
       inputTokens: 100000,
       outputTokens: 10000,
-      costUsd: 1.00,
+      costUsd: 5.00,
     });
     await fsp.writeFile(costsPath, costRecord + '\n', 'utf8');
 
     const { complete } = await loadTransport();
 
-    // Should throw BudgetExceededError because $1.00 spent > $0.01 cap.
-    // The MockAgent's disableNetConnect means ANY HTTP call would throw a
-    // different error — so if BudgetExceededError is not thrown, either no
-    // error occurs (wrong) or we get a network error (also wrong).
+    // $5.00 spent plus any estimate is past the $5 cap. The MockAgent's
+    // disableNetConnect means ANY HTTP call would throw a different error.
     await assert.rejects(
       () => complete({
         system: 'You are a helpful assistant.',
         messages: [{ role: 'user', content: 'Write a short intro.' }],
         scope: 'task',
         scopeId: 'test-budget',
-        scopeCapUsd: 0.01, // $0.01 cap; $1.00 already spent → must reject
       }),
       (err: unknown) => {
-        // Must be BudgetExceededError, not a network error from MockAgent
+        // Must be the cost-cap refusal, not a network error from MockAgent
         assert.ok(err instanceof Error, 'must throw an Error');
         const name = (err as Error).name;
-        assert.ok(
-          name === 'BudgetExceededError' || (err as Error).message.includes('budget'),
-          `expected BudgetExceededError, got ${name}: ${(err as Error).message}`,
-        );
+        assert.equal(name, 'CostCapExceededError', `expected CostCapExceededError, got ${name}: ${(err as Error).message}`);
         return true;
       },
     );
@@ -458,7 +450,6 @@ test('T-11-03: API key value never leaks to disk files, stdout, or stderr (no-le
         messages: [{ role: 'user', content: 'Hello.' }],
         scope: 'task',
         scopeId: 'test-noleak',
-        scopeCapUsd: 10.00, // generous cap so budget gate doesn't fire
       });
     } finally {
       process.stdout.write = origStdoutWrite;
@@ -586,7 +577,6 @@ test('T-11-07: Anthropic provider sends correct POST body and headers to api.ant
       maxTokens: 256,
       scope: 'task',
       scopeId: 'anthropic-shape-test',
-      scopeCapUsd: 10.00,
     });
 
     // The result must be valid
@@ -697,7 +687,6 @@ test('T-11-08: OpenAI provider sends correct POST body and Authorization header 
       maxTokens: 256,
       scope: 'task',
       scopeId: 'openai-shape-test',
-      scopeCapUsd: 10.00,
     });
 
     assert.ok(typeof result.text === 'string' && result.text.length > 0, 'result.text must be non-empty');

@@ -50,8 +50,8 @@
 //   For AMBIGUOUS sentences ONLY, the hash-pinned `orphan-label` prompt is asked
 //   for a {claim, definition, UNCLEAR} label. This is purely advisory metadata
 //   for the per-claim `label` field; it NEVER changes orphanCount (R8 invariant)
-//   and NEVER reclassifies a HIGH claim. It is gated behind assertBudget
-//   (ARCH-09/10 per-section cap) and the PENSMITH_NO_LLM guard — under
+//   and NEVER reclassifies a HIGH claim. It is gated behind the paper's cost
+//   cap (checked in complete()) and the PENSMITH_NO_LLM guard — under
 //   PENSMITH_NO_LLM=1 (or no ANTHROPIC_API_KEY) Step 3 is skipped entirely, every
 //   AMBIGUOUS claim is labeled 'UNCLEAR', and ZERO network calls are made (CI path).
 
@@ -106,14 +106,8 @@ const SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+/;
 
 // ---- Step-3 LLM constants (advisory edge-case labeling — AMBIGUOUS only) ----
 
-// Per-section Pass 4 cap (ARCH-10 per-step cap). A config knob (05-RESEARCH Open
-// Question 1) — no CONTEXT.md locks it, so default at Claude's discretion to
-// $0.50/section, matching the Pass-2 sibling and leaving ample headroom under the
-// $5 session cap even for paragraph-dense papers on claude-haiku-4.
-const PASS4_SECTION_CAP_DEFAULT = 0.5;
-
 // What the orphan-label call is expected to use, thinking included, for the
-// budget check. The output limit is the verify role's: a limit this small would
+// cost-cap check. The output limit is the verify role's: a limit this small would
 // cut off the thinking a current model does first.
 const EST_OUTPUT_TOKENS = 300;
 
@@ -362,14 +356,14 @@ function parseOrphanLabel(raw: string): OrphanLabel {
  * Step 3 (advisory, AMBIGUOUS sentences only): under PENSMITH_NO_LLM=1 (or no
  * ANTHROPIC_API_KEY) every AMBIGUOUS claim is labeled 'UNCLEAR' with ZERO network
  * calls (CI path). Otherwise each AMBIGUOUS sentence is sent to the hash-pinned
- * `orphan-label` prompt behind an assertBudget pre-call gate; the parsed label
+ * `orphan-label` prompt behind the paper's cost cap; the parsed label
  * populates that record's `label` (and, when confirmed 'claim', its audit-only
  * per-claim `isOrphan`) — but NEVER changes orphanCount or reclassifies a HIGH
  * claim (R8 invariant). Advisory by construction — NEVER mutates hasFail/status.
  */
 export async function runPass4(
   draftMd: string,
-  opts: { n: number; scopeCapUsd?: number },
+  opts: { n: number },
 ): Promise<Pass4Result[]> {
   // Presence check ONLY — never reads the key VALUE (the resolved key, when the
   // live branch is reached, comes from getProviderApiKey('anthropic')).
@@ -403,7 +397,6 @@ export async function runPass4(
 
   // Live branch (only reached with a real key + LLM enabled + >=1 AMBIGUOUS).
   // Never reached in CI: the noLlm short-circuit above is the test path.
-  const cap = opts.scopeCapUsd ?? PASS4_SECTION_CAP_DEFAULT;
   const scopeId = `${opts.n}-pass4`;
   const promptTemplate = loadPrompt('orphan-label');
 
@@ -421,12 +414,10 @@ export async function runPass4(
           paragraph_context: stripFenceMarkers(paraText.slice(0, 500)),
         });
 
-        // Route through the http.ts (D-06) transport chokepoint. complete()
-        // applies the SSRF pre-flight guard, full-jitter retry/backoff, the
-        // polite User-Agent, the pre-call assertBudget gate (scope/scopeId/cap
-        // forwarded), and post-call appendCost with ACTUAL usage — none of which
-        // the raw SDK client received (audit #7). Errors are caught below →
-        // UNCLEAR (advisory must not crash verify).
+        // complete() is the one model-call path (audit #7): the http.ts
+        // chokepoint, the paper's cost cap before the call and the cost ledger
+        // after it. Errors are caught below as UNCLEAR (advisory must not
+        // crash verify).
         const res = await complete({
           system: '',
           messages: [{ role: 'user', content: prompt }],
@@ -435,7 +426,6 @@ export async function runPass4(
           expectedOutputTokens: EST_OUTPUT_TOKENS,
           scope: 'section',
           scopeId,
-          scopeCapUsd: cap,
         });
         label = parseOrphanLabel(res.text);
       } catch {

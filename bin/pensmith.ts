@@ -61,6 +61,7 @@ import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from
 import { EXIT_ERROR, EXIT_OK, EXIT_REFUSED } from './lib/exit-codes.js';
 import { OFFLINE_SKIP_NOTE } from './lib/network-mode.js';
 import { GenerationError } from './lib/generator.js';
+import { CostCapExceededError, resolveCostCap } from './lib/budget.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -252,11 +253,12 @@ export function shouldRunYoloCapPreflight(argv: string[]): boolean {
   return true;
 }
 
-/** The configured session cap (C2-M3): PENSMITH_COST_CAP_USD if finite >0, else $5. */
+/**
+ * The paper's cost cap, as every model call checks it: PENSMITH_COST_CAP_USD,
+ * then [budget] cost_cap_usd in config.toml, then $5.
+ */
 function configuredCapUsd(): number {
-  const raw = process.env['PENSMITH_COST_CAP_USD'];
-  const n = raw ? Number(raw) : NaN;
-  return Number.isFinite(n) && n > 0 ? n : 5.0;
+  return resolveCostCap(process.cwd()).capUsd;
 }
 
 /** Index of the first argv token that is not a flag (the command word), or -1. */
@@ -386,9 +388,10 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
       await refuseUsage(argv, e);
       return;
     }
-    // A model call that gave no usable answer (cut off, declined, the provider
-    // failing) is reported in plain words, not as a stack trace.
-    if (e instanceof GenerationError) {
+    // A model call refused over the cost cap, or one that gave no usable answer
+    // (cut off, declined, the provider failing), is reported in plain words,
+    // not as a stack trace.
+    if (e instanceof GenerationError || e instanceof CostCapExceededError) {
       process.stderr.write(`pensmith: ${e.exitCode === EXIT_REFUSED ? 'REFUSED' : 'ERROR'} — ${e.message}\n`);
       process.exitCode = e.exitCode;
       return;

@@ -20,11 +20,9 @@
 // (or when ANTHROPIC_API_KEY is absent) Pass 2 returns a conservative UNCLEAR
 // placeholder for every citation and issues NO network call. This is the CI path.
 //
-// Budget gate (ARCH-09/10 — analog: bin/lib/budget.ts): the live branch calls
-// assertBudget BEFORE every model call and appendCost AFTER it, scoped to a
-// per-section cap (PASS2_SECTION_CAP). The api key is resolved ONLY through the
-// no-leak runtime chokepoint (getProviderApiKey); the value never reaches a log
-// or the cost ledger (T-05-02-02).
+// Cost: every model call goes through complete(), which checks the paper's
+// cost cap before the request and records the cost after it. The API key is
+// resolved only there; it never reaches a log or the cost ledger.
 
 import { complete } from '../anthropic.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
@@ -112,13 +110,6 @@ function collectClaimPairs(draftMd: string): ClaimPair[] {
   return [...pairs].map(([citekey, claimSentence]) => ({ citekey, claimSentence }));
 }
 
-// Per-section Pass 2 cap (ARCH-10 per-step cap). A config knob (05-RESEARCH Open
-// Question 1) — no CONTEXT.md locks it, so default at Claude's discretion to
-// $0.50/section, which leaves ample headroom under the $5 session cap even for
-// many-citation sections using claude-haiku-4 (~$0.007/call).
-const PASS2_SECTION_CAP_DEFAULT = 0.5;
-
-
 /** Normalize a CSL-style title (string | string[]) to a single string. */
 function normalizeTitle(title: Pass2BibEntry['title']): string {
   if (Array.isArray(title)) return title.filter(Boolean).join(' ');
@@ -190,7 +181,7 @@ function parsePass2Response(
 export async function runPass2(
   draftMd: string,
   bibByCitekey: Map<string, Pass2BibEntry>,
-  opts: { n: number; scopeCapUsd?: number },
+  opts: { n: number },
 ): Promise<Pass2Result[]> {
   // Provider-agnostic offline gate: only PENSMITH_NO_LLM short-circuits to the
   // placeholder. complete() owns provider + key resolution; if no provider key
@@ -206,7 +197,6 @@ export async function runPass2(
 
   // ---- Live claim-support branch (only reached with a real key + LLM enabled).
   // Never reached in CI: the noLlm short-circuit above is the test path.
-  const cap = opts.scopeCapUsd ?? PASS2_SECTION_CAP_DEFAULT;
   const scopeId = `${opts.n}-pass2`;
   const promptTemplate = loadPrompt('claim-support');
 
@@ -228,19 +218,16 @@ export async function runPass2(
         source_authors: stripFenceMarkers(normalizeAuthors(bibEntry?.author)),
       });
 
-      // Route through the http.ts (D-06) transport chokepoint. complete()
-      // applies the SSRF pre-flight guard, full-jitter retry/backoff, the polite
-      // User-Agent, the pre-call assertBudget gate (scope/scopeId/cap forwarded),
-      // and post-call appendCost with ACTUAL usage — none of which the raw SDK
-      // client received (audit #7). The prompt is the user message (no system).
-      // A BudgetExceededError or transport error is caught below → UNCLEAR.
+      // complete() is the one model-call path (audit #7): the http.ts
+      // chokepoint, the paper's cost cap before the call and the cost ledger
+      // after it. The prompt is the user message (no system). A refusal over
+      // the cap or a transport error is caught below as UNCLEAR.
       const res = await complete({
         system: '',
         messages: [{ role: 'user', content: prompt }],
         role: 'verify',
         scope: 'section',
         scopeId,
-        scopeCapUsd: cap,
       });
       results.push(parsePass2Response(res.text, pair.citekey, pair.claimSentence, abstract));
     } catch (err) {

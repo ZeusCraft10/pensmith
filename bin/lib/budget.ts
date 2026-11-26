@@ -1,13 +1,15 @@
 // bin/lib/budget.ts — budget assertion + cost ledger + concurrency primitive
 // per ARCH-09 / ARCH-10 / ARCH-11 (D-44, D-45, D-46, D-50).
 //
-// Pre-call gate (D-44):
-//   The CONTRACT is "assertBudget BEFORE LLM call". Caller pattern:
-//     await assertBudget({scope, scopeId, cap}, estimateUsd);
-//     const result = await llm.call(...);
-//     await appendCost({...result.usage, scope, scopeId});
-//   If estimateUsd + already-spent > cap → throws BudgetExceededError → caller
-//   never reaches the LLM call. NO post-call gate exists.
+// Pre-call gates (D-44):
+//   Every model call passes assertWithinCostCap before anything is sent: the
+//   paper's whole spend (every COSTS.jsonl row) plus the call's estimate must
+//   stay within the cost cap (PENSMITH_COST_CAP_USD, then [budget]
+//   cost_cap_usd in config.toml, then $5), or CostCapExceededError refuses it.
+//   complete() in anthropic.ts does this for every model call.
+//   assertBudget is the general form for one scope's own allowance (the
+//   GPTZero score uses it as well as the paper cap). Either way the caller
+//   never reaches the paid call when the gate throws; NO post-call gate exists.
 //
 // Ledger (D-45, D-46):
 //   .paper/COSTS.jsonl is append-only via O_APPEND. atomicAppendFile (W2)
@@ -23,8 +25,9 @@
 
 import path from 'node:path';
 import * as fsp from 'node:fs/promises';
-import { paperDir } from './paths.js';
+import { paperDir, projectRoot } from './paths.js';
 import { atomicAppendFile } from './atomic-write.js';
+import { readConfigTable } from './project-config.js';
 
 export interface BudgetSpec {
   scope: 'paper' | 'section' | 'task';
@@ -145,6 +148,95 @@ export async function assertBudget(spec: BudgetSpec, estimateUsd: number): Promi
 export async function appendCost(record: CostRecord): Promise<void> {
   const line = JSON.stringify(record) + '\n';
   await atomicAppendFile(costsPath(), line);
+}
+
+// ---------- The paper's cost cap ----------
+
+/** The cost cap when neither PENSMITH_COST_CAP_USD nor config.toml sets one. */
+export const DEFAULT_COST_CAP_USD = 5;
+
+export interface CostCap {
+  capUsd: number;
+  /** Past this total a running-cost warning is printed, once per run. */
+  warnAtUsd: number | null;
+  source: 'PENSMITH_COST_CAP_USD' | 'config.toml' | 'default';
+}
+
+/** A positive finite number, or null. */
+function positive(v: unknown): number | null {
+  const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * The cost cap for the paper at `root`: PENSMITH_COST_CAP_USD, then
+ * `cost_cap_usd` under `[budget]` in .paper/config.toml or the project's
+ * config.toml, then DEFAULT_COST_CAP_USD. A value that is not a positive
+ * number is ignored. `warn_at_usd` comes from the same table.
+ */
+export function resolveCostCap(root: string = projectRoot()): CostCap {
+  const tables = [path.join(paperDir(root), 'config.toml'), path.join(root, 'config.toml')].map((f) => readConfigTable(f, 'budget'));
+  const fromConfig = (key: string): number | null => {
+    for (const t of tables) {
+      const v = positive(t[key]);
+      if (v !== null) return v;
+    }
+    return null;
+  };
+  const warnAtUsd = fromConfig('warn_at_usd');
+  const env = positive(process.env['PENSMITH_COST_CAP_USD']);
+  if (env !== null) return { capUsd: env, warnAtUsd, source: 'PENSMITH_COST_CAP_USD' };
+  const configured = fromConfig('cost_cap_usd');
+  if (configured !== null) return { capUsd: configured, warnAtUsd, source: 'config.toml' };
+  return { capUsd: DEFAULT_COST_CAP_USD, warnAtUsd, source: 'default' };
+}
+
+const CAP_SOURCE_TEXT: Record<CostCap['source'], string> = {
+  PENSMITH_COST_CAP_USD: 'set by PENSMITH_COST_CAP_USD',
+  'config.toml': 'set in config.toml',
+  default: 'the default',
+};
+
+/**
+ * A paid call was refused because, with what the paper has spent, it could
+ * take the paper past its cost cap. It is a refusal (exit 2), not an error.
+ */
+export class CostCapExceededError extends BudgetExceededError {
+  readonly exitCode = 2;
+  readonly source: CostCap['source'];
+  constructor(cap: CostCap, spent: number, estimatedAdd: number) {
+    super({ scope: 'paper', scopeId: 'cost-cap', cap: cap.capUsd }, spent, estimatedAdd);
+    this.name = 'CostCapExceededError';
+    this.source = cap.source;
+    this.message =
+      `this step could take the paper past its cost cap: $${spent.toFixed(4)} spent so far plus about ` +
+      `$${estimatedAdd.toFixed(4)} for this call is more than the $${cap.capUsd.toFixed(2)} cap (${CAP_SOURCE_TEXT[cap.source]}). ` +
+      'Nothing was sent. To allow more, raise PENSMITH_COST_CAP_USD, or cost_cap_usd under [budget] in .paper/config.toml; ' +
+      '.paper/COSTS.jsonl lists what was spent.';
+  }
+}
+
+let warnedAtUsd: number | null = null;
+
+/**
+ * Refuse a paid call that, with everything the paper has spent (every row of
+ * .paper/COSTS.jsonl, whatever step it was for), could pass the cost cap.
+ * Call it before the request is sent, with the call's estimated cost.
+ *
+ * The estimate is what the call is expected to use, not its output limit, so
+ * one call can end a little past the cap; the next one is then refused.
+ */
+export async function assertWithinCostCap(estimateUsd: number): Promise<void> {
+  const cap = resolveCostCap();
+  const spent = await totalCost({});
+  if (spent + estimateUsd > cap.capUsd) throw new CostCapExceededError(cap, spent, estimateUsd);
+  if (cap.warnAtUsd !== null && spent + estimateUsd > cap.warnAtUsd && warnedAtUsd !== cap.warnAtUsd) {
+    warnedAtUsd = cap.warnAtUsd;
+    process.stderr.write(
+      `pensmith: WARN — this paper has spent $${spent.toFixed(2)} of the $${cap.capUsd.toFixed(2)} cost cap ` +
+      `(warn_at_usd is $${cap.warnAtUsd.toFixed(2)}).\n`,
+    );
+  }
 }
 
 // ---------- Semaphore (D-50) ----------

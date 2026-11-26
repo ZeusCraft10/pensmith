@@ -9,7 +9,9 @@
 // Covers:
 //   - VRFY-03: Pass 2 produces UNCLEAR-biased verdicts on adversarial fixtures
 //   - VRFY-03: verdict enum + result-object shape
-//   - ARCH-10: assertBudget appears before the LLM call site (source-level proxy)
+//   - ARCH-10: every Pass 2 model call goes through complete(), which checks the
+//     paper's cost cap before the request (tests/cost-cap.test.ts drives that
+//     refusal; this pins that Pass 2 has no other way to call a model)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -85,7 +87,7 @@ test('known-bad-pass2: runPass2 returns UNCLEAR for all adversarial fixtures und
       runPass2: (
         draftMd: string,
         bibByCitekey: Map<string, { DOI?: string; title?: string; author?: string[] }>,
-        opts: { n: number; scopeCapUsd?: number },
+        opts: { n: number },
       ) => Promise<Array<Record<string, unknown>>>;
     };
     const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8')) as Array<Record<string, unknown>>;
@@ -112,17 +114,15 @@ test('known-bad-pass2: runPass2 returns UNCLEAR for all adversarial fixtures und
   },
 );
 
-test('known-bad-pass2: assertBudget appears before the LLM call site in pass2.ts (ARCH-10)',
+test('known-bad-pass2: pass2.ts calls the model only through complete(), behind the cost cap (ARCH-10)',
   { skip: !existsSync(pass2SrcPath) },
   () => {
-    // Source-level proxy for the budget-before-call invariant: the pass2.ts
-    // source MUST reference assertBudget (the pre-call gate). A stronger
-    // ordering check (assertBudget index < LLM-call index) is asserted once the
-    // module lands; here the existence of the token is the Wave-0 RED contract.
+    // complete() checks the paper's cost cap before any request. A model call
+    // made any other way would skip it, so Pass 2 must import complete() and
+    // nothing that sends a request itself.
     const src = readFileSync(pass2SrcPath, 'utf-8');
-    assert.ok(
-      src.indexOf('assertBudget') >= 0,
-      'pass2.ts must call assertBudget BEFORE any LLM call (ARCH-10 per-step cap)',
-    );
+    assert.match(src, /import\s*\{\s*complete\s*\}\s*from\s*'\.\.\/anthropic\.js'/, 'pass2.ts must call the model through complete()');
+    assert.doesNotMatch(src, /from\s*'(?:\.\.\/http\.js|@anthropic-ai\/sdk|undici)'/, 'pass2.ts must not send requests itself');
+    assert.match(src, /await complete\(\{/, 'pass2.ts makes its model call with complete()');
   },
 );

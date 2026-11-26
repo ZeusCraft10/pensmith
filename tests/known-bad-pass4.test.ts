@@ -104,7 +104,7 @@ test('known-bad-pass4: orphanCount matches the PINNED-rule fixture counts under 
   async () => {
     process.env['PENSMITH_NO_LLM'] = '1';
     const mod = await import(pass4ModUrl.href) as {
-      runPass4: (draftMd: string, opts: { n: number; scopeCapUsd?: number }) => Promise<Array<{ orphanCount: number }>>;
+      runPass4: (draftMd: string, opts: { n: number }) => Promise<Array<{ orphanCount: number }>>;
     };
     const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8')) as OrphanFixture[];
 
@@ -125,7 +125,7 @@ test('known-bad-pass4: definition-style sentence yields 0 orphans (R4 non-claim,
   async () => {
     process.env['PENSMITH_NO_LLM'] = '1';
     const mod = await import(pass4ModUrl.href) as {
-      runPass4: (draftMd: string, opts: { n: number; scopeCapUsd?: number }) => Promise<Array<{ orphanCount: number }>>;
+      runPass4: (draftMd: string, opts: { n: number }) => Promise<Array<{ orphanCount: number }>>;
     };
     const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8')) as OrphanFixture[];
     const defEntry = fixtures.find((e) => /\b(defined as|refers to|known as)\b/i.test(e.paragraph));
