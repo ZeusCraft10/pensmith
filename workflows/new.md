@@ -6,7 +6,7 @@
 > CYCLE-3 NAMING NOTE: per Plan 06 REVIEWS CONVERGENCE, the canonical user-facing verb is
 > `pensmith intake`; `pensmith new` is a friendly alias mapped by the bin/cli/index.ts
 > dispatcher (Plan 07). This workflow file is named `new.md` to remain bijective with the
-> UX-02 16-verb canonical list (bin/lib/verbs.ts) that ARCH-01 (workflows-keyequal.test.ts)
+> UX-02 canonical verb list (bin/lib/verbs.ts) that ARCH-01 (workflows-keyequal.test.ts)
 > enforces; when Plan 07 renames the verb in `verbs.ts`, this file will move to
 > `workflows/intake.md`. Until then, this file *is* the intake workflow body.
 
@@ -25,7 +25,7 @@ assignment text + a discipline-aware clarifying battery. It is the front door of
 workflow: intake → research → outline → (plan → write → verify)* → compile.
 
 The implementation lives in `bin/cli/intake.ts` (created by Plan 07). The workflow body
-below is the prompt that drives the verb's behavior under both Tier 1 (Task/MCP) and
+below is the prompt that drives the verb's behavior under both Tier 1 (Task) and
 Tier 2 (shell) — the `<capability_check>` block above degrades the Tier-1 affordances
 to a Tier-2 shell invocation when those tools are unavailable, preserving TIER-06
 equivalence.

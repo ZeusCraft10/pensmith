@@ -5,10 +5,6 @@
 // supplies the production re-verify seam (deterministic Pass 1 + Pass 3 — NEVER
 // Pass 2/4, D-08), and emits the COMPILE-REPORT path + outcome to stdout.
 //
-// `compile` IS one of the locked UX-02 16 verbs (bin/lib/verbs.ts) — this file
-// promotes the Phase-2 dispatcher stub to a real loader (bin/pensmith.ts
-// REAL_VERB_LOADERS). No new verb is added.
-//
 // stdout-only (no console.*, so stdout carries only what the verb prints, as
 // in the other verbs).
 //

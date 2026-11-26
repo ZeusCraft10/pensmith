@@ -25,7 +25,7 @@
 //     waves (D-03). Orthogonal subtrees proceed normally.
 //   - Tier 2 forces maxParallel 1; when maxParallel === 1 we emit EXACTLY ONE
 //     WARN to stderr ("--max-parallel ignored") — stderr, never stdout, so
-//     stdout carries only the verb's own output (T-04-13).
+//     stdout carries only the verb's own output.
 //   - A thrown non-Error from writeSection is normalized to an Error by runWave
 //     (Research §P-5); we never nest Semaphore.withLock (§P-4).
 
@@ -166,7 +166,7 @@ export async function runAllSections(
   opts: RunAllSectionsOpts,
 ): Promise<WaveResult[]> {
   // D-02: Tier 2 forces serial execution. Emit EXACTLY ONE WARN to stderr
-  // (never stdout, which carries only the verb's own output, T-04-13).
+  // (never stdout, which carries only the verb's own output).
   if (opts.maxParallel === 1) {
     process.stderr.write(
       'WARN: Tier 2 runs sections serially; --max-parallel ignored\n',

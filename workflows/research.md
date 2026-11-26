@@ -8,12 +8,10 @@
 <capability_check>
 required:
   - Task
-  - MCP library.read
   - Zotero MCP
 
 degrade_if_missing:
   - if no Task: run sequentially (slower)
-  - if no MCP library: read .paper/library.json directly (Phase 3+)
   - if Zotero MCP present AND authenticated (ZOTERO_API_KEY set): wire the real MCP-backed Zotero client into the zotero-mcp adapter (setZoteroClientForTest) so its search() pulls + normalizes Zotero items into SourceCandidate[] — Zotero is USED AS A SOURCE alongside the other 7 adapters
   - if Zotero MCP absent OR configured-without-ZOTERO_API_KEY: SKIP the Zotero pull, note the skip in the research log, and continue on the other 7 adapters — research is NOT broken (RSCH-06 / ARCH-03 absence-non-breaking)
 </capability_check>
@@ -28,7 +26,7 @@ deterministic replay in CI per `bin/lib/http-mock.ts`).
 
 The implementation lives in `bin/cli/research.ts` (created by Plan 07). The
 workflow body below is the prompt that drives the verb under both Tier 1
-(Task/MCP) and Tier 2 (shell).
+(Task) and Tier 2 (shell).
 
 ## Steps
 
@@ -57,19 +55,10 @@ workflow body below is the prompt that drives the verb under both Tier 1
 
 5. **Cross-check retractions** (`bin/lib/sources/retraction-cross-check.ts`): mark each surviving candidate whose own record shows a retraction — Crossref `updated-by` with a retraction, partial retraction, withdrawal or removal notice (Retraction Watch's data among them), OpenAlex `is_retracted`, PubMed's "Retracted Publication" type, or a "RETRACTED:" / "WITHDRAWN:" title — with `retracted: true` and `retraction_details`. No request is made. Do **NOT** silently drop it: the library writes it into CITATIONS.bib with `note = {RETRACTED}`, and verify reports a citation of it as RETRACTED, which blocks until the author acknowledges it with `pensmith ack`.
 
-   **Retraction surfacing (Codex MEDIUM consensus #19 — locked)**: after the cross-check, if ANY candidate has `retracted: true`, the workflow emits a WARN line to stderr in the literal form:
-
-   ```text
-   WARN: ${count} retracted source(s) found in LIBRARY.json: ${citekeys.join(', ')}. These will FAIL Pass-1 if cited.
-   ```
-
-   This is also surfaced in the outline approval gate (see `workflows/outline.md` step 4).
+   A retracted candidate is shown as `retracted: true` in the candidate approval gate, so the author sees it before choosing.
 
 6. **Persist `.paper/LIBRARY.json`** (atomic via `bin/lib/atomic-write.ts`, D-07 chokepoint) with the dedup'd + filtered candidates (including any `retracted: true` survivors).
 
-7. **Write canonical BibTeX `.paper/CITATIONS.bib`** (RSCH-09, D-20):
-   - `import { writeBibtex } from 'bin/lib/bibtex-write.ts'` (Plan 03-04 — Wave 3).
-   - Call `writeBibtex(library.candidates, '.paper/CITATIONS.bib')`. This serializes via citation-js (D-19 chokepoint) and atomic-writes the file via `bin/lib/atomic-write.ts` (D-07 chokepoint).
-   - **`.paper/CITATIONS.bib` is the canonical citation source-of-truth (D-20)**. The verify verb reads it via `bin/lib/citations.ts` (D-19 chokepoint) at Pass-1 time. `LIBRARY.json` is NOT consulted at verify time.
+7. **`.paper/CITATIONS.bib` and `.paper/CITATIONS.ris`** are written from LIBRARY.json in the same update (`bin/lib/library.ts`, through `formatBibtex`): they are views of the library, never edited on their own. The verify verb reads CITATIONS.bib at Pass-1 time.
 
 8. **Shell fallback** (TIER-06 equivalence path): `pensmith research [--queries <n>] [--yolo]`.

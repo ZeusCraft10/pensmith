@@ -4,10 +4,10 @@
 
 <capability_check>
 required:
-  - MCP state.read
+  - (none required)
 
 degrade_if_missing:
-  - if no MCP tools: direct readFileSync('.paper/STATE.json') and '.paper/OUTLINE.json' + direct per-section PLAN.md reads
+  - (no degradation needed — `pensmith next` reads .paper/STATE.json, .paper/OUTLINE.json and each section's PLAN.md from disk)
 </capability_check>
 
 ## Overview

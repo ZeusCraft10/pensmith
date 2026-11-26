@@ -1,8 +1,8 @@
 // bin/cli/stubs.ts
 //
-// D-05: 15 of the 16 verbs are stubs in Phase 2. They register with citty
-// exactly the same way as real verbs but print "not implemented yet" and
-// exit 0. Phase 3+ replaces each one with a real implementation.
+// The placeholder for a verb in bin/lib/verbs.ts that has no loader in
+// bin/pensmith.ts REAL_VERB_LOADERS: it registers with citty like a real verb,
+// prints "not implemented yet" and exits 0. Every verb has a loader today.
 
 import { defineCommand } from 'citty';
 

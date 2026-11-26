@@ -20,7 +20,7 @@ gate (OUTL-03) lives here: an outline is NEVER persisted without explicit user a
 unless `--yolo` is set.
 
 The implementation lives in `bin/cli/outline.ts` (created by Plan 07). The workflow body
-below is the prompt that drives the verb under both Tier 1 (Task/MCP) and Tier 2 (shell).
+below is the prompt that drives the verb under both Tier 1 (Task) and Tier 2 (shell).
 
 ## Steps
 

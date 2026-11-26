@@ -11,9 +11,6 @@
 // `new` verb), preserving the section-as-phase isolation contract. A DECLINED
 // sketch leaves the working directory byte-unchanged.
 //
-// sketch is NOT a 17th verb — it is already a member of the locked-16
-// UX02_VERBS; this file promotes the Phase-2 stub to a real loader.
-//
 // stdout-only (no console.* — Pitfall-7 stance shared with the other verbs).
 //
 // Without a terminal (Claude Code's Bash tool, CI, a pipe) nothing is asked on

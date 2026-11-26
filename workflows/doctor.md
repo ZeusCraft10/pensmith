@@ -1,13 +1,13 @@
 # pensmith doctor
 
-> Run ecosystem self-check — 11 probes across runtime, MCP wiring, and ecosystem presence. Exits 1 on FAIL.
+> Run ecosystem self-check — 11 probes across runtime and ecosystem presence. Exits 1 on FAIL.
 
 <capability_check>
 required:
   - (none required)
 
 degrade_if_missing:
-  - (no degradation needed — doctor is read-only and requires no MCP tools)
+  - (no degradation needed — doctor is read-only)
 </capability_check>
 
 ## Overview

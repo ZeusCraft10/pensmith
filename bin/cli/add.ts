@@ -7,10 +7,11 @@
 //               from arXiv); a record for another DOI is refused;
 //   - arXiv ID  the arXiv record;
 //   - PDF       a local file or a URL serving one: identified by a DOI or
-//               arXiv ID printed in its opening whose work has the PDF's
-//               title word for word, else by a Crossref title search whose
-//               hit has that title and an author the opening names, never
-//               the reference list (bin/lib/source-hydrate.ts).
+//               arXiv ID printed in its opening whose work's title (word
+//               for word) and byline head the PDF, else by a Crossref title
+//               search whose hit has that title and an author the opening
+//               names, never the reference list (bin/lib/source-hydrate.ts);
+//               one it cannot identify is refused.
 //               Its text is kept under .paper/sources/ for the quotation check;
 //   - URL       an HTML page with a DOI in its citation <meta> tags;
 //   - .bib      every entry, written back as it is in the file;

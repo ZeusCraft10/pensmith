@@ -5,12 +5,9 @@
 
 <capability_check>
 required:
-  - MCP state.read
-  - MCP library.read
   - AskUserQuestion
 
 degrade_if_missing:
-  - if no MCP tools: direct file reads from .paper/
   - if no AskUserQuestion: render the --revise citation-swap diff via @clack/prompts in a TTY; with no terminal, keep the proposed change and exit 3 with the pending decision as JSON, answered through `pensmith gate answer <ref> approve|reject` (PRD §19 approval gate stays default-on; never suggest --yolo)
 </capability_check>
 
@@ -52,8 +49,8 @@ The implementation lives in `bin/cli/plan.ts` (created by Plan 07).
 
 ## Revise body (PLAN-02 / D-05 / D-06 — citation repair behind the approval gate)
 
-> **Surface note**: `revise` is NOT a separate UX-02 verb (the locked 16 are
-> bijective with `workflows/*.md`). The canonical revise surface is
+> **Surface note**: `revise` is NOT a separate UX-02 verb (the 18 verbs
+> are bijective with `workflows/*.md`). The canonical revise surface is
 > `pensmith plan <N> --revise`; both it and the thin `bin/cli/revise.ts`
 > CommandDef delegate to the SAME `bin/lib/revise.ts::runRevise` chokepoint
 > (D-06 — no divergent Tier-1/Tier-2 path). WRTE-02 is satisfied here.

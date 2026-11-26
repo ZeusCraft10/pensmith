@@ -9,10 +9,9 @@
 
 <capability_check>
 required:
-  - MCP state.read
+  - (none required)
 
 degrade_if_missing:
-  - if no MCP tools: direct file reads from .paper/
   - if no Task (parallel smoothing unavailable): smooth boundaries sequentially in-process
   - if no model transport (Tier 2): skip boundary smoothing entirely (raw concat) — smoothing is best-effort prose and never blocks compile
 </capability_check>

@@ -35,8 +35,7 @@ The implementation lives in `bin/lib/*` (`runPass4`, `runPlagiarism`,
 is `bin/cli/done.ts` — a thin delegate. Both Tier 1 (plugin) and Tier 2 (CLI)
 run the SAME `bin/cli/done.ts` → `bin/lib` path; there is no `pensmith_done` MCP
 tool (the Tier-1 surface is THIS workflow body delegating to the same code, the
-compile precedent — a documented asymmetry that keeps the locked 16 verbs
-bijective with the 16 workflow bodies).
+compile precedent — a documented asymmetry that keeps one workflow body per verb).
 
 **LOCKED INVARIANT — the DONE-09 gate is the SOLE escape valve.** Pass 2 (claim
 support) and Pass 4 (orphan claims) are advisory and NEVER auto-block (VRFY-07);

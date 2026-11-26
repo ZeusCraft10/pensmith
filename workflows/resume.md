@@ -4,10 +4,10 @@
 
 <capability_check>
 required:
-  - MCP state.read
+  - (none required)
 
 degrade_if_missing:
-  - if no MCP tools: direct readFileSync('.paper/HANDOFF.json') + direct readFileSync('.paper/STATE.json')
+  - (no degradation needed — `pensmith resume` reads .paper/HANDOFF.json and .paper/STATE.json from disk)
 </capability_check>
 
 ## Overview

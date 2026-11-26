@@ -9,11 +9,9 @@
 <capability_check>
 required:
   - Task
-  - MCP library.read
 
 degrade_if_missing:
   - if no Task: run sequentially (slower)
-  - if no MCP library: direct read of .paper/library.json
 </capability_check>
 
 ## Overview

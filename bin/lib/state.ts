@@ -320,7 +320,7 @@ export async function updateState(
 }
 
 // ---------------------------------------------------------------------------
-// State-mutation helpers (D-13 / TIER-02), typed wrappers over updateState.
+// State-mutation helpers, typed wrappers over updateState.
 //
 // STATE.json's per-section schema is { n, slug } strict; per-section status
 // and verdicts live in PLAN.md frontmatter (PlanFrontmatterSchema) and

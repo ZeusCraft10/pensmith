@@ -5,10 +5,10 @@
 
 <capability_check>
 required:
-  - MCP state.read
+  - (none required)
 
 degrade_if_missing:
-  - if no MCP tools: direct read of the global registry index + direct write of the active-paper pointer via the atomic-write chokepoint (the bin/cli/open.ts CLI path)
+  - (no degradation needed — `pensmith open` reads the global registry index and writes the active-paper pointer through the atomic-write chokepoint)
 </capability_check>
 
 ## Overview
@@ -25,8 +25,7 @@ The implementation lives in `bin/cli/open.ts` (`openCommand`) delegating to
 (`pensmithActivePointerPath`) + the D-07 `atomicWriteFile` chokepoint. Both
 Tier 1 (plugin) and Tier 2 (CLI) run the SAME `bin/cli/open.ts` path; there is
 no `pensmith_open` MCP tool (the Tier-1 surface is THIS workflow body delegating
-to the same code — the compile/done asymmetry precedent, keeping the locked 16
-verbs bijective with the 16 workflow bodies).
+to the same code — the compile/done asymmetry precedent, keeping one workflow body per verb).
 
 ## Outputs
 

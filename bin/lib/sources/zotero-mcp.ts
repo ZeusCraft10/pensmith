@@ -1,6 +1,6 @@
 // bin/lib/sources/zotero-mcp.ts — RSCH-06 Zotero MCP source provider.
 //
-// Zotero is a SOURCE PROVIDER + DOCTOR PROBE, never a verb (no 17th verb). This
+// Zotero is a SOURCE PROVIDER + DOCTOR PROBE, never a verb. This
 // adapter is the EXECUTABLE "used-as-source" path: when a client is wired AND
 // ZOTERO_API_KEY is set, search() PULLS items from the Zotero source and
 // NORMALIZES each one to the SAME SourceCandidate shape every other adapter

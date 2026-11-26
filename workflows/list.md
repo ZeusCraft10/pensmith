@@ -6,10 +6,10 @@
 
 <capability_check>
 required:
-  - MCP state.read
+  - (none required)
 
 degrade_if_missing:
-  - if no MCP tools: direct read of the global registry index + each paper's STATE.json from disk (the bin/cli/list.ts CLI path)
+  - (no degradation needed — `pensmith list` reads the global registry index and each paper's STATE.json from disk)
 </capability_check>
 
 ## Overview
@@ -22,12 +22,10 @@ grouped by its `class`, with a live lifecycle status per paper.
 
 The implementation lives in `bin/cli/list.ts` (`listCommand`) delegating to
 `bin/lib/global-library.ts` (`loadGlobalLibrary` + `deriveLibraryStatus`). Both
-Tier 1 (plugin) and Tier 2 (CLI) run the SAME code — Tier 1 may surface the
-registry via the MCP state resource; Tier 2 reads the index + each paper's
-STATE.json directly. There is no `pensmith_list` MCP tool (the Tier-1 surface is
+Tier 1 (plugin) and Tier 2 (CLI) run the SAME code, which reads the index and
+each paper's STATE.json directly. There is no `pensmith_list` MCP tool (the Tier-1 surface is
 THIS workflow body delegating to the same `bin/cli/list.ts` path — the documented
-compile/done precedent that keeps the locked 16 verbs bijective with the 16
-workflow bodies).
+compile/done precedent that keeps one workflow body per verb).
 
 **DERIVE-AT-DISPLAY (Open-Q4 / LIB-05).** list NEVER prints the stored
 `entry.status`. It computes each paper's live stage from that paper's

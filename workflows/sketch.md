@@ -23,7 +23,7 @@ degrade_if_missing:
 `pensmith sketch` is the fourth library/ergonomics verb (list / open / **sketch**
 / add). It is the pre-intake on-ramp: a 4-5 question Socratic loop that
 synthesizes a candidate thesis, presents it, then dispatches the existing `new`
-verb with the thesis as a seed (`intake --thesis`, NOT a 17th verb).
+verb with the thesis as a seed (`new --thesis`, not a verb of its own).
 
 The implementation lives in `bin/cli/sketch.ts` (`sketchCommand`) delegating to
 `bin/lib/prompts.ts` (`ask`) for the loop + gate and to `dispatchVerb('new', …)`
@@ -35,8 +35,7 @@ the go-ahead it needs) as one JSON line, writes nothing and exits 3; Claude
 talks it through with the user and runs `pensmith new --thesis "<thesis>"`
 once they agree. There is no
 `pensmith_sketch` MCP tool (the Tier-1 surface is THIS workflow body delegating
-to the same code — the compile/done asymmetry precedent, keeping the locked 16
-verbs bijective with the 16 workflow bodies).
+to the same code — the compile/done asymmetry precedent, keeping one workflow body per verb).
 
 ## Outputs
 

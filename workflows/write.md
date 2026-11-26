@@ -6,11 +6,10 @@
 
 <capability_check>
 required:
-  - MCP state.update
+  - (none required)
 
 degrade_if_missing:
-  - if no MCP tools: direct file writes via atomicWriteFile
-  - wave mode — if no parallel capability (Task / MCP scheduler): invoke
+  - wave mode — if no parallel capability (Task): invoke
     bin/lib/write-orchestrator.ts in-process and drain waves SERIALLY
     (Semaphore(1) === Tier-2 forced --max-parallel 1) — same code path,
     just a concurrency cap of 1
@@ -76,7 +75,7 @@ below is the prompt that drives the verb under both Tier 1 and Tier 2.
    - Within-wave failures do NOT cancel siblings; a section whose dependency failed is marked
      `blocked` and skipped, while orthogonal subtrees still complete (D-03).
    - Progress streams as structured JSON lines to stdout (`section_start` / `section_done` /
-     `wave_complete`); the WARN and diagnostics go to stderr to keep the MCP stdio frame clean.
+     `wave_complete`); the WARN and diagnostics go to stderr, so stdout carries only those JSON lines.
    - Approval gates are NOT prompted per section here — wave runs are batched; section-level
      citation approval lives in `--revise` (Plan 04).
 

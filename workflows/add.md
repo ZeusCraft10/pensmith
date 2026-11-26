@@ -1,13 +1,18 @@
 # pensmith add
 
-> Ingest ONE new source mid-paper — by DOI, a local PDF, or a URL — hydrate it
-> via Crossref, write it to `.paper/CITATIONS.bib`, then (behind an approval
-> gate) remap it onto sections by touching ONLY `assigned_sources[]`.
+> Ingest ONE new source mid-paper — by DOI, arXiv ID, a local PDF, a URL, or a
+> .bib / CSL-JSON file — find its own registry record, merge it into
+> `.paper/LIBRARY.json` (which writes `.paper/CITATIONS.bib` from it), then
+> (behind an approval gate) remap it onto sections by touching ONLY
+> `assigned_sources[]`.
 >
 > **NON-NEGOTIABLE (CLAUDE.md / PRD §14): add cannot smuggle a source past the
-> verifier.** `verifyDoi` runs at add-time, but a FABRICATED / MIS-CITED verdict
-> at compile (Pass 1) STILL blocks. The remap NEVER touches `status` or
-> `verified_against_draft_hash` — a verified section STAYS verified (ERGO-06).
+> verifier.** add only ever stores a work's own record (a record for another
+> DOI, or a PDF whose identity cannot be confirmed, is refused with exit 2),
+> and Pass 1 still checks the source when a section that cites it is verified:
+> a FABRICATED / MIS-CITED verdict STILL blocks compile and export. The remap
+> NEVER touches `status` or `verified_against_draft_hash` — a verified section
+> STAYS verified (ERGO-06).
 
 <capability_check>
 required:
@@ -32,14 +37,15 @@ surfaces the remap gate via `AskUserQuestion`; Tier 2 degrades to
 source is not remapped, and add says to run it again with `--remap` (the
 source is not added twice). There is no `pensmith_add` MCP tool (the Tier-1
 surface is THIS workflow body delegating to the same code — the compile/done
-asymmetry precedent, keeping the locked 16 verbs bijective with the 16 workflow
-bodies).
+asymmetry precedent, keeping one workflow body per verb).
 
 ## Outputs
 
-- `.paper/CITATIONS.bib` — the new candidate appended via `writeBibtex` (D-19
-  citation-js chokepoint, never a hand-rolled serializer), re-serializing the
-  whole file (existing entries preserved, citekey deduped).
+- `.paper/LIBRARY.json` — the new work merged by identifier (a work already
+  held is not added again; a new work whose key is taken gets the next free
+  one). `.paper/CITATIONS.bib` and `.ris` are written from it in the same
+  update, with every other entry kept as it was.
+- `.paper/sources/<key>.txt` — a PDF's text, kept for the quotation check.
 - On remap: each targeted section `PLAN.md` gains the citekey in
   `assigned_sources[]` (via `updateFrontmatter` inside `withLock` +
   `atomicWriteFile`). `status` and `verified_against_draft_hash` are byte-
@@ -54,32 +60,31 @@ bodies).
 > mapping for a section, the user runs `plan <N> --revise` — add does not touch a
 > verified section's verdict.
 
-1. **Detect input type + hydrate** (ERGO-06 / RSCH-05b):
-   - **DOI** → `crossrefFetchById(normalizeDoi(source))` (offline cassette-backed
-     in CI).
-   - **PDF** → `fs.readFile(path.resolve(source))` → bytes-only `extractPdfText`
-     (pdf-parse → pymupdf fallback, 08-03; T-08-04-03 path-traversal mitigation)
-     → title heuristic → `crossrefSearch(title, { limit: 1 })`.
-   - **URL** → `httpFetch` (D-06 chokepoint, NEVER raw fetch; T-08-04-02 SSRF
-     mitigation) → sniff `Content-Type`: PDF bytes → the PDF path; HTML → scrape
-     a `<meta>` DOI → retry as a DOI.
-   - No candidate hydrated → print `could not hydrate "<source>". Source NOT
-     added.` and return `{ ok: false }`.
+1. **Detect input type + find the work's own record** (`bin/lib/source-hydrate.ts`):
+   - **DOI** → the registry record for exactly that DOI (arXiv's own DOIs from
+     arXiv); a record for another DOI is refused (exit 2).
+   - **arXiv ID** → the arXiv record.
+   - **PDF** → bytes-only `extractPdfText`, then a DOI or arXiv ID printed in
+     its opening (before any reference list) whose work's title and byline
+     head the PDF, else a Crossref title search whose hit has the PDF's whole
+     title and an author the opening names. A PDF whose identity cannot be
+     confirmed is refused (exit 2): add it by its DOI or arXiv ID instead.
+   - **URL** → `httpFetch` (the http.ts chokepoint, with its SSRF guard) →
+     PDF bytes go the PDF path; an HTML page's citation `<meta>` DOI goes the
+     DOI path.
+   - **.bib / .json** → each entry, by identifier, as it is written in the file.
+   - Nothing found → the source is NOT added, and add exits 2.
 
-2. **verifyDoi at add-time** (T-08-04-04): when a DOI is present, run `verifyDoi`.
-   A non-resolving DOI prints a WARNING but the source is STILL added — the Pass-1
-   verifier re-checks at compile time and blocks on FABRICATED. A transport error
-   never aborts the add.
+2. **Merge into the library** (`bin/lib/library.ts`): by identifier (DOI,
+   arXiv ID, PMID or ISBN), with the retraction cross-check on the work's own
+   record; CITATIONS.bib and .ris are written from LIBRARY.json in the same
+   update.
 
-3. **Write `.paper/CITATIONS.bib`** (D-19): load existing candidates, dedup the
-   citekey, append the new one, and re-serialize the whole file via the
-   `writeBibtex` chokepoint.
-
-4. **Remap approval gate** (ERGO-06, approval-gates-default-on): remap when
+3. **Remap approval gate** (ERGO-06, approval-gates-default-on): remap when
    `--remap` is set OR (not `--yolo` AND the user confirms via the gate). When
    `--section`/`--slug` are supplied, remap that one section; otherwise iterate
    every section of the outline (`.paper/OUTLINE.json`). The remap is idempotent (a citekey already
    present is skipped) and touches ONLY `assigned_sources[]`.
 
-5. **Shell fallback** (TIER-06 equivalence path): `pensmith add <doi|pdf|url>
+4. **Shell fallback** (TIER-06 equivalence path): `pensmith add <doi|pdf|url>
    [--section <n> --slug <slug>] [--remap] [--yolo]`.

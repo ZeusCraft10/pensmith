@@ -1,10 +1,8 @@
 // bin/cli/done.ts — `pensmith done` verb entrypoint (DONE-01 / DONE-03 / DONE-09).
 //
 // THIN ORCHESTRATOR — delegates to bin/lib/* (runPass4, runPlagiarism,
-// scoreHonesty, exportDraft). 'done' IS one of the locked UX-02 16 verbs
-// (bin/lib/verbs.ts) — this file promotes the Phase-2 dispatcher stub to a real
-// loader (bin/pensmith.ts REAL_VERB_LOADERS). No 17th verb is added; the
-// workflows/done.md body (Tier 1) delegates to this SAME bin/lib path.
+// scoreHonesty, exportDraft). The workflows/done.md body (Tier 1) delegates to
+// this SAME bin/lib path.
 //
 // stdout-only (no console.*, so stdout carries only what the verb prints, as
 // in compile.ts and the other verbs).
