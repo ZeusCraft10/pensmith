@@ -357,6 +357,24 @@ test('the OpenAI path sends max_completion_tokens, never max_tokens', async () =
   assert.doesNotMatch(seen[0]!.headers['user-agent'] ?? '', /someone@example\.org/);
 });
 
+test('the default OpenAI model is never sent an output limit past its own', async () => {
+  // The role limits (64k for a draft, 32k for an outline or plan) suit models
+  // that stream and think; gpt-4o and gpt-4o-mini refuse more than 16,384
+  // completion tokens with an HTTP 400.
+  process.env['OPENAI_API_KEY'] = 'sk-openai-test';
+  await writeRuntime({ openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY' } });
+  const seen = answerChat('https://api.openai.com', '/v1/chat/completions', 200, chat('An answer.', 'stop'));
+  for (const role of ['write', 'outline', 'plan', 'verify'] as const) await complete({ ...ASK, role });
+  assert.deepEqual(seen.map((s) => s.body['model']), ['gpt-4o', 'gpt-4o', 'gpt-4o', 'gpt-4o']);
+  assert.deepEqual(seen.map((s) => s.body['max_completion_tokens']), [16_384, 16_384, 16_384, 8_000]);
+
+  await writeRuntime({ openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY', defaultModel: 'gpt-4o-mini', roles: { plan: { maxTokens: 20_000 } } } });
+  await complete({ ...ASK, role: 'write' });
+  await complete({ ...ASK, role: 'plan' });
+  assert.equal(seen[4]!.body['max_completion_tokens'], 16_384);
+  assert.equal(seen[5]!.body['max_completion_tokens'], 20_000, 'a limit runtime.json sets is sent as set');
+});
+
 test('the OpenAI path treats finish_reason length as truncated and content_filter as declined', async () => {
   process.env['OPENAI_API_KEY'] = 'sk-openai-test';
   await writeRuntime({ openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY' } });

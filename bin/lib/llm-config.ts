@@ -33,8 +33,9 @@ export interface RoleDefaults {
 /**
  * Per-role defaults. Drafting and outlining get the most effort and room;
  * classifying a source or a claim needs little of either. The limits are
- * generous (answers stream, so a long one does not time out); the estimate,
- * not the limit, is what the cost cap is checked against.
+ * generous (Anthropic answers stream, so a long one does not time out) and
+ * are lowered to a model's own limit where it is smaller (MODEL_OUTPUT_LIMITS).
+ * The estimate, not the limit, is what the cost cap is checked against.
  */
 export const ROLE_DEFAULTS: Readonly<Record<LlmRole, RoleDefaults>> = {
   intake: { effort: 'low', maxTokens: 16_000, expectedOutputTokens: 2_000 },
@@ -47,6 +48,26 @@ export const ROLE_DEFAULTS: Readonly<Record<LlmRole, RoleDefaults>> = {
   verify: { effort: 'low', maxTokens: 8_000, expectedOutputTokens: 800 },
   task: { effort: 'medium', maxTokens: 16_000, expectedOutputTokens: 2_000 },
 };
+
+/**
+ * Models whose output limit is below a role default, by provider. Every
+ * Anthropic model in the price table allows the role defaults. A dated
+ * snapshot takes its alias's limit unless it is listed itself.
+ */
+const MODEL_OUTPUT_LIMITS: Readonly<Record<ProviderName, Readonly<Record<string, number>>>> = {
+  anthropic: {},
+  openai: {
+    'gpt-4o': 16_384,
+    'gpt-4o-2024-05-13': 4_096,
+    'gpt-4o-mini': 16_384,
+  },
+};
+
+/** The most output tokens `model` allows, when it is known to be below the role defaults. */
+function modelOutputLimit(providerName: ProviderName, model: string): number | undefined {
+  const limits = MODEL_OUTPUT_LIMITS[providerName];
+  return limits[model] ?? limits[model.replace(/-\d{4}-\d{2}-\d{2}$/, '')];
+}
 
 export interface ResolvedCall {
   role: LlmRole;
@@ -82,14 +103,21 @@ export async function resolveCall(choice: CallChoice): Promise<ResolvedCall> {
   const roleCfg = provider?.roles?.[choice.role];
   const defaults = ROLE_DEFAULTS[choice.role];
   const baseUrl = provider?.baseUrl;
+  const model = choice.model ?? roleCfg?.model ?? provider?.defaultModel ?? DEFAULT_MODELS[providerName];
+  // A limit the caller or runtime.json sets is sent as set; only the role
+  // default is lowered to what the model allows (gpt-4o refuses more than
+  // 16,384 completion tokens with an HTTP 400).
+  const modelLimit = modelOutputLimit(providerName, model);
+  const maxTokens = choice.maxTokens ?? roleCfg?.maxTokens
+    ?? (modelLimit !== undefined ? Math.min(defaults.maxTokens, modelLimit) : defaults.maxTokens);
   return {
     role: choice.role,
     providerId,
     providerName,
-    model: choice.model ?? roleCfg?.model ?? provider?.defaultModel ?? DEFAULT_MODELS[providerName],
+    model,
     effort: choice.effort ?? roleCfg?.effort ?? defaults.effort,
-    maxTokens: choice.maxTokens ?? roleCfg?.maxTokens ?? defaults.maxTokens,
-    expectedOutputTokens: choice.expectedOutputTokens ?? roleCfg?.expectedOutputTokens ?? defaults.expectedOutputTokens,
+    maxTokens,
+    expectedOutputTokens: choice.expectedOutputTokens ?? roleCfg?.expectedOutputTokens ?? Math.min(defaults.expectedOutputTokens, maxTokens),
     ...(baseUrl ? { baseUrl } : {}),
     ...(provider?.pricePerMtok
       ? { pricePerMtok: { inputPerMtok: provider.pricePerMtok.input, outputPerMtok: provider.pricePerMtok.output } }
