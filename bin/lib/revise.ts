@@ -7,13 +7,16 @@
 //      FIRST failing citation (FABRICATED / MIS-CITED / NOT_FOUND / RETRACTED),
 //      in order of appearance. Other blocking verdicts are named, not repaired.
 //   2. Load the PLAN.md frontmatter: assigned_sources and the section's voice
-//      hint, which go into the prompt.
+//      hint, which go into the prompt with the works LIBRARY.json holds for
+//      those sources (title, authors, year, venue, abstract), as fenced data.
 //   3. Ask the model (the hash-pinned revise-swap prompt) for a swap or a
-//      remove. The answer is parsed with a strict zod schema and rejected
-//      unless the action is swap or remove and any replacement key is in
-//      assigned_sources, so no new citekey ever enters DRAFT.md.
-//   4. Approval gate (default-on, PRD §19): show the change and ask. Skipped
-//      under --yolo. A non-TTY without --yolo exits 3.
+//      remove, as structured JSON. The answer is parsed with a strict zod
+//      schema and rejected unless the action is swap or remove and any
+//      replacement key is in assigned_sources, so no new citekey ever enters
+//      DRAFT.md.
+//   4. Approval gate (default-on, PRD §19): show the change, with the
+//      replacement's abstract, and ask. Skipped under --yolo. A non-TTY
+//      without --yolo exits 3.
 //   5. On accept: `swap` replaces the flagged key inside each citation that
 //      cites it (prefix and locator kept). `remove` is mechanical too (no
 //      model rewrite). For a misquotation (a Pass-3 NOT_FOUND row) it deletes
@@ -39,7 +42,7 @@
 //
 // Every write goes through atomicWriteFile, never raw fs.
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { readFileSync, existsSync } from 'node:fs';
 import { atomicWriteFile } from './atomic-write.js';
 import { updateFrontmatter, parseFrontmatter } from './frontmatter.js';
@@ -57,7 +60,9 @@ import {
   type Quote,
 } from './citation-grammar.js';
 import { oneLine, parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
-import { addToLibrary } from './library.js';
+import { addToLibrary, loadLibrary } from './library.js';
+import { renderSourceContext, sourceContext, type SourceContextEntry } from './source-context.js';
+import { stripFenceMarkers } from './untrusted-fence.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
 import { assignedSourcesFrom } from './plan-status.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
@@ -70,8 +75,8 @@ const FAILING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED'
 /** FAILING_VERDICTS as message text: `FABRICATED/MIS-CITED/...`. */
 const FAILING_VERDICT_LIST = [...FAILING_VERDICTS].join('/');
 
-// Strict-JSON contract for the revise-swap model response.
-const ReviseSwapSchema = z.object({
+/** The revise-swap answer (its JSON Schema is sent as the structured output format). */
+export const ReviseSwapSchema = z.object({
   action: z.enum(['swap', 'remove']),
   flagged_citekey: z.string(),
   replacement_citekey: z.string().nullable(),
@@ -79,8 +84,8 @@ const ReviseSwapSchema = z.object({
   patch: z.object({
     before_excerpt: z.string(),
     after_excerpt: z.string(),
-  }),
-});
+  }).strict(),
+}).strict();
 export type ReviseSwapProposal = z.infer<typeof ReviseSwapSchema>;
 
 /** Variables handed to the LLM proposeSwap seam (mirror the prompt's {{vars}}). */
@@ -88,8 +93,15 @@ export interface ReviseSwapVars {
   flagged_citekey: string;
   verifier_reason: string;
   claim_context: string;
+  /** The section's assigned works, rendered as fenced JSON (source-context.ts). */
   available_sources: string;
   voice_hint: string;
+}
+
+/** What the approval gate is shown besides the proposal. */
+export interface ReviseGateContext {
+  /** The work a swap would cite instead, as LIBRARY.json holds it. */
+  replacement?: SourceContextEntry;
 }
 
 /** A research hit the --research adapter returns (loose superset of SourceCandidate). */
@@ -119,7 +131,7 @@ export interface ReviseOptions {
    * Approval-gate seam (default-on, PRD §19). Default uses @clack/prompts in a
    * TTY (exit code 3 in a non-TTY without --yolo). Tests inject a boolean.
    */
-  approve?: (proposal: ReviseSwapProposal) => Promise<boolean>;
+  approve?: (proposal: ReviseSwapProposal, context: ReviseGateContext) => Promise<boolean>;
   /** --research adapter seam. Default uses bin/lib/sources/*. */
   researchAdapter?: (query: string) => Promise<ResearchHit[]>;
 }
@@ -299,6 +311,15 @@ function withoutQuotations(
 // The section-planner prompt writes a one-line `Voice: ...` in the ## Brief.
 // ---------------------------------------------------------------------------
 
+/** The paper's library, or an empty one when LIBRARY.json cannot be read (the sources are then named without records). */
+async function libraryOrEmpty(root: string): Promise<Parameters<typeof sourceContext>[0]> {
+  try {
+    return await loadLibrary(root);
+  } catch {
+    return { $schemaVersion: 2, entries: [], bibtex_preamble: [] };
+  }
+}
+
 function voiceHint(planMd: string): string {
   const m = /(^|\n)\s*Voice:\s*([^\n]+)/i.exec(planMd);
   return m && m[2] ? `Voice: ${m[2].trim()}` : 'Voice: formal academic tone.';
@@ -326,7 +347,16 @@ async function defaultProposeSwap(vars: ReviseSwapVars): Promise<string> {
 // Default approval gate — @clack/prompts confirm in a TTY; exit 3 otherwise.
 // ---------------------------------------------------------------------------
 
-async function defaultApprove(proposal: ReviseSwapProposal): Promise<boolean> {
+/** The replacement work as the gate shows it: key, title, authors, year, and the abstract to judge support by. */
+function describeReplacement(r: SourceContextEntry): string {
+  const by = [r.authors.slice(0, 3).join('; '), r.year].filter(Boolean).join(', ');
+  return [
+    `Replacement: [@${r.citekey}] ${r.title}${by ? ` (${by})` : ''}${r.retracted ? ' — RETRACTED' : ''}`,
+    r.abstract ? `Abstract: ${r.abstract}` : 'Abstract: none in LIBRARY.json — check that this work supports the sentence before you accept.',
+  ].join('\n');
+}
+
+async function defaultApprove(proposal: ReviseSwapProposal, context: ReviseGateContext): Promise<boolean> {
   if (!process.stdout.isTTY || !process.stdin.isTTY) {
     throw new ApprovalUnavailableError(
       'revise: approval gate requires an interactive terminal. ' +
@@ -336,7 +366,8 @@ async function defaultApprove(proposal: ReviseSwapProposal): Promise<boolean> {
   const clack = await import('@clack/prompts');
   const before = proposal.patch.before_excerpt;
   const after = proposal.patch.after_excerpt;
-  clack.note(`- ${before}\n+ ${after}`, `Proposed ${proposal.action} — ${proposal.rationale}`);
+  const replacement = context.replacement ? `\n\n${describeReplacement(context.replacement)}` : '';
+  clack.note(`- ${before}\n+ ${after}${replacement}`, `Proposed ${proposal.action} — ${proposal.rationale}`);
   const ok = await clack.confirm({ message: `Apply this ${proposal.action}?` });
   return ok === true && !clack.isCancel(ok);
 }
@@ -594,11 +625,14 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   const approve = opts.approve ?? defaultApprove;
   const draftMd = readFileSync(draftPath, 'utf8');
 
+  const { sources, missing } = sourceContext(await libraryOrEmpty(opts.paperRoot), assignedSources);
   const vars: ReviseSwapVars = {
     flagged_citekey: failing.citekey,
     verifier_reason: failing.reason,
     claim_context: claimContext(draftMd, failing),
-    available_sources: assignedSources.map((k) => `- ${k}`).join('\n'),
+    available_sources: renderSourceContext(sources) + (missing.length > 0
+      ? `\n\nAssigned, but with no record in the library to judge them by: ${stripFenceMarkers(missing.join(', '))}.`
+      : ''),
     voice_hint: voiceHint(planMd),
   };
 
@@ -624,7 +658,8 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     // deletes text, the gate shows that text, not the model's excerpt.
     const shown: ReviseSwapProposal = patch.removed.length === 0 ? proposal
       : { ...proposal, patch: { before_excerpt: patch.removed.join('\n'), after_excerpt: '(deleted)' } };
-    const accepted = opts.yolo ? true : await approve(shown);
+    const replacement = sources.find((src) => src.citekey === proposal.replacement_citekey);
+    const accepted = opts.yolo ? true : await approve(shown, replacement ? { replacement } : {});
     if (!accepted) {
       return { ...base, accepted: false, message: `${base.message} Proposal rejected at the approval gate — DRAFT.md unchanged.`.trim() };
     }

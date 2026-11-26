@@ -6,8 +6,9 @@
 // `tier2ProposeSwap` stubs (deterministic remove, no LLM) are deleted in Phase 11.
 //
 // Architecture:
-//   - proposeSwap(vars) calls loadPrompt('revise-swap') + interpolate + complete()
-//   - returns the raw model text (strict-JSON the revise-swap prompt asks for)
+//   - proposeSwap(vars) calls loadPrompt('revise-swap') + interpolate + complete(),
+//     with ReviseSwapSchema as the answer's JSON Schema (structured output)
+//   - returns the raw model text (the JSON the revise-swap prompt asks for)
 //   - runRevise (bin/lib/revise.ts) owns PARSING of that text + the membership guard
 //     (T-04-14 / T-11-09 LLM-injection mitigations — no new citekeys ever enter DRAFT.md)
 //
@@ -22,8 +23,11 @@
 // complete() owns the no-leak header path; we never bind the key to any variable.
 
 import { complete, isNoLlmMode } from './anthropic.js';
+import { escapeTemplateTokens } from './intake-parse.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
-import type { ReviseSwapVars } from './revise.js';
+import { ReviseSwapSchema, type ReviseSwapVars } from './revise.js';
+import { modelJsonSchema } from './schemas/model-json.js';
+import { fenceUntrusted, stripFenceMarkers } from './untrusted-fence.js';
 
 /**
  * System prompt for the revise-swap LLM call.
@@ -32,9 +36,8 @@ import type { ReviseSwapVars } from './revise.js';
  */
 const REVISE_SWAP_SYSTEM =
   'You are an academic citation repair assistant. You will receive a ' +
-  'verifier-flagged citation and a list of available sources. Your output is ' +
-  'strict JSON only — no prose, no markdown fences, no text outside the JSON ' +
-  'object. Follow the schema exactly as specified in the prompt.';
+  'verifier-flagged citation and the sources the section may cite, and you ' +
+  'answer with the JSON object the prompt describes.';
 
 /**
  * Real proposeSwap — loads the hash-pinned 'revise-swap' prompt, interpolates
@@ -68,17 +71,25 @@ export async function proposeSwap(vars: ReviseSwapVars): Promise<string> {
     });
   }
 
-  const prompt = loadPrompt('revise-swap');
-  // ReviseSwapVars keys match the {{...}} placeholders in the revise-swap prompt:
-  //   {{flagged_citekey}}, {{verifier_reason}}, {{claim_context}},
-  //   {{available_sources}}, {{voice_hint}}
-  const interpolated = interpolate(prompt, vars as unknown as Record<string, string>);
+  // The citing sentence is the draft's text, written by a model that read
+  // third-party abstracts, so it goes in fenced like the sources (which
+  // runRevise rendered fenced already); the other values are stripped of
+  // anything that could pass for a fence marker.
+  const text = (v: string): string => escapeTemplateTokens(stripFenceMarkers(v));
+  const interpolated = interpolate(loadPrompt('revise-swap'), {
+    flagged_citekey: text(vars.flagged_citekey),
+    verifier_reason: text(vars.verifier_reason),
+    claim_context: escapeTemplateTokens(fenceUntrusted(vars.claim_context)),
+    available_sources: vars.available_sources,
+    voice_hint: text(vars.voice_hint),
+  });
   const result = await complete({
     system: REVISE_SWAP_SYSTEM,
     messages: [{ role: 'user', content: interpolated }],
     role: 'revise',
     scope: 'task',
     scopeId: `revise-${vars.flagged_citekey}`,
+    jsonSchema: modelJsonSchema(ReviseSwapSchema),
   });
   // Return the raw text — runRevise owns parse + membership guard.
   return result.text;

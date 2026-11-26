@@ -325,7 +325,7 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // GREEN from Task 1 (the file is byte-stable). bin/lib/prompt-loader.ts holds
   // a __PENDING_HASH_revise-swap__ sentinel until Plan 04-04 Task 3 re-pins the
   // SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
-  { slug: 'revise-swap',         path: 'templates/prompts/revise-swap.md',         decision: 'Phase 4 D-05',                   hash: '835876ccd55b713b5ebb41dde741fce88fccdc67f208fe2fe20720dc9dc2c3ef' },
+  { slug: 'revise-swap',         path: 'templates/prompts/revise-swap.md',         decision: 'Phase 4 D-05',                   hash: '14b01ada325aacbf528ce360f2bc3a85fab01ed830591d72cbf2721d9bf1497e' },
   // Phase 4 04-CONTEXT.md D-12 — new smoother prompt (Plan 04-05). The byte-pin
   // below is GREEN from Task 1a (the file is byte-stable). bin/lib/prompt-loader.ts
   // holds a __PENDING_HASH_smoother__ sentinel until Plan 04-05 Task 4 re-pins the

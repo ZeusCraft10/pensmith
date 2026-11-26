@@ -67,12 +67,17 @@ repairs ONE verifier-flagged citation rather than authoring a fresh PLAN.md:
 2. **Load `assigned_sources` + voice hint** from `<sectionPlan(n, slug)>`
    frontmatter and `## Brief` (WRTE-02 per-section voice consume point — the
    voice line is threaded into the swap prompt vars).
-3. **Propose a swap** — invoke the hash-pinned `revise-swap` prompt (D-05).
-   Parse the strict-JSON response and REJECT it if `action ∉ {swap, remove}`
-   or `replacement_citekey ∉ assigned_sources` (T-04-14 — no new citekeys ever
+3. **Propose a swap** — invoke the hash-pinned `revise-swap` prompt (D-05)
+   with the works LIBRARY.json holds for `assigned_sources` (title, authors,
+   year, venue, abstract; `bin/lib/source-context.ts`) and the citing
+   sentence, both inside the untrusted-data fence, and `ReviseSwapSchema` as
+   the answer's JSON Schema. REJECT the answer if `action ∉ {swap, remove}` or
+   `replacement_citekey ∉ assigned_sources` (T-04-14 — no new citekeys ever
    reach DRAFT.md).
 4. **Approval gate (default-on, PRD §19)** — render the before/after citation
-   diff and ask via `AskUserQuestion`; degrade to `@clack/prompts` in a TTY.
+   diff, with the replacement's title and abstract so the author can judge
+   whether it supports the sentence, and ask via `AskUserQuestion`; degrade to
+   `@clack/prompts` in a TTY.
    `--yolo` skips the gate and auto-loops the SAME path up to 2 retries, then
    writes a `RETRY_EXHAUSTED` verdict to VERIFICATION.md (D-06). A non-TTY
    without `--yolo` exits code 3.
