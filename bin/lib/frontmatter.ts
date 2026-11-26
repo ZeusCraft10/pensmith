@@ -39,6 +39,19 @@ export function parseFrontmatter(
   };
 }
 
+/**
+ * Why the frontmatter of `text` cannot be read as it was written, or null:
+ * a `---` block that is never closed, or YAML with errors. parseFrontmatter
+ * reads what it can of such a block, so a caller that must not overwrite a
+ * file the user broke while editing it asks here first.
+ */
+export function frontmatterProblem(text: string): string | null {
+  const match = FRONTMATTER_RE.exec(text);
+  if (!match) return /^---\r?\n/.test(text) ? 'the frontmatter block is never closed with ---' : null;
+  const err = parseDocument(match[1] ?? '').errors[0];
+  return err ? err.message.split('\n')[0]! : null;
+}
+
 export function serializeFrontmatter(frontmatter: Record<string, unknown>): string {
   const doc = parseDocument('');
   for (const [k, v] of Object.entries(frontmatter)) {

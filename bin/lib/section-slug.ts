@@ -10,7 +10,7 @@
 // before any outline exists).
 
 import { EXIT_REFUSED } from './exit-codes.js';
-import { readOutline } from './outline-read.js';
+import { lastCheckedOutline } from './outline-read.js';
 
 /** `raw` as a section number (a positive integer), or null. */
 export function parseSectionNumber(raw: unknown): number | null {
@@ -46,7 +46,6 @@ export function resolveSectionSlug(
   explicitSlug?: unknown,
 ): string {
   if (typeof explicitSlug === 'string' && explicitSlug.length > 0) return explicitSlug;
-  const outline = readOutline(paperRoot ?? process.cwd());
-  const sections = outline.ok ? outline.outline.sections : outline.problem === 'edited' ? outline.stored.sections : [];
+  const sections = lastCheckedOutline(paperRoot ?? process.cwd())?.sections ?? [];
   return sections.find((s) => s.n === n)?.slug ?? 'placeholder';
 }

@@ -225,8 +225,16 @@ test('a hand edit of OUTLINE.md is checked and taken in by `pensmith outline`, n
   assert.equal(stored.sections[3]!.title, 'What Follows');
   assert.equal(stored.sections[1]!.purpose, 'Survey the cohort studies.', 'what the table cannot hold is kept');
 
+  // A PLAN.md whose frontmatter the user broke is theirs to fix, not a stub to replace.
+  const planMd = join(root, '.paper', 'sections', '04-conclusion', 'PLAN.md');
+  const brokenPlan = '---\nsection: 4\nslug: conclusion\nstatus planned\n---\nMy notes.\n';
+  writeFileSync(planMd, brokenPlan);
+  writeFileSync(mdFile, readFileSync(mdFile, 'utf8').replace('| What Follows |', '| What Follows From It |'));
+  assert.equal((await runOutline(root))['ok'], true);
+  assert.equal(readFileSync(planMd, 'utf8'), brokenPlan);
+
   // An edit that breaks the table is refused, and the file left alone.
-  writeFileSync(mdFile, edited.replace('| 2 | evidence |', '| 2 | Evidence! |'));
+  writeFileSync(mdFile, readFileSync(mdFile, 'utf8').replace('| 2 | evidence |', '| 2 | Evidence! |'));
   const broken = readFileSync(mdFile, 'utf8');
   const r2 = await runOutline(root);
   assert.equal(r2['exitCode'], 2);
@@ -287,4 +295,53 @@ test('a deleted OUTLINE.md is rendered again from OUTLINE.json', async () => {
   const res = await runOutline(root);
   assert.equal(res['mode'], 'existing');
   assert.equal(readFileSync(mdFile, 'utf8'), md);
+});
+
+test('outline refuses at once, with no model call, when LIBRARY.json cannot be read', async () => {
+  const root = await paper();
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), '{ not json');
+  const seen: Seen[] = [];
+  _setGeneratorForTest(answering([PROPOSAL, PROPOSAL], seen));
+  const res = await runOutline(root);
+  assert.equal(res['exitCode'], 2, JSON.stringify(res));
+  assert.equal(seen.length, 0, 'nothing is billed for an outline that cannot be checked');
+  assert.ok(!existsSync(join(root, '.paper', 'OUTLINE.json')));
+});
+
+test('a hand-written OUTLINE.md is not walked while a heading cites or it assigns a source the library lacks', async () => {
+  const { readOutline } = await import('../bin/lib/outline-read.js');
+  const table = (title: string, sources: string): string => [
+    '# Tidal Energy', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |',
+    `| 1 | intro | Introduction | | 300 | ${sources} |`, `| 2 | policy | ${title} | intro | 500 | |`, '',
+  ].join('\n');
+
+  const citing = await paper({ counterargument: 'optional' });
+  writeFileSync(join(citing, '.paper', 'OUTLINE.md'), table('Doe et al. (2019) on policy', 'smith2020'));
+  const r1 = readOutline(citing);
+  assert.equal(r1.ok, false);
+  assert.match(r1.ok ? '' : r1.detail, /Doe et al\. \(2019\)/);
+  assert.equal((await resolveNextAction(citing)).verb, 'status');
+
+  const unknown = await paper({ counterargument: 'optional' });
+  writeFileSync(join(unknown, '.paper', 'OUTLINE.md'), table('Policy', 'nobody1999'));
+  const r2 = readOutline(unknown);
+  assert.equal(r2.ok, false);
+  assert.match(r2.ok ? '' : r2.detail, /nobody1999/);
+
+  const fine = await paper({ counterargument: 'optional' });
+  writeFileSync(join(fine, '.paper', 'OUTLINE.md'), table('Policy', 'smith2020'));
+  assert.equal(readOutline(fine).ok, true);
+});
+
+test('OUTLINE.md with its line endings changed (a Windows checkout) or a final newline added is not a hand edit', async () => {
+  const { readOutline } = await import('../bin/lib/outline-read.js');
+  const root = await paper();
+  _setGeneratorForTest(answering([PROPOSAL], []));
+  await runOutline(root);
+  const mdFile = join(root, '.paper', 'OUTLINE.md');
+  const md = readFileSync(mdFile, 'utf8');
+  writeFileSync(mdFile, md.replace(/\n/g, '\r\n') + '\r\n');
+  const r = readOutline(root);
+  assert.equal(r.ok, true, r.ok ? '' : r.detail);
+  assert.deepEqual(await resolveNextAction(root), { verb: 'plan', n: 1, slug: 'introduction' });
 });

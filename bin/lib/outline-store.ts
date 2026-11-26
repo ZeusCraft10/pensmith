@@ -12,9 +12,17 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod/v4';
 import { atomicWriteFile } from './atomic-write.js';
-import { findCitations, findRawCitations, findUnparseableCitations } from './citation-grammar.js';
-import { parseFrontmatter, serializeFrontmatter } from './frontmatter.js';
-import { sha256, StoredOutlineSchema, structureProblems, type CheckedSection, type OutlineSection, type StoredOutline } from './outline-read.js';
+import { frontmatterProblem, parseFrontmatter, serializeFrontmatter } from './frontmatter.js';
+import {
+  headingProblems,
+  outlineMdHash,
+  sourceProblems,
+  StoredOutlineSchema,
+  structureProblems,
+  type CheckedSection,
+  type OutlineSection,
+  type StoredOutline,
+} from './outline-read.js';
 import { paperDir, paperOutlineFile, parseSectionDirName, sectionPlan, SLUG_RE } from './paths.js';
 import { initState, StateAlreadyExistsError, updateState } from './state.js';
 
@@ -45,17 +53,6 @@ export function numberOutline(p: ProposedOutline): Outline {
   return { title: p.title, thesis: p.thesis, sections: p.sections.map((s, i) => ({ ...s, n: i + 1 })) };
 }
 
-/** Why `text` cannot be a heading: it holds a citation, which no heading's check ever verifies. */
-function citationIn(text: string): string | null {
-  const cites = findCitations(text);
-  if (cites.length > 0) return `holds the citation ${cites[0]!.raw}`;
-  const raw = findRawCitations(text, cites)[0];
-  if (raw) return `reads as a citation (${raw.kind}: ${raw.raw})`;
-  const broken = findUnparseableCitations(text, cites)[0];
-  if (broken) return `holds a citation bracket (${broken.raw})`;
-  return null;
-}
-
 export interface OutlineRules {
   /** The citekeys LIBRARY.json holds; every assigned source must be one. Null skips the check. */
   libraryKeys: ReadonlySet<string> | null;
@@ -64,27 +61,12 @@ export interface OutlineRules {
 }
 
 /** Every reason `outline` cannot be the paper's section list; empty when it can. */
-/** Every reason `outline` cannot be the paper's section list; empty when it can. */
 export function outlineProblems(outline: { title: string; sections: readonly CheckedSection[] }, rules: OutlineRules): string[] {
-  const problems: string[] = [];
-  const at = (s: { n: number; slug: string }): string => `section ${s.n} (${s.slug})`;
-  const titleProblem = citationIn(outline.title);
-  if (titleProblem) problems.push(`the paper's title "${outline.title}" ${titleProblem}; a title may not hold a citation`);
-  problems.push(...structureProblems(outline.sections));
-  for (const s of outline.sections) {
-    if (/[|\r\n]/.test(s.title)) problems.push(`${at(s)}: the title may not contain "|" or a line break`);
-    const tp = citationIn(s.title);
-    if (tp) problems.push(`${at(s)}: the title "${s.title}" ${tp}; a heading is never verified, so it may not hold a citation`);
-  }
+  const problems = [...structureProblems(outline.sections), ...headingProblems(outline.title, outline.sections)];
   if (rules.counterargumentRequired && !outline.sections.some((s) => s.counterargument === true)) {
     problems.push('the paper needs a counterargument and rebuttal section, and no section is marked as one');
   }
-  if (rules.libraryKeys) {
-    for (const s of outline.sections) {
-      const unknown = (s.assigned_sources ?? []).filter((k) => !rules.libraryKeys!.has(k));
-      if (unknown.length > 0) problems.push(`${at(s)} assigns ${unknown.join(', ')}, which LIBRARY.json does not hold`);
-    }
-  }
+  if (rules.libraryKeys) problems.push(...sourceProblems(outline.sections, rules.libraryKeys));
   return problems;
 }
 
@@ -105,10 +87,16 @@ export function renderOutlineMd(outline: Outline): string {
   return lines.join('\n');
 }
 
-/** The status a PLAN.md names ('stub' when it names none), or null when it cannot be read. */
+/**
+ * The status a PLAN.md names ('stub' when it names none), or null when it
+ * cannot be read, or its frontmatter was broken by hand (then it is the
+ * user's to fix, not a stub to replace).
+ */
 function planStatus(planPath: string): string | null {
   try {
-    const status = parseFrontmatter(readFileSync(planPath, 'utf8')).frontmatter['status'];
+    const text = readFileSync(planPath, 'utf8');
+    if (frontmatterProblem(text) !== null) return null;
+    const status = parseFrontmatter(text).frontmatter['status'];
     return typeof status === 'string' ? status : 'stub';
   } catch {
     return null;
@@ -137,7 +125,7 @@ export function stubPlan(s: OutlineSection): string {
  */
 export async function writeOutline(root: string, outline: Outline, opts: { keepMd?: string } = {}): Promise<string[]> {
   const md = opts.keepMd ?? renderOutlineMd(outline);
-  const stored: StoredOutline = StoredOutlineSchema.parse({ $schemaVersion: 1, ...outline, outline_md_sha256: sha256(md) });
+  const stored: StoredOutline = StoredOutlineSchema.parse({ $schemaVersion: 1, ...outline, outline_md_sha256: outlineMdHash(md) });
   if (opts.keepMd === undefined) await atomicWriteFile(path.join(paperDir(root), 'OUTLINE.md'), md);
   await atomicWriteFile(paperOutlineFile(root), JSON.stringify(stored, null, 2) + '\n');
 

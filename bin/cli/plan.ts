@@ -27,12 +27,12 @@ import { resolveSectionSlug } from '../lib/section-slug.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { readSectionState } from '../lib/router.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
-import { parseFrontmatter, serializeFrontmatter } from '../lib/frontmatter.js';
+import { frontmatterProblem, parseFrontmatter, serializeFrontmatter } from '../lib/frontmatter.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
 import { readLibrarySync } from '../lib/library.js';
 import { libraryCatalogJson } from '../lib/library-catalog.js';
-import { readOutline } from '../lib/outline-read.js';
+import { lastCheckedOutline } from '../lib/outline-read.js';
 import { checkModelJson, modelJsonSchema } from '../lib/schemas/model-json.js';
 import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 
@@ -46,14 +46,10 @@ export const SectionPlanSchema = z.object({
 export type SectionPlan = z.infer<typeof SectionPlanSchema>;
 
 /** Every reason `plan` cannot be the section's plan; empty when it can. */
-export function planProblems(plan: SectionPlan, libraryKeys: ReadonlySet<string> | null): string[] {
+export function planProblems(plan: SectionPlan, libraryKeys: ReadonlySet<string>): string[] {
   const problems: string[] = [];
-  if (libraryKeys) {
-    const unknown = plan.assigned_sources.filter((k) => !libraryKeys.has(k));
-    if (unknown.length > 0) problems.push(`assigned_sources names ${unknown.join(', ')}, which LIBRARY.json does not hold`);
-  } else {
-    problems.push('.paper/LIBRARY.json cannot be read, so the assigned sources cannot be checked');
-  }
+  const unknown = plan.assigned_sources.filter((k) => !libraryKeys.has(k));
+  if (unknown.length > 0) problems.push(`assigned_sources names ${unknown.join(', ')}, which LIBRARY.json does not hold`);
   const assigned = new Set(plan.assigned_sources);
   for (const c of plan.claims) {
     const outside = c.sources.filter((k) => !assigned.has(k));
@@ -73,11 +69,14 @@ interface SectionEntry {
   assigned_sources: string[];
 }
 
-/** Section `n` as the outline has it, or the bare minimum when there is no outline entry. */
+/**
+ * Section `n` as the outline has it (as last checked, while a hand edit of
+ * OUTLINE.md waits), or the bare minimum when there is no outline entry.
+ */
 function sectionEntry(root: string, n: number, slug: string): SectionEntry {
-  const read = readOutline(root);
-  const s = read.ok ? read.outline.sections.find((x) => x.n === n && x.slug === slug) : undefined;
-  const stored = read.ok ? read.outline.stored?.sections.find((x) => x.n === n) : undefined;
+  const outline = lastCheckedOutline(root);
+  const s = outline?.sections.find((x) => x.n === n && x.slug === slug);
+  const stored = outline?.stored?.sections.find((x) => x.n === n);
   return {
     n,
     slug,
@@ -91,11 +90,11 @@ function sectionEntry(root: string, n: number, slug: string): SectionEntry {
 
 /** The briefs of the planned sections `entry` depends on, as data for the prompt. */
 function upstreamPlans(root: string, entry: SectionEntry): string {
-  const read = readOutline(root);
-  if (!read.ok) return '[]';
+  const outline = lastCheckedOutline(root);
+  if (!outline) return '[]';
   const out: Array<{ slug: string; brief: string }> = [];
   for (const dep of entry.depends_on) {
-    const s = read.outline.sections.find((x) => x.slug === dep);
+    const s = outline.sections.find((x) => x.slug === dep);
     if (!s) continue;
     try {
       const { body, frontmatter } = parseFrontmatter(readFileSync(sectionPlan(s.n, s.slug, root), 'utf8'));
@@ -215,25 +214,46 @@ export const planCommand = defineCommand({
       return { ok: !result.retryExhausted, mode: 'revise', ...result };
     }
 
-    // A finished plan is the user's work: replace it only when asked to. An
-    // outline stub, and a placeholder no model wrote, are not finished plans.
+    // A finished plan is the user's work, and so is a PLAN.md they broke while
+    // editing it: replace either only when asked to. An outline stub, and a
+    // placeholder no model wrote, are not finished plans.
     const targetPath = sectionPlan(n, slug, root);
     const existing = readSectionState(targetPath);
-    if (!existing.absent && !existing.corrupt && existing.status !== 'stub' && args.force !== true) {
-      if (!isPlaceholderText(readFileSync(targetPath, 'utf8'))) {
+    if (!existing.absent && args.force !== true) {
+      let text = '';
+      try {
+        text = readFileSync(targetPath, 'utf8');
+      } catch {
+        // unreadable: refused below, as corrupt
+      }
+      const broken = existing.corrupt ? 'it cannot be read' : frontmatterProblem(text);
+      if (!isPlaceholderText(text) && (broken !== null || existing.status !== 'stub')) {
         process.stderr.write(
-          `pensmith plan: section ${n} (${slug}) already has a plan (status ${existing.status}); nothing was changed. ` +
-            `Run \`pensmith plan ${n} --force\` to plan it again, or \`pensmith plan ${n} --revise\` to repair a flagged citation.\n`,
+          broken !== null
+            ? `pensmith plan: section ${n} (${slug}) has a PLAN.md whose frontmatter cannot be read (${broken}); nothing was changed. ` +
+                `Fix it, or run \`pensmith plan ${n} --force\` to replace it with a new plan.\n`
+            : `pensmith plan: section ${n} (${slug}) already has a plan (status ${existing.status}); nothing was changed. ` +
+                `Run \`pensmith plan ${n} --force\` to plan it again, or \`pensmith plan ${n} --revise\` to repair a flagged citation.\n`,
         );
         process.exitCode = EXIT_REFUSED;
-        return { ok: false, mode: 'already-planned' };
+        return { ok: false, mode: broken !== null ? 'plan-unreadable' : 'already-planned' };
       }
     }
 
+    // The planner's sources are checked against LIBRARY.json; without it no
+    // plan could pass, so nothing is asked (or billed).
+    const library = readLibrarySync(root);
+    if (!library) {
+      process.stderr.write(
+        `pensmith plan: .paper/LIBRARY.json cannot be read, so a plan's sources cannot be checked; nothing was asked or written. ` +
+          `Run \`pensmith research\`, or repair .paper/LIBRARY.json.\n`,
+      );
+      process.exitCode = EXIT_REFUSED;
+      return { ok: false, mode: 'no-library' };
+    }
+    const libraryKeys = new Set(library.entries.map((e) => e.id));
     const entry = sectionEntry(root, n, slug);
     const intake = readIntake(root);
-    const library = readLibrarySync(root);
-    const libraryKeys = library ? new Set(library.entries.map((e) => e.id)) : null;
     const system = interpolate(loadPrompt('section-planner'), {
       section: escapeTemplateTokens(JSON.stringify({
         number: entry.n, slug: entry.slug, title: entry.title, purpose: entry.purpose, depends_on: entry.depends_on,

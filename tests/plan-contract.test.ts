@@ -166,3 +166,53 @@ test('the section-planner prompt\'s own example is a plan the schema and the che
   const plan = SectionPlanSchema.parse(JSON.parse(example));
   assert.deepEqual(planProblems(plan, new Set(plan.assigned_sources)), []);
 });
+
+test('while a hand edit of OUTLINE.md waits to be checked, plan uses the outline as last checked', async () => {
+  const root = await paper();
+  // Section 1 is planned, so its brief is upstream of section 2.
+  writeFileSync(planFile(root, '01-introduction'), '---\nsection: 1\nslug: introduction\ntitle: Introduction\nstatus: planned\nassigned_sources: []\n---\n## Brief\n\nOpen with the 2023 advisory.\n');
+  const md = join(root, '.paper', 'OUTLINE.md');
+  writeFileSync(md, readFileSync(md, 'utf8') + '\n<!-- my note -->\n');
+  const seen: Seen[] = [];
+  _setGeneratorForTest(answering([PLAN], seen));
+  const res = await runPlan(root, 2);
+  assert.equal(res['ok'], true, JSON.stringify(res));
+  const sent = seen[0]!.system;
+  assert.match(sent, /What the Evidence Shows/);
+  assert.match(sent, /Survey the cohort studies/);
+  assert.match(sent, /Open with the 2023 advisory/);
+  const fm = PlanFrontmatterSchema.parse(parseFrontmatter(readFileSync(planFile(root, '02-evidence'), 'utf8')).frontmatter);
+  assert.equal(fm.title, 'What the Evidence Shows');
+  assert.deepEqual(fm.depends_on, ['introduction']);
+});
+
+test('plan refuses at once, with no model call, when LIBRARY.json cannot be read', async () => {
+  const root = await paper();
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), '{ not json');
+  const stub = readFileSync(planFile(root, '02-evidence'), 'utf8');
+  const seen: Seen[] = [];
+  _setGeneratorForTest(answering([PLAN, PLAN], seen));
+  const res = await runPlan(root, 2);
+  assert.equal(res['exitCode'], 2, JSON.stringify(res));
+  assert.equal(seen.length, 0, 'nothing is billed for a plan that cannot be checked');
+  assert.equal(readFileSync(planFile(root, '02-evidence'), 'utf8'), stub);
+});
+
+test('plan refuses to replace a PLAN.md whose frontmatter the user broke, unless --force is given', async () => {
+  // Both read as a PLAN.md with no status, which is what a stub is.
+  const broken = [
+    '---\nsection: 2\nslug: evidence\ntitle: What the Evidence Shows\nstatus planned\n---\n## Brief\n\nMy own notes.\n', // a lost colon
+    '---\nsection: 2\nslug: evidence\nstatus: planned\n## Brief\n\nMy own notes.\n', // a deleted closing ---
+  ];
+  for (const text of broken) {
+    const root = await paper();
+    writeFileSync(planFile(root, '02-evidence'), text);
+    const seen: Seen[] = [];
+    _setGeneratorForTest(answering([PLAN], seen));
+    const res = await runPlan(root, 2);
+    assert.equal(res['exitCode'], 2, JSON.stringify(res));
+    assert.equal(seen.length, 0);
+    assert.equal(readFileSync(planFile(root, '02-evidence'), 'utf8'), text);
+    process.exitCode = 0;
+  }
+});

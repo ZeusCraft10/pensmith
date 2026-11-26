@@ -180,6 +180,12 @@ export const outlineCommand = defineCommand({
       // missing, or a placeholder no model wrote: propose one.
     }
 
+    // The outline's sources are checked against LIBRARY.json; without it no
+    // outline could pass, so nothing is asked (or billed).
+    if (rules.problems.length > 0) {
+      return refuse(rules.problems, 'Nothing was asked or written. Run `pensmith research`, or repair .paper/LIBRARY.json.');
+    }
+
     const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
     if (!noLlm) {
       try {
@@ -224,7 +230,7 @@ export const outlineCommand = defineCommand({
         return { ok: true, path: outlinePath, mode: 'placeholder', sections: 0 };
       }
       const checked = checkModelJson(ProposedOutlineSchema, result.json);
-      problems = checked.ok ? [...rules.problems, ...outlineProblems(numberOutline(checked.value), rules)] : checked.problems;
+      problems = checked.ok ? outlineProblems(numberOutline(checked.value), rules) : checked.problems;
       if (problems.length === 0 && checked.ok) {
         outline = numberOutline(checked.value);
         break;

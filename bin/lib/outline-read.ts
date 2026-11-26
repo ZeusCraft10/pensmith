@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { findCitations, findRawCitations, findUnparseableCitations } from './citation-grammar.js';
 import { parseOutline, type ParsedOutline, type ParsedOutlineSection } from './outline-parse.js';
 import { paperDir, paperOutlineFile, SLUG_RE } from './paths.js';
 import { isPlaceholderText } from './placeholder.js';
@@ -37,7 +38,7 @@ export const StoredOutlineSchema = z.object({
   title: z.string().min(1),
   thesis: z.string(),
   sections: z.array(StoredSectionSchema).min(1),
-  /** The sha256 of the OUTLINE.md rendered from this list. */
+  /** The outlineMdHash of the OUTLINE.md rendered from this list. */
   outline_md_sha256: z.string(),
 }).strict();
 export type StoredOutline = z.infer<typeof StoredOutlineSchema>;
@@ -45,6 +46,15 @@ export type OutlineSection = z.infer<typeof StoredSectionSchema>;
 
 export function sha256(text: string | Buffer): string {
   return createHash('sha256').update(text).digest('hex');
+}
+
+/**
+ * The hash that binds OUTLINE.md to OUTLINE.json. Line endings and trailing
+ * whitespace are not part of it, so a checkout that turns \n into \r\n, or
+ * an editor that adds a final newline, is not taken for a hand edit.
+ */
+export function outlineMdHash(md: string): string {
+  return sha256(md.replace(/\r\n?/g, '\n').trimEnd());
 }
 
 /** A section as the structure checks see it. */
@@ -101,6 +111,55 @@ export function structureProblems(sections: readonly CheckedSection[]): string[]
   return problems;
 }
 
+/** Why `text` cannot be a heading: it holds a citation, which no heading's check ever verifies. */
+export function citationIn(text: string): string | null {
+  const cites = findCitations(text);
+  if (cites.length > 0) return `holds the citation ${cites[0]!.raw}`;
+  const raw = findRawCitations(text, cites)[0];
+  if (raw) return `reads as a citation (${raw.kind}: ${raw.raw})`;
+  const broken = findUnparseableCitations(text, cites)[0];
+  if (broken) return `holds a citation bracket (${broken.raw})`;
+  return null;
+}
+
+/** Why the paper's title or a section title cannot be a heading. */
+export function headingProblems(title: string, sections: readonly CheckedSection[]): string[] {
+  const problems: string[] = [];
+  const titleProblem = citationIn(title);
+  if (titleProblem) problems.push(`the paper's title "${title}" ${titleProblem}; a title may not hold a citation`);
+  for (const s of sections) {
+    if (/[|\r\n]/.test(s.title)) problems.push(`section ${s.n} (${s.slug}): the title may not contain "|" or a line break`);
+    const tp = citationIn(s.title);
+    if (tp) problems.push(`section ${s.n} (${s.slug}): the title "${s.title}" ${tp}; a heading is never verified, so it may not hold a citation`);
+  }
+  return problems;
+}
+
+/** Why `sections` assign a source `libraryKeys` does not hold. */
+export function sourceProblems(sections: readonly CheckedSection[], libraryKeys: ReadonlySet<string>): string[] {
+  const problems: string[] = [];
+  for (const s of sections) {
+    const unknown = (s.assigned_sources ?? []).filter((k) => !libraryKeys.has(k));
+    if (unknown.length > 0) problems.push(`section ${s.n} (${s.slug}) assigns ${unknown.join(', ')}, which LIBRARY.json does not hold`);
+  }
+  return problems;
+}
+
+/**
+ * The citekeys of .paper/LIBRARY.json in its current shape, read here rather
+ * than through library.ts so the SessionStart hook's bundle stays small. Null
+ * when there is no such file, or it is in a shape only library.ts reads.
+ */
+function libraryKeys(root: string): Set<string> | null {
+  try {
+    const v = JSON.parse(readFileSync(path.join(paperDir(root), 'LIBRARY.json'), 'utf8')) as { $schemaVersion?: unknown; entries?: unknown };
+    if (v.$schemaVersion !== 2 || !Array.isArray(v.entries)) return null;
+    return new Set(v.entries.map((e: { id?: unknown } | null) => e?.id).filter((id): id is string => typeof id === 'string'));
+  } catch {
+    return null;
+  }
+}
+
 export type OutlineRead =
   | { ok: true; source: 'json' | 'md'; outline: ParsedOutline & { stored: StoredOutline | null } }
   | { ok: false; problem: 'missing' | 'placeholder' | 'invalid'; detail: string }
@@ -118,8 +177,12 @@ function asParsed(o: StoredOutline): ParsedOutline & { stored: StoredOutline } {
   };
 }
 
-/** An OUTLINE.md table read as the list (no OUTLINE.json). */
-function readMdOutline(md: string): OutlineRead {
+/**
+ * An OUTLINE.md table read as the list (no OUTLINE.json). It gets the checks
+ * `pensmith outline` would make that need nothing but the paper's files: the
+ * structure, headings that hold no citation, and sources LIBRARY.json holds.
+ */
+function readMdOutline(root: string, md: string): OutlineRead {
   if (isPlaceholderText(md)) return { ok: false, problem: 'placeholder', detail: 'OUTLINE.md is placeholder text (PENSMITH_NO_LLM), not an outline' };
   let parsed: ParsedOutline;
   try {
@@ -128,7 +191,12 @@ function readMdOutline(md: string): OutlineRead {
     return { ok: false, problem: 'invalid', detail: `OUTLINE.md has no usable section table: ${(e as Error).message}` };
   }
   if (parsed.sections.length === 0) return { ok: false, problem: 'invalid', detail: 'OUTLINE.md has no sections in its table' };
-  const problems = structureProblems(parsed.sections);
+  const keys = libraryKeys(root);
+  const problems = [
+    ...structureProblems(parsed.sections),
+    ...headingProblems(parsed.paper_title, parsed.sections),
+    ...(keys ? sourceProblems(parsed.sections, keys) : []),
+  ];
   if (problems.length > 0) return { ok: false, problem: 'invalid', detail: `OUTLINE.md: ${problems.join('; ')}` };
   return { ok: true, source: 'md', outline: { ...parsed, stored: null } };
 }
@@ -147,7 +215,7 @@ export function readOutline(root: string): OutlineRead {
   }
   if (!existsSync(jsonFile)) {
     if (md === null) return { ok: false, problem: 'missing', detail: "there is no outline yet — run 'pensmith outline'" };
-    return readMdOutline(md);
+    return readMdOutline(root, md);
   }
   let stored: StoredOutline;
   try {
@@ -155,7 +223,7 @@ export function readOutline(root: string): OutlineRead {
   } catch (e) {
     return { ok: false, problem: 'invalid', detail: `.paper/OUTLINE.json cannot be read (${(e as Error).message.split('\n')[0]})` };
   }
-  if (md !== null && sha256(md) !== stored.outline_md_sha256) {
+  if (md !== null && outlineMdHash(md) !== stored.outline_md_sha256) {
     return {
       ok: false,
       problem: 'edited',
@@ -164,6 +232,17 @@ export function readOutline(root: string): OutlineRead {
     };
   }
   return { ok: true, source: 'json', outline: asParsed(stored) };
+}
+
+/**
+ * The list a verb that works on one section uses (plan, write, verify): the
+ * outline, or, while a hand edit of OUTLINE.md waits to be checked, the list
+ * as last checked. Null when there is no usable list.
+ */
+export function lastCheckedOutline(root: string): (ParsedOutline & { stored: StoredOutline | null }) | null {
+  const r = readOutline(root);
+  if (r.ok) return r.outline;
+  return r.problem === 'edited' ? asParsed(r.stored) : null;
 }
 
 /** readOutline, for callers that stop on any problem: the list, or an Error naming the reason. */
