@@ -77,22 +77,22 @@ test('research marks a work its own record shows as retracted before it reaches 
 });
 
 test('the discipline\'s source preference decides whose record of a work the library keeps', () => {
-  // Crossref, OpenAlex and Semantic Scholar all return "Attention Is All You
-  // Need" for this search. computer-science prefers Semantic Scholar to
-  // OpenAlex and lists no Crossref; other prefers Crossref.
+  // OpenAlex and arXiv both return "A Note on Visible Islands" for this search
+  // (recorded: tests/fixtures/cassettes/{openalex,arxiv}/journey-visible-islands.json).
+  // computer-science prefers arXiv to OpenAlex; other prefers OpenAlex and lists no arXiv.
   const keptFrom = (discipline: string): string[] => {
-    const root = project('attention mechanisms', discipline);
+    const root = project('visible islands point sets', discipline);
     const r = cli(root, ['research', '--yolo']);
     assert.equal(r.status, 0, r.out);
     const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as {
-      entries: Array<{ id: string; custom: { provenance: Array<{ source: string }> } }>;
+      entries: Array<{ id: string; title: string; custom: { provenance: Array<{ source: string }> } }>;
     };
-    const item = lib.entries.find((e) => e.id === 'vaswani2017');
+    const item = lib.entries.find((e) => /visible islands/i.test(e.title));
     assert.ok(item, JSON.stringify(lib.entries.map((e) => e.id)));
     return item.custom.provenance.map((p) => p.source);
   };
-  assert.deepEqual(keptFrom('computer-science'), ['semanticscholar', 'openalex', 'crossref']);
-  assert.deepEqual(keptFrom('other'), ['crossref', 'openalex', 'semanticscholar']);
+  assert.deepEqual(keptFrom('computer-science'), ['arxiv', 'openalex']);
+  assert.deepEqual(keptFrom('other'), ['openalex', 'arxiv']);
 });
 
 test('a retraction only one source\'s record shows survives the merge of a work\'s records', async (t) => {

@@ -2,92 +2,424 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=attention+mechanisms&rows=20",
+    "path": "/works?query=attention+mechanisms&rows=3",
     "status": 200,
     "response": {
       "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
       "message": {
+        "facets": {},
+        "total-results": 862869,
         "items": [
           {
-            "DOI": "10.48550/arXiv.1706.03762",
+            "indexed": {
+              "date-parts": [
+                [
+                  2026,
+                  2,
+                  28
+                ]
+              ],
+              "date-time": "2026-02-28T09:31:50Z",
+              "timestamp": 1772271110436,
+              "version": "3.50.1"
+            },
+            "reference-count": 0,
+            "publisher": "PeerJ",
+            "content-domain": {
+              "domain": [],
+              "crossmark-restriction": false
+            },
+            "DOI": "10.7717/peerjcs.2169/fig-5",
+            "type": "component",
+            "created": {
+              "date-parts": [
+                [
+                  2024,
+                  8,
+                  8
+                ]
+              ],
+              "date-time": "2024-08-08T04:39:38Z",
+              "timestamp": 1723091978000
+            },
+            "source": "Crossref",
+            "is-referenced-by-count": 0,
             "title": [
-              "Attention Is All You Need"
+              "Figure 5: Attention mechanisms and multiple attention mechanisms."
             ],
-            "author": [
-              {
-                "family": "Vaswani",
-                "given": "Ashish"
-              },
-              {
-                "family": "Shazeer",
-                "given": "Noam"
-              },
-              {
-                "family": "Parmar",
-                "given": "Niki"
+            "prefix": "10.7717",
+            "member": "4443",
+            "deposited": {
+              "date-parts": [
+                [
+                  2024,
+                  8,
+                  8
+                ]
+              ],
+              "date-time": "2024-08-08T04:39:57Z",
+              "timestamp": 1723091997000
+            },
+            "score": 21.376158,
+            "resource": {
+              "primary": {
+                "URL": "https://peerj.com/articles/cs-2169/fig-5"
               }
-            ],
+            },
             "issued": {
               "date-parts": [
                 [
-                  2017
+                  null
                 ]
               ]
             },
+            "references-count": 0,
+            "URL": "https://doi.org/10.7717/peerjcs.2169/fig-5",
+            "relation": {
+              "is-component-of": [
+                {
+                  "id-type": "doi",
+                  "id": "10.7717/peerj-cs.2169",
+                  "asserted-by": "object"
+                }
+              ]
+            }
+          },
+          {
+            "indexed": {
+              "date-parts": [
+                [
+                  2026,
+                  11,
+                  11
+                ]
+              ],
+              "date-time": "2026-11-11T09:30:59Z",
+              "timestamp": 1794389459867,
+              "version": "4.9.0"
+            },
+            "publisher-location": "Boston, MA",
+            "reference-count": 15,
+            "publisher": "Springer US",
+            "isbn-type": [
+              {
+                "value": "9781461349280",
+                "type": "print"
+              },
+              {
+                "value": "9781461501114",
+                "type": "electronic"
+              }
+            ],
+            "content-domain": {
+              "domain": [],
+              "crossmark-restriction": false
+            },
+            "published-print": {
+              "date-parts": [
+                [
+                  2002
+                ]
+              ]
+            },
+            "DOI": "10.1007/978-1-4615-0111-4_5",
+            "type": "book-chapter",
+            "created": {
+              "date-parts": [
+                [
+                  2011,
+                  6,
+                  12
+                ]
+              ],
+              "date-time": "2011-06-12T03:14:57Z",
+              "timestamp": 1307848497000
+            },
+            "page": "53-60",
+            "source": "Crossref",
+            "is-referenced-by-count": 0,
+            "title": [
+              "Visual Attention Mechanisms in Motion Analysis"
+            ],
+            "prefix": "10.1007",
+            "author": [
+              {
+                "given": "Vito",
+                "family": "Roberto",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "member": "297",
+            "reference": [
+              {
+                "key": "5_CR1",
+                "unstructured": "D.Sagi, contribution to the present volume."
+              },
+              {
+                "key": "5_CR2",
+                "doi-asserted-by": "crossref",
+                "first-page": "171",
+                "DOI": "10.1007/978-1-4899-1004-2_12",
+                "volume-title": "Human and Machine Vision: Analogies and Divergencies",
+                "author": "SL Tanimoto",
+                "year": "1994",
+                "unstructured": "S.L.Tanimoto, Allocation of attention in vision, in: Human and Machine Vision: Analogies and Divergencies, V.Cantoni ed., Plenum Press, New York, p.171 (1994)."
+              },
+              {
+                "key": "5_CR3",
+                "volume-title": "Toward automatic visual obstacle avoidance, in: Proc. Int. Joint Conf. on Artificial Intelligence (IJCAI)",
+                "author": "HP Moravec",
+                "year": "1977",
+                "unstructured": "H.P.Moravec, Toward automatic visual obstacle avoidance, in: Proc. Int. Joint Conf. on Artificial Intelligence (IJCAI), p.584 (1977)."
+              },
+              {
+                "key": "5_CR4",
+                "first-page": "192",
+                "volume": "189",
+                "author": "CG Harris",
+                "year": "1988",
+                "unstructured": "C.G.Harris and M.Stephens, A combined corner and edge detector, in;Proc. 4th Alvey Vision Conf., Manchester, UK, 189:192 (1988).",
+                "journal-title": "Proc. 4th Alvey Vision Conf."
+              },
+              {
+                "key": "5_CR5",
+                "doi-asserted-by": "publisher",
+                "first-page": "121",
+                "DOI": "10.1016/0262-8856(88)90007-8",
+                "volume": "6",
+                "author": "JA Noble",
+                "year": "1988",
+                "unstructured": "J.A.Noble, Finding corners, Image and Vision Computing, vol.6, 121:128 (1988).",
+                "journal-title": "Image and Vision Computing"
+              },
+              {
+                "key": "5_CR6",
+                "unstructured": "http://www.vasc.ri.cmu.edu/idb/html/motion/index.html"
+              },
+              {
+                "key": "5_CR7",
+                "volume-title": "Introductory Techniques for 3D Computer Vision, Prentice Hall",
+                "author": "E Trucco",
+                "year": "1998",
+                "unstructured": "E.Trucco and A.Verri, Introductory Techniques for 3D Computer Vision, Prentice Hall (1998)."
+              },
+              {
+                "key": "5_CR8",
+                "volume-title": "Technical Report CMU-CS-91132, Carnegie-Mellon Univ",
+                "author": "C Tomasi",
+                "year": "1991",
+                "unstructured": "C.Tomasi and T.Kanade, Detection and tracking of point features. Technical Report CMU-CS-91132, Carnegie-Mellon Univ. (1991)."
+              },
+              {
+                "key": "5_CR9",
+                "first-page": "600",
+                "volume": "593",
+                "author": "J Shi",
+                "year": "1994",
+                "unstructured": "J.Shi and C.Tomasi, Good features to track. In; Proc. of the IEEE Conf. on Computer Vision and Pattern Recognition (CVPR), 593:600 (1994).",
+                "journal-title": "Proc. of the IEEE Conf. on Computer Vision and Pattern Recognition (CVPR)"
+              },
+              {
+                "issue": "366",
+                "key": "5_CR10",
+                "first-page": "369",
+                "volume": "2",
+                "author": "IJ Cox",
+                "year": "1995",
+                "unstructured": "I.J.Cox, S.Roy, and S.L.Hingorani. Dynamic histogram warping of image pairs from constant image brightness, IEEE International Conf. on Image Processing (ICIP), vol.2, 366:369 (1995).",
+                "journal-title": "IEEE International Conf. on Image Processing (ICIP)"
+              },
+              {
+                "issue": "10",
+                "key": "5_CR11",
+                "doi-asserted-by": "publisher",
+                "first-page": "1025",
+                "DOI": "10.1109/34.722606",
+                "volume": "20",
+                "author": "GD Hager",
+                "year": "1998",
+                "unstructured": "G.D.Hager and P.N.Belhumeur, Efficient region tracking with parametric models of geometry and illumination, IEEE Trans. Patt. Analysis and Machine Intelligence (PAMI), 20 (10) 1025:1039 (1998).",
+                "journal-title": "IEEE Trans. Patt. Analysis and Machine Intelligence (PAMI)"
+              },
+              {
+                "key": "5_CR12",
+                "first-page": "181",
+                "volume": "178",
+                "author": "T Tommasini",
+                "year": "1998",
+                "unstructured": "T.Tommasini, A.Fusiello, E.Trucco and V.Roberto, Making good features track better, in: Proc. IEEE CVPR, 178:181 (1998).",
+                "journal-title": "Proc. IEEE CVPR"
+              },
+              {
+                "key": "5_CR13",
+                "volume-title": "Robust Statistics: the Approach Based on Influence Functions, John Wiley & Sons",
+                "author": "FR Hampel",
+                "year": "1986",
+                "unstructured": "F.R.Hampel, P.J.Rousseeuw, E.Ronchetti and W.Stahel, Robust Statistics: the Approach Based on Influence Functions, John Wiley & Sons (1986)."
+              },
+              {
+                "key": "5_CR14",
+                "unstructured": "P.B.Yale, Geometry and Symmetry, Dover (1968)."
+              },
+              {
+                "key": "5_CR15",
+                "first-page": "668",
+                "volume": "665",
+                "author": "A Censi",
+                "year": "1999",
+                "unstructured": "A.Censi, A.Fusiello and V.Roberto, Image stabilization by features tracking, in; Proc. of the 10th Int. Conf. on Image Analysis and Processing (ICIAP99), Venice, IEEE Comp. Soc., Los Alamitos, CA, 665:668 (1999).",
+                "journal-title": "Proc. of the 10th Int. Conf. on Image Analysis and Processing (ICIAP99)"
+              }
+            ],
             "container-title": [
-              "arXiv"
+              "Visual Attention Mechanisms"
             ],
-            "type": "posted-content"
-          },
-          {
-            "DOI": "10.1109/CVPR.2018.00813",
-            "title": [
-              "Non-local Neural Networks"
-            ],
-            "author": [
+            "language": "en",
+            "link": [
               {
-                "family": "Wang",
-                "given": "Xiaolong"
-              },
-              {
-                "family": "Girshick",
-                "given": "Ross"
+                "URL": "http://link.springer.com/content/pdf/10.1007/978-1-4615-0111-4_5.pdf",
+                "content-type": "unspecified",
+                "content-version": "vor",
+                "intended-application": "similarity-checking"
               }
             ],
+            "deposited": {
+              "date-parts": [
+                [
+                  2021,
+                  5,
+                  1
+                ]
+              ],
+              "date-time": "2021-05-01T06:50:38Z",
+              "timestamp": 1619851838000
+            },
+            "score": 19.669891,
+            "resource": {
+              "primary": {
+                "URL": "http://link.springer.com/10.1007/978-1-4615-0111-4_5"
+              }
+            },
             "issued": {
               "date-parts": [
                 [
-                  2018
+                  2002
                 ]
               ]
             },
-            "type": "proceedings-article"
+            "ISBN": [
+              "9781461349280",
+              "9781461501114"
+            ],
+            "references-count": 15,
+            "URL": "https://doi.org/10.1007/978-1-4615-0111-4_5",
+            "relation": {
+              "is-part-of": [
+                {
+                  "id-type": "doi",
+                  "id": "https://doi.org/10.1007/978-1-4615-0111-4",
+                  "asserted-by": "object"
+                }
+              ]
+            },
+            "published": {
+              "date-parts": [
+                [
+                  2002
+                ]
+              ]
+            }
           },
           {
-            "DOI": "10.1162/neco_a_01199",
+            "indexed": {
+              "date-parts": [
+                [
+                  2026,
+                  2,
+                  28
+                ]
+              ],
+              "date-time": "2026-02-28T09:30:21Z",
+              "timestamp": 1772271021188,
+              "version": "3.50.1"
+            },
+            "reference-count": 0,
+            "publisher": "PeerJ",
+            "content-domain": {
+              "domain": [],
+              "crossmark-restriction": false
+            },
+            "DOI": "10.7717/peerjcs.1196/fig-2",
+            "type": "component",
+            "created": {
+              "date-parts": [
+                [
+                  2023,
+                  1,
+                  17
+                ]
+              ],
+              "date-time": "2023-01-17T04:22:31Z",
+              "timestamp": 1673929351000
+            },
+            "source": "Crossref",
+            "is-referenced-by-count": 0,
             "title": [
-              "A Survey on Attention Mechanisms"
+              "Figure 2: Different channel attention mechanisms."
             ],
-            "author": [
-              {
-                "family": "Chaudhari",
-                "given": "Sneha"
-              },
-              {
-                "family": "Mithal",
-                "given": "Varun"
+            "prefix": "10.7717",
+            "member": "4443",
+            "deposited": {
+              "date-parts": [
+                [
+                  2023,
+                  1,
+                  17
+                ]
+              ],
+              "date-time": "2023-01-17T04:22:33Z",
+              "timestamp": 1673929353000
+            },
+            "score": 18.4123,
+            "resource": {
+              "primary": {
+                "URL": "https://peerj.com/articles/cs-1196/fig-2"
               }
-            ],
+            },
             "issued": {
               "date-parts": [
                 [
-                  2019
+                  null
                 ]
               ]
             },
-            "type": "journal-article"
+            "references-count": 0,
+            "URL": "https://doi.org/10.7717/peerjcs.1196/fig-2",
+            "relation": {
+              "is-component-of": [
+                {
+                  "id-type": "doi",
+                  "id": "10.7717/peerj-cs.1196",
+                  "asserted-by": "object"
+                }
+              ]
+            }
           }
-        ]
+        ],
+        "items-per-page": 3,
+        "query": {
+          "start-index": 0,
+          "search-terms": "attention mechanisms"
+        }
       }
     },
     "responseHeaders": {

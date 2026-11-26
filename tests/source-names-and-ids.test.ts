@@ -62,12 +62,13 @@ test('arXiv: names are split, and the arXiv ID and abstract are kept', async () 
   assert.match(c.abstract ?? '', /dominant sequence transduction models/);
 });
 
-test('OpenAlex: display names are split, and an arXiv DOI gives the arXiv ID', async () => {
+test('OpenAlex (a real search): display names are split, and an arXiv copy gives the arXiv ID', async () => {
   const hits = await openalex.search('attention mechanisms');
-  const v = hits.find((h) => /Attention Is All You Need/.test(h.title));
+  const v = hits.find((h) => /Attention mechanisms in computer vision/.test(h.title));
   assert.ok(v, 'the recorded OpenAlex search has the paper');
-  assert.deepEqual(v.names, [{ family: 'Vaswani', given: 'Ashish' }, { family: 'Shazeer', given: 'Noam' }]);
-  assert.equal(v.arxiv, '1706.03762');
+  assert.deepEqual(v.names?.slice(0, 2), [{ family: 'Guo', given: 'Meng-Hao' }, { family: 'Xu', given: 'Tian-Xing' }]);
+  assert.equal(v.doi, '10.1007/s41095-022-0271-y');
+  assert.equal(v.arxiv, '2111.07624', 'the arXiv ID comes from the work\'s arXiv location');
 });
 
 test('OpenAlex (a real record): "Stéfan van der Walt" keeps the particle in the family name, and the ids give the arXiv ID', async () => {
@@ -102,12 +103,8 @@ test('Crossref: family and given come from the record\'s own fields', async () =
   assert.equal(hits[0]!.isbn, '9783031842993');
 });
 
-test('Semantic Scholar: display names are split', async () => {
-  const hits = await semanticscholar.search('attention mechanisms');
-  const v = hits.find((h) => /Attention Is All You Need/.test(h.title));
-  assert.ok(v);
-  assert.deepEqual(v.names, [{ family: 'Vaswani', given: 'Ashish' }, { family: 'Shazeer', given: 'Noam' }]);
-  assert.equal(v.arxiv, '1706.03762');
+test('Semantic Scholar: a keyless search it rate-limits (its real 429) gives no candidates', async () => {
+  assert.deepEqual(await semanticscholar.search('attention mechanisms'), []);
 });
 
 test('Zotero: lastName and firstName are kept as they are', async () => {
