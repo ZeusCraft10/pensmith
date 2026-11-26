@@ -15,14 +15,17 @@ export default async function* fileResults(source) {
     // A suite is counted through its tests, except when the suite itself
     // fails (a hook throws), which is a failure of its own.
     if (kind === 'suite' && ev.type === 'test:pass') continue;
+    // A todo test that fails is still a todo, as node:test counts it: the
+    // file does not fail, and neither does the run.
+    const outcome = d.skip !== undefined ? 'skip' : d.todo !== undefined ? 'todo' : ev.type === 'test:fail' ? 'fail' : 'pass';
     tests.push({
       name: d.name,
       nesting: d.nesting,
       kind,
-      outcome: ev.type === 'test:fail' ? 'fail' : d.skip !== undefined ? 'skip' : d.todo !== undefined ? 'todo' : 'pass',
+      outcome,
       ...(d.skip !== undefined ? { reason: typeof d.skip === 'string' ? d.skip : '' } : {}),
       ...(d.todo !== undefined ? { reason: typeof d.todo === 'string' ? d.todo : '' } : {}),
-      ...(ev.type === 'test:fail' ? { error: String(d.details?.error?.cause?.message ?? d.details?.error?.message ?? 'failed').split('\n')[0] } : {}),
+      ...(outcome === 'fail' ? { error: String(d.details?.error?.cause?.message ?? d.details?.error?.message ?? 'failed').split('\n')[0] } : {}),
     });
   }
   yield `${JSON.stringify({ complete: true, tests })}\n`;

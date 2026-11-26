@@ -131,6 +131,10 @@ function runFile(file, index) {
   });
 }
 
+// On Windows a handle still open (a child exiting, a virus scanner) makes a
+// removal fail with EBUSY or EPERM for a moment; retry before giving up.
+const RM_OPTIONS = { recursive: true, force: true, maxRetries: 5, retryDelay: 200 };
+
 const results = [];
 const leaks = [];
 const running = new Set();
@@ -141,7 +145,7 @@ const workers = Math.max(1, Math.min(files.length, availableParallelism() - 1));
 function checkLeak(file) {
   if (!existsSync(leakedPaper)) return;
   leaks.push([file, ...running].map(rel));
-  rmSync(leakedPaper, { recursive: true, force: true });
+  rmSync(leakedPaper, RM_OPTIONS);
 }
 
 async function worker() {
@@ -160,6 +164,7 @@ await Promise.all(Array.from({ length: workers }, worker));
 const counts = { pass: 0, fail: 0, skip: 0, todo: 0 };
 const failures = [];
 const skips = [];
+const todos = [];
 for (const r of results.sort((a, b) => a.file.localeCompare(b.file))) {
   const name = rel(r.file);
   if (r.tests === null) {
@@ -177,6 +182,7 @@ for (const r of results.sort((a, b) => a.file.localeCompare(b.file))) {
     } else if (t.kind === 'test') {
       counts[t.outcome]++;
       if (t.outcome === 'skip') skips.push(`${name} › ${t.name}${t.reason ? ` — ${t.reason}` : ''}`);
+      if (t.outcome === 'todo') todos.push(`${name} › ${t.name}${t.reason ? ` — ${t.reason}` : ''}`);
     }
   }
   if (ran === 0) failures.push(`${name}: ran no tests${r.code !== 0 ? ` (exited with code ${r.code})` : ''}`);
@@ -195,8 +201,16 @@ console.log(
     `${counts.pass} passed, ${counts.fail} failed, ${counts.skip} skipped, ${counts.todo} todo`,
 );
 for (const s of skips) console.log(`# skipped: ${s}`);
+for (const t of todos) console.log(`# todo: ${t}`);
 for (const f of failures) console.log(`# FAILED: ${f}`);
 
 if (process.env['PENSMITH_KEEP_TEST_RUN'] === '1') console.log(`# kept the run folder ${runRoot}`);
-else rmSync(runRoot, { recursive: true, force: true });
+else {
+  // The results are in; a folder that cannot be removed does not change them.
+  try {
+    rmSync(runRoot, RM_OPTIONS);
+  } catch (err) {
+    console.warn(`# warning: could not remove the run folder ${runRoot} (${err?.code ?? err}); remove it by hand`);
+  }
+}
 process.exit(failures.length > 0 ? 1 : 0);
