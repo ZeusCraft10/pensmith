@@ -44,6 +44,8 @@ import { getProviderApiKey } from '../lib/runtime.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
 import { artifactText } from '../lib/placeholder.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
+import { GenerationError } from '../lib/generator.js';
+import { CostCapExceededError } from '../lib/budget.js';
 
 // Phase 11 — the section-draft placeholder constant has been removed. write now
 // calls complete() for real generation (GEN-02). With no key configured:
@@ -51,6 +53,14 @@ import { EXIT_REFUSED } from '../lib/exit-codes.js';
 // With PENSMITH_NO_LLM=1: complete() returns offline mock transparently.
 
 const DEFAULT_MAX_PARALLEL = 5;
+
+/** One section's failure in plain words, as the CLI prints an unhandled one. */
+function describeFailure(e: unknown): string {
+  if (e instanceof GenerationError || e instanceof CostCapExceededError) {
+    return `${e.exitCode === EXIT_REFUSED ? 'REFUSED' : 'ERROR'} — ${e.message}`;
+  }
+  return `ERROR — ${e instanceof Error ? e.message : String(e)}`;
+}
 
 // STYL-03 default tone — the never-empty fallback when neither a PLAN.md voice
 // line nor a style-match profile is available.
@@ -343,13 +353,28 @@ export const writeCommand = defineCommand({
       // so the `subscriber ? … : undefined` below makes the Foundation callback a
       // no-op — the zero-branch mechanism. Foundation never imports tutorial.ts.
       const subscriber = makeSubscriberNonFatal(paperRoot);
+      // Once one section is refused over the cost cap, the paper is at its
+      // ceiling: sections not yet started are not attempted.
+      let capRefusal: CostCapExceededError | null = null;
       const results = await runAllSections(paperRoot, {
         maxParallel,
         writeSection: async (node: SectionNode) => {
+          if (capRefusal) {
+            process.stderr.write(
+              `pensmith write: section ${node.n} (${node.slug}): not drafted, because the paper is at its cost cap.\n`,
+            );
+            throw capRefusal;
+          }
           process.stdout.write(
             JSON.stringify({ event: 'section_start', wave: node.computed_wave, section: node.slug }) + '\n',
           );
-          await writeOneSection(node.n, node.slug);
+          try {
+            await writeOneSection(node.n, node.slug);
+          } catch (e) {
+            if (e instanceof CostCapExceededError) capRefusal ??= e;
+            process.stderr.write(`pensmith write: section ${node.n} (${node.slug}): ${describeFailure(e)}\n`);
+            throw e;
+          }
           process.stdout.write(
             JSON.stringify({ event: 'section_done', wave: node.computed_wave, section: node.slug, status: 'done' }) + '\n',
           );
@@ -384,10 +409,23 @@ export const writeCommand = defineCommand({
         );
       }
 
-      const anyFailed = results.some((w) => w.sections.some((s) => s.status === 'failed'));
-      // CR-02: set exitCode when any section failed so the process exits non-zero.
-      // citty does not map verb return values to exit codes; we must set it here.
-      if (anyFailed) process.exitCode = 1;
+      for (const wave of results) {
+        for (const s of wave.sections) {
+          if (s.status === 'blocked') {
+            process.stderr.write(
+              `pensmith write: section ${s.n} (${s.slug}): not drafted, because a section it depends on was not.\n`,
+            );
+          }
+        }
+      }
+
+      // citty does not map a verb's return value to an exit code, so set it
+      // here: 2 when any section was refused (the cost cap, a declined
+      // request), else 1 when any failed.
+      const failed = results.flatMap((w) => w.sections.filter((s) => s.status === 'failed'));
+      const anyFailed = failed.length > 0;
+      if (failed.some((s) => s.exitCode === EXIT_REFUSED)) process.exitCode = EXIT_REFUSED;
+      else if (anyFailed) process.exitCode = 1;
       return { ok: !anyFailed, mode: 'wave', waves: results };
     }
 

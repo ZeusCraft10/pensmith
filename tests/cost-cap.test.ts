@@ -152,3 +152,36 @@ test('the CLI refuses a step over the cap with exit 2 and a plain message', () =
   assert.ok(!existsSync(path.join(dir, '.paper', 'sections')) || !existsSync(path.join(dir, '.paper', 'sections', '01-placeholder', 'PLAN.md')), 'no PLAN.md written');
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('a wave write at the cap names each refused section and exits 2', () => {
+  // `pensmith write` with no section number drafts every planned section. Each
+  // section's error used to be reduced to a "failed" count, exit 1, so the
+  // cost-cap refusal never reached the person running it.
+  const dir = mkdtempSync(path.join(tmpdir(), 'pensmith-cost-cap-wave-'));
+  const paper = path.join(dir, '.paper');
+  mkdirSync(paper, { recursive: true });
+  writeFileSync(path.join(paper, 'OUTLINE.md'),
+    '# Paper\n\n| # | slug | title | depends_on | word target | assigned_sources |\n| --- | --- | --- | --- | --- | --- |\n' +
+    '| 1 | intro | Intro | | 300 | |\n| 2 | method | Method | | 300 | |\n');
+  for (const [n, slug] of [[1, 'intro'], [2, 'method']] as const) {
+    const sec = path.join(paper, 'sections', `0${n}-${slug}`);
+    mkdirSync(sec, { recursive: true });
+    writeFileSync(path.join(sec, 'PLAN.md'), `---\nsection: ${n}\nslug: ${slug}\ntitle: ${slug}\nstatus: planned\nassigned_sources: []\n---\n# ${slug}\n\nBrief.\n`);
+  }
+  spent(dir, [['write-1', 5]]);
+  const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url)), 'write'], {
+    cwd: dir,
+    env: isolatedCliEnv({ ANTHROPIC_API_KEY: 'sk-ant-dummy', PENSMITH_NO_LLM: undefined, PENSMITH_COST_CAP_USD: undefined }),
+    encoding: 'utf8',
+    timeout: 60_000,
+  });
+  try {
+    assert.equal(r.status, 2, `stdout=${r.stdout} stderr=${r.stderr}`);
+    assert.match(r.stderr, /section 1 \(intro\): REFUSED — this step could take the paper past its cost cap/);
+    assert.match(r.stderr, /section 2 \(method\):/, 'the second section is accounted for too');
+    assert.doesNotMatch(r.stderr, /\n\s+at /, 'no stack trace');
+    assert.ok(!existsSync(path.join(paper, 'sections', '01-intro', 'DRAFT.md')), 'nothing was drafted');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

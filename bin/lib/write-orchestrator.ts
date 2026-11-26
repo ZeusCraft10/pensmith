@@ -45,6 +45,8 @@ export interface SectionResult {
   status: 'done' | 'failed' | 'blocked';
   /** Error message when status === 'failed'. */
   error?: string;
+  /** The exit code the error asks for (2 for a refusal), when it carries one. */
+  exitCode?: number;
 }
 
 /** The settled outcome of a single wave. */
@@ -199,7 +201,14 @@ export async function runAllSections(
         node.status = 'failed';
         failedOrBlocked.add(node.slug);
         const reason = r.reason instanceof Error ? r.reason.message : String(r.reason);
-        sections.push({ slug: node.slug, n: node.n, status: 'failed', error: reason });
+        const exitCode = (r.reason as { exitCode?: unknown } | null)?.exitCode;
+        sections.push({
+          slug: node.slug,
+          n: node.n,
+          status: 'failed',
+          error: reason,
+          ...(typeof exitCode === 'number' ? { exitCode } : {}),
+        });
       }
     }
     for (const node of blocked) {
