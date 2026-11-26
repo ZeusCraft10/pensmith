@@ -1,7 +1,6 @@
-// bin/lib/budget.ts — budget assertion + cost ledger + concurrency primitive
-// per ARCH-09 / ARCH-10 / ARCH-11 (D-44, D-45, D-46, D-50).
+// bin/lib/budget.ts — budget assertion + cost ledger + concurrency primitive.
 //
-// Pre-call gates (D-44):
+// Pre-call gates:
 //   Every model call passes assertWithinCostCap before anything is sent: the
 //   paper's whole spend (every COSTS.jsonl row) plus the call's estimate must
 //   stay within the cost cap (PENSMITH_COST_CAP_USD, then [budget]
@@ -11,14 +10,14 @@
 //   GPTZero score uses it as well as the paper cap). Either way the caller
 //   never reaches the paid call when the gate throws; NO post-call gate exists.
 //
-// Ledger (D-45, D-46):
-//   .paper/COSTS.jsonl is append-only via O_APPEND. atomicAppendFile (W2)
+// Ledger:
+//   .paper/COSTS.jsonl is append-only via O_APPEND. atomicAppendFile
 //   handles the file open/write/fsync/close. Concurrent appends from parallel
 //   sections are atomic for line size <= PIPE_BUF (4KB on POSIX, similar on
 //   NTFS). This is the SOLE write path — direct fs.writeFile is forbidden by
-//   the eslint chokepoint (D-07).
+//   the eslint chokepoint.
 //
-// Semaphore (D-50):
+// Semaphore:
 //   Bounded-parallel primitive. No external dep. In-process only — does NOT
 //   coordinate across processes (use proper-lockfile / lock.ts for that).
 //   Used by Phase 2+ wave scheduler to bound parallel section drafting.

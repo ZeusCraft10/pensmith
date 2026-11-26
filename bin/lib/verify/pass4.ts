@@ -414,7 +414,7 @@ export async function runPass4(
           paragraph_context: stripFenceMarkers(paraText.slice(0, 500)),
         });
 
-        // complete() is the one model-call path (audit #7): the http.ts
+        // complete() is the one model-call path: the http.ts
         // chokepoint, the paper's cost cap before the call and the cost ledger
         // after it. Errors are caught below as UNCLEAR (advisory must not
         // crash verify).

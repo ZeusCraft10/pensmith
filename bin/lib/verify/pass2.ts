@@ -218,7 +218,7 @@ export async function runPass2(
         source_authors: stripFenceMarkers(normalizeAuthors(bibEntry?.author)),
       });
 
-      // complete() is the one model-call path (audit #7): the http.ts
+      // complete() is the one model-call path: the http.ts
       // chokepoint, the paper's cost cap before the call and the cost ledger
       // after it. The prompt is the user message (no system). A refusal over
       // the cap or a transport error is caught below as UNCLEAR.

@@ -16,7 +16,7 @@ a model server on your own machine works.
 
 | Host | When | What is sent |
 | --- | --- | --- |
-| `api.anthropic.com` | Intake clarifying questions, outline, section plans and drafts, the advisory verifier passes, and citation repair | The prompt for that step: your assignment and intake answers, the outline, the metadata of the sources assigned to the section, and the section draft. Needs `ANTHROPIC_API_KEY`. A `baseUrl` set for the provider in `runtime.json` replaces this host. |
+| `api.anthropic.com` | Intake clarifying questions, outline, section plans and drafts, the advisory verifier passes, and citation repair | The prompt for that step: your assignment and intake answers, the outline, the metadata of the sources assigned to the section, and the section draft. Needs `ANTHROPIC_API_KEY`. A `baseUrl` set for the provider in `runtime.json` replaces this host; without one, `ANTHROPIC_BASE_URL` does if it is set. Anthropic's SDK also sends headers naming its version, your operating system, CPU architecture and Node.js version. |
 | `api.openai.com` | The same steps, only if you configure the OpenAI-compatible provider instead | The same prompts. A `baseUrl` set for the provider (a server such as Ollama on your own machine) replaces this host. |
 | `api.openalex.org` | Research, adding a source, checking citations, Pass 1's retraction cross-check for a cited DOI whose registry record does not show a retraction, and Pass 3, to find the open-access PDF of a quoted source | Search terms from your topic, titles and DOIs. |
 | `api.crossref.org` | Research, adding a source, and Pass 1 of the verifier (every cited DOI) | DOIs and title searches. For a PDF you add that prints no DOI or arXiv ID of its own, the PDF's title line, never its text. |
