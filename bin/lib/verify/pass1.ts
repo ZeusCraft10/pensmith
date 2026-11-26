@@ -231,7 +231,15 @@ async function verdictForCitekey(
   // still checked like any other.
   const stored = claimed.retracted === true || claimed.note === 'RETRACTED';
   if (stored && !ctx.ack) {
-    return retractedResult(ctx, 'the work was recorded as retracted in CITATIONS.bib (note = {RETRACTED}) when it was added');
+    const what = 'the work was recorded as retracted in CITATIONS.bib (note = {RETRACTED}) when it was added';
+    // `pensmith ack` binds an acknowledgement to an identifier, so it refuses
+    // an entry with none: say what will work instead.
+    if (!workBinding(claimed, fields)) {
+      return result(ck, 'RETRACTED',
+        `${what} — remove the citation, or add the work's DOI, PMID or arXiv ID to its CITATIONS.bib entry: ` +
+        'with none, it can be neither looked up nor acknowledged');
+    }
+    return retractedResult(ctx, what);
   }
   const r = await checkIdentifiers(ctx, claimed, fields, work);
   // The record no longer says so, but the bibliography does: the

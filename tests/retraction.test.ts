@@ -244,6 +244,26 @@ test('a stale section citing a work under an expression of concern still compile
   assert.equal(c.status, 0, c.out);
 });
 
+test('a work the bibliography records as retracted, with no identifier, is not offered an ack that would refuse', () => {
+  // Research writes `note = {RETRACTED}` for a "RETRACTED:" title, which a
+  // Semantic Scholar or Zotero record may carry with no DOI. ack binds an
+  // acknowledgement to an identifier, so it refuses such an entry.
+  const root = seedPaper(
+    '@article{anon2019,\n  title = {RETRACTED: Sleep and memory in adolescents},\n  author = {Doe, Jane},\n' +
+    '  journal = {Journal of Sleep Studies},\n  year = {2019},\n  note = {RETRACTED}\n}\n',
+  );
+  const v = cli(root, 'verify', '1', '--slug', 'intro');
+  assert.equal(v.status, 2, v.out);
+  const r = row(root, 'anon2019');
+  assert.match(r, /\*\*RETRACTED\*\*/);
+  assert.doesNotMatch(r + v.out, /pensmith ack/, 'the advice must not name a command that refuses this entry');
+  assert.match(r, /remove the citation/);
+  assert.match(r, /DOI, PMID or arXiv ID/);
+  const a = cli(root, 'ack', '1', 'anon2019', '--slug', 'intro', '--reason', REASON);
+  assert.equal(a.status, 2, a.out);
+  assert.equal(existsSync(ackFile(root)), false);
+});
+
 test('ack refuses without a reason, for a key verify did not find RETRACTED, and for a key not in the bibliography', () => {
   const root = seedPaper(WAKEFIELD + CONCERN);
   cli(root, 'verify', '1', '--slug', 'intro');
