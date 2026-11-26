@@ -16,6 +16,7 @@ import { readGoalFromConfig } from '../bin/cli/goal.js';
 import { resolveCostCap } from '../bin/lib/budget.js';
 import { resolveCitationStyle } from '../bin/lib/citation-style.js';
 import { resolveNextAction } from '../bin/lib/router.js';
+import { migrateLegacyLayout } from '../bin/lib/migrations/layout.js';
 
 function tmpRoot(): string {
   return mkdtempSync(join(tmpdir(), 'pensmith-layout-'));
@@ -46,6 +47,8 @@ test('a project laid out the old way is moved into .paper/ on first use', async 
   const config = '# my paper\n[project]\ngoal = "learning"   # keep\n\n[budget]\ncost_cap_usd = 9\n';
   writeFileSync(join(root, 'config.toml'), config);
 
+  // What the dispatcher runs before any verb.
+  assert.equal(await migrateLegacyLayout(root), true);
   const state = await loadState(root);
   assert.equal(state.paperId, LEGACY_STATE.paperId);
   assert.deepEqual(state.sections, LEGACY_STATE.sections);
@@ -72,7 +75,7 @@ test('a shared root config.toml is left as it is; pensmith copies only its own t
   const hugo = 'baseURL = "https://example.org/"\ntitle = "My site" # hugo\n\n[project]\ncitation_style = "mla"\n';
   writeFileSync(join(root, 'config.toml'), hugo);
 
-  await loadState(root);
+  await migrateLegacyLayout(root);
   assert.equal(readFileSync(join(root, 'config.toml'), 'utf8'), hugo, 'never rewrite a file pensmith did not create');
   assert.match(readFileSync(join(root, '.paper', 'config.toml'), 'utf8'), /\[project\][\s\S]*citation_style = "mla"/);
   assert.doesNotMatch(readFileSync(join(root, '.paper', 'config.toml'), 'utf8'), /baseURL/);
@@ -126,4 +129,40 @@ test('the CLI moves an old layout before it reads any setting, even for a verb t
   assert.ok(!existsSync(join(root, 'config.toml')), r.stderr);
   assert.equal(readFileSync(join(root, '.paper', 'config.toml'), 'utf8'), '[budget]\ncost_cap_usd = 0.01\n');
   assert.match(r.stderr, /moved STATE\.json into \.paper\//);
+});
+
+test('reading an old layout moves nothing: loadState, the router and the --estimate preview only look', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { isolatedCliEnv } = await import('./lib/cli-env.js');
+  const root = tmpRoot();
+  const legacy = JSON.stringify(LEGACY_STATE);
+  writeFileSync(join(root, 'STATE.json'), legacy);
+  writeFileSync(join(root, 'config.toml'), '[budget]\ncost_cap_usd = 4\n');
+
+  assert.equal((await loadState(root)).paperId, LEGACY_STATE.paperId);
+  assert.equal((await resolveNextAction(root)).verb, 'research');
+  const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), join(import.meta.dirname, '..', 'bin', 'pensmith.ts'), '--estimate'], {
+    cwd: root,
+    env: isolatedCliEnv({ PENSMITH_NO_LLM: '1' }),
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(readFileSync(join(root, 'STATE.json'), 'utf8'), legacy);
+  assert.ok(existsSync(join(root, 'config.toml')));
+  assert.ok(!existsSync(join(root, '.paper', 'STATE.json')));
+});
+
+test('a root STATE.json that an interrupted move left behind is removed; another paper\'s is not', async () => {
+  const root = tmpRoot();
+  mkdirSync(join(root, '.paper'));
+  // The move wrote .paper/STATE.json and stopped before removing the old file.
+  writeFileSync(join(root, '.paper', 'STATE.json'), JSON.stringify(LEGACY_STATE, null, 2) + '\n');
+  writeFileSync(join(root, 'STATE.json'), JSON.stringify({ ...LEGACY_STATE, sections: [] }));
+  await migrateLegacyLayout(root);
+  assert.ok(!existsSync(join(root, 'STATE.json')));
+
+  const other = { ...LEGACY_STATE, paperId: '99999999-2222-4333-8444-555555555555' };
+  writeFileSync(join(root, 'STATE.json'), JSON.stringify(other));
+  await migrateLegacyLayout(root);
+  assert.ok(existsSync(join(root, 'STATE.json')), 'not the same paper: left for the user');
 });

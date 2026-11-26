@@ -59,7 +59,7 @@ import { withLock } from './lock.js';
 import { loadAndMigrate } from './migrations/loader.js';
 import { hasLegacyLayout, migrateLegacyLayout } from './migrations/layout.js';
 import { legacyStateFile, paperStateFile } from './paths.js';
-import { atomicWriteFile, isDryRun } from './atomic-write.js';
+import { atomicWriteFile } from './atomic-write.js';
 import v1_to_v2_migration, {
   migrate as migrate_v1_to_v2,
 } from './migrations/state/v1_to_v2.js';
@@ -103,23 +103,14 @@ export class StateAlreadyExistsError extends Error {
 // ---------------------------------------------------------------------------
 
 /**
- * The absolute path of the paper's `.paper/STATE.json`, after moving a
- * STATE.json that an older pensmith left in the project root
- * (migrations/layout.ts). The path is absolute so the lock key (the file
- * path) is the same for every caller.
+ * The absolute path of the paper's `.paper/STATE.json` for a writer, after
+ * moving a STATE.json that an older pensmith left in the project root
+ * (migrations/layout.ts), so no writer recreates it there. The path is
+ * absolute so the lock key (the file path) is the same for every caller.
  */
 async function stateFile(paperRoot: string): Promise<string> {
   await migrateLegacyLayout(paperRoot);
   return paperStateFile(paperRoot);
-}
-
-/**
- * The file loadState reads. A dry run moves nothing, so it reads a STATE.json
- * an older pensmith left in the project root where it is.
- */
-async function stateFileToRead(paperRoot: string): Promise<string> {
-  const file = await stateFile(paperRoot);
-  return isDryRun() && hasLegacyLayout(paperRoot) ? legacyStateFile(paperRoot) : file;
 }
 
 /**
@@ -211,12 +202,16 @@ export async function initState(
  * Pass-through ForwardIncompatError is the T-01-COMPAT-01 mitigation:
  * a newer-on-disk STATE.json must never be silently downgraded.
  *
- * `writeBack: true` so a future v1→v2 migration persists the upgraded
- * shape on disk. Today the migration registry is empty (we're at v1)
- * so no actual write occurs.
+ * A forward schema migration of .paper/STATE.json is written back; a
+ * STATE.json still in the project root is read and never written.
  */
 export async function loadState(paperRoot: string): Promise<State> {
-  const file = await stateFileToRead(paperRoot);
+  // A read moves nothing: the router, the SessionStart hook and the
+  // estimator only look. A STATE.json an older pensmith left in the project
+  // root is read where it is (and not written back there); the dispatcher and
+  // the writers move it.
+  const legacy = hasLegacyLayout(paperRoot);
+  const file = legacy ? legacyStateFile(paperRoot) : paperStateFile(paperRoot);
   let value: State;
   try {
     // BLOCKER-02 fix: wrap the loadAndMigrate call inside withLock. The
@@ -235,12 +230,14 @@ export async function loadState(paperRoot: string): Promise<State> {
         schemaName: 'state',
         currentVersion: CURRENT_STATE_VERSION,
         migrations: STATE_MIGRATIONS,
-        writeBack: true,
+        writeBack: !legacy,
       })) as State,
     );
   } catch (e) {
     const err = e as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
     if (err?.code === 'ENOENT' || err?.cause?.code === 'ENOENT') {
+      // Another process moved the old file into .paper/ while this one read it.
+      if (legacy && fs.existsSync(paperStateFile(paperRoot))) return loadState(paperRoot);
       throw new StateNotFoundError(`STATE.json not found at ${file}`);
     }
     throw e;

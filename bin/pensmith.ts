@@ -471,8 +471,9 @@ async function dispatchArgv(argv: string[]): Promise<void> {
 
   // A project an older pensmith laid out with STATE.json and config.toml in
   // the project root is moved into .paper/ before anything reads its settings
-  // (the cost cap below among them). A dry run changes nothing, so it skips this.
-  if (!isDryRun() && !wantsHelp(argv) && !hasFlag(argv, 'version')) {
+  // (the cost cap below among them). A dry run and the --estimate preview
+  // change nothing, so they skip this.
+  if (!isDryRun() && !wantsHelp(argv) && !hasFlag(argv, 'version') && !hasFlag(argv, 'estimate')) {
     try {
       await migrateLegacyLayout(process.cwd());
     } catch (e) {

@@ -90,17 +90,46 @@ export function hasLegacyLayout(root: string): boolean {
   }
 }
 
+/** The paperId and createdAt of a pensmith STATE.json, or null. */
+function stateIdentity(file: string): string | null {
+  try {
+    const text = readFileSync(file, 'utf8');
+    if (!isPensmithState(text)) return null;
+    const v = JSON.parse(text) as { paperId: string; createdAt: string };
+    return `${v.paperId} ${v.createdAt}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remove a root STATE.json that a move stopped before its last step left
+ * behind: the same paper (paperId and createdAt) as .paper/STATE.json.
+ */
+async function removeLeftoverState(legacy: string, target: string): Promise<void> {
+  await withLock(target, async () => {
+    const left = stateIdentity(legacy);
+    if (left !== null && left === stateIdentity(target)) await removePath(legacy);
+  });
+}
+
 /**
  * Move STATE.json and config.toml from the project root at `root` into
  * .paper/, when the project is still laid out the old way. Does nothing in a
- * dry run (which writes nothing), when .paper/STATE.json already exists, or
- * when the root STATE.json is not pensmith's. Safe to call before every state
- * read; the check is two existsSync calls.
+ * dry run (which writes nothing), or when the root STATE.json is not
+ * pensmith's; when .paper/STATE.json already exists, it only removes a root
+ * copy of the same paper that an interrupted move left. Readers do not call
+ * it (they read an old layout in place); the dispatcher and the state
+ * writers do.
  */
 export async function migrateLegacyLayout(root: string): Promise<boolean> {
   const legacy = legacyStateFile(root);
   const target = paperStateFile(root);
-  if (!existsSync(legacy) || existsSync(target) || isDryRun()) return false;
+  if (!existsSync(legacy) || isDryRun()) return false;
+  if (existsSync(target)) {
+    await removeLeftoverState(legacy, target);
+    return false;
+  }
   let moved = false;
   await withLock(target, async () => {
     if (!existsSync(legacy) || existsSync(target)) return; // another process moved it

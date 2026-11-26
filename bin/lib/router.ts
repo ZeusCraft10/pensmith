@@ -1,8 +1,9 @@
 // bin/lib/router.ts — Phase 7 Plan 07-02. The bare `/pensmith` state-aware
 // next-WORK-verb resolver (UX-01).
 //
-// resolveNextAction is a PURE FUNCTION over STATE.json, the outline
-// (outline-store.ts) and per-section PLAN.md frontmatter. It IGNORES HANDOFF.json entirely (H4 — see the PINNED ORDERING
+// resolveNextAction only reads: STATE.json (in the project root, for a
+// project an older pensmith laid out, which it does not move), the outline
+// (outline-read.ts) and per-section PLAN.md frontmatter. It IGNORES HANDOFF.json entirely (H4 — see the PINNED ORDERING
 // in 07-RESEARCH): a non-done HANDOFF must NOT trap bare /pensmith in a resume
 // loop, so the resolver always returns a concrete next WORK verb (plan / write /
 // verify / compile / done) or a status terminus, NEVER { verb:'resume' }. The

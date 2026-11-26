@@ -7,14 +7,15 @@ required:
   - MCP state.read
 
 degrade_if_missing:
-  - if no MCP tools: direct readFileSync('.paper/STATE.json') + direct per-section PLAN.md reads
+  - if no MCP tools: direct readFileSync('.paper/STATE.json') and '.paper/OUTLINE.json' + direct per-section PLAN.md reads
 </capability_check>
 
 ## Overview
 
 `pensmith next` is the bare `/pensmith` invocation: the state-aware next-step resolver.
-It calls `resolveNextAction()` (`bin/lib/router.ts`) — a pure function over STATE.json
-+ per-section PLAN.md frontmatter. The resolver IGNORES HANDOFF.json (H4) and NEVER
+It calls `resolveNextAction()` (`bin/lib/router.ts`), which only reads: STATE.json (that a paper
+was started), the outline (`.paper/OUTLINE.json`, the one list of sections) and per-section
+PLAN.md frontmatter. The resolver IGNORES HANDOFF.json (H4) and NEVER
 returns `{ verb:'resume' }`. It dispatches the resolved verb via `dispatchVerb()`.
 
 State machine: `new → research → outline → (plan → write → verify per section) → compile → done`.
