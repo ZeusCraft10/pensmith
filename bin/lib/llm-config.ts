@@ -65,14 +65,19 @@ const MODEL_OUTPUT_LIMITS: Readonly<Record<ProviderName, Readonly<Record<string,
     'gpt-4.1-mini': 32_768,
     'gpt-4.1-nano': 32_768,
     'gpt-4-turbo': 4_096,
+    'gpt-4-turbo-preview': 4_096,
+    'gpt-4-0125-preview': 4_096,
+    'gpt-4-1106-preview': 4_096,
     'gpt-3.5-turbo': 4_096,
+    'gpt-3.5-turbo-16k': 4_096,
   },
 };
 
 /** The most output tokens `model` allows, when it is known to be below the role defaults. */
 function modelOutputLimit(providerName: ProviderName, model: string): number | undefined {
   const limits = MODEL_OUTPUT_LIMITS[providerName];
-  return limits[model] ?? limits[model.replace(/-\d{4}-\d{2}-\d{2}$/, '')];
+  // A snapshot dated in full ("gpt-4.1-2025-04-14") or by month and day ("gpt-3.5-turbo-0125").
+  return limits[model] ?? limits[model.replace(/-(?:\d{4}-\d{2}-\d{2}|\d{4})$/, '')];
 }
 
 export interface ResolvedCall {

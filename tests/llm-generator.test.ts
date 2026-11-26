@@ -525,6 +525,9 @@ test('common OpenAI chat models are never sent an output limit past their own', 
   const expected: Array<[string, number]> = [
     ['gpt-4.1', 32_768], ['gpt-4.1-mini', 32_768], ['gpt-4.1-nano', 32_768], ['gpt-4.1-2025-04-14', 32_768],
     ['gpt-4-turbo', 4_096], ['gpt-3.5-turbo', 4_096],
+    // Snapshots named without a full date.
+    ['gpt-3.5-turbo-0125', 4_096], ['gpt-3.5-turbo-1106', 4_096], ['gpt-3.5-turbo-16k', 4_096],
+    ['gpt-4-turbo-preview', 4_096], ['gpt-4-0125-preview', 4_096], ['gpt-4-1106-preview', 4_096],
   ];
   for (const [model] of expected) {
     await writeRuntime({ openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY', defaultModel: model } });
