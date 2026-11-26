@@ -67,7 +67,7 @@ Defaults (the owner may revise these later):
 
 ## Tasks
 
-Order: T01 → T13 and T15 run sequentially on the branch, with the controller follow-ups A2F (after T09) and A3F (after T13). T14 (packaging) runs in a parallel worktree and is merged before T15.
+Order: T01 → T13 and T15 run sequentially on the branch, with the controller follow-ups A2F (after T09), A3F (after T13) and A4F (after T15). T14 (packaging) runs in a parallel worktree and is merged before T15.
 
 ### T01 — Live network by default; cassettes are test-only
 **Issues:** `cassette-replay-production-default`, `http-ignores-proxy-env`, `cassette-committed-personal-email`
@@ -320,6 +320,35 @@ Order: T01 → T13 and T15 run sequentially on the branch, with the controller f
   - Trim the stale verb-count comments ("locked UX-02 16 verbs", "No 17th verb", "15 of the 16 verbs") in `bin/cli/done.ts`, `compile.ts`, `stubs.ts`, `plan.ts`, `sketch.ts` and `bin/lib/sources/zotero-mcp.ts`. There are 18 verbs.
   - README's Pass 3 row says a heading ends a sentence, but only a heading set off by a blank line does. Say exactly that, or name the single-newline heading as a known gap.
   - Drop the decision IDs from the comments A2F rewrote (`bin/lib/state.ts`, `bin/lib/outline.ts`, `bin/lib/write-orchestrator.ts`), and rewrap the long goal comment in `bin/cli/intake.ts`.
+
+### A4F — A4 review follow-ups (controller follow-up to A3F and T15)
+**Issues:** the finding A3F parked, the A3F and T15 review minors, and the concerns those tasks left for a fix round. The evidence is in the A3F and T15 reports in `/tmp/claude-0/-home-user-pensmith/d215d403-59ed-5fd5-8322-103c08c7e93a/scratchpad/phase1/reports/` and in `scratchpad/phase1/a4-digest.md`. Re-check each item against the current code first.
+- **`add <pdf>` must never store a work the PDF is not.** This is important; A3F parked it, as a regression from 37cc76b. `anotherWorkAbove()` in `bin/lib/source-hydrate.ts` refuses only when it finds positive evidence of another work. That evidence is a NOTICE line, or a title-like line whose next lines `bylineNames()` reads as names outside the hit's authors. Many ordinary bylines do not parse, so a cited work's title and DOI printed below the PDF's own title and byline are accepted as the PDF's identity. Bylines that do not parse:
+  - `J. Roe`;
+  - `John Roe, University of Somewhere`, or an affiliation in parentheses;
+  - `John Roe∗ Google Brain jroe@google.com`;
+  - `by John Roe`;
+  - `John Roe, Ph.D.`;
+  - non-Latin names;
+  - several names separated only by spaces;
+  - an editorial byline with affiliations.
+
+  A sentence heading also gets through, for example "A comment on the paper by van der Walt and colleagues in this issue".
+
+  Make the check fail closed. A title-like line above the hit's title counts as a competing title unless it is recognisably furniture (NOT_A_TITLE, a NOTICE, or a line whose words are all in NOT_A_NAME) or prose (it starts lower-case, continues a sentence, or ends in a full stop). Tests that expect refusal cover each probe in the A3F report. The Attention, svjour3, AASTeX, running-head, special-issue and RETRACTED-stamp tests must keep passing.
+
+  The same task fixes the A3F review minors:
+  - an affiliation letter after a family name of three letters or fewer (`Wei Liua,∗`): match exact family names before letter-stripped ones;
+  - a label such as `Research Article` or `Open Access` above a byline that comes before the title;
+  - two Crossref hits with the same title and a tied name score (Hanna/Hann, Dutta/Dutt): refuse instead of taking the first;
+  - NOTICE missing `Author Correction`, `Publisher Correction`, `Editor's Note`, `Review of` and `Withdrawal Notice`.
+
+  Whenever the identity is in doubt, refuse with exit 2 and name `pensmith add <doi>`.
+- **Quotations from arXiv works.** A work kept under its arXiv record (the preferred source for computer-science) prints only its arXiv identifiers. Pass 3 (`bin/lib/verify/source-text.ts`) finds text only through a DOI, so every quotation of such a work is PDF_UNAVAILABLE. Find an arXiv-identified work's text at its arXiv PDF (`https://arxiv.org/pdf/<id>`, through `http.ts`, with its SSRF checks and the body cap). A quotation of it can then be OK or NOT_FOUND. Add cassette tests for both, and one through the real verify CLI with discipline `computer-science`.
+- **`plan N --revise --yolo` drops an answered kept change.** `bin/lib/revise.ts` (around line 715) skips an answered kept revise change under `--yolo`. This is the same class as the outline case A3F fixed. Apply an answered kept change before the `--yolo` skip.
+- **The estimator's wave write counts stub sections**, which the wave write never drafts. Price only the sections it will draft.
+- **`--thesis ''`** removes a PROJECT.md that held only the thesis, but leaves INTAKE.raw.local, the raw text that PII redaction kept, in place. Remove it as well, or rewrite it to match.
+- **Stale comments (T15 minor).** `bin/cli/write.ts` and `verify.ts` still say "an explicit --slug wins", and `bin/cli/plan.ts` says "even when --slug names it differently". Since ee3bb56 a `--slug` must match the outline's. Fix the comments. Also re-check that `add --remap --section N --slug X` names the outline's slug when they conflict.
 
 ### T14 — Packaging: installable plugin + bundled CLI (parallel worktree)
 **Issues:** `plugin-manifest-uninstallable`, Phase-1 part of `tier1-no-executable-path`, `root-mcp-json-project-scope`, `sessionstart-context-not-delivered`, `hooks-write-into-every-project`, `hooks-no-entrypoint-wrong-state`, `stop-hook-useless`, `handoff-size-bound-rejects`, `mcp-verbs-write-stdout`, `mcp-surface-noop-and-unwired`, `mcp-resources-wrong-root`, `mcp-tools-expose-yolo-and-paperroot`, `skill-descriptions-overtrigger`, `ci-gates-pin-invalid-plugin-format`, `build-ships-compiled-tests`, `package-deps-engines-hygiene`, `ecosystem-presence-wrong-paths`, `docs-inaccurate`
