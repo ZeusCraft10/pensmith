@@ -591,6 +591,11 @@ export function paperFinalStagedFile(root: string = projectRoot()): string {
   return path.join(paperDir(root), 'FINAL.staged.md');
 }
 
+/** `<root>/.paper/gates/`: decisions waiting for a person's answer (bin/lib/gates.ts). */
+export function paperGatesDir(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'gates');
+}
+
 /** `<root>/.paper/EXPORT.json`: which compiled draft the last export came from (bin/lib/export-record.ts). */
 export function exportRecordPath(root: string = projectRoot()): string {
   return path.join(paperDir(root), 'EXPORT.json');

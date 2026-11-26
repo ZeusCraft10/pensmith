@@ -239,7 +239,8 @@ test('research without a terminal does not offer --yolo when the evaluator kept 
     _setGeneratorForTest(researchModel([], evaluate));
     const res = await research(root, {});
     assert.equal(res['exitCode'], 3, `${JSON.stringify(res)}\n${stderr}`);
-    assert.match(stderr, /candidate approval requires an interactive terminal/);
+    assert.match(stderr, /choosing which sources to keep needs the user, and there is no terminal to ask in/);
+    assert.match(stderr, /none is chosen for them/);
     assert.doesNotMatch(stderr, /--yolo/);
   }
   // After a usable evaluation, --yolo keeps what it kept, not every candidate.

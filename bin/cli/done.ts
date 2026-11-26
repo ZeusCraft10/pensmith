@@ -15,7 +15,9 @@
 // export to block automatically. The gate ALWAYS prompts (generic confirm even
 // when clean — PRD §7.9), shows a per-issue summary when UNSUPPORTED / orphan /
 // plagiarism issues exist, and ONLY --yolo skips it. The answer defaults to no.
-// With no terminal to ask in, done exits 3 with the pending decision as JSON.
+// With no terminal to ask in, done keeps the audit (.paper/gates/export.json),
+// exits 3 with the pending decision as JSON, and takes the answer back through
+// `pensmith gate answer <ref> export|cancel`, which exports those same bytes.
 //
 // Exports go to the exporter's DISTINCT export dir (default `.paper/export/`),
 // never over the source DRAFT.md. The format defaults to docx when Pandoc is
@@ -24,6 +26,7 @@
 // paper done: a refusal exits 2, a crashed tool exits 1.
 
 import { defineCommand } from 'citty';
+import { z } from 'zod';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
@@ -41,7 +44,8 @@ import {
   runHumanizer,
   type ExportFormat,
 } from '../lib/exporter.js';
-import { paperDir, paperFinalFile, sectionDirName } from '../lib/paths.js';
+import { paperDir, paperFinalFile, paperFinalStagedFile, sectionDirName } from '../lib/paths.js';
+import { closeGate, gateStillApplies, openGate, pendingDecision, readGate, type GateRecord } from '../lib/gates.js';
 import { parseBibByCitekey } from '../lib/citations.js';
 import { resolveCitationStyle } from '../lib/citation-style.js';
 import { isPandocPresent } from '../lib/ecosystem-presence.js';
@@ -563,32 +567,42 @@ function canAskInTerminal(): boolean {
   return Boolean(process.stdin.isTTY) && Boolean(process.stderr.isTTY);
 }
 
+/** The one-line question the export confirmation asks. */
+function pendingExportSummary(issues: GateIssues, format: string, source: string): string {
+  const count = issues.unsupported.length + issues.orphanClaimCount + issues.plagiarismHits.length;
+  return `Export ${source} as ${format}? ` +
+    (issues.hasIssues ? `${count} advisory issue(s) to review first.` : 'No advisory issues were found.');
+}
+
 /**
  * The machine-readable description of a pending export decision, printed as
- * one JSON line when there is no terminal to ask in. Nothing is exported.
+ * one JSON line when there is no terminal to ask in. Nothing is exported; the
+ * user's answer comes back through `pensmith gate answer <ref> export|cancel`.
  */
-export function pendingExportDecision(
-  issues: GateIssues,
-  format: string,
-  source = '.paper/DRAFT.md',
-): Record<string, unknown> {
-  const count = issues.unsupported.length + issues.orphanClaimCount + issues.plagiarismHits.length;
-  return {
-    pending: 'export-confirmation',
-    gate: 'export',
+export function pendingExportDecision(issues: GateIssues, record: GateRecord): Record<string, unknown> {
+  return pendingDecision(record, 'export-confirmation', {
     needs_confirmation: true,
-    summary:
-      `Export ${source} as ${format}? ` +
-      (issues.hasIssues ? `${count} advisory issue(s) to review first.` : 'No advisory issues were found.'),
-    options: ['export', 'cancel'],
-    default: 'cancel',
     issues: {
       unsupported: issues.unsupported.map((r) => r.citekey),
       orphan_claims: issues.orphanClaimCount,
       plagiarism_hits: issues.plagiarismHits.map((r) => r.phrase.replace(/\s+/g, ' ').slice(0, 80)),
     },
-    how_to_answer: 'Run `pensmith done` in an interactive terminal and answer the prompt there.',
-  };
+  });
+}
+
+/** What done keeps with a pending export confirmation, so the answering run audits nothing again. */
+const ExportAuditSchema = z.object({
+  pass4Results: z.array(z.object({ orphanCount: z.number() }).passthrough()),
+  plagiarismResults: z.array(z.object({ phrase: z.string(), matches: z.array(z.string()) }).passthrough()),
+  honestyReport: z.string(),
+  humanized: z.boolean(),
+}).strict();
+
+interface ExportAudit {
+  pass4Results: Pass4Result[];
+  plagiarismResults: PlagiarismResult[];
+  honestyReport: string;
+  humanized: boolean;
 }
 
 /** Build the whole-paper `.paper/VERIFICATION.md` report body (a SOURCE
@@ -704,33 +718,58 @@ export const doneCommand = defineCommand({
       return { ok: false };
     }
 
-    // 1. DONE-01 whole-paper Pass 4 (orphan audit). 2. DONE-02 plagiarism.
-    const pass4Results = await runWholePaperPass4(paperRoot);
-    const plagiarismResults = await runPlagiarism(draftMd);
-
-    // 3. DONE-04 honesty score (before humanize).
-    const before = await scoreHonesty(draftMd);
-
-    // 4. DONE-03 humanize (skip-clean if absent / no transport). 5. honesty after.
-    let finalPath: string | null = null;
-    let after: Awaited<ReturnType<typeof scoreHonesty>> = null;
-    if (args.raw !== true) {
-      finalPath = await runHumanizer(draftMd, paperRoot);
-      if (finalPath !== null) {
-        try {
-          after = await scoreHonesty(readFileSync(finalPath, 'utf8'));
-        } catch {
-          after = null;
-        }
+    // An export confirmation kept from an earlier run without a terminal: its
+    // audit is reused (nothing is searched, scored or humanized again), and an
+    // answer given through `pensmith gate answer` decides the export. One
+    // kept for another draft, bibliography, format or humanized text is
+    // dropped, and the audit runs again. --yolo needs no confirmation.
+    const stagedPath = paperFinalStagedFile(paperRoot);
+    const binding = { draft_sha256: sha256(draftBytes), bib_sha256: sha256(bibText), format, raw: String(args.raw === true) };
+    const keptGate = readGate(paperRoot, 'export');
+    let audit: ExportAudit | null = null;
+    let answer: boolean | null = null;
+    if (keptGate && args.yolo !== true) {
+      const kept = ExportAuditSchema.safeParse(keptGate.payload);
+      const staged = existsSync(stagedPath) ? sha256(readFileSync(stagedPath)) : null;
+      if (kept.success && gateStillApplies(keptGate, { ...binding, staged_sha256: staged })) {
+        audit = kept.data as unknown as ExportAudit;
+        if (keptGate.answer) answer = keptGate.answer.options[0] === 'export';
+      } else {
+        process.stderr.write('pensmith done: the export confirmation kept earlier was for another draft, bibliography or format; the audit runs again.\n');
       }
     }
+    const reused = audit !== null;
+    if (keptGate && !reused) await closeGate(paperRoot, 'export');
 
-    // Honesty report: guard the null score explicitly — a missing key emits the
-    // skip banner, NEVER a fabricated percent (T-06-05-05).
-    const honestyReport =
-      before === null
-        ? renderHonestySkipped()
-        : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
+    // 1. DONE-01 whole-paper Pass 4 (orphan audit). 2. DONE-02 plagiarism.
+    // 3. DONE-04 honesty score (before humanize). 4. DONE-03 humanize (staged;
+    // skip-clean if absent / no transport). 5. honesty after.
+    if (audit === null) {
+      const pass4Results = await runWholePaperPass4(paperRoot);
+      const plagiarismResults = await runPlagiarism(draftMd);
+      const before = await scoreHonesty(draftMd);
+      let humanizedPath: string | null = null;
+      let after: Awaited<ReturnType<typeof scoreHonesty>> = null;
+      if (args.raw !== true) {
+        humanizedPath = await runHumanizer(draftMd, paperRoot);
+        if (humanizedPath !== null) {
+          try {
+            after = await scoreHonesty(readFileSync(humanizedPath, 'utf8'));
+          } catch {
+            after = null;
+          }
+        }
+      }
+      // Honesty report: guard the null score explicitly — a missing key emits the
+      // skip banner, NEVER a fabricated percent (T-06-05-05).
+      const honestyReport =
+        before === null
+          ? renderHonestySkipped()
+          : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
+      audit = { pass4Results, plagiarismResults, honestyReport, humanized: humanizedPath !== null };
+    }
+    const { pass4Results, plagiarismResults, honestyReport } = audit;
+    const finalPath: string | null = audit.humanized ? stagedPath : null;
 
     // GATE-04: re-verify the humanized text before export (HARD block, BEFORE runDoneGate).
     // Skip only when no humanizer ran (finalPath === null) — i.e. no humanized artifact exists.
@@ -738,12 +777,13 @@ export const doneCommand = defineCommand({
     // --yolo belongs ONLY on the advisory runDoneGate (DONE-09) confirmation below.
     // The humanized text waits under a staging name (runHumanizer); it becomes
     // FINAL.md only once the export succeeds, so a refusal here leaves no mark
-    // that the paper was exported.
+    // that the paper was exported. A kept text is checked again too.
     let finalMd: string | null = null;
     if (finalPath !== null) {
       finalMd = readFileSync(finalPath, 'utf8');
       const refuseHumanized = async <T>(result: T): Promise<T> => {
-        await removePath(finalPath!);
+        await removePath(finalPath);
+        await closeGate(paperRoot, 'export');
         return result;
       };
       if (isPlaceholderText(finalMd)) {
@@ -773,34 +813,49 @@ export const doneCommand = defineCommand({
     // 6. DONE-09 export-confirmation gate. Pass-2 UNSUPPORTED is read from the
     //    section VERIFICATION.md files (the load-bearing disk→gate feed, HIGH-3).
     const pass2Results = readSectionUnsupported(paperRoot);
-
-    // With no terminal there is nobody to ask. Report the pending decision and
-    // stop; never read stdin for it and never treat silence as a yes.
-    if (args.yolo !== true && !canAskInTerminal()) {
-      const issues = collectGateIssues({ pass2Results, pass4Results, plagiarismResults });
-      process.stderr.write(
-        'pensmith done: exporting needs your confirmation and there is no terminal to ask in. Nothing was exported.\n',
-      );
-      const source = finalPath !== null ? '.paper/FINAL.md' : '.paper/DRAFT.md';
-      process.stdout.write(`${JSON.stringify(pendingExportDecision(issues, format, source))}\n`);
-      process.exitCode = EXIT_NEEDS_ANSWER;
-      return { ok: false, pending: true };
-    }
-
-    const gateResult = await runDoneGate({
-      pass2Results,
-      pass4Results,
-      plagiarismResults,
-      yolo: args.yolo === true,
-      approve: () => confirmOrNo(EXPORT_CONFIRM_QUESTION),
-    });
-
-    if (gateResult.exported === false && gateResult.gateSkipped !== true) {
+    const cancel = async (): Promise<{ ok: false }> => {
       process.stdout.write('pensmith done: export cancelled by user.\n');
       process.exitCode = EXIT_REFUSED;
       if (finalPath !== null) await removePath(finalPath);
+      await closeGate(paperRoot, 'export');
       return { ok: false };
+    };
+
+    if (answer === false) return cancel();
+    if (answer === null && args.yolo !== true) {
+      // With no terminal there is nobody to ask. Keep the audit for the
+      // user's answer, report the pending decision and stop; never read stdin
+      // for it and never treat silence as a yes.
+      if (!canAskInTerminal()) {
+        const issues = collectGateIssues({ pass2Results, pass4Results, plagiarismResults });
+        const record = keptGate && reused
+          ? keptGate
+          : await openGate(paperRoot, {
+            gate: 'export',
+            args: { format, raw: args.raw === true },
+            summary: pendingExportSummary(issues, format, finalPath !== null ? '.paper/FINAL.md' : '.paper/DRAFT.md'),
+            options: ['export', 'cancel'],
+            default: ['cancel'],
+            binding: { ...binding, staged_sha256: finalMd === null ? null : sha256(readFileSync(stagedPath)) },
+            payload: audit,
+          });
+        process.stderr.write(
+          'pensmith done: exporting needs your confirmation and there is no terminal to ask in. Nothing was exported; the audit is kept until you answer.\n',
+        );
+        process.stdout.write(`${JSON.stringify(pendingExportDecision(issues, record))}\n`);
+        process.exitCode = EXIT_NEEDS_ANSWER;
+        return { ok: false, pending: true, ref: record.ref };
+      }
+      const gateResult = await runDoneGate({
+        pass2Results,
+        pass4Results,
+        plagiarismResults,
+        yolo: false,
+        approve: () => confirmOrNo(EXPORT_CONFIRM_QUESTION),
+      });
+      if (gateResult.exported !== true) return cancel();
     }
+    await closeGate(paperRoot, 'export');
 
     // 7. DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir.
 

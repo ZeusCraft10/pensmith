@@ -22,7 +22,7 @@
 //
 // citty@^0.2.2 parses the command line.
 // The verbs are the 16 of REQUIREMENTS.md UX-02, plus `ack` (acknowledge a
-//   RETRACTED citation). Words like `export`/`humanize`/`gpt-zero`/`plagiarism`
+//   RETRACTED citation) and `gate` (answer a decision a step is waiting for). Words like `export`/`humanize`/`gpt-zero`/`plagiarism`
 //   are aliases or parts of other verbs, not verbs of their own.
 // No console.log here: stdout carries only what a verb prints.
 //
@@ -104,6 +104,7 @@ export const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyComman
   sketch: () => import('./cli/sketch.js').then((m) => m.sketchCommand),
   add: () => import('./cli/add.js').then((m) => m.addCommand),
   ack: () => import('./cli/ack.js').then((m) => m.ackCommand),
+  gate: () => import('./cli/gate.js').then((m) => m.gateCommand),
 };
 
 /** The CommandDef for `verb`: its real loader, or the Phase 2 stub. */

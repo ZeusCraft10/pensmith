@@ -19,7 +19,9 @@ import { defineCommand } from 'citty';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
-import { paperDir, paperOutlineFile } from '../lib/paths.js';
+import { paperDir, paperIntakeFile, paperOutlineFile } from '../lib/paths.js';
+import { closeGate, gateStillApplies, openGate, pendingDecision, readGate, type GateRecord } from '../lib/gates.js';
+import { sha256 } from '../lib/verify/verification-record.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
@@ -42,27 +44,50 @@ import {
   type OutlineRules,
 } from '../lib/outline-store.js';
 
-/** Thrown by the approval gate when there is no terminal and --yolo was not given (exit 3). */
-class ApprovalUnavailableError extends Error {
-  exitCode = EXIT_NEEDS_ANSWER;
+/** True when a person at a terminal can see the outline and answer. */
+function canAskInTerminal(): boolean {
+  return Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
 }
 
-/**
- * The outline approval gate: --yolo approves; on a terminal the user confirms;
- * without one, ApprovalUnavailableError.
- */
-async function runApprovalGate(outlineMd: string, yolo: boolean): Promise<boolean> {
-  if (yolo) return true;
-  if (!process.stdout.isTTY || !process.stdin.isTTY) {
-    throw new ApprovalUnavailableError(
-      'outline: approval gate requires an interactive terminal. ' +
-      'Use --yolo to auto-accept (CLAUDE.md non-negotiable: approval-gates default-on).',
-    );
-  }
+/** Ask the person at the terminal whether to accept the outline. */
+async function confirmAtTerminal(outlineMd: string): Promise<boolean> {
   const clack = await import('@clack/prompts');
   clack.note(outlineMd, 'Proposed outline');
   const ok = await clack.confirm({ message: 'Accept this outline and write OUTLINE.md?' });
   return ok === true && !clack.isCancel(ok);
+}
+
+/** The outline approval's options; approving needs an explicit yes. */
+const APPROVE = 'approve';
+const REJECT = 'reject';
+
+/** What an outline proposal is about: the intake it was written for. */
+function outlineBinding(root: string): Record<string, string | null> {
+  try {
+    return { intake_sha256: sha256(readFileSync(paperIntakeFile(root))) };
+  } catch {
+    return { intake_sha256: null };
+  }
+}
+
+/** Keep the checked proposal for the person to approve, print the decision, and stop (exit 3). */
+async function awaitApproval(root: string, proposal: unknown, outlineMd: string, sections: number): Promise<Record<string, unknown>> {
+  const record = await openGate(root, {
+    gate: 'outline',
+    summary: `Approve this outline of ${sections} section(s) and write OUTLINE.md?`,
+    options: [APPROVE, REJECT],
+    default: [REJECT],
+    binding: outlineBinding(root),
+    payload: { proposal },
+  });
+  return showPending(record, outlineMd);
+}
+
+function showPending(record: GateRecord, outlineMd: string): Record<string, unknown> {
+  process.stderr.write('pensmith outline: the outline needs the user\'s approval and there is no terminal to ask in; it is kept until they answer.\n');
+  process.stdout.write(`${JSON.stringify(pendingDecision(record, 'outline-approval', { outline: outlineMd }))}\n`);
+  process.exitCode = EXIT_NEEDS_ANSWER;
+  return { ok: false, mode: 'pending', ref: record.ref };
 }
 
 /** A heading that names an objection, for an outline whose table cannot mark the counterargument section. */
@@ -146,6 +171,8 @@ export const outlineCommand = defineCommand({
     const existing = args.force === true ? null : readOutline(root);
     if (existing?.ok && existing.source === 'json') {
       const stored = existing.outline.stored!;
+      // A proposal still waiting for approval was overtaken by this outline.
+      await closeGate(root, 'outline');
       // A deleted OUTLINE.md is rendered again from the list.
       const count = await save(root, stored, existsSync(outlinePath) ? readFileSync(outlinePath, 'utf8') : undefined);
       process.stdout.write(`pensmith outline: OUTLINE.json already has ${count} section(s); not regenerating — pass --force to redo.\n`);
@@ -181,6 +208,25 @@ export const outlineCommand = defineCommand({
       }
       // missing, or a placeholder no model wrote: propose one.
     }
+
+    // A proposal kept for the user's approval: apply their answer, ask at a
+    // terminal, or show the same decision again, without a new model call.
+    // --force asks for a new proposal instead.
+    const pending = readGate(root, 'outline');
+    if (pending && args.force !== true) {
+      const parsed = ProposedOutlineSchema.safeParse((pending.payload as { proposal?: unknown } | null)?.proposal);
+      if (parsed.success && gateStillApplies(pending, outlineBinding(root))) {
+        const kept = numberOutline(parsed.data);
+        const keptMd = renderOutlineMd(kept);
+        if (!pending.answer && !canAskInTerminal()) return showPending(pending, keptMd);
+        const approved = pending.answer ? pending.answer.options[0] === APPROVE : await confirmAtTerminal(keptMd);
+        await closeGate(root, 'outline');
+        return decide(root, kept, approved, rules);
+      }
+      // A proposal for an intake that has changed since is not the user's to approve.
+      process.stderr.write('pensmith outline: the outline kept for approval was written for an earlier intake; proposing a new one.\n');
+    }
+    if (pending) await closeGate(root, 'outline');
 
     // The outline's sources are checked against LIBRARY.json; without it no
     // outline could pass, so nothing is asked (or billed).
@@ -236,27 +282,30 @@ export const outlineCommand = defineCommand({
     if ('problems' in answer) return refuse(answer.problems, 'Nothing was written. Run `pensmith outline` again, or write .paper/OUTLINE.md yourself.');
     const outline = numberOutline(answer.value);
 
+    // The approval gate (default-on): --yolo approves; a person at a terminal
+    // is asked; without one the checked proposal is kept for their answer.
+    if (args.yolo === true) return decide(root, outline, true, rules);
     const md = renderOutlineMd(outline);
-    let approved: boolean;
-    try {
-      approved = await runApprovalGate(md, args.yolo === true);
-    } catch (e) {
-      if (e instanceof ApprovalUnavailableError) {
-        process.stderr.write(`pensmith outline: ${e.message}\n`);
-        process.exitCode = e.exitCode;
-        return { ok: false, mode: 'approval-unavailable' };
-      }
-      throw e;
-    }
-    if (!approved) {
-      process.stdout.write('pensmith outline: outline rejected — no OUTLINE.md written.\n');
-      return { ok: false, mode: 'rejected' };
-    }
-
-    const count = await save(root, outline);
-    process.stdout.write(`pensmith outline: wrote OUTLINE.md and OUTLINE.json to ${paperDir(root)} (${count} section(s)).\n`);
-    return { ok: true, path: outlinePath, mode: 'real', sections: count };
+    if (!canAskInTerminal()) return awaitApproval(root, answer.value, md, outline.sections.length);
+    return decide(root, outline, await confirmAtTerminal(md), rules);
   },
 });
+
+/**
+ * Write the approved outline, checked again against the library and intake
+ * as they are now; a rejected one writes nothing and exits 2.
+ */
+async function decide(root: string, outline: Outline, approved: boolean, rules: OutlineRules & { problems: string[] }): Promise<Record<string, unknown>> {
+  if (!approved) {
+    process.stdout.write('pensmith outline: outline rejected — no OUTLINE.md written. Run `pensmith outline` for a new proposal.\n');
+    process.exitCode = EXIT_REFUSED;
+    return { ok: false, mode: 'rejected' };
+  }
+  const problems = [...rules.problems, ...outlineProblems(outline, rules)];
+  if (problems.length > 0) return refuse(problems, 'Nothing was written. Run `pensmith outline` again.');
+  const count = await save(root, outline);
+  process.stdout.write(`pensmith outline: wrote OUTLINE.md and OUTLINE.json to ${paperDir(root)} (${count} section(s)).\n`);
+  return { ok: true, path: path.join(paperDir(root), 'OUTLINE.md'), mode: 'real', sections: count };
+}
 
 export default outlineCommand;

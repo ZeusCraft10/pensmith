@@ -21,7 +21,7 @@ const ALLOWED_REQUIRED_TOKENS = [
   // MCP tools are matched by the prefix `MCP ` — see vocabulary check below.
 ];
 
-test('ARCH-01 / UX-02: workflows/ contains exactly one markdown body per verb (17)', () => {
+test('ARCH-01 / UX-02: workflows/ contains exactly one markdown body per verb (18)', () => {
   assert.ok(existsSync('workflows'), 'workflows/ directory missing');
   const files = readdirSync('workflows').filter((f) => f.endsWith('.md')).sort();
   assert.deepEqual(

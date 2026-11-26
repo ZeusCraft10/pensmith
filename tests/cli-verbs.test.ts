@@ -18,11 +18,11 @@ import { readdirSync, existsSync } from 'node:fs';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 import { command } from '../bin/pensmith.js';
 
-// WR-03: derived from the single-source-of-truth list. Length-locked to 17
-// here (UX-02's 16 plus `ack`) so a new verb is a deliberate change.
+// WR-03: derived from the single-source-of-truth list. Length-locked to 18
+// here (UX-02's 16 plus `ack` and `gate`) so a new verb is a deliberate change.
 const EXPECTED_VERBS: readonly string[] = UX02_VERBS;
 
-test('TIER-04: dispatcher registers exactly 17 verbs (UX-02 canonical 16 plus ack, runtime introspection)', () => {
+test('TIER-04: dispatcher registers exactly 18 verbs (UX-02 canonical 16 plus ack and gate, runtime introspection)', () => {
   // WR-06: introspect the actual citty CommandDef instead of regex-scanning
   // the source. command.subCommands is the Resolvable<SubCommandsDef> citty
   // will dispatch from — its keys are the verbs the user can actually invoke.
@@ -36,12 +36,12 @@ test('TIER-04: dispatcher registers exactly 17 verbs (UX-02 canonical 16 plus ac
   assert.deepEqual(
     registeredVerbs,
     expectedSorted,
-    `dispatcher verbs must equal the canonical 17 — got ${JSON.stringify(registeredVerbs)}, expected ${JSON.stringify(expectedSorted)}`,
+    `dispatcher verbs must equal the canonical 18 — got ${JSON.stringify(registeredVerbs)}, expected ${JSON.stringify(expectedSorted)}`,
   );
   assert.equal(
     registeredVerbs.length,
-    17,
-    `dispatcher must register exactly 17 verbs (UX-02's 16 plus ack), got ${registeredVerbs.length}`,
+    18,
+    `dispatcher must register exactly 18 verbs (UX-02's 16 plus ack and gate), got ${registeredVerbs.length}`,
   );
   // Each value must be a loader function — citty's subCommands entries are
   // Resolvable<CommandDef>, i.e. CommandDef | (() => CommandDef | Promise<CommandDef>).

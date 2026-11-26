@@ -7,8 +7,10 @@
 //
 // The first sixteen are REQUIREMENTS.md UX-02 (PRD §5.2). `ack` is the
 // seventeenth: the only way to let a RETRACTED citation the paper must cite
-// pass, with the author's reason (bin/cli/ack.ts). Keep the list in step with
-// the workflows/*.md filenames.
+// pass, with the author's reason (bin/cli/ack.ts). `gate` is the eighteenth:
+// it takes back the person's answer to a decision a step stopped for when
+// there was no terminal to ask in (bin/cli/gate.ts). Keep the list in step
+// with the workflows/*.md filenames.
 
 import { levenshtein } from './fuzzy.js';
 
@@ -30,6 +32,7 @@ export const UX02_VERBS = [
   'sketch',
   'add',
   'ack',
+  'gate',
 ] as const;
 
 export type Ux02Verb = (typeof UX02_VERBS)[number];

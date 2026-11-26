@@ -8,14 +8,17 @@
 //   2. GEN-06 fail-loud probe: assert LLM key configured (non-offline only).
 //   3. Read INTAKE.md → parseIntakeMd → topic/discipline/assignment.
 //   4. Call topic-disambiguator complete() → defensively parse scopes.
-//   5. Scope approval gate (default-ON): select one scope; --yolo → scope[0];
-//      non-TTY → ApprovalUnavailableError / exit-3.
+//   5. Scope approval gate (default-ON): select one scope; --yolo → scope[0].
 //   6. Call runResearchOrchestrator (adapter fan-out + dedup + source-evaluator).
 //   7. Candidate approval gate (default-ON): multiselect prune of what the
-//      evaluator kept; --yolo → keep those; zero-candidates → skip gate;
-//      non-TTY → ApprovalUnavailableError / exit-3. When the evaluator gave
-//      no usable answer, the gate offers every candidate with none selected,
-//      and --yolo adds nothing (exit 2, research not marked done).
+//      evaluator kept; --yolo → keep those; zero-candidates → skip gate.
+//      When the evaluator gave no usable answer, the gate offers every
+//      candidate with none selected, and --yolo adds nothing (exit 2,
+//      research not marked done).
+//      Without a terminal each gate keeps its choice (.paper/gates/) and
+//      prints it as JSON with exit 3; `pensmith gate answer <ref> <option>`
+//      continues from there with the author's answer, searching nothing
+//      again for a kept candidate list.
 //   8. Merge the approved candidates (marked retracted where their own
 //      records say so) into .paper/LIBRARY.json (bin/lib/library.ts), which writes
 //      CITATIONS.bib and CITATIONS.ris from it. A work the library already
@@ -27,16 +30,19 @@
 // T-11-12: key value never logged here — complete() owns the no-leak header path.
 
 import { defineCommand } from 'citty';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { mergeCandidates, updateLibrary } from '../lib/library.js';
 import { paperDir } from '../lib/paths.js';
-import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
+import { SourceCandidateSchema, type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { ask } from '../lib/prompts.js';
-import { EXIT_REFUSED } from '../lib/exit-codes.js';
+import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
+import { closeGate, gateStillApplies, openGate, pendingDecision, readGate, type GateRecord } from '../lib/gates.js';
+import { sha256 } from '../lib/verify/verification-record.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
 import { runResearchOrchestrator, SourceEvaluationError } from '../lib/research-orchestrator.js';
@@ -50,18 +56,6 @@ import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../lib/network-mode.js';
 void loadPrompt; // reference kept to prevent unused-import elision
 
 // ---------------------------------------------------------------------------
-// ApprovalUnavailableError — mirrors outline.ts exactly (CLAUDE.md non-negotiable:
-// approval gates default-on; non-TTY without --yolo → exit 3).
-// ---------------------------------------------------------------------------
-class ApprovalUnavailableError extends Error {
-  exitCode = 3 as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'ApprovalUnavailableError';
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Topic-disambiguator response schema (T-12-01 trust boundary).
 // ---------------------------------------------------------------------------
 const ScopeSchema = z.object({
@@ -71,6 +65,129 @@ const ScopeSchema = z.object({
 const DisambiguatorResponseSchema = z.object({
   scopes: z.array(ScopeSchema).min(1),
 });
+
+type Scope = z.infer<typeof ScopeSchema>;
+
+/** The scopes and the candidates research keeps while it waits for the author's choice. */
+const KeptScopesSchema = z.object({ scopes: z.array(ScopeSchema).min(1) });
+const KeptCandidatesSchema = z.object({
+  candidates: z.array(SourceCandidateSchema).min(1),
+  evaluated: z.boolean(),
+  scope: z.string(),
+});
+
+/** True when a person at a terminal can see the choice and answer. */
+function canAskInTerminal(): boolean {
+  return Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
+}
+
+/** What a kept choice is about: the intake research was asked for. */
+function intakeFingerprint(root: string): string | null {
+  for (const name of ['INTAKE.json', 'INTAKE.md']) {
+    try {
+      return sha256(readFileSync(path.join(paperDir(root), name)));
+    } catch {
+      // not this one
+    }
+  }
+  return null;
+}
+
+/** The topic-disambiguator's scopes, or the topic as the one query when its answer cannot be used (T-12-01). */
+async function proposeScopes(topic: string, discipline: string, assignment: string): Promise<Scope[]> {
+  // CR-01: sanitize user-controlled strings before interpolation so that
+  // {{...}} tokens in INTAKE.md cannot cause secondary template expansion.
+  const interpolatedPrompt = interpolate(loadPrompt('topic-disambiguator'), {
+    topic: escapeTemplateTokens(topic || '(unknown topic — run pensmith intake first)'),
+    discipline: escapeTemplateTokens(discipline),
+    assignment: escapeTemplateTokens(assignment || '(no assignment text — run pensmith intake first)'),
+  });
+  const llmResult = await complete({
+    system:
+      'You are an academic research assistant. Your task is to disambiguate a ' +
+      'research topic and propose search scopes. Return a JSON object in the ' +
+      'exact format specified in the prompt. No prose outside the JSON object.',
+    messages: [{ role: 'user', content: interpolatedPrompt }],
+    role: 'research',
+    scope: 'task',
+    scopeId: 'research',
+  });
+  // On any parse failure: WARN + fall back to a single auto scope.
+  try {
+    const zodResult = DisambiguatorResponseSchema.safeParse(JSON.parse(llmResult.text));
+    if (zodResult.success) return zodResult.data.scopes;
+    process.stderr.write(
+      `pensmith research: WARN — topic-disambiguator response failed schema validation ` +
+      `(${zodResult.error.message.slice(0, 120)}); ` +
+      `falling back to single-scope with topic as query.\n`,
+    );
+  } catch {
+    process.stderr.write(
+      `pensmith research: WARN — topic-disambiguator response is not valid JSON; ` +
+      `falling back to single-scope with topic as query.\n`,
+    );
+  }
+  return [{ label: 'auto', queries: [topic || 'research'] }];
+}
+
+/** Ask the person at the terminal which scope to search; the label they chose. */
+async function askScope(scopes: Scope[]): Promise<string> {
+  const answer = await ask({
+    id: 'scope',
+    kind: 'select',
+    label: 'Which research scope should I use?',
+    options: scopes.map((sc) => ({ value: sc.label, label: sc.label, hint: sc.queries.slice(0, 2).join(', ') })),
+    default: scopes[0]!.label,
+  });
+  const value = (answer as { value: string }).value;
+  if (!scopes.some((sc) => sc.label === value)) {
+    // WR-01: say so rather than silently falling through to the default.
+    process.stderr.write(
+      `pensmith research: WARN — scope selection returned unrecognised value "${value}"; falling back to first scope "${scopes[0]!.label}".\n`,
+    );
+  }
+  return value;
+}
+
+/** Ask the person at the terminal which candidates to keep; their citekeys. */
+async function askCandidates(candidates: SourceCandidate[], evaluated: boolean): Promise<string[]> {
+  const answer = await ask({
+    id: 'candidates',
+    kind: 'multiselect',
+    label: `Select candidates to keep (${candidates.length} found):`,
+    options: candidates.map((c) => ({
+      value: c.citekey,
+      label: `[${c.source}] ${c.title.slice(0, 60)}${c.title.length > 60 ? '…' : ''} (${c.year ?? '?'})`,
+      hint: c.authors.slice(0, 2).join(', '),
+    })),
+    default: evaluated ? candidates.map((c) => c.citekey) : [],
+  });
+  const value = (answer as { value: unknown }).value;
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+/** Print the kept scope choice and stop for the author's answer (exit 3). */
+function showScopes(record: GateRecord, scopes: Scope[]): Record<string, unknown> {
+  process.stderr.write('pensmith research: choosing the search scope needs the user, and there is no terminal to ask in; the scopes are kept until they answer.\n');
+  process.stdout.write(`${JSON.stringify(pendingDecision(record, 'research-scope', { scopes }))}\n`);
+  process.exitCode = EXIT_NEEDS_ANSWER;
+  return { ok: false, mode: 'pending', ref: record.ref };
+}
+
+/** Print the kept candidates and stop for the author's choice (exit 3). */
+function showCandidates(record: GateRecord, kept: z.infer<typeof KeptCandidatesSchema>): Record<string, unknown> {
+  process.stderr.write(
+    'pensmith research: choosing which sources to keep needs the user, and there is no terminal to ask in; the candidates are kept until they answer.' +
+      (kept.evaluated ? '\n' : ' The source evaluator kept none of them, so none is chosen for them.\n'),
+  );
+  const shown = kept.candidates.map((c) => ({
+    key: c.citekey, source: c.source, title: c.title, authors: c.authors.slice(0, 3), year: c.year ?? null,
+    ...(c.doi ? { doi: c.doi } : {}), ...(c.retracted ? { retracted: true } : {}),
+  }));
+  process.stdout.write(`${JSON.stringify(pendingDecision(record, 'research-candidates', { scope: kept.scope, evaluated: kept.evaluated, candidates: shown }))}\n`);
+  process.exitCode = EXIT_NEEDS_ANSWER;
+  return { ok: false, mode: 'pending', ref: record.ref };
+}
 
 export const researchCommand = defineCommand({
   meta: {
@@ -146,164 +263,120 @@ export const researchCommand = defineCommand({
     }
     const { topic, discipline, assignment } = intake ?? { topic: '', discipline: 'other', assignment: '' };
 
-    // ── Step 2: topic-disambiguator complete() (D-12 LOCKED slug) ──
-    // CR-01: sanitize user-controlled strings before interpolation so that
-    // {{...}} tokens in INTAKE.md cannot cause secondary template expansion.
-    const topicDisambiguatorPrompt = loadPrompt('topic-disambiguator');
-    const interpolatedPrompt = interpolate(topicDisambiguatorPrompt, {
-      topic: escapeTemplateTokens(topic || '(unknown topic — run pensmith intake first)'),
-      discipline: escapeTemplateTokens(discipline),
-      assignment: escapeTemplateTokens(assignment || '(no assignment text — run pensmith intake first)'),
-    });
-    const llmResult = await complete({
-      system:
-        'You are an academic research assistant. Your task is to disambiguate a ' +
-        'research topic and propose search scopes. Return a JSON object in the ' +
-        'exact format specified in the prompt. No prose outside the JSON object.',
-      messages: [{ role: 'user', content: interpolatedPrompt }],
-      role: 'research',
-      scope: 'task',
-      scopeId: 'research',
-    });
+    const root = process.cwd();
+    const binding = { intake_sha256: intakeFingerprint(root) };
 
-    // ── Step 3: Defensively parse topic-disambiguator response (T-12-01) ──
-    // On any parse failure: WARN + fall back to a single auto scope.
-    let scopes: Array<{ label: string; queries: string[] }>;
-    try {
-      const rawParsed: unknown = JSON.parse(llmResult.text);
-      const zodResult = DisambiguatorResponseSchema.safeParse(rawParsed);
-      if (zodResult.success) {
-        scopes = zodResult.data.scopes;
-      } else {
+    // A list of candidates kept for the author's choice: take their answer,
+    // ask at a terminal, or show the same list again. Nothing is searched or
+    // screened again. --yolo starts afresh.
+    let finalCandidates: SourceCandidate[] | null = null;
+    let candidates: SourceCandidate[] = [];
+    const keptList = readGate(root, 'research-candidates');
+    if (keptList && !yolo) {
+      const kept = KeptCandidatesSchema.safeParse(keptList.payload);
+      if (kept.success && gateStillApplies(keptList, binding)) {
+        candidates = kept.data.candidates;
+        if (!keptList.answer && !canAskInTerminal()) return showCandidates(keptList, kept.data);
+        const keys = keptList.answer ? keptList.answer.options : await askCandidates(candidates, kept.data.evaluated);
+        finalCandidates = candidates.filter((c) => keys.includes(c.citekey));
+      }
+    }
+    if (keptList) await closeGate(root, 'research-candidates');
+
+    if (finalCandidates === null) {
+      // ── Step 2: the search scope: one kept for the author's choice, else
+      //    the topic-disambiguator's (D-12 LOCKED slug). ──
+      let chosenScope: Scope | null = null;
+      const keptScope = readGate(root, 'research-scope');
+      if (keptScope && !yolo) {
+        const kept = KeptScopesSchema.safeParse(keptScope.payload);
+        if (kept.success && gateStillApplies(keptScope, binding)) {
+          if (!keptScope.answer && !canAskInTerminal()) return showScopes(keptScope, kept.data.scopes);
+          const label = keptScope.answer ? keptScope.answer.options[0] : await askScope(kept.data.scopes);
+          chosenScope = kept.data.scopes.find((sc) => sc.label === label) ?? kept.data.scopes[0]!;
+        }
+      }
+      if (keptScope) await closeGate(root, 'research-scope');
+
+      if (chosenScope === null) {
+        const scopes = await proposeScopes(topic, discipline, assignment);
+        chosenScope = scopes[0]!;
+        // ── Step 3: scope approval gate (default-ON): --yolo takes the first
+        //    scope; a terminal asks; otherwise the scopes are kept for the
+        //    author's choice (exit 3). ──
+        if (scopes.length > 1 && !yolo) {
+          if (!canAskInTerminal()) {
+            const record = await openGate(root, {
+              gate: 'research-scope',
+              summary: 'Which search scope should research use?',
+              options: scopes.map((sc) => sc.label),
+              default: [scopes[0]!.label],
+              binding,
+              payload: { scopes },
+            });
+            return showScopes(record, scopes);
+          }
+          const label = await askScope(scopes);
+          chosenScope = scopes.find((sc) => sc.label === label) ?? scopes[0]!;
+        }
+      }
+
+      // ── Step 4: Live discovery — runResearchOrchestrator ──
+      // When the source evaluator gives no usable answer, or keeps none,
+      // nothing is chosen for the author: the gate shows every candidate with
+      // none selected, and --yolo (which keeps what the evaluator kept) adds
+      // nothing and leaves research not done.
+      let evaluated = true;
+      try {
+        candidates = await runResearchOrchestrator(
+          chosenScope.queries,
+          {
+            topic,
+            discipline,
+            assignment,
+            scopeLabel: chosenScope.label,
+          },
+        );
+      } catch (e) {
+        if (!(e instanceof SourceEvaluationError)) throw e;
+        candidates = e.candidates;
+        evaluated = false;
+        process.stderr.write(`pensmith research: WARN — ${e.message}; no candidate is kept unless you choose it.\n`);
+      }
+
+      if (!evaluated && yolo) {
         process.stderr.write(
-          `pensmith research: WARN — topic-disambiguator response failed schema validation ` +
-          `(${zodResult.error.message.slice(0, 120)}); ` +
-          `falling back to single-scope with topic as query.\n`,
+          `pensmith research: --yolo keeps the candidates the source evaluator keeps, and it kept none, so nothing was added ` +
+          `to LIBRARY.json and research is not marked done. Run \`pensmith research\` again, or without --yolo to choose ` +
+          `from the ${candidates.length} candidates yourself.\n`,
         );
-        scopes = [{ label: 'auto', queries: [topic || 'research'] }];
-      }
-    } catch {
-      process.stderr.write(
-        `pensmith research: WARN — topic-disambiguator response is not valid JSON; ` +
-        `falling back to single-scope with topic as query.\n`,
-      );
-      scopes = [{ label: 'auto', queries: [topic || 'research'] }];
-    }
-
-    // ── Step 4: Scope approval gate (default-ON) ──
-    // When scopes.length > 1 and not --yolo: ask() a kind:'select' over scope labels.
-    // --yolo: auto-select scopes[0].
-    // non-TTY: ApprovalUnavailableError → exit-3 (outline precedent).
-    let chosenScope = scopes[0]!;
-    if (scopes.length > 1 && !yolo) {
-      if (!process.stdout.isTTY || !process.stdin.isTTY) {
-        const err = new ApprovalUnavailableError(
-          'research: scope selection requires an interactive terminal. ' +
-          'Use --yolo to auto-select the first scope (CLAUDE.md non-negotiable: approval-gates default-on).',
-        );
-        process.stderr.write(`pensmith ${err.message}\n`);
-        process.exitCode = err.exitCode;
-        return { ok: false, mode: 'approval-unavailable' };
+        process.exitCode = EXIT_REFUSED;
+        return { ok: false, mode: 'evaluation-failed' };
       }
 
-      const answer = await ask({
-        id: 'scope',
-        kind: 'select',
-        label: 'Which research scope should I use?',
-        options: scopes.map((s) => ({
-          value: s.label,
-          label: s.label,
-          hint: s.queries.slice(0, 2).join(', '),
-        })),
-        default: scopes[0]!.label,
-      });
-
-      const answerValue = (answer as { value: string }).value;
-      const selected = scopes.find((s) => s.label === answerValue);
-      if (selected) {
-        chosenScope = selected;
-      } else {
-        // WR-01: the ask() return value did not match any scope label.
-        // Emit a WARN rather than silently falling through to the pre-gate default.
-        process.stderr.write(
-          `pensmith research: WARN — scope selection returned unrecognised value ` +
-          `"${answerValue}"; falling back to first scope "${scopes[0]!.label}".\n`,
-        );
-        // chosenScope is already scopes[0] — no assignment needed.
+      // ── Step 5: Candidate approval gate (default-ON) ──
+      // Zero candidates: nothing to choose. --yolo keeps what the evaluator
+      // kept. A terminal asks; otherwise the candidates are kept for the
+      // author's choice (exit 3).
+      finalCandidates = candidates;
+      if (candidates.length > 0 && !yolo) {
+        if (!canAskInTerminal()) {
+          const kept = { candidates, evaluated, scope: chosenScope.label };
+          const record = await openGate(root, {
+            gate: 'research-candidates',
+            summary: `Which of the ${candidates.length} candidate sources should the library keep?` +
+              (evaluated ? '' : ' The source evaluator gave no usable answer, so none is chosen for you.'),
+            options: candidates.map((c) => c.citekey),
+            multiple: true,
+            default: evaluated ? candidates.map((c) => c.citekey) : [],
+            binding,
+            payload: kept,
+          });
+          return showCandidates(record, kept);
+        }
+        const keys = await askCandidates(candidates, evaluated);
+        finalCandidates = candidates.filter((c) => keys.includes(c.citekey));
       }
-    }
-
-    // ── Step 5: Live discovery — runResearchOrchestrator ──
-    // When the source evaluator gives no usable answer, or keeps none,
-    // nothing is chosen for the author: the gate shows every candidate with
-    // none selected, and --yolo (which keeps what the evaluator kept) adds
-    // nothing and leaves research not done.
-    let candidates: SourceCandidate[];
-    let evaluated = true;
-    try {
-      candidates = await runResearchOrchestrator(
-        chosenScope.queries,
-        {
-          topic,
-          discipline,
-          assignment,
-          scopeLabel: chosenScope.label,
-        },
-      );
-    } catch (e) {
-      if (!(e instanceof SourceEvaluationError)) throw e;
-      candidates = e.candidates;
-      evaluated = false;
-      process.stderr.write(`pensmith research: WARN — ${e.message}; no candidate is kept unless you choose it.\n`);
-    }
-
-    if (!evaluated && yolo) {
-      process.stderr.write(
-        `pensmith research: --yolo keeps the candidates the source evaluator keeps, and it kept none, so nothing was added ` +
-        `to LIBRARY.json and research is not marked done. Run \`pensmith research\` again, or without --yolo to choose ` +
-        `from the ${candidates.length} candidates yourself.\n`,
-      );
-      process.exitCode = EXIT_REFUSED;
-      return { ok: false, mode: 'evaluation-failed' };
-    }
-
-    // ── Step 6: Candidate approval gate (default-ON) ──
-    // Zero-candidate path: skip the gate (nothing to prune).
-    // non-TTY and not --yolo: ApprovalUnavailableError → exit-3.
-    let finalCandidates: SourceCandidate[] = candidates;
-    if (candidates.length > 0 && !yolo) {
-      if (!process.stdout.isTTY || !process.stdin.isTTY) {
-        // --yolo keeps what the evaluator kept, so it is no way out when the
-        // evaluator kept none.
-        const err = new ApprovalUnavailableError(
-          'research: candidate approval requires an interactive terminal. ' +
-          (evaluated
-            ? 'Use --yolo to keep the candidates the source evaluator kept (CLAUDE.md non-negotiable: approval-gates default-on).'
-            : 'The source evaluator kept none of them, so nothing is chosen for you; run `pensmith research` at a terminal to choose from them yourself.'),
-        );
-        process.stderr.write(`pensmith ${err.message}\n`);
-        process.exitCode = err.exitCode;
-        return { ok: false, mode: 'approval-unavailable' };
-      }
-
-      const pruneAnswer = await ask({
-        id: 'candidates',
-        kind: 'multiselect',
-        label: `Select candidates to keep (${candidates.length} found):`,
-        options: candidates.map((c) => ({
-          value: c.citekey,
-          label: `[${c.source}] ${c.title.slice(0, 60)}${c.title.length > 60 ? '…' : ''} (${c.year ?? '?'})`,
-          hint: c.authors.slice(0, 2).join(', '),
-        })),
-        default: evaluated ? candidates.map((c) => c.citekey) : [],
-      });
-
-      const keepKeys = new Set(
-        Array.isArray((pruneAnswer as { value: unknown }).value)
-          ? (pruneAnswer as { value: string[] }).value
-          : [],
-      );
-      finalCandidates = candidates.filter((c) => keepKeys.has(c.citekey));
     }
 
     if (finalCandidates.length === 0) {

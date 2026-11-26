@@ -25,7 +25,8 @@ import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { readSectionState } from '../lib/router.js';
-import { EXIT_REFUSED } from '../lib/exit-codes.js';
+import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
+import { pendingDecision } from '../lib/gates.js';
 import { frontmatterProblem, parseFrontmatter } from '../lib/frontmatter.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
@@ -130,8 +131,21 @@ export const planCommand = defineCommand({
         ...(research ? { research } : {}),
         proposeSwap,
       });
+      if (result.pending) {
+        // No terminal to ask in: the checked change waits for the user's answer.
+        process.stderr.write(`pensmith plan --revise: ${result.message}\n`);
+        process.stdout.write(`${JSON.stringify(pendingDecision(result.pending, 'revise-approval', {
+          section: n,
+          flagged_citekey: result.flagged_citekey,
+          change: result.pendingChange ?? '',
+        }))}\n`);
+        process.exitCode = EXIT_NEEDS_ANSWER;
+        return { ok: false, mode: 'pending', ref: result.pending.ref };
+      }
       process.stdout.write(`pensmith plan --revise: ${result.message}\n`);
-      return { ok: !result.retryExhausted, mode: 'revise', ...result };
+      // A change the user rejected is a refused step.
+      if (result.rejected) process.exitCode = EXIT_REFUSED;
+      return { ok: !result.retryExhausted && result.rejected !== true, mode: 'revise', ...result };
     }
 
     // A finished plan is the user's work, and so is a PLAN.md they broke while

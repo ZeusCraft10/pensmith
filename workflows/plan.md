@@ -11,7 +11,7 @@ required:
 
 degrade_if_missing:
   - if no MCP tools: direct file reads from .paper/
-  - if no AskUserQuestion: render the --revise citation-swap diff via @clack/prompts in a TTY; in a non-TTY without --yolo, exit code 3 with "use --yolo to auto-accept" (PRD §19 approval gate stays default-on)
+  - if no AskUserQuestion: render the --revise citation-swap diff via @clack/prompts in a TTY; with no terminal, keep the proposed change and exit 3 with the pending decision as JSON, answered through `pensmith gate answer <ref> approve|reject` (PRD §19 approval gate stays default-on; never suggest --yolo)
 </capability_check>
 
 ## Overview
@@ -79,8 +79,14 @@ repairs ONE verifier-flagged citation rather than authoring a fresh PLAN.md:
    whether it supports the sentence, and ask via `AskUserQuestion`; degrade to
    `@clack/prompts` in a TTY.
    `--yolo` skips the gate and auto-loops the SAME path up to 2 retries, then
-   writes a `RETRY_EXHAUSTED` verdict to VERIFICATION.md (D-06). A non-TTY
-   without `--yolo` exits code 3.
+   writes a `RETRY_EXHAUSTED` verdict to VERIFICATION.md (D-06). With no
+   terminal and no `--yolo`, the checked change is kept in
+   `.paper/gates/revise-<N>.json`, bound to the DRAFT.md and VERIFICATION.md
+   it was made from, and printed as one JSON line (`change`: before, after and
+   the replacement work) with exit 3. `pensmith gate answer <ref> approve`
+   applies exactly that change with no new model call; `reject` leaves
+   DRAFT.md unchanged and exits 2. A change kept for a draft that changed
+   since is never applied.
 5. **On accept** — `swap` substitutes the flagged `[@k]` (via the Plan 01
    `replaceCitekeys` token locator); `remove` mechanically deletes the bracketed
    citation clause (NO LLM prose rewrite). The patched DRAFT.md is written via

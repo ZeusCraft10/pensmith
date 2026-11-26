@@ -156,6 +156,7 @@ The first run starts intake, and each later run advances one step (`pensmith nex
 | `pensmith sketch` | Thinking-partner thesis discovery before intake (no state created until you confirm). |
 | `pensmith add <source>` | Ingest a source mid-paper (DOI, arXiv ID, local PDF, URL, .bib or CSL-JSON file) and optionally remap sections. |
 | `pensmith ack <n> <citekey>` | Acknowledge a RETRACTED citation in section &lt;n&gt; that the paper must cite, with your reason, so it no longer blocks. |
+| `pensmith gate [action] [ref] [option]` | Answer a decision a step is waiting for (`gate answer &lt;ref&gt; &lt;option&gt;`), or list them (`gate list`). |
 <!-- verb-table:end -->
 
 In this alpha, `pensmith done` skips the humanize step (see [Status](#status)).

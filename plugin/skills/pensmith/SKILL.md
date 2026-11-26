@@ -29,7 +29,9 @@ the Bash tool; do not reimplement its steps yourself.
 1. `pensmith status` shows where the paper is and what comes next.
 2. `pensmith next` runs that next step: intake, research, the outline, then
    plan, write and verify for each section, then compile and done.
-3. Tell the user what the step did, then repeat.
+3. Tell the user what the step did, then repeat. `pensmith status` also says
+   why the next step is the one it names (for a section that failed
+   verification, which citation and how to repair it).
 
 Run one step at a time and report between steps. The user can also ask for a
 specific step:
@@ -45,6 +47,7 @@ specific step:
 | `pensmith compile` | Assemble the verified sections into one draft. |
 | `pensmith done` | Final audit and export; the user confirms. |
 | `pensmith add` | Add a source by DOI, arXiv ID, PDF, URL, or a .bib or CSL-JSON file. |
+| `pensmith gate` | `pensmith gate answer <ref> <option>` passes the user's answer to a waiting decision back; `pensmith gate list` shows what is waiting. |
 | `pensmith list` / `pensmith open` | List papers, switch the active one. |
 | `pensmith resume` | Pick up the active paper where it stopped. |
 | `pensmith sketch` | Explore a thesis before starting a paper. |
@@ -72,8 +75,9 @@ Read the exit status of every pensmith command.
   edit `DRAFT.md`, `VERIFICATION.md`, `VERIFICATION.json`, the compiled
   `.paper/DRAFT.md` or the bibliography to make a check pass: compile and
   done check those files against what verify and compile recorded.
-  A flagged citation is fixed with `pensmith plan N --revise`, then write and
-  verify again; UNRESOLVED means retry once the registry is reachable, or,
+  A flagged citation is fixed with `pensmith plan N --revise` (the user
+  approves the change), then verify again; `pensmith next` takes these steps
+  in turn and says why. UNRESOLVED means retry once the registry is reachable, or,
   for an entry with no identifier, tell the user which source needs one. For
   RAW_CITATION and UNPARSEABLE, revise names what to rewrite; show the user
   and let them decide. For RETRACTED, tell the user the work was retracted;
@@ -82,11 +86,16 @@ Read the exit status of every pensmith command.
   `pensmith ack N <citekey> --reason "<their reason, in their words>"`, then
   verify again. Never acknowledge a retraction on your own.
 - **Exit 3**: pensmith needs a decision or answers from the user before it
-  can continue, such as approving the outline, confirming the export, or answering
-  intake questions. The command prints a JSON object describing what it is
-  waiting for: the gate, a summary and the options. Ask the user with
-  AskUserQuestion, offering exactly those options, and pass their choice back
-  the way that output says. Never choose for the user.
+  can continue, such as approving the outline, choosing sources, approving a
+  citation repair, confirming the export, or answering intake questions. The
+  command prints one line of JSON describing what it is waiting for: the
+  gate, a `ref`, a summary, the options, and what to show (the outline, the
+  candidates, the change). Show that to the user and ask with
+  AskUserQuestion, offering exactly those options; then run
+  `pensmith gate answer <ref> <option>` with their choice, which finishes the
+  step. Intake's questions are free text: pass the answers back the way its
+  JSON says. Never choose for the user, and never use `--yolo` to get past a
+  gate.
 
 ## Flags
 

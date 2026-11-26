@@ -94,11 +94,15 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
    A declined gate cancels the export, writes no deliverable and exits 2.
 
    With no terminal (Claude Code's Bash tool, CI, a pipe) the CLI cannot ask.
-   It prints the pending decision as one JSON line, exports nothing and exits
-   3. On exit 3, show the user that summary and ask with AskUserQuestion.
-   Never add `--yolo` yourself: only the user may type it. Until pensmith can
-   take the answer back from Tier 1, a user who wants to export runs
-   `pensmith done` in their own terminal and answers the prompt there.
+   It keeps the audit (Pass 4, plagiarism, honesty, the staged humanized text)
+   in `.paper/gates/export.json`, prints the pending decision as one JSON line
+   (`{pending, gate: "export", ref, summary, options: ["export","cancel"],
+   default: "cancel", issues, how_to_answer}`), exports nothing and exits 3.
+   Running done again shows the same decision without auditing again. On exit
+   3, show the user the summary and issues and ask with AskUserQuestion; then
+   run `pensmith gate answer <ref> export` (or `cancel`, which exits 2). The
+   answering run checks the export again on the same bytes and exports them.
+   Never add `--yolo` yourself: only the user may type it.
 
 7. **Export + mandatory scrub + trace scan** (DONE-06/07/08): `exportDraft`
    builds the files in a staging folder inside `.paper/`, then moves them into

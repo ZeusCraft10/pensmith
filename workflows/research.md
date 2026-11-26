@@ -43,7 +43,7 @@ workflow body below is the prompt that drives the verb under both Tier 1
 
 1. **Read `.paper/INTAKE.md`** for topic + discipline + tone + citation style.
 
-2. **Disambiguate topic + generate queries** (RSCH-02): invoke `templates/prompts/topic-disambiguator.md` (D-12 LOCKED slug per Plan 03 CONTEXT D-12) → `{scopes: [{label, queries}]}` JSON. In `--yolo` mode, pick scope #1; otherwise present to user for selection (via `AskUserQuestion` if available, else stdin via `@clack/prompts`).
+2. **Disambiguate topic + generate queries** (RSCH-02): invoke `templates/prompts/topic-disambiguator.md` (D-12 LOCKED slug per Plan 03 CONTEXT D-12) → `{scopes: [{label, queries}]}` JSON. In `--yolo` mode, pick scope #1; otherwise present to user for selection (via `AskUserQuestion` if available, else stdin via `@clack/prompts`). With no terminal, the scopes are kept in `.paper/gates/research-scope.json` and printed as one JSON line with exit 3; `pensmith gate answer <ref> <label>` searches the chosen scope. The candidate approval in step 6 works the same way (`research-candidates`, several keys comma-separated, or `all` / `none`), and approving a kept list searches and screens nothing again.
 
 3. **Run adapters in parallel** (RSCH-03 / RSCH-04):
    - `import { sources } from 'bin/lib/sources/index.ts'` (the registry has 7 entries: `crossref`, `openalex`, `arxiv`, `pubmed`, `semanticscholar`, `unpaywall` and `zotero-mcp`).

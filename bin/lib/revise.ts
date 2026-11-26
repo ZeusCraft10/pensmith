@@ -15,8 +15,11 @@
 //      replacement key is in assigned_sources, so no new citekey ever enters
 //      DRAFT.md.
 //   4. Approval gate (default-on, PRD §19): show the change, with the
-//      replacement's abstract, and ask. Skipped under --yolo. A non-TTY
-//      without --yolo exits 3.
+//      replacement's abstract, and ask. Skipped under --yolo. Without a
+//      terminal the checked proposal is kept (.paper/gates/revise-<N>.json,
+//      bound to the DRAFT.md and VERIFICATION.md it was made from) and
+//      returned as pending; `pensmith gate answer <ref> approve` applies
+//      exactly that change, with no new model call.
 //   5. On accept: `swap` replaces the flagged key inside each citation that
 //      cites it (prefix and locator kept). `remove` is mechanical too (no
 //      model rewrite). For a misquotation (a Pass-3 NOT_FOUND row) it deletes
@@ -66,6 +69,8 @@ import { stripFenceMarkers } from './untrusted-fence.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
 import { assignedSourcesFrom } from './plan-status.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
+import { closeGate, gateStillApplies, openGate, readGate, type GateRecord } from './gates.js';
+import { sha256 } from './verify/verification-record.js';
 
 // --yolo retry cap: 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
@@ -151,16 +156,14 @@ export interface ReviseResult {
   researchApplied: boolean;
   /** Human-readable summary for the CLI / workflow narration. */
   message: string;
+  /** The change kept for the user's approval, when there was no terminal to ask in. */
+  pending?: GateRecord;
+  /** What the pending decision shows: the change and the replacement work. */
+  pendingChange?: string;
+  /** True when the user rejected the change at the approval gate. */
+  rejected?: boolean;
 }
 
-/** Raised when the approval gate cannot run (non-TTY without --yolo). Exit 3. */
-export class ApprovalUnavailableError extends Error {
-  exitCode = 3 as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'ApprovalUnavailableError';
-  }
-}
 
 // ---------------------------------------------------------------------------
 // VERIFICATION.md parsing — first failing citation, in appearance order.
@@ -378,13 +381,12 @@ export function gateNote(proposal: ReviseSwapProposal, context: ReviseGateContex
   return change;
 }
 
+/** True when a person at a terminal can see the change and answer. */
+function canAskInTerminal(): boolean {
+  return Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
+}
+
 async function defaultApprove(proposal: ReviseSwapProposal, context: ReviseGateContext): Promise<boolean> {
-  if (!process.stdout.isTTY || !process.stdin.isTTY) {
-    throw new ApprovalUnavailableError(
-      'revise: approval gate requires an interactive terminal. ' +
-      'Use --yolo to auto-accept (PRD §19 default-on approval).',
-    );
-  }
   const clack = await import('@clack/prompts');
   clack.note(gateNote(proposal, context), `Proposed ${proposal.action} — ${proposal.rationale}`);
   const ok = await clack.confirm({ message: `Apply this ${proposal.action}?` });
@@ -655,6 +657,65 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     voice_hint: voiceHint(planMd),
   };
 
+  // The change waits for the person's approval: an injected approver (tests)
+  // or a terminal asks now; otherwise it is kept for `pensmith gate answer`.
+  const interactive = opts.approve !== undefined || canAskInTerminal();
+  const binding = { draft_sha256: sha256(draftMd), verification_sha256: sha256(verificationMd) };
+
+  /** The patch for `proposal`, and what the approval gate shows for it. */
+  const prepare = (proposal: ReviseSwapProposal): { patched: string; removed: string[]; shown: ReviseSwapProposal; context: ReviseGateContext } | { refused: string } => {
+    const patch = patchFor(proposal, draftMd, failing);
+    if ('refused' in patch) return patch;
+    // When the patch deletes text, the gate shows that text, not the model's excerpt.
+    const shown: ReviseSwapProposal = patch.removed.length === 0 ? proposal
+      : { ...proposal, patch: { before_excerpt: patch.removed.join('\n'), after_excerpt: '(deleted)' } };
+    const replacement = sources.find((src) => src.citekey === proposal.replacement_citekey);
+    return { ...patch, shown, context: replacement ? { replacement } : {} };
+  };
+
+  /** Apply `proposal` once approved; a rejection leaves DRAFT.md as it is. */
+  const settle = async (proposal: ReviseSwapProposal, patch: { patched: string; removed: string[] }, accepted: boolean): Promise<ReviseResult> => {
+    if (!accepted) {
+      return { ...base, accepted: false, rejected: true, message: `${base.message} Proposal rejected at the approval gate — DRAFT.md unchanged.`.trim() };
+    }
+    await applyProposal(draftPath, planPath, patch.patched);
+    const what = failing.misquoted ? 'the misquotation'
+      : patch.removed.length === 1 ? 'the quotation it alone supported' : `${patch.removed.length} passages with quotations it alone supported`;
+    const deleted = patch.removed.length === 0 ? '' : ` Deleted ${what}: "${excerpt(patch.removed[0]!)}".`;
+    return {
+      ...base,
+      accepted: true,
+      message: `${base.message} Applied ${proposal.action} for [@${failing.citekey}]${proposal.replacement_citekey ? ` → [@${proposal.replacement_citekey}]` : ''}.${deleted} Verification hash reset — re-run verify.`.trim(),
+    };
+  };
+
+  // A change kept for approval: apply the person's answer, ask at a terminal,
+  // or show it again, with no new model call. One proposed for another
+  // DRAFT.md or VERIFICATION.md is never applied.
+  const kept = readGate(opts.paperRoot, 'revise', opts.n);
+  if (kept && !opts.yolo) {
+    const parsed = ReviseSwapSchema.safeParse((kept.payload as { proposal?: unknown } | null)?.proposal);
+    const checked = parsed.success ? validateProposal(JSON.stringify(parsed.data), failing.citekey, assignedSources) : null;
+    const prepared = checked?.ok ? prepare(checked.proposal) : null;
+    if (checked?.ok && prepared && !('refused' in prepared) && gateStillApplies(kept, binding)) {
+      base.action = checked.proposal.action;
+      base.replacement_citekey = checked.proposal.replacement_citekey;
+      if (!kept.answer && !interactive) return { ...base, pending: kept, pendingChange: gateNote(prepared.shown, prepared.context), message: `${base.message} The proposed ${checked.proposal.action} for [@${failing.citekey}] waits for the user's approval.`.trim() };
+      const accepted = kept.answer ? kept.answer.options[0] === 'approve' : await approve(prepared.shown, prepared.context);
+      await closeGate(opts.paperRoot, 'revise', opts.n);
+      return settle(checked.proposal, prepared, accepted);
+    }
+    await closeGate(opts.paperRoot, 'revise', opts.n);
+    if (kept.answer) {
+      return {
+        ...base, accepted: false, rejected: true,
+        message: `${base.message} The change answered was proposed for an earlier DRAFT.md or VERIFICATION.md of section ${opts.n}, so it was not applied; DRAFT.md unchanged. Run \`pensmith verify ${opts.n}\`, then revise again.`.trim(),
+      };
+    }
+  } else if (kept) {
+    await closeGate(opts.paperRoot, 'revise', opts.n);
+  }
+
   const maxAttempts = opts.yolo ? YOLO_RETRY_CAP + 1 : 1;
   let lastRejection = '';
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -668,31 +729,25 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     base.action = proposal.action;
     base.replacement_citekey = proposal.replacement_citekey;
 
-    const patch = patchFor(proposal, draftMd, failing);
-    if ('refused' in patch) {
-      return { ...base, accepted: false, rejectedReason: patch.refused, message: `${base.message} Not applied: ${patch.refused}; DRAFT.md unchanged.`.trim() };
+    const prepared = prepare(proposal);
+    if ('refused' in prepared) {
+      return { ...base, accepted: false, rejectedReason: prepared.refused, message: `${base.message} Not applied: ${prepared.refused}; DRAFT.md unchanged.`.trim() };
     }
 
-    // Approval gate (default-on, PRD §19). --yolo skips. When the patch
-    // deletes text, the gate shows that text, not the model's excerpt.
-    const shown: ReviseSwapProposal = patch.removed.length === 0 ? proposal
-      : { ...proposal, patch: { before_excerpt: patch.removed.join('\n'), after_excerpt: '(deleted)' } };
-    const replacement = sources.find((src) => src.citekey === proposal.replacement_citekey);
-    const context: ReviseGateContext = replacement ? { replacement } : {};
-    const accepted = opts.yolo ? true : await approve(shown, context);
-    if (!accepted) {
-      return { ...base, accepted: false, message: `${base.message} Proposal rejected at the approval gate — DRAFT.md unchanged.`.trim() };
-    }
-
-    await applyProposal(draftPath, planPath, patch.patched);
-    const what = failing.misquoted ? 'the misquotation'
-      : patch.removed.length === 1 ? 'the quotation it alone supported' : `${patch.removed.length} passages with quotations it alone supported`;
-    const deleted = patch.removed.length === 0 ? '' : ` Deleted ${what}: "${excerpt(patch.removed[0]!)}".`;
-    return {
-      ...base,
-      accepted: true,
-      message: `${base.message} Applied ${proposal.action} for [@${failing.citekey}]${proposal.replacement_citekey ? ` → [@${proposal.replacement_citekey}]` : ''}.${deleted} Verification hash reset — re-run verify.`.trim(),
-    };
+    // Approval gate (default-on, PRD §19). --yolo skips.
+    if (opts.yolo) return settle(proposal, prepared, true);
+    if (interactive) return settle(proposal, prepared, await approve(prepared.shown, prepared.context));
+    const record = await openGate(opts.paperRoot, {
+      gate: 'revise',
+      n: opts.n,
+      args: { n: opts.n, slug: opts.slug, revise: true },
+      summary: `Apply this ${proposal.action} of [@${failing.citekey}] in section ${opts.n}?`,
+      options: ['approve', 'reject'],
+      default: ['reject'],
+      binding,
+      payload: { proposal },
+    });
+    return { ...base, pending: record, pendingChange: gateNote(prepared.shown, prepared.context), message: `${base.message} The proposed ${proposal.action} for [@${failing.citekey}] waits for the user's approval.`.trim() };
   }
 
   // Exhausted (only reachable under --yolo with all proposals invalid, or a

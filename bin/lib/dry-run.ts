@@ -186,6 +186,15 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
         network: MODEL_PROVIDER,
         asks: 'proceed to intake with the thesis',
       };
+    case 'gate':
+      return {
+        command: [command, ...['action', 'ref', 'option'].flatMap((k) => (typeof args[k] === 'string' ? [args[k] as string] : []))].join(' '),
+        summary: 'Record your answer to a decision a step is waiting for, then finish that step; or list the waiting decisions.',
+        reads: [paper('gates')],
+        writes: [`${paper('gates')}/ (the answer), and what the step that asked writes`],
+        model: 'none to take the answer; the step that asked may make its own calls (research scope: the searches and screening)',
+        network: 'what the step that asked uses',
+      };
     case 'open':
       return {
         command: typeof args['name'] === 'string' ? `${command} ${args['name']}` : command,
