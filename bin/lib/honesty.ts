@@ -226,7 +226,8 @@ export interface GptzeroScoringOptions {
 }
 
 /** Why no score was produced: every reason the report can name. */
-export type HonestySkip = 'no-key' | 'no-score' | 'offline' | 'no-consent' | 'declined' | 'backend-error';
+export const HONESTY_SKIPS = ['no-key', 'no-score', 'offline', 'no-consent', 'declined', 'backend-error'] as const;
+export type HonestySkip = (typeof HONESTY_SKIPS)[number];
 
 /** The consent decision for one run of done. */
 export interface GptzeroConsent {
@@ -267,10 +268,10 @@ async function keepGptzeroConsent(paperRoot: string, consent: boolean): Promise<
  */
 export async function decideGptzeroConsent(
   paperRoot: string,
-  opts: { score?: boolean; noScore?: boolean; terminal: boolean },
+  opts: { score?: boolean; terminal: boolean },
 ): Promise<GptzeroConsent> {
   if (!process.env['GPTZERO_API_KEY']) return { consent: false, skip: 'no-key' };
-  if (opts.noScore === true) return { consent: false, skip: 'no-score' };
+  if (opts.score === false) return { consent: false, skip: 'no-score' };
   if (isOfflineMode()) return { consent: false, skip: 'offline' };
   if (opts.score === true) {
     await keepGptzeroConsent(paperRoot, true);

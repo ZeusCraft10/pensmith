@@ -62,7 +62,7 @@ import {
   type Citation,
   type Quote,
 } from './citation-grammar.js';
-import { oneLine, parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
+import { oneLine, parseVerdictRowDetails, REPAIRABLE_VERDICTS, type VerdictRow } from './verify/verdict-rows.js';
 import { addToLibrary, loadLibrary, type Library } from './library.js';
 import { renderSourceContext, sourceContext, type SourceContextEntry } from './source-context.js';
 import { stripFenceMarkers } from './untrusted-fence.js';
@@ -70,14 +70,15 @@ import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperD
 import { assignedSourcesFrom } from './plan-status.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 import { closeGate, gateStillApplies, openGate, readGate, type GateRecord } from './gates.js';
+import { canAskInTerminal } from './prompts.js';
 import { sha256 } from './verify/verification-record.js';
 import { clearReviseOutcome, recordReviseOutcome } from './revise-outcome.js';
 
 // --yolo retry cap: 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
 
-/** The verifier verdicts that --revise repairs. */
-const FAILING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'RETRACTED']);
+/** The verifier verdicts that --revise repairs (the router routes on the same set). */
+const FAILING_VERDICTS = REPAIRABLE_VERDICTS;
 /** FAILING_VERDICTS as message text: `FABRICATED/MIS-CITED/...`. */
 const FAILING_VERDICT_LIST = [...FAILING_VERDICTS].join('/');
 
@@ -384,11 +385,6 @@ export function gateNote(proposal: ReviseSwapProposal, context: ReviseGateContex
   return change;
 }
 
-/** True when a person at a terminal can see the change and answer. */
-function canAskInTerminal(): boolean {
-  return Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
-}
-
 async function defaultApprove(proposal: ReviseSwapProposal, context: ReviseGateContext): Promise<boolean> {
   const clack = await import('@clack/prompts');
   clack.note(gateNote(proposal, context), `Proposed ${proposal.action} — ${proposal.rationale}`);
@@ -400,17 +396,21 @@ async function defaultApprove(proposal: ReviseSwapProposal, context: ReviseGateC
 // Validate + parse one LLM proposal against the strict schema + membership.
 // ---------------------------------------------------------------------------
 
-function validateProposal(
-  raw: string,
-  flagged: string,
-  assignedSources: readonly string[],
-): { ok: true; proposal: ReviseSwapProposal } | { ok: false; reason: string } {
+type CheckedProposal = { ok: true; proposal: ReviseSwapProposal } | { ok: false; reason: string };
+
+/** The model's answer `raw` (JSON text), checked as checkProposal checks it. */
+function validateProposal(raw: string, flagged: string, assignedSources: readonly string[]): CheckedProposal {
   let json: unknown;
   try {
     json = JSON.parse(raw);
   } catch {
     return { ok: false, reason: 'LLM response was not valid JSON' };
   }
+  return checkProposal(json, flagged, assignedSources);
+}
+
+/** `json` as a proposal for `flagged`: the strict schema, then the membership guard (no new citekey). */
+function checkProposal(json: unknown, flagged: string, assignedSources: readonly string[]): CheckedProposal {
   const parsed = ReviseSwapSchema.safeParse(json);
   if (!parsed.success) {
     return { ok: false, reason: `LLM response failed strict schema: ${parsed.error.issues[0]?.message ?? 'invalid'}` };
@@ -679,7 +679,7 @@ async function reviseOnce(opts: ReviseOptions): Promise<ReviseResult> {
 
   // The change waits for the person's approval: an injected approver (tests)
   // or a terminal asks now; otherwise it is kept for `pensmith gate answer`.
-  const interactive = opts.approve !== undefined || canAskInTerminal();
+  const interactive = opts.approve !== undefined || canAskInTerminal(process.stdout);
   const binding = { draft_sha256: sha256(draftMd), verification_sha256: sha256(verificationMd) };
 
   /** The patch for `proposal`, and what the approval gate shows for it. */
@@ -714,10 +714,12 @@ async function reviseOnce(opts: ReviseOptions): Promise<ReviseResult> {
   // DRAFT.md or VERIFICATION.md is never applied.
   const kept = readGate(opts.paperRoot, 'revise', opts.n);
   if (kept && !opts.yolo) {
-    const parsed = ReviseSwapSchema.safeParse((kept.payload as { proposal?: unknown } | null)?.proposal);
-    const checked = parsed.success ? validateProposal(JSON.stringify(parsed.data), failing.citekey, assignedSources) : null;
+    // The binding first: a change proposed for another draft is not prepared at all.
+    const checked = gateStillApplies(kept, binding)
+      ? checkProposal((kept.payload as { proposal?: unknown } | null)?.proposal, failing.citekey, assignedSources)
+      : null;
     const prepared = checked?.ok ? prepare(checked.proposal) : null;
-    if (checked?.ok && prepared && !('refused' in prepared) && gateStillApplies(kept, binding)) {
+    if (checked?.ok && prepared && !('refused' in prepared)) {
       base.action = checked.proposal.action;
       base.replacement_citekey = checked.proposal.replacement_citekey;
       if (!kept.answer && !interactive) return { ...base, pending: kept, pendingChange: gateNote(prepared.shown, prepared.context), message: `${base.message} The proposed ${checked.proposal.action} for [@${failing.citekey}] waits for the user's approval.`.trim() };

@@ -100,6 +100,15 @@ export type VerificationStatus = VerificationRecord['status'];
 
 export const sha256 = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
 
+/** The SHA-256 of the bytes at `file`, or null when there is none or it cannot be read. Never throws. */
+export function fileSha256(file: string): string | null {
+  try {
+    return sha256(readFileSync(file));
+  } catch {
+    return null;
+  }
+}
+
 /** `value` as JSON with every object's keys sorted, so equal data always hashes the same. */
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;

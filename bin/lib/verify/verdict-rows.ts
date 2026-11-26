@@ -39,7 +39,14 @@ export function isBlockingVerdict(verdict: string): boolean {
 }
 
 /** Blocking verdicts on text that is not a `[@key]` citation, so the row's key is that text. */
-const TEXT_VERDICTS: ReadonlySet<string> = new Set(['RAW_CITATION', 'UNPARSEABLE']);
+export const TEXT_VERDICTS: ReadonlySet<string> = new Set(['RAW_CITATION', 'UNPARSEABLE']);
+
+/**
+ * The blocking verdicts `plan N --revise` repairs by swapping or removing the
+ * citation (bin/lib/revise.ts). The router sends a section that failed on one
+ * of these to revise, so both read this one set.
+ */
+export const REPAIRABLE_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'RETRACTED']);
 
 /** The key a Pass-3 row carries for a quotation that cites nothing. */
 export const NO_CITATION_KEY = '(no citation)';

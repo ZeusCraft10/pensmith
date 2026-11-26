@@ -69,6 +69,17 @@ function resolveMode(opts?: AskOptions): 'clack' | 'numbered' {
   return isTty ? 'clack' : 'numbered';
 }
 
+/**
+ * True when a person at a terminal can see a question and type the answer:
+ * stdin and `out`, the stream the verb shows the question on, are both a TTY.
+ * Claude Code's Bash tool, CI and pipes have no terminal: reading stdin there
+ * either crashes on a closed stream or takes whatever text was piped in, so a
+ * gate with no terminal keeps its decision for `pensmith gate answer` instead.
+ */
+export function canAskInTerminal(out: { readonly isTTY?: boolean }): boolean {
+  return Boolean(process.stdin.isTTY) && Boolean(out.isTTY);
+}
+
 // ── Public ask() ──────────────────────────────────────────────────────────────
 
 export async function ask(question: PromptQuestion, opts: AskOptions = {}): Promise<PromptAnswer> {

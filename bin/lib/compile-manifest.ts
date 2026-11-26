@@ -9,7 +9,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
-import { atomicWriteFile } from './atomic-write.js';
+import { writeJsonRecord } from './json-record.js';
 import { compileManifestPath, SLUG_RE } from './paths.js';
 import { bibEntryHashes, HEX64, sha256 } from './verify/verification-record.js';
 import type { Bib } from './verify/pass1.js';
@@ -59,7 +59,7 @@ export function bibFileSha256(bibText: string | null): string | null {
 }
 
 export async function writeCompileManifest(paperRoot: string, manifest: CompileManifest): Promise<void> {
-  await atomicWriteFile(compileManifestPath(paperRoot), `${JSON.stringify(CompileManifestSchema.parse(manifest), null, 2)}\n`);
+  await writeJsonRecord(compileManifestPath(paperRoot), CompileManifestSchema, manifest);
 }
 
 /** The manifest of the last compile, or why there is none to trust. Never throws. */

@@ -9,11 +9,11 @@
 // unchanged the router stops at attention with the reason instead. An applied
 // change, or a new proposal waiting for approval, removes the record.
 
-import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
-import { atomicWriteFile, removePath } from './atomic-write.js';
+import { removePath } from './atomic-write.js';
+import { readJsonRecord, writeJsonRecord } from './json-record.js';
 import { sectionDraft, sectionReviseOutcome, sectionVerificationRecord } from './paths.js';
-import { HEX64, sha256 } from './verify/verification-record.js';
+import { fileSha256, HEX64 } from './verify/verification-record.js';
 
 export const ReviseOutcomeSchema = z.object({
   $schemaVersion: z.literal(1),
@@ -31,15 +31,6 @@ export const ReviseOutcomeSchema = z.object({
 
 export type ReviseOutcome = z.infer<typeof ReviseOutcomeSchema>;
 
-/** The hash of the bytes at `file`, or null when it cannot be read. */
-function hashOf(file: string): string | null {
-  try {
-    return sha256(readFileSync(file));
-  } catch {
-    return null;
-  }
-}
-
 /** One line of at most `max` characters: a reason may quote a model's answer. */
 function short(text: string, max = 240): string {
   const line = text.replace(/\s+/g, ' ').trim();
@@ -53,18 +44,18 @@ export async function recordReviseOutcome(
   slug: string,
   outcome: { citekey: string; outcome: ReviseOutcome['outcome']; reason: string },
 ): Promise<void> {
-  const draft = hashOf(sectionDraft(n, slug, paperRoot));
+  const draft = fileSha256(sectionDraft(n, slug, paperRoot));
   if (draft === null) return;
   const record: ReviseOutcome = {
     $schemaVersion: 1,
     recorded_at: new Date().toISOString(),
     draft_sha256: draft,
-    verification_sha256: hashOf(sectionVerificationRecord(n, slug, paperRoot)),
+    verification_sha256: fileSha256(sectionVerificationRecord(n, slug, paperRoot)),
     citekey: outcome.citekey,
     outcome: outcome.outcome,
     reason: short(outcome.reason) || 'no reason was given',
   };
-  await atomicWriteFile(sectionReviseOutcome(n, slug, paperRoot), `${JSON.stringify(ReviseOutcomeSchema.parse(record), null, 2)}\n`);
+  await writeJsonRecord(sectionReviseOutcome(n, slug, paperRoot), ReviseOutcomeSchema, record);
 }
 
 /** Remove the record: the draft changed, or a new proposal is waiting. */
@@ -73,26 +64,17 @@ export async function clearReviseOutcome(paperRoot: string, n: number, slug: str
 }
 
 /**
- * The recorded outcome when it is still about `draft` and `verification`
- * (the bytes of DRAFT.md and VERIFICATION.json now), else null. Never throws.
+ * The recorded outcome when it is still about the DRAFT.md and
+ * VERIFICATION.json whose hashes are `draftSha256` and `verificationSha256`
+ * now, else null. Never throws.
  */
 export function currentReviseOutcome(
   paperRoot: string,
   n: number,
   slug: string,
-  draft: Buffer,
-  verification: Buffer | null,
+  draftSha256: string,
+  verificationSha256: string | null,
 ): ReviseOutcome | null {
-  try {
-    const file = sectionReviseOutcome(n, slug, paperRoot);
-    if (!existsSync(file)) return null;
-    const parsed = ReviseOutcomeSchema.safeParse(JSON.parse(readFileSync(file, 'utf8')));
-    if (!parsed.success) return null;
-    const r = parsed.data;
-    if (r.draft_sha256 !== sha256(draft)) return null;
-    if (r.verification_sha256 !== (verification === null ? null : sha256(verification))) return null;
-    return r;
-  } catch {
-    return null;
-  }
+  const r = readJsonRecord(sectionReviseOutcome(n, slug, paperRoot), ReviseOutcomeSchema);
+  return r && r.draft_sha256 === draftSha256 && r.verification_sha256 === verificationSha256 ? r : null;
 }

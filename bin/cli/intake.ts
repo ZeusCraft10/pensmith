@@ -25,7 +25,7 @@ import { defineCommand } from 'citty';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { ask, PromptAbortedError, PromptTimeoutError, type AskOptions } from '../lib/prompts.js';
+import { ask, canAskInTerminal, PromptAbortedError, PromptTimeoutError, type AskOptions } from '../lib/prompts.js';
 import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
 import { redactPii, diffPii } from '../lib/pii.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
@@ -88,10 +88,6 @@ export function __setAskForTest(fn: Asker | null): () => void {
   return () => {
     _ask = prev;
   };
-}
-
-function canAskInTerminal(): boolean {
-  return Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY);
 }
 
 /** Ask one question in the terminal; null when the user cancels or does not answer in time. `opts` is for tests. */
@@ -526,7 +522,7 @@ export const intakeCommand = defineCommand({
       const kept = readAssignment(cwd);
       if (kept) {
         assignment = kept;
-      } else if (_ask || canAskInTerminal()) {
+      } else if (_ask || canAskInTerminal(process.stdout)) {
         const typed = await (_ask ?? askInTerminal)({
           id: 'assignment',
           question: 'Paste the assignment prompt (or rerun with --from <file>):',
@@ -607,7 +603,7 @@ export const intakeCommand = defineCommand({
 
       // ── 3. The answers: asked on a terminal, else reported and left pending. ──
       const waiting = questions.filter((q) => missing.includes(q.id as QuestionId));
-      const ask = _ask ?? (canAskInTerminal() ? askInTerminal : null);
+      const ask = _ask ?? (canAskInTerminal(process.stdout) ? askInTerminal : null);
       if (ask) {
         for (const q of waiting) {
           let why: string | undefined;

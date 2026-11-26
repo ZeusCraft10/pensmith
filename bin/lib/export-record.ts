@@ -6,9 +6,8 @@
 // done only while both still match, so a recompile, or a FINAL.md left by
 // anything but a finished export, sends it back to `done`.
 
-import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
-import { atomicWriteFile } from './atomic-write.js';
+import { readJsonRecord, writeJsonRecord } from './json-record.js';
 import { exportRecordPath } from './paths.js';
 import { HEX64 } from './verify/verification-record.js';
 
@@ -26,17 +25,10 @@ export const ExportRecordSchema = z.object({
 export type ExportRecord = z.infer<typeof ExportRecordSchema>;
 
 export async function writeExportRecord(paperRoot: string, record: ExportRecord): Promise<void> {
-  await atomicWriteFile(exportRecordPath(paperRoot), `${JSON.stringify(ExportRecordSchema.parse(record), null, 2)}\n`);
+  await writeJsonRecord(exportRecordPath(paperRoot), ExportRecordSchema, record);
 }
 
 /** The record of the last export, or null when there is none to trust. Never throws. */
 export function readExportRecord(paperRoot: string): ExportRecord | null {
-  const file = exportRecordPath(paperRoot);
-  if (!existsSync(file)) return null;
-  try {
-    const parsed = ExportRecordSchema.safeParse(JSON.parse(readFileSync(file, 'utf8')));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
+  return readJsonRecord(exportRecordPath(paperRoot), ExportRecordSchema);
 }

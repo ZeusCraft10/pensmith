@@ -34,8 +34,8 @@ import { runPass3 } from '../lib/verify/pass3.js';
 import { readBibText } from '../lib/verify/pass1.js';
 import { extractQuotes } from '../lib/quote-extractor.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
-import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
-import { decideGptzeroConsent, scoreHonesty, renderHonestyReport, renderHonestySkipped, type HonestySkip } from '../lib/honesty.js';
+import { PLAGIARISM_SKIPS, runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
+import { decideGptzeroConsent, HONESTY_SKIPS, scoreHonesty, renderHonestyReport, renderHonestySkipped, type HonestySkip } from '../lib/honesty.js';
 import {
   EXPORT_FORMATS,
   exportDraft,
@@ -45,12 +45,12 @@ import {
   type ExportFormat,
 } from '../lib/exporter.js';
 import { paperDir, paperFinalFile, paperFinalStagedFile, sectionDirName } from '../lib/paths.js';
-import { closeGate, gateStillApplies, openGate, pendingDecision, readGate, type GateRecord } from '../lib/gates.js';
+import { closeGate, gateStillApplies, openGate, readGate, stopForAnswer } from '../lib/gates.js';
 import { parseBibByCitekey } from '../lib/citations.js';
 import { resolveCitationStyle } from '../lib/citation-style.js';
 import { isPandocPresent } from '../lib/ecosystem-presence.js';
 import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
-import { confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
+import { canAskInTerminal, confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
 import {
   citedKeys,
   findCitations,
@@ -58,7 +58,7 @@ import {
   findUnparseableCitations,
   type Citation,
 } from '../lib/citation-grammar.js';
-import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
+import { EXIT_ERROR, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { readOutline } from '../lib/outline-read.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { recheckExportText, runExportBlockingGate } from '../lib/export-gate.js';
@@ -579,15 +579,6 @@ export const EXPORT_CONFIRM_QUESTION = {
   default: false,
 } as const satisfies PromptQuestion;
 
-/**
- * True when a person at a terminal can see the question and type an answer.
- * Claude Code's Bash tool, CI and pipes have no terminal: reading stdin there
- * either crashes on a closed stream or takes whatever text was piped in.
- */
-function canAskInTerminal(): boolean {
-  return Boolean(process.stdin.isTTY) && Boolean(process.stderr.isTTY);
-}
-
 /** The one-line question the export confirmation asks. */
 function pendingExportSummary(issues: GateIssues, format: string, source: string): string {
   const count = issues.unsupported.length + issues.orphanClaimCount + issues.plagiarismHits.length;
@@ -599,17 +590,11 @@ function pendingExportSummary(issues: GateIssues, format: string, source: string
 }
 
 /**
- * The machine-readable description of a pending export decision, printed as
- * one JSON line when there is no terminal to ask in. Nothing is exported; the
- * user's answer comes back through `pensmith gate answer <ref> export|cancel`.
+ * What the export decision shows: the advisory issues to review. Printed as
+ * part of one JSON line when there is no terminal to ask in; nothing is
+ * exported, and the user's answer comes back through
+ * `pensmith gate answer <ref> export|cancel`.
  */
-export function pendingExportDecision(issues: GateIssues, record: GateRecord): Record<string, unknown> {
-  return pendingDecision(record, EXPORT_PENDING, exportShown(issues));
-}
-
-const EXPORT_PENDING = 'export-confirmation';
-
-/** What the export decision shows: the advisory issues to review. */
 function exportShown(issues: GateIssues): Record<string, unknown> {
   return {
     needs_confirmation: true,
@@ -628,20 +613,18 @@ const ExportAuditSchema = z.object({
   plagiarismResults: z.array(z.object({
     phrase: z.string(),
     matches: z.array(z.string()),
-    skipped: z.enum(['offline', 'blocked', 'no-answer']).optional(),
+    skipped: z.enum(PLAGIARISM_SKIPS).optional(),
   }).strict()),
   honestyReport: z.string(),
   /** Why the audit has no GPTZero score, or null when it has one. */
-  honestySkip: z.enum(['no-key', 'no-score', 'offline', 'no-consent', 'declined', 'backend-error']).nullable(),
+  honestySkip: z.enum(HONESTY_SKIPS).nullable(),
   humanized: z.boolean(),
 }).strict();
 
-interface ExportAudit {
+/** The audit as done builds it. The schema checks only each Pass 4 result's orphanCount and keeps the rest as it was. */
+interface ExportAudit extends Omit<z.infer<typeof ExportAuditSchema>, 'pass4Results' | 'plagiarismResults'> {
   pass4Results: Pass4Result[];
   plagiarismResults: PlagiarismResult[];
-  honestyReport: string;
-  honestySkip: HonestySkip | null;
-  humanized: boolean;
 }
 
 /** Skip reasons `--score` overturns: the user had not consented, or had said no. */
@@ -783,7 +766,11 @@ export const doneCommand = defineCommand({
         if (args.score === true && !keptGate.answer && CONSENT_SKIPS.has(kept.data.honestySkip)) {
           process.stderr.write('pensmith done: --score gives the consent the kept audit had no score for; the audit runs again with it.\n');
         } else {
-          audit = kept.data as unknown as ExportAudit;
+          audit = {
+            ...kept.data,
+            pass4Results: kept.data.pass4Results as unknown as Pass4Result[],
+            plagiarismResults: kept.data.plagiarismResults as PlagiarismResult[],
+          };
           if (keptGate.answer) answer = keptGate.answer.options[0] === 'export';
         }
       } else {
@@ -803,8 +790,8 @@ export const doneCommand = defineCommand({
       // alike): only with a key, and only with the user's consent, which
       // defaults to no and which --yolo never gives.
       const consent = await decideGptzeroConsent(paperRoot, {
-        ...(typeof args.score === 'boolean' ? { score: args.score, noScore: !args.score } : {}),
-        terminal: canAskInTerminal(),
+        ...(typeof args.score === 'boolean' ? { score: args.score } : {}),
+        terminal: canAskInTerminal(process.stderr),
       });
       // One disclosure per run: the consent question, or the first score, shows it.
       const scoring = { consentGranted: consent.consent, disclosed: consent.disclosed === true };
@@ -822,16 +809,16 @@ export const doneCommand = defineCommand({
         }
       }
       // Honesty report: guard the null score explicitly — the skip line names
-      // why, never a made-up percent.
-      const honestyReport =
-        before === null
-          ? renderHonestySkipped(consent.skip ?? 'backend-error')
-          : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
-      audit = {
-        pass4Results, plagiarismResults, honestyReport,
-        honestySkip: before === null ? (consent.skip ?? 'backend-error') : null,
-        humanized: humanizedPath !== null,
-      };
+      // why, never a made-up percent. The audit keeps the reason the report names.
+      let honestySkip: HonestySkip | null = null;
+      let honestyReport: string;
+      if (before === null) {
+        honestySkip = consent.skip ?? 'backend-error';
+        honestyReport = renderHonestySkipped(honestySkip);
+      } else {
+        honestyReport = renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
+      }
+      audit = { pass4Results, plagiarismResults, honestyReport, honestySkip, humanized: humanizedPath !== null };
     }
     const { pass4Results, plagiarismResults, honestyReport } = audit;
     const finalPath: string | null = audit.humanized ? stagedPath : null;
@@ -844,8 +831,10 @@ export const doneCommand = defineCommand({
     // FINAL.md only once the export succeeds, so a refusal here leaves no mark
     // that the paper was exported. A kept text is checked again too.
     let finalMd: string | null = null;
+    let finalBytes: Buffer | null = null;
     if (finalPath !== null) {
-      finalMd = readFileSync(finalPath, 'utf8');
+      finalBytes = readFileSync(finalPath);
+      finalMd = finalBytes.toString('utf8');
       const refuseHumanized = async <T>(result: T): Promise<T> => {
         await removePath(finalPath);
         await closeGate(paperRoot, 'export');
@@ -891,7 +880,7 @@ export const doneCommand = defineCommand({
       // With no terminal there is nobody to ask. Keep the audit for the
       // user's answer, report the pending decision and stop; never read stdin
       // for it and never treat silence as a yes.
-      if (!canAskInTerminal()) {
+      if (!canAskInTerminal(process.stderr)) {
         const issues = collectGateIssues({ pass2Results, pass4Results, plagiarismResults });
         const record = keptGate && reused
           ? keptGate
@@ -901,15 +890,16 @@ export const doneCommand = defineCommand({
             summary: pendingExportSummary(issues, format, finalPath !== null ? '.paper/FINAL.md' : '.paper/DRAFT.md'),
             options: ['export', 'cancel'],
             default: ['cancel'],
-            binding: { ...binding, staged_sha256: finalMd === null ? null : sha256(readFileSync(stagedPath)) },
+            binding: { ...binding, staged_sha256: finalBytes === null ? null : sha256(finalBytes) },
             payload: audit,
-            shown: { pending: EXPORT_PENDING, extra: exportShown(issues) },
+            shown: { pending: 'export-confirmation', extra: exportShown(issues) },
           });
-        process.stderr.write(
-          'pensmith done: exporting needs your confirmation and there is no terminal to ask in. Nothing was exported; the audit is kept until you answer.\n',
+        // The issues as they are now: a section's VERIFICATION.md can change while the audit is kept.
+        stopForAnswer(
+          'pensmith done: exporting needs your confirmation and there is no terminal to ask in. Nothing was exported; the audit is kept until you answer.',
+          record,
+          exportShown(issues),
         );
-        process.stdout.write(`${JSON.stringify(pendingExportDecision(issues, record))}\n`);
-        process.exitCode = EXIT_NEEDS_ANSWER;
         return { ok: false, pending: true, ref: record.ref };
       }
       const gateResult = await runDoneGate({
@@ -968,7 +958,7 @@ export const doneCommand = defineCommand({
     await writeExportRecord(paperRoot, {
       $schemaVersion: 1,
       exported_at: new Date().toISOString(),
-      draft_sha256: sha256(draftBytes),
+      draft_sha256: binding.draft_sha256,
       final_sha256: sha256(Buffer.from(exported, 'utf8')),
       format,
       humanized: finalMd !== null,

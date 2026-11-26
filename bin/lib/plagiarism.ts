@@ -43,6 +43,9 @@ export interface PlagiarismMatch {
   title?: string;
 }
 
+/** Why a phrase was not checked (PlagiarismResult.skipped). */
+export const PLAGIARISM_SKIPS = ['offline', 'blocked', 'no-answer'] as const;
+
 /**
  * One queried distinctive phrase plus the result URLs that came back for it.
  *
@@ -64,7 +67,7 @@ export interface PlagiarismResult {
    *   - no-answer: no usable answer (a transport error, no recording, a page
    *     that is neither results nor "No results.").
    */
-  skipped?: 'offline' | 'blocked' | 'no-answer';
+  skipped?: (typeof PLAGIARISM_SKIPS)[number];
 }
 
 // ============================================================

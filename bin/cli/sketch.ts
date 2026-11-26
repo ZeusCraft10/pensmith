@@ -29,7 +29,7 @@
 //   - args.__dispatch  a spy dispatcher used instead of the real dispatchVerb
 
 import { defineCommand } from 'citty';
-import { ask, confirmOrNo } from '../lib/prompts.js';
+import { ask, canAskInTerminal, confirmOrNo } from '../lib/prompts.js';
 import { dispatchVerb, type GlobalFlags } from '../pensmith.js';
 import type { Ux02Verb } from '../lib/verbs.js';
 import { EXIT_NEEDS_ANSWER } from '../lib/exit-codes.js';
@@ -79,7 +79,7 @@ export const sketchCommand = defineCommand({
     //     LIBRARY.json — sketch never advances paper state (Pitfall 6).
     let synthesized: string;
     const preThesis = typeof args.thesis === 'string' ? args.thesis.trim() : '';
-    const terminal = Boolean(process.stdin.isTTY) && Boolean(process.stderr.isTTY);
+    const terminal = canAskInTerminal(process.stderr);
     if (preThesis) {
       synthesized = preThesis;
     } else if (!terminal) {

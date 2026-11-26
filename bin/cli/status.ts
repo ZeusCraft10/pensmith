@@ -18,7 +18,7 @@ import { defineCommand } from 'citty';
 import { loadState, StateNotFoundError } from '../lib/state.js';
 import { readOutline } from '../lib/outline-read.js';
 import type { State } from '../lib/schemas/state.js';
-import { resolveNextAction, readSectionState } from '../lib/router.js';
+import { decisionFlags, resolveNextAction, readSectionState } from '../lib/router.js';
 import { sectionPlan } from '../lib/paths.js';
 import { readGoalFromConfig, stopAfterResearchFor } from './goal.js';
 import { EXIT_ERROR, EXIT_REFUSED } from '../lib/exit-codes.js';
@@ -78,15 +78,11 @@ export const statusCommand = defineCommand({
     // callers next/resume/bare; status only reports).
     const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
     const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
-    const flags = [
-      ...('revise' in decision && decision.revise ? ['--revise'] : []),
-      ...('force' in decision && decision.force ? ['--force'] : []),
-    ];
     const next =
       decision.verb === 'status'
         ? `status (${decision.reason})`
         : 'n' in decision
-          ? [`${decision.verb} §${decision.n}`, ...flags].join(' ')
+          ? [`${decision.verb} §${decision.n}`, ...decisionFlags(decision)].join(' ')
           : decision.verb;
     lines.push(`  next: ${next}`);
     if (decision.why) lines.push(`  why: ${decision.why}`);

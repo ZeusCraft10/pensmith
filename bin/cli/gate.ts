@@ -13,7 +13,7 @@
 // comes from the person: Claude asks them (AskUserQuestion) and never picks.
 
 import { defineCommand } from 'citty';
-import { answerGate, GATE_VERBS, listGates, parseAnswer, pendingDecision } from '../lib/gates.js';
+import { answerGate, GATE_VERBS, listGates, parseAnswer, pendingDecision, readGateByRef } from '../lib/gates.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { dispatchVerb } from '../pensmith.js';
 
@@ -48,8 +48,7 @@ export const gateCommand = defineCommand({
       const gates = listGates(root);
       // The same line the step printed when it stopped, and the answer once given.
       for (const g of gates) {
-        const extra = { ...(g.shown?.extra ?? {}), ...(g.answer ? { answered: g.answer.options } : {}) };
-        process.stdout.write(`${JSON.stringify(pendingDecision(g, g.shown?.pending ?? g.gate, extra))}\n`);
+        process.stdout.write(`${JSON.stringify(pendingDecision(g, g.answer ? { answered: g.answer.options } : {}))}\n`);
       }
       if (gates.length === 0) process.stderr.write('pensmith gate: no decision is waiting.\n');
       return { ok: true, gates: gates.map((g) => g.ref) };
@@ -62,7 +61,7 @@ export const gateCommand = defineCommand({
 
     const ref = typeof args.ref === 'string' ? args.ref : '';
     const typed = typeof args.option === 'string' ? args.option : '';
-    const record = listGates(root).find((g) => g.ref === ref);
+    const record = readGateByRef(root, ref);
     if (!record) {
       process.stderr.write(
         `pensmith gate: no decision with ref '${ref}' is waiting (it was answered, or the files it was about changed and it was dropped). ` +

@@ -20,13 +20,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
 import { paperDir, paperIntakeFile, paperOutlineFile } from '../lib/paths.js';
-import { closeGate, gateStillApplies, openGate, pendingDecision, readGate, type GateRecord } from '../lib/gates.js';
-import { sha256 } from '../lib/verify/verification-record.js';
+import { closeGate, gateStillApplies, openGate, readGate, stopForAnswer, type GateRecord } from '../lib/gates.js';
+import { fileSha256 } from '../lib/verify/verification-record.js';
+import { canAskInTerminal } from '../lib/prompts.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { artifactText } from '../lib/placeholder.js';
-import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake, type IntakeRead } from '../lib/intake-record.js';
 import { readLibrarySync, type Library } from '../lib/library.js';
@@ -44,11 +45,6 @@ import {
   type OutlineRules,
 } from '../lib/outline-store.js';
 
-/** True when a person at a terminal can see the outline and answer. */
-function canAskInTerminal(): boolean {
-  return Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
-}
-
 /** Ask the person at the terminal whether to accept the outline. */
 async function confirmAtTerminal(outlineMd: string): Promise<boolean> {
   const clack = await import('@clack/prompts');
@@ -61,15 +57,6 @@ async function confirmAtTerminal(outlineMd: string): Promise<boolean> {
 const APPROVE = 'approve';
 const REJECT = 'reject';
 
-/** The hash of the file at `file`, or null when there is none. */
-function hashOrNull(file: string): string | null {
-  try {
-    return sha256(readFileSync(file));
-  } catch {
-    return null;
-  }
-}
-
 /**
  * What an outline proposal is about: the intake it was written for, and the
  * outline it would replace (none, or the one `--force` asked to redo). An
@@ -77,9 +64,9 @@ function hashOrNull(file: string): string | null {
  */
 function outlineBinding(root: string): Record<string, string | null> {
   return {
-    intake_sha256: hashOrNull(paperIntakeFile(root)),
-    outline_json_sha256: hashOrNull(paperOutlineFile(root)),
-    outline_md_sha256: hashOrNull(path.join(paperDir(root), 'OUTLINE.md')),
+    intake_sha256: fileSha256(paperIntakeFile(root)),
+    outline_json_sha256: fileSha256(paperOutlineFile(root)),
+    outline_md_sha256: fileSha256(path.join(paperDir(root), 'OUTLINE.md')),
   };
 }
 
@@ -98,18 +85,14 @@ async function awaitApproval(root: string, flags: OutlineFlags, proposal: unknow
     default: [REJECT],
     binding: outlineBinding(root),
     payload: { proposal },
-    shown: { pending: OUTLINE_PENDING, extra: { outline: outlineMd } },
+    shown: { pending: 'outline-approval', extra: { outline: outlineMd } },
   });
-  return showPending(record, outlineMd);
+  return showPending(record);
 }
 
-const OUTLINE_PENDING = 'outline-approval';
-
-function showPending(record: GateRecord, outlineMd: string): Record<string, unknown> {
-  process.stderr.write('pensmith outline: the outline needs the user\'s approval and there is no terminal to ask in; it is kept until they answer.\n');
-  process.stdout.write(`${JSON.stringify(pendingDecision(record, OUTLINE_PENDING, { outline: outlineMd }))}\n`);
-  process.exitCode = EXIT_NEEDS_ANSWER;
-  return { ok: false, mode: 'pending', ref: record.ref };
+/** Print the kept proposal (the outline its record shows) and stop for the user's approval (exit 3). */
+function showPending(record: GateRecord): Record<string, unknown> {
+  return stopForAnswer('pensmith outline: the outline needs the user\'s approval and there is no terminal to ask in; it is kept until they answer.', record);
 }
 
 /** A heading that names an objection, for an outline whose table cannot mark the counterargument section. */
@@ -189,8 +172,6 @@ export const outlineCommand = defineCommand({
     const root = process.cwd();
     const outlinePath = path.join(paperDir(root), 'OUTLINE.md');
     const flags: OutlineFlags = { force: args.force === true, 'no-counter': args['no-counter'] === true };
-    const library = readLibrarySync(root);
-    const intake = readIntake(root);
 
     // A proposal kept for the user's approval, still about the intake and the
     // outline it was made to replace: apply their answer, ask at a terminal,
@@ -203,13 +184,12 @@ export const outlineCommand = defineCommand({
       const parsed = ProposedOutlineSchema.safeParse((pending.payload as { proposal?: unknown } | null)?.proposal);
       const applies = parsed.success && gateStillApplies(pending, outlineBinding(root));
       if (applies && args.yolo !== true && (pending.answer !== undefined || !flags.force)) {
+        if (!pending.answer && !canAskInTerminal(process.stdout)) return showPending(pending);
         const kept = numberOutline(parsed.data);
-        const keptMd = renderOutlineMd(kept);
-        if (!pending.answer && !canAskInTerminal()) return showPending(pending, keptMd);
-        const approved = pending.answer ? pending.answer.options[0] === APPROVE : await confirmAtTerminal(keptMd);
+        const approved = pending.answer ? pending.answer.options[0] === APPROVE : await confirmAtTerminal(renderOutlineMd(kept));
         await closeGate(root, 'outline');
         const noCounter = flags['no-counter'] || pending.args['no-counter'] === true;
-        return decide(root, kept, approved, rulesFor(library, intake, noCounter), readOutline(root).ok);
+        return decide(root, kept, approved, rulesFor(readLibrarySync(root), readIntake(root), noCounter), readOutline(root).ok);
       }
       // A proposal for an intake or outline that has changed since is not the user's to approve.
       await closeGate(root, 'outline');
@@ -232,6 +212,8 @@ export const outlineCommand = defineCommand({
       return { ok: true, path: outlinePath, mode: 'existing', sections: count };
     }
 
+    const library = readLibrarySync(root);
+    const intake = readIntake(root);
     const rules = rulesFor(library, intake, flags['no-counter']);
 
     if (existing !== null) {
@@ -319,7 +301,7 @@ export const outlineCommand = defineCommand({
     const hadOutline = readOutline(root).ok;
     if (args.yolo === true) return decide(root, outline, true, rules, hadOutline);
     const md = renderOutlineMd(outline);
-    if (!canAskInTerminal()) return awaitApproval(root, flags, answer.value, md, outline.sections.length);
+    if (!canAskInTerminal(process.stdout)) return awaitApproval(root, flags, answer.value, md, outline.sections.length);
     return decide(root, outline, await confirmAtTerminal(md), rules, hadOutline);
   },
 });

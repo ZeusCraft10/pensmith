@@ -25,8 +25,8 @@ import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { readSectionState } from '../lib/router.js';
-import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
-import { pendingDecision, readGate } from '../lib/gates.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
+import { readGate, stopForAnswer } from '../lib/gates.js';
 import { frontmatterProblem, parseFrontmatter } from '../lib/frontmatter.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
@@ -60,6 +60,17 @@ function upstreamPlans(root: string, outline: CheckedOutline, entry: SectionEntr
 async function requireKey(): Promise<void> {
   if (process.env['PENSMITH_NO_LLM'] === '1') return;
   await getProviderApiKey(await resolveProviderId());
+}
+
+/** True when no model key is configured; any other failure is thrown. */
+async function keyMissing(): Promise<boolean> {
+  try {
+    await requireKey();
+    return false;
+  } catch (e) {
+    if (e instanceof MissingApiKeyError) return true;
+    throw e;
+  }
 }
 
 /** Say there is no model key, and stop (exit 1). */
@@ -127,14 +138,9 @@ export const planCommand = defineCommand({
     const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
     if (args.revise === true || research) {
       const keptChange = args.yolo !== true && readGate(root, 'revise', n) !== null;
-      if (!keptChange) {
-        try {
-          await requireKey();
-        } catch (e) {
-          if (e instanceof MissingApiKeyError) return noKey();
-          throw e;
-        }
-      }
+      if (!keptChange && await keyMissing()) return noKey();
+      // Checked above unless a kept change skipped it; a proposal checks it once, then.
+      let keyChecked = !keptChange;
       let result: Awaited<ReturnType<typeof runRevise>>;
       try {
         result = await runRevise({
@@ -144,7 +150,10 @@ export const planCommand = defineCommand({
           yolo: args.yolo === true,
           ...(research ? { research } : {}),
           proposeSwap: async (vars) => {
-            await requireKey();
+            if (!keyChecked) {
+              await requireKey();
+              keyChecked = true;
+            }
             return proposeSwap(vars);
           },
         });
@@ -154,14 +163,13 @@ export const planCommand = defineCommand({
       }
       if (result.pending) {
         // No terminal to ask in: the checked change waits for the user's answer.
-        process.stderr.write(`pensmith plan --revise: ${result.message}\n`);
-        process.stdout.write(`${JSON.stringify(pendingDecision(result.pending, 'revise-approval', {
+        // The change is shown as revise prepares it now (with the replacement
+        // work as LIBRARY.json holds it now).
+        return stopForAnswer(`pensmith plan --revise: ${result.message}`, result.pending, {
           section: n,
           flagged_citekey: result.flagged_citekey,
           change: result.pendingChange ?? '',
-        }))}\n`);
-        process.exitCode = EXIT_NEEDS_ANSWER;
-        return { ok: false, mode: 'pending', ref: result.pending.ref };
+        });
       }
       process.stdout.write(`pensmith plan --revise: ${result.message}\n`);
       // A change the user rejected, one that could not be applied, and a
@@ -172,12 +180,7 @@ export const planCommand = defineCommand({
     }
 
     // Without a key there is no planner to ask, and plan says so.
-    try {
-      await requireKey();
-    } catch (e) {
-      if (e instanceof MissingApiKeyError) return noKey();
-      throw e;
-    }
+    if (await keyMissing()) return noKey();
 
     // A finished plan is the user's work, and so is a PLAN.md they broke while
     // editing it: replace either only when asked to. An outline stub, and a

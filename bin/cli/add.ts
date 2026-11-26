@@ -36,7 +36,7 @@ import { bareArxivId, isDoi, normalizeDoi } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
-import { confirmOrNo } from '../lib/prompts.js';
+import { canAskInTerminal, confirmOrNo } from '../lib/prompts.js';
 import { paperDir, sectionPlan } from '../lib/paths.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { readOutline } from '../lib/outline-read.js';
@@ -291,7 +291,7 @@ export const addCommand = defineCommand({
     //     answer defaults to no, and add says how to remap.
     let doRemap = args.remap === true;
     if (!doRemap && args.yolo !== true) {
-      if (process.stdin.isTTY && process.stderr.isTTY) {
+      if (canAskInTerminal(process.stderr)) {
         doRemap = await confirmOrNo({
           id: 'add-remap',
           kind: 'confirm',

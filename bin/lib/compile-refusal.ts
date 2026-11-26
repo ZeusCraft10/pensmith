@@ -9,11 +9,11 @@
 // failed, bound to the DRAFT.md and VERIFICATION.json it checked, and the
 // router sends each to `verify N`, which records its verdicts as they are now.
 
-import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
-import { atomicWriteFile, removePath } from './atomic-write.js';
+import { removePath } from './atomic-write.js';
+import { readJsonRecord, writeJsonRecord } from './json-record.js';
 import { compileRefusalPath } from './paths.js';
-import { HEX64, sha256 } from './verify/verification-record.js';
+import { HEX64 } from './verify/verification-record.js';
 
 const RefusedSectionSchema = z.object({
   n: z.number().int().min(1),
@@ -29,6 +29,7 @@ export const CompileRefusalSchema = z.object({
   sections: z.array(RefusedSectionSchema),
 }).strict();
 
+export type CompileRefusal = z.infer<typeof CompileRefusalSchema>;
 export type RefusedSection = z.infer<typeof RefusedSectionSchema>;
 
 /** Keep the sections whose re-check failed; none removes the record. */
@@ -37,32 +38,26 @@ export async function writeCompileRefusal(paperRoot: string, sections: RefusedSe
     await removePath(compileRefusalPath(paperRoot));
     return;
   }
-  const record = CompileRefusalSchema.parse({ $schemaVersion: 1, refused_at: new Date().toISOString(), sections });
-  await atomicWriteFile(compileRefusalPath(paperRoot), `${JSON.stringify(record, null, 2)}\n`);
+  await writeJsonRecord(compileRefusalPath(paperRoot), CompileRefusalSchema, { $schemaVersion: 1, refused_at: new Date().toISOString(), sections });
+}
+
+/** The sections compile's last re-check refused, or null when there is no record to trust. Never throws. */
+export function readCompileRefusal(paperRoot: string): CompileRefusal | null {
+  return readJsonRecord(compileRefusalPath(paperRoot), CompileRefusalSchema);
 }
 
 /**
- * Why compile refused section `n` (`slug`) whose DRAFT.md and VERIFICATION.json
- * are `draft` and `verification` now, or null when it did not (or either has
- * changed since). Never throws.
+ * Why `refusal` says compile refused section `n` (`slug`), whose DRAFT.md and
+ * VERIFICATION.json hash to `draftSha256` and `verificationSha256` now, or
+ * null when it did not (or either has changed since).
  */
-export function compileRefusalOf(
-  paperRoot: string,
+export function refusalFor(
+  refusal: CompileRefusal | null,
   n: number,
   slug: string,
-  draft: Buffer,
-  verification: Buffer | null,
+  draftSha256: string,
+  verificationSha256: string,
 ): RefusedSection | null {
-  if (verification === null) return null;
-  try {
-    const file = compileRefusalPath(paperRoot);
-    if (!existsSync(file)) return null;
-    const parsed = CompileRefusalSchema.safeParse(JSON.parse(readFileSync(file, 'utf8')));
-    if (!parsed.success) return null;
-    const hit = parsed.data.sections.find((s) => s.n === n && s.slug === slug);
-    if (!hit || hit.draft_sha256 !== sha256(draft) || hit.verification_sha256 !== sha256(verification)) return null;
-    return hit;
-  } catch {
-    return null;
-  }
+  const hit = refusal?.sections.find((s) => s.n === n && s.slug === slug);
+  return hit && hit.draft_sha256 === draftSha256 && hit.verification_sha256 === verificationSha256 ? hit : null;
 }

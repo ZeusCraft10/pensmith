@@ -64,17 +64,20 @@ import { parseFrontmatter } from './frontmatter.js';
 import { readOutline } from './outline-read.js';
 import { assignedSourcesFrom } from './plan-status.js';
 import { computeDraftHash } from './draft-hash.js';
-import { readCompileManifest } from './compile-manifest.js';
+import { bibFileSha256, readCompileManifest } from './compile-manifest.js';
 import { readExportRecord } from './export-record.js';
 import { currentReviseOutcome } from './revise-outcome.js';
-import { compileRefusalOf } from './compile-refusal.js';
+import { readCompileRefusal, refusalFor, type CompileRefusal } from './compile-refusal.js';
 import { isOfflineMode, networkMode } from './network-mode.js';
-import { isBlockingVerdict } from './verify/verdict-rows.js';
-import { readVerificationRecord, sha256, UNCHECKED_QUOTE, type VerificationRecord } from './verify/verification-record.js';
+import { isBlockingVerdict, REPAIRABLE_VERDICTS, TEXT_VERDICTS } from './verify/verdict-rows.js';
+import { fileSha256, readVerificationRecord, sha256, UNCHECKED_QUOTE, type VerificationRecord } from './verify/verification-record.js';
 import { VERSION } from './version.generated.js';
 import type { Handoff } from './schemas/handoff.js';
 
 type SectionRef = { n: number; slug: string };
+
+/** A section's key in the manifest comparison: `n-slug`. */
+const sectionKey = (s: SectionRef): string => `${s.n}-${s.slug}`;
 
 export type RouterDecision =
   | { verb: 'new'; why: string }
@@ -208,9 +211,6 @@ function bytesOrNull(path: string): Buffer | null {
   }
 }
 
-/** Verdicts revise repairs by swapping or removing the citation (bin/lib/revise.ts). */
-const REPAIRABLE: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'RETRACTED']);
-
 /** Each blocking verdict of `record` as `VERDICT [@key]` (or the text, for a citation typed as text). */
 function blockingVerdicts(record: VerificationRecord): Array<{ verdict: string; key: string; label: string }> {
   const rows = [
@@ -219,7 +219,7 @@ function blockingVerdicts(record: VerificationRecord): Array<{ verdict: string; 
   ].filter((r) => isBlockingVerdict(r.verdict));
   return rows.map((r) => ({
     ...r,
-    label: r.verdict === 'RAW_CITATION' || r.verdict === 'UNPARSEABLE' ? `${r.verdict} "${r.key}"` : `${r.verdict} [@${r.key}]`,
+    label: TEXT_VERDICTS.has(r.verdict) ? `${r.verdict} "${r.key}"` : `${r.verdict} [@${r.key}]`,
   }));
 }
 
@@ -228,18 +228,29 @@ function listed(items: readonly string[]): string {
   return [...new Set(items)].join('; ');
 }
 
+/** What the section walk shares between the sections it routes from their records. */
+interface RecordedWalk {
+  paperRoot: string;
+  /** Told what must not look clean in a section that is through. */
+  warn: (w: string) => void;
+  /** COMPILE-REFUSAL.json, read at most once a walk, when a verified section needs it. */
+  refusal: () => CompileRefusal | null;
+  /** The DRAFT.md and VERIFICATION.json hashes each section that is through was routed on, by sectionKey. */
+  through: Map<string, { draft: string; verification: string }>;
+}
+
 /**
  * What a section whose PLAN.md says failed, unverifiable or verified needs,
  * from its recorded verdicts: a decision, or null when it is through (with
- * `warn` told what must not look clean).
+ * `walk.warn` told what must not look clean, and `walk.through` the hashes).
  */
 function routeRecorded(
-  paperRoot: string,
+  walk: RecordedWalk,
   s: SectionRef,
   planStatus: string,
   assignedSources: readonly string[],
-  warn: (w: string) => void,
 ): RouterDecision | null {
+  const { paperRoot } = walk;
   const { n, slug } = s;
   const where = `section ${n} (${slug})`;
   const read = readVerificationRecord(sectionVerificationRecord(n, slug, paperRoot));
@@ -259,31 +270,38 @@ function routeRecorded(
   if (draft === null) {
     return { verb: 'write', n, slug, force: true, why: `${where} has no DRAFT.md to compile` };
   }
-  if (record.draft_sha256 !== sha256(draft)) {
+  const draftSha = sha256(draft);
+  if (record.draft_sha256 !== draftSha) {
     return { verb: 'verify', n, slug, why: `${where}'s DRAFT.md changed since it was verified` };
   }
+  const through = (): null => {
+    walk.through.set(sectionKey(s), { draft: draftSha, verification: read.sha256 });
+    return null;
+  };
 
   // A verified record about this draft: compile re-checks it against the
   // sources, bibliography and acknowledgements as they are then. One whose
   // re-check compile refused goes to verify, which records the verdicts as
   // they are now; compile would only refuse it again.
   if (record.status === 'verified' && record.checked) {
-    const refused = compileRefusalOf(paperRoot, n, slug, draft, bytesOrNull(sectionVerificationRecord(n, slug, paperRoot)));
+    const refused = refusalFor(walk.refusal(), n, slug, draftSha, read.sha256);
     if (refused) {
       return {
         verb: 'verify', n, slug,
         why: `compile refused ${where} when it checked it again (${listed(refused.reasons)}); verify ${n} records its verdicts as they are now`,
       };
     }
-    return null;
+    return through();
   }
 
   // A failed or unverifiable record whose inputs changed may now pass.
   if (record.checked && record.draft_hash !== computeDraftHash(draft, [...assignedSources])) {
     return { verb: 'verify', n, slug, why: `${where}'s assigned sources changed in PLAN.md since it was verified` };
   }
-  const acks = bytesOrNull(sectionAcknowledgements(n, slug, paperRoot));
-  if (record.checked && record.acknowledgements_sha256 !== (acks === null ? null : sha256(acks))) {
+  // The hash verify and compile bind (readAcknowledgements' sha256: null when
+  // there is no file to read). acknowledgements.ts is not imported here: it
+  // would bring the registry adapters into the SessionStart hook's bundle.
+  if (record.checked && record.acknowledgements_sha256 !== fileSha256(sectionAcknowledgements(n, slug, paperRoot))) {
     return { verb: 'verify', n, slug, why: `${where}'s ACKNOWLEDGEMENTS.json changed since it was verified` };
   }
   if (record.verifier_version !== VERSION) {
@@ -305,8 +323,8 @@ function routeRecorded(
       ...(unchecked > 0 ? [`${unchecked} quotation(s) could not be checked against their source text`] : []),
       ...(unattributed > 0 ? [`${unattributed} quotation(s) cite nothing`] : []),
     ];
-    warn(`${where} is unverifiable: ${parts.length > 0 ? parts.join(', ') : 'it cites nothing and the library is empty'}; in this alpha that does not block compile`);
-    return null;
+    walk.warn(`${where} is unverifiable: ${parts.length > 0 ? parts.join(', ') : 'it cites nothing and the library is empty'}; in this alpha that does not block compile`);
+    return through();
   }
 
   // Failed on its verdicts.
@@ -317,17 +335,17 @@ function routeRecorded(
     // cites none of its assigned sources, which a new draft fixes.
     return { verb: 'write', n, slug, force: true, why: `${where} failed verification: ${reason}` };
   }
-  const repairable = blocking.filter((b) => REPAIRABLE.has(b.verdict));
+  const repairable = blocking.filter((b) => REPAIRABLE_VERDICTS.has(b.verdict));
   if (repairable.length > 0) {
     const retracted = [...new Set(repairable.filter((b) => b.verdict === 'RETRACTED').map((b) => b.key))];
     const ack = retracted.length === 0 ? '' :
       `; if the paper must cite a retracted work (it discusses the retraction), the user can instead run ${
         retracted.map((k) => `\`pensmith ack ${n} ${k} --reason "<why>"\``).join(' or ')} and verify again`;
-    const others = blocking.filter((b) => !REPAIRABLE.has(b.verdict));
+    const others = blocking.filter((b) => !REPAIRABLE_VERDICTS.has(b.verdict));
     const failedOn = `${where} failed verification: ${listed(repairable.map((b) => b.label))}${others.length > 0 ? ` (also ${listed(others.map((b) => b.label))})` : ''}`;
     // The last revise of this very draft and record changed nothing: sending
     // the section back to it would only pay for the same refusal again.
-    const last = currentReviseOutcome(paperRoot, n, slug, draft, bytesOrNull(sectionVerificationRecord(n, slug, paperRoot)));
+    const last = currentReviseOutcome(paperRoot, n, slug, draftSha, read.sha256);
     if (last) {
       return {
         verb: 'status', reason: 'attention', section: s,
@@ -374,8 +392,17 @@ function routeRecorded(
   };
 }
 
-/** Why the compiled .paper/DRAFT.md is not what the last compile wrote from the paper as it is now, or null. */
-function compileDue(paperRoot: string, sections: readonly SectionRef[]): RouterDecision | null {
+/**
+ * What follows once every section is through: compile while the compiled
+ * .paper/DRAFT.md is not what the last compile wrote from the paper as it is
+ * now, attention for a compiled draft edited by hand, then done until it is
+ * exported. `through` holds the hashes the walk routed each section on.
+ */
+function compileDue(
+  paperRoot: string,
+  sections: readonly SectionRef[],
+  through: ReadonlyMap<string, { draft: string; verification: string }>,
+): RouterDecision {
   const pDir = paperDir(paperRoot);
   const draft = bytesOrNull(join(pDir, 'DRAFT.md'));
   if (draft === null) return { verb: 'compile', why: 'every section is through verification and nothing is compiled yet' };
@@ -389,18 +416,17 @@ function compileDue(paperRoot: string, sections: readonly SectionRef[]): RouterD
         '`pensmith compile` then writes DRAFT.md again from the sections, replacing the edit',
     };
   }
-  const key = (xs: readonly SectionRef[]): string => xs.map((x) => `${x.n}-${x.slug}`).sort().join(',');
+  const key = (xs: readonly SectionRef[]): string => xs.map(sectionKey).sort().join(',');
   if (key(sections) !== key(m.sections)) return { verb: 'compile', why: "the outline's sections are not the ones last compiled" };
   for (const s of m.sections) {
     const where = `section ${s.n} (${s.slug})`;
-    const d = bytesOrNull(sectionDraft(s.n, s.slug, paperRoot));
-    if (d === null || sha256(d) !== s.draft_sha256) return { verb: 'compile', why: `${where}'s DRAFT.md changed since compile` };
-    const v = bytesOrNull(sectionVerificationRecord(s.n, s.slug, paperRoot));
-    if (v === null || sha256(v) !== s.verification_sha256) return { verb: 'compile', why: `${where} was verified again since compile` };
+    const h = through.get(sectionKey(s));
+    if (h === undefined || h.draft !== s.draft_sha256) return { verb: 'compile', why: `${where}'s DRAFT.md changed since compile` };
+    if (h.verification !== s.verification_sha256) return { verb: 'compile', why: `${where} was verified again since compile` };
   }
   if (m.bib_sha256 !== undefined) {
     const bib = bytesOrNull(join(pDir, 'CITATIONS.bib'));
-    if ((bib === null ? null : sha256(bib.toString('utf8'))) !== m.bib_sha256) {
+    if (bibFileSha256(bib === null ? null : bib.toString('utf8')) !== m.bib_sha256) {
       return { verb: 'compile', why: '.paper/CITATIONS.bib changed since compile' };
     }
   }
@@ -463,6 +489,13 @@ export async function resolveNextAction(
 
     // Walk the sections in order; the first one not through decides.
     const warnings: string[] = [];
+    let refusal: CompileRefusal | null | undefined;
+    const walk: RecordedWalk = {
+      paperRoot,
+      warn: (w) => warnings.push(w),
+      refusal: () => (refusal === undefined ? (refusal = readCompileRefusal(paperRoot)) : refusal),
+      through: new Map(),
+    };
     for (const { n, slug } of [...sections].sort((a, b) => a.n - b.n)) {
       const where = `section ${n} (${slug})`;
       const r = readSectionState(sectionPlan(n, slug, paperRoot));
@@ -481,7 +514,7 @@ export async function resolveNextAction(
         case 'verified':
         case 'failed':
         case 'unverifiable': {
-          const d = routeRecorded(paperRoot, { n, slug }, r.status, r.assignedSources, (w) => warnings.push(w));
+          const d = routeRecorded(walk, { n, slug }, r.status, r.assignedSources);
           if (d) return d;
           continue;
         }
@@ -490,10 +523,9 @@ export async function resolveNextAction(
       }
     }
 
-    const next = compileDue(paperRoot, sections);
+    const next = compileDue(paperRoot, sections, walk.through);
     const note = warnings.length > 0 ? ` (WARN: ${warnings.join('; ')})` : '';
-    if (next) return { ...next, why: `${next.why}${note}` };
-    return { verb: 'status', reason: 'attention', why: 'the compile could not be checked' };
+    return { ...next, why: `${next.why}${note}` };
   } catch (e) {
     // Backstop: anything that throws despite the per-read guards.
     process.stderr.write(
@@ -514,11 +546,15 @@ export function decisionArgs(decision: RouterDecision): Record<string, unknown> 
   return out;
 }
 
+/** The flags the decision runs its verb with: `--revise`, `--force`. */
+export function decisionFlags(decision: RouterDecision): string[] {
+  return [
+    ...('revise' in decision && decision.revise ? ['--revise'] : []),
+    ...('force' in decision && decision.force ? ['--force'] : []),
+  ];
+}
+
 /** The command the decision runs, as the user would type it (`pensmith plan 2 --revise`). */
 export function decisionCommand(decision: RouterDecision): string {
-  const parts = ['pensmith', decision.verb];
-  if ('n' in decision) parts.push(String(decision.n));
-  if ('revise' in decision && decision.revise) parts.push('--revise');
-  if ('force' in decision && decision.force) parts.push('--force');
-  return parts.join(' ');
+  return ['pensmith', decision.verb, ...('n' in decision ? [String(decision.n)] : []), ...decisionFlags(decision)].join(' ');
 }

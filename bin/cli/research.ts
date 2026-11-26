@@ -31,60 +31,57 @@
 // The key's value is never printed here; complete() alone puts it in a header.
 
 import { defineCommand } from 'citty';
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { mergeCandidates, updateLibrary } from '../lib/library.js';
-import { paperDir } from '../lib/paths.js';
+import { paperDir, paperIntakeFile } from '../lib/paths.js';
 import { SourceCandidateSchema, type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
-import { ask } from '../lib/prompts.js';
-import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
-import { closeGate, gateStillApplies, openGate, pendingDecision, readGate, type GateRecord } from '../lib/gates.js';
-import { sha256 } from '../lib/verify/verification-record.js';
+import { ask, canAskInTerminal } from '../lib/prompts.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
+import { closeGate, gateStillApplies, openGate, readGate, stopForAnswer, type GateRecord } from '../lib/gates.js';
+import { fileSha256 } from '../lib/verify/verification-record.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
 import { runResearchOrchestrator, SourceEvaluationError } from '../lib/research-orchestrator.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../lib/network-mode.js';
 
 // ---------------------------------------------------------------------------
-// The topic disambiguator's answer, checked before it is used.
+// The topic disambiguator's answer, checked before it is used; research keeps
+// the scopes in this shape while it waits for the author's choice.
 // ---------------------------------------------------------------------------
 const ScopeSchema = z.object({
   label: z.string().min(1),
   queries: z.array(z.string().min(1)).min(1),
 });
-const DisambiguatorResponseSchema = z.object({
+const ScopesSchema = z.object({
   scopes: z.array(ScopeSchema).min(1),
 });
 
 type Scope = z.infer<typeof ScopeSchema>;
 
-/** The scopes and the candidates research keeps while it waits for the author's choice. */
-const KeptScopesSchema = z.object({ scopes: z.array(ScopeSchema).min(1) });
+/** The candidates research keeps while it waits for the author's choice. */
 const KeptCandidatesSchema = z.object({
   candidates: z.array(SourceCandidateSchema).min(1),
   evaluated: z.boolean(),
   scope: z.string(),
 });
 
-/** True when a person at a terminal can see the choice and answer. */
-function canAskInTerminal(): boolean {
-  return Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
-}
-
 /** What a kept choice is about: the intake research was asked for. */
 function intakeFingerprint(root: string): string | null {
-  for (const name of ['INTAKE.json', 'INTAKE.md']) {
-    try {
-      return sha256(readFileSync(path.join(paperDir(root), name)));
-    } catch {
-      // not this one
-    }
-  }
-  return null;
+  return fileSha256(paperIntakeFile(root)) ?? fileSha256(path.join(paperDir(root), 'INTAKE.md'));
+}
+
+/** The scope labelled `label`, or the first scope when none is. */
+function scopeNamed(scopes: Scope[], label: string | undefined): Scope {
+  return scopes.find((sc) => sc.label === label) ?? scopes[0]!;
+}
+
+/** The candidates whose citekeys are `keys`, in the order found. */
+function candidatesNamed(candidates: SourceCandidate[], keys: readonly string[]): SourceCandidate[] {
+  return candidates.filter((c) => keys.includes(c.citekey));
 }
 
 /** The topic-disambiguator's scopes, or the topic as the one query when its answer cannot be used. */
@@ -108,7 +105,7 @@ async function proposeScopes(topic: string, discipline: string, assignment: stri
   });
   // On any parse failure: WARN + fall back to a single auto scope.
   try {
-    const zodResult = DisambiguatorResponseSchema.safeParse(JSON.parse(llmResult.text));
+    const zodResult = ScopesSchema.safeParse(JSON.parse(llmResult.text));
     if (zodResult.success) return zodResult.data.scopes;
     process.stderr.write(
       `pensmith research: WARN — topic-disambiguator response failed schema validation ` +
@@ -124,8 +121,8 @@ async function proposeScopes(topic: string, discipline: string, assignment: stri
   return [{ label: 'auto', queries: [topic || 'research'] }];
 }
 
-/** Ask the person at the terminal which scope to search; the label they chose. */
-async function askScope(scopes: Scope[]): Promise<string> {
+/** Ask the person at the terminal which scope to search; the scope they chose. */
+async function askScope(scopes: Scope[]): Promise<Scope> {
   const answer = await ask({
     id: 'scope',
     kind: 'select',
@@ -140,7 +137,7 @@ async function askScope(scopes: Scope[]): Promise<string> {
       `pensmith research: WARN — scope selection returned unrecognised value "${value}"; falling back to first scope "${scopes[0]!.label}".\n`,
     );
   }
-  return value;
+  return scopeNamed(scopes, value);
 }
 
 /** Ask the person at the terminal which candidates to keep; their citekeys. */
@@ -160,12 +157,9 @@ async function askCandidates(candidates: SourceCandidate[], evaluated: boolean):
   return Array.isArray(value) ? value.map(String) : [];
 }
 
-/** Print the kept scope choice and stop for the author's answer (exit 3). */
-function showScopes(record: GateRecord, scopes: Scope[]): Record<string, unknown> {
-  process.stderr.write('pensmith research: choosing the search scope needs the user, and there is no terminal to ask in; the scopes are kept until they answer.\n');
-  process.stdout.write(`${JSON.stringify(pendingDecision(record, 'research-scope', { scopes }))}\n`);
-  process.exitCode = EXIT_NEEDS_ANSWER;
-  return { ok: false, mode: 'pending', ref: record.ref };
+/** Print the kept scope choice (the scopes its record shows) and stop for the author's answer (exit 3). */
+function showScopes(record: GateRecord): Record<string, unknown> {
+  return stopForAnswer('pensmith research: choosing the search scope needs the user, and there is no terminal to ask in; the scopes are kept until they answer.', record);
 }
 
 /** What the candidate decision shows: each candidate in brief. */
@@ -177,15 +171,13 @@ function candidatesShown(kept: z.infer<typeof KeptCandidatesSchema>): Record<str
   return { scope: kept.scope, evaluated: kept.evaluated, candidates };
 }
 
-/** Print the kept candidates and stop for the author's choice (exit 3). */
-function showCandidates(record: GateRecord, kept: z.infer<typeof KeptCandidatesSchema>): Record<string, unknown> {
-  process.stderr.write(
+/** Print the kept candidates (as its record shows them) and stop for the author's choice (exit 3). */
+function showCandidates(record: GateRecord, evaluated: boolean): Record<string, unknown> {
+  return stopForAnswer(
     'pensmith research: choosing which sources to keep needs the user, and there is no terminal to ask in; the candidates are kept until they answer.' +
-      (kept.evaluated ? '\n' : ' The source evaluator kept none of them, so none is chosen for them.\n'),
+      (evaluated ? '' : ' The source evaluator kept none of them, so none is chosen for them.'),
+    record,
   );
-  process.stdout.write(`${JSON.stringify(pendingDecision(record, 'research-candidates', candidatesShown(kept)))}\n`);
-  process.exitCode = EXIT_NEEDS_ANSWER;
-  return { ok: false, mode: 'pending', ref: record.ref };
 }
 
 export const researchCommand = defineCommand({
@@ -228,9 +220,9 @@ export const researchCommand = defineCommand({
       const kept = KeptCandidatesSchema.safeParse(keptList.payload);
       if (kept.success && gateStillApplies(keptList, binding)) {
         candidates = kept.data.candidates;
-        if (!keptList.answer && !canAskInTerminal()) return showCandidates(keptList, kept.data);
+        if (!keptList.answer && !canAskInTerminal(process.stdout)) return showCandidates(keptList, kept.data.evaluated);
         const keys = keptList.answer ? keptList.answer.options : await askCandidates(candidates, kept.data.evaluated);
-        finalCandidates = candidates.filter((c) => keys.includes(c.citekey));
+        finalCandidates = candidatesNamed(candidates, keys);
       }
     }
     if (keptList) await closeGate(root, 'research-candidates');
@@ -280,11 +272,10 @@ export const researchCommand = defineCommand({
       let chosenScope: Scope | null = null;
       const keptScope = readGate(root, 'research-scope');
       if (keptScope && !yolo) {
-        const kept = KeptScopesSchema.safeParse(keptScope.payload);
+        const kept = ScopesSchema.safeParse(keptScope.payload);
         if (kept.success && gateStillApplies(keptScope, binding)) {
-          if (!keptScope.answer && !canAskInTerminal()) return showScopes(keptScope, kept.data.scopes);
-          const label = keptScope.answer ? keptScope.answer.options[0] : await askScope(kept.data.scopes);
-          chosenScope = kept.data.scopes.find((sc) => sc.label === label) ?? kept.data.scopes[0]!;
+          if (!keptScope.answer && !canAskInTerminal(process.stdout)) return showScopes(keptScope);
+          chosenScope = keptScope.answer ? scopeNamed(kept.data.scopes, keptScope.answer.options[0]) : await askScope(kept.data.scopes);
         }
       }
       if (keptScope) await closeGate(root, 'research-scope');
@@ -296,7 +287,7 @@ export const researchCommand = defineCommand({
         //    scope; a terminal asks; otherwise the scopes are kept for the
         //    author's choice (exit 3). ──
         if (scopes.length > 1 && !yolo) {
-          if (!canAskInTerminal()) {
+          if (!canAskInTerminal(process.stdout)) {
             const record = await openGate(root, {
               gate: 'research-scope',
               summary: 'Which search scope should research use?',
@@ -306,10 +297,9 @@ export const researchCommand = defineCommand({
               payload: { scopes },
               shown: { pending: 'research-scope', extra: { scopes } },
             });
-            return showScopes(record, scopes);
+            return showScopes(record);
           }
-          const label = await askScope(scopes);
-          chosenScope = scopes.find((sc) => sc.label === label) ?? scopes[0]!;
+          chosenScope = await askScope(scopes);
         }
       }
 
@@ -352,7 +342,7 @@ export const researchCommand = defineCommand({
       // author's choice (exit 3).
       finalCandidates = candidates;
       if (candidates.length > 0 && !yolo) {
-        if (!canAskInTerminal()) {
+        if (!canAskInTerminal(process.stdout)) {
           const kept = { candidates, evaluated, scope: chosenScope.label };
           const record = await openGate(root, {
             gate: 'research-candidates',
@@ -365,10 +355,9 @@ export const researchCommand = defineCommand({
             payload: kept,
             shown: { pending: 'research-candidates', extra: candidatesShown(kept) },
           });
-          return showCandidates(record, kept);
+          return showCandidates(record, evaluated);
         }
-        const keys = await askCandidates(candidates, evaluated);
-        finalCandidates = candidates.filter((c) => keys.includes(c.citekey));
+        finalCandidates = candidatesNamed(candidates, await askCandidates(candidates, evaluated));
       }
     }
 

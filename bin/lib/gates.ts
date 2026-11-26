@@ -16,10 +16,12 @@
 // without redoing the work. A record whose files changed since is dropped and
 // the work done afresh. Nothing here ever suggests --yolo.
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { atomicWriteFile, removePath } from './atomic-write.js';
+import { removePath } from './atomic-write.js';
+import { EXIT_NEEDS_ANSWER } from './exit-codes.js';
+import { readJsonRecord, writeJsonRecord } from './json-record.js';
 import { paperGatesDir } from './paths.js';
 import { sha256 } from './verify/verification-record.js';
 
@@ -58,7 +60,7 @@ export const GateRecordSchema = z.object({
   /** What the verb kept to apply: its proposal, and what it showed. */
   payload: z.unknown(),
   /** The pending line the verb printed (its name and what it showed), so `gate list` prints the same. */
-  shown: z.object({ pending: z.string().min(1), extra: z.record(z.string(), z.unknown()) }).strict().optional(),
+  shown: z.object({ pending: z.string().min(1), extra: z.record(z.string(), z.unknown()) }).strict(),
   answer: z.object({ options: z.array(z.string()), answered_at: z.string().min(1) }).strict().optional(),
 }).strict();
 
@@ -76,7 +78,7 @@ export interface OpenGate {
   binding: GateRecord['binding'];
   payload: unknown;
   /** The pending name and what the decision line shows besides the record's own fields. */
-  shown?: GateRecord['shown'];
+  shown: GateRecord['shown'];
 }
 
 function gateFile(paperRoot: string, id: string): string {
@@ -93,7 +95,7 @@ export async function openGate(paperRoot: string, spec: OpenGate): Promise<GateR
   const id = gateId(spec.gate, spec.n);
   const created_at = new Date().toISOString();
   const ref = `${id}-${sha256(JSON.stringify({ id, created_at, binding: spec.binding, payload: spec.payload })).slice(0, 12)}`;
-  const record = GateRecordSchema.parse({
+  return writeJsonRecord(gateFile(paperRoot, id), GateRecordSchema, {
     $schemaVersion: 1,
     gate: spec.gate,
     id,
@@ -106,26 +108,26 @@ export async function openGate(paperRoot: string, spec: OpenGate): Promise<GateR
     created_at,
     binding: spec.binding,
     payload: spec.payload,
-    ...(spec.shown ? { shown: spec.shown } : {}),
+    shown: spec.shown,
   });
-  await atomicWriteFile(gateFile(paperRoot, id), `${JSON.stringify(record, null, 2)}\n`);
-  return record;
 }
 
 /** The record at `file`, or null when there is none or it cannot be trusted. Never throws. */
 function readGateFile(file: string): GateRecord | null {
-  if (!existsSync(file)) return null;
-  try {
-    const parsed = GateRecordSchema.safeParse(JSON.parse(readFileSync(file, 'utf8')));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
+  return readJsonRecord(file, GateRecordSchema);
 }
 
 /** The decision kept for `gate` (section `n`), or null. Never throws. */
 export function readGate(paperRoot: string, gate: GateName, n?: number): GateRecord | null {
   return readGateFile(gateFile(paperRoot, gateId(gate, n)));
+}
+
+/** The decision whose ref is `ref` (`<id>-<12 hex>`, in `<id>.json`), or null. Never throws. */
+export function readGateByRef(paperRoot: string, ref: string): GateRecord | null {
+  const id = ref.replace(/-[0-9a-f]{12}$/, '');
+  if (id === ref || !GATE_ID.test(id)) return null;
+  const record = readGateFile(gateFile(paperRoot, id));
+  return record?.ref === ref ? record : null;
 }
 
 /** Every decision kept for the paper, oldest first. Never throws. */
@@ -170,9 +172,7 @@ export function parseAnswer(record: GateRecord, typed: string): { options: strin
 
 /** Record `options` as the person's answer to `record`. */
 export async function answerGate(paperRoot: string, record: GateRecord, options: string[]): Promise<GateRecord> {
-  const answered = GateRecordSchema.parse({ ...record, answer: { options, answered_at: new Date().toISOString() } });
-  await atomicWriteFile(gateFile(paperRoot, record.id), `${JSON.stringify(answered, null, 2)}\n`);
-  return answered;
+  return writeJsonRecord(gateFile(paperRoot, record.id), GateRecordSchema, { ...record, answer: { options, answered_at: new Date().toISOString() } });
 }
 
 /** How the person's answer comes back, for the pending JSON. */
@@ -184,20 +184,33 @@ export function howToAnswer(record: GateRecord): string {
 }
 
 /**
- * The one JSON line a verb prints when it stops for this decision. `extra`
- * carries what the person needs to see to decide (the proposal itself).
- * `pensmith gate list` prints the same line from the record's `shown`.
+ * The one JSON line a verb prints when it stops for this decision, built from
+ * the record: its `shown` carries what the person needs to see to decide (the
+ * proposal itself), so `pensmith gate list` prints the same line. `more`
+ * adds to it, or replaces what a verb shows as it is now.
  */
-export function pendingDecision(record: GateRecord, pending: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+export function pendingDecision(record: GateRecord, more: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    pending,
+    pending: record.shown.pending,
     gate: record.gate,
     ref: record.ref,
     summary: record.summary,
     options: record.options,
     ...(record.multiple ? { multiple: true } : {}),
     default: record.multiple ? record.default : (record.default[0] ?? null),
-    ...extra,
+    ...record.shown.extra,
+    ...more,
     how_to_answer: howToAnswer(record),
   };
+}
+
+/**
+ * Stop the verb for the person's answer: `note` (one line, saying why) on
+ * stderr, the decision line on stdout, exit 3.
+ */
+export function stopForAnswer(note: string, record: GateRecord, more: Record<string, unknown> = {}): { ok: false; mode: 'pending'; ref: string } {
+  process.stderr.write(`${note}\n`);
+  process.stdout.write(`${JSON.stringify(pendingDecision(record, more))}\n`);
+  process.exitCode = EXIT_NEEDS_ANSWER;
+  return { ok: false, mode: 'pending', ref: record.ref };
 }
