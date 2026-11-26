@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { pensmithDataDir, sectionPlan } from '../bin/lib/paths.js';
 import { estimateCost } from '../bin/lib/pricing.js';
 import { isolatedCliEnv } from './lib/cli-env.js';
+import { writeVerificationFixture } from './lib/verification-fixture.js';
 
 // RED-by-skip guard — the module under test does not exist until Plan 07-02.
 const ESTIMATOR_SRC = fileURLToPath(new URL('../bin/lib/estimator.ts', import.meta.url));
@@ -228,6 +229,29 @@ test('estimate: a bare run counts only the sections still to finish', { skip: !b
   const root = paperWith(['verified', 'verified', 'written', 'writing']);
   const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 5 });
   assert.deepEqual(res.rows.map((r) => r.step), ['verify §3', 'write §4', 'verify §4', 'done']);
+});
+
+test('estimate: a failed or unverifiable section is priced as the step the router sends it to', { skip: !built }, async () => {
+  // A failed section was priced as verify, but the router sends it to
+  // plan --revise (a citation revise can repair), write --force (a draft
+  // with nothing to check), verify (a registry did not answer) or to the
+  // person; an unverifiable one it compiles with a warning.
+  const projectEstimate = await loadProject();
+  const root = paperWith(['failed', 'failed', 'failed', 'failed', 'unverifiable']);
+  const record = (n: number, draft: string, spec: Record<string, unknown>): void => {
+    const dir = dirname(sectionPlan(n, `s${n}`, root));
+    writeFileSync(join(dir, 'DRAFT.md'), draft);
+    writeVerificationFixture(dir, { n, slug: `s${n}`, draft, ...spec });
+  };
+  record(1, 'A claim [@ghost2020].\n', { citations: [{ citekey: 'ghost2020', verdict: 'FABRICATED' }] });
+  record(2, '[PENSMITH_NO_LLM placeholder]\n', { status: 'failed', checked: false, reason: 'the draft is placeholder text' });
+  record(3, 'A claim [@slow2020].\n', { citations: [{ citekey: 'slow2020', verdict: 'UNRESOLVED', retryable: true }] });
+  record(4, 'A claim (Smith, 2020).\n', { citations: [{ citekey: 'Smith, 2020', verdict: 'RAW_CITATION' }] });
+  record(5, 'He wrote "a long quotation of more than ten words that no source can confirm for us".\n', {
+    status: 'unverifiable', citations: [], quotes: [{ citekey: '', quote: 'a long quotation of more than ten words that no source can confirm for us', verdict: 'UNATTRIBUTED' }],
+  });
+  const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 5 });
+  assert.deepEqual(res.rows.map((r) => r.step), ['revise §1', 'verify §1', 'write §2', 'verify §2', 'verify §3', 'done']);
 });
 
 test('estimate: a wave write counts only the sections that still need drafting; compile costs nothing',

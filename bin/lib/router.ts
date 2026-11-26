@@ -393,6 +393,26 @@ function routeRecorded(
 }
 
 /**
+ * What a section whose PLAN.md says failed, unverifiable or verified needs
+ * next, from its recorded verdicts, as resolveNextAction decides it; null
+ * when it is through. For the estimator, which prices that step.
+ */
+export function recordedSectionDecision(
+  paperRoot: string,
+  s: SectionRef,
+  planStatus: string,
+  assignedSources: readonly string[],
+): RouterDecision | null {
+  let refusal: CompileRefusal | null | undefined;
+  return routeRecorded({
+    paperRoot,
+    warn: () => {},
+    refusal: () => (refusal === undefined ? (refusal = readCompileRefusal(paperRoot)) : refusal),
+    through: new Map(),
+  }, s, planStatus, assignedSources);
+}
+
+/**
  * What follows once every section is through: compile while the compiled
  * .paper/DRAFT.md is not what the last compile wrote from the paper as it is
  * now, attention for a compiled draft edited by hand, then done until it is

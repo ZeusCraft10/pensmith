@@ -20,7 +20,7 @@ import path from 'node:path';
 import { loadState } from './state.js';
 import { readOutline } from './outline-read.js';
 import { paperDir, sectionPlan } from './paths.js';
-import { readSectionState, researchDone, sectionVerb } from './router.js';
+import { readSectionState, recordedSectionDecision, researchDone, sectionVerb, type RouterDecision } from './router.js';
 import { callCost, resolveCall } from './llm-config.js';
 import type { LlmRole } from './generator.js';
 import { DEFAULT_COST_CAP_USD } from './budget.js';
@@ -79,7 +79,26 @@ function remainingSteps(status: string | null): readonly Step[] {
   return SECTION_PIPELINE.slice(verb === null ? 0 : SECTION_PIPELINE.indexOf(verb));
 }
 
-interface Section { n: number; status: string | null }
+/**
+ * The steps a router decision for a section leads to: the step it names,
+ * then verify for the draft that step changes. Nothing runs for a section
+ * that is through, or one that needs the person first.
+ */
+function stepsAfter(d: RouterDecision | null): readonly Step[] {
+  switch (d?.verb) {
+    case 'plan':
+      return d.revise ? ['revise', 'verify'] : SECTION_PIPELINE;
+    case 'write':
+      return ['write', 'verify'];
+    case 'verify':
+      return ['verify'];
+    default:
+      return [];
+  }
+}
+
+/** A section's PLAN.md status, and the steps the rest of the paper needs for it. */
+interface Section { n: number; status: string | null; steps: readonly Step[] }
 
 /** Which steps, with which labels, `verb` (null: the rest of the paper) would run. */
 function plannedSteps(
@@ -108,7 +127,7 @@ function plannedSteps(
       if (!paper.researched) steps.push(['research', 'research']);
       if (!paper.outlined) steps.push(['outline', 'outline']);
       for (const s of sections) {
-        for (const step of remainingSteps(s.status)) steps.push([step, `${step} §${s.n}`]);
+        for (const step of s.steps) steps.push([step, `${step} §${s.n}`]);
       }
       if (!paper.finished) steps.push(['done', 'done']);
       return steps;
@@ -144,7 +163,14 @@ export async function projectEstimate(args: {
       .sort((a, b) => a.n - b.n)
       .map(({ n, slug }) => {
         const r = readSectionState(sectionPlan(n, slug, args.paperRoot));
-        return { n, status: r.absent ? null : r.status };
+        const status = r.absent ? null : r.status;
+        // A failed or unverifiable section goes where its recorded verdicts
+        // send it (plan --revise, write --force, verify, or the person).
+        const recorded = status === 'failed' || status === 'unverifiable';
+        const steps = recorded
+          ? stepsAfter(recordedSectionDecision(args.paperRoot, { n, slug }, status, r.assignedSources))
+          : remainingSteps(status);
+        return { n, status, steps };
       });
     const steps = plannedSteps(args.verb ?? null, args.n ?? null, sections, {
       researched: researchDone(pDir) === true,
