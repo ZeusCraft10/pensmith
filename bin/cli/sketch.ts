@@ -16,10 +16,15 @@
 //
 // stdout-only (no console.* — Pitfall-7 stance shared with the other verbs).
 //
-// TEST SEAMS (Tier-2): the Socratic loop, the confirm gate, and the downstream
-// dispatch are each injectable so tests can observe the delegation without
-// running the full `new` pipeline or a live TTY prompt:
-//   - args.thesis   pre-supplies the thesis (skips the Socratic loop)
+// Without a terminal (Claude Code's Bash tool, CI, a pipe) nothing is asked on
+// stdin: sketch prints what it would ask as one JSON line and exits 3, having
+// written nothing. Claude talks the thesis through with the user, and starts
+// the paper with `pensmith new --thesis "<their thesis>"` once they agree.
+//
+// TEST SEAMS (Tier-2): the confirm gate and the downstream dispatch are
+// injectable so tests can observe the delegation without running the full
+// `new` pipeline or a live TTY prompt:
+//   - --thesis      pre-supplies the thesis (skips the Socratic loop)
 //   - args.confirm  pre-supplies the gate decision (skips the ask() prompt)
 //   - args.__dispatch  a spy dispatcher used instead of the real dispatchVerb
 
@@ -27,12 +32,29 @@ import { defineCommand } from 'citty';
 import { ask, confirmOrNo } from '../lib/prompts.js';
 import { dispatchVerb, type GlobalFlags } from '../pensmith.js';
 import type { Ux02Verb } from '../lib/verbs.js';
+import { EXIT_NEEDS_ANSWER } from '../lib/exit-codes.js';
 
 /** Dispatcher seam — matches the dispatchVerb signature the tests spy on. */
 type Dispatcher = (
   verb: string,
   opts?: { args?: Record<string, unknown>; globalFlags?: Record<string, unknown> },
 ) => Promise<unknown>;
+
+/** The Socratic questions, in the order they are asked. */
+const QUESTIONS = [
+  { id: 'sketch-interests', label: 'What interests or questions motivate this paper?' },
+  { id: 'sketch-disagree', label: 'What conventional view do you disagree with?' },
+  { id: 'sketch-audience', label: 'Who is your target audience?' },
+  { id: 'sketch-claim', label: 'In one sentence, what is your candidate thesis claim?' },
+] as const;
+
+/** Print what sketch waits for, as one JSON line, and stop (exit 3). Nothing is written. */
+function reportPending(decision: Record<string, unknown>): { ok: false; pending: true } {
+  process.stderr.write('pensmith sketch: this needs the user, and there is no terminal to ask in. Nothing was written.\n');
+  process.stdout.write(`${JSON.stringify(decision)}\n`);
+  process.exitCode = EXIT_NEEDS_ANSWER;
+  return { ok: false, pending: true };
+}
 
 /** Ask one Socratic text question, returning the trimmed answer (or ''). */
 async function askText(id: string, label: string): Promise<string> {
@@ -46,6 +68,7 @@ export const sketchCommand = defineCommand({
     description: 'Thinking-partner thesis discovery before intake (no state created until you confirm).',
   },
   args: {
+    thesis: { type: 'string', description: 'A thesis you already have: skip the questions and confirm it.' },
     yolo: { type: 'boolean', description: 'Skip the confirm gate and proceed to intake.', default: false },
     'dry-run': { type: 'boolean', description: 'Describe the step only; ask nothing, write nothing, no network.', default: false },
   },
@@ -56,13 +79,21 @@ export const sketchCommand = defineCommand({
     //     LIBRARY.json — sketch never advances paper state (Pitfall 6).
     let synthesized: string;
     const preThesis = typeof args.thesis === 'string' ? args.thesis.trim() : '';
+    const terminal = Boolean(process.stdin.isTTY) && Boolean(process.stderr.isTTY);
     if (preThesis) {
       synthesized = preThesis;
+    } else if (!terminal) {
+      return reportPending({
+        pending: 'sketch-questions',
+        gate: 'sketch',
+        summary: 'Sketch a thesis with the user before starting the paper.',
+        questions: QUESTIONS.map(({ id, label }) => ({ id, question: label })),
+        how_to_answer: 'Talk these questions through with the user and help them shape one thesis sentence; when they agree to it, run `pensmith new --thesis "<their thesis>"`.',
+      });
     } else {
-      const interests = await askText('sketch-interests', 'What interests or questions motivate this paper?');
-      const disagreements = await askText('sketch-disagree', 'What conventional view do you disagree with?');
-      const audience = await askText('sketch-audience', 'Who is your target audience?');
-      const claim = await askText('sketch-claim', 'In one sentence, what is your candidate thesis claim?');
+      const answers: string[] = [];
+      for (const q of QUESTIONS) answers.push(await askText(q.id, q.label));
+      const [interests, disagreements, audience, claim] = answers;
       const parts = [claim || interests, disagreements, audience].filter(Boolean);
       synthesized = parts.length > 0 ? parts.join(' — ') : 'An exploratory thesis to refine during intake.';
     }
@@ -70,13 +101,24 @@ export const sketchCommand = defineCommand({
     process.stdout.write(`\npensmith sketch:\n  ${synthesized}\n\n`);
 
     // (2) Confirm gate (approval-gates-default-on). A pre-supplied `confirm`
-    //     (test seam) wins; --yolo skips the prompt; otherwise ask(). On
-    //     decline: print + return WITHOUT creating ANY state (no-advance).
+    //     (test seam) wins; --yolo skips the prompt; at a terminal ask();
+    //     without one report the decision (exit 3). On decline: print +
+    //     return WITHOUT creating ANY state (no-advance).
     let proceed: boolean;
     if (typeof args.confirm === 'boolean') {
       proceed = args.confirm;
     } else if (args.yolo === true) {
       proceed = true;
+    } else if (!terminal) {
+      return reportPending({
+        pending: 'sketch-confirm',
+        gate: 'sketch',
+        summary: 'Start a paper with this thesis?',
+        thesis: synthesized,
+        options: ['proceed', 'cancel'],
+        default: 'cancel',
+        how_to_answer: `Ask the user whether to start the paper with this thesis. If they proceed, run \`pensmith new --thesis ${JSON.stringify(synthesized)}\`; if not, nothing was written.`,
+      });
     } else {
       proceed = await confirmOrNo({
         id: 'sketch-confirm',

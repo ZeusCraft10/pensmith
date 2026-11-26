@@ -287,14 +287,23 @@ export const addCommand = defineCommand({
     // (3) Remap gate. Remap when --remap is set OR (not --yolo AND the user
     //     confirms). When --section/--slug are supplied, remap that one section;
     //     otherwise remap every section in STATE.json.
+    //     Without a terminal nothing is asked (stdin is not the user): the
+    //     answer defaults to no, and add says how to remap.
     let doRemap = args.remap === true;
     if (!doRemap && args.yolo !== true) {
-      doRemap = await confirmOrNo({
-        id: 'add-remap',
-        kind: 'confirm',
-        label: 'Source added. Remap sections to reference it?',
-        default: false,
-      });
+      if (process.stdin.isTTY && process.stderr.isTTY) {
+        doRemap = await confirmOrNo({
+          id: 'add-remap',
+          kind: 'confirm',
+          label: 'Source added. Remap sections to reference it?',
+          default: false,
+        });
+      } else {
+        process.stdout.write(
+          `pensmith add: not remapped onto any section. To have sections cite it, run ` +
+          `\`pensmith add ${String(args.source)} --remap\` (add \`--section <N>\` for one section); the source is not added twice.\n`,
+        );
+      }
     }
 
     if (doRemap) {

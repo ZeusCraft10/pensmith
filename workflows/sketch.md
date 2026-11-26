@@ -29,7 +29,11 @@ The implementation lives in `bin/cli/sketch.ts` (`sketchCommand`) delegating to
 `bin/lib/prompts.ts` (`ask`) for the loop + gate and to `dispatchVerb('new', …)`
 for the hand-off. Both Tier 1 (plugin) and Tier 2 (CLI) run the SAME
 `bin/cli/sketch.ts` path: Tier 1 surfaces the questions + confirm via
-`AskUserQuestion`; Tier 2 degrades to `@clack/prompts` over stdin. There is no
+`AskUserQuestion`; Tier 2 degrades to `@clack/prompts` at a terminal. With no
+terminal sketch asks nothing: it prints its questions (or, with `--thesis`,
+the go-ahead it needs) as one JSON line, writes nothing and exits 3; Claude
+talks it through with the user and runs `pensmith new --thesis "<thesis>"`
+once they agree. There is no
 `pensmith_sketch` MCP tool (the Tier-1 surface is THIS workflow body delegating
 to the same code — the compile/done asymmetry precedent, keeping the locked 16
 verbs bijective with the 16 workflow bodies).

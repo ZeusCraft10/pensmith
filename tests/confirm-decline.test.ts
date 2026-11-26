@@ -81,8 +81,10 @@ test('add: an unclear answer to the remap question keeps the source and skips th
     join(root, 'STATE.json'),
     JSON.stringify({ $schemaVersion: 2, paperId: 'confirm-add', createdAt: new Date().toISOString(), sections: [] }),
   );
-  const r = runCli(['add', '10.1038/nphys1170'], root, 'maybe\n');
+  // At a terminal: without one, add asks nothing (tests/no-terminal-prompts.test.ts).
+  const r = runCli(['add', '10.1038/nphys1170'], root, 'maybe\n', { terminal: true });
   assertNoCrash(r, 'add');
+  assert.match(r.stderr, /Remap sections to reference it\?/, 'the question is asked');
   assert.equal(r.status, 0, `stdout=${r.stdout} stderr=${r.stderr}`);
   assert.match(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'), /10\.1038\/nphys1170/i, 'the source is still added');
 });
@@ -98,7 +100,11 @@ test('sketch: an unclear answer to the proceed question cancels and creates noth
   let dispatched = false;
   process.chdir(dir);
   process.env['PENSMITH_PROMPT_MODE'] = 'numbered';
-  // The numbered prompt reads process.stdin; give it the answer.
+  // A terminal (without one sketch asks nothing): the numbered prompt reads
+  // process.stdin; give it the answer.
+  Object.assign(stdin, { isTTY: true });
+  const stderrWasTty = process.stderr.isTTY;
+  Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
   Object.defineProperty(process, 'stdin', { configurable: true, get: () => stdin });
   queueMicrotask(() => stdin.end('maybe\n'));
   process.stdout.write = ((chunk: string | Uint8Array, ...rest: unknown[]): boolean => {
@@ -121,6 +127,7 @@ test('sketch: an unclear answer to the proceed question cancels and creates noth
   } finally {
     process.stdout.write = realWrite;
     if (realStdin) Object.defineProperty(process, 'stdin', realStdin);
+    Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: stderrWasTty });
     process.chdir(prevCwd);
     if (prevMode === undefined) delete process.env['PENSMITH_PROMPT_MODE'];
     else process.env['PENSMITH_PROMPT_MODE'] = prevMode;

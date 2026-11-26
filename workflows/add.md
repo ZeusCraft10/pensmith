@@ -28,7 +28,9 @@ The implementation lives in `bin/cli/add.ts` (`addCommand`) composing existing
 chokepoints only — no business logic in the verb beyond input-type detection.
 Both Tier 1 (plugin) and Tier 2 (CLI) run the SAME `bin/cli/add.ts` path: Tier 1
 surfaces the remap gate via `AskUserQuestion`; Tier 2 degrades to
-`@clack/prompts` over stdin. There is no `pensmith_add` MCP tool (the Tier-1
+`@clack/prompts` at a terminal. With no terminal nothing is asked: the
+source is not remapped, and add says to run it again with `--remap` (the
+source is not added twice). There is no `pensmith_add` MCP tool (the Tier-1
 surface is THIS workflow body delegating to the same code — the compile/done
 asymmetry precedent, keeping the locked 16 verbs bijective with the 16 workflow
 bodies).
