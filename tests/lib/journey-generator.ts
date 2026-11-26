@@ -1,21 +1,15 @@
-// tests/lib/journey-generator.ts — the scripted model for the journey test.
+// tests/lib/journey-generator.ts — the scripted model for the journey test
+// (tests/journey.test.ts), loaded into the CLI process with `node --import`.
 //
-// Loaded into the CLI process with `node --import` (tests/journey.test.ts), it
-// puts a fake Generator in place of the provider (anthropic.ts
-// _setGeneratorForTest), so every model call goes through the real complete()
-// (cost cap, ledger, structured-output checks) and gets a scripted answer.
-// The answer depends only on what the request asks for: the step (from its
-// JSON Schema and prompt) and, for plan and write, the section it names. A
-// request the script does not expect throws, so the journey fails on it.
-//
-// Each request is appended, in brief, to the file PENSMITH_JOURNEY_LOG names.
+// Each answer depends only on what the request asks for: the step and, for
+// plan and write, the section its user turn names. The works are found by
+// title among those the request shows, never by a key written here.
 //
 // Not a test file (the runner collects only *.test.ts).
 
-import { appendFileSync } from 'node:fs';
-import { _setGeneratorForTest } from '../../bin/lib/anthropic.js';
-import type { GenerateRequest, GenerateResult } from '../../bin/lib/generator.js';
+import type { GenerateRequest } from '../../bin/lib/generator.js';
 import { fencedBlocks } from './fence.js';
+import { installScriptedModel, stepOf, worksShown, type Step } from './scripted-model.js';
 
 /** The two works the journey's paper is about, as the source evaluator is shown them. */
 export const VISIBLE = { title: /visible islands/i, doi: '10.1556/012.2022.01524' };
@@ -23,47 +17,6 @@ export const COVERING = { title: /covering islands/i, doi: '10.1007/978-3-642-34
 
 /** A sentence of the Visible Islands paper the drafter quotes word for word. */
 export const QUOTE = 'In this paper, we study a relaxed version of this question by replacing holes with visible islands';
-
-type Step = 'intake' | 'research' | 'evaluate' | 'outline' | 'plan' | 'write' | 'claim-support' | 'orphan-label' | 'other';
-
-function propsOf(req: GenerateRequest): string[] {
-  const p = (req.jsonSchema as { properties?: Record<string, unknown> } | undefined)?.properties;
-  return p ? Object.keys(p).sort() : [];
-}
-
-function stepOf(req: GenerateRequest): Step {
-  const props = propsOf(req).join(',');
-  const text = `${req.system}\n${req.messages.map((m) => m.content).join('\n')}`;
-  if (props === 'questions,topic') return 'intake';
-  if (props === 'verdicts' && /candidate/i.test(text)) return 'evaluate';
-  if (/disambiguate a research topic/i.test(req.system)) return 'research';
-  if (props === 'draft,gaps') return 'write';
-  // The advisory verifier passes (Pass 2 and Pass 4) send their prompt as the user turn.
-  if (/^# Claim-Support Judge/m.test(text)) return 'claim-support';
-  if (/^# Orphan-Label Classifier/m.test(text)) return 'orphan-label';
-  if (/outline/i.test(req.system) && props.includes('sections')) return 'outline';
-  if (props === 'assigned_sources,brief,claims,voice') return 'plan';
-  return 'other';
-}
-
-/** The works the request shows as fenced JSON (the library, a section's sources): citekey → title. */
-function worksShown(req: GenerateRequest): Map<string, string> {
-  const out = new Map<string, string>();
-  const text = `${req.system}\n${req.messages.map((m) => m.content).join('\n')}`;
-  for (const block of fencedBlocks(text)) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(block);
-    } catch {
-      continue;
-    }
-    if (!Array.isArray(parsed)) continue;
-    for (const w of parsed as Array<Record<string, unknown>>) {
-      if (typeof w['citekey'] === 'string' && typeof w['title'] === 'string') out.set(w['citekey'], w['title']);
-    }
-  }
-  return out;
-}
 
 /** The citekey of the shown work whose title matches `title`. */
 function keyOf(req: GenerateRequest, title: RegExp): string {
@@ -97,11 +50,6 @@ function sectionNamed(req: GenerateRequest): (typeof SECTIONS)[number] {
   const sec = SECTIONS.find((s) => text.includes(`"${s.title}"`));
   if (!sec) throw new Error(`journey: the request names no journey section: ${text.slice(0, 200)}`);
   return sec;
-}
-
-function log(entry: Record<string, unknown>): void {
-  const file = process.env['PENSMITH_JOURNEY_LOG'];
-  if (file) appendFileSync(file, `${JSON.stringify(entry)}\n`);
 }
 
 function answer(req: GenerateRequest, step: Step): unknown {
@@ -163,26 +111,9 @@ function answer(req: GenerateRequest, step: Step): unknown {
       const key = keyOf(req, sec.work.title);
       return { draft: DRAFTS[sec.slug](key), gaps: [] };
     }
-    case 'claim-support':
-      return { verdict: 'SUPPORTED', rationale: 'The cited work states this.', evidence: '' };
-    case 'orphan-label':
-      return { label: 'definition' };
     default:
-      throw new Error(`journey: no answer scripted for a ${step} request`);
+      return undefined;
   }
 }
 
-_setGeneratorForTest({
-  async generate(req: GenerateRequest): Promise<GenerateResult> {
-    const step = stepOf(req);
-    log({ step, shown: [...worksShown(req).keys()], user: req.messages.at(-1)?.content ?? '' });
-    const a = answer(req, step);
-    return {
-      text: typeof a === 'string' ? a : JSON.stringify(a),
-      model: req.model,
-      stop: 'complete',
-      stopReason: 'end_turn',
-      usage: [{ model: req.model, inputTokens: 1000, outputTokens: 400, cacheReadTokens: 0, cacheWriteTokens: 0 }],
-    };
-  },
-});
+installScriptedModel(answer);
