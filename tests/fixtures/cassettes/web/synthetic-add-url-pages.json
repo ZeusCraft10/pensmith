@@ -1,0 +1,12 @@
+[
+ {
+  "scope": "https://example.org",
+  "method": "GET",
+  "path": "/pensmith-first-doi-unreadable",
+  "status": 200,
+  "response": "<!DOCTYPE html><html><head><title>A page with no citation meta tag</title></head><body><p>Prefix list: 10.5555/) and see https://doi.org/10.1038/nphys1170</p></body></html>",
+  "responseHeaders": {
+   "content-type": "text/html; charset=UTF-8"
+  }
+ }
+]

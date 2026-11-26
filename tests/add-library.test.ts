@@ -216,6 +216,44 @@ test('add <pdf> refuses a hit with its title when none of the hit\'s authors is 
   assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
 });
 
+test('add <pdf> holds a printed DOI to the whole title, when Crossref\'s subtitle list starts with a blank', async () => {
+  // Crossref keeps the subtitle in a list of its own; this record's list is
+  // ['', 'A field study'] (a synthetic record, 10.0000 test prefix). Its
+  // whole title, the one Pass 1 compares, has the subtitle, so a PDF that
+  // prints only the main title is not this work, and one that prints the
+  // whole title is.
+  const root = project();
+  const mainOnly = await pdfOf(root, [
+    'Measuring trust in online communities',
+    'Chidi Okonkwo and Astrid Lindqvist',
+    'https://doi.org/10.0000/pensmith-subtitle-blank-first',
+    'Abstract We survey trust between members of three online forums.',
+  ]);
+  const r = cli(root, ['add', mainOnly, '--yolo']);
+  assert.equal(r.status, 2, r.out);
+  assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
+
+  const whole = await pdfOf(root, [
+    'Measuring trust in online communities: A field study',
+    'Chidi Okonkwo and Astrid Lindqvist',
+    'https://doi.org/10.0000/pensmith-subtitle-blank-first',
+    'Abstract We survey trust between members of three online forums.',
+  ]);
+  const ok = cli(root, ['add', whole, '--yolo']);
+  assert.equal(ok.status, 0, ok.out);
+  assert.match(bibOf(root), /doi = \{10\.0000\/pensmith-subtitle-blank-first\}/, ok.out);
+});
+
+test('add <url> of a page with no citation meta tag reads only the first DOI-shaped text on it', () => {
+  // The page's first DOI-shaped text is not a DOI ("10.5555/)"); a later DOI
+  // on the page may be a cited work's, so the page is not taken to name it.
+  const root = project();
+  const r = cli(root, ['add', 'https://example.org/pensmith-first-doi-unreadable', '--yolo']);
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.out, /the page names no DOI/, r.out);
+  assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
+});
+
 test('add <arXiv ID> adds the preprint, known by its eprint', () => {
   const root = project();
   const r = cli(root, ['add', 'arXiv:1706.03762', '--yolo']);

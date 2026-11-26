@@ -1,0 +1,111 @@
+[
+ {
+  "scope": "https://api.crossref.org",
+  "method": "GET",
+  "path": "/works/10.0000/pensmith-subtitle-blank-first",
+  "status": 200,
+  "response": {
+   "status": "ok",
+   "message-type": "work",
+   "message-version": "1.0.0",
+   "message": {
+    "DOI": "10.0000/pensmith-subtitle-blank-first",
+    "type": "journal-article",
+    "title": [
+     "Measuring trust in online communities"
+    ],
+    "subtitle": [
+     "",
+     "A field study"
+    ],
+    "short-title": [],
+    "author": [
+     {
+      "given": "Chidi",
+      "family": "Okonkwo",
+      "sequence": "first",
+      "affiliation": []
+     },
+     {
+      "given": "Astrid",
+      "family": "Lindqvist",
+      "sequence": "additional",
+      "affiliation": []
+     }
+    ],
+    "container-title": [
+     "Journal of Online Communities"
+    ],
+    "short-container-title": [],
+    "issued": {
+     "date-parts": [
+      [
+       2024,
+       5
+      ]
+     ]
+    }
+   }
+  },
+  "responseHeaders": {
+   "content-type": "application/json"
+  }
+ },
+ {
+  "scope": "https://api.crossref.org",
+  "method": "GET",
+  "path": "/works?query=Measuring%20trust%20in%20online%20communities&rows=5",
+  "status": 200,
+  "response": {
+   "status": "ok",
+   "message-type": "work-list",
+   "message-version": "1.0.0",
+   "message": {
+    "items": [
+     {
+      "DOI": "10.0000/pensmith-subtitle-blank-first",
+      "type": "journal-article",
+      "title": [
+       "Measuring trust in online communities"
+      ],
+      "subtitle": [
+       "",
+       "A field study"
+      ],
+      "short-title": [],
+      "author": [
+       {
+        "given": "Chidi",
+        "family": "Okonkwo",
+        "sequence": "first",
+        "affiliation": []
+       },
+       {
+        "given": "Astrid",
+        "family": "Lindqvist",
+        "sequence": "additional",
+        "affiliation": []
+       }
+      ],
+      "container-title": [
+       "Journal of Online Communities"
+      ],
+      "short-container-title": [],
+      "issued": {
+       "date-parts": [
+        [
+         2024,
+         5
+        ]
+       ]
+      }
+     }
+    ],
+    "total-results": 1
+   }
+  },
+  "responseHeaders": {
+   "content-type": "application/json"
+  }
+ }
+]

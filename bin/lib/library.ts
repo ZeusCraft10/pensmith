@@ -548,7 +548,10 @@ export function importCslJson(lib: Library, items: unknown[], at: string, file: 
     });
     const fields = Object.fromEntries(Object.entries(csl).filter(([k]) => k !== 'custom' && k !== 'citation-key'));
     const str = (k: string): string | undefined => (typeof csl[k] === 'string' ? (csl[k] as string) : undefined);
-    const arxiv = bareArxivId(arxivFromLink(str('URL') ?? '')) ?? bareArxivId(str('number') ?? '');
+    // A CSL URL is kept as written, so text can follow an arXiv link
+    // ("https://arxiv.org/abs/1706.03762 (preprint)"): the link ends at the first space.
+    const arxivLink = /arxiv\.org\/(?:abs|pdf)\/[^\s?#]+/i.exec(str('URL') ?? '')?.[0] ?? '';
+    const arxiv = bareArxivId(arxivFromLink(arxivLink)) ?? bareArxivId(str('number') ?? '');
     const item = LibraryItemSchema.parse({
       ...fields,
       id: key,

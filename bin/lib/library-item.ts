@@ -21,7 +21,6 @@ import {
   normalizePmcid,
   normalizePmid,
 } from './doi.js';
-import { firstString } from './sources/work-record.js';
 import type { CslName, SourceCandidate } from './schemas/source-candidate.js';
 import type { LibraryItem, Provenance } from './schemas/library.js';
 
@@ -163,11 +162,14 @@ export function itemFromBibEntry(
   const pmid = normalizePmid(f['pmid'] ?? (eprintType === 'pubmed' ? eprint : ''));
   if (pmid && !item['PMID']) item['PMID'] = pmid;
   const doi = typeof item['DOI'] === 'string' ? (item['DOI'] as string) : (f['doi'] || doiFromLink(url));
+  // The title as citation-js reads it, untrimmed.
+  const titleRaw = item['title'];
+  const title = typeof titleRaw === 'string' ? titleRaw : Array.isArray(titleRaw) ? String(titleRaw[0] ?? '') : '';
   return {
     ...item,
     id: key,
     type: typeof item['type'] === 'string' && item['type'] ? (item['type'] as string) : 'document',
-    title: firstString(item['title']) ?? '',
+    title,
     custom: {
       ...(arxiv ? { arxiv } : {}),
       identities: identityKeys({

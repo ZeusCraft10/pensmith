@@ -149,6 +149,55 @@ test('a CSL-JSON item whose link is an arXiv PDF is the preprint, as a .bib entr
   assert.equal(lib.entries.length, 1);
 });
 
+test('a CSL-JSON item whose arXiv link is followed by a space or other text is still the preprint', () => {
+  // The importer keeps a CSL URL as written, untrimmed: the link ends at the
+  // first space. Read past it, the item had no identity, so verify would
+  // block it as UNRESOLVED, and the same preprint added again was a second
+  // entry under a second key.
+  for (const url of ['https://arxiv.org/abs/1706.03762 ', 'https://arxiv.org/abs/1706.03762\n', 'https://arxiv.org/abs/1706.03762 (preprint)']) {
+    const lib = emptyLibrary();
+    const item = (id: string, link: string): Record<string, unknown> => ({
+      id,
+      type: 'article',
+      title: 'Attention Is All You Need',
+      author: [{ family: 'Vaswani', given: 'Ashish' }],
+      issued: { 'date-parts': [[2017]] },
+      URL: link,
+    });
+    const first = importCslJson(lib, [item('vaswani2017', url)], AT, 'a.json');
+    assert.deepEqual(first.unidentified, [], JSON.stringify(url));
+    assert.equal(lib.entries[0]!.custom.arxiv, '1706.03762', JSON.stringify(url));
+    assert.deepEqual(lib.entries[0]!.custom.identities, ['arxiv:1706.03762'], JSON.stringify(url));
+    const again = importCslJson(lib, [item('other2017', 'https://arxiv.org/abs/1706.03762')], AT, 'b.json');
+    assert.deepEqual(again.works.map((w) => `${w.citekey}:${w.status}`), ['vaswani2017:existing'], JSON.stringify(url));
+  }
+});
+
+test('a .bib entry\'s title is stored as the bibliography reader gives it, spaces and all', async () => {
+  const lib = emptyLibrary();
+  await importBibliography(
+    lib,
+    '@article{a1, title = {  Spaced Title  }, author = {Doe, J}, year = {2017}, doi = {10.1000/x}}\n',
+    AT,
+    'refs.bib',
+  );
+  assert.equal(lib.entries[0]!.title, ' Spaced Title ');
+});
+
+test('readLibrarySync reads a LIBRARY.json with a zero, negative or fractional version as v1, as loadLibrary does', async () => {
+  // The tutorial's source list reads the library through readLibrarySync. It
+  // used to give null for these versions (an undefined migration was called
+  // and threw), so the tutorial listed no sources for a library that
+  // research, add and compile all read.
+  for (const version of [0, -1, 1.5]) {
+    const root = mkRoot();
+    const entry = { source: 'crossref', id: '10.1000/xyz123', doi: '10.1000/xyz123', title: 'A Study of Things', authors: ['Ada Lovelace'], year: 2020, retracted: false, last_verified: AT, citekey: 'lovelace2020', raw: null };
+    fs.writeFileSync(path.join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: version, entries: [entry] }));
+    assert.deepEqual(readLibrarySync(root)?.entries.map((e) => e.id), ['lovelace2020'], `version ${version}`);
+    assert.deepEqual((await loadLibrary(root)).entries.map((e) => e.id), ['lovelace2020'], `version ${version}`);
+  }
+});
+
 test('10 concurrent adds of different works all land, each under its own key', async () => {
   const root = mkRoot();
   await Promise.all(Array.from({ length: 10 }, (_, i) => addToLibrary(root, [cand({ title: `Paper ${i}`, doi: `10.1000/p${i}` })])));

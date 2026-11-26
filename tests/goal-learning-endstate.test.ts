@@ -87,6 +87,30 @@ test('buildResearchDonePayload: reads the sources of the LIBRARY.json research w
   }
 });
 
+test('buildResearchDonePayload: a source keeps the year its LIBRARY.json entry holds, however early or late', async () => {
+  // A humanities paper cites works from before 1500 (a .bib entry with
+  // year = {1265} is stored as issued [[1265]]); the tutorial lists the year
+  // the library holds.
+  const { buildResearchDonePayload } = (await import(GOAL_MOD.href)) as GoalMod;
+  const root = seedLearningPaper();
+  fs.writeFileSync(
+    path.join(root, '.paper', 'LIBRARY.json'),
+    JSON.stringify({
+      $schemaVersion: 2,
+      bibtex_preamble: [],
+      entries: [
+        { id: 'aquinas1265', type: 'book', title: 'Summa Theologiae', issued: { 'date-parts': [[1265]] }, custom: { added_at: '2026-06-01T00:00:00.000Z' } },
+        { id: 'future2150', type: 'article-journal', title: 'Future Work', issued: { 'date-parts': [[2150]] }, custom: { added_at: '2026-06-01T00:00:00.000Z' } },
+      ],
+    }),
+  );
+  const payload = buildResearchDonePayload(root);
+  assert.deepEqual(payload.sources, [
+    { citekey: 'aquinas1265', title: 'Summa Theologiae', year: 1265 },
+    { citekey: 'future2150', title: 'Future Work', year: 2150 },
+  ]);
+});
+
 test('renderLearningEndState (H2): writes TUTORIAL.md with ≥1 per-claim line, no section written', async () => {
   const { renderLearningEndState } = (await import(GOAL_MOD.href)) as GoalMod;
   const root = seedLearningPaper();
