@@ -12,7 +12,7 @@ import path from 'node:path';
 import { normalizeStyleName, resolveStyleName, SUPPORTED_STYLES } from './citations.js';
 import { parseIntakeMd } from './intake-parse.js';
 import { paperDir } from './paths.js';
-import { readProjectConfig } from './project-config.js';
+import { paperConfigFiles, readProjectConfig } from './project-config.js';
 
 export interface ResolvedStyle {
   /** A style key with a bundled CSL file. */
@@ -27,7 +27,7 @@ export interface ResolvedStyle {
 function configuredStyle(paperRoot: string): string | null {
   // config.toml lives at the project root today; .paper/config.toml is read too.
   // An unreadable config.toml gives no choice; the preset applies.
-  for (const file of [path.join(paperDir(paperRoot), 'config.toml'), path.join(paperRoot, 'config.toml')]) {
+  for (const file of paperConfigFiles(paperRoot)) {
     const v = readProjectConfig(file)['citation_style'];
     if (typeof v === 'string' && v.trim()) return v.trim();
   }

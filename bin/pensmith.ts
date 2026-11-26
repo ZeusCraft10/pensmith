@@ -60,8 +60,9 @@ import { isDryRun } from './lib/atomic-write.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 import { EXIT_ERROR, EXIT_OK, EXIT_REFUSED } from './lib/exit-codes.js';
 import { OFFLINE_SKIP_NOTE, isOfflineMode } from './lib/network-mode.js';
-import { GenerationError } from './lib/generator.js';
-import { CostCapExceededError, resolveCostCap } from './lib/budget.js';
+import { resolveCostCap } from './lib/budget.js';
+import { describeModelFailure } from './lib/failure.js';
+import { isNoLlmMode } from './lib/placeholder.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -248,7 +249,7 @@ export function shouldRunYoloCapPreflight(argv: string[]): boolean {
   if (!hasFlag(argv, 'yolo')) return false;
   if (hasFlag(argv, 'estimate') || hasFlag(argv, 'dry-run') || isDryRun()) return false;
   // Stub mode and offline make no paid call, so there is nothing to cap.
-  if (process.env['PENSMITH_NO_LLM'] === '1' || isOfflineMode()) return false;
+  if (isNoLlmMode() || isOfflineMode()) return false;
   if (wantsHelp(argv) || hasFlag(argv, 'version')) return false;
   const v = firstVerb(argv);
   if (v !== null && NO_COST_VERBS.has(v)) return false;
@@ -410,9 +411,10 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
     // A model call refused over the cost cap, or one that gave no usable answer
     // (cut off, declined, the provider failing), is reported in plain words,
     // not as a stack trace.
-    if (e instanceof GenerationError || e instanceof CostCapExceededError) {
-      process.stderr.write(`pensmith: ${e.exitCode === EXIT_REFUSED ? 'REFUSED' : 'ERROR'} — ${e.message}\n`);
-      process.exitCode = e.exitCode;
+    const failure = describeModelFailure(e);
+    if (failure) {
+      process.stderr.write(`pensmith: ${failure.text}\n`);
+      process.exitCode = failure.exitCode;
       return;
     }
     process.stderr.write(`${inspect(e)}\n`);

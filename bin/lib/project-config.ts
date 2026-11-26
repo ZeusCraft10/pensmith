@@ -5,7 +5,17 @@
 // malformed file means "nothing configured", never an error.
 
 import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { parse as parseToml } from 'smol-toml';
+import { paperDir } from './paths.js';
+
+/**
+ * The config.toml files of the paper at `root`, the one that wins first:
+ * .paper/config.toml, then the project root's.
+ */
+export function paperConfigFiles(root: string): string[] {
+  return [path.join(paperDir(root), 'config.toml'), path.join(root, 'config.toml')];
+}
 
 /**
  * The `[table]` table of the config.toml at `file`. Empty when the file is

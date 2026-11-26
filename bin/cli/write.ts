@@ -44,8 +44,8 @@ import { getProviderApiKey } from '../lib/runtime.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
 import { artifactText } from '../lib/placeholder.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
-import { GenerationError } from '../lib/generator.js';
 import { CostCapExceededError } from '../lib/budget.js';
+import { describeModelFailure } from '../lib/failure.js';
 
 // Phase 11 — the section-draft placeholder constant has been removed. write now
 // calls complete() for real generation (GEN-02). With no key configured:
@@ -56,10 +56,7 @@ const DEFAULT_MAX_PARALLEL = 5;
 
 /** One section's failure in plain words, as the CLI prints an unhandled one. */
 function describeFailure(e: unknown): string {
-  if (e instanceof GenerationError || e instanceof CostCapExceededError) {
-    return `${e.exitCode === EXIT_REFUSED ? 'REFUSED' : 'ERROR'} — ${e.message}`;
-  }
-  return `ERROR — ${e instanceof Error ? e.message : String(e)}`;
+  return describeModelFailure(e)?.text ?? `ERROR — ${e instanceof Error ? e.message : String(e)}`;
 }
 
 // STYL-03 default tone — the never-empty fallback when neither a PLAN.md voice
@@ -407,9 +404,6 @@ export const writeCommand = defineCommand({
         process.stdout.write(
           JSON.stringify({ event: 'wave_complete', wave: wave.wave, results: counts }) + '\n',
         );
-      }
-
-      for (const wave of results) {
         for (const s of wave.sections) {
           if (s.status === 'blocked') {
             process.stderr.write(

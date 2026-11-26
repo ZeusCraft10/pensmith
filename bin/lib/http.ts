@@ -791,12 +791,24 @@ async function writeCache(key: string, response: HttpResponse): Promise<void> {
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /** The default limit on one response body: far above any registry answer. */
-export const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024;
+const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024;
 
-/** Refuse a response whose declared length is already past `limit`. */
-function assertDeclaredLength(contentLength: unknown, url: string, limit: number): void {
-  const declared = Number(Array.isArray(contentLength) ? contentLength[0] : contentLength);
-  if (Number.isFinite(declared) && declared > limit) throw new ResponseTooLargeError(url, limit);
+/**
+ * Refuse a response whose declared length is already past `limit`, destroying
+ * its unread body first.
+ */
+function assertDeclaredLength(
+  rh: Dispatcher.ResponseData['headers'],
+  body: Dispatcher.ResponseData['body'],
+  url: string,
+  limit: number,
+): void {
+  const v = rh['content-length'];
+  const declared = Number(Array.isArray(v) ? v[0] : v);
+  if (Number.isFinite(declared) && declared > limit) {
+    body.destroy();
+    throw new ResponseTooLargeError(url, limit);
+  }
 }
 
 /** Read `body` whole, failing as soon as it passes `limit` bytes. */
@@ -844,14 +856,55 @@ const RETRYABLE_ERR_CODES: ReadonlySet<string> = new Set([
 // request provably never reached the server.
 const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
+/**
+ * True when `err` is a missed deadline after the request may have reached the
+ * server, and `method` is not safe to send twice: the request must not be
+ * sent again.
+ */
+function mustNotResend(err: unknown, method: string): boolean {
+  return err instanceof HttpDeadlineError && err.mayHaveReachedServer && !IDEMPOTENT_METHODS.has(method);
+}
+
 function isRetryable(err: unknown, method: string): boolean {
   const e = err as { status?: number; code?: string } | null;
   if (!e) return false;
   if (typeof e.status === 'number' && RETRYABLE_STATUSES.has(e.status)) return true;
-  if (err instanceof HttpDeadlineError) {
-    return !err.mayHaveReachedServer || IDEMPOTENT_METHODS.has(method);
-  }
+  if (err instanceof HttpDeadlineError) return !mustNotResend(err, method);
   return typeof e.code === 'string' && RETRYABLE_ERR_CODES.has(e.code);
+}
+
+/**
+ * Send one request and wait for its response head under the deadline (see
+ * withDeadline). Runs the SSRF pre-flight first when `untrusted`. A caller's
+ * `signal` aborts the request too.
+ */
+async function openResponse(url: string, o: {
+  method: Dispatcher.HttpMethod;
+  headers: Record<string, string>;
+  body?: string | Buffer;
+  timeoutMs: number;
+  untrusted: boolean;
+  signal?: AbortSignal;
+}): Promise<Dispatcher.ResponseData<unknown>> {
+  // SSRF pre-flight: throws on private IP / bad scheme / resolver error.
+  if (o.untrusted) await checkSsrf(url);
+  const abort = new AbortController();
+  const reqInit: Parameters<typeof request>[1] = {
+    method: o.method,
+    headers: o.headers,
+    headersTimeout: o.timeoutMs,
+    bodyTimeout: o.timeoutMs,
+    dispatcher: dispatcherForRequest(),
+    signal: o.signal ? AbortSignal.any([o.signal, abort.signal]) : abort.signal,
+  };
+  if (o.body !== undefined) reqInit.body = o.body;
+  // undici dispatches a request with no body, a string body or a Buffer body
+  // synchronously, so a CONNECT sent while request() runs is the tunnel this
+  // request waits on.
+  const firstTunnel = tunnelSeq + 1;
+  const pending = request(url, reqInit);
+  const tunnels = { first: firstTunnel, last: tunnelSeq };
+  return withDeadline(pending, url, o.timeoutMs, abort, tunnels);
 }
 
 // A body the cache can keep as text: no content type (the registries' plain
@@ -891,11 +944,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   if (isOfflineMode()) throw new OfflineEgressError(url);
   const maxBodyBytes = opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   // Test runs answer from committed cassettes and never touch the network.
-  if (isCassetteMode()) {
-    const replayed = await replayFromCassette(method, url);
-    if ((replayed.bodyBytes?.length ?? 0) > maxBodyBytes) throw new ResponseTooLargeError(url, maxBodyBytes);
-    return replayed;
-  }
+  if (isCassetteMode()) return replayFromCassette(method, url, maxBodyBytes);
 
   const headers: Record<string, string> = {
     'user-agent': userAgent(),
@@ -932,30 +981,13 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   const untrusted = opts.untrusted === false ? false
     : (source === 'generic' || opts.untrusted === true);
   const callOnce = async (): Promise<HttpResponse> => {
-    if (untrusted) {
-      // SSRF pre-flight: throws on private IP / bad scheme / resolver error.
-      await checkSsrf(url);
-    }
-    const abort = new AbortController();
-    const reqInit: Parameters<typeof request>[1] = {
+    const { statusCode, headers: rh, body } = await openResponse(url, {
       method,
       headers,
-      headersTimeout: timeoutMs,
-      bodyTimeout: timeoutMs,
-      dispatcher: dispatcherForRequest(),
-      signal: abort.signal,
-    };
-    if (opts.body !== undefined) {
-      reqInit.body = opts.body;
-    }
-    // undici dispatches a request with no body or a string body synchronously,
-    // so a CONNECT sent while request() runs is the tunnel this request waits on.
-    const firstTunnel = tunnelSeq + 1;
-    const pending = request(url, reqInit);
-    const tunnels = { first: firstTunnel, last: tunnelSeq };
-    const { statusCode, headers: rh, body } = await withDeadline(
-      pending, url, timeoutMs, abort, tunnels,
-    );
+      ...(opts.body !== undefined ? { body: opts.body } : {}),
+      timeoutMs,
+      untrusted,
+    });
     // Read the raw bytes once, stopping at the size limit. `text`
     // is the UTF-8 decode for text consumers; `bodyBytes` preserves the exact
     // bytes for binary content (PDFs fetched by URL). A HEAD answer has no
@@ -965,12 +997,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       await body.dump();
       bodyBytes = Buffer.alloc(0);
     } else {
-      try {
-        assertDeclaredLength(rh['content-length'], url, maxBodyBytes);
-      } catch (e) {
-        body.destroy();
-        throw e;
-      }
+      assertDeclaredLength(rh, body, url, maxBodyBytes);
       bodyBytes = await readCapped(body, url, maxBodyBytes);
     }
     const text = bodyBytes.toString('utf8');
@@ -1135,14 +1162,11 @@ export function chokepointFetch(opts: ChokepointFetchOptions): (input: string | 
     const url = input.toString();
     const method = (init.method ?? 'GET').toUpperCase();
     if (isOfflineMode()) throw new OfflineEgressError(url);
-    const idempotent = IDEMPOTENT_METHODS.has(method);
-    if (mayHaveDelivered && !idempotent) throw new RequestNotResentError(url);
+    if (mayHaveDelivered && !IDEMPOTENT_METHODS.has(method)) throw new RequestNotResentError(url);
 
     if (isCassetteMode()) {
-      const r = await replayFromCassette(method, url);
-      const bytes = r.bodyBytes ?? Buffer.from(r.body, 'utf8');
-      if (bytes.length > opts.maxBodyBytes) throw new ResponseTooLargeError(url, opts.maxBodyBytes);
-      return new Response(NULL_BODY_STATUSES.has(r.status) ? null : bytes, { status: r.status, headers: r.headers });
+      const r = await replayFromCassette(method, url, opts.maxBodyBytes);
+      return new Response(NULL_BODY_STATUSES.has(r.status) ? null : r.bodyBytes, { status: r.status, headers: r.headers });
     }
 
     const headers: Record<string, string> = {};
@@ -1150,35 +1174,22 @@ export function chokepointFetch(opts: ChokepointFetchOptions): (input: string | 
     const body = requestBody(init.body);
 
     await bucketFor(opts.source).acquire();
-    if (opts.untrusted) await checkSsrf(url);
-    const abort = new AbortController();
-    const signal = init.signal ? AbortSignal.any([init.signal, abort.signal]) : abort.signal;
-    const reqInit: Parameters<typeof request>[1] = {
-      method: method as Dispatcher.HttpMethod,
-      headers,
-      headersTimeout: opts.timeoutMs,
-      bodyTimeout: opts.timeoutMs,
-      dispatcher: dispatcherForRequest(),
-      signal,
-    };
-    if (body !== undefined) reqInit.body = body;
-    const firstTunnel = tunnelSeq + 1;
-    const pending = request(url, reqInit);
-    const tunnels = { first: firstTunnel, last: tunnelSeq };
-    let head: Awaited<typeof pending>;
+    let head: Dispatcher.ResponseData<unknown>;
     try {
-      head = await withDeadline(pending, url, opts.timeoutMs, abort, tunnels);
+      head = await openResponse(url, {
+        method: method as Dispatcher.HttpMethod,
+        headers,
+        ...(body !== undefined ? { body } : {}),
+        timeoutMs: opts.timeoutMs,
+        untrusted: opts.untrusted,
+        ...(init.signal ? { signal: init.signal } : {}),
+      });
     } catch (e) {
-      if (e instanceof HttpDeadlineError && e.mayHaveReachedServer && !idempotent) mayHaveDelivered = true;
+      if (mustNotResend(e, method)) mayHaveDelivered = true;
       throw e;
     }
     const { statusCode, headers: rh, body: resBody } = head;
-    try {
-      assertDeclaredLength(rh['content-length'], url, opts.maxBodyBytes);
-    } catch (e) {
-      resBody.destroy();
-      throw e;
-    }
+    assertDeclaredLength(rh, resBody, url, opts.maxBodyBytes);
     if (NULL_BODY_STATUSES.has(statusCode)) {
       resBody.destroy();
       return new Response(null, { status: statusCode, headers: responseHeaders(rh) });
@@ -1196,17 +1207,17 @@ export function chokepointFetch(opts: ChokepointFetchOptions): (input: string | 
  * tests/fixtures. A request with no recording rejects with CassetteMissError,
  * which adapters treat like any transport failure (null / no results).
  */
-async function replayFromCassette(method: string, url: string): Promise<HttpResponse> {
+async function replayFromCassette(
+  method: string,
+  url: string,
+  maxBodyBytes: number,
+): Promise<HttpResponse & { bodyBytes: Buffer }> {
   const { replayCassette } = await import('./http-mock.js');
   const r = replayCassette(method, url);
   const body = method === 'HEAD' ? '' : r.body;
-  return {
-    status: r.status,
-    headers: r.headers,
-    body,
-    bodyBytes: method === 'HEAD' ? Buffer.alloc(0) : (r.bytes ?? Buffer.from(body, 'utf8')),
-    cached: false,
-  };
+  const bodyBytes = method === 'HEAD' ? Buffer.alloc(0) : (r.bytes ?? Buffer.from(body, 'utf8'));
+  if (bodyBytes.length > maxBodyBytes) throw new ResponseTooLargeError(url, maxBodyBytes);
+  return { status: r.status, headers: r.headers, body, bodyBytes, cached: false };
 }
 
 // ============================================================

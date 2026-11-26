@@ -21,7 +21,7 @@ import { EFFORTS, LLM_ROLES, type Effort, type LlmRole } from '../generator.js';
 export const CURRENT_RUNTIME_CONFIG_VERSION = 1;
 
 /** What one role (write, plan, verify, ...) uses instead of the provider's defaults. */
-export const RoleConfigSchema = z.object({
+const RoleConfigSchema = z.object({
   model: z.string().min(1).optional(),
   effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional(),
   maxTokens: z.number().int().positive().optional(),

@@ -36,55 +36,45 @@ import {
 } from '../generator.js';
 
 /** The beta that turns on server-side fallbacks with `fallbacks: "default"`. */
-export const SERVER_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+const SERVER_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+
+/** What a model takes beyond the basic request. */
+interface ModelCaps {
+  /** The `output_config.effort` levels it takes; absent, no effort is sent. */
+  effort?: readonly Effort[];
+  /** It runs without thinking unless `thinking: adaptive` is sent. */
+  adaptiveOnRequest?: true;
+  /** It accepts `fallbacks: "default"`. */
+  fallbacks?: true;
+}
 
 /**
- * Models that accept `fallbacks: "default"`. Others refuse the field or have
- * no fallback (Claude Haiku 5.5), so it is not sent to them.
+ * Each model's capabilities, by model ID. A model not listed (Claude Haiku
+ * 4.5, which refuses effort, or one released after this table) gets none of
+ * them. Claude Haiku 5.5 has no fallback, and the others without `fallbacks`
+ * refuse the field.
  */
-const FALLBACK_MODELS: ReadonlySet<string> = new Set([
-  'claude-opus-5-5',
-  'claude-opus-5',
-  'claude-sonnet-5-5',
-  'claude-fable-5-2',
-  'claude-fable-5-1',
-  'claude-fable-5',
-  'claude-mythos-5-2',
-  'claude-mythos-5-1',
+const MODELS: ReadonlyMap<string, ModelCaps> = new Map<string, ModelCaps>([
+  ['claude-opus-5-5', { effort: EFFORTS, fallbacks: true }],
+  ['claude-opus-5', { effort: EFFORTS, fallbacks: true }],
+  ['claude-sonnet-5-5', { effort: EFFORTS, fallbacks: true }],
+  ['claude-fable-5-2', { effort: EFFORTS, fallbacks: true }],
+  ['claude-fable-5-1', { effort: EFFORTS, fallbacks: true }],
+  ['claude-fable-5', { effort: EFFORTS, fallbacks: true }],
+  ['claude-mythos-5-2', { effort: EFFORTS, fallbacks: true }],
+  ['claude-mythos-5-1', { effort: EFFORTS, fallbacks: true }],
+  ['claude-mythos-5', { effort: EFFORTS }],
+  ['claude-haiku-5-5', { effort: EFFORTS }],
+  ['claude-sonnet-5', { effort: EFFORTS }],
+  ['claude-opus-4-8', { effort: EFFORTS, adaptiveOnRequest: true }],
+  ['claude-opus-4-7', { effort: EFFORTS, adaptiveOnRequest: true }],
+  ['claude-opus-4-6', { effort: ['low', 'medium', 'high', 'max'], adaptiveOnRequest: true }],
+  ['claude-sonnet-4-6', { effort: ['low', 'medium', 'high', 'max'], adaptiveOnRequest: true }],
+  ['claude-opus-4-5', { effort: ['low', 'medium', 'high'] }],
 ]);
 
-/** Models that take `output_config.effort`. Claude Haiku 4.5 refuses it; unknown models get none. */
-const EFFORT_MODELS: ReadonlySet<string> = new Set([
-  ...FALLBACK_MODELS,
-  'claude-haiku-5-5',
-  'claude-sonnet-5',
-  'claude-sonnet-4-6',
-  'claude-opus-4-8',
-  'claude-opus-4-7',
-  'claude-opus-4-6',
-  'claude-opus-4-5',
-  'claude-mythos-5',
-]);
-
-/** Models that run without thinking unless `thinking: adaptive` is sent. */
-const ADAPTIVE_ON_REQUEST: ReadonlySet<string> = new Set([
-  'claude-opus-4-8',
-  'claude-opus-4-7',
-  'claude-opus-4-6',
-  'claude-sonnet-4-6',
-]);
-
-/** Models in EFFORT_MODELS that take only some levels; the rest take all five. */
-const EFFORT_LEVELS: Readonly<Record<string, readonly Effort[]>> = {
-  'claude-opus-4-6': ['low', 'medium', 'high', 'max'],
-  'claude-sonnet-4-6': ['low', 'medium', 'high', 'max'],
-  'claude-opus-4-5': ['low', 'medium', 'high'],
-};
-
-/** `effort`, or the highest level below it that `model` takes (another is a 400). */
-function effortFor(model: string, effort: Effort): Effort {
-  const levels = EFFORT_LEVELS[model];
-  if (!levels) return effort;
+/** `effort`, or the highest level below it in `levels` (another is a 400). */
+function effortFor(levels: readonly Effort[], effort: Effort): Effort {
   for (let i = EFFORTS.indexOf(effort); i >= 0; i -= 1) {
     if (levels.includes(EFFORTS[i]!)) return EFFORTS[i]!;
   }
@@ -109,7 +99,8 @@ export interface AnthropicGeneratorOptions {
 type Params = Anthropic.Beta.Messages.MessageCreateParamsStreaming;
 
 /** The request body for `req`, as the SDK takes it. */
-export function anthropicParams(req: GenerateRequest): Params {
+function anthropicParams(req: GenerateRequest): Params {
+  const caps = MODELS.get(req.model);
   const params: Record<string, unknown> = {
     model: req.model,
     max_tokens: req.maxTokens,
@@ -117,12 +108,12 @@ export function anthropicParams(req: GenerateRequest): Params {
     stream: true,
   };
   if (req.system) params['system'] = req.system;
-  if (ADAPTIVE_ON_REQUEST.has(req.model)) params['thinking'] = { type: 'adaptive' };
+  if (caps?.adaptiveOnRequest) params['thinking'] = { type: 'adaptive' };
   const outputConfig: Record<string, unknown> = {};
-  if (req.effort && EFFORT_MODELS.has(req.model)) outputConfig['effort'] = effortFor(req.model, req.effort);
+  if (req.effort && caps?.effort) outputConfig['effort'] = effortFor(caps.effort, req.effort);
   if (req.jsonSchema) outputConfig['format'] = { type: 'json_schema', schema: req.jsonSchema };
   if (Object.keys(outputConfig).length > 0) params['output_config'] = outputConfig;
-  if (FALLBACK_MODELS.has(req.model)) {
+  if (caps?.fallbacks) {
     params['betas'] = [SERVER_FALLBACK_BETA];
     // Newer than this SDK's types; the SDK sends a field it does not know as given.
     params['fallbacks'] = 'default';
@@ -174,7 +165,7 @@ function row(model: string, u: RawUsage): UsageRow {
  * the fallback model) and the top-level usage covers only the last, so the
  * attempts are counted instead.
  */
-export function usageRows(
+function usageRows(
   message: { model?: string; usage?: RawUsage | null } | undefined,
   requestedModel: string,
 ): UsageRow[] {

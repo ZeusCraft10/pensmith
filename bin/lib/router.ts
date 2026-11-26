@@ -111,6 +111,30 @@ export function readSectionState(planPath: string): SectionStateRead {
 }
 
 /**
+ * What a section whose PLAN.md has `status` needs next: 'verified' when it is
+ * done, the verb that moves it on, or null for a status pensmith does not know
+ * (C3-HIGH-1: 'failed' and 'unverifiable' go back to verify). The estimator
+ * prices the rest of a section from the same map.
+ */
+export function sectionVerb(status: string): 'plan' | 'write' | 'verify' | 'verified' | null {
+  switch (status) {
+    case 'verified':
+      return 'verified';
+    case 'planned':
+      return 'plan';
+    case 'writing':
+      return 'write';
+    case 'written':
+    case 'verifying':
+    case 'failed': // re-attempt verification — NOT continue
+    case 'unverifiable': // re-attempt verification — NOT continue
+      return 'verify';
+    default:
+      return null;
+  }
+}
+
+/**
  * Whether research has run for the paper whose `.paper/` folder is `pDir`:
  * the legacy RESEARCH.md exists, or LIBRARY.json records a research run.
  * `pensmith add` writes LIBRARY.json too, so the file being there is not
@@ -220,23 +244,12 @@ export async function resolveNextAction(
       if (r.absent) return { verb: 'plan', n, slug };
       if (r.corrupt) return { verb: 'status', reason: 'attention', section: { n, slug } };
 
-      switch (r.status) {
-        case 'verified':
-          continue; // the ONLY continue case
-        case 'planned':
-          return { verb: 'plan', n, slug };
-        case 'writing':
-          return { verb: 'write', n, slug };
-        case 'written':
-        case 'verifying':
-        case 'failed': // re-attempt verification — NOT continue
-        case 'unverifiable': // re-attempt verification — NOT continue
-          return { verb: 'verify', n, slug };
-        default:
-          // Unrecognized status (hand-edited PLAN.md): surface a stuck-section
-          // status instead of falling through to undefined.
-          return { verb: 'status', reason: 'attention', section: { n, slug } };
-      }
+      const verb = sectionVerb(r.status);
+      if (verb === 'verified') continue; // the ONLY continue case
+      // Unrecognized status (hand-edited PLAN.md): surface a stuck-section
+      // status instead of falling through to undefined.
+      if (verb === null) return { verb: 'status', reason: 'attention', section: { n, slug } };
+      return { verb, n, slug };
     }
 
     // All sections verified (the walk fell through ONLY because every section

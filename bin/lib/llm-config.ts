@@ -10,19 +10,20 @@
 // The estimator reads the same choices, so --estimate and the --yolo pre-flight
 // price the model that would really run.
 
-import { loadRuntimeConfig } from './runtime.js';
+import { loadRuntimeConfig, type RuntimeConfig } from './runtime.js';
+import { estimateCost } from './pricing.js';
 import type { Effort, LlmRole } from './generator.js';
 import { OPENAI_DEFAULT_BASE_URL } from './generators/openai.js';
 
 export type ProviderName = 'anthropic' | 'openai';
 
 /** The model each provider uses when runtime.json names none. */
-export const DEFAULT_MODELS: Readonly<Record<ProviderName, string>> = {
+const DEFAULT_MODELS: Readonly<Record<ProviderName, string>> = {
   anthropic: 'claude-opus-5-5',
   openai: 'gpt-4o',
 };
 
-export interface RoleDefaults {
+interface RoleDefaults {
   effort: Effort;
   /** The output limit, thinking included. A call that reaches it fails as truncated. */
   maxTokens: number;
@@ -37,7 +38,7 @@ export interface RoleDefaults {
  * are lowered to a model's own limit where it is smaller (MODEL_OUTPUT_LIMITS).
  * The estimate, not the limit, is what the cost cap is checked against.
  */
-export const ROLE_DEFAULTS: Readonly<Record<LlmRole, RoleDefaults>> = {
+const ROLE_DEFAULTS: Readonly<Record<LlmRole, RoleDefaults>> = {
   intake: { effort: 'low', maxTokens: 16_000, expectedOutputTokens: 2_000 },
   research: { effort: 'low', maxTokens: 16_000, expectedOutputTokens: 1_500 },
   evaluate: { effort: 'low', maxTokens: 16_000, expectedOutputTokens: 3_000 },
@@ -94,10 +95,26 @@ export interface CallChoice {
   expectedOutputTokens?: number;
 }
 
+/**
+ * The runtime.json key of the provider pensmith uses: the first one listed, or
+ * 'anthropic' (the default config's only entry).
+ */
+export function providerIdOf(cfg: RuntimeConfig): string {
+  return Object.keys(cfg.providers ?? {})[0] ?? 'anthropic';
+}
+
+/**
+ * The provider complete() will call (providerIdOf the loaded runtime.json).
+ * Verbs check its API key before they start, with this same choice.
+ */
+export async function resolveProviderId(): Promise<string> {
+  return providerIdOf(await loadRuntimeConfig());
+}
+
 /** The provider, model, effort and limits for a call (see the file header). */
 export async function resolveCall(choice: CallChoice): Promise<ResolvedCall> {
   const cfg = await loadRuntimeConfig();
-  const providerId = Object.keys(cfg.providers ?? {})[0] ?? 'anthropic';
+  const providerId = providerIdOf(cfg);
   const provider = cfg.providers?.[providerId];
   const providerName: ProviderName = provider?.name ?? 'anthropic';
   const roleCfg = provider?.roles?.[choice.role];
@@ -124,4 +141,28 @@ export async function resolveCall(choice: CallChoice): Promise<ResolvedCall> {
       : {}),
     endpoint: baseUrl ?? (providerName === 'openai' ? OPENAI_DEFAULT_BASE_URL : 'https://api.anthropic.com'),
   };
+}
+
+/**
+ * What `usage` costs on `call`'s provider, at the rates runtime.json sets for
+ * it or the price table's. `usage.model` defaults to the call's model. complete()
+ * prices its pre-call estimate and the ledger rows with it, and the estimator
+ * its projection, so all three price a call the same way.
+ */
+export function callCost(call: ResolvedCall, usage: {
+  model?: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}): number {
+  return estimateCost({
+    provider: call.providerName,
+    modelId: usage.model ?? call.model,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens ?? 0,
+    cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+    ...(call.pricePerMtok ? { override: call.pricePerMtok } : {}),
+  });
 }

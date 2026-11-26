@@ -9,6 +9,11 @@
 
 import { parseFrontmatter, updateFrontmatter } from './frontmatter.js';
 
+/** True when PENSMITH_NO_LLM=1: every model call returns a placeholder. */
+export function isNoLlmMode(): boolean {
+  return process.env['PENSMITH_NO_LLM'] === '1';
+}
+
 /** How every PENSMITH_NO_LLM placeholder starts. */
 export const NO_LLM_PLACEHOLDER_PREFIX = '[PENSMITH_NO_LLM placeholder';
 

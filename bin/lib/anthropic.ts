@@ -25,13 +25,12 @@
 // The API key is never logged or written anywhere; it reaches only the
 // request header.
 
-import { loadRuntimeConfig, getProviderApiKey, MissingApiKeyError } from './runtime.js';
+import { getProviderApiKey, MissingApiKeyError } from './runtime.js';
 import { appendCost, assertWithinCostCap } from './budget.js';
 import type { BudgetSpec } from './budget.js';
-import { estimateCost } from './pricing.js';
-import { noLlmPlaceholderText } from './placeholder.js';
+import { isNoLlmMode, noLlmPlaceholderText } from './placeholder.js';
 import { isOfflineMode, OfflineEgressError } from './network-mode.js';
-import { resolveCall, type ResolvedCall } from './llm-config.js';
+import { callCost, resolveCall, type ResolvedCall } from './llm-config.js';
 import {
   GenerationError,
   RefusalError,
@@ -45,6 +44,8 @@ import { anthropicGenerator } from './generators/anthropic.js';
 import { openAiGenerator } from './generators/openai.js';
 
 export { MissingApiKeyError };
+export { isNoLlmMode } from './placeholder.js';
+export { resolveProviderId } from './llm-config.js';
 export {
   GenerationError,
   ProviderError,
@@ -98,25 +99,6 @@ export interface CompleteResult {
 }
 
 // ============================================================
-//   Offline-mode predicate
-// ============================================================
-
-/** True when PENSMITH_NO_LLM=1: every model call returns a placeholder. */
-export function isNoLlmMode(): boolean {
-  return process.env['PENSMITH_NO_LLM'] === '1';
-}
-
-/**
- * The runtime.json key of the provider pensmith uses: the first one listed, or
- * 'anthropic' (the default config's only entry). Verbs check its API key
- * before they start, with this same choice.
- */
-export async function resolveProviderId(): Promise<string> {
-  const cfg = await loadRuntimeConfig();
-  return Object.keys(cfg.providers ?? {})[0] ?? 'anthropic';
-}
-
-// ============================================================
 //   Generator selection
 // ============================================================
 
@@ -134,9 +116,8 @@ async function generatorFor(call: ResolvedCall): Promise<Generator> {
   if (generatorOverride) return generatorOverride;
   // The key value goes only to the generator, which puts it in a request header.
   const apiKey = await getProviderApiKey(call.providerId);
-  return call.providerName === 'openai'
-    ? openAiGenerator({ apiKey, ...(call.baseUrl ? { baseUrl: call.baseUrl } : {}) })
-    : anthropicGenerator({ apiKey, ...(call.baseUrl ? { baseUrl: call.baseUrl } : {}) });
+  const opts = { apiKey, ...(call.baseUrl ? { baseUrl: call.baseUrl } : {}) };
+  return call.providerName === 'openai' ? openAiGenerator(opts) : anthropicGenerator(opts);
 }
 
 // ============================================================
@@ -146,23 +127,11 @@ async function generatorFor(call: ResolvedCall): Promise<Generator> {
 /** Characters per token for the pre-call estimate; current tokenizers give a little under 4. */
 const CHARS_PER_TOKEN = 3.5;
 
-function costOf(call: ResolvedCall, rows: readonly UsageRow[]): number {
-  return rows.reduce((sum, r) => sum + estimateCost({
-    provider: call.providerName,
-    modelId: r.model,
-    inputTokens: r.inputTokens,
-    outputTokens: r.outputTokens,
-    cacheReadTokens: r.cacheReadTokens,
-    cacheWriteTokens: r.cacheWriteTokens,
-    ...(call.pricePerMtok ? { override: call.pricePerMtok } : {}),
-  }), 0);
-}
-
 /** Write one COSTS.jsonl row per model the call used; returns the total. */
 async function recordCost(call: ResolvedCall, rows: readonly UsageRow[], scope: BudgetSpec['scope'], scopeId: string): Promise<number> {
   let total = 0;
   for (const r of rows) {
-    const costUsd = costOf(call, [r]);
+    const costUsd = callCost(call, r);
     total += costUsd;
     await appendCost({
       ts: new Date().toISOString(),
@@ -222,13 +191,10 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
   const generator = await generatorFor(call);
 
   const chars = opts.system.length + opts.messages.reduce((n, m) => n + m.content.length, 0);
-  const estimateUsd = costOf(call, [{
-    model: call.model,
+  const estimateUsd = callCost(call, {
     inputTokens: Math.ceil(chars / CHARS_PER_TOKEN),
     outputTokens: call.expectedOutputTokens,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-  }]);
+  });
   await assertWithinCostCap(estimateUsd);
 
   const scope = opts.scope ?? 'task';

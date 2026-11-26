@@ -26,7 +26,7 @@ import path from 'node:path';
 import * as fsp from 'node:fs/promises';
 import { paperDir, projectRoot } from './paths.js';
 import { atomicAppendFile } from './atomic-write.js';
-import { readConfigTable } from './project-config.js';
+import { paperConfigFiles, readConfigTable } from './project-config.js';
 
 export interface BudgetSpec {
   scope: 'paper' | 'section' | 'task';
@@ -174,7 +174,7 @@ function positive(v: unknown): number | null {
  * number is ignored. `warn_at_usd` comes from the same table.
  */
 export function resolveCostCap(root: string = projectRoot()): CostCap {
-  const tables = [path.join(paperDir(root), 'config.toml'), path.join(root, 'config.toml')].map((f) => readConfigTable(f, 'budget'));
+  const tables = paperConfigFiles(root).map((f) => readConfigTable(f, 'budget'));
   const fromConfig = (key: string): number | null => {
     for (const t of tables) {
       const v = positive(t[key]);

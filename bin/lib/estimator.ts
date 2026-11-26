@@ -17,11 +17,10 @@
 
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { estimateCost } from './pricing.js';
 import { loadState } from './state.js';
 import { paperDir, sectionPlan } from './paths.js';
-import { readSectionState, researchDone } from './router.js';
-import { resolveCall } from './llm-config.js';
+import { readSectionState, researchDone, sectionVerb } from './router.js';
+import { callCost, resolveCall } from './llm-config.js';
 import type { LlmRole } from './generator.js';
 import { DEFAULT_COST_CAP_USD } from './budget.js';
 
@@ -66,25 +65,20 @@ const STEP_ROLE: Readonly<Record<Step, LlmRole>> = {
   done: 'verify',
 };
 
-/** The steps a section still needs, by its PLAN.md status (the router's walk). */
-function remainingSteps(status: string | null): Step[] {
-  switch (status) {
-    case 'verified':
-      return [];
-    case 'writing':
-      return ['write', 'verify'];
-    case 'written':
-    case 'verifying':
-    case 'failed':
-    case 'unverifiable':
-      return ['verify'];
-    default:
-      // No PLAN.md, 'planned', or a status pensmith does not know.
-      return ['plan', 'write', 'verify'];
-  }
+const SECTION_PIPELINE: readonly Step[] = ['plan', 'write', 'verify'];
+
+/**
+ * The steps a section still needs: from the verb the router would run for its
+ * PLAN.md status to the end of the pipeline. No PLAN.md counts as 'planned',
+ * and a status pensmith does not know as the whole pipeline.
+ */
+function remainingSteps(status: string | null): readonly Step[] {
+  const verb = sectionVerb(status ?? 'planned');
+  if (verb === 'verified') return [];
+  return SECTION_PIPELINE.slice(verb === null ? 0 : SECTION_PIPELINE.indexOf(verb));
 }
 
-interface Section { n: number; slug: string; status: string | null }
+interface Section { n: number; status: string | null }
 
 /** Which steps, with which labels, `verb` (null: the rest of the paper) would run. */
 function plannedSteps(
@@ -96,19 +90,16 @@ function plannedSteps(
   const section = (s: Step): Array<[Step, string]> => [[s, n !== null ? `${s} §${n}` : s]];
   switch (verb) {
     case 'new':
-      return [['new', 'new']];
     case 'research':
-      return [['research', 'research']];
     case 'outline':
-      return [['outline', 'outline']];
+    case 'done':
+      return [[verb, verb]];
     case 'plan':
     case 'verify':
       return section(verb);
     case 'write':
       if (n !== null) return section('write');
       return sections.filter((s) => remainingSteps(s.status).includes('write')).map((s) => ['write', `write §${s.n}`]);
-    case 'done':
-      return [['done', 'done']];
     case null:
     case 'next':
     case 'resume': {
@@ -151,7 +142,7 @@ export async function projectEstimate(args: {
       .sort((a, b) => a.n - b.n)
       .map(({ n, slug }) => {
         const r = readSectionState(sectionPlan(n, slug, args.paperRoot));
-        return { n, slug, status: r.absent ? null : r.status };
+        return { n, status: r.absent ? null : r.status };
       });
     const steps = plannedSteps(args.verb ?? null, args.n ?? null, sections, {
       researched: researchDone(pDir) === true,
@@ -159,17 +150,18 @@ export async function projectEstimate(args: {
       finished: existsSync(path.join(pDir, 'FINAL.md')),
     });
 
+    // A row's price depends only on its step, so each step is priced once
+    // (one runtime.json read per step, not per section). Sequential on
+    // purpose: concurrent reads would contend for runtime.json's lock.
+    const usdByStep = new Map<Step, number>();
     const rows: EstimateRow[] = [];
     for (const [step, label] of steps) {
       const heur = STEP_HEURISTICS[step];
-      const call = await resolveCall({ role: STEP_ROLE[step] });
-      const usd = estimateCost({
-        provider: call.providerName,
-        modelId: call.model,
-        inputTokens: heur.inputTokens,
-        outputTokens: heur.outputTokens,
-        ...(call.pricePerMtok ? { override: call.pricePerMtok } : {}),
-      });
+      let usd = usdByStep.get(step);
+      if (usd === undefined) {
+        usd = callCost(await resolveCall({ role: STEP_ROLE[step] }), heur);
+        usdByStep.set(step, usd);
+      }
       rows.push({ step: label, inputTokens: heur.inputTokens, outputTokens: heur.outputTokens, usd });
     }
     const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);
