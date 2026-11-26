@@ -29,7 +29,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { builtPluginFile } from './lib/built-plugin.js';
-import { filesUnder } from './lib/files.js';
+import { fileHashes, filesUnder } from './lib/files.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = path.join(repoRoot, 'plugin');
@@ -345,8 +345,6 @@ test('the installed CLI starts a paper from assignment.txt: intake, a dry run, s
   const assignment = 'Write a 1500-word essay on whether the visible lattice points form islands.\n';
   writeFileSync(path.join(cwd, 'assignment.txt'), assignment);
   const env = { PENSMITH_NO_LLM: '1' };
-  const tree = (): string => filesUnder(path.join(cwd, '.paper')).sort()
-    .map((f) => `${path.relative(cwd, f)} ${readFileSync(f).toString('base64')}`).join('\n');
 
   const asked = runPensmith(copy, ['--offline'], cwd, env);
   assert.equal(asked.status, 3, `bare pensmith stops for the intake answers\n${asked.stdout}${asked.stderr}`);
@@ -364,11 +362,11 @@ test('the installed CLI starts a paper from assignment.txt: intake, a dry run, s
   assert.ok(readFileSync(path.join(cwd, '.paper', 'PROJECT.md'), 'utf8').includes(assignment.trim()), 'the assignment is kept');
   assert.ok(existsSync(path.join(cwd, '.paper', 'INTAKE.json')));
 
-  const before = tree();
+  const before = fileHashes(path.join(cwd, '.paper'));
   const dry = runPensmith(copy, ['--dry-run'], cwd, env);
   assert.equal(dry.status, 0, dry.stdout + dry.stderr);
   assert.match(dry.stdout, /the next step is `pensmith research`/);
-  assert.equal(tree(), before, '--dry-run leaves .paper/ as it was');
+  assert.deepEqual(fileHashes(path.join(cwd, '.paper')), before, '--dry-run leaves .paper/ as it was');
 
   const status = runPensmith(copy, ['status'], cwd, env);
   assert.equal(status.status, 0, status.stdout + status.stderr);

@@ -28,22 +28,21 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import JSZip from 'jszip';
 import { citedKeys, findCitations } from '../bin/lib/citation-grammar.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
+import { sectionDirName } from '../bin/lib/paths.js';
 import { assignedSourcesFrom } from '../bin/lib/plan-status.js';
+import { scriptedCli, type CliStreams } from './lib/cli-env.js';
+import { docxParts } from './lib/docx-fixture.js';
 import { hasTool, pathWithoutPandoc } from './lib/export-fixture.js';
-import { DRAFTS, QUOTE, SECTIONS } from './lib/journey-generator.js';
+import { fileHashes } from './lib/files.js';
+import { DRAFTS, QUOTE, SECTIONS, VISIBLE } from './lib/journey-generator.js';
 
-const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const GENERATOR = fileURLToPath(new URL('./lib/journey-generator.ts', import.meta.url));
-const TSX = import.meta.resolve('tsx');
 
 const ASSIGNMENT = [
   'MATH 340: Discrete Geometry, term paper',
@@ -57,71 +56,27 @@ const ASSIGNMENT = [
 /** docx in the export lane, which installs Pandoc; Markdown everywhere else. */
 const FORMAT: 'docx' | 'md' = process.env['PENSMITH_REQUIRE_EXPORT_TOOLS'] === '1' ? 'docx' : 'md';
 
-interface Run { status: number | null; stdout: string; stderr: string }
-
 interface Journey {
   root: string;
   log: string;
   /** The CLI with `args`, in the journey's folder or in `cwd`. */
-  run(args: string[], cwd?: string): Run;
+  run(args: string[], cwd?: string): CliStreams;
 }
 
 function journey(): Journey {
   const root = mkdtempSync(path.join(tmpdir(), 'pensmith-journey-'));
-  const home = mkdtempSync(path.join(tmpdir(), 'pensmith-journey-home-'));
-  const log = path.join(home, 'model-calls.jsonl');
+  const log = path.join(mkdtempSync(path.join(tmpdir(), 'pensmith-journey-log-')), 'model-calls.jsonl');
   writeFileSync(path.join(root, 'assignment.txt'), ASSIGNMENT);
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  for (const k of ['HOME', 'USERPROFILE', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'APPDATA']) env[k] = home;
-  for (const k of ['PENSMITH_NO_LLM', 'PENSMITH_OFFLINE', 'OPENAI_API_KEY', 'GPTZERO_API_KEY', 'PENSMITH_CONTACT_EMAIL', 'PENSMITH_COST_CAP_USD']) delete env[k];
-  env['PENSMITH_TEST_CASSETTES'] = '1';
-  // complete() asks for a key before any model call; the scripted model never sends it.
-  env['ANTHROPIC_API_KEY'] = 'sk-ant-journey-not-sent';
-  env['PENSMITH_JOURNEY_LOG'] = log;
-  if (FORMAT === 'md') env['PATH'] = pathWithoutPandoc();
-  return {
-    root,
-    log,
-    run(args, cwd = root) {
-      const r = spawnSync(process.execPath, ['--import', TSX, '--import', GENERATOR, PENSMITH_TS, ...args], {
-        cwd,
-        env,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 120_000,
-      });
-      return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
-    },
-  };
+  const cli = scriptedCli(GENERATOR, { PENSMITH_JOURNEY_LOG: log, ...(FORMAT === 'md' ? { PATH: pathWithoutPandoc() } : {}) });
+  return { root, log, run: (args, cwd = root) => cli(cwd, args) };
 }
 
-/** A hash of every file under `dir` (path and bytes), or 'absent'. */
-function treeHash(dir: string): string {
-  if (!existsSync(dir)) return 'absent';
-  const h = createHash('sha256');
-  const walk = (d: string): void => {
-    for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      const p = path.join(d, e.name);
-      if (e.isDirectory()) walk(p);
-      else h.update(`${path.relative(dir, p)}\0`).update(readFileSync(p)).update('\0');
-    }
-  };
-  walk(dir);
-  return h.digest('hex');
-}
-
-/** Every text part of a .docx, by name. */
-async function docxParts(file: string): Promise<Array<[string, string]>> {
-  const zip = await JSZip.loadAsync(readFileSync(file));
-  const parts: Array<[string, string]> = [];
-  for (const [name, entry] of Object.entries(zip.files)) if (!entry.dir) parts.push([name, await entry.async('string')]);
-  return parts;
-}
+/** Every file under `dir` → its SHA-256, or null when there is no `dir`. */
+const snapshot = (dir: string): Map<string, string> | null => (existsSync(dir) ? fileHashes(dir) : null);
 
 /** The text of a .docx's body, a line per paragraph. */
 async function docxText(file: string): Promise<string> {
-  const xml = (await docxParts(file)).find(([name]) => name === 'word/document.xml')?.[1] ?? '';
+  const xml = (await docxParts(file)).get('word/document.xml') ?? '';
   return xml.split(/<w:p[ >]/).map((p) => p.replace(/<[^>]+>/g, '')).join('\n')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
 }
@@ -143,7 +98,7 @@ function pending(stdout: string): Record<string, unknown> {
 }
 
 /** The answer a user gives who accepts what each question suggests (and approves the outline and the export). */
-function answer(j: Journey, p: Record<string, unknown>): Run {
+function answer(j: Journey, p: Record<string, unknown>): CliStreams {
   switch (p['pending']) {
     case 'intake-questions': {
       const answers = Object.fromEntries((p['questions'] as Array<{ id: string; suggested: string }>).map((q) => [q.id, q.suggested]));
@@ -179,11 +134,11 @@ test(`journey: bare pensmith takes an assignment to an exported ${FORMAT}, and a
 
   for (let i = 0; i < 40 && steps.at(-1) !== 'status (done)'; i++) {
     // A dry run first: it names the same step, writes nothing and calls no model.
-    const before = treeHash(paper);
+    const before = snapshot(paper);
     const callsBefore = modelCalls(j.log).length;
     const dry = j.run(['--dry-run']);
     assert.equal(dry.status, 0, `--dry-run exits 0\n${dry.stdout}${dry.stderr}`);
-    assert.equal(treeHash(paper), before, `--dry-run before step ${i + 1} changed .paper/`);
+    assert.deepEqual(snapshot(paper), before, `--dry-run before step ${i + 1} changed .paper/`);
     assert.equal(modelCalls(j.log).length, callsBefore, '--dry-run made a model call');
 
     const r = j.run([]);
@@ -223,7 +178,7 @@ test(`journey: bare pensmith takes an assignment to an exported ${FORMAT}, and a
   const state = JSON.parse(readFileSync(path.join(paper, 'STATE.json'), 'utf8')) as { sections: Array<{ n: number; slug: string }> };
   assert.deepEqual(state.sections.map((s) => [s.n, s.slug]), SECTIONS.map((s, i) => [i + 1, s.slug]));
   const dirs = readdirSync(path.join(paper, 'sections')).sort();
-  assert.deepEqual(dirs, SECTIONS.map((s, i) => `${String(i + 1).padStart(2, '0')}-${s.slug}`));
+  assert.deepEqual(dirs, SECTIONS.map((s, i) => sectionDirName(i + 1, s.slug)));
 
   // ---- each section saw, and cites, only its own works ----
   const writes = calls.filter((c) => c.step === 'write');
@@ -242,11 +197,12 @@ test(`journey: bare pensmith takes an assignment to an exported ${FORMAT}, and a
     };
     assert.equal(record.status, 'verified', dir);
     assert.deepEqual(record.citations.map((c) => [c.citekey, c.verdict]), assigned.map((k) => [k, 'OK']));
+    if (i === 0) {
+      // The quotation was checked against the paper's real open-access text.
+      assert.deepEqual(record.quotes.map((q) => q.verdict), ['OK']);
+      assert.match(record.quotes[0]!.reason, /arxiv\.org\/pdf\/2109\.00022/);
+    }
   }
-  // The quotation was checked against the paper's real open-access text.
-  const first = JSON.parse(readFileSync(path.join(paper, 'sections', dirs[0]!, 'VERIFICATION.json'), 'utf8')) as { quotes: Array<{ verdict: string; reason: string }> };
-  assert.deepEqual(first.quotes.map((q) => q.verdict), ['OK']);
-  assert.match(first.quotes[0]!.reason, /arxiv\.org\/pdf\/2109\.00022/);
 
   // ---- the export ----
   const exported = path.join(paper, 'export', FORMAT === 'docx' ? 'DRAFT.docx' : 'DRAFT.md');
@@ -257,7 +213,7 @@ test(`journey: bare pensmith takes an assignment to an exported ${FORMAT}, and a
   assert.ok(text.includes(QUOTE), 'the verified quotation');
   assert.match(text, /Leuchtner et al\.,? 2022/, 'citations are rendered in APA');
   assert.doesNotMatch(text, /\[@/, 'no citation markup is left');
-  for (const [part, body] of FORMAT === 'docx' ? await docxParts(exported) : [['DRAFT.md', text] as const]) {
+  for (const [part, body] of FORMAT === 'docx' ? await docxParts(exported) : new Map([['DRAFT.md', text]])) {
     assert.doesNotMatch(body, /pensmith|\.paper|journey/i, `${part} carries no trace of the tool or the paper's folder`);
   }
   const record = JSON.parse(readFileSync(path.join(paper, 'EXPORT.json'), 'utf8')) as { format: string };
@@ -277,7 +233,7 @@ test(`journey: bare pensmith takes an assignment to an exported ${FORMAT}, and a
   const swapped = mkdtempSync(path.join(tmpdir(), 'pensmith-journey-swap-'));
   cpSync(j.root, swapped, { recursive: true });
   const bibFile = path.join(swapped, '.paper', 'CITATIONS.bib');
-  writeFileSync(bibFile, readFileSync(bibFile, 'utf8').replace('doi = {10.1556/012.2022.01524}', 'doi = {10.99999/fake.001}'));
+  writeFileSync(bibFile, readFileSync(bibFile, 'utf8').replace(`doi = {${VISIBLE.doi}}`, 'doi = {10.99999/fake.001}'));
   const swappedRun = j.run(['done', '--yolo'], swapped);
   assert.equal(swappedRun.status, 2, `export after a bibliography swap exits 2\n${swappedRun.stdout}${swappedRun.stderr}`);
   assert.match(swappedRun.stdout + swappedRun.stderr, /CITATIONS\.bib entry for \[@leuchtner2022\] changed after compile/);

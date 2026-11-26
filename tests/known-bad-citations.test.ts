@@ -14,12 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { bibEntry, citationVerdicts, verifySection } from './lib/verify-cli.js';
-
-interface Entry { citekey: string; title: string; authors: string[]; year: number; journal?: string; doi: string; expected_verdict: string; why: string }
-
-const CORPUS = JSON.parse(readFileSync(new URL('./fixtures/known-bad-citations.json', import.meta.url), 'utf8')) as Entry[];
+import { bibEntry, citationVerdicts, citingDraft, KNOWN_BAD_CITATIONS as CORPUS, verifySection } from './lib/verify-cli.js';
 
 test('the corpus holds ten fabricated DOIs, each a different one', () => {
   const fabricated = CORPUS.filter((e) => e.expected_verdict === 'FABRICATED');
@@ -28,8 +23,7 @@ test('the corpus holds ten fabricated DOIs, each a different one', () => {
 });
 
 test('pensmith verify gives every known-bad citation the verdict the corpus names, and blocks', () => {
-  const draft = `# Introduction\n\n${CORPUS.map((e) => `One claim of this review rests on this work [@${e.citekey}].`).join('\n')}\n`;
-  const v = verifySection(draft, CORPUS.map(bibEntry).join('\n'));
+  const v = verifySection(citingDraft(CORPUS.map((e) => e.citekey)), CORPUS.map(bibEntry).join('\n'));
   assert.equal(v.status, 2, `a section citing fabricated, mis-cited and retracted works is refused\n${v.out}`);
   assert.equal(v.record.status, 'failed');
   const got = citationVerdicts(v.record);

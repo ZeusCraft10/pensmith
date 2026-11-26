@@ -39,16 +39,19 @@ test('pensmith verify finds the faithful quotations and gives every known-bad on
   assert.equal(v.record.status, 'failed');
   assert.deepEqual(v.record.citations.map((c) => [c.citekey, c.verdict]), [[key, 'OK']], 'the work itself is real');
 
-  const byStart = (q: string) => v.record.quotes.find((r) => q.replace(/[“”"]/g, '').startsWith(r.quote.replace(/[“”"…]/g, '').trim().slice(0, 40)));
+  // The row recording quotation `q`: among `rows`, the one whose quote, quotation marks aside, `q` starts with.
+  const rowFor = (q: string, rows = v.record.quotes, prefix = 40) =>
+    rows.find((r) => q.replace(/[“”"]/g, '').startsWith(r.quote.replace(/[“”"…]/g, '').trim().slice(0, prefix)));
   for (const q of CORPUS.known_good) {
-    const row = byStart(q);
+    const row = rowFor(q);
     assert.equal(row?.verdict, 'OK', `faithful: ${q}\n${JSON.stringify(row)}`);
   }
+  const notFound = v.record.quotes.filter((r) => r.verdict === 'NOT_FOUND');
   for (const b of CORPUS.known_bad) {
-    const row = v.record.quotes.filter((r) => r.verdict === 'NOT_FOUND').find((r) => b.quote.replace(/[“”"]/g, '').startsWith(r.quote.replace(/[“”"…]/g, '').trim().slice(0, 30)));
+    const row = rowFor(b.quote, notFound, 30);
     assert.ok(row, `${b.distortion}: ${b.quote}\n${JSON.stringify(v.record.quotes, null, 1)}`);
     assert.match(row.reason, /arxiv\.org\/pdf\/2109\.00022/, 'checked against the recorded open-access PDF');
   }
-  assert.equal(v.record.quotes.filter((r) => r.verdict === 'NOT_FOUND').length, 10, '10/10 known-bad quotations are NOT_FOUND');
+  assert.equal(notFound.length, 10, '10/10 known-bad quotations are NOT_FOUND');
   assert.equal(v.record.quotes.filter((r) => r.verdict === 'OK').length, CORPUS.known_good.length);
 });

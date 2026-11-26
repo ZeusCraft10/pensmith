@@ -41,7 +41,7 @@ import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
 import { canAskInTerminal, confirmOrNo } from '../lib/prompts.js';
 import { paperDir, sectionPlan } from '../lib/paths.js';
-import { resolveSectionSlug } from '../lib/section-slug.js';
+import { parseSectionNumber, sectionSlugOrWhy } from '../lib/section-slug.js';
 import { readOutline } from '../lib/outline-read.js';
 import { fetch as httpFetch } from '../lib/http.js';
 import { isOfflineMode } from '../lib/network-mode.js';
@@ -315,22 +315,20 @@ export const addCommand = defineCommand({
     if (doRemap) {
       let only: { n: number; slug: string } | undefined;
       const secRaw = args.section;
-      const slugRaw = args.slug;
-      // With --section, remap only that section, its slug from --slug or
-      // OUTLINE.md. One that cannot be resolved remaps nothing (never every
-      // section); no --section remaps every section, by design.
+      // With --section, remap only that section, its slug the one the outline
+      // names (or, with no outline, --slug). One that cannot be resolved
+      // remaps nothing (never every section), and says why; no --section
+      // remaps every section, by design.
       if (secRaw !== undefined) {
-        const n = Number(secRaw);
-        const explicit = typeof slugRaw === 'string' && slugRaw.length > 0 ? slugRaw : undefined;
-        const slug = Number.isInteger(n) && n >= 1 ? resolveSectionSlug(paperRoot, n, explicit) : null;
-        if (slug === null) {
-          process.stdout.write(
-            `pensmith add: --section ${String(secRaw)} could not be resolved to a section slug ` +
-            `(pass --slug, or run \`pensmith outline\` first) — no sections remapped.\n`,
-          );
+        const unresolved = (why: string): ReturnType<typeof addedResult> => {
+          process.stdout.write(`pensmith add: --section ${String(secRaw)}: ${why}. No sections remapped.\n`);
           return addedResult(keys);
-        }
-        only = { n, slug };
+        };
+        const n = parseSectionNumber(secRaw);
+        if (n === null) return unresolved('a section number is a positive integer');
+        const found = sectionSlugOrWhy(paperRoot, n, args.slug);
+        if (found.slug === null) return unresolved(found.why);
+        only = { n, slug: found.slug };
       }
       const count = await remapSections(paperRoot, keys, only);
       process.stdout.write(`pensmith add: remapped ${keys.join(', ')} onto ${count} section(s) (assigned_sources only).\n`);

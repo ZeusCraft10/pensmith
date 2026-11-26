@@ -18,8 +18,8 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import JSZip from 'jszip';
 import { PDFDocument, PDFDict } from 'pdf-lib';
+import { docxParts } from './lib/docx-fixture.js';
 import { compiledPaper, needsTool, runCli } from './lib/export-fixture.js';
 
 const BIB = [
@@ -49,16 +49,6 @@ async function paper(): Promise<string> {
       { slug: 'effects', title: 'Effects', draft: 'Estuary beds change over decades [@alpha2019; @zeta2020].\n', sources: ['alpha2019', 'zeta2020'] },
     ],
   });
-}
-
-/** Every text part of a docx, by name. */
-async function docxParts(file: string): Promise<Map<string, string>> {
-  const zip = await JSZip.loadAsync(readFileSync(file));
-  const out = new Map<string, string>();
-  for (const [name, entry] of Object.entries(zip.files)) {
-    if (!entry.dir) out.set(name, await entry.async('string'));
-  }
-  return out;
 }
 
 test('done --format docx: no part of the docx names a local path, and custom.xml is gone', needsTool('pandoc'), async () => {

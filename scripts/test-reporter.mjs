@@ -18,13 +18,13 @@ export default async function* fileResults(source) {
     // A todo test that fails is still a todo, as node:test counts it: the
     // file does not fail, and neither does the run.
     const outcome = d.skip !== undefined ? 'skip' : d.todo !== undefined ? 'todo' : ev.type === 'test:fail' ? 'fail' : 'pass';
+    // A skip or todo carries its reason, or true when none was given.
+    const flag = outcome === 'skip' ? d.skip : outcome === 'todo' ? d.todo : undefined;
     tests.push({
       name: d.name,
-      nesting: d.nesting,
       kind,
       outcome,
-      ...(d.skip !== undefined ? { reason: typeof d.skip === 'string' ? d.skip : '' } : {}),
-      ...(d.todo !== undefined ? { reason: typeof d.todo === 'string' ? d.todo : '' } : {}),
+      ...(flag !== undefined ? { reason: typeof flag === 'string' ? flag : '' } : {}),
       ...(outcome === 'fail' ? { error: String(d.details?.error?.cause?.message ?? d.details?.error?.message ?? 'failed').split('\n')[0] } : {}),
     });
   }

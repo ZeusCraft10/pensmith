@@ -163,8 +163,7 @@ await Promise.all(Array.from({ length: workers }, worker));
 // ---- Summary, from the reporter's events only ----
 const counts = { pass: 0, fail: 0, skip: 0, todo: 0 };
 const failures = [];
-const skips = [];
-const todos = [];
+const listed = { skip: [], todo: [] };
 for (const r of results.sort((a, b) => a.file.localeCompare(b.file))) {
   const name = rel(r.file);
   if (r.tests === null) {
@@ -175,15 +174,13 @@ for (const r of results.sort((a, b) => a.file.localeCompare(b.file))) {
   }
   let ran = 0;
   for (const t of r.tests) {
-    if (t.kind === 'test') ran++;
-    if (t.outcome === 'fail') {
-      if (t.kind === 'test') counts.fail++;
-      failures.push(`${name} › ${t.name} — ${t.error}`);
-    } else if (t.kind === 'test') {
-      counts[t.outcome]++;
-      if (t.outcome === 'skip') skips.push(`${name} › ${t.name}${t.reason ? ` — ${t.reason}` : ''}`);
-      if (t.outcome === 'todo') todos.push(`${name} › ${t.name}${t.reason ? ` — ${t.reason}` : ''}`);
-    }
+    const label = `${name} › ${t.name}`;
+    // A failing suite (a hook threw) is a failure, but only tests are counted.
+    if (t.outcome === 'fail') failures.push(`${label} — ${t.error}`);
+    if (t.kind !== 'test') continue;
+    ran++;
+    counts[t.outcome]++;
+    if (t.outcome === 'skip' || t.outcome === 'todo') listed[t.outcome].push(`${label}${t.reason ? ` — ${t.reason}` : ''}`);
   }
   if (ran === 0) failures.push(`${name}: ran no tests${r.code !== 0 ? ` (exited with code ${r.code})` : ''}`);
   else if (r.code !== 0 && !r.tests.some((t) => t.outcome === 'fail')) {
@@ -200,8 +197,8 @@ console.log(
   `# pensmith tests: ${plural(results.length, 'file')}, ${plural(total, 'test')}: ` +
     `${counts.pass} passed, ${counts.fail} failed, ${counts.skip} skipped, ${counts.todo} todo`,
 );
-for (const s of skips) console.log(`# skipped: ${s}`);
-for (const t of todos) console.log(`# todo: ${t}`);
+for (const s of listed.skip) console.log(`# skipped: ${s}`);
+for (const t of listed.todo) console.log(`# todo: ${t}`);
 for (const f of failures) console.log(`# FAILED: ${f}`);
 
 if (process.env['PENSMITH_KEEP_TEST_RUN'] === '1') console.log(`# kept the run folder ${runRoot}`);

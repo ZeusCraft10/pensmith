@@ -1,7 +1,18 @@
-// tests/lib/docx-fixture.ts — a .docx shaped like Pandoc's output.
+// tests/lib/docx-fixture.ts — a .docx shaped like Pandoc's output, and a
+// reader for the parts of any .docx.
 
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import JSZip from 'jszip';
+
+/** Every text part of a .docx, by name. */
+export async function docxParts(file: string): Promise<Map<string, string>> {
+  const zip = await JSZip.loadAsync(readFileSync(file));
+  const out = new Map<string, string>();
+  for (const [name, entry] of Object.entries(zip.files)) {
+    if (!entry.dir) out.set(name, await entry.async('string'));
+  }
+  return out;
+}
 
 /** A docx the way Pandoc writes one when given absolute --csl/--bibliography paths. */
 export async function pandocLikeDocx(file: string, leak: string): Promise<void> {

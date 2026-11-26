@@ -8,7 +8,7 @@
 //
 // Not a test file (the runner collects only *.test.ts).
 
-import { installScriptedModel, worksShown } from './scripted-model.js';
+import { installScriptedModel, requestText, worksShown } from './scripted-model.js';
 
 installScriptedModel((req, step) => {
   if (step === 'plan') {
@@ -24,7 +24,7 @@ installScriptedModel((req, step) => {
     };
   }
   if (step === 'revise') {
-    const flagged = /^- Citekey: (\S+)$/m.exec(req.messages.map((m) => m.content).join('\n'))?.[1];
+    const flagged = /^- Citekey: (\S+)$/m.exec(requestText(req, { system: false }))?.[1];
     if (!flagged) throw new Error('redo: the revise request names no flagged citation');
     return {
       action: 'remove',

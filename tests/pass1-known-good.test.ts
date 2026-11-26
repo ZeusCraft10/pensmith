@@ -16,13 +16,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
 import { bibFile } from './lib/bib-fixture.js';
-import { citationVerdicts, verifySection } from './lib/verify-cli.js';
+import { citationVerdicts, citingDraft, verifySection } from './lib/verify-cli.js';
 
-const CORPUS = fileURLToPath(new URL('./fixtures/pass1-known-good.bib', import.meta.url));
+const corpus = readFileSync(fileURLToPath(new URL('./fixtures/pass1-known-good.bib', import.meta.url)), 'utf8');
+const keys = [...corpus.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
 
 test('Pass 1: every entry of the known-good corpus is OK', async () => {
-  const corpus = readFileSync(CORPUS, 'utf8');
-  const keys = [...corpus.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
   assert.ok(keys.length >= 13, `the corpus lists ${keys.length} entries`);
   const bibPath = bibFile(corpus);
   const draft = `# S\n\n${keys.map((k) => `A claim [@${k}].`).join(' ')}\n`;
@@ -37,9 +36,7 @@ test('Pass 1: every entry of the known-good corpus is OK', async () => {
 });
 
 test('pensmith verify: a section citing the whole known-good corpus is verified', () => {
-  const corpus = readFileSync(CORPUS, 'utf8');
-  const keys = [...corpus.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
-  const v = verifySection(`# Introduction\n\n${keys.map((k) => `One claim here rests on this work [@${k}].`).join('\n')}\n`, corpus);
+  const v = verifySection(citingDraft(keys), corpus);
   assert.equal(v.status, 0, v.out);
   assert.equal(v.record.status, 'verified');
   assert.deepEqual(Object.entries(citationVerdicts(v.record)).filter(([, verdict]) => verdict !== 'OK'), []);

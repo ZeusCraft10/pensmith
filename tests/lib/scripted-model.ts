@@ -28,10 +28,16 @@ function propsOf(req: GenerateRequest): string[] {
   return p ? Object.keys(p).sort() : [];
 }
 
+/** The request's text: its system prompt (unless `system` is false), then every turn. */
+export function requestText(req: GenerateRequest, { system = true } = {}): string {
+  const turns = req.messages.map((m) => m.content).join('\n');
+  return system ? `${req.system}\n${turns}` : turns;
+}
+
 /** Which step sent `req`: from its JSON Schema, else its prompt. */
 export function stepOf(req: GenerateRequest): Step {
   const props = propsOf(req).join(',');
-  const text = `${req.system}\n${req.messages.map((m) => m.content).join('\n')}`;
+  const text = requestText(req);
   if (props === 'questions,topic') return 'intake';
   if (props === 'verdicts' && /candidate/i.test(text)) return 'evaluate';
   if (/disambiguate a research topic/i.test(req.system)) return 'research';
@@ -48,8 +54,7 @@ export function stepOf(req: GenerateRequest): Step {
 /** The works the request shows as fenced JSON (the library, a section's sources): citekey → title. */
 export function worksShown(req: GenerateRequest): Map<string, string> {
   const out = new Map<string, string>();
-  const text = `${req.system}\n${req.messages.map((m) => m.content).join('\n')}`;
-  for (const block of fencedBlocks(text)) {
+  for (const block of fencedBlocks(requestText(req))) {
     let parsed: unknown;
     try {
       parsed = JSON.parse(block);
@@ -65,7 +70,7 @@ export function worksShown(req: GenerateRequest): Map<string, string> {
 }
 
 /** The answer every test gives the advisory passes: supported, and not an orphan claim. */
-export function advisoryAnswer(step: Step): unknown {
+function advisoryAnswer(step: Step): unknown {
   if (step === 'claim-support') return { verdict: 'SUPPORTED', rationale: 'The cited work states this.', evidence: '' };
   if (step === 'orphan-label') return { label: 'definition' };
   return undefined;

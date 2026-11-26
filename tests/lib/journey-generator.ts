@@ -9,7 +9,7 @@
 
 import type { GenerateRequest } from '../../bin/lib/generator.js';
 import { fencedBlocks } from './fence.js';
-import { installScriptedModel, stepOf, worksShown, type Step } from './scripted-model.js';
+import { installScriptedModel, requestText, stepOf, worksShown, type Step } from './scripted-model.js';
 
 /** The two works the journey's paper is about, as the source evaluator is shown them. */
 export const VISIBLE = { title: /visible islands/i, doi: '10.1556/012.2022.01524' };
@@ -46,7 +46,7 @@ export const DRAFTS: Record<(typeof SECTIONS)[number]['slug'], (key: string) => 
 
 /** The journey section a plan or write request is for, by the title its user turn names. */
 function sectionNamed(req: GenerateRequest): (typeof SECTIONS)[number] {
-  const text = req.messages.map((m) => m.content).join('\n');
+  const text = requestText(req, { system: false });
   const sec = SECTIONS.find((s) => text.includes(`"${s.title}"`));
   if (!sec) throw new Error(`journey: the request names no journey section: ${text.slice(0, 200)}`);
   return sec;

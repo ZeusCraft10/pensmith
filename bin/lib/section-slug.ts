@@ -35,12 +35,15 @@ export function sectionNumberArg(verb: string, raw: unknown): number | null {
 
 type OutlineList = { sections: ReadonlyArray<{ n: number; slug: string }> } | null;
 
-/** Section `n`'s slug, or why it has none (one sentence, for the refusal). */
-function lookUpSlug(
+/**
+ * Section `n`'s slug, as resolveSectionSlug finds it, or why it has none (one
+ * sentence, without a final stop, for a refusal or a notice).
+ */
+export function sectionSlugOrWhy(
   paperRoot: string | undefined,
   n: number,
-  explicitSlug: unknown,
-  outline: OutlineList | undefined,
+  explicitSlug?: unknown,
+  outline?: OutlineList,
 ): { slug: string } | { slug: null; why: string } {
   const explicit = typeof explicitSlug === 'string' && explicitSlug.length > 0 ? explicitSlug : null;
   const list = outline === undefined ? lastCheckedOutline(paperRoot ?? process.cwd()) : outline;
@@ -88,7 +91,7 @@ export function resolveSectionSlug(
   /** The list as lastCheckedOutline read it, for a caller that already has it. */
   outline?: OutlineList,
 ): string | null {
-  return lookUpSlug(paperRoot, n, explicitSlug, outline).slug;
+  return sectionSlugOrWhy(paperRoot, n, explicitSlug, outline).slug;
 }
 
 /**
@@ -102,7 +105,7 @@ export function sectionSlugArg(
   explicitSlug?: unknown,
   outline?: OutlineList,
 ): string | null {
-  const r = lookUpSlug(paperRoot, n, explicitSlug, outline);
+  const r = sectionSlugOrWhy(paperRoot, n, explicitSlug, outline);
   if (r.slug === null) {
     process.stderr.write(`pensmith ${verb}: ${r.why}.\n`);
     process.exitCode = EXIT_REFUSED;

@@ -14,16 +14,14 @@
 // The provider answers are streamed Messages API events (complete() streams
 // through the SDK); tests/llm-generator.test.ts covers the answer shapes.
 //
-// Skip strategy: every behavioral test guards on `transportReady()` — a
+// Skip strategy: the in-process tests guard on `transportReady()` — a
 // feature-detect that tries a dynamic import of bin/lib/anthropic.js via URL.href
 // and checks that the module exports `complete` and `isNoLlmMode` functions.
 // While the module is absent (Waves 1-2 not yet landed), ALL tests skip cleanly
 // with 0 failures. This mirrors the 08-00 / 10-00 RED-by-skip convention.
 //
-// Per-verb integration tests (T-11-05, T-11-06) are additionally guarded by a
-// source-grep predicate that checks whether the verb's source file still contains
-// its TIER2_* placeholder constant — if it does, the verb is not yet wired and
-// the integration test skips.
+// The per-verb integration tests (T-11-05, T-11-06) do not skip: they spawn the
+// built CLI and fail when it is missing.
 //
 // Analogs:
 //   - tests/http-cache-no-header-leak.test.ts (withFreshState, disk-sweep loop)
@@ -36,7 +34,7 @@ import assert from 'node:assert/strict';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fsp from 'node:fs/promises';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { pensmithDataDir } from '../bin/lib/paths.js';
@@ -208,43 +206,6 @@ function sseAnswer(text: string, usage = { input_tokens: 10, output_tokens: 8 })
 }
 
 const SSE_HEADERS = { headers: { 'content-type': 'text/event-stream' } };
-
-// ---------------------------------------------------------------------------
-// Per-verb source-grep predicates.
-// A verb is "not yet wired" if its source file still contains the TIER2_*
-// placeholder constant. This prevents the integration tests from running
-// against a verb that hasn't had complete() wired yet — mirrors the 07-01
-// source-grep skip-predicate pattern.
-// ---------------------------------------------------------------------------
-// Read a verb's .ts source via the repo root. Uses fileURLToPath so a repo path
-// containing spaces (e.g. ".../OneDrive - Roanoke College/...") is %20-DECODED —
-// the prior `.pathname`/regex-strip approach left %20 in the path, so readFileSync
-// threw on spaced dev paths and every per-verb test silently skipped locally while
-// running for the first time on CI (the exact local-vs-CI gap we're closing).
-function verbSrc(verb: string): string {
-  return readFileSync(path.join(repoRoot(), 'bin', 'cli', `${verb}.ts`), 'utf8');
-}
-
-const VERB_WIRED_PREDICATES: Record<string, () => boolean> = {
-  intake: () => {
-    try { const s = verbSrc('intake'); return !s.includes('tier2-placeholder') && !s.includes('TIER2_PLACEHOLDER'); } catch { return false; }
-  },
-  research: () => {
-    try { const s = verbSrc('research'); return !s.includes('PLACEHOLDER_LIBRARY') && !s.includes('tier2-placeholder'); } catch { return false; }
-  },
-  outline: () => {
-    try { const s = verbSrc('outline'); return !s.includes('TIER2_OUTLINE') && !s.includes('tier2-placeholder'); } catch { return false; }
-  },
-  plan: () => {
-    try { const s = verbSrc('plan'); return !s.includes('TIER2_PLAN') && !s.includes('tier2-placeholder'); } catch { return false; }
-  },
-  write: () => {
-    try { const s = verbSrc('write'); return !s.includes('TIER2_DRAFT') && !s.includes('tier2-placeholder'); } catch { return false; }
-  },
-  revise: () => {
-    try { const s = verbSrc('revise'); return !s.includes('tier2ProposeSwap') && !s.includes('tier2-placeholder'); } catch { return false; }
-  },
-};
 
 // Resolve the repo root from import.meta.url so we can locate the built CLI.
 // fileURLToPath decodes %20 (and other escapes) and yields a native path on both
@@ -723,9 +684,8 @@ test('T-11-08: OpenAI provider sends correct POST body and Authorization header 
 //   T-11-06: writes a NON-placeholder artifact under PENSMITH_NO_LLM=1
 //            (the offline mock text from complete() counts as "real" for CI)
 //
-// Guard: transportReady() AND per-verb source-grep predicate (verb not yet wired).
 // CLI is spawned using the built dist/bin/pensmith.js binary. If the binary
-// doesn't exist, the test skips (build is a precondition).
+// doesn't exist, the test fails (build is a precondition).
 // ---------------------------------------------------------------------------
 
 const VERBS_FOR_INTEGRATION = ['intake', 'research', 'outline', 'plan', 'write', 'revise'] as const;
@@ -798,10 +758,7 @@ const VERB_NO_LLM_SETUP: Partial<Record<GenerativeVerb, (root: string) => Promis
 
 for (const verb of VERBS_FOR_INTEGRATION) {
   test(`T-11-05: verb '${verb}' exits non-zero + stderr banner when no LLM key configured`, async () => {
-    // These used to skip when the transport, the verb's wiring or the build
-    // was missing, so a regression in any of them passed as a skip.
-    assert.ok(await transportReady(), 'bin/lib/anthropic.ts exports the transport');
-    assert.ok(VERB_WIRED_PREDICATES[verb]?.(), `verb '${verb}' still has a TIER2_* placeholder`);
+    // This used to skip when the build was missing, so a regression passed as a skip.
     const bin = cliBin();
     assert.ok(existsSync(bin), 'dist/bin/pensmith.js is missing: run `npm run build` (npm run check does) before the tests');
 
@@ -864,10 +821,7 @@ for (const verb of VERBS_FOR_INTEGRATION) {
   });
 
   test(`T-11-06: verb '${verb}' writes NON-placeholder artifact under PENSMITH_NO_LLM=1`, async () => {
-    // These used to skip when the transport, the verb's wiring or the build
-    // was missing, so a regression in any of them passed as a skip.
-    assert.ok(await transportReady(), 'bin/lib/anthropic.ts exports the transport');
-    assert.ok(VERB_WIRED_PREDICATES[verb]?.(), `verb '${verb}' still has a TIER2_* placeholder`);
+    // This used to skip when the build was missing, so a regression passed as a skip.
     const bin = cliBin();
     assert.ok(existsSync(bin), 'dist/bin/pensmith.js is missing: run `npm run build` (npm run check does) before the tests');
 

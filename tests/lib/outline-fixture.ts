@@ -8,14 +8,17 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** An OUTLINE.md with a section table of `sections`. */
-export function outlineTable(sections: ReadonlyArray<{ n: number; slug: string; title?: string }>, title = 'Test Paper'): string {
+/** An OUTLINE.md with a section table of `sections`, each assigned its `sources` (none by default). */
+export function outlineTable(
+  sections: ReadonlyArray<{ n: number; slug: string; title?: string; sources?: readonly string[] }>,
+  title = 'Test Paper',
+): string {
   return [
     `# ${title}`,
     '',
     '| # | slug | title | depends_on | word target | assigned_sources |',
     '| --- | --- | --- | --- | --- | --- |',
-    ...sections.map((s) => `| ${s.n} | ${s.slug} | ${s.title ?? s.slug} | | 300 | |`),
+    ...sections.map((s) => `| ${s.n} | ${s.slug} | ${s.title ?? s.slug} | | 300 | ${(s.sources ?? []).join(', ')} |`),
     '',
   ].join('\n');
 }

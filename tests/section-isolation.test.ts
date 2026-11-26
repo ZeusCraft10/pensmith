@@ -15,15 +15,16 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { numberOutline, writeOutline } from '../bin/lib/outline-store.js';
 import { importBibliography, updateLibrary } from '../bin/lib/library.js';
-import { VISIBLE_ISLANDS_BIB } from './lib/verify-cli.js';
+import { scriptedCli } from './lib/cli-env.js';
+import type { CliOutput } from './lib/export-fixture.js';
+import { fileHashes } from './lib/files.js';
+import { bibEntry, KNOWN_BAD_CITATIONS, VISIBLE_ISLANDS_BIB } from './lib/verify-cli.js';
 
 test('section-isolation: slug regex ^[a-z0-9-]+$ is enforced by strict path helpers (T-3-12, ARCH-02)',
   async () => {
@@ -59,47 +60,27 @@ test('section-isolation: slug regex ^[a-z0-9-]+$ is enforced by strict path help
   },
 );
 
-const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const GENERATOR = fileURLToPath(new URL('./lib/redo-generator.ts', import.meta.url));
-const TSX = import.meta.resolve('tsx');
 
-interface Run { status: number | null; out: string }
-
-/** The real CLI in `root`, on the recorded registry answers, with the scripted model. */
-function cli(root: string, home: string, ...args: string[]): Run {
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  for (const k of ['HOME', 'USERPROFILE', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'LOCALAPPDATA', 'APPDATA']) env[k] = home;
-  for (const k of ['PENSMITH_NO_LLM', 'PENSMITH_OFFLINE', 'GPTZERO_API_KEY']) delete env[k];
-  env['PENSMITH_TEST_CASSETTES'] = '1';
-  env['ANTHROPIC_API_KEY'] = 'sk-ant-isolation-not-sent';
-  const r = spawnSync(process.execPath, ['--import', TSX, '--import', GENERATOR, PENSMITH_TS, ...args], {
-    cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000,
-  });
-  return { status: r.status, out: (r.stdout ?? '') + (r.stderr ?? '') };
-}
-
-/** Every file under `dir`, by path relative to it, → its SHA-256. */
-function hashes(dir: string): Map<string, string> {
-  const out = new Map<string, string>();
-  const walk = (d: string): void => {
-    for (const e of readdirSync(d, { withFileTypes: true })) {
-      const p = join(d, e.name);
-      if (e.isDirectory()) walk(p);
-      else out.set(p.slice(dir.length + 1), createHash('sha256').update(readFileSync(p)).digest('hex'));
-    }
+/**
+ * The real CLI, on the recorded registry answers, with the scripted model
+ * (tests/lib/redo-generator.ts); every run of one test shares a home.
+ */
+function redoCli(): (root: string, ...args: string[]) => CliOutput {
+  const run = scriptedCli(GENERATOR);
+  return (root, ...args) => {
+    const r = run(root, args);
+    return { status: r.status, out: r.stdout + r.stderr };
   };
-  walk(dir);
-  return out;
 }
 
 test('a section verb names a section of the outline, or is refused; it never makes up a folder', () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-no-outline-'));
-  const home = mkdtempSync(join(tmpdir(), 'pensmith-no-outline-home-'));
+  const cli = redoCli();
   mkdirSync(join(root, '.paper', 'sections', '03-methods'), { recursive: true });
   writeFileSync(join(root, '.paper', 'sections', '03-methods', 'PLAN.md'), '# Methods\n');
   for (const args of [['plan', '3', '--yolo'], ['write', '3'], ['verify', '3'], ['plan', '3', '--revise', '--yolo'], ['ack', '3', 'smith2020', '--reason', 'discussed']]) {
-    const r = cli(root, home, ...args);
+    const r = cli(root, ...args);
     assert.equal(r.status, 2, `${args.join(' ')} with no outline is refused\n${r.out}`);
     assert.match(r.out, /section 3 is not in the outline/, r.out);
     assert.deepEqual(readdirSync(join(root, '.paper', 'sections')), ['03-methods'], `${args.join(' ')} made no folder`);
@@ -108,7 +89,7 @@ test('a section verb names a section of the outline, or is refused; it never mak
 
 test('with an outline, --slug cannot name a folder the outline does not register', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-slug-outline-'));
-  const home = mkdtempSync(join(tmpdir(), 'pensmith-slug-outline-home-'));
+  const cli = redoCli();
   await writeOutline(root, numberOutline({
     title: 'Three Sections',
     thesis: 'A section is a phase of the outline.',
@@ -128,7 +109,7 @@ test('with an outline, --slug cannot name a folder the outline does not register
     [['plan', '7', '--slug', 'appendix', '--yolo'], /section 7 is not in the outline \(its sections are 1, 2, 3\)/],
   ];
   for (const [args, reason] of cases) {
-    const r = cli(root, home, ...args);
+    const r = cli(root, ...args);
     assert.equal(r.status, 2, `${args.join(' ')} is refused\n${r.out}`);
     assert.match(r.out, reason, r.out);
     const after = existsSync(sections) ? readdirSync(sections).sort() : [];
@@ -157,13 +138,12 @@ function corpusEntries(keys: string[]): string {
   }).join('\n');
 }
 
-const FABRICATED =
-  '@article{smith2024attention,\n  title = {Attention Mechanisms in Modern Transformer Architectures},\n  author = {Smith, A. B.},\n' +
-  '  year = {2024},\n  doi = {10.99999/fake.001}\n}\n';
+/** A work under a DOI no registry holds, from the known-bad corpus. */
+const FABRICATED = bibEntry(KNOWN_BAD_CITATIONS.find((e) => e.citekey === 'smith2024attention')!);
 
 test('re-doing section 3 of 5 (verify, plan --revise, write --force, verify) changes nothing outside section 3', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-section-isolation-'));
-  const home = mkdtempSync(join(tmpdir(), 'pensmith-section-isolation-home-'));
+  const cli = redoCli();
   const paper = join(root, '.paper');
   // The outline and the library, written by the stores the outline and add verbs use.
   await writeOutline(root, numberOutline({
@@ -177,13 +157,12 @@ test('re-doing section 3 of 5 (verify, plan --revise, write --force, verify) cha
   const bib = corpusEntries(['numpy-braced', 'encode-doi', 'salmonella', 'higgs-mass']) + '\n' + VISIBLE_ISLANDS_BIB('leuchtner2022') + '\n' + FABRICATED;
   await updateLibrary(root, (lib, at) => importBibliography(lib, bib, at, 'refs.bib'));
 
-  // Each section planned, drafted and verified by the real CLI.
-  for (const [i] of SECTIONS.entries()) {
-    const n = String(i + 1);
-    for (const args of [['plan', n, '--yolo'], ['write', n], ['verify', n]]) {
-      const r = cli(root, home, ...args);
-      assert.equal(r.status, 0, `${args.join(' ')}\n${r.out}`);
-    }
+  // Every section planned, drafted (one wave: none depends on another) and
+  // verified by the real CLI.
+  const ns = SECTIONS.map((_, i) => String(i + 1));
+  for (const args of [...ns.map((n) => ['plan', n, '--yolo']), ['write'], ...ns.map((n) => ['verify', n])]) {
+    const r = cli(root, ...args);
+    assert.equal(r.status, 0, `${args.join(' ')}\n${r.out}`);
   }
 
   // The author cites the fabricated work in section 3 by hand.
@@ -193,7 +172,7 @@ test('re-doing section 3 of 5 (verify, plan --revise, write --force, verify) cha
   // The paper's own logs grow with every step; nothing else outside section 3 may change.
   const LOGS = new Set(['COSTS.jsonl', 'SESSION.log']);
   const outside = (): Map<string, string> =>
-    new Map([...hashes(paper)].filter(([p]) => !p.startsWith(join('sections', '03-genomes')) && !LOGS.has(p)));
+    new Map([...fileHashes(paper)].filter(([p]) => !p.startsWith(join('sections', '03-genomes')) && !LOGS.has(p)));
   const before = outside();
   assert.ok([...before.keys()].some((p) => p.startsWith(join('sections', '04-mass'))), 'the other sections are part of the snapshot');
 
@@ -204,7 +183,7 @@ test('re-doing section 3 of 5 (verify, plan --revise, write --force, verify) cha
     [['verify', '3'], 0],                    // and verified
   ];
   for (const [args, status] of redo) {
-    const r = cli(root, home, ...args);
+    const r = cli(root, ...args);
     assert.equal(r.status, status, `${args.join(' ')}\n${r.out}`);
     const after = outside();
     for (const [p, h] of before) assert.equal(after.get(p), h, `${args.join(' ')} changed ${p}`);
