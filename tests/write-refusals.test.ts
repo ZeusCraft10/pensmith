@@ -189,3 +189,56 @@ test('with no key configured, a <n> that is not a section number is still invali
   assert.equal(ok.status, 1, ok.stdout + ok.stderr);
   assert.match(ok.stderr, /no LLM key configured/);
 });
+
+test('write refuses a placeholder PLAN.md when a model is configured (exit 2), and advises plan --force', async () => {
+  // A PLAN.md written under PENSMITH_NO_LLM holds no plan. With a real model
+  // configured, write drafted from it as if it were one.
+  const root = await paper();
+  const s = OUTLINE.sections[0]!;
+  writeFileSync(planFile(root), renderPlan(
+    { n: s.n, slug: s.slug, title: s.title, depends_on: [], purpose: s.purpose, word_target: s.word_target, assigned_sources: s.assigned_sources },
+    null,
+    '[PENSMITH_NO_LLM placeholder — Plan section 1 (evidence).]',
+  ));
+  const calls: Call[] = [];
+  _setGeneratorForTest(drafter(calls, [CITED]));
+  for (const args of [{ n: 1 }, { 'max-parallel': '1' }]) {
+    io.stderr = '';
+    process.exitCode = 0;
+    const res = await runWrite(root, args);
+    assert.equal(res['exitCode'], 2, `${JSON.stringify(args)}: ${io.stderr}`);
+    assert.match(io.stderr, /placeholder/);
+    assert.match(io.stderr, /`pensmith plan 1 --force`/);
+  }
+  assert.equal(calls.length, 0, 'the drafter was never asked');
+  assert.ok(!existsSync(draftFile(root)));
+
+  // Under PENSMITH_NO_LLM a placeholder plan still gives a placeholder draft.
+  process.env['PENSMITH_NO_LLM'] = '1';
+  process.exitCode = 0;
+  const offline = await runWrite(root, { n: 1 });
+  assert.equal(offline['exitCode'], 0, io.stderr);
+  assert.ok(existsSync(draftFile(root)));
+});
+
+test('a hand-edited year that is not an integer is left out of the drafter\'s input, and write does not crash', async () => {
+  const root = await paper();
+  const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<Record<string, unknown>> };
+  lib.entries[0]!['issued'] = { 'date-parts': [[2019.5]] };
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify(lib));
+  const systems: string[] = [];
+  _setGeneratorForTest({
+    async generate(req) {
+      systems.push(req.system);
+      return {
+        text: JSON.stringify(CITED), model: req.model, stop: 'complete', stopReason: 'end_turn',
+        usage: [{ model: req.model, inputTokens: 10, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 }],
+      };
+    },
+  });
+  const res = await runWrite(root, { n: 1 });
+  assert.equal(res['exitCode'], 0, io.stderr);
+  assert.equal(systems.length, 1);
+  assert.doesNotMatch(systems[0]!, /"year"/);
+  assert.match(readFileSync(draftFile(root), 'utf8'), /\[@hayes2020\]/);
+});

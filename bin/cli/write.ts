@@ -35,7 +35,7 @@ import { sectionEntry } from '../lib/plan-store.js';
 import { sourceContext } from '../lib/source-context.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
-import { artifactText } from '../lib/placeholder.js';
+import { artifactText, isPlaceholderText } from '../lib/placeholder.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { CostCapExceededError } from '../lib/budget.js';
 import { describeModelFailure } from '../lib/failure.js';
@@ -237,6 +237,14 @@ async function writeOneSection(
   // No PLAN.md reads as a stub, which is always refused.
   const refusal = draftRefusal(n, plan?.frontmatter.status ?? 'stub', force);
   if (refusal !== null || plan === null) throw new DraftRefusedError(`not drafted: ${refusal}.`);
+  // A PLAN.md written under PENSMITH_NO_LLM holds a placeholder, not a plan.
+  // A model asked to draft from it would invent the section.
+  if (!isNoLlmMode() && isPlaceholderText(plan.text)) {
+    throw new DraftRefusedError(
+      `not drafted: its PLAN.md is a placeholder written without a model (PENSMITH_NO_LLM), not a plan. ` +
+        `Plan the section with \`pensmith plan ${n} --force\`.`,
+    );
+  }
   const { text: planMd, body, frontmatter: { status, assigned_sources: assigned } } = plan;
   const sources = await sectionSources(run, n, slug, assigned);
 
