@@ -46,7 +46,7 @@ export async function compiledPaper(spec: PaperSpec): Promise<string> {
   const pdir = join(root, '.paper');
   mkdirSync(pdir, { recursive: true });
   writeFileSync(
-    join(root, 'STATE.json'),
+    join(pdir, 'STATE.json'),
     JSON.stringify({
       $schemaVersion: 2,
       paperId: 'export-fixture',
@@ -69,7 +69,7 @@ export async function compiledPaper(spec: PaperSpec): Promise<string> {
   writeFileSync(join(pdir, 'CITATIONS.bib'), spec.bib);
   if (spec.ris !== undefined) writeFileSync(join(pdir, 'CITATIONS.ris'), spec.ris);
   if (spec.intake !== undefined) writeFileSync(join(pdir, 'INTAKE.md'), spec.intake);
-  if (spec.configToml !== undefined) writeFileSync(join(root, 'config.toml'), spec.configToml);
+  if (spec.configToml !== undefined) writeFileSync(join(pdir, 'config.toml'), spec.configToml);
   const bib = await parseBibForPass1(spec.bib);
   for (const [i, s] of spec.sections.entries()) {
     const sdir = join(pdir, 'sections', `${String(i + 1).padStart(2, '0')}-${s.slug}`);

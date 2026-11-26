@@ -62,7 +62,7 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
         command,
         summary: 'Start a paper: read the assignment, ask clarifying questions, save the intake.',
         reads: [typeof args['from'] === 'string' ? args['from'] : 'the assignment (asked for)'],
-        writes: ['STATE.json', paper('INTAKE.md'), paper('.gitignore'), 'the global list of papers'],
+        writes: [paper('STATE.json'), paper('INTAKE.md'), paper('.gitignore'), 'the global list of papers'],
         model: '1 call (intake clarifier)',
         network: MODEL_PROVIDER,
       };
@@ -81,7 +81,7 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
         command,
         summary: 'Propose a section outline from the intake.',
         reads: [paper('INTAKE.md')],
-        writes: [paper('OUTLINE.md'), 'STATE.json (sections)'],
+        writes: [paper('OUTLINE.md'), `${paper('STATE.json')} (sections)`],
         model: '1 call (outline author)',
         network: MODEL_PROVIDER,
         asks: 'approve the outline',
@@ -199,7 +199,7 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       return {
         command,
         summary: 'Report state only.',
-        reads: ['STATE.json', '.paper/'],
+        reads: [paper('STATE.json'), '.paper/'],
         writes: [],
         model: NO_MODEL,
         network: verb === 'doctor' ? 'health probes' : NO_NETWORK,

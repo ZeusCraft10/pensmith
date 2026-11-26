@@ -278,7 +278,8 @@ test('UX-01 / C4-HIGH (m): invalid-JSON STATE.json → status/attention, no thro
     const resolveNextAction = await loadResolve();
     const root = freshRoot();
     // Non-JSON content → JSON.parse throws a SyntaxError inside loadState.
-    writeFileSync(join(root, 'STATE.json'), '{ this is not json ');
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    writeFileSync(join(root, '.paper', 'STATE.json'), '{ this is not json ');
     let decision: RouterDecision | undefined;
     await assert.doesNotReject(
       async () => { decision = await resolveNextAction(root); },

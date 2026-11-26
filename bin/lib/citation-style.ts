@@ -12,7 +12,7 @@ import path from 'node:path';
 import { normalizeStyleName, resolveStyleName, SUPPORTED_STYLES } from './citations.js';
 import { parseIntakeMd } from './intake-parse.js';
 import { paperDir } from './paths.js';
-import { paperConfigFiles, readProjectConfig } from './project-config.js';
+import { readProjectConfig } from './project-config.js';
 
 export interface ResolvedStyle {
   /** A style key with a bundled CSL file. */
@@ -23,15 +23,10 @@ export interface ResolvedStyle {
   warning?: string;
 }
 
-/** `[project] citation_style` from the paper's config.toml, if any. */
+/** `[project] citation_style` from .paper/config.toml, if any. An unreadable file gives no choice. */
 function configuredStyle(paperRoot: string): string | null {
-  // config.toml lives at the project root today; .paper/config.toml is read too.
-  // An unreadable config.toml gives no choice; the preset applies.
-  for (const file of paperConfigFiles(paperRoot)) {
-    const v = readProjectConfig(file)['citation_style'];
-    if (typeof v === 'string' && v.trim()) return v.trim();
-  }
-  return null;
+  const v = readProjectConfig(paperRoot)['citation_style'];
+  return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
 
 /** A "Citation style: X" answer line in INTAKE.md. Question lines are ignored. */

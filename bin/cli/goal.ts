@@ -32,13 +32,13 @@ import { TutorialSubscriber } from '../lib/tutorial.js';
 export type Goal = 'draft' | 'learning' | 'both';
 
 /**
- * Read the educator-mode `goal` from config.toml `[project] goal`. Best-effort:
+ * Read the educator-mode `goal` from .paper/config.toml `[project] goal`. Best-effort:
  * a missing/malformed config.toml or an unrecognized value defaults to 'draft'.
  * NEVER throws (readProjectConfig). This is the SINGLE shared goal-read
  * helper — write.ts + the four goal-aware callers all import it (L5).
  */
 export function readGoalFromConfig(paperRoot: string): Goal {
-  const g = readProjectConfig(path.join(paperRoot, 'config.toml'))['goal'];
+  const g = readProjectConfig(paperRoot)['goal'];
   return g === 'learning' || g === 'both' || g === 'draft' ? g : 'draft';
 }
 

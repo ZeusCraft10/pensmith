@@ -107,7 +107,7 @@ test('alias: `export` runs `done`, not the router', () => {
   const dir = emptyDir();
   const r = runCli(['export', '--format', 'md'], dir, { PENSMITH_NO_LLM: '1' });
   assert.match(r.stdout, /pensmith done: no compiled draft/, `export must run done; stdout=${r.stdout} stderr=${r.stderr}`);
-  assert.ok(!existsSync(join(dir, 'STATE.json')), 'export must not start a new paper');
+  assert.ok(!existsSync(join(dir, '.paper', 'STATE.json')), 'export must not start a new paper');
   assert.ok(!existsSync(join(dir, '.paper')), 'export must not create .paper/');
 });
 

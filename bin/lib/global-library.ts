@@ -47,7 +47,7 @@ import { loadAndMigrate } from './migrations/loader.js';
 import { loadState, StateNotFoundError } from './state.js';
 import { Schema as StateSchema, type State } from './schemas/state.js';
 import { readSectionState, researchDone } from './router.js';
-import { paperDir, sectionPlan, pensmithGlobalLibraryIndexPath } from './paths.js';
+import { legacyStateFile, paperDir, paperStateFile, sectionPlan, pensmithGlobalLibraryIndexPath } from './paths.js';
 import {
   GlobalLibrarySchema,
   GlobalLibraryEntrySchema,
@@ -451,10 +451,19 @@ function loadStateSync(folderPath: string): SyncStateRead {
   void loadState;
   void StateNotFoundError;
 
-  const file = join(path.resolve(folderPath), 'STATE.json');
+  // A paper an older pensmith left with STATE.json in the project root is
+  // read there; list moves nothing (the paper's own next run does). A root
+  // STATE.json that is not a valid pensmith state is not the paper's.
+  if (!fs.existsSync(paperStateFile(folderPath))) {
+    try {
+      return { absent: false, corrupt: false, state: StateSchema.parse(JSON.parse(fs.readFileSync(legacyStateFile(folderPath), 'utf8'))) };
+    } catch {
+      return { absent: true, corrupt: false };
+    }
+  }
   let raw: string;
   try {
-    raw = fs.readFileSync(file, 'utf8');
+    raw = fs.readFileSync(paperStateFile(folderPath), 'utf8');
   } catch (e) {
     const code = (e as NodeJS.ErrnoException | null)?.code;
     if (code === 'ENOENT') return { absent: true, corrupt: false };

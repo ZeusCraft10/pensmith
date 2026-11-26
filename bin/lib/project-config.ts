@@ -1,21 +1,14 @@
-// bin/lib/project-config.ts — read a table of a config.toml.
+// bin/lib/project-config.ts — read a table of the paper's config.toml.
 //
 // Every reader of a paper's settings (goal, class, title, PII opt-in, citation
-// style, the cost cap) reads its table the same best-effort way: a missing or
-// malformed file means "nothing configured", never an error.
+// style, the cost cap) reads .paper/config.toml (PRD §10) the same
+// best-effort way: a missing or malformed file means "nothing configured",
+// never an error. A config.toml in the project root is the user's own file and
+// is never read (an older pensmith's is moved by migrations/layout.ts).
 
 import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
 import { parse as parseToml } from 'smol-toml';
-import { paperDir } from './paths.js';
-
-/**
- * The config.toml files of the paper at `root`, the one that wins first:
- * .paper/config.toml, then the project root's.
- */
-export function paperConfigFiles(root: string): string[] {
-  return [path.join(paperDir(root), 'config.toml'), path.join(root, 'config.toml')];
-}
+import { paperConfigFile } from './paths.js';
 
 /**
  * The `[table]` table of the config.toml at `file`. Empty when the file is
@@ -31,7 +24,12 @@ export function readConfigTable(file: string, table: string): Record<string, unk
   }
 }
 
-/** The `[project]` table of the config.toml at `file` (see readConfigTable). */
-export function readProjectConfig(file: string): Record<string, unknown> {
-  return readConfigTable(file, 'project');
+/** The `[table]` table of the paper at `root`'s .paper/config.toml (see readConfigTable). */
+export function readPaperConfig(root: string, table: string): Record<string, unknown> {
+  return readConfigTable(paperConfigFile(root), table);
+}
+
+/** The `[project]` table of the paper at `root`. */
+export function readProjectConfig(root: string): Record<string, unknown> {
+  return readPaperConfig(root, 'project');
 }

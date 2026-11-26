@@ -317,7 +317,8 @@ test('LIB-05 (7b): NEVER-THROW — corrupt STATE.json → "unknown" (resolves, d
   mkDataRoot();
   const root = mkPaperRoot();
   // STATE.json PRESENT but invalid JSON / schema-invalid.
-  fs.writeFileSync(path.join(root, 'STATE.json'), '{ this is : not, valid json');
+  fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.paper', 'STATE.json'), '{ this is : not, valid json');
   const { deriveLibraryStatus } = await glib();
 
   let result: DerivedStatus | undefined;

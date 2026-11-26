@@ -56,6 +56,7 @@ import { UX02_VERBS, canonicalVerb, unknownOptionMessage, unknownVerbMessage, ty
 import { setMirrorPromptsToStderr } from './lib/session-log.js';
 import { projectEstimate } from './lib/estimator.js';
 import { resolveNextAction, type RouterDecision } from './lib/router.js';
+import { migrateLegacyLayout } from './lib/migrations/layout.js';
 import { isDryRun } from './lib/atomic-write.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 import { EXIT_ERROR, EXIT_OK, EXIT_REFUSED } from './lib/exit-codes.js';
@@ -467,6 +468,17 @@ async function dispatchArgv(argv: string[]): Promise<void> {
     process.env['PENSMITH_OFFLINE'] = '1';
   }
   if (isDryRun()) process.env['PENSMITH_NO_LLM'] = '1';
+
+  // A project an older pensmith laid out with STATE.json and config.toml in
+  // the project root is moved into .paper/ before anything reads its settings
+  // (the cost cap below among them). A dry run changes nothing, so it skips this.
+  if (!isDryRun() && !wantsHelp(argv) && !hasFlag(argv, 'version')) {
+    try {
+      await migrateLegacyLayout(process.cwd());
+    } catch (e) {
+      process.stderr.write(`pensmith: WARN — could not move STATE.json and config.toml into .paper/: ${(e as Error).message}\n`);
+    }
+  }
 
   // (c) H1 / C2-H1 YOLO CAP PRE-FLIGHT — runs WHENEVER --yolo is present for a
   //     COST-INCURRING execution (write/plan/verify/research/compile/done/revise,

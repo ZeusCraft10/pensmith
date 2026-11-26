@@ -229,7 +229,8 @@ test('exit codes: status exits 2 with no paper and 1 for an unreadable STATE.jso
   assert.match(a.stdout, /no active paper/);
   assert.equal(a.status, 2);
   const corrupt = mkdtempSync(join(tmpdir(), 'pensmith-exit-corrupt-'));
-  writeFileSync(join(corrupt, 'STATE.json'), '{ not json');
+  mkdirSync(join(corrupt, '.paper'));
+  writeFileSync(join(corrupt, '.paper', 'STATE.json'), '{ not json');
   const b = runCli(['status'], corrupt);
   assert.match(b.stdout, /unreadable\/corrupt/);
   assert.equal(b.status, 1);

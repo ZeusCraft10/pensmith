@@ -42,14 +42,25 @@ test('audit #13: intake writes .paper/.gitignore that ignores the raw-PII file',
   assert.match(body, /^\*\.local$/m, '.gitignore should also ignore *.local artifacts');
 });
 
-test('audit #13: intake does NOT overwrite an existing .paper/.gitignore (idempotent)', () => {
+test('an existing .paper/.gitignore keeps every line of its own and gains only the lines it lacks', () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-gitignore-idem-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
   const gi = join(root, '.paper', '.gitignore');
   const custom = '# my custom ignore\nsecrets.txt\nINTAKE.raw.local\n';
   writeFileSync(gi, custom);
 
-  const res = runNew(root);
-  assert.equal(res.status, 0, `stderr=${res.stderr}`);
-  assert.equal(readFileSync(gi, 'utf8'), custom, 'an existing .gitignore must be preserved verbatim');
+  runNew(root);
+  // The user's file is kept as it was; the raw-PII pattern and the added PDF
+  // texts (sources/) it did not cover are appended once.
+  const after = readFileSync(gi, 'utf8');
+  assert.ok(after.startsWith(custom), after);
+  assert.equal(after.slice(custom.length), '*.local\nsources/\n');
+  runNew(root);
+  assert.equal(readFileSync(gi, 'utf8'), after, 'a second run adds nothing');
+});
+
+test('intake\'s .paper/.gitignore keeps the added PDF texts (sources/) out of git', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-gitignore-src-'));
+  runNew(root);
+  assert.match(readFileSync(join(root, '.paper', '.gitignore'), 'utf8'), /^sources\/$/m);
 });

@@ -6,8 +6,7 @@
 // limit at all: PENSMITH_COST_CAP_USD only fed the --yolo pre-flight, and
 // config.toml's [budget] cost_cap_usd was read by nothing. Now one cap covers
 // everything the paper has spent, from PENSMITH_COST_CAP_USD, then
-// `cost_cap_usd` under [budget] in .paper/config.toml (or the project root's
-// config.toml), then $5, and a call that could pass it is refused before
+// `cost_cap_usd` under [budget] in .paper/config.toml, then $5, and a call that could pass it is refused before
 // anything is sent.
 
 import { test, beforeEach, afterEach } from 'node:test';
@@ -95,14 +94,17 @@ test('PENSMITH_COST_CAP_USD sets the cap', async () => {
   await assert.rejects(complete(ASK), CostCapExceededError);
 });
 
-test('[budget] cost_cap_usd in .paper/config.toml or the project config.toml sets it, and the variable overrides both', async () => {
+test('[budget] cost_cap_usd in .paper/config.toml sets it, and the variable overrides it', async () => {
   spent(root, [['outline', 1.5]]);
   writeFileSync(path.join(root, '.paper', 'config.toml'), '[budget]\ncost_cap_usd = 1.0\n');
   assert.deepEqual(resolveCostCap(root), { capUsd: 1, warnAtUsd: null, source: 'config.toml' });
   await assert.rejects(complete(ASK), CostCapExceededError);
 
+  // A config.toml in the project root is the user's own file, not the paper's.
   rmSync(path.join(root, '.paper', 'config.toml'));
   writeFileSync(path.join(root, 'config.toml'), '[project]\ntitle = "x"\n\n[budget]\ncost_cap_usd = 1.25\n');
+  assert.equal(resolveCostCap(root).source, 'default');
+  writeFileSync(path.join(root, '.paper', 'config.toml'), '[budget]\ncost_cap_usd = 1.25\n');
   assert.equal(resolveCostCap(root).capUsd, 1.25);
   await assert.rejects(complete(ASK), CostCapExceededError);
 

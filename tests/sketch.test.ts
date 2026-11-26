@@ -68,7 +68,7 @@ test('ERGO-05 / Pitfall 6: a DECLINED sketch creates NO .paper/, NO STATE.json, 
   await runSketch(root, { thesis: 'A rough thesis idea', confirm: false, yolo: false });
 
   assert.ok(!fs.existsSync(path.join(root, '.paper')), 'declined sketch must NOT create .paper/');
-  assert.ok(!fs.existsSync(path.join(root, 'STATE.json')), 'declined sketch must NOT create STATE.json');
+  assert.ok(!fs.existsSync(path.join(root, '.paper', 'STATE.json')), 'declined sketch must NOT create STATE.json');
   assert.ok(!fs.existsSync(path.join(root, '.paper', 'STATE.json')), 'declined sketch must NOT create .paper/STATE.json');
   assert.ok(!fs.existsSync(path.join(root, 'LIBRARY.json')), 'declined sketch must NOT create LIBRARY.json');
   assert.ok(!fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), 'declined sketch must NOT create .paper/LIBRARY.json');
@@ -105,6 +105,6 @@ test('ERGO-05: on CONFIRM, sketch dispatches `new` with the thesis seed and does
   // No-advance-by-self: sketch must NOT have created STATE.json itself (the spy
   // swallowed the dispatch, so the only way STATE.json could exist is if sketch
   // called initState directly — which violates the single-init-site contract).
-  assert.ok(!fs.existsSync(path.join(root, 'STATE.json')), 'sketch must not call initState itself');
+  assert.ok(!fs.existsSync(path.join(root, '.paper', 'STATE.json')), 'sketch must not call initState itself');
   assert.ok(!fs.existsSync(path.join(root, '.paper', 'STATE.json')), 'sketch must not call initState itself');
 });

@@ -54,11 +54,12 @@
 // chokepoint modules above. No third-party deps.
 
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { loadAndMigrate } from './migrations/loader.js';
+import { hasLegacyLayout, migrateLegacyLayout } from './migrations/layout.js';
+import { legacyStateFile, paperStateFile } from './paths.js';
+import { atomicWriteFile, isDryRun } from './atomic-write.js';
 import v1_to_v2_migration, {
   migrate as migrate_v1_to_v2,
 } from './migrations/state/v1_to_v2.js';
@@ -102,12 +103,23 @@ export class StateAlreadyExistsError extends Error {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the absolute path to STATE.json under `paperRoot`. Resolving up-
- * front ensures the lock key (which is the file path) is identical across
- * callers regardless of relative vs. absolute paperRoot input.
+ * The absolute path of the paper's `.paper/STATE.json`, after moving a
+ * STATE.json that an older pensmith left in the project root
+ * (migrations/layout.ts). The path is absolute so the lock key (the file
+ * path) is the same for every caller.
  */
-function stateFile(paperRoot: string): string {
-  return path.join(path.resolve(paperRoot), 'STATE.json');
+async function stateFile(paperRoot: string): Promise<string> {
+  await migrateLegacyLayout(paperRoot);
+  return paperStateFile(paperRoot);
+}
+
+/**
+ * The file loadState reads. A dry run moves nothing, so it reads a STATE.json
+ * an older pensmith left in the project root where it is.
+ */
+async function stateFileToRead(paperRoot: string): Promise<string> {
+  const file = await stateFile(paperRoot);
+  return isDryRun() && hasLegacyLayout(paperRoot) ? legacyStateFile(paperRoot) : file;
 }
 
 /**
@@ -130,7 +142,7 @@ function log(): SessionLogger {
 // ---------------------------------------------------------------------------
 
 /**
- * Create STATE.json under `paperRoot` with $schemaVersion=CURRENT_STATE_VERSION,
+ * Create `.paper/STATE.json` under `paperRoot` with $schemaVersion=CURRENT_STATE_VERSION,
  * a fresh paperId (UUID v4 unless caller provides one via `seed.paperId`),
  * and createdAt = ISO-now.
  *
@@ -144,7 +156,7 @@ export async function initState(
   paperRoot: string,
   seed?: { paperId?: string },
 ): Promise<State> {
-  const file = stateFile(paperRoot);
+  const file = await stateFile(paperRoot);
 
   // Validate the seed against the schema BEFORE acquiring the lock. This
   // guards against a caller passing a paperId that fails .min(1) and
@@ -188,7 +200,7 @@ export async function initState(
 }
 
 /**
- * Read STATE.json under `paperRoot`, run any pending forward migrations,
+ * Read `.paper/STATE.json` under `paperRoot`, run any pending forward migrations,
  * validate against StateSchema, and return the typed value.
  *
  * Translates ENOENT (or `cause.code === 'ENOENT'`) into StateNotFoundError
@@ -204,7 +216,7 @@ export async function initState(
  * so no actual write occurs.
  */
 export async function loadState(paperRoot: string): Promise<State> {
-  const file = stateFile(paperRoot);
+  const file = await stateFileToRead(paperRoot);
   let value: State;
   try {
     // BLOCKER-02 fix: wrap the loadAndMigrate call inside withLock. The
@@ -252,7 +264,7 @@ export async function loadState(paperRoot: string): Promise<State> {
  * malformed state regardless of caller discipline (T-01-08 mitigation).
  */
 export async function saveState(paperRoot: string, state: State): Promise<void> {
-  const file = stateFile(paperRoot);
+  const file = await stateFile(paperRoot);
   const validated = StateSchema.parse(state);
 
   await withLock(file, async () => {
@@ -284,7 +296,7 @@ export async function updateState(
   paperRoot: string,
   mutator: (s: State) => State | Promise<State>,
 ): Promise<State> {
-  const file = stateFile(paperRoot);
+  const file = await stateFile(paperRoot);
   let next!: State;
 
   await withLock(file, async () => {

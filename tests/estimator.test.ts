@@ -150,7 +150,8 @@ test('ERGO-02 / C4-HIGH: invalid-JSON STATE.json → empty projection, no throw 
   { skip: !built }, async () => {
     const projectEstimate = await loadProject();
     const root = freshRoot();
-    writeFileSync(join(root, 'STATE.json'), '{ not json');
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    writeFileSync(join(root, '.paper', 'STATE.json'), '{ not json');
     let res: EstimateResult | undefined;
     await assert.doesNotReject(
       async () => { res = await projectEstimate({ paperRoot: root, sessionCapUsd: 100 }); },

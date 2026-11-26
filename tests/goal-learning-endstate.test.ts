@@ -143,8 +143,9 @@ test('readGoalFromConfig + stopAfterResearchFor: learning ⇒ stop, draft/both �
   assert.equal(stopAfterResearchFor('both'), false);
   assert.equal(stopAfterResearchFor('learning'), true);
 
-  // config.toml [project] goal = 'learning' → learning → stop.
-  fs.writeFileSync(path.join(root, 'config.toml'), '[project]\ngoal = "learning"\n');
+  // .paper/config.toml [project] goal = 'learning' → learning → stop.
+  fs.mkdirSync(path.join(root, '.paper'));
+  fs.writeFileSync(path.join(root, '.paper', 'config.toml'), '[project]\ngoal = "learning"\n');
   assert.equal(readGoalFromConfig(root), 'learning');
   assert.equal(stopAfterResearchFor(readGoalFromConfig(root)), true);
 });

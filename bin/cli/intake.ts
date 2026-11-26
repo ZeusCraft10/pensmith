@@ -46,7 +46,8 @@ export function __setInterpolateForTest(
     _interpolate = prev;
   };
 }
-import { paperDir } from '../lib/paths.js';
+import { paperConfigFile, paperDir } from '../lib/paths.js';
+import { ensurePaperGitignore } from '../lib/paper-gitignore.js';
 import { readProjectConfig } from '../lib/project-config.js';
 import { initState, loadState, StateAlreadyExistsError } from '../lib/state.js';
 import { registerPaperInGlobalLibrary } from '../lib/global-library.js';
@@ -69,7 +70,7 @@ import {
 function resolvePaperMeta(cwd: string): { name: string; class: string } {
   const name = path.basename(cwd) || 'Untitled paper';
   // best-effort: a malformed config.toml must not break intake.
-  const project = readProjectConfig(path.join(cwd, 'config.toml'));
+  const project = readProjectConfig(cwd);
   const c = project['class'];
   const klass = typeof c === 'string' && c.trim() ? c.trim() : 'Unfiled';
   const t = project['title'];
@@ -101,7 +102,7 @@ async function persistProjectConfig(
   citationStyle?: string,
 ): Promise<void> {
   try {
-    const cfgPath = path.join(cwd, 'config.toml');
+    const cfgPath = paperConfigFile(cwd);
     let cfg: { project?: Record<string, unknown> } = {};
     if (existsSync(cfgPath)) {
       try {
@@ -140,7 +141,7 @@ function resolvePiiRedact(
   if (typeof argValue === 'boolean') return { on: argValue, argSet: true };
   // Else fall back to config.toml [project] pii_redaction (best-effort: a
   // malformed config.toml defaults PII OFF, since it is opt-in).
-  const fromConfig = readProjectConfig(path.join(cwd, 'config.toml'))['pii_redaction'] === true;
+  const fromConfig = readProjectConfig(cwd)['pii_redaction'] === true;
   return { on: fromConfig, argSet: false };
 }
 
@@ -255,34 +256,6 @@ async function runStyleProducerNonFatal(
   }
 }
 
-/**
- * Audit #13 — write a .gitignore into the paper workspace so the RAW (unredacted)
- * PII file .paper/INTAKE.raw.local (and any *.local artifact) can NEVER be
- * committed. The intake code repeatedly documents INTAKE.raw.local as
- * "(gitignored)", but nothing ever wrote that .gitignore into the user's
- * workspace — so with PII redaction on, the raw answers were committable,
- * defeating the opt-in. Best-effort + idempotent: never overwrites an existing
- * .gitignore (the user may have customized it); a non-writable .paper/ must not
- * break intake. Written through the atomicWriteFile (D-07) chokepoint.
- */
-async function ensurePaperGitignore(): Promise<void> {
-  try {
-    const gi = path.join(paperDir(), '.gitignore');
-    if (existsSync(gi)) return;
-    const body = [
-      '# Written by pensmith — keep unredacted PII and local-only artifacts out of git.',
-      '# INTAKE.raw.local holds the RAW (unredacted) intake answers when PII redaction',
-      '# is enabled; it must NEVER be committed.',
-      'INTAKE.raw.local',
-      '*.local',
-      '',
-    ].join('\n');
-    await atomicWriteFile(gi, body);
-  } catch {
-    // best-effort — a workspace without a writable .paper/ must not break intake.
-  }
-}
-
 export const intakeCommand = defineCommand({
   meta: {
     name: 'new',
@@ -371,7 +344,7 @@ export const intakeCommand = defineCommand({
     process.stdout.write(DISCLAIMER + '\n\n');
 
     // Audit #13: protect the raw-PII file BEFORE anything could write it.
-    await ensurePaperGitignore();
+    await ensurePaperGitignore(cwd);
 
     const targetPath = path.join(paperDir(), 'INTAKE.md');
     const rawLocalPath = path.join(paperDir(), 'INTAKE.raw.local');

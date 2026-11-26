@@ -238,7 +238,8 @@ test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT cra
 test('C4-HIGH: bare `pensmith --yolo` against a corrupt STATE.json does NOT crash (exits 1, the error code)',
   { skip: !flagsWired }, () => {
     const root = freshRoot();
-    writeFileSync(join(root, 'STATE.json'), '{ this is not json ');
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    writeFileSync(join(root, '.paper', 'STATE.json'), '{ this is not json ');
     const res = runCli(['--yolo'], root);
     // The cost pre-flight sees an empty projection and lets the run through;
     // the router then reports the unreadable STATE.json. That is an error the

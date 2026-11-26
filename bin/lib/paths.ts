@@ -295,6 +295,40 @@ export function paperDir(root: string = projectRoot()): string {
   return path.join(root, '.paper');
 }
 
+/** `<root>/.paper/STATE.json`: the paper's state (bin/lib/state.ts). */
+export function paperStateFile(root: string = projectRoot()): string {
+  return path.join(paperDir(path.resolve(root)), 'STATE.json');
+}
+
+/** `<root>/.paper/config.toml`: the paper's settings (PRD §10). */
+export function paperConfigFile(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'config.toml');
+}
+
+/**
+ * Where pensmith up to v0.2 kept STATE.json and config.toml: the project root,
+ * which is the user's own folder. They are read only to move them into
+ * `.paper/` (bin/lib/migrations/layout.ts).
+ */
+export function legacyStateFile(root: string = projectRoot()): string {
+  return path.join(path.resolve(root), 'STATE.json');
+}
+
+/** See legacyStateFile. */
+export function legacyConfigFile(root: string = projectRoot()): string {
+  return path.join(path.resolve(root), 'config.toml');
+}
+
+/** `<root>/.paper/OUTLINE.json`: the paper's section list (bin/lib/outline-store.ts). */
+export function paperOutlineFile(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'OUTLINE.json');
+}
+
+/** `<root>/.paper/INTAKE.json`: the answers intake collected (bin/lib/intake-record.ts). */
+export function paperIntakeFile(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'INTAKE.json');
+}
+
 /** Options bag for sectionDir (ARCH-20 / D-15 letter-suffix reservation). */
 export interface SectionDirOpts {
   /**

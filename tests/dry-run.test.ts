@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import * as net from 'node:net';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -102,7 +102,7 @@ function paperMidway(): string {
   mkdirSync(join(pdir, 'sections', '01-intro'), { recursive: true });
   mkdirSync(join(pdir, 'sections', '02-methods'), { recursive: true });
   writeFileSync(
-    join(root, 'STATE.json'),
+    join(pdir, 'STATE.json'),
     JSON.stringify({
       $schemaVersion: 2,
       paperId: 'dry-run',
@@ -251,7 +251,7 @@ test('dry run: an old-format STATE.json is read as upgraded but not rewritten', 
   // A v1 STATE.json: reading it runs a migration, which normally saves the
   // upgraded file. A dry run must use the upgrade in memory only.
   writeFileSync(
-    join(root, 'STATE.json'),
+    join(root, '.paper', 'STATE.json'),
     JSON.stringify({
       $schemaVersion: 1,
       paperId: '22222222-2222-2222-2222-222222222222',
@@ -260,6 +260,14 @@ test('dry run: an old-format STATE.json is read as upgraded but not rewritten', 
     }),
   );
   await assertDryRunChangesNothing(['--dry-run'], root, [/the next step is `pensmith plan 2`/]);
+});
+
+test('dry run: a paper an older pensmith laid out is read where it is and not moved', async () => {
+  const root = paperMidway();
+  // STATE.json in the project root, where pensmith kept it up to v0.2.
+  renameSync(join(root, '.paper', 'STATE.json'), join(root, 'STATE.json'));
+  await assertDryRunChangesNothing(['--dry-run'], root, [/the next step is `pensmith plan 2`/]);
+  assert.ok(existsSync(join(root, 'STATE.json')));
 });
 
 test('dry run: PENSMITH_DRY_RUN=1 in the environment is a dry run too', async () => {

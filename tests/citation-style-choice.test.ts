@@ -101,7 +101,7 @@ test('pensmith new --citation-style persists the choice to config.toml; an unkno
   const dir = mkdtempSync(join(tmpdir(), 'pensmith-style-new-'));
   const r = runCli(['new', '--citation-style', 'AMA'], dir);
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
-  const cfg = parseToml(readFileSync(join(dir, 'config.toml'), 'utf8')) as { project?: { citation_style?: string } };
+  const cfg = parseToml(readFileSync(join(dir, '.paper', 'config.toml'), 'utf8')) as { project?: { citation_style?: string } };
   assert.equal(cfg.project?.citation_style, 'ama');
 
   const bad = mkdtempSync(join(tmpdir(), 'pensmith-style-bad-'));

@@ -26,7 +26,7 @@ import path from 'node:path';
 import * as fsp from 'node:fs/promises';
 import { paperDir, projectRoot } from './paths.js';
 import { atomicAppendFile } from './atomic-write.js';
-import { paperConfigFiles, readConfigTable } from './project-config.js';
+import { readPaperConfig } from './project-config.js';
 
 export interface BudgetSpec {
   scope: 'paper' | 'section' | 'task';
@@ -169,19 +169,13 @@ function positive(v: unknown): number | null {
 
 /**
  * The cost cap for the paper at `root`: PENSMITH_COST_CAP_USD, then
- * `cost_cap_usd` under `[budget]` in .paper/config.toml or the project's
- * config.toml, then DEFAULT_COST_CAP_USD. A value that is not a positive
+ * `cost_cap_usd` under `[budget]` in .paper/config.toml, then
+ * DEFAULT_COST_CAP_USD. A value that is not a positive
  * number is ignored. `warn_at_usd` comes from the same table.
  */
 export function resolveCostCap(root: string = projectRoot()): CostCap {
-  const tables = paperConfigFiles(root).map((f) => readConfigTable(f, 'budget'));
-  const fromConfig = (key: string): number | null => {
-    for (const t of tables) {
-      const v = positive(t[key]);
-      if (v !== null) return v;
-    }
-    return null;
-  };
+  const table = readPaperConfig(root, 'budget');
+  const fromConfig = (key: string): number | null => positive(table[key]);
   const warnAtUsd = fromConfig('warn_at_usd');
   const env = positive(process.env['PENSMITH_COST_CAP_USD']);
   if (env !== null) return { capUsd: env, warnAtUsd, source: 'PENSMITH_COST_CAP_USD' };
