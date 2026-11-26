@@ -711,9 +711,10 @@ async function reviseOnce(opts: ReviseOptions): Promise<ReviseResult> {
 
   // A change kept for approval: apply the person's answer, ask at a terminal,
   // or show it again, with no new model call. One proposed for another
-  // DRAFT.md or VERIFICATION.md is never applied.
+  // DRAFT.md or VERIFICATION.md is never applied. The person's answer stands
+  // whatever this run's flags: --yolo skips only a question not yet answered.
   const kept = readGate(opts.paperRoot, 'revise', opts.n);
-  if (kept && !opts.yolo) {
+  if (kept && (!opts.yolo || kept.answer)) {
     // The binding first: a change proposed for another draft is not prepared at all.
     const checked = gateStillApplies(kept, binding)
       ? checkProposal((kept.payload as { proposal?: unknown } | null)?.proposal, failing.citekey, assignedSources)

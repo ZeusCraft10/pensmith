@@ -681,6 +681,47 @@ test('plan --revise --yolo: a model key removed between proposals stops the next
   assert.equal(readFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8'), FLAGGED);
 });
 
+/** Record `option` as the answer to section 1's kept revise change, as `gate answer` does before it runs plan --revise. */
+function answerKeptRevise(root: string, option: string): void {
+  const file = join(root, '.paper', 'gates', 'revise-1.json');
+  const record = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+  record['answer'] = { options: [option], answered_at: new Date().toISOString() };
+  writeFileSync(file, JSON.stringify(record, null, 2));
+}
+
+test('plan --revise --yolo with a kept change the user approved: exactly that change is applied, with no new proposal', async () => {
+  // The answer was recorded, but the run that applies it did not finish. A
+  // later `plan 1 --revise --yolo` dropped the approved change and asked the
+  // model for a new one, which --yolo then applied unseen.
+  const root = revisePaper();
+  const calls: Call[] = [];
+  const swap = {
+    action: 'swap', flagged_citekey: 'ghost2020', replacement_citekey: 'real2020', rationale: 'The assigned source makes the claim.',
+    patch: { before_excerpt: '[@ghost2020]', after_excerpt: '[@real2020]' },
+  };
+  let answer: unknown = swap;
+  _setGeneratorForTest(model(calls, () => answer));
+  assert.equal((await verb('plan', root, { n: '1', revise: true, yolo: false, force: false })).exit, 3, `${out}\n${err}`);
+  answerKeptRevise(root, 'approve');
+  answer = { ...swap, replacement_citekey: 'nobody2099', patch: { before_excerpt: '[@ghost2020]', after_excerpt: '[@nobody2099]' } };
+
+  const r = await verb('plan', root, { n: '1', revise: true, yolo: true, force: false });
+  assert.equal(r.exit, 0, `${out}\n${err}`);
+  assert.equal(readFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8'), 'Barrages change sediment [@real2020]. Tides are regular [@real2020].\n');
+  assert.equal(calls.length, 1, 'applying it calls no model');
+  assert.deepEqual(gateFiles(root), []);
+});
+
+test('plan --revise --yolo with a kept change the user rejected: DRAFT.md is left as it was, and the rejection stands', () => {
+  const root = revisePaper();
+  assert.equal(cli(root, ['plan', '1', '--revise']).status, 3);
+  answerKeptRevise(root, 'reject');
+  const r = cli(root, ['plan', '1', '--revise', '--yolo']);
+  assert.equal(r.status, 2, `${r.stdout}\n${r.stderr}`);
+  assert.equal(readFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8'), FLAGGED, 'no new change is applied');
+  assert.deepEqual(gateFiles(root), []);
+});
+
 test('plan --revise: `gate list` shows the kept change as the step did', () => {
   const root = revisePaper();
   const p = lastJson(cli(root, ['plan', '1', '--revise']).stdout);
