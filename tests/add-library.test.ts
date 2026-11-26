@@ -278,9 +278,9 @@ test('add <pdf> holds a printed DOI to the whole title, when Crossref\'s subtitl
 });
 
 // A cited work's DOI and title on the first page, where the opening is not
-// cut where it should be: a reference heading pensmith did not know (P3),
-// or no abstract label at all (P4). Both stored the NumPy paper for a PDF
-// of 'Attention Is All You Need'.
+// cut where it should be: under a reference heading pensmith did not know,
+// or with no abstract label at all. Both stored the NumPy paper for a PDF of
+// 'Attention Is All You Need'.
 test('add <pdf> refuses a cited DOI under a "References and Notes" heading', async () => {
   const root = project();
   const pdf = await pdfOf(root, [
@@ -310,6 +310,37 @@ test('add <pdf> with no abstract label refuses a cited title printed as a body l
   assert.equal(r.status, 2, r.out);
   assert.doesNotMatch(r.out, /added vanderwalt2011/, r.out);
   assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
+});
+
+test('add <pdf> refuses a cited title printed in the body with its byline and DOI', async () => {
+  // The PDF's own title, byline and text come first; the NumPy paper's title,
+  // authors and DOI are set below them, as an erratum or a comment sets the
+  // work it is about. Nothing on the page confirms the PDF is the NumPy paper.
+  const root = project();
+  const pdf = await pdfOf(root, [
+    'Attention Is All You Need',
+    'Ashish Vaswani, Noam Shazeer, Niki Parmar',
+    'We build on earlier work on array computing, in particular:',
+    'The NumPy Array: A Structure for Efficient Numerical Computation',
+    'S. van der Walt, S. C. Colbert, G. Varoquaux',
+    'doi:10.1109/MCSE.2011.37',
+  ]);
+  const r = cli(root, ['add', pdf, '--yolo']);
+  assert.equal(r.status, 2, r.out);
+  assert.doesNotMatch(r.out, /added vanderwalt2011/, r.out);
+  assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
+});
+
+test('add <pdf> takes the printed DOI of a paper whose byline numbers its authors\' affiliations', async () => {
+  const root = project();
+  const pdf = await pdfOf(root, [
+    'The NumPy Array: A Structure for Efficient Numerical Computation',
+    'Stefan van der Walt1, S. Chris Colbert2 and Gael Varoquaux3',
+    'doi:10.1109/MCSE.2011.37',
+  ]);
+  const r = cli(root, ['add', pdf, '--yolo']);
+  assert.equal(r.status, 0, r.out);
+  assert.deepEqual(keysOf(bibOf(root)), ['vanderwalt2011']);
 });
 
 test('add <url> of a page with no citation meta tag reads only the first DOI-shaped text on it', () => {

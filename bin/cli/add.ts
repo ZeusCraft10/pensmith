@@ -9,8 +9,9 @@
 //   - PDF       a local file or a URL serving one: identified by a DOI or
 //               arXiv ID printed in its opening whose work's title (word
 //               for word) and byline head the PDF, else by a Crossref title
-//               search whose hit has that title and an author the opening
-//               names, never the reference list (bin/lib/source-hydrate.ts);
+//               search whose hit's title heads it and whose author the
+//               opening names, never the reference list or a work a notice
+//               is about (bin/lib/source-hydrate.ts);
 //               one it cannot identify is refused.
 //               Its text is kept under .paper/sources/ for the quotation check;
 //   - URL       an HTML page with a DOI in its citation <meta> tags;
