@@ -105,7 +105,7 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       return {
         command,
         summary: 'Plan this section: its claims and the sources it may cite.',
-        reads: [paper('OUTLINE.md'), paper('LIBRARY.json')],
+        reads: [paper('OUTLINE.json'), paper('INTAKE.json'), paper('LIBRARY.json'), sec('PLAN.md')],
         writes: [sec('PLAN.md')],
         model: '1 call (section planner)',
         network: MODEL_PROVIDER,

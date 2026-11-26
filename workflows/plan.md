@@ -38,19 +38,13 @@ The implementation lives in `bin/cli/plan.ts` (created by Plan 07).
 
 1. **Parse args**: `pensmith plan <N>` — `N` is the 1-based section number. Read `.paper/OUTLINE.md` to resolve the slug for `N`.
 
-2. **Read inputs** (read-only file accesses, no mutation):
-   - `.paper/OUTLINE.md` → resolve section `{n, slug, title, depends_on, estimated_word_count, assigned_sources}` for the target N.
-   - `.paper/LIBRARY.json` → the deduped `SourceCandidate[]` (full library — the planner has read access to the whole library; the drafter does NOT per PRD §7.6).
-   - `templates/prompts/section-planner.md` (D-12 LOCKED slug per Plan 03 CONTEXT D-12) — the planner prompt template.
+2. **Read inputs** (read-only): section `N` of the outline (`bin/lib/outline-read.ts`: its title, purpose, `depends_on`, word target and the outline's assigned sources), the topic and discipline from `.paper/INTAKE.json`, the briefs of the planned sections it depends on, and the works in `.paper/LIBRARY.json` (citekey, title, year, first author).
 
-3. **Run planner**: invoke the section-planner prompt with `{section, library_subset, intake}` interpolation → returns `PlanFrontmatter` YAML + a `## Brief` narrative section.
+3. **Run the planner** with `templates/prompts/section-planner.md` as structured output (`SectionPlanSchema` in `bin/cli/plan.ts`): `{assigned_sources, claims: [{claim, sources}], brief, voice}`.
 
-4. **Status contract** (`SectionStateSchema` in `bin/lib/schemas/state.ts`): an outline entry not planned yet is `stub`, and a finished plan is `planned`, which the router sends on to `write`. A PLAN.md with no status counts as `stub`. Plan only a `stub` (or a missing PLAN.md); a section with any other status already has a plan, and `pensmith plan <N>` refuses it with exit 2 unless `--force` is given.
+4. **Check it, and the status contract** (`SectionStateSchema` in `bin/lib/schemas/state.ts`): every assigned source is a citekey LIBRARY.json holds, every claim's sources are among them, and the brief is not empty; a failing plan is sent back once with the problems, then refused with exit 2 and nothing written. An outline entry not planned yet is `stub`, and a finished plan is `planned`, which the router sends on to `write`. A PLAN.md with no status counts as `stub`. Plan only a `stub` (or a missing PLAN.md); a section with any other status already has a plan, and `pensmith plan <N>` refuses it with exit 2 unless `--force` is given.
 
-5. **Write `<sectionPlan(n, slug)>`** = `.paper/sections/<NN>-<slug>/PLAN.md` via `bin/lib/atomic-write.ts` (D-07 chokepoint):
-   - YAML frontmatter with `status: 'planned'`.
-   - `## Brief` section with the planner-authored narrative.
-   - Set `verified_against_draft_hash: null` (no draft yet → hash invalidated by definition).
+5. **Write `<sectionPlan(n, slug)>`** = `.paper/sections/<NN>-<slug>/PLAN.md` via `bin/lib/atomic-write.ts`. Code writes the frontmatter (`section`, `slug`, `title` and `depends_on` from the outline, the checked `assigned_sources`, `status: 'planned'`, `verified_against_draft_hash: null`); the body is `## Brief`, a `Voice:` line and `## Claims`.
 
 6. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/`. Use `bin/lib/paths.ts sectionDir(n, slug)` (Plan 03 Wave 2) as the only filesystem-write target. The `tests/section-isolation.test.ts` mtime gate enforces this in CI.
 

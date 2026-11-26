@@ -34,6 +34,7 @@ import { PlanFrontmatterSchema, type PlanFrontmatter } from './schemas/plan-fron
 import { buildWaveGraph, runWave } from './scheduler.js';
 import type { SectionNode } from './schemas/wave-graph.js';
 import { readFile } from 'node:fs/promises';
+import { ZodError } from 'zod';
 
 /** Per-section outcome within a wave (final settled status only). */
 export interface SectionResult {
@@ -46,6 +47,8 @@ export interface SectionResult {
   error?: string;
   /** The exit code the error asks for (2 for a refusal), when it carries one. */
   exitCode?: number;
+  /** True when the section failed because its PLAN.md could not be used (so it never started). */
+  unusablePlan?: boolean;
 }
 
 /** The settled outcome of a single wave. */
@@ -136,12 +139,22 @@ export async function runAllSections(
   //    (buildWaveGraph omits it). Honor an `only` allow-list by skipping any
   //    section not named — those sections never enter the graph, so their
   //    artifacts are never touched (section-as-phase isolation).
+  //    A PLAN.md whose frontmatter cannot be used fails its own section (and
+  //    blocks the sections that depend on it); the rest of the paper goes on.
   const allow = opts.only ? new Set(opts.only) : null;
   const plans = new Map<string, PlanFrontmatter>();
+  const unusable: SectionResult[] = [];
   for (const s of outline.sections) {
     if (allow && !allow.has(s.slug)) continue;
-    const plan = await loadPlanFrontmatter(paperRoot, s.n, s.slug);
-    if (plan) plans.set(s.slug, plan);
+    try {
+      const plan = await loadPlanFrontmatter(paperRoot, s.n, s.slug);
+      if (plan) plans.set(s.slug, plan);
+    } catch (e) {
+      const why = e instanceof ZodError
+        ? e.issues.map((i) => `${i.path.join('.') || '(frontmatter)'}: ${i.message}`).join('; ')
+        : (e as Error).message;
+      unusable.push({ slug: s.slug, n: s.n, status: 'failed', error: `its PLAN.md cannot be used (${why}); plan it again with \`pensmith plan ${s.n} --force\``, unusablePlan: true });
+    }
   }
 
   // 3. Build the wave graph (Kahn topo-sort + override validation + cycles).
@@ -149,8 +162,8 @@ export async function runAllSections(
 
   // 4. Drain waves serially. Track slugs that ended `failed` or `blocked` so a
   //    downstream node whose deps include one is pruned from later waves (D-03).
-  const failedOrBlocked = new Set<string>();
-  const results: WaveResult[] = [];
+  const failedOrBlocked = new Set<string>(unusable.map((u) => u.slug));
+  const results: WaveResult[] = unusable.length > 0 ? [{ wave: 0, sections: unusable }] : [];
 
   for (const waveNodes of graph.waves) {
     if (waveNodes.length === 0) continue;

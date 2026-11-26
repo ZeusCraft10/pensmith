@@ -28,6 +28,7 @@ import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
 import { readLibrarySync } from '../lib/library.js';
+import { libraryCatalogJson } from '../lib/library-catalog.js';
 import { parseOutline } from '../lib/outline-parse.js';
 import { checkModelJson, modelJsonSchema } from '../lib/schemas/model-json.js';
 import { readOutline, type StoredOutline } from '../lib/outline-read.js';
@@ -111,22 +112,6 @@ async function save(root: string, outline: Outline, keepMd?: string): Promise<nu
   const warnings = await writeOutline(root, outline, keepMd === undefined ? {} : { keepMd });
   for (const w of warnings) process.stderr.write(`pensmith outline: WARN — ${w}.\n`);
   return outline.sections.length;
-}
-
-/** The library's works, as data for the prompt. */
-function candidateSources(root: string): string {
-  const lib = readLibrarySync(root);
-  const items = (lib?.entries ?? []).map((e) => {
-    const year = (e.issued as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
-    const first = e.author?.[0];
-    return {
-      citekey: e.id,
-      title: e.title,
-      ...(typeof year === 'number' ? { year } : {}),
-      ...(first ? { first_author: first.family ?? first.literal ?? '' } : {}),
-    };
-  });
-  return escapeTemplateTokens(JSON.stringify(items, null, 2));
 }
 
 export const outlineCommand = defineCommand({
@@ -220,7 +205,7 @@ export const outlineCommand = defineCommand({
       discipline: escapeTemplateTokens(intake?.discipline ?? 'other'),
       length: String(length),
       counterargument: rules.counterargumentRequired ? 'required' : 'optional',
-      candidateSources: candidateSources(root),
+      candidateSources: libraryCatalogJson(root),
     });
     const user = intake?.assignment || intake?.topic || 'Propose an outline for the paper.';
     const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [{ role: 'user', content: user }];

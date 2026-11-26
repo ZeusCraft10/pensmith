@@ -316,7 +316,7 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e' },
   { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762' },
   { slug: 'outline-author',      path: 'templates/prompts/outline-author.md',      decision: 'D-12', hash: '15aa2e6a80f677365171842fe1ade70afa9cb667728cfb59fbff5102c084b0b6' },  // structured outline, matching ProposedOutlineSchema
-  { slug: 'section-planner',     path: 'templates/prompts/section-planner.md',     decision: 'D-12', hash: 'e2991033be0f7e0b28a20ffc0bfa03355e999daf445070b709077c310d5ee5b5' },
+  { slug: 'section-planner',     path: 'templates/prompts/section-planner.md',     decision: 'D-12', hash: '12082a7bd8b249d48403208944bdfe69511dfa4adc4ca51c36d527ea01522a0c' },  // structured plan, matching SectionPlanSchema
   { slug: 'section-drafter',     path: 'templates/prompts/section-drafter.md',     decision: 'D-12', hash: 'baf0172b4e2e96a2d2a1a6c35b5cf548faafd9436f1405e863060c619caa1d34' },
   { slug: 'pass1-fuzzy-judge',   path: 'templates/prompts/pass1-fuzzy-judge.md',   decision: 'D-12 + D-13 DORMANT in Phase 3', hash: 'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e' },
   { slug: 'pass3-quote-checker', path: 'templates/prompts/pass3-quote-checker.md', decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9' },

@@ -402,6 +402,9 @@ export const writeCommand = defineCommand({
 
       for (const wave of results) {
         for (const s of wave.sections) {
+          if (s.unusablePlan) {
+            process.stderr.write(`pensmith write: section ${s.n} (${s.slug}): ERROR — not drafted, because ${s.error}.\n`);
+          }
           if (s.status === 'blocked') {
             process.stderr.write(
               `pensmith write: section ${s.n} (${s.slug}): not drafted, because a section it depends on was not.\n`,

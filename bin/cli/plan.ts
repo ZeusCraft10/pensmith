@@ -1,34 +1,141 @@
-// bin/cli/plan.ts — `pensmith plan <n>` verb entrypoint (PLAN-01).
+// bin/cli/plan.ts — `pensmith plan <n>`: plan one section.
 //
-// Phase 11 (GEN-02 / GEN-06): Wired to the Tier-2 LLM transport.
-//   - The local deterministic-remove proposeSwap stub is REMOVED.
-//   - The placeholder PLAN.md constant is REMOVED.
-//   - A fail-loud probe fires at the top of run(): MissingApiKeyError →
-//     stderr banner + exitCode=1 + ok:false. Never ok:true on missing key.
-//   - The normal plan path calls complete() with the 'section-planner' prompt
-//     (D-12 LOCKED slug) and writes the model output as a real PLAN.md.
-//   - The --revise path imports the shared proposeSwap from bin/lib/revise-swap.ts
-//     (ONE implementation; no duplication with revise.ts — GEN-02).
+// The section planner returns the plan's content as JSON to a schema
+// (structured output): the sources the section cites, its claims, a brief for
+// the drafter and a voice line. Code checks it (every source is one
+// LIBRARY.json holds, every claim's sources are among them, the brief is not
+// empty), sends a failing answer back once with the problems, and refuses
+// (exit 2, nothing written) if it still fails. Code then writes PLAN.md: its
+// frontmatter (section, slug, title and depends_on from the outline, status
+// 'planned') and a body made of the brief, the voice line and the claims.
 //
-// D-12 LOCKED prompt slug: 'section-planner'.
-// D-06 LOCKED chokepoint: --revise delegates to runRevise (bin/lib/revise.ts).
-// T-11-09: runRevise's membership guard rejects replacement_citekey ∉ assigned_sources.
-// T-11-12: key value never logged here — complete() owns the no-leak header path.
+// A section that already has a finished plan is refused unless --force is
+// given. `--revise` (and `--research`) repair a flagged citation through
+// bin/lib/revise.ts instead.
 
 import { defineCommand } from 'citty';
+import { readFileSync } from 'node:fs';
+import { z } from 'zod/v4';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionPlan } from '../lib/paths.js';
-import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
-import { artifactText, isPlaceholderText } from '../lib/placeholder.js';
+import { isPlaceholderText } from '../lib/placeholder.js';
 import { readSectionState } from '../lib/router.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
-import { readFileSync } from 'node:fs';
+import { parseFrontmatter, serializeFrontmatter } from '../lib/frontmatter.js';
+import { escapeTemplateTokens } from '../lib/intake-parse.js';
+import { readIntake } from '../lib/intake-record.js';
+import { readLibrarySync } from '../lib/library.js';
+import { libraryCatalogJson } from '../lib/library-catalog.js';
+import { readOutline } from '../lib/outline-read.js';
+import { checkModelJson, modelJsonSchema } from '../lib/schemas/model-json.js';
+import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
+
+/** What the section planner returns. */
+export const SectionPlanSchema = z.object({
+  assigned_sources: z.array(z.string()),
+  claims: z.array(z.object({ claim: z.string(), sources: z.array(z.string()) }).strict()),
+  brief: z.string(),
+  voice: z.string(),
+}).strict();
+export type SectionPlan = z.infer<typeof SectionPlanSchema>;
+
+/** Every reason `plan` cannot be the section's plan; empty when it can. */
+export function planProblems(plan: SectionPlan, libraryKeys: ReadonlySet<string> | null): string[] {
+  const problems: string[] = [];
+  if (libraryKeys) {
+    const unknown = plan.assigned_sources.filter((k) => !libraryKeys.has(k));
+    if (unknown.length > 0) problems.push(`assigned_sources names ${unknown.join(', ')}, which LIBRARY.json does not hold`);
+  } else {
+    problems.push('.paper/LIBRARY.json cannot be read, so the assigned sources cannot be checked');
+  }
+  const assigned = new Set(plan.assigned_sources);
+  for (const c of plan.claims) {
+    const outside = c.sources.filter((k) => !assigned.has(k));
+    if (outside.length > 0) problems.push(`the claim "${c.claim.slice(0, 60)}" cites ${outside.join(', ')}, which is not in assigned_sources`);
+  }
+  if (plan.brief.trim().split(/\s+/).filter(Boolean).length < 20) problems.push('the brief is shorter than 20 words');
+  return problems;
+}
+
+interface SectionEntry {
+  n: number;
+  slug: string;
+  title: string;
+  depends_on: string[];
+  purpose: string;
+  word_target: number | null;
+  assigned_sources: string[];
+}
+
+/** Section `n` as the outline has it, or the bare minimum when there is no outline entry. */
+function sectionEntry(root: string, n: number, slug: string): SectionEntry {
+  const read = readOutline(root);
+  const s = read.ok ? read.outline.sections.find((x) => x.n === n && x.slug === slug) : undefined;
+  const stored = read.ok ? read.outline.stored?.sections.find((x) => x.n === n) : undefined;
+  return {
+    n,
+    slug,
+    title: s?.title ?? slug,
+    depends_on: s?.depends_on ?? [],
+    purpose: stored?.purpose ?? '',
+    word_target: s?.estimated_word_count ?? null,
+    assigned_sources: s?.assigned_sources ?? [],
+  };
+}
+
+/** The briefs of the planned sections `entry` depends on, as data for the prompt. */
+function upstreamPlans(root: string, entry: SectionEntry): string {
+  const read = readOutline(root);
+  if (!read.ok) return '[]';
+  const out: Array<{ slug: string; brief: string }> = [];
+  for (const dep of entry.depends_on) {
+    const s = read.outline.sections.find((x) => x.slug === dep);
+    if (!s) continue;
+    try {
+      const { body, frontmatter } = parseFrontmatter(readFileSync(sectionPlan(s.n, s.slug, root), 'utf8'));
+      if (frontmatter['status'] !== 'stub' && frontmatter['placeholder'] !== true) out.push({ slug: s.slug, brief: body.trim().slice(0, 2000) });
+    } catch {
+      // not planned yet
+    }
+  }
+  return escapeTemplateTokens(JSON.stringify(out, null, 2));
+}
+
+/** PLAN.md: frontmatter written by code, the planner's content as the body. */
+export function renderPlan(entry: SectionEntry, plan: SectionPlan | null, placeholderText?: string): string {
+  const fm: Record<string, unknown> = {
+    section: entry.n,
+    slug: entry.slug,
+    title: entry.title,
+    depends_on: entry.depends_on,
+    assigned_sources: plan ? plan.assigned_sources : entry.assigned_sources,
+    status: 'planned',
+    verified_against_draft_hash: null,
+  };
+  if (placeholderText !== undefined) fm['placeholder'] = true;
+  PlanFrontmatterSchema.parse(fm);
+  if (!plan) return `${serializeFrontmatter(fm)}\n${placeholderText ?? ''}\n`;
+  const claims = plan.claims.map((c) => `- ${c.claim} (sources: ${c.sources.join(', ') || 'none'})`);
+  return [
+    serializeFrontmatter(fm),
+    '## Brief',
+    '',
+    plan.brief.trim(),
+    '',
+    `Voice: ${plan.voice.trim() || 'formal academic tone'}`,
+    '',
+    '## Claims',
+    '',
+    ...(claims.length > 0 ? claims : ['(none)']),
+    '',
+  ].join('\n');
+}
 
 export const planCommand = defineCommand({
   meta: {
@@ -44,16 +151,16 @@ export const planCommand = defineCommand({
     },
     slug: {
       type: 'string',
-      description: 'Section slug (lowercase-kebab; defaults to "placeholder" in Tier-2 mode).',
+      description: 'Section slug (defaults to the one in the outline).',
     },
     revise: {
       type: 'boolean',
-      description: 'Repair a verifier-flagged citation (PLAN-02 — delegates to bin/lib/revise.ts::runRevise).',
+      description: 'Repair a verifier-flagged citation (delegates to bin/lib/revise.ts runRevise).',
       default: false,
     },
     research: {
       type: 'string',
-      description: 'Section-scoped additional research query (PLAN-03 / D-09).',
+      description: 'Section-scoped additional research query.',
     },
     force: {
       type: 'boolean',
@@ -67,28 +174,17 @@ export const planCommand = defineCommand({
     },
   },
   async run({ args }) {
+    const root = process.cwd();
     const n = Number(args.n);
     if (!Number.isInteger(n) || n < 1) {
       throw new Error(`pensmith plan: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
     }
-    // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
-    // wins; 'placeholder' only if no outline row exists).
-    const slug = resolveSectionSlug(process.cwd(), n, args.slug);
+    const slug = resolveSectionSlug(root, n, args.slug);
 
-    // GEN-06 fail-loud probe: assert a key is configured before doing any LLM work.
-    // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
-    // getProviderApiKey. When PENSMITH_NO_LLM=1 is set, complete() short-circuits to
-    // the offline mock — MissingApiKeyError is never thrown. The probe here is ONLY
-    // for the non-offline case: if no key and no offline mode, we fail loud.
-    // NEVER log the resolved key value — T-11-12 / T-01-07.
-    const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-    if (!noLlm) {
+    // Without a key there is no planner to ask, and plan says so.
+    if (process.env['PENSMITH_NO_LLM'] !== '1') {
       try {
-        // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
-        // false-positive with "no config for 'anthropic'". resolveProviderId()
-        // is the single source of truth (shared with complete()).
-        const providerId = await resolveProviderId();
-        await getProviderApiKey(providerId);
+        await getProviderApiKey(await resolveProviderId());
       } catch (e) {
         if (e instanceof MissingApiKeyError) {
           process.stderr.write(
@@ -103,21 +199,16 @@ export const planCommand = defineCommand({
       }
     }
 
-    // PLAN-02 / D-05: `pensmith plan <N> --revise` (and `--research`) is the
-    // canonical revise surface. Both route through the single runRevise
-    // chokepoint (D-06) — identical to bin/cli/revise.ts. This keeps the locked
-    // UX-02 16-verb set intact (no new top-level verb) while shipping WRTE-02.
+    // `plan <N> --revise` (and `--research`) repair a citation through runRevise,
+    // whose membership guard refuses a replacement outside assigned_sources.
     const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
     if (args.revise === true || research) {
       const result = await runRevise({
-        paperRoot: process.cwd(),
+        paperRoot: root,
         n,
         slug,
         yolo: args.yolo === true,
         ...(research ? { research } : {}),
-        // Real shared proposeSwap from bin/lib/revise-swap.ts (GEN-02).
-        // runRevise owns parsing the returned JSON + the membership guard that
-        // rejects any replacement_citekey ∉ assigned_sources (T-04-14 / T-11-09).
         proposeSwap,
       });
       process.stdout.write(`pensmith plan --revise: ${result.message}\n`);
@@ -126,11 +217,10 @@ export const planCommand = defineCommand({
 
     // A finished plan is the user's work: replace it only when asked to. An
     // outline stub, and a placeholder no model wrote, are not finished plans.
-    const targetPath = sectionPlan(n, slug);
+    const targetPath = sectionPlan(n, slug, root);
     const existing = readSectionState(targetPath);
     if (!existing.absent && !existing.corrupt && existing.status !== 'stub' && args.force !== true) {
-      const text = readFileSync(targetPath, 'utf8');
-      if (!isPlaceholderText(text)) {
+      if (!isPlaceholderText(readFileSync(targetPath, 'utf8'))) {
         process.stderr.write(
           `pensmith plan: section ${n} (${slug}) already has a plan (status ${existing.status}); nothing was changed. ` +
             `Run \`pensmith plan ${n} --force\` to plan it again, or \`pensmith plan ${n} --revise\` to repair a flagged citation.\n`,
@@ -140,39 +230,60 @@ export const planCommand = defineCommand({
       }
     }
 
-    // Normal plan path: call complete() with the 'section-planner' prompt
-    // (D-12 LOCKED slug). The prompt expects {{section}}, {{candidateSources}},
-    // {{topic}}, {{discipline}}, and {{upstreamPlans}}.
-    // Phase 12 / GEN-03 will wire these vars from the real LIBRARY.json + OUTLINE.md.
-    // For now (Phase 11 scope fence) we supply placeholder values that let complete()
-    // succeed with the offline mock (PENSMITH_NO_LLM=1) and produce a real output
-    // file (not a placeholder constant) that downstream verbs can read.
-    const planPrompt = loadPrompt('section-planner');
-    // Provide minimal var values; Phase 12 will populate from LIBRARY.json + OUTLINE.md.
-    const interpolatedPlan = interpolate(planPrompt, {
-      section: JSON.stringify({ number: n, slug, title: slug, depends_on: [], estimated_word_count: 400 }),
-      candidateSources: '(no sources loaded yet — wire via Phase 12 / GEN-03)',
-      topic: '(topic from INTAKE.md — wire via Phase 12)',
-      discipline: 'other',
-      upstreamPlans: '[]',
+    const entry = sectionEntry(root, n, slug);
+    const intake = readIntake(root);
+    const library = readLibrarySync(root);
+    const libraryKeys = library ? new Set(library.entries.map((e) => e.id)) : null;
+    const system = interpolate(loadPrompt('section-planner'), {
+      section: escapeTemplateTokens(JSON.stringify({
+        number: entry.n, slug: entry.slug, title: entry.title, purpose: entry.purpose, depends_on: entry.depends_on,
+        word_target: entry.word_target, outline_sources: entry.assigned_sources,
+      })),
+      topic: escapeTemplateTokens(intake?.topic || '(no topic recorded)'),
+      discipline: escapeTemplateTokens(intake?.discipline ?? 'other'),
+      upstreamPlans: upstreamPlans(root, entry),
+      candidateSources: libraryCatalogJson(root),
     });
-    const result = await complete({
-      system:
-        'You are an academic section planner. Generate a PLAN.md document in the ' +
-        'exact YAML frontmatter + ## Brief format specified in the prompt. ' +
-        'Your output is the PLAN.md file content only — no prose outside the document.',
-      messages: [{ role: 'user', content: interpolatedPlan }],
-      role: 'plan',
-      scope: 'section',
-      scopeId: `plan-${n}`,
-    });
-    await atomicWriteFile(targetPath, artifactText(result));
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      { role: 'user', content: `Plan section ${entry.n}, "${entry.title}".` },
+    ];
 
-    // The CLI marks the plan finished ('planned'), so the router goes on to
-    // write; it never depends on the model writing a status.
-    await updatePlanFrontmatter(targetPath, (fm) => {
-      fm.status = 'planned';
-    });
+    let plan: SectionPlan | null = null;
+    let problems: string[] = [];
+    for (let attempt = 0; attempt < 2 && plan === null; attempt += 1) {
+      const result = await complete({
+        system,
+        messages,
+        role: 'plan',
+        scope: 'section',
+        scopeId: `plan-${n}`,
+        jsonSchema: modelJsonSchema(SectionPlanSchema),
+      });
+      if (result.placeholder) {
+        // No model ran (PENSMITH_NO_LLM): code still writes the frontmatter; the
+        // body is the flagged placeholder, which verify, compile and done refuse.
+        await atomicWriteFile(targetPath, renderPlan(entry, null, result.text));
+        process.stdout.write(`pensmith plan: wrote placeholder PLAN.md to ${targetPath}\n`);
+        return { ok: true, path: targetPath, mode: 'placeholder' };
+      }
+      const checked = checkModelJson(SectionPlanSchema, result.json);
+      problems = checked.ok ? planProblems(checked.value, libraryKeys) : checked.problems;
+      if (checked.ok && problems.length === 0) {
+        plan = checked.value;
+        break;
+      }
+      messages.push(
+        { role: 'assistant', content: result.text },
+        { role: 'user', content: `This plan cannot be used:\n${problems.map((p) => `- ${p}`).join('\n')}\nReturn the corrected plan.` },
+      );
+    }
+    if (plan === null) {
+      process.stderr.write(`pensmith plan: the plan for section ${n} (${slug}) cannot be used; nothing was written:\n${problems.map((p) => `  - ${p}\n`).join('')}`);
+      process.exitCode = EXIT_REFUSED;
+      return { ok: false, mode: 'refused', problems };
+    }
+
+    await atomicWriteFile(targetPath, renderPlan(entry, plan));
     process.stdout.write(`pensmith plan: wrote PLAN.md to ${targetPath}\n`);
     return { ok: true, path: targetPath };
   },
