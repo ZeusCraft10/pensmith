@@ -6,6 +6,11 @@
 // check only). The detection-aware honesty score (DONE-04) is transparency-only
 // — it is NEVER an undetectability claim (PROJECT.md non-negotiable).
 //
+// The paper text goes to GPTZero only with GPTZERO_API_KEY set and the user's
+// consent, decided once per run (decideGptzeroConsent) and kept for the paper
+// in .paper/config.toml; the question defaults to no, and --yolo never
+// consents. The report names why there is no score (renderHonestySkipped).
+//
 // The module mirrors bin/lib/plagiarism.ts + bin/lib/verify/pass2.ts:
 //   - key-absence / offline guard → clean null skip, NEVER a crash (advisory);
 //     offline prints "skipped (offline)" and never shows a number;
@@ -19,11 +24,13 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { packageRoot } from './paths.js';
+import { packageRoot, paperConfigFile } from './paths.js';
 import { fetch as httpFetch } from './http.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
 import { assertBudget, assertWithinCostCap, appendCost } from './budget.js';
 import { confirmOrNo } from './prompts.js';
+import { readPaperConfig } from './project-config.js';
+import { setConfigValues } from './config-edit.js';
 
 // ============================================================
 //   Public types
@@ -204,27 +211,94 @@ function parseGptzeroResponse(raw: unknown): HonestyScore | null {
 
 /** Options for scoreWithGptzero (HARD-05 consent seam). */
 export interface GptzeroScoringOptions {
-  /** When true, skip the consent gate (approval-gates design: --yolo skips). */
-  yolo?: boolean;
   /**
-   * Injected consent decision (for tests). When provided, the ask() gate is
-   * bypassed and this value is used directly. undefined → run the gate normally.
+   * The user's consent, decided once per run (decideGptzeroConsent). Only
+   * true sends anything; false or undefined sends nothing. Nothing in here
+   * asks: done decides consent before either score.
    */
   consentGranted?: boolean;
 }
 
+/** Why no score was produced: every reason the report can name. */
+export type HonestySkip = 'no-key' | 'no-score' | 'offline' | 'no-consent' | 'declined' | 'backend-error';
+
+/** The consent decision for one run of done. */
+export interface GptzeroConsent {
+  consent: boolean;
+  /** Why the paper is not sent, when it is not. */
+  skip?: HonestySkip;
+}
+
+/** The [honesty] table of .paper/config.toml, where the one-time answer is kept. */
+const CONSENT_TABLE = 'honesty';
+const CONSENT_KEY = 'gptzero_consent';
+
+/** The answer kept for this paper: true, false, or undefined when never given. */
+export function readGptzeroConsent(paperRoot: string): boolean | undefined {
+  const value = readPaperConfig(paperRoot, CONSENT_TABLE)[CONSENT_KEY];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+async function keepGptzeroConsent(paperRoot: string, consent: boolean): Promise<void> {
+  const why = await setConfigValues(paperConfigFile(paperRoot), CONSENT_TABLE, { [CONSENT_KEY]: consent });
+  if (why) process.stderr.write(`pensmith: WARN — your GPTZero answer could not be kept in .paper/config.toml (${why}); it applies to this run only.\n`);
+}
+
+/**
+ * Decide, once per run, whether the paper text may go to GPTZero. It goes
+ * only with GPTZERO_API_KEY set and the user's consent, which is asked once
+ * per paper and kept (.paper/config.toml [honesty] gptzero_consent):
+ *   - `--no-score` skips the score this run; offline nothing can be sent;
+ *   - `--score` is the user's consent, kept for the paper;
+ *   - a kept answer is used as it is;
+ *   - otherwise, at a terminal the disclosure is shown and the question asked
+ *     with "no" as the default, and the answer kept; with no terminal nothing
+ *     is sent and the user is told how to consent.
+ * --yolo never consents: it skips approval gates, and this is the user's
+ * data going to a third party.
+ */
+export async function decideGptzeroConsent(
+  paperRoot: string,
+  opts: { score?: boolean; noScore?: boolean; terminal: boolean },
+): Promise<GptzeroConsent> {
+  if (!process.env['GPTZERO_API_KEY']) return { consent: false, skip: 'no-key' };
+  if (opts.noScore === true) return { consent: false, skip: 'no-score' };
+  if (isOfflineMode()) return { consent: false, skip: 'offline' };
+  if (opts.score === true) {
+    await keepGptzeroConsent(paperRoot, true);
+    return { consent: true };
+  }
+  const kept = readGptzeroConsent(paperRoot);
+  if (kept !== undefined) return kept ? { consent: true } : { consent: false, skip: 'declined' };
+  if (!opts.terminal) {
+    process.stdout.write(
+      'pensmith: GPTZero honesty score skipped: it needs your consent to send the paper text to GPTZero, and nothing was sent. ' +
+        'To allow it for this paper, run `pensmith done --score`.\n',
+    );
+    return { consent: false, skip: 'no-consent' };
+  }
+  process.stdout.write(`pensmith: ${loadDisclosureNote()}\n`);
+  const consent = await confirmOrNo({
+    id: 'honesty-gptzero-consent',
+    kind: 'confirm',
+    label: 'Send paper text to GPTZero for honesty scoring?',
+    default: false,
+  });
+  await keepGptzeroConsent(paperRoot, consent);
+  if (!consent) process.stdout.write('pensmith: GPTZero honesty scoring declined — nothing was sent, and you will not be asked again for this paper.\n');
+  return consent ? { consent: true } : { consent: false, skip: 'declined' };
+}
+
 /**
  * Score `text` against GPTZero. Behavior:
- *   - GPTZERO_API_KEY absent → null (skip-clean banner; key never logged).
- *   - Disclosure (HARD-05) — always shown before any POST attempt.
- *   - Consent gate (HARD-05) — ask() before POST; declined → null, no POST.
- *     --yolo (opts.yolo) skips the gate (disclosure still shown).
- *     non-TTY and not-yolo → SILENT decline (null) — honesty is advisory,
- *     NEVER exit-3/block (Pitfall 6 / RESEARCH A4).
- *     opts.consentGranted bypasses ask() for test injection.
- *   - Size cap (HARD-05) — input truncated to GPTZERO_MAX_BYTES with a note.
+ *   - GPTZERO_API_KEY absent → null (key never logged).
+ *   - consent not granted (opts.consentGranted !== true) → null, no request:
+ *     the caller decides consent once per run (decideGptzeroConsent), and
+ *     nothing here asks or treats silence as a yes.
  *   - offline (--offline / --dry-run) → "skipped (offline)" and null; no
- *     request, no disclosure, never a canned score.
+ *     request, never a canned score.
+ *   - Disclosure (HARD-05) — shown before the POST.
+ *   - Size cap (HARD-05) — input truncated to GPTZERO_MAX_BYTES with a note.
  *   - live → assertBudget BEFORE the call (paper-scoped cap), then httpFetch
  *     POST with the x-api-key header through the http.ts chokepoint; status
  *     !== 200 → null; parse defensively; appendCost AFTER a successful call.
@@ -237,55 +311,20 @@ async function scoreWithGptzero(
 ): Promise<HonestyScore | null> {
   // Key-absence guard FIRST. Presence-check only — the value is never printed.
   const apiKey = process.env['GPTZERO_API_KEY'];
-  if (!apiKey) {
-    process.stdout.write('pensmith: GPTZero API key not set — honesty score skipped.\n');
-    return null;
-  }
+  if (!apiKey) return null;
 
-  // HARD-05 Step 2a: Explicit test-injection decline. When consentGranted is
-  // explicitly false (injected by tests), return null immediately — no offline
-  // branch, no POST, no disclosure printed (decline takes priority over display).
-  if (opts?.consentGranted === false) {
-    return null;
-  }
+  // Only the user's consent sends anything.
+  if (opts?.consentGranted !== true) return null;
 
-  // Offline: nothing is sent, so there is nothing to disclose or consent to,
-  // and no score to show.
+  // Offline: nothing is sent, so there is nothing to disclose, and no score to show.
   if (isOfflineMode()) {
     process.stdout.write(`pensmith: GPTZero honesty score ${OFFLINE_SKIP_NOTE}.\n`);
     return null;
   }
 
-  // HARD-05 Step 1: Disclosure — always shown before a live POST attempt,
-  // even if the user later declines. Copy is read VERBATIM from the locked
-  // references/honesty-framing.md (never inlined — loadDisclosureNote).
+  // HARD-05 Step 1: Disclosure before the POST. Copy is read VERBATIM from
+  // the locked references/honesty-framing.md (never inlined).
   process.stdout.write(`pensmith: ${loadDisclosureNote()}\n`);
-
-  // HARD-05 Step 2: Consent gate — before any live POST.
-  const isYolo = opts?.yolo === true;
-  if (!isYolo) {
-    let consented: boolean;
-    if (opts?.consentGranted === true) {
-      // Explicit test injection of consent=true: bypass ask().
-      consented = true;
-    } else if (!process.stdout.isTTY) {
-      // Non-TTY (CI/piped): silently decline — honesty is advisory and must
-      // NEVER break automated export (Pitfall 6 / RESEARCH A4 / open-Q2).
-      return null;
-    } else {
-      // TTY: show the interactive consent gate (approval-gates default-on).
-      consented = await confirmOrNo({
-        id: 'honesty-gptzero-consent',
-        kind: 'confirm',
-        label: 'Send paper text to GPTZero for honesty scoring?',
-        default: true,
-      });
-    }
-    if (!consented) {
-      process.stdout.write('pensmith: GPTZero honesty scoring declined — skipped.\n');
-      return null;
-    }
-  }
 
   // HARD-05 Step 3: Size cap — truncate over-cap input before POST body.
   let postText = text;
@@ -344,11 +383,10 @@ async function scoreWithGptzero(
   }
 }
 
-/** The shipped GPTZero backend (DONE-04). */
-const gptzeroBackend: HonestyBackend = {
-  name: 'gptzero',
-  score: (text: string) => scoreWithGptzero(text),
-};
+/** The shipped GPTZero backend (DONE-04); it sends nothing without consent. */
+function gptzeroBackend(opts?: GptzeroScoringOptions): HonestyBackend {
+  return { name: 'gptzero', score: (text: string) => scoreWithGptzero(text, opts) };
+}
 
 // ============================================================
 //   Pluggable backend selection (DONE-05)
@@ -378,7 +416,7 @@ function notImplementedBackend(name: string): HonestyBackend {
  * stubs that skip cleanly; any unknown / undefined value falls back to GPTZero.
  * This is a pure selector — it reads no key and issues no network call.
  */
-export function selectBackend(config?: { honestyBackend?: string }): HonestyBackend {
+export function selectBackend(config?: { honestyBackend?: string }, opts?: GptzeroScoringOptions): HonestyBackend {
   switch (config?.honestyBackend) {
     case 'originality':
       return notImplementedBackend('originality');
@@ -387,7 +425,7 @@ export function selectBackend(config?: { honestyBackend?: string }): HonestyBack
     case 'gptzero':
     case undefined:
     default:
-      return gptzeroBackend;
+      return gptzeroBackend(opts);
   }
 }
 
@@ -397,23 +435,22 @@ export function selectBackend(config?: { honestyBackend?: string }): HonestyBack
 
 /**
  * Compute the detection-aware honesty score for `text`. Resolves the backend
- * via selectBackend (DONE-05) and delegates to it. Absent key / offline /
- * unexpected response → null (clean skip). Advisory by construction
- * — never throws, never blocks export.
+ * via selectBackend (DONE-05) and delegates to it. Absent key / no consent /
+ * offline / unexpected response → null (clean skip). Advisory by
+ * construction — never throws, never blocks export.
  */
 export async function scoreHonesty(
   text: string,
   config?: { honestyBackend?: string },
+  opts?: GptzeroScoringOptions,
 ): Promise<HonestyScore | null> {
-  return selectBackend(config).score(text);
+  return selectBackend(config, opts).score(text);
 }
 
 /**
- * Score `text` with explicit HARD-05 consent/yolo options (test seam + caller
- * override). Delegates to scoreWithGptzero directly (GPTZero is the only
- * backend with a consent gate; other backends are advisory stubs with no egress).
- * opts.consentGranted bypasses ask() for test injection; opts.yolo skips the
- * consent gate entirely (disclosure still shown). Non-TTY + not-yolo → null.
+ * Score `text` with GPTZero directly, given the consent decision (test seam).
+ * GPTZero is the only backend that sends anything; the others are advisory
+ * stubs with no egress.
  */
 export async function scoreHonestyWithOptions(
   text: string,
@@ -422,12 +459,18 @@ export async function scoreHonestyWithOptions(
   return scoreWithGptzero(text, opts);
 }
 
-/** The report line when no score was produced. Says why when the reason is
- *  offline mode, so the report never blames a missing key for a skipped call. */
-export function renderHonestySkipped(): string {
-  return isOfflineMode()
-    ? `Pensmith honesty check: ${OFFLINE_SKIP_NOTE}.`
-    : 'Pensmith honesty check: skipped (no GPTZero API key set or backend unavailable).';
+const SKIP_TEXT: Readonly<Record<HonestySkip, string>> = {
+  'no-key': 'skipped (no GPTZERO_API_KEY set).',
+  'no-score': 'skipped (--no-score).',
+  offline: `${OFFLINE_SKIP_NOTE}.`,
+  'no-consent': 'skipped: sending the paper to GPTZero needs your consent, and nothing was sent (`pensmith done --score` gives it for this paper).',
+  declined: 'skipped: you declined sending the paper to GPTZero, so nothing was sent (`pensmith done --score` allows it).',
+  'backend-error': 'skipped: GPTZero gave no usable answer (an error, a limit, or a response pensmith could not read). No score is shown.',
+};
+
+/** The report line when no score was produced, naming why. */
+export function renderHonestySkipped(reason: HonestySkip = isOfflineMode() ? 'offline' : 'backend-error'): string {
+  return `Pensmith honesty check: ${SKIP_TEXT[reason]}`;
 }
 
 // ============================================================

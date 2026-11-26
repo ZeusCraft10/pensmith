@@ -325,13 +325,13 @@ test('offline mode: Pass 3 and the freshness probe make zero requests and say sk
   });
 });
 
-test('offline mode: the GPTZero score is skipped, never a canned number', async () => {
+test('offline mode: the GPTZero score is skipped, never a canned number, even with consent', async () => {
   await inMode({ PENSMITH_OFFLINE: '1' }, async (agent) => {
     const { scoreHonesty } = await import('../bin/lib/honesty.js');
     const out = captureStream('stdout');
     let score: unknown;
     try {
-      score = await scoreHonesty('Some paper text that would be scored.');
+      score = await scoreHonesty('Some paper text that would be scored.', undefined, { consentGranted: true });
     } finally {
       out.restore();
     }
@@ -342,7 +342,7 @@ test('offline mode: the GPTZero score is skipped, never a canned number', async 
 });
 
 test('live mode without consent: GPTZero never returns the committed canned score', async () => {
-  // The test process is non-TTY, so the consent gate declines before any POST.
+  // No consent was given, so nothing is sent.
   await inMode({}, async (agent) => {
     const { scoreHonesty } = await import('../bin/lib/honesty.js');
     const out = captureStream('stdout');

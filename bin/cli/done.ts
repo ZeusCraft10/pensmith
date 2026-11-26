@@ -35,7 +35,7 @@ import { readBibText } from '../lib/verify/pass1.js';
 import { extractQuotes } from '../lib/quote-extractor.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
-import { scoreHonesty, renderHonestyReport, renderHonestySkipped } from '../lib/honesty.js';
+import { decideGptzeroConsent, scoreHonesty, renderHonestyReport, renderHonestySkipped } from '../lib/honesty.js';
 import {
   EXPORT_FORMATS,
   exportDraft,
@@ -646,6 +646,10 @@ export const doneCommand = defineCommand({
       description: 'Skip the humanizer step.',
       default: false,
     },
+    score: {
+      type: 'boolean',
+      description: 'Consent to sending the paper text to GPTZero for the AI-likelihood score (kept for this paper); --no-score skips the score.',
+    },
   },
   async run({ args }) {
     const paperRoot = process.cwd();
@@ -747,24 +751,32 @@ export const doneCommand = defineCommand({
     if (audit === null) {
       const pass4Results = await runWholePaperPass4(paperRoot);
       const plagiarismResults = await runPlagiarism(draftMd);
-      const before = await scoreHonesty(draftMd);
+      // GPTZero consent, decided once for this run (before and after humanize
+      // alike): only with a key, and only with the user's consent, which
+      // defaults to no and which --yolo never gives.
+      const consent = await decideGptzeroConsent(paperRoot, {
+        ...(typeof args.score === 'boolean' ? { score: args.score, noScore: !args.score } : {}),
+        terminal: canAskInTerminal(),
+      });
+      const scoring = { consentGranted: consent.consent };
+      const before = consent.consent ? await scoreHonesty(draftMd, undefined, scoring) : null;
       let humanizedPath: string | null = null;
       let after: Awaited<ReturnType<typeof scoreHonesty>> = null;
       if (args.raw !== true) {
         humanizedPath = await runHumanizer(draftMd, paperRoot);
-        if (humanizedPath !== null) {
+        if (humanizedPath !== null && before !== null) {
           try {
-            after = await scoreHonesty(readFileSync(humanizedPath, 'utf8'));
+            after = await scoreHonesty(readFileSync(humanizedPath, 'utf8'), undefined, scoring);
           } catch {
             after = null;
           }
         }
       }
-      // Honesty report: guard the null score explicitly — a missing key emits the
-      // skip banner, NEVER a fabricated percent (T-06-05-05).
+      // Honesty report: guard the null score explicitly — the skip line names
+      // why, NEVER a fabricated percent (T-06-05-05).
       const honestyReport =
         before === null
-          ? renderHonestySkipped()
+          ? renderHonestySkipped(consent.skip ?? 'backend-error')
           : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
       audit = { pass4Results, plagiarismResults, honestyReport, humanized: humanizedPath !== null };
     }
