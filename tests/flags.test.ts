@@ -1,25 +1,18 @@
-// tests/flags.test.ts — Phase 7 Wave 0 RED scaffold for ERGO-01..04 +
-// the cross-AI HIGH regression gates (H1/H2/H3/C3-HIGH-2/C4-HIGH/C6-HIGH).
+// tests/flags.test.ts — the global flags (--dry-run, --estimate, --yolo,
+// --show-prompts) and the dispatch regressions they once caused (H1, H2, H3,
+// C3-HIGH-2, C4-HIGH, C6-HIGH).
 //
-// These cases drive the REAL CLI dispatch path via
-//   execFileSync(process.execPath, ['--import','tsx','bin/pensmith.ts', ...args], { cwd, env })
-// so the assertions exercise the actual argv pre-parse + dispatch seam (07-02),
-// not just module introspection.
-//
-// RED-by-skip: bin/pensmith.ts ALREADY exists, so existsSync alone would not
-// skip. The four global flags (--dry-run/--estimate/--yolo/--show-prompts) and
-// the argv pre-parse land in 07-02. We guard the dispatch-driving cases on a
-// `flagsWired` predicate that greps bin/pensmith.ts for a 'dry-run' token. Until
-// 07-02 wires the flags these cases SKIP; afterwards they un-skip and must PASS
-// — and would FAIL against the ORIGINAL broken design (see per-case notes).
-//
-// One un-skipped case asserts isOfflineMode()===true (the offline-by-default
-// adapter gate that --dry-run relies on for SOURCE adapters).
+// These cases drive the real CLI as a child process
+//   node --import tsx bin/pensmith.ts ...args   (cwd and env per case)
+// so they exercise the actual argv pre-parse and dispatch, not module
+// introspection. stdout, stderr and the exit status are captured for every
+// run, including a successful one, so an assertion about stderr is never
+// checking an empty string.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,20 +20,12 @@ import { outlineForStateFixture } from './lib/outline-fixture.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 
-// Resolve tsx's loader to an ABSOLUTE file URL so the CLI subprocess can load it
-// regardless of cwd — a bare `--import tsx` resolves relative to the child's
-// tmpdir cwd (no node_modules) and crashes ERR_MODULE_NOT_FOUND (07-01-SUMMARY
-// hook-driver fix, mirrored here for the flags execFileSync driver).
+// tsx's loader as an absolute file URL: a bare `--import tsx` would resolve
+// against the child's temp cwd, which has no node_modules.
 const TSX_LOADER = import.meta.resolve('tsx');
 
-// RED-by-skip predicate: the four global flags + argv pre-parse + yolo cap
-// pre-flight + dispatchVerb backstop all land in 07-02. We detect that wiring
-// by greping bin/pensmith.ts for a 'dry-run' token (absent today). existsSync
-// alone is insufficient because bin/pensmith.ts already exists.
-const pensmithSrc = existsSync(PENSMITH_TS) ? readFileSync(PENSMITH_TS, 'utf8') : '';
-const flagsWired = /dry-run/.test(pensmithSrc);
-
 // === Child-process driver ===
+// status is null when the child was killed by a signal.
 interface RunResult { status: number | null; stdout: string; stderr: string; }
 
 function runCli(args: string[], cwd: string, extraEnv: Record<string, string | undefined> = {}): RunResult {
@@ -48,21 +33,13 @@ function runCli(args: string[], cwd: string, extraEnv: Record<string, string | u
   for (const [k, v] of Object.entries({ ...process.env, ...extraEnv })) {
     if (v !== undefined) env[k] = v;
   }
-  try {
-    const stdout = execFileSync(
-      process.execPath,
-      ['--import', TSX_LOADER, PENSMITH_TS, ...args],
-      { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    return { status: 0, stdout, stderr: '' };
-  } catch (e) {
-    const err = e as { status?: number | null; stdout?: Buffer | string; stderr?: Buffer | string };
-    return {
-      status: err.status ?? 1,
-      stdout: err.stdout ? err.stdout.toString() : '',
-      stderr: err.stderr ? err.stderr.toString() : '',
-    };
-  }
+  const res = spawnSync(
+    process.execPath,
+    ['--import', TSX_LOADER, PENSMITH_TS, ...args],
+    { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  if (res.error) throw res.error;
+  return { status: res.status, stdout: res.stdout, stderr: res.stderr };
 }
 
 // === Fixture builders ===
@@ -136,20 +113,11 @@ test('ERGO-01: isOfflineMode() is false by default and true only under PENSMITH_
   }
 });
 
-// --- RED-by-skip presence guard for the flag wiring ---
-test('ERGO-01..04: flag-wiring presence is consistent with Wave-0 RED state', () => {
-  if (flagsWired) {
-    assert.ok(flagsWired, 'bin/pensmith.ts carries the dry-run flag token — dispatch tests active');
-  } else {
-    assert.ok(!flagsWired, 'Wave-0: global flags not wired in bin/pensmith.ts yet (RED-by-skip)');
-  }
-});
 
 // ===========================================================================
 // Flag declaration — the four global flags parse on the explicit-verb surface.
 // ===========================================================================
-test('ERGO-01/04: --dry-run / --show-prompts parse on explicit verbs (no "unknown flag")',
-  { skip: !flagsWired }, () => {
+test('ERGO-01/04: --dry-run / --show-prompts parse on explicit verbs (no "unknown flag")', () => {
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }]);
     const a = runCli(['write', '--dry-run', '1'], root);
@@ -169,8 +137,7 @@ test('ERGO-01/04: --dry-run / --show-prompts parse on explicit verbs (no "unknow
 // NOTE: the >50%-cap env knob (PENSMITH_COST_CAP_USD) is introduced by 07-02's
 // pre-flight; a large section count drives the projection over a small cap.
 // ===========================================================================
-test('H1 / C2-H1: `write --yolo` (NON-GATE) over-cap WITHOUT --estimate exits non-zero (cap refusal)',
-  { skip: !flagsWired }, () => {
+test('H1 / C2-H1: `write --yolo` (NON-GATE) over-cap WITHOUT --estimate exits non-zero (cap refusal)', () => {
     const root = freshRoot();
     writeState(root, manySections(50));
     writePaperFile(root, 'RESEARCH.md');
@@ -182,8 +149,7 @@ test('H1 / C2-H1: `write --yolo` (NON-GATE) over-cap WITHOUT --estimate exits no
       'H1/C2-H1: the refusal must name the >50%-cap reason');
   });
 
-test('H1 / C2-H1: `plan --yolo` (NON-GATE) over-cap WITHOUT --estimate exits non-zero (cap refusal)',
-  { skip: !flagsWired }, () => {
+test('H1 / C2-H1: `plan --yolo` (NON-GATE) over-cap WITHOUT --estimate exits non-zero (cap refusal)', () => {
     const root = freshRoot();
     writeState(root, manySections(50));
     writePaperFile(root, 'RESEARCH.md');
@@ -193,8 +159,7 @@ test('H1 / C2-H1: `plan --yolo` (NON-GATE) over-cap WITHOUT --estimate exits non
       'H1/C2-H1: `plan --yolo` over-cap must EXIT NON-ZERO — the cap applies to non-gate verbs too');
   });
 
-test('H1: `compile --yolo` and bare `--yolo` over-cap exit non-zero (gate-skipping verbs)',
-  { skip: !flagsWired }, () => {
+test('H1: `compile --yolo` and bare `--yolo` over-cap exit non-zero (gate-skipping verbs)', () => {
     const root = freshRoot();
     writeState(root, manySections(50));
     writePaperFile(root, 'RESEARCH.md');
@@ -205,8 +170,7 @@ test('H1: `compile --yolo` and bare `--yolo` over-cap exit non-zero (gate-skippi
     assert.notEqual(b.status, 0, 'H1: bare `--yolo` over-cap must exit non-zero');
   });
 
-test('H1: a --yolo verb UNDER the 50% cap exits 0 (no false refusal)',
-  { skip: !flagsWired }, () => {
+test('H1: a --yolo verb UNDER the 50% cap exits 0 (no false refusal)', () => {
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }]);
     writePaperFile(root, 'RESEARCH.md');
@@ -221,8 +185,7 @@ test('H1: a --yolo verb UNDER the 50% cap exits 0 (no false refusal)',
     assert.equal(res.status, 0, `H1: a small projection under a huge cap must NOT be refused; stderr=${res.stderr}`);
   });
 
-test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT crash (no StateNotFoundError)',
-  { skip: !flagsWired }, () => {
+test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT crash (no StateNotFoundError)', () => {
     const root = freshRoot(); // no STATE.json
     // Phase 11 (GEN-06): all generative verbs now require either a real API key OR
     // PENSMITH_NO_LLM=1 (offline mode). Set it so the bare dispatch (intake) and
@@ -238,8 +201,7 @@ test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT cra
       'C2-H1: `write --yolo` in a fresh dir must not crash with StateNotFoundError');
   });
 
-test('C4-HIGH: bare `pensmith --yolo` against a corrupt STATE.json does NOT crash (exits 1, the error code)',
-  { skip: !flagsWired }, () => {
+test('C4-HIGH: bare `pensmith --yolo` against a corrupt STATE.json does NOT crash (exits 1, the error code)', () => {
     const root = freshRoot();
     mkdirSync(join(root, '.paper'), { recursive: true });
     writeFileSync(join(root, '.paper', 'STATE.json'), '{ this is not json ');
@@ -263,25 +225,25 @@ test('C4-HIGH: bare `pensmith --yolo` against a corrupt STATE.json does NOT cras
 // dispatch leg. Would FAIL against a status verb re-walking the corrupt PLAN.md
 // via a raw unguarded parseFrontmatter + a dispatchVerb with no backstop.
 // ===========================================================================
-test('C6-HIGH: END-TO-END bare `pensmith` against a corrupt per-section PLAN.md exits without an uncaught crash',
-  { skip: !flagsWired }, () => {
+test('C6-HIGH: END-TO-END bare `pensmith` against a corrupt per-section PLAN.md reports it and exits 0, with no uncaught crash', () => {
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }]);
     writePaperFile(root, 'RESEARCH.md');
     writePaperFile(root, 'OUTLINE.md');
     writeCorruptSectionPlan(root, 1, 'intro'); // alias-to-missing-anchor → parseFrontmatter throws
     const res = runCli([], root); // bare, no verb, no --yolo
-    // A graceful exit (clean status code, NOT a Node uncaught-exception trace).
-    assert.ok(
-      res.status === 0 || (typeof res.status === 'number' && res.status >= 0),
-      'C6-HIGH: the process must exit with a defined status, not be killed by an uncaught exception',
-    );
-    assert.ok(
-      !/\bat (Object|Module|async)\b.*\n.*\n.*\bat\b/.test(res.stderr) || !/throw|ReferenceError|Unresolved alias/.test(res.stderr),
-      'C6-HIGH: bare /pensmith must NOT crash with an uncaught exception stack trace on a corrupt PLAN.md',
-    );
-    assert.match(res.stderr + res.stdout, /status|attention/i,
-      'C6-HIGH: the corrupt section should surface the status/attention disposition');
+    // The router stops at status, which reports the unreadable PLAN.md as a
+    // section that needs attention and exits 0: the paper is readable, and
+    // the row tells the user what to fix. An uncaught exception would exit 1
+    // with a stack trace on stderr.
+    assert.equal(res.status, 0,
+      `C6-HIGH: a corrupt PLAN.md must be reported, not crash; status=${res.status} stderr=${res.stderr}`);
+    assert.doesNotMatch(res.stderr, /\n\s+at /,
+      'C6-HIGH: bare pensmith must not print an uncaught exception stack trace');
+    assert.match(res.stdout, /§1 intro: corrupt\/unreadable PLAN\.md — needs attention/,
+      'C6-HIGH: the corrupt section is reported as needing attention');
+    assert.match(res.stdout, /next: status \(attention\)/,
+      'C6-HIGH: the router stops for the user');
   });
 
 // ===========================================================================
@@ -289,8 +251,7 @@ test('C6-HIGH: END-TO-END bare `pensmith` against a corrupt per-section PLAN.md 
 // runCommand runs the child then falls into the parent run() with no early
 // return; a root run() that re-dispatched the router would run a SECOND verb.
 // ===========================================================================
-test('H2: an explicit verb runs EXACTLY once (no second router-dispatched verb in stdout)',
-  { skip: !flagsWired }, () => {
+test('H2: an explicit verb runs EXACTLY once (no second router-dispatched verb in stdout)', () => {
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }]);
     const res = runCli(['status'], root);
@@ -300,8 +261,7 @@ test('H2: an explicit verb runs EXACTLY once (no second router-dispatched verb i
       'H2: no router/next diagnostic ("→ <verb>") may leak to stdout (single dispatch)');
   });
 
-test('H2: --show-prompts takes effect for an EXPLICIT verb (pre-dispatch seam, mirrors to stderr)',
-  { skip: !flagsWired }, () => {
+test('H2: --show-prompts takes effect for an EXPLICIT verb (pre-dispatch seam, mirrors to stderr)', () => {
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }]);
     writePaperFile(root, 'RESEARCH.md');
@@ -323,8 +283,7 @@ test('H2: --show-prompts takes effect for an EXPLICIT verb (pre-dispatch seam, m
 // the gate is NOT skipped. Cost kept UNDER the cap so the pre-flight does not
 // exit first and mask the test.
 // ===========================================================================
-test('C3-HIGH-2 (a) BARE path: `pensmith --yolo` → dispatched gate verb receives yolo:true / skips its gate',
-  { skip: !flagsWired }, () => {
+test('C3-HIGH-2 (a) BARE path: `pensmith --yolo` → dispatched gate verb receives yolo:true / skips its gate', () => {
     const root = freshRoot();
     // State so resolveNextAction lands on a GATE verb (compile): all sections
     // verified, no DRAFT.md. Under-cap (few sections) so the pre-flight passes.
@@ -338,8 +297,7 @@ test('C3-HIGH-2 (a) BARE path: `pensmith --yolo` → dispatched gate verb receiv
       'C3-HIGH-2: the bare-dispatched gate verb must skip its approval gate (yolo forwarded), not prompt');
   });
 
-test('C3-HIGH-2 (b) RESUME path: `pensmith resume --yolo` → dispatched work verb receives yolo:true / skips its gate',
-  { skip: !flagsWired }, () => {
+test('C3-HIGH-2 (b) RESUME path: `pensmith resume --yolo` → dispatched work verb receives yolo:true / skips its gate', () => {
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }]);
     writePaperFile(root, 'RESEARCH.md');
@@ -369,8 +327,7 @@ test('C3-HIGH-2 (b) RESUME path: `pensmith resume --yolo` → dispatched work ve
 // 1. A dry run does not run the verb at all: it prints what verify would do.
 // Assert: no VERIFICATION.md, no COSTS.jsonl, no network error text.
 // ===========================================================================
-test('H3 / C2-H3: `verify <N> --dry-run` with a fake key makes ZERO network calls + appends NO COSTS.jsonl (non-vacuous)',
-  { skip: !flagsWired }, () => {
+test('H3 / C2-H3: `verify <N> --dry-run` with a fake key makes ZERO network calls + appends NO COSTS.jsonl (non-vacuous)', () => {
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }]);
     // A verifiable section: a DRAFT.md with a [@citekey] + a matching bib entry,
