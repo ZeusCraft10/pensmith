@@ -8,7 +8,8 @@
 //   - arXiv ID  the arXiv record;
 //   - PDF       a local file or a URL serving one: identified by a DOI or
 //               arXiv ID printed in its opening whose work's title (word
-//               for word) and byline head the PDF, else by a Crossref title
+//               for word) and byline head the PDF, with no other work's
+//               title and byline above them, else by a Crossref title
 //               search whose hit's title heads it and whose author the
 //               opening names, never the reference list or a work a notice
 //               is about (bin/lib/source-hydrate.ts);

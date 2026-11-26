@@ -66,11 +66,12 @@ asymmetry precedent, keeping one workflow body per verb).
    - **arXiv ID** → the arXiv record.
    - **PDF** → bytes-only `extractPdfText`, then a DOI or arXiv ID printed in
      its opening (before any reference list) whose work's title and byline
-     head the PDF (only page furniture and labels above the title, the byline
-     next to it), else a Crossref title search whose hit's whole title heads
-     the PDF the same way and an author the opening names. A PDF whose
-     identity cannot be confirmed, or a notice about a work (an erratum, a
-     comment), is refused (exit 2): add it by its DOI or arXiv ID instead.
+     head the PDF (the byline next to the title, and no notice or other
+     work's title and byline above it; a running head or a permission notice
+     may be), else a Crossref title search whose hit's whole title heads the
+     PDF the same way and an author the opening names. A PDF whose identity
+     cannot be confirmed, or a notice about a work (an erratum, a comment, a
+     book review), is refused (exit 2): add it by its DOI or arXiv ID instead.
    - **URL** → `httpFetch` (the http.ts chokepoint, with its SSRF guard) →
      PDF bytes go the PDF path; an HTML page's citation `<meta>` DOI goes the
      DOI path.

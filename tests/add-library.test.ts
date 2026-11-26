@@ -343,6 +343,30 @@ test('add <pdf> takes the printed DOI of a paper whose byline numbers its author
   assert.deepEqual(keysOf(bibOf(root)), ['vanderwalt2011']);
 });
 
+test('add <pdf> takes the arXiv ID printed in a paper whose first page sets a permission notice above its title', async () => {
+  // The first page of the arXiv PDF of "Attention Is All You Need": Google's
+  // reproduction notice, the title, then one author per line with a mark, an
+  // affiliation and an email; arXiv's stamp in the margin is read later.
+  const root = project();
+  const pdf = await pdfOf(root, [
+    'Provided proper attribution is provided, Google hereby grants permission to',
+    'reproduce the tables and figures in this paper solely for use in journalistic or',
+    'scholarly works.',
+    'Attention Is All You Need',
+    'Ashish Vaswani', '*', 'Google Brain', 'avaswani@google.com',
+    'Noam Shazeer', '*', 'Google Brain', 'noam@google.com',
+    'Abstract',
+    'The dominant sequence transduction models are based on complex recurrent or',
+    'convolutional neural networks that include an encoder and a decoder.',
+    'arXiv:1706.03762v7 [cs.CL] 2 Aug 2023',
+  ]);
+  const r = cli(root, ['add', pdf, '--yolo']);
+  assert.equal(r.status, 0, r.out);
+  const bib = bibOf(root);
+  assert.deepEqual(keysOf(bib), ['vaswani2017'], bib);
+  assert.match(bib, /eprint = \{1706\.03762\}/);
+});
+
 test('add <url> of a page with no citation meta tag reads only the first DOI-shaped text on it', () => {
   // The page's first DOI-shaped text is not a DOI ("10.5555/)"); a later DOI
   // on the page may be a cited work's, so the page is not taken to name it.

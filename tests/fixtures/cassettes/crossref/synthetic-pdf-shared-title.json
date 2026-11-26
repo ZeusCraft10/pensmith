@@ -1,0 +1,144 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=Graph%20signals%20on%20sparse%20sensor%20networks&rows=5",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message": {
+        "total-results": 4,
+        "items": [
+          {
+            "DOI": "10.0000/pensmith-shared-title-chen",
+            "type": "journal-article",
+            "title": [
+              "Graph signals on sparse sensor networks"
+            ],
+            "author": [
+              {
+                "family": "Chen",
+                "given": "Li",
+                "sequence": "first"
+              },
+              {
+                "family": "Ruiz",
+                "given": "Ana",
+                "sequence": "additional"
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2018
+                ]
+              ]
+            },
+            "container-title": [
+              "Journal of Test Fixtures"
+            ],
+            "volume": "3",
+            "page": "1-12"
+          },
+          {
+            "DOI": "10.0000/pensmith-shared-title-cheng",
+            "type": "journal-article",
+            "title": [
+              "Graph signals on sparse sensor networks"
+            ],
+            "author": [
+              {
+                "family": "Cheng",
+                "given": "Wei",
+                "sequence": "first"
+              },
+              {
+                "family": "Ruiz",
+                "given": "Ana",
+                "sequence": "additional"
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2019
+                ]
+              ]
+            },
+            "container-title": [
+              "Journal of Test Fixtures"
+            ],
+            "volume": "4",
+            "page": "1-12"
+          },
+          {
+            "DOI": "10.0000/pensmith-shared-title-hann",
+            "type": "journal-article",
+            "title": [
+              "Graph signals on sparse sensor networks"
+            ],
+            "author": [
+              {
+                "family": "Hann",
+                "given": "Jo",
+                "sequence": "first"
+              },
+              {
+                "family": "Ruiz",
+                "given": "Ana",
+                "sequence": "additional"
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2020
+                ]
+              ]
+            },
+            "container-title": [
+              "Journal of Test Fixtures"
+            ],
+            "volume": "5",
+            "page": "1-12"
+          },
+          {
+            "DOI": "10.0000/pensmith-shared-title-hanna",
+            "type": "journal-article",
+            "title": [
+              "Graph signals on sparse sensor networks"
+            ],
+            "author": [
+              {
+                "family": "Hanna",
+                "given": "Sam",
+                "sequence": "first"
+              },
+              {
+                "family": "Ruiz",
+                "given": "Ana",
+                "sequence": "additional"
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2021
+                ]
+              ]
+            },
+            "container-title": [
+              "Journal of Test Fixtures"
+            ],
+            "volume": "5",
+            "page": "1-12"
+          }
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]
