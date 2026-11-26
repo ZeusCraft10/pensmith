@@ -194,6 +194,25 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
   - Write the derived `CITATIONS.bib` through `formatBibtex` in `bin/lib/citations.ts`. The research-time writer (`bin/lib/bibtex-write.ts`) still uses citation-js's ASCII-only BibTeX output, which drops Chinese, Cyrillic and Arabic text and turns Greek into math mode. The export path already uses `formatBibtex`.
   - Wire `sourcePreference` from `templates/presets/disciplines.json` into research's merge-by-identifier ordering, or delete it from the presets and the disciplines schema. It is still unread.
 
+### A2F — A2 review follow-ups (controller follow-up to T04–T09)
+**Issues:** the minor review findings from T04–T09 that no later task owns. Re-check each against the current code first; T07 rewrote the quote matcher after T04's review.
+- Usage errors exit 2. A missing required argument (`pensmith ack 1`, `pensmith add`) exits 1 today, while an unknown verb exits 2. Map every citty usage error to `EXIT_REFUSED` in one place in `bin/pensmith.ts`, with the usage text on stderr. Test two verbs through the real CLI.
+- Ack advice that cannot work. A stored `note = {RETRACTED}` on an entry with no identifier gives RETRACTED with advice to run `pensmith ack`, which refuses an entry with no identifier. Say what will work instead: add the DOI, PMID or arXiv ID, or remove the citation.
+- A record from another verifier is stale. VERIFICATION.json records `verifier_version` but nothing reads it, so a section verified by an older, more lenient verifier still compiles and exports. `verificationStaleness` treats a different `verifier_version` as stale, so compile re-verifies the section.
+- Make the retraction note visible. When OpenAlex could not be asked, the OK reason says so only in VERIFICATION.md. verify's summary should also say how many citations had their retraction status checked from the record alone.
+- Sentence ends in source text. Pass 3's sentence detection misses a full stop followed by a numeric reference marker (`[12]`, `12,13`) and a paragraph break between a heading and the next paragraph. So within the 150-character bound, an ellipsis can join two sentences. Probes that must give NOT_FOUND: 'the treatment ... was ineffective' against 'We found the treatment effective.[12] The placebo was ineffective.', against the same text with `effective.12,13 The placebo`, and against 'effective\n\nResults\n\nThe placebo was ineffective'. If the quadratic rescan in the short-quote matcher is still there, bound it.
+- Missing tests (T06, T09 reviews):
+  - the PMID acknowledgement binding;
+  - a stored note together with an acknowledgement;
+  - a PubMed expression of concern;
+  - the word-for-word title check on both `add <pdf>` paths, through the CLI;
+  - the v1→v2 migration's `researched_at` stamp.
+  Fix any defect they find, in scope.
+- Cleanup:
+  - rename `READ_ONLY_VERBS` in `bin/pensmith.ts` to `NO_COST_VERBS`: it lists the verbs the cost-cap pre-flight skips, and `ack` writes a file;
+  - fix the comments and docs that still describe the old verdict set, the Retraction Watch Labs adapter or the MCP server (`bin/cli/verify.ts`, `verifyDoi` in `bin/lib/doi.ts`, a grep for `retraction-watch`, `Labs` and `MCP`).
+  Leave the dormant hash-pinned prompts in `templates/prompts/` alone; Phase 3 rewrites them.
+
 ### T10 — LLM transport on the official SDK
 **Issues:** `anthropic-response-parse-thinking`, `pricing-table-and-model-ids`, `llm-stop-reason-max-tokens`, `llm-timeout-no-streaming`, `budget-scope-cap-lifetime`, `no-session-cost-cap`, `yolo-preflight-whole-paper-estimate`, `openai-reasoning-params`
 - Rebuild `bin/lib/anthropic.ts` as a `Generator` interface. The Anthropic implementation uses `@anthropic-ai/sdk` with `fetch` routed through the `http.ts` chokepoint:
@@ -208,6 +227,7 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - Budget: remove the lifetime $0.50 per-scope cap. Enforce a per-paper aggregate `cost_cap_usd` (config/env, default $5) at run time, with a clear refusal. The estimator counts only remaining work.
 - OpenAI-compatible path: `max_completion_tokens`, check `finish_reason`, configurable `base_url`.
 - Tests use a mocked transport, including thinking-first responses, max_tokens, refusal and 529.
+- Carry-over from T07: `http.ts` reads a whole response body into memory with no size cap. `extractPdfText`'s 50 MB cap applies only after the read, and `add <url>` has the same problem. Routing the SDK's `fetch` through `http.ts` needs streamed bodies anyway: add a per-request maximum body size there, past which the request fails with a typed error.
 
 ### T11 — Intake, outline and plan contracts
 **Issues:** `intake-discards-assignment`, `intake-clobbers-config-toml`, `outline-format-mismatch`, `planner-output-schema-mismatch`, `planned-status-overloaded`, `section-registry-diverges`, `state-config-at-project-root`
@@ -222,6 +242,8 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - `STATE.json` and `config.toml` move into `.paper/`, with a migration from the root locations.
 - Prompts in `templates/prompts/` are updated to match the schemas. Trim their process-history cruft.
 - Carry-over from T03: when intake records the clarifier's "Which citation style?" answer, write it as `citation_style` under `[project]` in `.paper/config.toml` (normalized with `normalizeStyleName`). `done` reads that key first (`bin/lib/citation-style.ts`). Today the choice is honoured only through `pensmith new --citation-style`, a hand edit of config.toml, or a `Citation style:` line in INTAKE.md.
+- Carry-over from T08: compile adds the outline titles as headings, and done re-checks them, but verify never sees them. So a title that reads like an author-year citation gives RAW_CITATION only at done. Check titles with `citation-grammar` when the outline is validated, and refuse one that holds a citation.
+- Carry-over from T09: `pensmith add <pdf>` keeps the PDF's full text in `.paper/sources/<key>.txt`, but the `.paper/.gitignore` that intake writes ignores only `*.local`. Add `sources/` to it, and to an existing project's `.paper/.gitignore` when it is migrated.
 
 ### T12 — Minimal source feed and drafter contract
 **Issues:** `feed-gap-llm-gets-no-sources`, `write-wave-overwrites-verified`, `source-evaluator-unfenced-fail-open`, `revise-swap-prompt-blind`, drafter side of `empty-or-uncited-draft-verified`
@@ -232,6 +254,7 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - Wave `write` drafts only sections with status planned or writing, unless `--force`.
 - source-evaluator input is fenced, and it fails closed on parse errors.
 - **Exit:** a 2-section paper with disjoint sources shows zero cross-section citekey bleed. Use a fake Generator in tests.
+- Carry-over from T04/T09: read a draft's keys only through `bin/lib/citation-grammar.ts` (`citedKeys`); an AST test fails on any citation regex outside it. Build the source context from LIBRARY.json v2 (`loadLibrary` in `bin/lib/library.ts`), not from CITATIONS.bib, which is a derived view.
 
 ### T13 — Router and approval gates
 **Issues:** `router-failed-unverifiable-loop`, `router-stale-compile-and-final`, `approval-gates-unusable-non-tty`, `gptzero-consent-flow`, `plagiarism-check-false-assurance`
@@ -248,6 +271,10 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - GPTZero: consent once, default no, only with a configured key.
 - Plagiarism: a DuckDuckGo challenge or blocked response gives "incomplete", never "clean". Phrases are sent quoted.
 - Carry-over from T03: on the humanizer path (a wired TaskRunner, which only tests wire in Phase 1), `runHumanizer` writes `.paper/FINAL.md`, the router's done marker, before the export gate and `exportDraft` run. A cancelled, refused or failed export then still leaves the marker. Write the humanized text under a staging name and make it FINAL.md only after a successful export.
+- Carry-over from T08: the FINAL.md re-check (`recheckExportText`, `pass3: false`) blocks a changed quotation only when its source text can be read. If the humanizer changes a cited quotation whose source is PDF_UNAVAILABLE or TEXT_UNAVAILABLE at that check, the changed quotation is exported unblocked. Humanize runs on protected text (owner decision), so make export refuse (exit 2) when any citation or quotation in the humanized text differs from the compiled DRAFT.md, whether or not its source can be read. Compare the spans `citation-grammar` and `extractQuotes` find.
+- Carry-over from T08: in cassette mode, plagiarism reads a cassette miss as "no matches". The "incomplete, never clean" rule covers every lookup that did not get an answer, including a cassette miss and `OfflineEgressError`.
+- Carry-over from T06: when a section fails only on RETRACTED, the router's reason names `pensmith ack <n> <key> --reason "..."` as well as revising. The ack action itself is Phase 2's.
+- Carry-over (T06/T14): `pensmith gate` makes the 18th verb. Add it to `UX02_VERBS` (`bin/lib/verbs.ts`) with a `workflows/gate.md`, and update the verb-count pins (cli-verbs, nl-triggers, tier-contract). Every backticked `pensmith <verb>` in SKILL.md must be one of them.
 
 ### T14 — Packaging: installable plugin + bundled CLI (parallel worktree)
 **Issues:** `plugin-manifest-uninstallable`, Phase-1 part of `tier1-no-executable-path`, `root-mcp-json-project-scope`, `sessionstart-context-not-delivered`, `hooks-write-into-every-project`, `hooks-no-entrypoint-wrong-state`, `stop-hook-useless`, `handoff-size-bound-rejects`, `mcp-verbs-write-stdout`, `mcp-surface-noop-and-unwired`, `mcp-resources-wrong-root`, `mcp-tools-expose-yolo-and-paperroot`, `skill-descriptions-overtrigger`, `ci-gates-pin-invalid-plugin-format`, `build-ships-compiled-tests`, `package-deps-engines-hygiene`, `ecosystem-presence-wrong-paths`, `docs-inaccurate`
@@ -317,6 +344,10 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - `scripts/run-tests.mjs` isolates HOME/XDG/LOCALAPPDATA/tmp itself and sets `PENSMITH_TEST_CASSETTES=1`.
 - Fix the root-only chmod test so it skips when uid is 0.
 - Carry-over (controller, after the T14 merge): in-process tests write `.paper/SESSION.log` and `.paper/COSTS.jsonl` into the repository root, because `paperDir()` defaults to `process.cwd()`. Examples are the state race tests (`paper-rt`, `paper-race`) and the GPTZero cost record (`honesty-gptzero`). Make every such test pass an explicit temp paper root, or chdir into one. Make the runner fail any test that creates `<repo>/.paper`. Check that production writes the session log and the cost ledger under the paper root it was given, not under the cwd.
+- Carry-over from T05: exit criterion 3's 10/10 fabricated DOIs must go through the real verify CLI. T05 recorded one fabricated DOI (Crossref, DataCite and doi.org all answer not-found). Record nine more for the known-bad corpus (about 27 live requests, no contact email sent), and run that corpus through `pensmith verify`, not `runPass1Unit`.
+- Carry-over from T06: record OpenAlex answers for the corpora, so their OK reasons no longer end with "OpenAlex could not be asked (PENSMITH_CASSETTE_MISS)".
+- Carry-over from T05: the research-side cassettes (the Crossref `works-attention` search entry, Semantic Scholar, OpenAlex) claim Crossref holds arXiv DOIs. Correct them, or re-record them.
+- Carry-over from T07: tests leave about 30 `pensmith-bib-fixture-*` temp folders behind (`tests/lib/bib-fixture.ts`). Remove each in the test's teardown; the runner's tmp isolation should catch any others.
 
 ## Phase 1 exit criteria (controller verifies before declaring done)
 
