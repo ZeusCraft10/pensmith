@@ -62,7 +62,7 @@ import {
 import { oneLine, parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
 import { addToLibrary, loadLibrary, type Library } from './library.js';
 import { renderSourceContext, sourceContext, type SourceContextEntry } from './source-context.js';
-import { promptText } from './untrusted-fence.js';
+import { stripFenceMarkers } from './untrusted-fence.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
 import { assignedSourcesFrom } from './plan-status.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
@@ -650,7 +650,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     verifier_reason: failing.reason,
     claim_context: claimContext(draftMd, failing),
     available_sources: renderSourceContext(sources) + (missing.length > 0
-      ? `\n\nAssigned, but with no record in the library to judge them by: ${promptText(missing.join(', '))}.`
+      ? `\n\nAssigned, but with no record in the library to judge them by: ${stripFenceMarkers(missing.join(', '))}.`
       : ''),
     voice_hint: voiceHint(planMd),
   };

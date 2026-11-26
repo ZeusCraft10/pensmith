@@ -7,8 +7,12 @@
 // source, so the text is first stripped of anything that could pass for one:
 // the marker's name, and any run of three or more angle brackets.
 //
-// Every value interpolated into a prompt goes through one of the prompt*
-// helpers below, which also escape template tokens (intake-parse.ts).
+// A value interpolated into a prompt goes through one of the prompt*
+// helpers below, which also escape template tokens (intake-parse.ts). One
+// exception: revise's note of the assigned keys with no library record is
+// only stripped (stripFenceMarkers). interpolate() makes one pass, so a `{{`
+// in a key is never read as a slot, and the key is shown exactly as a swap
+// must name it.
 //
 // The markers are the ones the claim-support and orphan-label prompts name
 // (verify/pass2.ts and verify/pass4.ts import them from here).
@@ -20,7 +24,7 @@ export const FENCE_OPEN = `<<<PENSMITH_UNTRUSTED_DATA_${FENCE_ID}>>>`;
 export const FENCE_CLOSE = `<<<END_PENSMITH_UNTRUSTED_DATA_${FENCE_ID}>>>`;
 
 /** `text` with nothing left that could open or close a fence. */
-function stripFenceMarkers(text: string): string {
+export function stripFenceMarkers(text: string): string {
   return text
     .replace(/PENSMITH_UNTRUSTED_DATA/gi, '[marker removed]')
     .replace(/<{3,}/g, '<<')

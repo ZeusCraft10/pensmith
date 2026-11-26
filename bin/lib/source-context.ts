@@ -13,7 +13,6 @@
 import { z } from 'zod/v4';
 import { displayName } from './author-normalize.js';
 import { decodeEntities } from './csl-html.js';
-import { cslDateYear } from './sources/work-record.js';
 import { fencedJson } from './untrusted-fence.js';
 import type { Library, LibraryItem } from './schemas/library.js';
 import type { CslName } from './schemas/source-candidate.js';
@@ -35,6 +34,17 @@ const AUTHORS_SHOWN = 6;
 
 /** How much of an abstract a prompt is shown, unless the caller says otherwise. */
 export const ABSTRACT_CHARS = 2000;
+
+/**
+ * The work's year as LIBRARY.json holds it, a number however early or late,
+ * so a prompt shows 1265 for Aquinas and -350 for Aristotle. (work-record's
+ * cslDateYear keeps only 1500 to 2100, the range Pass 1 compares with
+ * registry records.)
+ */
+function yearOf(item: LibraryItem): number | undefined {
+  const y = (item.issued as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
+  return typeof y === 'number' ? y : undefined;
+}
 
 /**
  * A markup tag: `<` then a letter or `/` (`<jats:p>`, `</i>`, `<br/>`). A `<`
@@ -68,7 +78,7 @@ function entryOf(item: LibraryItem, abstractChars: number): SourceContextEntry {
   const names = (item.author ?? item.editor ?? []) as CslName[];
   const authors = names.slice(0, AUTHORS_SHOWN).map(displayName).filter((n) => n.length > 0);
   if (names.length > AUTHORS_SHOWN) authors.push('et al.');
-  const year = cslDateYear(item.issued);
+  const year = yearOf(item);
   const venue = item['container-title'] ?? item.publisher;
   const abstract = item.abstract ? plainAbstract(item.abstract, abstractChars) : '';
   return {

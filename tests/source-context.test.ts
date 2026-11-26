@@ -65,3 +65,20 @@ test('the whole library, for the outline author and the planner, is fenced and c
   assert.ok(json[0]!.abstract.length <= 601, `abstract cut to 600 characters, got ${json[0]!.abstract.length}`);
   assert.equal(renderLibraryContext(null).split('\n')[1], '[]');
 });
+
+test('a work keeps the year its LIBRARY.json entry holds, however early', () => {
+  // Pass 1's 1500 to 2100 bound is for comparing with registry records; the
+  // outline author, planner, drafter and revise-swap are shown the year as held.
+  const old: Library = {
+    ...LIBRARY,
+    entries: [
+      { id: 'aquinas1265', type: 'book', title: 'Summa Theologiae', issued: { 'date-parts': [[1265]] }, custom },
+      { id: 'aristotle-350', type: 'book', title: 'Nicomachean Ethics', issued: { 'date-parts': [[-350]] }, custom },
+    ],
+  };
+  const { sources } = sourceContext(old, ['aquinas1265', 'aristotle-350']);
+  assert.deepEqual(sources.map((s) => s.year), [1265, -350]);
+  const text = renderLibraryContext(old);
+  assert.match(text, /"year": 1265/);
+  assert.match(text, /"year": -350/);
+});

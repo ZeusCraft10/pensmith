@@ -10,7 +10,7 @@
 
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _setGeneratorForTest, type Generator } from '../bin/lib/anthropic.js';
@@ -134,16 +134,19 @@ test('proposeSwap fences the citing sentence and the sources, strips a fence mar
 
 test('a swap to an assigned key LIBRARY.json holds no record of is shown at the gate as having none', async () => {
   const root = seed();
+  const proposals: ReviseSwapProposal[] = [];
   const shown: ReviseGateContext[] = [];
   const toMissing = { ...SWAP, replacement_citekey: 'missing2017', patch: { before_excerpt: '[@jones2019]', after_excerpt: '[@missing2017]' } };
   const res = await runRevise({
     paperRoot: root, n: 2, slug: 'target', yolo: false,
     proposeSwap: () => Promise.resolve(JSON.stringify(toMissing)),
-    approve: (_p, context) => { shown.push(context); return Promise.resolve(false); },
+    approve: (p, context) => { proposals.push(p); shown.push(context); return Promise.resolve(false); },
   });
   assert.equal(res.accepted, false);
+  assert.equal(proposals[0]!.replacement_citekey, 'missing2017', 'the gate is handed the replacement key');
   assert.deepEqual(shown[0], {}, 'no record to show');
-  const note = gateNote(toMissing as ReviseSwapProposal, shown[0]!);
+  // The note the gate prints, from what runRevise handed the gate.
+  const note = gateNote(proposals[0]!, shown[0]!);
   assert.match(note, /\[@missing2017\] — no record in LIBRARY\.json/);
 
   // A replacement with a record is shown with its title and abstract.
@@ -153,6 +156,34 @@ test('a swap to an assigned key LIBRARY.json holds no record of is shown at the 
   assert.match(withRecord, /^- \[@jones2019\]\n\+ \[@baker2018\]/);
   assert.match(withRecord, /Replacement: \[@baker2018\] The Mechanism Is Robust Across Cohorts \(Baker, A\., 2018\)/);
   assert.match(withRecord, /Abstract: Across four cohorts\./);
+});
+
+test('an assigned key with no record is named to the model exactly as PLAN.md has it, braces and all', async () => {
+  // interpolate() makes one pass, so a `{{` in a key is never read as a slot;
+  // the key is shown as a swap must name it.
+  const root = seed();
+  const plan = join(root, '.paper', 'sections', '02-target', 'PLAN.md');
+  writeFileSync(plan, readFileSync(plan, 'utf8').replace("  - missing2017\n", "  - missing2017\n  - 'smith{{2020}}'\n"));
+  const vars: ReviseSwapVars[] = [];
+  await runRevise({
+    paperRoot: root, n: 2, slug: 'target', yolo: false,
+    proposeSwap: (v) => { vars.push(v); return Promise.resolve(JSON.stringify(SWAP)); },
+    approve: () => Promise.resolve(false),
+  });
+  assert.match(vars[0]!.available_sources, /no record in the library to judge them by: missing2017, smith\{\{2020\}\}\.$/);
+
+  let sent = '';
+  _setGeneratorForTest({
+    async generate(req) {
+      sent = req.messages.map((m) => m.content).join('\n');
+      return {
+        text: JSON.stringify(SWAP), model: req.model, stop: 'complete', stopReason: 'end_turn',
+        usage: [{ model: req.model, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 }],
+      };
+    },
+  });
+  await proposeSwap(vars[0]!);
+  assert.ok(sent.includes('to judge them by: missing2017, smith{{2020}}.'), 'the model is sent the key as PLAN.md has it');
 });
 
 test('an unreadable LIBRARY.json is named on stderr, not passed over in silence', async () => {

@@ -96,10 +96,10 @@ afterEach(() => {
   }
 });
 
-async function runPlan(root: string, n: number): Promise<Record<string, unknown>> {
+async function runPlan(root: string, n: number, extra: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   const { planCommand } = await import('../bin/cli/plan.js');
   process.chdir(root);
-  const res = (await (planCommand.run as (c: { args: Record<string, unknown> }) => Promise<Record<string, unknown>>)({ args: { n, yolo: true } })) ?? {};
+  const res = (await (planCommand.run as (c: { args: Record<string, unknown> }) => Promise<Record<string, unknown>>)({ args: { n, yolo: true, ...extra } })) ?? {};
   return { ...res, exitCode: process.exitCode ?? 0 };
 }
 
@@ -127,6 +127,21 @@ test('the planner\'s JSON becomes a PLAN.md whose frontmatter code wrote from th
   assert.match(body, /^## Brief\n\nThis section sets out/m);
   assert.match(body, /^Voice: measured, precise$/m);
   assert.match(body, /^- It weakens once prior anxiety is controlled for\. \(sources: lee2021\)$/m);
+});
+
+test('plan N --slug X, for an X that is not the outline\'s slug for N, still tells the planner the outline\'s purpose for N', async () => {
+  const root = await paper();
+  const seen: Seen[] = [];
+  _setGeneratorForTest(answering([PLAN], seen));
+  const res = await runPlan(root, 2, { slug: 'my-evidence' });
+  assert.equal(res['ok'], true, JSON.stringify(res));
+  const section = /\{"number":2,[^\n]*?"outline_sources":\[[^\]]*\]\}/.exec(seen[0]!.system)?.[0];
+  assert.ok(section, 'the section JSON is in the planner prompt');
+  assert.deepEqual(JSON.parse(section), {
+    number: 2, slug: 'my-evidence', title: 'my-evidence', purpose: 'Survey the cohort studies.', depends_on: [],
+    word_target: null, outline_sources: [],
+  });
+  assert.ok(existsSync(planFile(root, '02-my-evidence')), 'PLAN.md is written in the folder --slug names');
 });
 
 test('a plan that cites outside the library is repaired once, then refused with exit 2, the stub left as it was', async () => {
