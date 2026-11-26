@@ -114,7 +114,7 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       if (n === null) {
         return {
           command,
-          summary: 'Draft every planned section, wave by wave in dependency order.',
+          summary: 'Draft every planned section, wave by wave in dependency order (with --force, drafted sections too).',
           reads: ['.paper/sections/*/PLAN.md', paper('OUTLINE.json'), paper('LIBRARY.json')],
           writes: ['.paper/sections/*/DRAFT.md', '.paper/sections/*/PLAN.md (status)'],
           model: '1 call per section (section drafter)',
@@ -123,7 +123,7 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       }
       return {
         command,
-        summary: 'Draft this section from its plan and the sources it assigns (replacing any existing draft).',
+        summary: 'Draft this section from its plan and the sources it assigns (a section already drafted needs --force).',
         reads: [sec('PLAN.md'), paper('OUTLINE.json'), paper('LIBRARY.json')],
         writes: [sec('DRAFT.md'), `${sec('PLAN.md')} (status)`],
         model: '1 call (section drafter)',

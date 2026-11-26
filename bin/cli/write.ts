@@ -22,7 +22,7 @@ import { readGoalFromConfig } from './goal.js';
 import { sectionDraft, sectionPlan, paperDir } from '../lib/paths.js';
 import { assignedSourcesFrom, updatePlanFrontmatter } from '../lib/plan-status.js';
 import { draftProblems, renderDrafterPrompt, SectionDraftSchema, type DrafterInput, type SectionDraft } from '../lib/drafter-input.js';
-import { runAllSections } from '../lib/write-orchestrator.js';
+import { draftRefusal, runAllSections } from '../lib/write-orchestrator.js';
 import { lastCheckedOutline, readOutline } from '../lib/outline-read.js';
 import type { SectionNode } from '../lib/schemas/wave-graph.js';
 import { styleMatchToVoiceHint } from '../lib/style-match.js';
@@ -36,6 +36,7 @@ import { loadLibrary } from '../lib/library.js';
 import { sourceContext } from '../lib/source-context.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
+import { readSectionState } from '../lib/router.js';
 import { artifactText } from '../lib/placeholder.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { CostCapExceededError } from '../lib/budget.js';
@@ -208,9 +209,11 @@ function reportGaps(n: number, slug: string, gaps: SectionDraft['gaps']): void {
  * the section's sources, and save it as DRAFT.md. Both `pensmith write <n>`
  * and each node of a wave write run through here.
  */
-async function writeOneSection(n: number, slug: string): Promise<string> {
+async function writeOneSection(n: number, slug: string, force: boolean): Promise<string> {
   const paperRoot = process.cwd();
   const planPath = sectionPlan(n, slug, paperRoot);
+  const refusal = draftRefusal(n, readSectionState(planPath).status, force);
+  if (refusal) throw new DraftRefusedError(`not drafted: ${refusal}.`);
   let planMd = '';
   try {
     planMd = readFileSync(planPath, 'utf8');
@@ -266,7 +269,10 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
     );
   }
 
+  // A draft about to be replaced (only --force, or a re-plan, gets here with
+  // one) is kept beside the new one.
   const targetPath = sectionDraft(n, slug, paperRoot);
+  if (existsSync(targetPath)) await atomicWriteFile(`${targetPath}.bak`, readFileSync(targetPath));
   if ('placeholder' in answer) {
     await atomicWriteFile(targetPath, artifactText(answer.placeholder));
   } else {
@@ -290,7 +296,7 @@ export const writeCommand = defineCommand({
   meta: {
     name: 'write',
     description:
-      'Draft DRAFT.md for one section, or (no <n>) schedule all sections into waves.',
+      'Draft DRAFT.md for one planned section, or (no <n>) every planned section in waves; --force drafts a drafted one again.',
   },
   args: {
     n: {
@@ -308,6 +314,11 @@ export const writeCommand = defineCommand({
       description:
         'Wave-mode concurrency cap (Tier 1 default 5; Tier 2 forces 1 with a WARN).',
     },
+    force: {
+      type: 'boolean',
+      description: 'Draft a section that is already drafted again (its DRAFT.md is kept as DRAFT.md.bak).',
+      default: false,
+    },
     yolo: {
       type: 'boolean',
       description: 'Skip approval gates.',
@@ -315,35 +326,31 @@ export const writeCommand = defineCommand({
     },
   },
   async run({ args }) {
-    // ---- Wave mode: no positional <n> ----
-    // When <n> is absent, schedule ALL planned sections into waves and write
-    // them wave-by-wave. Each node routes through writeOneSection (which runs
-    // the WRTE-04 chokepoint per section — no bypass). Progress streams as
-    // structured JSON lines to stdout (04-RESEARCH §L); WARN goes to stderr.
-    if (args.n === undefined || args.n === null || args.n === '') {
-      // CR-02: GEN-06 fail-loud probe for wave mode.
-      // Single-section path catches MissingApiKeyError from writeOneSection,
-      // but wave mode routes it per-section via runAllSections — by then
-      // disabling the whole wave is not possible. Probe here, before dispatch.
-      const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-      if (!noLlm) {
-        try {
-          const providerId = await resolveProviderId();
-          await getProviderApiKey(providerId);
-        } catch (e) {
-          if (e instanceof MissingApiKeyError) {
-            process.stderr.write(
-              'pensmith write: ERROR — no LLM key configured.\n' +
-              'Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n' +
-              'Run inside Claude Code (Tier 1) for key-free operation.\n',
-            );
-            process.exitCode = 1;
-            return { ok: false, mode: 'no-key-configured' };
-          }
-          throw e;
+    const force = args.force === true;
+    // Without a key there is no drafter to ask, and write says so before it
+    // looks at any section (in a wave, before the first one starts).
+    if (process.env['PENSMITH_NO_LLM'] !== '1') {
+      try {
+        await getProviderApiKey(await resolveProviderId());
+      } catch (e) {
+        if (e instanceof MissingApiKeyError) {
+          process.stderr.write(
+            'pensmith write: ERROR — no LLM key configured.\n' +
+            'Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n' +
+            'Run inside Claude Code (Tier 1) for key-free operation.\n',
+          );
+          process.exitCode = 1;
+          return { ok: false, mode: 'no-key-configured' };
         }
+        throw e;
       }
+    }
 
+    // ---- Wave mode: no positional <n> ----
+    // When <n> is absent, schedule the sections that have something to draft
+    // into waves and write them wave by wave, each through writeOneSection.
+    // Progress streams as JSON lines to stdout; warnings go to stderr.
+    if (args.n === undefined || args.n === null || args.n === '') {
       const rawMax = typeof args['max-parallel'] === 'string' ? Number(args['max-parallel']) : DEFAULT_MAX_PARALLEL;
       const maxParallel = Number.isInteger(rawMax) && rawMax >= 1 ? rawMax : DEFAULT_MAX_PARALLEL;
 
@@ -373,6 +380,7 @@ export const writeCommand = defineCommand({
       const results = await runAllSections(paperRoot, {
         maxParallel,
         outline: outline.outline,
+        force,
         writeSection: async (node: SectionNode) => {
           if (capRefusal) {
             process.stderr.write(
@@ -384,7 +392,7 @@ export const writeCommand = defineCommand({
             JSON.stringify({ event: 'section_start', wave: node.computed_wave, section: node.slug }) + '\n',
           );
           try {
-            await writeOneSection(node.n, node.slug);
+            await writeOneSection(node.n, node.slug, force);
           } catch (e) {
             if (e instanceof CostCapExceededError) capRefusal ??= e;
             process.stderr.write(`pensmith write: section ${node.n} (${node.slug}): ${describeFailure(e)}\n`);
@@ -429,6 +437,9 @@ export const writeCommand = defineCommand({
           if (s.unusablePlan) {
             process.stderr.write(`pensmith write: section ${s.n} (${s.slug}): ERROR — not drafted, because ${s.error}.\n`);
           }
+          if (s.status === 'skipped') {
+            process.stderr.write(`pensmith write: section ${s.n} (${s.slug}): not drafted, because ${s.error}.\n`);
+          }
           if (s.status === 'blocked') {
             process.stderr.write(
               `pensmith write: section ${s.n} (${s.slug}): not drafted, because a section it depends on was not.\n`,
@@ -462,17 +473,8 @@ export const writeCommand = defineCommand({
 
     let targetPath: string;
     try {
-      targetPath = await writeOneSection(n, slug);
+      targetPath = await writeOneSection(n, slug, force);
     } catch (e) {
-      if (e instanceof MissingApiKeyError) {
-        process.stderr.write(
-          'pensmith write: ERROR — no LLM key configured.\n' +
-          'Set ANTHROPIC_API_KEY to enable real generation.\n' +
-          'Run inside Claude Code (Tier 1) for key-free operation.\n',
-        );
-        process.exitCode = 1;
-        return { ok: false, mode: 'no-key-configured' };
-      }
       if (e instanceof DraftRefusedError) {
         process.stderr.write(`pensmith write: section ${n} (${slug}): ${describeFailure(e)}\n`);
         process.exitCode = e.exitCode;

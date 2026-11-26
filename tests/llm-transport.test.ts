@@ -787,6 +787,15 @@ const VERB_NO_LLM_ARGS: Partial<Record<GenerativeVerb, string[]>> = {
   intake: ['--answers', JSON.stringify({ assignment: 'Write a 2000-word essay on tidal energy policy.', ...INTAKE_ANSWERS })],
 };
 
+// write drafts only a planned section, so T-11-06 gives it one to draft.
+const VERB_NO_LLM_SETUP: Partial<Record<GenerativeVerb, (root: string) => Promise<void>>> = {
+  write: async (root) => {
+    const dir = path.join(root, '.paper', 'sections', '01-placeholder');
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(path.join(dir, 'PLAN.md'), '---\nsection: 1\nslug: placeholder\ntitle: Placeholder\nassigned_sources: []\nstatus: planned\n---\n## Brief\n\nIntroduce the topic.\n');
+  },
+};
+
 for (const verb of VERBS_FOR_INTEGRATION) {
   test(`T-11-05: verb '${verb}' exits non-zero + stderr banner when no LLM key configured`, async (t) => {
     if (!(await transportReady())) {
@@ -877,6 +886,7 @@ for (const verb of VERBS_FOR_INTEGRATION) {
 
     const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), `pensmith-t1106-${verb}-`));
     await fsp.mkdir(path.join(tmpRoot, '.paper'), { recursive: true });
+    await VERB_NO_LLM_SETUP[verb]?.(tmpRoot);
 
     try {
       const result = spawnSync(

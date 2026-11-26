@@ -9,10 +9,13 @@
 //
 // HARD INVARIANTS:
 //   - READ-ONLY orchestrator (ARCH-20 / D-04): this module persists NOTHING of
-//     its own. It reads OUTLINE.md + each section's PLAN.md frontmatter (to
-//     supply the scheduler its `wave:` overrides), then delegates ALL writes to
+//     its own. It reads the outline + each section's PLAN.md frontmatter (its
+//     status, and the scheduler's `wave:` overrides), then delegates ALL writes to
 //     `opts.writeSection`, which performs the existing per-section atomic writes.
 //     No wave-state / progress file is ever written here.
+//   - Only sections with something to draft are scheduled: status 'planned'
+//     or 'writing', or with --force any section that has a plan. A stub, and
+//     a section already drafted, are reported as skipped and never touched.
 //   - Each wave drains FULLY before the next begins (D-02 — no cross-wave
 //     pipelining). A fresh Semaphore is constructed per wave.
 //   - Within-wave failure does NOT cancel siblings (D-03) — runWave uses
@@ -41,10 +44,11 @@ import { ZodError } from 'zod';
 export interface SectionResult {
   slug: string;
   n: number;
-  /** Terminal status: 'done' (write succeeded), 'failed' (write threw), or
-   *  'blocked' (a transitive dependency failed, so the write was skipped). */
-  status: 'done' | 'failed' | 'blocked';
-  /** Error message when status === 'failed'. */
+  /** Terminal status: 'done' (write succeeded), 'failed' (write threw),
+   *  'blocked' (a transitive dependency failed, so the write was skipped), or
+   *  'skipped' (nothing to draft: no plan yet, or already drafted). */
+  status: 'done' | 'failed' | 'blocked' | 'skipped';
+  /** Error message when status === 'failed'; why, when status === 'skipped'. */
   error?: string;
   /** The exit code the error asks for (2 for a refusal), when it carries one. */
   exitCode?: number;
@@ -93,6 +97,23 @@ export interface RunAllSectionsOpts {
   onSectionWritten?: SectionWrittenCallback;
   /** The outline, when the caller has already read it; else it is read here. */
   outline?: ParsedOutline;
+  /** Draft sections that are already drafted too (never a stub). */
+  force?: boolean;
+}
+
+/** The statuses a section is drafted from without --force: planned, or a draft that did not finish. */
+const DRAFTABLE: ReadonlySet<string> = new Set(['planned', 'writing']);
+
+/**
+ * Why section `n`, whose PLAN.md has `status`, is not drafted, or null when it
+ * is. A stub has no plan to draft from, --force or not. A section already
+ * drafted (written, verified, failed, ...) is the author's work: it is
+ * drafted again only with --force.
+ */
+export function draftRefusal(n: number, status: string, force: boolean): string | null {
+  if (status === 'stub') return `it has no plan yet; run \`pensmith plan ${n}\` first`;
+  if (DRAFTABLE.has(status) || force) return null;
+  return `it is already drafted (status ${status}); nothing was changed. Run \`pensmith write ${n} --force\` to draft it again (the current DRAFT.md is kept as DRAFT.md.bak)`;
 }
 
 /**
@@ -144,14 +165,21 @@ export async function runAllSections(
   //    artifacts are never touched (section-as-phase isolation).
   //    A PLAN.md whose frontmatter cannot be used fails its own section (and
   //    blocks the sections that depend on it); the rest of the paper goes on.
+  //    A section with nothing to draft (a stub, or one already drafted
+  //    without --force) is left out too, and reported as skipped; a section
+  //    that depends on it is drafted, since its upstream is not failing.
   const allow = opts.only ? new Set(opts.only) : null;
   const plans = new Map<string, PlanFrontmatter>();
   const unusable: SectionResult[] = [];
+  const skipped: SectionResult[] = [];
   for (const s of outline.sections) {
     if (allow && !allow.has(s.slug)) continue;
     try {
       const plan = await loadPlanFrontmatter(paperRoot, s.n, s.slug);
-      if (plan) plans.set(s.slug, plan);
+      if (!plan) continue;
+      const refusal = draftRefusal(s.n, plan.status, opts.force === true);
+      if (refusal) skipped.push({ slug: s.slug, n: s.n, status: 'skipped', error: refusal });
+      else plans.set(s.slug, plan);
     } catch (e) {
       const why = e instanceof ZodError
         ? e.issues.map((i) => `${i.path.join('.') || '(frontmatter)'}: ${i.message}`).join('; ')
@@ -166,7 +194,8 @@ export async function runAllSections(
   // 4. Drain waves serially. Track slugs that ended `failed` or `blocked` so a
   //    downstream node whose deps include one is pruned from later waves (D-03).
   const failedOrBlocked = new Set<string>(unusable.map((u) => u.slug));
-  const results: WaveResult[] = unusable.length > 0 ? [{ wave: 0, sections: unusable }] : [];
+  const notRun = [...unusable, ...skipped].sort((a, b) => a.n - b.n);
+  const results: WaveResult[] = notRun.length > 0 ? [{ wave: 0, sections: notRun }] : [];
 
   for (const waveNodes of graph.waves) {
     if (waveNodes.length === 0) continue;

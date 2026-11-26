@@ -43,7 +43,7 @@ below is the prompt that drives the verb under both Tier 1 and Tier 2.
 
 ## Body
 
-1. **Parse args**: `pensmith write <N>` — `N` is the 1-based section number. Read `.paper/OUTLINE.md` to resolve the slug.
+1. **Parse args**: `pensmith write <N> [--force]` — `N` is the 1-based section number. Read the outline to resolve the slug. A section is drafted only when its PLAN.md `status` is `planned` or `writing`; a `stub` (no plan yet) is refused with exit 2 (run `pensmith plan <N>`), and a section already drafted (`written`, `verifying`, `verified`, `failed`, `unverifiable`) is refused with exit 2 unless `--force` is given, which keeps the old draft as `DRAFT.md.bak`.
 
 2. **Read inputs**:
    - `<sectionPlan(n, slug)>` → `.paper/sections/<NN>-<slug>/PLAN.md`: its `assigned_sources` and its body (the brief, the voice line, the claims), without the frontmatter.
@@ -70,6 +70,9 @@ below is the prompt that drives the verb under both Tier 1 and Tier 2.
    - **Tier 2** (portable CLI): forces `--max-parallel 1` and emits exactly ONE WARN to
      stderr ("Tier 2 runs sections serially; --max-parallel ignored", D-02). The flag is
      parsed, never error'd, so the same invocation works in both tiers.
+   - Only sections whose status is `planned` or `writing` are scheduled (any planned-or-later
+     section with `--force`, never a `stub`). Each section left out is named on stderr with why;
+     a section that depends on one is still drafted.
    - Within-wave failures do NOT cancel siblings; a section whose dependency failed is marked
      `blocked` and skipped, while orthogonal subtrees still complete (D-03).
    - Progress streams as structured JSON lines to stdout (`section_start` / `section_done` /
@@ -77,4 +80,4 @@ below is the prompt that drives the verb under both Tier 1 and Tier 2.
    - Approval gates are NOT prompted per section here — wave runs are batched; section-level
      citation approval lives in `--revise` (Plan 04).
 
-10. **Shell fallback** (TIER-06 equivalence path): `pensmith write [<N>] [--max-parallel K] [--yolo]`.
+10. **Shell fallback** (TIER-06 equivalence path): `pensmith write [<N>] [--force] [--max-parallel K] [--yolo]`.

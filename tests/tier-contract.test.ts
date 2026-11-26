@@ -224,6 +224,16 @@ function seedVerifySectionDraft(root: string): void {
   );
 }
 
+/** A planned PLAN.md for the MIDDLE_SECTION placeholder dir, for the write-section case. */
+function seedPlannedSection(root: string): void {
+  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'PLAN.md'),
+    `---\nsection: ${MIDDLE_SECTION}\nslug: placeholder\ntitle: Placeholder\nassigned_sources: []\nstatus: planned\n---\n## Brief\n\nSet out the background.\n`,
+  );
+}
+
 for (const tc of PHASE_3_CASES) {
   const verbExists = existsSync(new URL(`../${tc.verbFile}`, import.meta.url));
 
@@ -271,6 +281,10 @@ for (const tc of PHASE_3_CASES) {
     // blocks it.
     if (tc.name === 'verify-section') {
       seedVerifySectionDraft(root);
+    }
+    // write drafts only a section that has been planned.
+    if (tc.name === 'write-section') {
+      seedPlannedSection(root);
     }
 
     // --- Tier 2 (CLI) ---
