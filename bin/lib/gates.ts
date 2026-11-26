@@ -59,8 +59,12 @@ export const GateRecordSchema = z.object({
   binding: z.record(z.string(), z.string().nullable()),
   /** What the verb kept to apply: its proposal, and what it showed. */
   payload: z.unknown(),
-  /** The pending line the verb printed (its name and what it showed), so `gate list` prints the same. */
-  shown: z.object({ pending: z.string().min(1), extra: z.record(z.string(), z.unknown()) }).strict(),
+  /**
+   * The pending line the verb printed (its name and what it showed), so
+   * `gate list` prints the same. A record kept by a build from before it was
+   * written has none; it is still read, listed and answered.
+   */
+  shown: z.object({ pending: z.string().min(1), extra: z.record(z.string(), z.unknown()) }).strict().optional(),
   answer: z.object({ options: z.array(z.string()), answered_at: z.string().min(1) }).strict().optional(),
 }).strict();
 
@@ -78,7 +82,7 @@ export interface OpenGate {
   binding: GateRecord['binding'];
   payload: unknown;
   /** The pending name and what the decision line shows besides the record's own fields. */
-  shown: GateRecord['shown'];
+  shown: NonNullable<GateRecord['shown']>;
 }
 
 function gateFile(paperRoot: string, id: string): string {
@@ -184,33 +188,38 @@ export function howToAnswer(record: GateRecord): string {
 }
 
 /**
- * The one JSON line a verb prints when it stops for this decision, built from
- * the record: its `shown` carries what the person needs to see to decide (the
- * proposal itself), so `pensmith gate list` prints the same line. `more`
- * adds to it, or replaces what a verb shows as it is now.
+ * The one JSON line a verb prints when it stops for this decision. `extra`
+ * carries what the person needs to see to decide (the proposal itself); a
+ * verb builds it from the payload it applies, so what is shown is what an
+ * approval applies. `pensmith gate list` prints the same line from the
+ * record's `shown`.
  */
-export function pendingDecision(record: GateRecord, more: Record<string, unknown> = {}): Record<string, unknown> {
+export function pendingDecision(record: GateRecord, pending: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    pending: record.shown.pending,
+    pending,
     gate: record.gate,
     ref: record.ref,
     summary: record.summary,
     options: record.options,
     ...(record.multiple ? { multiple: true } : {}),
     default: record.multiple ? record.default : (record.default[0] ?? null),
-    ...record.shown.extra,
-    ...more,
+    ...extra,
     how_to_answer: howToAnswer(record),
   };
 }
 
 /**
  * Stop the verb for the person's answer: `note` (one line, saying why) on
- * stderr, the decision line on stdout, exit 3.
+ * stderr, the decision line (`pendingDecision`) on stdout, exit 3.
  */
-export function stopForAnswer(note: string, record: GateRecord, more: Record<string, unknown> = {}): { ok: false; mode: 'pending'; ref: string } {
+export function stopForAnswer(
+  note: string,
+  record: GateRecord,
+  pending: string,
+  extra: Record<string, unknown> = {},
+): { ok: false; mode: 'pending'; ref: string } {
   process.stderr.write(`${note}\n`);
-  process.stdout.write(`${JSON.stringify(pendingDecision(record, more))}\n`);
+  process.stdout.write(`${JSON.stringify(pendingDecision(record, pending, extra))}\n`);
   process.exitCode = EXIT_NEEDS_ANSWER;
   return { ok: false, mode: 'pending', ref: record.ref };
 }

@@ -157,9 +157,14 @@ async function askCandidates(candidates: SourceCandidate[], evaluated: boolean):
   return Array.isArray(value) ? value.map(String) : [];
 }
 
-/** Print the kept scope choice (the scopes its record shows) and stop for the author's answer (exit 3). */
-function showScopes(record: GateRecord): Record<string, unknown> {
-  return stopForAnswer('pensmith research: choosing the search scope needs the user, and there is no terminal to ask in; the scopes are kept until they answer.', record);
+/** Print the kept scope choice (`scopes`, the ones an answer chooses from) and stop for the author's answer (exit 3). */
+function showScopes(record: GateRecord, scopes: Scope[]): Record<string, unknown> {
+  return stopForAnswer(
+    'pensmith research: choosing the search scope needs the user, and there is no terminal to ask in; the scopes are kept until they answer.',
+    record,
+    'research-scope',
+    { scopes },
+  );
 }
 
 /** What the candidate decision shows: each candidate in brief. */
@@ -171,12 +176,14 @@ function candidatesShown(kept: z.infer<typeof KeptCandidatesSchema>): Record<str
   return { scope: kept.scope, evaluated: kept.evaluated, candidates };
 }
 
-/** Print the kept candidates (as its record shows them) and stop for the author's choice (exit 3). */
-function showCandidates(record: GateRecord, evaluated: boolean): Record<string, unknown> {
+/** Print the kept candidates (`kept`, the ones an answer chooses from) and stop for the author's choice (exit 3). */
+function showCandidates(record: GateRecord, kept: z.infer<typeof KeptCandidatesSchema>): Record<string, unknown> {
   return stopForAnswer(
     'pensmith research: choosing which sources to keep needs the user, and there is no terminal to ask in; the candidates are kept until they answer.' +
-      (evaluated ? '' : ' The source evaluator kept none of them, so none is chosen for them.'),
+      (kept.evaluated ? '' : ' The source evaluator kept none of them, so none is chosen for them.'),
     record,
+    'research-candidates',
+    candidatesShown(kept),
   );
 }
 
@@ -220,7 +227,7 @@ export const researchCommand = defineCommand({
       const kept = KeptCandidatesSchema.safeParse(keptList.payload);
       if (kept.success && gateStillApplies(keptList, binding)) {
         candidates = kept.data.candidates;
-        if (!keptList.answer && !canAskInTerminal(process.stdout)) return showCandidates(keptList, kept.data.evaluated);
+        if (!keptList.answer && !canAskInTerminal(process.stdout)) return showCandidates(keptList, kept.data);
         const keys = keptList.answer ? keptList.answer.options : await askCandidates(candidates, kept.data.evaluated);
         finalCandidates = candidatesNamed(candidates, keys);
       }
@@ -274,7 +281,7 @@ export const researchCommand = defineCommand({
       if (keptScope && !yolo) {
         const kept = ScopesSchema.safeParse(keptScope.payload);
         if (kept.success && gateStillApplies(keptScope, binding)) {
-          if (!keptScope.answer && !canAskInTerminal(process.stdout)) return showScopes(keptScope);
+          if (!keptScope.answer && !canAskInTerminal(process.stdout)) return showScopes(keptScope, kept.data.scopes);
           chosenScope = keptScope.answer ? scopeNamed(kept.data.scopes, keptScope.answer.options[0]) : await askScope(kept.data.scopes);
         }
       }
@@ -297,7 +304,7 @@ export const researchCommand = defineCommand({
               payload: { scopes },
               shown: { pending: 'research-scope', extra: { scopes } },
             });
-            return showScopes(record);
+            return showScopes(record, scopes);
           }
           chosenScope = await askScope(scopes);
         }
@@ -355,7 +362,7 @@ export const researchCommand = defineCommand({
             payload: kept,
             shown: { pending: 'research-candidates', extra: candidatesShown(kept) },
           });
-          return showCandidates(record, evaluated);
+          return showCandidates(record, kept);
         }
         finalCandidates = candidatesNamed(candidates, await askCandidates(candidates, evaluated));
       }

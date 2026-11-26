@@ -85,14 +85,21 @@ async function awaitApproval(root: string, flags: OutlineFlags, proposal: unknow
     default: [REJECT],
     binding: outlineBinding(root),
     payload: { proposal },
-    shown: { pending: 'outline-approval', extra: { outline: outlineMd } },
+    shown: { pending: OUTLINE_PENDING, extra: { outline: outlineMd } },
   });
-  return showPending(record);
+  return showPending(record, outlineMd);
 }
 
-/** Print the kept proposal (the outline its record shows) and stop for the user's approval (exit 3). */
-function showPending(record: GateRecord): Record<string, unknown> {
-  return stopForAnswer('pensmith outline: the outline needs the user\'s approval and there is no terminal to ask in; it is kept until they answer.', record);
+const OUTLINE_PENDING = 'outline-approval';
+
+/** Print the kept proposal (`outlineMd`, rendered from the proposal an approval applies) and stop for the user's approval (exit 3). */
+function showPending(record: GateRecord, outlineMd: string): Record<string, unknown> {
+  return stopForAnswer(
+    'pensmith outline: the outline needs the user\'s approval and there is no terminal to ask in; it is kept until they answer.',
+    record,
+    OUTLINE_PENDING,
+    { outline: outlineMd },
+  );
 }
 
 /** A heading that names an objection, for an outline whose table cannot mark the counterargument section. */
@@ -184,11 +191,13 @@ export const outlineCommand = defineCommand({
       const parsed = ProposedOutlineSchema.safeParse((pending.payload as { proposal?: unknown } | null)?.proposal);
       const applies = parsed.success && gateStillApplies(pending, outlineBinding(root));
       if (applies && args.yolo !== true && (pending.answer !== undefined || !flags.force)) {
-        if (!pending.answer && !canAskInTerminal(process.stdout)) return showPending(pending);
         const kept = numberOutline(parsed.data);
-        const approved = pending.answer ? pending.answer.options[0] === APPROVE : await confirmAtTerminal(renderOutlineMd(kept));
+        const keptMd = renderOutlineMd(kept);
+        if (!pending.answer && !canAskInTerminal(process.stdout)) return showPending(pending, keptMd);
+        const approved = pending.answer ? pending.answer.options[0] === APPROVE : await confirmAtTerminal(keptMd);
         await closeGate(root, 'outline');
         const noCounter = flags['no-counter'] || pending.args['no-counter'] === true;
+        // The library and intake as they are after the user answered, not before the question waited.
         return decide(root, kept, approved, rulesFor(readLibrarySync(root), readIntake(root), noCounter), readOutline(root).ok);
       }
       // A proposal for an intake or outline that has changed since is not the user's to approve.

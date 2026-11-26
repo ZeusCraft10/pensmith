@@ -15,11 +15,13 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { doneCommand } from '../bin/cli/done.js';
 import { __setTaskRunnerForTest } from '../bin/lib/exporter.js';
+import { answerGate, readGate } from '../bin/lib/gates.js';
+import { sha256 } from '../bin/lib/verify/verification-record.js';
 import { compiledPaper } from './lib/export-fixture.js';
 import { JSON_HEADERS, useMockRegistries } from './lib/mock-registries.js';
 import { textPdf } from './lib/pdf-fixture.js';
@@ -77,10 +79,15 @@ function registries(works: CrossrefWork[], oaPdf?: string): void {
 interface DoneRun { exitCode: number | undefined; out: string }
 
 /**
- * Run `done --yolo --format md` in `root`. The humanizer runs `during`, then
- * returns `humanize(draft)`.
+ * Run `done --yolo --format md` (or `args`) in `root`. The humanizer runs
+ * `during`, then returns `humanize(draft)`.
  */
-async function runDone(root: string, humanize: (draft: string) => string, during: () => void = () => {}): Promise<DoneRun> {
+async function runDone(
+  root: string,
+  humanize: (draft: string) => string,
+  during: () => void = () => {},
+  args: Record<string, unknown> = { yolo: true, raw: false, format: 'md' },
+): Promise<DoneRun> {
   const prevCwd = process.cwd();
   const prevNoLlm = process.env['PENSMITH_NO_LLM'];
   const prevExit = process.exitCode;
@@ -102,7 +109,7 @@ async function runDone(root: string, humanize: (draft: string) => string, during
   process.stderr.write = capture(realErr);
   try {
     const run = doneCommand.run as (ctx: { args: Record<string, unknown> }) => Promise<unknown>;
-    await run({ args: { yolo: true, raw: false, format: 'md' } });
+    await run({ args });
     return { exitCode: process.exitCode as number | undefined, out };
   } finally {
     process.stdout.write = realOut;
@@ -157,6 +164,54 @@ test('done: a FINAL.md whose quotations its source still holds exports', async (
   assert.match(r.out, /pensmith done: exported /);
   assert.equal(downloads(), 2, r.out);
   assert.ok(existsSync(join(root, '.paper', 'export', 'FINAL.md')));
+});
+
+// ---- the export confirmation, kept for the FINAL.md text done checked ----
+
+// No terminal and no --yolo: done keeps the audit for the user's answer.
+const NO_TERMINAL = { yolo: false, raw: false, format: 'md' };
+
+test('done without a terminal: the export confirmation is kept for the FINAL.md text done checked, so a text changed while it was checked is audited again', async () => {
+  const seen: { staged?: string; checked?: Buffer } = {};
+  const { root } = await quotingPaper((n) => {
+    // The second download is the check of the humanized text, which done has read already.
+    if (n === 2 && seen.staged) {
+      seen.checked = readFileSync(seen.staged);
+      writeFileSync(seen.staged, `${seen.checked.toString('utf8')}\nA sentence added to the staged text while done was checking it.\n`);
+    }
+    return PDF_A;
+  });
+  seen.staged = join(root, '.paper', 'FINAL.staged.md');
+  const first = await runDone(root, keepQuotation, () => {}, NO_TERMINAL);
+  assert.equal(first.exitCode, 3, first.out);
+  const gate = readGate(root, 'export');
+  assert.ok(gate && seen.checked, first.out);
+  assert.equal(gate.binding['staged_sha256'], sha256(seen.checked), 'the confirmation is bound to the text that was checked');
+  assert.notEqual(gate.binding['staged_sha256'], sha256(readFileSync(seen.staged)));
+
+  // The user says "export": the answer is not applied to the text nobody checked or was shown.
+  await answerGate(root, gate, ['export']);
+  const second = await runDone(root, keepQuotation, () => {}, NO_TERMINAL);
+  assert.match(second.out, /the export confirmation kept earlier was for another draft, bibliography or format; the audit runs again/);
+  assert.equal(second.exitCode, 3, second.out);
+  assert.ok(!existsSync(join(root, '.paper', 'export')), 'nothing is exported on the earlier answer');
+});
+
+test('done without a terminal: a staged text removed while it was checked still stops for the answer, bound to the text checked', async () => {
+  const seen: { staged?: string; checked?: Buffer } = {};
+  const { root } = await quotingPaper((n) => {
+    if (n === 2 && seen.staged) {
+      seen.checked = readFileSync(seen.staged);
+      rmSync(seen.staged);
+    }
+    return PDF_A;
+  });
+  seen.staged = join(root, '.paper', 'FINAL.staged.md');
+  const r = await runDone(root, keepQuotation, () => {}, NO_TERMINAL);
+  assert.equal(r.exitCode, 3, r.out);
+  const gate = readGate(root, 'export');
+  assert.ok(gate && seen.checked, r.out);
+  assert.equal(gate.binding['staged_sha256'], sha256(seen.checked));
 });
 
 // ---- the sections, read again for FINAL.md ----

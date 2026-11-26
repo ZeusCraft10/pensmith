@@ -589,6 +589,8 @@ function pendingExportSummary(issues: GateIssues, format: string, source: string
     (count > 0 ? `${count} advisory issue(s) to review first.` : 'No advisory issues were found.') + incomplete;
 }
 
+const EXPORT_PENDING = 'export-confirmation';
+
 /**
  * What the export decision shows: the advisory issues to review. Printed as
  * part of one JSON line when there is no terminal to ask in; nothing is
@@ -890,14 +892,17 @@ export const doneCommand = defineCommand({
             summary: pendingExportSummary(issues, format, finalPath !== null ? '.paper/FINAL.md' : '.paper/DRAFT.md'),
             options: ['export', 'cancel'],
             default: ['cancel'],
+            // Bound to the staged bytes checked above, not to the file as it is
+            // now: a text changed during the checks is audited again.
             binding: { ...binding, staged_sha256: finalBytes === null ? null : sha256(finalBytes) },
             payload: audit,
-            shown: { pending: 'export-confirmation', extra: exportShown(issues) },
+            shown: { pending: EXPORT_PENDING, extra: exportShown(issues) },
           });
         // The issues as they are now: a section's VERIFICATION.md can change while the audit is kept.
         stopForAnswer(
           'pensmith done: exporting needs your confirmation and there is no terminal to ask in. Nothing was exported; the audit is kept until you answer.',
           record,
+          EXPORT_PENDING,
           exportShown(issues),
         );
         return { ok: false, pending: true, ref: record.ref };

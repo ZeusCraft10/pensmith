@@ -139,8 +139,6 @@ export const planCommand = defineCommand({
     if (args.revise === true || research) {
       const keptChange = args.yolo !== true && readGate(root, 'revise', n) !== null;
       if (!keptChange && await keyMissing()) return noKey();
-      // Checked above unless a kept change skipped it; a proposal checks it once, then.
-      let keyChecked = !keptChange;
       let result: Awaited<ReturnType<typeof runRevise>>;
       try {
         result = await runRevise({
@@ -149,11 +147,10 @@ export const planCommand = defineCommand({
           slug,
           yolo: args.yolo === true,
           ...(research ? { research } : {}),
+          // The key is checked again before each proposal, so one removed
+          // between --yolo's attempts stops the next one.
           proposeSwap: async (vars) => {
-            if (!keyChecked) {
-              await requireKey();
-              keyChecked = true;
-            }
+            await requireKey();
             return proposeSwap(vars);
           },
         });
@@ -165,7 +162,7 @@ export const planCommand = defineCommand({
         // No terminal to ask in: the checked change waits for the user's answer.
         // The change is shown as revise prepares it now (with the replacement
         // work as LIBRARY.json holds it now).
-        return stopForAnswer(`pensmith plan --revise: ${result.message}`, result.pending, {
+        return stopForAnswer(`pensmith plan --revise: ${result.message}`, result.pending, 'revise-approval', {
           section: n,
           flagged_citekey: result.flagged_citekey,
           change: result.pendingChange ?? '',
