@@ -23,5 +23,30 @@
       }
     },
     "responseHeaders": { "content-type": "application/json" }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/pensmith-two-letter-family-names",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/pensmith-two-letter-family-names",
+        "type": "journal-article",
+        "title": ["Sparse coding of graph signals on sensor arrays"],
+        "author": [
+          { "given": "Jun", "family": "Li", "sequence": "first", "affiliation": [] },
+          { "given": "Wei", "family": "Xu", "sequence": "additional", "affiliation": [] }
+        ],
+        "container-title": ["Journal of Test Fixtures"],
+        "issued": { "date-parts": [[2022]] },
+        "volume": "7",
+        "page": "1-12"
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
   }
 ]

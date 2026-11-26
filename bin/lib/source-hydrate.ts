@@ -209,19 +209,39 @@ function bylineOf(c: SourceCandidate, line: string): boolean {
   return bylineNames(line)?.every((name) => shareNamed(c, bylineWords(name)) > 0) ?? false;
 }
 
-// The end of a line a sentence runs on from: a comma, or a lower-case word
-// that cannot end a sentence ("... hereby grants permission to").
-const RUNS_ON = /(?:,|\b(?:a|an|and|as|at|by|for|from|in|of|on|or|that|the|to|which|with))\s*$/u;
+// Lower-case words that cannot end a sentence ("... hereby grants permission
+// to"), and do not make a line a sentence ("Proceedings of the").
+const FUNCTION_WORDS = ['a', 'an', 'and', 'as', 'at', 'by', 'for', 'from', 'in', 'of', 'on', 'or', 'that', 'the', 'to', 'which', 'with'];
+const FUNCTION_WORD = new Set(FUNCTION_WORDS);
+// The end of a line a sentence runs on from: a comma, or a function word.
+const RUNS_ON = new RegExp(`(?:,|\\b(?:${FUNCTION_WORDS.join('|')}))\\s*$`, 'u');
 
 /**
  * Whether line `i` of `lines` is prose, not a title: it starts with a word in
  * lower case ("reproduce the tables ...", "by John Roe"; not "mRNA" or
- * "e-Science"), ends in a full stop, or carries on the sentence of the line
- * before it.
+ * "e-Science"), ends in a full stop, or carries on a sentence the line
+ * before it holds. A venue's citation line ("..., vol. 13,"), "Proceedings
+ * of the" or "by Jane Roe," ends as a sentence can, but holds none, and the
+ * PDF's own title may be what follows it.
  */
 function proseAt(lines: readonly string[], i: number): boolean {
   const line = lines[i]!;
-  return /^[^\p{L}]*\p{Ll}[\p{Ll}'’]*(?![\p{L}-])/u.test(line) || /\.\s*$/.test(line) || (i > 0 && RUNS_ON.test(lines[i - 1]!));
+  if (/^[^\p{L}]*\p{Ll}[\p{Ll}'’]*(?![\p{L}-])/u.test(line) || /\.\s*$/.test(line)) return true;
+  const before = i > 0 ? lines[i - 1]! : '';
+  return RUNS_ON.test(before) && holdsSentence(before);
+}
+
+/**
+ * Whether `line` holds a sentence: it prints a lower-case word that is not a
+ * function word or an abbreviation ("Accepted for publication in", "... is
+ * permitted. Permission from"). A venue's citation line ("Computing in
+ * Science & Engineering, vol. 13, no. 2,") and "Proceedings of the" hold
+ * none, and an editor's line ("edited by Jane Roe and") runs on to another
+ * name, not to a title.
+ */
+function holdsSentence(line: string): boolean {
+  if (EDITED_BY.test(line)) return false;
+  return line.split(/\s+/).some((t) => /^\p{Ll}+[,;:]?$/u.test(t) && !FUNCTION_WORD.has(t.replace(/[,;:]$/, '')));
 }
 
 /** The BYLINE_LINES lines of the block right above line `first`, where a byline printed above a title is. */
@@ -275,12 +295,19 @@ function furniture(line: string): boolean {
 // byline can print them as a name ("Short", "Case", "Press").
 const LABEL_WORDS = new Set(
   [
-    // article types and labels
+    // article types and labels, among them clinical journals' ("Original
+    // Investigation", "Randomized Controlled Trial", "Matters Arising")
     'brief short long case trial systematic meta mini full length regular position primer commentary data descriptor',
-    'check updates press graphical record reuse guidelines',
+    'check updates press graphical record reuse guidelines guideline investigation investigations contribution',
+    'randomized randomised controlled observational cohort study discussion hypothesis matters arising viewpoint',
+    'statement consensus practice registered general images',
     // venues and subjects
-    'ieee acm siam plos one pattern recognition current directions trends advances annual surveys magazine archives',
+    'pattern recognition current directions trends advances annual surveys magazine archives lancet internal',
     'multidisciplinary interdisciplinary brain language human behaviour behavior sequence gene genome bioinformatics',
+    'oncology cardiology pediatrics paediatrics surgery radiology infectious diseases',
+    // venues' acronyms: any other acronym can be a work's ("GPT Technical Report")
+    'ieee acm siam plos one jama bmj bmc nejm pnas acs rsc aip aps iop ams apa embo mnras jmlr',
+    'iclr icml neurips nips cvpr iccv eccv acl emnlp naacl aaai ijcai kdd sigir',
   ]
     .join(' ')
     .split(' '),
@@ -292,18 +319,16 @@ const JOINING = new Set(['a', 'an', 'and', 'at', 'for', 'from', 'in', 'of', 'on'
 /**
  * Whether `line` is a label, a venue's name or a subject heading, which names
  * no one and is no work's title: each of its words is one NOT_A_NAME or
- * LABEL_WORDS lists, a joining word, a number, or, in a line that is not all
- * capitals, an acronym ("Research Article", "Open Access", "CC BY 4.0",
- * "IEEE Transactions on Pattern Analysis and Machine Intelligence",
- * "Workshop track - ICLR 2016").
+ * LABEL_WORDS lists, a joining word or a number ("Research Article", "Open
+ * Access", "CC BY 4.0", "IEEE Transactions on Pattern Analysis and Machine
+ * Intelligence", "Workshop track - ICLR 2016").
  */
 function label(line: string): boolean {
   const tokens = line.normalize('NFC').replace(/['’]s\b/gu, '').match(/[\p{L}\p{N}]+/gu) ?? [];
-  const mixedCase = /\p{Ll}/u.test(line);
   let labelled = false;
   for (const t of tokens) {
     const w = normalizeForFuzzy(t);
-    if (JOINING.has(w) || /^\p{N}+$/u.test(t) || (mixedCase && /^\p{Lu}{2,6}$/u.test(t))) continue;
+    if (JOINING.has(w) || /^\p{N}+$/u.test(t)) continue;
     if (!NOT_A_NAME.has(w) && !LABEL_WORDS.has(w)) return false;
     labelled = true;
   }
@@ -387,13 +412,17 @@ function wholeTitleOf(c: SourceCandidate): string {
 // "Behavioral and Brain Sciences (2017), Page 1 of 72", "Bioinformatics,
 // 36(1), 2020", "Advance Access Publication Date"), templates' headers
 // ("Noname manuscript No.", "Typeset using LATEX"), a permission notice, the
-// editor who handled the paper ("Communicated by ..."), identifiers.
+// editor who handled the paper (EDITED_BY, "... handled this article"),
+// identifiers.
 const NOT_A_TITLE =
-  /https?:\/\/|www\.|©|\bcopyright\b|\blicen[cs]e|\bdoi\b|\barxiv\b|\bissn\b|\bpreprint\b|\bjournal of\b|\bproceedings\b|\bvol(?:ume)?\.?\s*\d|\bpp\.\s*\d|\d\s*\((?:1[89]|20)\d\d\)|\((?:1[89]|20)\d\d\)[\s,.:;]*\d|\breceived\b|\baccepted\b|\bsciencedirect\b|\bcontents lists available\b|\bpublished (?:as|in|online|by)\b|\bunder review\b|\bto appear in\b|\bpage \d+ of \d+\b|\bnoname manuscript\b|\bwill be inserted by the editor\b|\btypeset using\b|^\W*draft version\b|\bauthor manuscript\b|\bhereby grants?\b|\bgrants? permission\b|\bproper attribution\b|^\W*special (?:issue|section)\b|\bthis (?:article|paper) is part of\b|^\W*retracted article\W*$|^\W*\d+\W*$|^\W*(?:communicated|edited|handled|recommended) by\b|\bhandled (?:this|the) (?:article|paper|manuscript)\b|\b\d+\s*\(\s*\d+(?:\s*[-–]\s*\d+)?\s*\)\s*[,:]|\bpublication date\b|\badvance access\b|\b[a-z0-9-]+\.(?:com|org|net|edu|gov)\//i;
+  /https?:\/\/|www\.|©|\bcopyright\b|\blicen[cs]e|\bdoi\b|\barxiv\b|\bissn\b|\bpreprint\b|\bjournal of\b|\bproceedings\b|\bvol(?:ume)?\.?\s*\d|\bpp\.\s*\d|\d\s*\((?:1[89]|20)\d\d\)|\((?:1[89]|20)\d\d\)[\s,.:;]*\d|\breceived\b|\baccepted\b|\bsciencedirect\b|\bcontents lists available\b|\bpublished (?:as|in|online|by)\b|\bunder review\b|\bto appear in\b|\bpage \d+ of \d+\b|\bnoname manuscript\b|\bwill be inserted by the editor\b|\btypeset using\b|^\W*draft version\b|\bauthor manuscript\b|\bhereby grants?\b|\bgrants? permission\b|\bproper attribution\b|^\W*special (?:issue|section)\b|\bthis (?:article|paper) is part of\b|^\W*retracted article\W*$|^\W*\d+\W*$|\bhandled (?:this|the) (?:article|paper|manuscript)\b|\b\d+\s*\(\s*\d+(?:\s*[-–]\s*\d+)?\s*\)\s*[,:]|\bpublication date\b|\badvance access\b|\b[a-z0-9-]+\.(?:com|org|net|edu|gov)\//i;
+
+// The editor who handled a paper ("Communicated by ...", "Edited by ...").
+const EDITED_BY = /^\W*(?:communicated|edited|handled|recommended) by\b/i;
 
 /** Whether `line` can be a title: 8 to 300 characters, and not page furniture. */
 function titleLike(line: string): boolean {
-  return line.length >= 8 && line.length <= 300 && !NOT_A_TITLE.test(line);
+  return line.length >= 8 && line.length <= 300 && !NOT_A_TITLE.test(line) && !EDITED_BY.test(line);
 }
 
 /** The PDF's likely title line, if any: the first line in `lines` that can be a title. */
@@ -411,13 +440,13 @@ function nameWords(text: string): Set<string> {
 }
 
 /**
- * The words of a byline: those of nameWords, and a word with an affiliation
- * letter set against it ("Walta,∗", "Liua,∗", "Varoquauxc") also without
- * that letter. Only a to d, the letters of a first few affiliations, and
- * only before a comma, a mark or the line's end, so "Cheng," is not read as
- * "Chen", nor "Clarke," as "Clark". "Hanna," is also read as "Hann", so a
- * work whose family names are printed whole is ranked above one matched
- * without a letter (rankHits).
+ * The words of a byline: those of nameWords, and a word of three letters or
+ * more with an affiliation letter set against it ("Walta,∗", "Liua,∗",
+ * "Lia,∗", "Varoquauxc") also without that letter. Only a to d, the letters
+ * of a first few affiliations, and only before a comma, a mark or the line's
+ * end, so "Cheng," is not read as "Chen", nor "Clarke," as "Clark". "Hanna,"
+ * is also read as "Hann", so a work whose family names are printed whole is
+ * ranked above one matched without a letter (rankHits).
  */
 function bylineWords(text: string): Set<string> {
   const out = new Set<string>();
@@ -426,7 +455,7 @@ function bylineWords(text: string): Set<string> {
       const w = m[0];
       out.add(w);
       const next = line[m.index + w.length];
-      if (w.length >= 4 && /[a-d]$/.test(w) && (next === undefined || /[,;*∗†‡§¶✉]/u.test(next))) out.add(w.slice(0, -1));
+      if (w.length >= 3 && /[a-d]$/.test(w) && (next === undefined || /[,;*∗†‡§¶✉]/u.test(next))) out.add(w.slice(0, -1));
     }
   }
   return out;

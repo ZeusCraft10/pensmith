@@ -280,12 +280,14 @@ test('a label above a byline printed above the title does not hide the paper\'s 
   assert.doesNotMatch(await workOf(['Deep Nets for Arrays', OWN_BYLINE, CITED, NUMPY_DOI]), /NumPy/);
 });
 
-// A synthetic record (10.0000 test prefix) by Wei Liu and Jun Zhu: family
-// names of three letters, which an Elsevier byline sets with an affiliation
-// letter against them ("Liua,∗").
+// Synthetic records (10.0000 test prefix) by Wei Liu and Jun Zhu, and by Jun
+// Li and Wei Xu: family names of three and two letters, which an Elsevier
+// byline sets with an affiliation letter against them ("Liua,∗", "Lia,∗").
 test('a byline whose short family names carry affiliation letters names the paper\'s authors', async () => {
   const lines = ['Sampling graph signals on sensor networks', 'Wei Liua,∗, Jun Zhub', 'doi:10.0000/pensmith-short-family-names'];
   assert.equal(await workOf(lines), 'Sampling graph signals on sensor networks');
+  const twoLetters = ['Sparse coding of graph signals on sensor arrays', 'Jun Lia,∗, Wei Xub', 'doi:10.0000/pensmith-two-letter-family-names'];
+  assert.equal(await workOf(twoLetters), 'Sparse coding of graph signals on sensor arrays');
 });
 
 test('works sharing a title whose authors the PDF names equally are refused, not decided by the order of the hits', async () => {
@@ -299,6 +301,16 @@ test('works sharing a title whose authors the PDF names equally are refused, not
 
 test('a publisher\'s labels, running heads and editor lines above a paper\'s title still let its printed DOI name it', async () => {
   for (const header of [
+    ['JAMA', 'Original Investigation'],
+    ['JAMA Internal Medicine'],
+    ['Annals of Internal Medicine'],
+    ['The Lancet'],
+    ['BMJ Open', 'Research'],
+    ['Randomized Controlled Trial'],
+    ['Observational Study'],
+    ['Discussion Paper'],
+    ['Hypothesis and Theory'],
+    ['Matters Arising'],
     ['PLOS ONE', 'RESEARCH ARTICLE'],
     ['Cognitive Science', 'A Multidisciplinary Journal'],
     ['Communicated by Jane Roe'],
@@ -317,6 +329,29 @@ test('a publisher\'s labels, running heads and editor lines above a paper\'s tit
   }
 });
 
+// The PDF's own title can follow a line that ends in a comma or "of the"
+// without being prose: a venue's citation line, a running head, an editor's
+// line. Only a line that holds a sentence runs on to the next.
+test('a title below page furniture that ends in a comma or a joining word is still a title', async () => {
+  for (const header of [
+    'Proceedings of the',
+    'Computing in Science & Engineering, vol. 13,',
+    'Computing in Science & Engineering, vol. 13, no. 2,',
+    'Edited by Jane Roe,',
+    'edited by Jane Roe and',
+    'by Jane Roe,',
+  ]) {
+    assert.doesNotMatch(await workOf([header, OWN_TITLE, 'J. Roe', CITED, CITED_AUTHORS, NUMPY_DOI]), /NumPy/, header);
+  }
+});
+
+// A label's words with an acronym no venue is known by make a title, not a
+// label ("GPT Technical Report"). A venue's acronym still reads as a label.
+test('a title made of a label\'s words and an acronym is not taken for a label', async () => {
+  assert.doesNotMatch(await workOf(['GPT Technical Report', 'J. Roe', CITED, CITED_AUTHORS, NUMPY_DOI]), /NumPy/);
+  assert.match(await workOf(['Workshop Track - ICLR 2018', CITED, OWN_BYLINE, NUMPY_DOI]), /NumPy/);
+});
+
 test('prose above a paper\'s title, and its own byline there, do not count against it', async () => {
   // A reprint notice: a sentence, then a line that starts in lower case.
   assert.match(
@@ -328,6 +363,10 @@ test('prose above a paper\'s title, and its own byline there, do not count again
     await workOf(['© 2011 IEEE. Personal use of this material is permitted. Permission from', 'IEEE must be obtained for all other uses', CITED, OWN_BYLINE, NUMPY_DOI]),
     /NumPy/,
   );
+  // A venue named on the line after the notice that announces it.
+  for (const notice of [['Accepted for publication in', 'The Astrophysical Journal'], ['To appear in the', 'Annual Meeting of the Association for Computational Linguistics']]) {
+    assert.match(await workOf([...notice, CITED, OWN_BYLINE, NUMPY_DOI]), /NumPy/, notice.join(' / '));
+  }
   // The byline above the title, and an author named again below it.
   assert.match(await workOf([OWN_BYLINE, CITED, 'Correspondence: Gael Varoquaux, INRIA Saclay', NUMPY_DOI]), /NumPy/);
 });
