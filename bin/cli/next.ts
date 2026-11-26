@@ -8,7 +8,7 @@
 //
 // stdout-only rule: the resolved-verb diagnostic goes to STDERR (not stdout) so
 // `next`'s stdout stays byte-equivalent to the underlying verb's stdout
-// (tier/scripting parity). No 17th verb is introduced.
+// (tier/scripting parity).
 
 import { defineCommand } from 'citty';
 import { resolveNextAction } from '../lib/router.js';

@@ -1,7 +1,7 @@
 // bin/cli/intake.ts — `pensmith new` / `pensmith intake` verb entrypoint
 // (INTK-01, ARCH-02; CYCLE-2 M-1 canonical filename).
 //
-// Plan 03-07 Task 7.2 — Tier-2 thin orchestrator. The Tier-1 (MCP plugin)
+// Plan 03-07 Task 7.2 — Tier-2 thin orchestrator. The Tier-1 (plugin)
 // path delegates to the model via the workflow body's <capability_check>
 // branch; the Tier-2 (portable Node CLI) path calls complete() via the
 // Tier-2 LLM transport (GEN-02, Phase 11).
@@ -78,7 +78,7 @@ function resolvePaperMeta(cwd: string): { name: string; class: string } {
 
 /**
  * The educator-mode goal enum (ERGO-07 / resolved Open-Q2): a SHORT enum, NOT a
- * 17th verb. Coerce any unrecognized value to the default 'draft'. GOAL logic
+ * verb. Coerce any unrecognized value to the default 'draft'. GOAL logic
  * is confined to the CLI tier (intake/goal.ts) — Foundation never sees it (H1).
  */
 function coerceGoal(v: unknown): 'draft' | 'learning' | 'both' {
@@ -301,7 +301,7 @@ export const intakeCommand = defineCommand({
       type: 'string',
       description: 'A candidate thesis to pre-fill the intake (optional; supplied by `sketch`).',
     },
-    // Phase 8 STYL-01/02 (08-05) — OPT-IN style-match producer. NOT a 17th verb:
+    // Phase 8 STYL-01/02 (08-05) — OPT-IN style-match producer. NOT a verb:
     // an absent flag means NO profiling. When provided, intake builds the paper's
     // .paper/STYLE.json from these writing samples and surfaces cross-paper reuse
     // UNCONDITIONALLY. The Tier-1 workflow body may surface this as an interactive
@@ -312,8 +312,7 @@ export const intakeCommand = defineCommand({
         'Opt-in: path to a folder of your writing samples to match your voice (.md/.txt/.docx).',
     },
     // Phase 9 ERGO-07 / resolved Open-Q2 — the educator-mode workflow goal. A
-    // SHORT enum (draft|learning|both), NOT a 17th verb (the 16-verb bijection is
-    // unchanged). Persisted to config.toml [project] goal; the goal-aware CLI
+    // SHORT enum (draft|learning|both), NOT a verb. Persisted to config.toml [project] goal; the goal-aware CLI
     // callers (next/resume/status/bare) read it and map learning ⇒ a hard-stop
     // after research. Anything outside the enum coerces to 'draft'.
     goal: {

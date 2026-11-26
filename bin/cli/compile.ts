@@ -9,8 +9,8 @@
 // promotes the Phase-2 dispatcher stub to a real loader (bin/pensmith.ts
 // REAL_VERB_LOADERS). No new verb is added.
 //
-// stdout-only (no console.* — keeps a future stdio/MCP frame clean, same
-// Pitfall-7 stance as the other verbs).
+// stdout-only (no console.*, so stdout carries only what the verb prints, as
+// in the other verbs).
 //
 // LLM seam: bin/lib has no model-transport client yet (Tier-2 placeholder era).
 // In Tier 2 the boundary smoother is OMITTED (raw concat) — smoothing is

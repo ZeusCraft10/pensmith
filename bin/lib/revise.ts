@@ -311,13 +311,13 @@ function voiceHint(planMd: string): string {
 // ---------------------------------------------------------------------------
 
 async function defaultProposeSwap(vars: ReviseSwapVars): Promise<string> {
-  // The prompt body is loaded + interpolated by the CLI/MCP caller which owns
+  // The prompt body is loaded + interpolated by the CLI caller, which owns
   // the actual model transport (no model client exists in bin/lib yet). When a
   // caller does not inject proposeSwap, there is nothing to call.
   void vars;
   await Promise.resolve();
   throw new Error(
-    'runRevise: no proposeSwap transport injected. The CLI/MCP caller must ' +
+    'runRevise: no proposeSwap transport injected. The CLI caller must ' +
     'supply an LLM seam (loadPrompt(\'revise-swap\') + interpolate + model call).',
   );
 }

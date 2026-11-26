@@ -314,27 +314,17 @@ export async function updateState(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 state-mutation helpers (D-13 / TIER-02).
-// Each is a typed convenience wrapper over updateState. Business logic
-// is HERE (bin/lib), not in mcp/ — handlers in mcp/tools.ts are thin shims
-// that call these and JSON.stringify the result.
+// State-mutation helpers (D-13 / TIER-02), each a typed convenience wrapper
+// over updateState.
 //
-// Phase 3 Plan 03-03 Task 3.2 amendment (D-08 / D-09):
-//   STATE.json's per-section schema is now slimmed to { n, slug } strict.
-//   The per-section state/status/verdict cursors moved to PLAN.md frontmatter
-//   (PlanFrontmatterSchema). To keep the MCP tool surface (paper_init_section,
-//   paper_advance_section, paper_set_status, paper_record_verification) wire-
-//   compatible without dragging the Phase 1 contract through a breaking
-//   change, the helpers now:
-//     - initSection: writes {n, slug} to STATE.json (drops the embedded
-//       state/status fields the Phase 1 version wrote).
-//     - advanceSection / setSectionStatus / recordVerification: are NO-OPS
-//       at the STATE.json level (they validate input, log an event-kind
-//       breadcrumb, and return the unchanged state). The "real" persistence
-//       for those mutations is PlanFrontmatter — wired in later plans that
-//       own the verb implementations (Plan 03-04+).
-//   This keeps mcp-tool-handlers TIER-06 tests passing (they only assert
-//   isError !== true on valid input) while honoring the D-08 pivot.
+// STATE.json's per-section schema is { n, slug } strict. The per-section
+// state/status/verdict cursors live in PLAN.md frontmatter
+// (PlanFrontmatterSchema), so:
+//   - initSection: writes {n, slug} to STATE.json;
+//   - advanceSection / setSectionStatus / recordVerification: are NO-OPS at
+//     the STATE.json level (they validate input, log an event-kind breadcrumb,
+//     and return the unchanged state). They were kept for the MCP server's
+//     tools, which are gone; nothing calls them now.
 // ---------------------------------------------------------------------------
 
 /**
@@ -361,9 +351,8 @@ export async function initSection(
  * frontmatter (PlanFrontmatterSchema.status). Validates the toState enum,
  * logs an event-kind breadcrumb, returns the current state unchanged.
  *
- * Future plans (03-04+) wire the real PLAN.md write through updateFrontmatter
- * + atomicWriteFile per the D-09 dance. Today this exists so the MCP tool
- * handler stays wire-compatible.
+ * The real write is to PLAN.md (updatePlanFrontmatter); nothing calls this
+ * since the MCP server was removed.
  */
 export async function advanceSection(
   paperRoot: string,

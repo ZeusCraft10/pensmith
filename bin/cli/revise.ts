@@ -3,15 +3,15 @@
 // THIN ORCHESTRATOR: this verb delegates 100% to bin/lib/revise.ts::runRevise
 // (the single Tier-1/Tier-2 chokepoint, D-06). No business logic lives here.
 //
-// Surface note (Plan 04-04): `revise` is NOT one of the locked UX-02 16 verbs
-// (those are owned by bin/lib/verbs.ts and gated by tests/cli-verbs.test.ts +
-// tests/workflows-keyequal.test.ts at exactly 16, bijective with workflows/).
+// Surface note: `revise` is NOT one of the verbs (UX02_VERBS, owned by
+// bin/lib/verbs.ts and gated by tests/cli-verbs.test.ts +
+// tests/workflows-keyequal.test.ts, bijective with workflows/).
 // The canonical user-facing revise surface is `pensmith plan <N> --revise`
-// (PLAN-02; workflows/plan.md step 7; the MCP pensmith_plan `revise` arg) which
-// also delegates to runRevise — so both the standalone command exported here
-// and the `plan --revise` path share the identical chokepoint. This file exists
-// so the chokepoint has a citty CommandDef surface (and so future top-level
-// promotion is a one-line dispatcher edit) without expanding the locked 16.
+// (PLAN-02; workflows/plan.md step 7), which also delegates to runRevise — so
+// both the standalone command exported here and the `plan --revise` path share
+// the identical chokepoint. This file exists so the chokepoint has a citty
+// CommandDef surface (and so future top-level promotion is a one-line
+// dispatcher edit) without adding a verb.
 //
 // Phase 11 (GEN-02 / GEN-06): the local deterministic-remove proposeSwap stub is REMOVED.
 // The shared real proposeSwap from bin/lib/revise-swap.ts calls complete() with

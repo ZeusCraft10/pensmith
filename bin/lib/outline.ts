@@ -1,5 +1,5 @@
 // bin/lib/outline.ts — chokepoint for reading approved outline markdown.
-// mcp/ MUST NOT call node:fs directly (D-09); it calls loadOutline() here.
+// Callers read the outline through loadOutline() here, not node:fs (D-09).
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';

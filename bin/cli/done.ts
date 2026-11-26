@@ -6,8 +6,8 @@
 // loader (bin/pensmith.ts REAL_VERB_LOADERS). No 17th verb is added; the
 // workflows/done.md body (Tier 1) delegates to this SAME bin/lib path.
 //
-// stdout-only (no console.* — keeps a future stdio/MCP frame clean, the same
-// Pitfall-7 stance as compile.ts and the other verbs).
+// stdout-only (no console.*, so stdout carries only what the verb prints, as
+// in compile.ts and the other verbs).
 //
 // DONE-09 export-confirmation gate is the SOLE escape valve reconciling the
 // Core Value ("every citation supports its claim") with VRFY-07 (advisory Pass

@@ -12,7 +12,7 @@
 // other load error prints "STATE.json unreadable/corrupt"; a corrupt PLAN.md is
 // rendered as an attention row (readSectionState never throws).
 //
-// stdout-only (no console.* — keeps a future stdio/MCP frame clean).
+// stdout-only (no console.*, so stdout carries only what the verb prints).
 
 import { defineCommand } from 'citty';
 import { loadState, StateNotFoundError } from '../lib/state.js';
