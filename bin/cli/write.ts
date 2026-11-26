@@ -404,6 +404,9 @@ export const writeCommand = defineCommand({
         process.stdout.write(
           JSON.stringify({ event: 'wave_complete', wave: wave.wave, results: counts }) + '\n',
         );
+      }
+
+      for (const wave of results) {
         for (const s of wave.sections) {
           if (s.status === 'blocked') {
             process.stderr.write(
