@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { atomicWriteFile } from './atomic-write.js';
 import { compileManifestPath, SLUG_RE } from './paths.js';
-import { bibEntryHashes, HEX64 } from './verify/verification-record.js';
+import { bibEntryHashes, HEX64, sha256 } from './verify/verification-record.js';
 import type { Bib } from './verify/pass1.js';
 
 // done joins n and slug into the section's paths, so they must name a folder
@@ -33,6 +33,12 @@ export const CompileManifestSchema = z.object({
   sections: z.array(ManifestSectionSchema),
   /** Each key the manuscript cites → the hash of its CITATIONS.bib entry (bibEntryHashes). */
   bib_entries: z.record(z.string(), HEX64),
+  /**
+   * The whole CITATIONS.bib compile read (bibFileSha256), null when there was
+   * none. The router compares it without parsing the file, to send the user
+   * back to compile after any change to the bibliography.
+   */
+  bib_sha256: HEX64.nullable().optional(),
 }).strict();
 
 export type CompileManifest = z.infer<typeof CompileManifestSchema>;
@@ -45,6 +51,11 @@ export function manifestBibEntries(keys: Iterable<string>, bib: Bib): Record<str
     if (hash !== null) out[key] = hash;
   }
   return out;
+}
+
+/** The hash the manifest records for CITATIONS.bib's text (readBibText), or null when there is none. */
+export function bibFileSha256(bibText: string | null): string | null {
+  return bibText === null ? null : sha256(bibText);
 }
 
 export async function writeCompileManifest(paperRoot: string, manifest: CompileManifest): Promise<void> {

@@ -7,8 +7,10 @@
 // Behavioral contract (all skip-guarded until __setTaskRunnerForTest exists):
 //   (1) Call-through — inject a deterministic TaskRunner returning
 //       { output: '<humanized prose>' }, call runHumanizer(draft, tmpDir), assert it
-//       returns a path ending in FINAL.md, the file is written under paperDir(tmpDir)
-//       (NOT cwd+'/FINAL.md' — Pitfall 8), and its content equals the injected output.
+//       returns a path ending in FINAL.staged.md, the file is written under
+//       paperDir(tmpDir) (NOT cwd — Pitfall 8), its content equals the injected
+//       output, and FINAL.md is not written: FINAL.md marks a finished export,
+//       and done moves the staged text there only once the export succeeds.
 //   (2) Null-runner clean skip — inject null (Tier-2), assert runHumanizer returns
 //       null AND prints the 'humanizer skill present but no Task transport' banner
 //       AND never throws.
@@ -92,15 +94,16 @@ type TaskRunner = (skill: string, input: Record<string, string>) => Promise<{ ou
 // ================================================================================
 
 test(
-  'humanizer-task: call-through — injected TaskRunner → FINAL.md written under paperDir(tmpDir), not cwd (GEN-05)',
+  'humanizer-task: call-through — injected TaskRunner → FINAL.staged.md written under paperDir(tmpDir), not cwd, and no FINAL.md (GEN-05)',
   { skip: !SEAM_WIRED },
   async () => {
     // Inject a deterministic TaskRunner that returns a predictable output string.
     // runHumanizer must:
     //   a) call the runner.
-    //   b) write FINAL.md under paperDir(tmpDir) — NOT cwd+'/FINAL.md' (Pitfall 8).
-    //   c) return the FINAL.md path (string, not null).
-    //   d) The FINAL.md content must equal the runner's output.
+    //   b) stage the output under paperDir(tmpDir) — NOT cwd (Pitfall 8).
+    //   c) return the staged path (string, not null).
+    //   d) The staged content must equal the runner's output.
+    //   e) Leave FINAL.md unwritten: no export has happened.
     const root = mkPaperRoot();
 
     const mod = await import(exporterModUrl.href) as {
@@ -136,10 +139,15 @@ test(
       'runHumanizer with an injected TaskRunner must return a FINAL.md path (not null)',
     );
 
-    // (b) path must end with FINAL.md.
+    // (b) path must end with FINAL.staged.md.
     assert.ok(
-      result!.endsWith('FINAL.md'),
-      `returned path must end with FINAL.md (got: ${String(result)})`,
+      result!.endsWith('FINAL.staged.md'),
+      `returned path must end with FINAL.staged.md (got: ${String(result)})`,
+    );
+    // (e) the export has not happened, so nothing marks the paper done.
+    assert.ok(
+      !fs.existsSync(path.join(root, '.paper', 'FINAL.md')),
+      'runHumanizer must not write FINAL.md before the export succeeds',
     );
 
     // (b) path must be under the paper root — NOT cwd (Pitfall 8).

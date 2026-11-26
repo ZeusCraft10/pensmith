@@ -41,11 +41,11 @@ import {
   runHumanizer,
   type ExportFormat,
 } from '../lib/exporter.js';
-import { paperDir, sectionDirName } from '../lib/paths.js';
+import { paperDir, paperFinalFile, sectionDirName } from '../lib/paths.js';
 import { parseBibByCitekey } from '../lib/citations.js';
 import { resolveCitationStyle } from '../lib/citation-style.js';
 import { isPandocPresent } from '../lib/ecosystem-presence.js';
-import { atomicWriteFile } from '../lib/atomic-write.js';
+import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
 import { confirmOrNo, type PromptQuestion } from '../lib/prompts.js';
 import {
   citedKeys,
@@ -58,7 +58,8 @@ import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.j
 import { readOutline } from '../lib/outline-read.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { recheckExportText, runExportBlockingGate } from '../lib/export-gate.js';
-import { readVerificationRecord } from '../lib/verify/verification-record.js';
+import { readVerificationRecord, sha256 } from '../lib/verify/verification-record.js';
+import { writeExportRecord } from '../lib/export-record.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -413,9 +414,15 @@ function addedEntries(after: readonly string[], before: readonly string[]): stri
   });
 }
 
-/** The text of every long quotation in `md` with no citation. */
-function unattributedQuotes(md: string, cites: readonly Citation[]): string[] {
-  return extractQuotes(md, cites).filter((q) => q.unattributed).map((q) => q.text);
+/** Each quotation Pass 3 reads in `md`, with the work it is attributed to ('' for none). */
+function quotationSpans(md: string, cites: readonly Citation[]): string[] {
+  return extractQuotes(md, cites).map((q) => `${q.citekey}\u0000${q.text}`);
+}
+
+/** A quotation span (quotationSpans) as people read it. */
+function describeQuotation(span: string): string {
+  const [key, text] = span.split('\u0000') as [string, string];
+  return key === '' ? `no citation "${text.slice(0, 40)}"` : `[@${key}] "${text.slice(0, 40)}"`;
 }
 
 /**
@@ -424,9 +431,13 @@ function unattributedQuotes(md: string, cites: readonly Citation[]): string[] {
  * (a) Citation diff: the keys FINAL.md cites, in any Pandoc form, MUST equal
  *     the keys draftMd cites, and FINAL.md must not add a citation typed as
  *     text or a broken one. Any add/drop/swap is a HARD block.
- * (b) A quotation with no citation does not block, but the humanizer must
- *     leave it as the draft had it: one it separated from its citation, or
- *     whose words it changed, is a HARD block.
+ * (b) Humanize runs on protected text: every citation must be written as
+ *     DRAFT.md writes it (prefix and locator included), and every quotation
+ *     must be word for word in DRAFT.md and attributed to the same work. A
+ *     citation or quotation the humanizer changed, moved or separated from
+ *     its citation is a HARD block, whether or not the source's text can be
+ *     read: Pass 3 below can only check a quotation against a source it can
+ *     read.
  * (c) Pass-3 quote re-check on finalMd against the whole CITATIONS.bib, not
  *     only the works the draft cites, so a quote moved onto another work is
  *     still checked; an absent or empty bib is an empty library. Any
@@ -461,13 +472,22 @@ export async function reCheckFinalMd(
     };
   }
 
-  // Step (b): quotations with no citation, which need no bibliography.
-  const changedUnattributed = addedEntries(unattributedQuotes(finalMd, finalCites), unattributedQuotes(draftMd, draftCites));
-  if (changedUnattributed.length > 0) {
-    const detail = changedUnattributed.map((t) => `no citation "${t.slice(0, 40)}"`).join('; ');
+  // Step (b): the citations and quotations themselves, span for span.
+  const draftRaw = draftCites.map((c) => c.raw);
+  const finalRaw = finalCites.map((c) => c.raw);
+  const rewritten = addedEntries(finalRaw, draftRaw);
+  if (rewritten.length > 0) {
     return {
       passed: false,
-      reason: `Pass-3 quote UNATTRIBUTED in humanized FINAL.md and not word for word in DRAFT.md: ${detail}`,
+      reason: `a citation in the humanized FINAL.md is not written as in .paper/DRAFT.md: ${rewritten.join(', ')} (DRAFT.md has ${addedEntries(draftRaw, finalRaw).join(', ') || 'no other'})`,
+    };
+  }
+  const changedQuotes = addedEntries(quotationSpans(finalMd, finalCites), quotationSpans(draftMd, draftCites));
+  if (changedQuotes.length > 0) {
+    const unattributed = changedQuotes.some((q) => q.startsWith('\u0000')) ? ' (UNATTRIBUTED where it has no citation)' : '';
+    return {
+      passed: false,
+      reason: `a quotation in the humanized FINAL.md is not word for word in .paper/DRAFT.md, attributed to the same work${unattributed}: ${changedQuotes.map(describeQuotation).join('; ')}`,
     };
   }
 
@@ -712,17 +732,24 @@ export const doneCommand = defineCommand({
         ? renderHonestySkipped()
         : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
 
-    // GATE-04: re-verify humanized FINAL.md before export (HARD block, BEFORE runDoneGate).
+    // GATE-04: re-verify the humanized text before export (HARD block, BEFORE runDoneGate).
     // Skip only when no humanizer ran (finalPath === null) — i.e. no humanized artifact exists.
     // --yolo NEVER bypasses this gate (per PRD §14 non-negotiable: verifier gates are unconditional).
     // --yolo belongs ONLY on the advisory runDoneGate (DONE-09) confirmation below.
+    // The humanized text waits under a staging name (runHumanizer); it becomes
+    // FINAL.md only once the export succeeds, so a refusal here leaves no mark
+    // that the paper was exported.
     let finalMd: string | null = null;
     if (finalPath !== null) {
       finalMd = readFileSync(finalPath, 'utf8');
+      const refuseHumanized = async <T>(result: T): Promise<T> => {
+        await removePath(finalPath!);
+        return result;
+      };
       if (isPlaceholderText(finalMd)) {
         process.stdout.write('pensmith done: BLOCKED — the humanized FINAL.md is placeholder text (PENSMITH_NO_LLM), not a paper.\n');
         process.exitCode = EXIT_REFUSED;
-        return { ok: false, blocked: true };
+        return refuseHumanized({ ok: false, blocked: true });
       }
       const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
       const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath);
@@ -731,7 +758,7 @@ export const doneCommand = defineCommand({
           `pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification: ${gate4.reason}\n`,
         );
         process.exitCode = EXIT_REFUSED;
-        return { ok: false };
+        return refuseHumanized({ ok: false });
       }
       // FINAL.md is what is exported, so its citations are checked as well
       // (reCheckFinalMd has just run Pass 3 on it). It cites exactly the works
@@ -739,7 +766,7 @@ export const doneCommand = defineCommand({
       // sections are read again: one edited since the gate is checked as it is now.
       const finalCheck = await recheckExportText(paperRoot, finalMd, { pass3: false, label: '.paper/FINAL.md', bibText });
       if (finalCheck.blocked) {
-        return refuseExport('export refused (a citation in the humanized FINAL.md does not pass when checked again)', finalCheck.reasons);
+        return refuseHumanized(refuseExport('export refused (a citation in the humanized FINAL.md does not pass when checked again)', finalCheck.reasons));
       }
     }
 
@@ -771,6 +798,7 @@ export const doneCommand = defineCommand({
     if (gateResult.exported === false && gateResult.gateSkipped !== true) {
       process.stdout.write('pensmith done: export cancelled by user.\n');
       process.exitCode = EXIT_REFUSED;
+      if (finalPath !== null) await removePath(finalPath);
       return { ok: false };
     }
 
@@ -780,11 +808,14 @@ export const doneCommand = defineCommand({
     const citation = resolveCitationStyle(paperRoot);
     if (citation.warning) process.stderr.write(`pensmith done: WARN — ${citation.warning}\n`);
 
+    // The humanized text exports under FINAL's name, as it will be kept.
+    const finalMdPath = paperFinalFile(paperRoot);
+    const exported = finalMd ?? draftMd;
     let result: Awaited<ReturnType<typeof exportDraft>>;
     try {
       result = await exportDraft({
-        inputPath: finalPath ?? draftPath,
-        markdown: finalMd ?? draftMd,
+        inputPath: finalMd !== null ? finalMdPath : draftPath,
+        markdown: exported,
         bibText,
         format,
         paperRoot,
@@ -793,6 +824,7 @@ export const doneCommand = defineCommand({
       });
     } catch (err) {
       if (!(err instanceof ExportError)) throw err;
+      if (finalPath !== null) await removePath(finalPath);
       process.stdout.write(`pensmith done: export failed — ${err.message} Nothing was exported.\n`);
       for (const d of err.details) process.stdout.write(`  ${d.replace(/\n/g, '\n  ')}\n`);
       // A tool that crashed is an error; everything else is a refusal.
@@ -807,18 +839,20 @@ export const doneCommand = defineCommand({
       buildVerificationReport(honestyReport, plagiarismResults, pass4Results),
     );
 
-    // Audit #15: the router's terminal sentinel is "DRAFT.md present AND FINAL.md
-    // present" (router.ts:216-218). In Tier 2 there is no humanizer, so
-    // runHumanizer returns null and FINAL.md is never written — bare `pensmith`/
-    // next/resume then re-run the WHOLE export pipeline (and re-prompt the gate)
-    // on every invocation, never reaching the {verb:'status',reason:'done'}
-    // terminus. Mark completion by writing FINAL.md from the exported source when
-    // it is absent: the humanized FINAL.md when a humanizer ran (already on disk),
-    // otherwise the compiled draft (the manuscript is final, just not humanized).
-    const finalMdPath = join(paperDir(paperRoot), 'FINAL.md');
-    if (!existsSync(finalMdPath)) {
-      await atomicWriteFile(finalMdPath, finalMd ?? draftMd);
-    }
+    // The export happened: FINAL.md is the text it shipped (humanized, or the
+    // compiled draft itself), and EXPORT.json binds it to the compiled draft
+    // it was checked against. The router counts the paper done only while
+    // both still match (a recompile moves FINAL.md aside).
+    await atomicWriteFile(finalMdPath, exported);
+    await writeExportRecord(paperRoot, {
+      $schemaVersion: 1,
+      exported_at: new Date().toISOString(),
+      draft_sha256: sha256(draftBytes),
+      final_sha256: sha256(Buffer.from(exported, 'utf8')),
+      format,
+      humanized: finalMd !== null,
+    });
+    if (finalPath !== null) await removePath(finalPath);
 
     process.stdout.write(`pensmith done: exported ${result.outputPath} (${citation.style} citations)\n`);
     if (requested === undefined && !pandoc) {

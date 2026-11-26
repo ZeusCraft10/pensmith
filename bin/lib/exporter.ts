@@ -34,7 +34,7 @@ import { citedKeys, exportCitations, findCitations, type Citation } from './cita
 import { cslHtmlToLatex, cslHtmlToMarkdown, escapeLatexText } from './csl-html.js';
 import { readBibEntries, readIdentifierFields, selectEntries, toBibtex, toRis, type CslEntry } from './export-bib.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
-import { homeDirs, packageRoot, paperDir, realPath } from './paths.js';
+import { homeDirs, packageRoot, paperDir, paperFinalStagedFile, realPath } from './paths.js';
 import { describeFinding, EPOCH_W3CDTF, scanExportBuffer, type TraceFormat } from './trace-scan.js';
 
 // PKG_ROOT — templates/citation-styles/ resolves against the install root.
@@ -76,11 +76,12 @@ export function __setTaskRunnerForTest(fn: TaskRunner | null): void {
  *
  * Behavior (T-06-05-03 — a missing skill must NEVER fail the export):
  *   - _taskRunner !== null (Tier 1 / injected runner): invoke the runner with
- *     the draft, write the output to `.paper/FINAL.md` via atomicWriteFile, and
- *     return the FINAL.md path. This is the only path that returns a non-null
- *     value — a FINAL.md path is returned ONLY when a real humanized artifact
- *     was written. The skill-presence check is bypassed when a runner is
- *     explicitly wired (the runner IS the transport + skill).
+ *     the draft, write the output to `.paper/FINAL.staged.md` via
+ *     atomicWriteFile, and return that path. This is the only path that
+ *     returns a non-null value. The text is staged, not FINAL.md: FINAL.md
+ *     marks a finished export, and done moves the staged text there only once
+ *     the export succeeds. The skill-presence check is bypassed when a runner
+ *     is explicitly wired (the runner IS the transport + skill).
  *   - _taskRunner === null AND isHumanizerSkillPresent() === false → print a
  *     clear stdout banner ('humanizer skill not found at
  *     ~/.claude/skills/humanizer/ — skipping humanize step.') and return null.
@@ -90,9 +91,8 @@ export function __setTaskRunnerForTest(fn: TaskRunner | null): void {
  *     cleanly with a distinct banner and let the export proceed on DRAFT.md.
  *
  * NEVER throws — any unexpected error degrades to a clean null skip (advisory).
- * `paperRoot` is the FINAL.md anchor; always resolves via paperDir(paperRoot)
- * (never cwd-relative — Pitfall 8; Phase 14 GATE-04 expects FINAL.md in
- * .paper/).
+ * `paperRoot` anchors the staged file; it always resolves via paperDir(paperRoot)
+ * (never cwd-relative — Pitfall 8).
  *
  * done.ts OWNS the before/after scoreHonesty + renderHonestyReport flow —
  * this function must NOT call scoreHonesty.
@@ -103,14 +103,14 @@ export async function runHumanizer(
 ): Promise<string | null> {
   try {
     // Tier-1 path: an injectable TaskRunner is present (live Task API or test
-    // seam). Invoke the runner, write the output to .paper/FINAL.md, and return
-    // its path. The skill-presence check is bypassed — the runner IS the
-    // transport; callers that wire it have already confirmed availability.
+    // seam). Invoke the runner, stage the output, and return its path. The
+    // skill-presence check is bypassed — the runner IS the transport; callers
+    // that wire it have already confirmed availability.
     if (_taskRunner !== null) {
       const { output } = await _taskRunner('humanizer', { draft: draftMd });
-      const finalPath = join(paperDir(paperRoot), 'FINAL.md');
-      await atomicWriteFile(finalPath, output);
-      return finalPath;
+      const stagedPath = paperFinalStagedFile(paperRoot);
+      await atomicWriteFile(stagedPath, output);
+      return stagedPath;
     }
 
     // No runner wired (Tier 2 / no transport): check skill presence.

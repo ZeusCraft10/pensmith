@@ -32,17 +32,27 @@
 //   4. Refuse if the manuscript cites a work CITATIONS.bib does not hold; else
 //      write DRAFT.md and COMPILE-REPORT.md, then COMPILE-MANIFEST.json, the
 //      hashes done checks before it exports (bin/lib/compile-manifest.ts).
+//      Either way an export of the earlier compile no longer stands: its
+//      FINAL.md is moved aside to FINAL.stale.md.
 //
 // The smoother and re-verify are injectable seams, so tests never reach a
 // model or the network. bin/cli/compile.ts wires the production re-verify.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { paperDir, sectionAcknowledgements, sectionDraft, sectionPlan, sectionVerificationRecord } from './paths.js';
+import {
+  paperDir,
+  paperFinalFile,
+  paperFinalStagedFile,
+  sectionAcknowledgements,
+  sectionDraft,
+  sectionPlan,
+  sectionVerificationRecord,
+} from './paths.js';
 import { type ParsedOutlineSection } from './outline-parse.js';
 import { readOutline } from './outline-read.js';
 import { parseFrontmatter } from './frontmatter.js';
-import { atomicRename, atomicWriteFile } from './atomic-write.js';
+import { atomicRename, atomicWriteFile, removePath } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
@@ -72,7 +82,7 @@ import {
   verificationGate,
   verificationStaleness,
 } from './verify/verification-record.js';
-import { manifestBibEntries, writeCompileManifest, type ManifestSection } from './compile-manifest.js';
+import { bibFileSha256, manifestBibEntries, writeCompileManifest, type ManifestSection } from './compile-manifest.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -274,11 +284,29 @@ async function loadSection(
 }
 
 /**
+ * An export of an earlier compile no longer describes the paper: its FINAL.md
+ * (the router's done mark) is moved aside to FINAL.stale.md, kept, and text
+ * humanized from the earlier draft and not exported yet is dropped. A failure
+ * is a warning: the router also checks FINAL.md against the export record.
+ */
+async function invalidateExport(paperRoot: string, warn: (msg: string) => void): Promise<void> {
+  const finalPath = paperFinalFile(paperRoot);
+  try {
+    if (existsSync(finalPath)) await atomicRename(finalPath, join(paperDir(paperRoot), 'FINAL.stale.md'));
+    await removePath(paperFinalStagedFile(paperRoot));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code ?? (err instanceof Error ? err.message : String(err));
+    warn(`WARN: could not move the earlier .paper/FINAL.md aside (${code}); it no longer matches the compiled draft`);
+  }
+}
+
+/**
  * Finish a refusal. A DRAFT.md from an earlier compile no longer reflects the
  * sections; left in place, the router would send the user to `done` and done
  * would read it. Move it aside (kept, not deleted) and say where it went.
  */
-async function refuse(paperRoot: string, result: CompileResult): Promise<CompileResult> {
+async function refuse(paperRoot: string, warn: (msg: string) => void, result: CompileResult): Promise<CompileResult> {
+  await invalidateExport(paperRoot, warn);
   const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
   if (!existsSync(draftPath)) return result;
   const staleDraftPath = join(paperDir(paperRoot), 'DRAFT.stale.md');
@@ -313,7 +341,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     // table that cannot be read) is a refusal with the reason, never a stack trace.
     const read = readOutline(opts.paperRoot);
     if (!read.ok) {
-      return refuse(opts.paperRoot, {
+      return refuse(opts.paperRoot, warn, {
         refused: true,
         refuseReasons: [`no usable outline: ${read.detail}`],
         sectionsCount: 0,
@@ -322,7 +350,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     }
     const outline = read.outline;
     if (outline.sections.length === 0) {
-      return refuse(opts.paperRoot, {
+      return refuse(opts.paperRoot, warn, {
         refused: true,
         refuseReasons: [
           "no sections in .paper/OUTLINE.md — run 'pensmith outline' to populate the section table",
@@ -340,7 +368,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     try {
       bib = await parseBibForPass1(bibText ?? '');
     } catch (err) {
-      return refuse(opts.paperRoot, {
+      return refuse(opts.paperRoot, warn, {
         refused: true,
         refuseReasons: [`.paper/CITATIONS.bib could not be read (${err instanceof Error ? err.message : String(err)}) — fix it, then verify again`],
         sectionsCount: 0,
@@ -438,7 +466,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     // Refuse: no DRAFT.md is written, so a bad citation never escapes.
     if (refuseReasons.length > 0) {
       for (const r of refuseReasons) warn(`REFUSE: ${r}`);
-      return refuse(opts.paperRoot, {
+      return refuse(opts.paperRoot, warn, {
         refused: true,
         refuseReasons,
         sectionsCount: loaded.length,
@@ -563,7 +591,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     if (missing.length > 0) {
       const reasons = missing.map((key) => `citation [@${key}] has no entry in .paper/CITATIONS.bib — re-run research or \`pensmith add\` it, then verify`);
       for (const r of reasons) warn(`REFUSE: ${r}`);
-      return refuse(opts.paperRoot, {
+      return refuse(opts.paperRoot, warn, {
         refused: true,
         refuseReasons: reasons,
         sectionsCount: loaded.length,
@@ -571,6 +599,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       });
     }
 
+    await invalidateExport(opts.paperRoot, warn);
     const draftPath = join(paperDir(opts.paperRoot), 'DRAFT.md');
     await atomicWriteFile(draftPath, compiled);
 
@@ -596,6 +625,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       draft_sha256: sha256(Buffer.from(compiled, 'utf8')),
       sections: manifestSections,
       bib_entries: manifestBibEntries(citedKeys(rendered), bib),
+      bib_sha256: bibFileSha256(bibText),
     });
 
     return {

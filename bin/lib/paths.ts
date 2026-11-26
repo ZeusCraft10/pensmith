@@ -581,6 +581,21 @@ export function compileManifestPath(root: string = projectRoot()): string {
   return path.join(paperDir(root), 'COMPILE-MANIFEST.json');
 }
 
+/** `<root>/.paper/FINAL.md`: the text the last export shipped, written only once it succeeded. */
+export function paperFinalFile(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'FINAL.md');
+}
+
+/** `<root>/.paper/FINAL.staged.md`: humanized text waiting for its export to succeed. */
+export function paperFinalStagedFile(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'FINAL.staged.md');
+}
+
+/** `<root>/.paper/EXPORT.json`: which compiled draft the last export came from (bin/lib/export-record.ts). */
+export function exportRecordPath(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'EXPORT.json');
+}
+
 /** A section's acknowledged verdicts (bin/lib/verify/acknowledgements.ts). */
 export function sectionAcknowledgements(
   n: number,
