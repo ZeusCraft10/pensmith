@@ -285,8 +285,13 @@ function installedCopy(): string {
   return dest;
 }
 
-function runPensmith(copy: string, args: string[], cwd: string): { status: number | null; stdout: string; stderr: string } {
-  const env = { ...process.env };
+function runPensmith(
+  copy: string,
+  args: string[],
+  cwd: string,
+  extraEnv: Record<string, string> = {},
+): { status: number | null; stdout: string; stderr: string } {
+  const env = { ...process.env, ...extraEnv };
   // A user's shell does not carry the test runner's cassette switches.
   delete env['PENSMITH_TEST_CASSETTES'];
   delete env['PENSMITH_NETWORK_TESTS'];
@@ -330,6 +335,48 @@ test('the installed CLI finds its runtime assets: doctor reports the install as 
     assert.equal(p.severity, 'PASS', `${id}: ${p.summary} ${p.detail ?? ''}`);
   }
   assert.ok(!existsSync(path.join(cwd, '.paper')), 'doctor must not create a workspace');
+});
+
+test('the installed CLI starts a paper from assignment.txt: intake, a dry run, status and an offline research step', () => {
+  // The journey runs the source CLI, so this is the run that loads the
+  // bundle's copied assets (the intake prompt, the disclaimer) mid-pipeline.
+  const copy = installedCopy();
+  const cwd = mkdtempSync(path.join(tmpdir(), 'pensmith-installed-paper-'));
+  const assignment = 'Write a 1500-word essay on whether the visible lattice points form islands.\n';
+  writeFileSync(path.join(cwd, 'assignment.txt'), assignment);
+  const env = { PENSMITH_NO_LLM: '1' };
+  const tree = (): string => filesUnder(path.join(cwd, '.paper')).sort()
+    .map((f) => `${path.relative(cwd, f)} ${readFileSync(f).toString('base64')}`).join('\n');
+
+  const asked = runPensmith(copy, ['--offline'], cwd, env);
+  assert.equal(asked.status, 3, `bare pensmith stops for the intake answers\n${asked.stdout}${asked.stderr}`);
+  const pendingLine = `${asked.stdout}\n${asked.stderr}`.split('\n').find((l) => l.startsWith('{"pending"'));
+  assert.ok(pendingLine, asked.stdout + asked.stderr);
+  const pending = JSON.parse(pendingLine) as { pending: string; questions: Array<{ id: string; suggested: string }> };
+  assert.equal(pending.pending, 'intake-questions');
+  const given: Record<string, string> = {
+    discipline: 'other', length_words: '1500', citation_style: 'apa', audience: 'an undergraduate course', counterargument: 'optional',
+  };
+  const answers = Object.fromEntries(pending.questions.map((q) => [q.id, given[q.id] ?? q.suggested]));
+
+  const intake = runPensmith(copy, ['new', '--offline', '--answers', JSON.stringify(answers)], cwd, env);
+  assert.equal(intake.status, 0, intake.stdout + intake.stderr);
+  assert.ok(readFileSync(path.join(cwd, '.paper', 'PROJECT.md'), 'utf8').includes(assignment.trim()), 'the assignment is kept');
+  assert.ok(existsSync(path.join(cwd, '.paper', 'INTAKE.json')));
+
+  const before = tree();
+  const dry = runPensmith(copy, ['--dry-run'], cwd, env);
+  assert.equal(dry.status, 0, dry.stdout + dry.stderr);
+  assert.match(dry.stdout, /the next step is `pensmith research`/);
+  assert.equal(tree(), before, '--dry-run leaves .paper/ as it was');
+
+  const status = runPensmith(copy, ['status'], cwd, env);
+  assert.equal(status.status, 0, status.stdout + status.stderr);
+  assert.match(status.stdout, /next: research/);
+
+  const research = runPensmith(copy, ['--offline'], cwd, env);
+  assert.equal(research.status, 0, research.stdout + research.stderr);
+  assert.match(research.stdout + research.stderr, /research: skipped \(offline\)/);
 });
 
 test('the installed CLI parses a PDF without printing a Buffer() deprecation warning', () => {
