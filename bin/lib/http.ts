@@ -956,16 +956,23 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     const { statusCode, headers: rh, body } = await withDeadline(
       pending, url, timeoutMs, abort, tunnels,
     );
-    // Read the raw bytes ONCE (audit #29), stopping at the size limit. `text`
+    // Read the raw bytes once, stopping at the size limit. `text`
     // is the UTF-8 decode for text consumers; `bodyBytes` preserves the exact
-    // bytes for binary content (PDFs fetched by URL).
-    try {
-      assertDeclaredLength(rh['content-length'], url, maxBodyBytes);
-    } catch (e) {
-      body.destroy();
-      throw e;
+    // bytes for binary content (PDFs fetched by URL). A HEAD answer has no
+    // body, and its content-length is the size a GET would return.
+    let bodyBytes: Buffer;
+    if (method === 'HEAD') {
+      await body.dump();
+      bodyBytes = Buffer.alloc(0);
+    } else {
+      try {
+        assertDeclaredLength(rh['content-length'], url, maxBodyBytes);
+      } catch (e) {
+        body.destroy();
+        throw e;
+      }
+      bodyBytes = await readCapped(body, url, maxBodyBytes);
     }
-    const bodyBytes = await readCapped(body, url, maxBodyBytes);
     const text = bodyBytes.toString('utf8');
     const flatHeaders: Record<string, string> = {};
     for (const [k, v] of Object.entries(rh)) {

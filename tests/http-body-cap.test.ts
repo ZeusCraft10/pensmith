@@ -49,6 +49,16 @@ test('fetch refuses up front when the declared content-length is past the limit'
   );
 });
 
+test('a HEAD answer is not refused for the size of the body it describes', async () => {
+  // A HEAD response's content-length is the size a GET would return; there
+  // is no body to read.
+  mockAgent().get(ORIGIN).intercept({ path: '/head', method: 'HEAD' })
+    .reply(200, '', { headers: { 'content-type': 'application/pdf', 'content-length': String(200_000_000) } });
+  const res = await fetch(`${ORIGIN}/head`, { method: 'HEAD', source: 'crossref', noCache: true, maxBodyBytes: 1024 });
+  assert.equal(res.status, 200);
+  assert.equal(res.body, '');
+});
+
 test('fetch returns a body at the limit intact', async () => {
   const body = Buffer.alloc(1024, 0x62);
   mockAgent().get(ORIGIN).intercept({ path: '/fits', method: 'GET' })
