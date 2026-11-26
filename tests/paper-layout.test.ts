@@ -17,6 +17,8 @@ import { resolveCostCap } from '../bin/lib/budget.js';
 import { resolveCitationStyle } from '../bin/lib/citation-style.js';
 import { resolveNextAction } from '../bin/lib/router.js';
 import { migrateLegacyLayout } from '../bin/lib/migrations/layout.js';
+import { tryAcquire } from '../bin/lib/lock.js';
+import { paperStateFile } from '../bin/lib/paths.js';
 
 function tmpRoot(): string {
   return mkdtempSync(join(tmpdir(), 'pensmith-layout-'));
@@ -165,4 +167,41 @@ test('a root STATE.json that an interrupted move left behind is removed; another
   writeFileSync(join(root, 'STATE.json'), JSON.stringify(other));
   await migrateLegacyLayout(root);
   assert.ok(existsSync(join(root, 'STATE.json')), 'not the same paper: left for the user');
+});
+
+test('the layout migration reads the root STATE.json only under the state lock, whoever\'s it is', async () => {
+  // Another pensmith process holds the state lock: the migration waits for it
+  // before it looks at the root STATE.json, even one that is not pensmith's or
+  // is another paper's, and then leaves that file as it is.
+  async function waitsForLock(root: string): Promise<void> {
+    const release = await tryAcquire(paperStateFile(root));
+    let settled = false;
+    const run = migrateLegacyLayout(root).finally(() => {
+      settled = true;
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(settled, false, 'the root STATE.json is checked under the lock, not before it');
+    } finally {
+      await release();
+    }
+    assert.equal(await run, false);
+  }
+
+  const hugo = tmpRoot();
+  const theirs = '{"build": {"publish": "public"}, "version": 3}\n';
+  writeFileSync(join(hugo, 'STATE.json'), theirs);
+  await waitsForLock(hugo);
+  assert.equal(readFileSync(join(hugo, 'STATE.json'), 'utf8'), theirs);
+  assert.ok(!existsSync(join(hugo, '.paper', 'STATE.json')));
+
+  const twoPapers = tmpRoot();
+  mkdirSync(join(twoPapers, '.paper'));
+  const ours = JSON.stringify(LEGACY_STATE);
+  const other = JSON.stringify({ ...LEGACY_STATE, paperId: '99999999-2222-4333-8444-555555555555' });
+  writeFileSync(join(twoPapers, '.paper', 'STATE.json'), ours);
+  writeFileSync(join(twoPapers, 'STATE.json'), other);
+  await waitsForLock(twoPapers);
+  assert.equal(readFileSync(join(twoPapers, 'STATE.json'), 'utf8'), other);
+  assert.equal(readFileSync(join(twoPapers, '.paper', 'STATE.json'), 'utf8'), ours);
 });

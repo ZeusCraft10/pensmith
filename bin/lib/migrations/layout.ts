@@ -104,22 +104,14 @@ function stateIdentity(file: string): string | null {
   }
 }
 
-/** True when the STATE.json at `legacy` is the same paper (paperId and createdAt) as the one at `target`. */
-function sameState(legacy: string, target: string): boolean {
-  const left = stateIdentity(legacy);
-  return left !== null && left === stateIdentity(target);
-}
-
 /**
  * Remove a root STATE.json that a move stopped before its last step left
- * behind: the same paper as .paper/STATE.json. Checked first without the
- * lock, since pensmith no longer writes the root file: a root STATE.json that
- * is someone else's (a Hugo site, a Python package) costs no lock.
+ * behind: the same paper (paperId and createdAt) as .paper/STATE.json.
  */
 async function removeLeftoverState(legacy: string, target: string): Promise<void> {
-  if (!sameState(legacy, target)) return;
   await withLock(target, async () => {
-    if (sameState(legacy, target)) await removePath(legacy);
+    const left = stateIdentity(legacy);
+    if (left !== null && left === stateIdentity(target)) await removePath(legacy);
   });
 }
 
@@ -140,23 +132,14 @@ export async function migrateLegacyLayout(root: string): Promise<boolean> {
     await removeLeftoverState(legacy, target);
     return false;
   }
-  // Someone else's root STATE.json is left alone, without taking the lock.
-  let text: string;
-  try {
-    text = readFileSync(legacy, 'utf8');
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false; // another process moved it
-    throw e;
-  }
-  if (pensmithStateId(text) === null) return false;
   let moved = false;
   await withLock(target, async () => {
     if (!existsSync(legacy) || existsSync(target)) return; // another process moved it
-    const current = readFileSync(legacy, 'utf8');
-    if (pensmithStateId(current) === null) return;
+    const text = readFileSync(legacy, 'utf8');
+    if (pensmithStateId(text) === null) return;
     await moveLegacyConfig(root);
     await ensurePaperGitignore(root);
-    await atomicWriteFile(target, current);
+    await atomicWriteFile(target, text);
     await removePath(legacy);
     moved = true;
   });
