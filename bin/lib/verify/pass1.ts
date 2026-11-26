@@ -41,7 +41,7 @@ import { paperDir } from '../paths.js';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { lookupRetraction } from '../sources/openalex.js';
 import { describeSignal, recordRetraction, type RetractionSignal } from './retraction.js';
-import { findRetractionAck, workBinding, type Acknowledgement } from './acknowledgements.js';
+import { findRetractionAck, workBinding, type Acknowledgement, type WorkBinding } from './acknowledgements.js';
 import {
   citedKeys,
   findCitations,
@@ -138,6 +138,8 @@ function missDetail(id: WorkId, r: Exclude<IdResolution, { kind: 'found' }>): st
 /** What one citation is checked under: its key, the work it binds to, and any acknowledgement. */
 interface CiteContext {
   ck: string;
+  /** The work an acknowledgement binds to; null when the entry has no identifier. */
+  binding: WorkBinding | null;
   ack: Acknowledgement | undefined;
   section: number | undefined;
 }
@@ -150,6 +152,13 @@ function retractedResult(ctx: CiteContext, what: string, titleJW = 0, authorJW =
   if (ctx.ack) {
     return result(ctx.ck, 'RETRACTED_ACKNOWLEDGED',
       `${what}; acknowledged ${ctx.ack.acknowledged_at.slice(0, 10)}: "${ctx.ack.reason}"`, titleJW, authorJW);
+  }
+  // `pensmith ack` binds an acknowledgement to an identifier, so it refuses
+  // an entry with none: say what will work instead.
+  if (!ctx.binding) {
+    return result(ctx.ck, 'RETRACTED',
+      `${what} — remove the citation, or add the work's DOI, PMID or arXiv ID to its CITATIONS.bib entry: ` +
+      'with none, it can be neither looked up nor acknowledged', titleJW, authorJW);
   }
   return result(ctx.ck, 'RETRACTED',
     `${what} — cite another source; if the paper discusses the retraction, acknowledge this citation with ` +
@@ -226,10 +235,11 @@ async function verdictForCitekey(
   if (!work.title || work.authors.length === 0) {
     return result(ck, 'MIS-CITED', 'claimed citation metadata incomplete (empty title or no authors)');
   }
+  const binding = workBinding(claimed, fields);
   const ctx: CiteContext = {
     ck,
-    // The binding is worked out only when there is an acknowledgement to match.
-    ack: opts.acknowledgements?.length ? findRetractionAck(opts.acknowledgements, ck, workBinding(claimed, fields)) : undefined,
+    binding,
+    ack: opts.acknowledgements?.length ? findRetractionAck(opts.acknowledgements, ck, binding) : undefined,
     section: opts.section,
   };
   // A retraction recorded when the source was added (the boolean on an
@@ -238,15 +248,7 @@ async function verdictForCitekey(
   // still checked like any other.
   const stored = claimed.retracted === true || claimed.note === 'RETRACTED';
   if (stored && !ctx.ack) {
-    const what = 'the work was recorded as retracted in CITATIONS.bib (note = {RETRACTED}) when it was added';
-    // `pensmith ack` binds an acknowledgement to an identifier, so it refuses
-    // an entry with none: say what will work instead.
-    if (!workBinding(claimed, fields)) {
-      return result(ck, 'RETRACTED',
-        `${what} — remove the citation, or add the work's DOI, PMID or arXiv ID to its CITATIONS.bib entry: ` +
-        'with none, it can be neither looked up nor acknowledged');
-    }
-    return retractedResult(ctx, what);
+    return retractedResult(ctx, 'the work was recorded as retracted in CITATIONS.bib (note = {RETRACTED}) when it was added');
   }
   const r = await checkIdentifiers(ctx, claimed, fields, work);
   // The record no longer says so, but the bibliography does: the

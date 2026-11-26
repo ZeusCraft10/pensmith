@@ -60,3 +60,20 @@ export function useMockRegistries(tmpPrefix: string): () => MockAgent {
     return agent;
   };
 }
+
+/** Answer GET eutils esummary for `pmid` (and only that) with `status` and `body`. */
+export function pubmedAnswers(
+  agent: MockAgent,
+  pmid: string,
+  status: number,
+  body: string,
+  headers: Record<string, string> = JSON_HEADERS,
+): void {
+  agent.get('https://eutils.ncbi.nlm.nih.gov')
+    .intercept({
+      path: (p) => p.startsWith('/entrez/eutils/esummary.fcgi?') && p.includes(`id=${pmid}&`),
+      method: 'GET',
+    })
+    .reply(status, body, { headers })
+    .persist();
+}

@@ -44,7 +44,7 @@ import {
   sectionPlan,
   paperDir,
 } from '../lib/paths.js';
-import { citationWarnings, unattributedWarning } from '../lib/verify/verdict-rows.js';
+import { citationWarnings, recordOnlyRetractionWarning, unattributedWarning } from '../lib/verify/verdict-rows.js';
 import { readAcknowledgements } from '../lib/verify/acknowledgements.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { assignedSourcesFrom, updatePlanFrontmatter } from '../lib/plan-status.js';
@@ -222,13 +222,7 @@ export const verifyCommand = defineCommand({
     // against OpenAlex's retraction list; that must not look like a full check.
     const recordOnly = pass1.filter((r) => r.retractionRecordOnly).length;
     if (recordOnly > 0) {
-      const one = recordOnly === 1;
-      process.stderr.write(
-        `pensmith verify: WARN — section ${n}: the retraction status of ` +
-        `${one ? '1 citation was read from its registry record' : `${recordOnly} citations was read from their registry records`} ` +
-        `alone, since OpenAlex could not be asked; re-run verify later to check ${one ? 'it' : 'them'} against OpenAlex too ` +
-        `(see ${verifPath}).\n`,
-      );
+      process.stderr.write(`pensmith verify: WARN — ${recordOnlyRetractionWarning(`section ${n}`, recordOnly)} (see ${verifPath}).\n`);
     }
     // What nobody could check does not block yet, but must not look clean.
     if (unattributed > 0) {

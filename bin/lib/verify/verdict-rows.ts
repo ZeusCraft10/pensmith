@@ -165,6 +165,18 @@ export function uncheckedQuoteWarning(where: string, count: number): string {
   return `${where} has ${quotations(count)} that could not be checked against the source text`;
 }
 
+/**
+ * The warning for `count` citations in `where` whose retraction status was read
+ * from their registry record alone, since OpenAlex could not be asked.
+ */
+export function recordOnlyRetractionWarning(where: string, count: number): string {
+  const [what, them] = count === 1
+    ? ['1 citation was read from its registry record', 'it']
+    : [`${count} citations was read from their registry records`, 'them'];
+  return `${where}: the retraction status of ${what} alone, since OpenAlex could not be asked; ` +
+    `re-run verify later to check ${them} against OpenAlex too`;
+}
+
 /** How a refusal names what a verdict is about: `[@key]`, or the quoted text. */
 function describeVerdictRow(row: Pick<VerdictRow, 'citekey' | 'verdict'>): string {
   return TEXT_VERDICTS.has(row.verdict) ? `text "${row.citekey}"` : `citation [@${row.citekey}]`;

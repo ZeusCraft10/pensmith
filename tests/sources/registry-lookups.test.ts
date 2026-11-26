@@ -32,7 +32,7 @@ import { lookupIsbn } from '../../bin/lib/sources/openlibrary.js';
 import { fetchById as arxivFetchById, lookupArxiv, search as arxivSearch } from '../../bin/lib/sources/arxiv.js';
 import { fetchById as pubmedFetchById, lookupPmid } from '../../bin/lib/sources/pubmed.js';
 import { pass1Verdict } from '../lib/bib-fixture.js';
-import { JSON_HEADERS, useMockRegistries } from '../lib/mock-registries.js';
+import { JSON_HEADERS, pubmedAnswers, useMockRegistries } from '../lib/mock-registries.js';
 
 const agent = useMockRegistries('pensmith-registry-lookups-');
 
@@ -163,17 +163,6 @@ function arxivAnswers(id: string, status: number, body: string, headers: Record<
     .persist();
 }
 
-/** Answer GET eutils esummary for `pmid` (and only that) with `status` and `body`. */
-function pubmedAnswers(pmid: string, status: number, body: string, headers: Record<string, string> = JSON_HEADERS): void {
-  agent().get('https://eutils.ncbi.nlm.nih.gov')
-    .intercept({
-      path: (p) => p.startsWith('/entrez/eutils/esummary.fcgi?') && p.includes(`id=${pmid}&`),
-      method: 'GET',
-    })
-    .reply(status, body, { headers })
-    .persist();
-}
-
 // esummary's answer for a PMID that does not exist.
 const pubmedNoSuchId = (pmid: string): string => JSON.stringify({
   header: { type: 'esummary', version: '0.3' },
@@ -220,24 +209,24 @@ test('arXiv: search and fetchById do not read the error entry as a paper', async
 });
 
 test('PubMed: an esummary error entry for the PMID is not_found', async () => {
-  pubmedAnswers('39999999', 200, pubmedNoSuchId('39999999'));
+  pubmedAnswers(agent(), '39999999', 200, pubmedNoSuchId('39999999'));
   assert.deepEqual(await lookupPmid('39999999'), { kind: 'not_found', registry: 'PubMed', authoritative: true });
 });
 
 test('PubMed: a 503 that outlasts the retries is unavailable, not not_found', { timeout: 60_000 }, async () => {
-  pubmedAnswers('39999998', 503, 'Service Unavailable');
+  pubmedAnswers(agent(), '39999998', 503, 'Service Unavailable');
   assert.deepEqual(await lookupPmid('39999998'), { kind: 'unavailable', registry: 'PubMed', detail: 'HTTP 503' });
 });
 
 test('PubMed: a 403 is unavailable, not not_found', async () => {
-  pubmedAnswers('39999996', 403, 'Forbidden', PLAIN);
+  pubmedAnswers(agent(), '39999996', 403, 'Forbidden', PLAIN);
   assert.deepEqual(await lookupPmid('39999996'), { kind: 'unavailable', registry: 'PubMed', detail: 'HTTP 403' });
 });
 
 test('PubMed: an error about the request rather than the PMID is unavailable, not not_found', async () => {
   // E-utilities report a refused request (a rate limit, a bad parameter) as a
   // top-level `error`; it says nothing about whether the PMID exists.
-  pubmedAnswers('39999997', 200, JSON.stringify({ error: 'API rate limit exceeded', count: '4', limit: '3' }));
+  pubmedAnswers(agent(), '39999997', 200, JSON.stringify({ error: 'API rate limit exceeded', count: '4', limit: '3' }));
   const r = await lookupPmid('39999997');
   assert.equal(r.kind, 'unavailable');
   assert.match(r.kind === 'unavailable' ? r.detail : '', /API rate limit exceeded/);
@@ -265,14 +254,14 @@ test('Pass 1: an arXiv-only entry is UNRESOLVED, not FABRICATED, when arXiv does
 });
 
 test('Pass 1: a PMID-only entry PubMed has no record of is FABRICATED', async () => {
-  pubmedAnswers('39999999', 200, pubmedNoSuchId('39999999'));
+  pubmedAnswers(agent(), '39999999', 200, pubmedNoSuchId('39999999'));
   const r = await pass1Verdict(pmidOnly('39999999'));
   assert.equal(r.verdict, 'FABRICATED', r.reason);
   assert.match(r.reason, /PMID 39999999 is not registered \(PubMed has no record of it\)/);
 });
 
 test('Pass 1: a PMID-only entry is UNRESOLVED, not FABRICATED, when PubMed does not answer', { timeout: 60_000 }, async () => {
-  pubmedAnswers('39999998', 503, 'Service Unavailable');
+  pubmedAnswers(agent(), '39999998', 503, 'Service Unavailable');
   const r = await pass1Verdict(pmidOnly('39999998'));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
   assert.match(r.reason, /PMID 39999998 could not be checked \(PubMed: HTTP 503\)/);
@@ -286,7 +275,7 @@ test('Pass 1: an arXiv-only entry is UNRESOLVED, not FABRICATED, when arXiv refu
 });
 
 test('Pass 1: a PMID-only entry is UNRESOLVED, not FABRICATED, when PubMed refuses with a 403', async () => {
-  pubmedAnswers('39999996', 403, 'Forbidden', PLAIN);
+  pubmedAnswers(agent(), '39999996', 403, 'Forbidden', PLAIN);
   const r = await pass1Verdict(pmidOnly('39999996'));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
   assert.match(r.reason, /PMID 39999996 could not be checked \(PubMed: HTTP 403\)/);
@@ -322,7 +311,7 @@ test('Open Library: a 200 whose fields are the wrong type is unavailable, and Pa
 });
 
 test('PubMed: a 200 whose fields are the wrong type is unavailable, and Pass 1 says UNRESOLVED', async () => {
-  pubmedAnswers('31452104', 200, pubmedNumericPubdate('31452104'));
+  pubmedAnswers(agent(), '31452104', 200, pubmedNumericPubdate('31452104'));
   assert.deepEqual(await lookupPmid('31452104'), { kind: 'unavailable', registry: 'PubMed', detail: 'unreadable response' });
   const r = await pass1Verdict(pmidOnly('31452104'));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
@@ -496,7 +485,7 @@ test('arXiv: fetchById says on stderr why it reads nothing from an oversized fee
 });
 
 test('PubMed: fetchById reads the fields a candidate needs, whatever epubdate holds', async () => {
-  pubmedAnswers('31000001', 200, JSON.stringify({
+  pubmedAnswers(agent(), '31000001', 200, JSON.stringify({
     result: { uids: ['31000001'], '31000001': { uid: '31000001', title: 'A Valid Article', authors: [{ name: 'Roe J' }], pubdate: '2019 Jul', epubdate: 20190101 } },
   }));
   const c = await pubmedFetchById('31000001');

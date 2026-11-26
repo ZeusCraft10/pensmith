@@ -351,26 +351,29 @@ const ABBREVIATIONS: ReadonlySet<string> = new Set([
   'fig', 'figs', 'no', 'nos', 'vol', 'vols', 'p', 'pp', 'ch', 'chap', 'sec', 'eq', 'approx', 'ca',
 ]);
 
+// What may open a sentence: a capital, a number or an opening mark.
+const OPENER = String.raw`[\p{Lu}\p{N}"“‘'[@]`;
 // `.`, `!` or `?`, closing quotes or brackets, then space and a capital or an
 // opening mark: the end of a sentence.
-const SENTENCE_END = /[.!?]["”’')\]]*(?=\s+[\p{Lu}\p{N}"“‘'[@])/gu;
+const SENTENCE_END = new RegExp(String.raw`[.!?]["”’')\]]*(?=\s+${OPENER})`, 'gu');
 // In text extracted from a paper with numeric citations, the full stop after a
 // word is often followed by its reference marker as plain digits
 // ("effective.12,13 The", "effective.(12) The"). That still ends the sentence.
 // The marks between the word and the full stop are bounded, so a long run of
-// them is read in linear time.
+// them is read in linear time. The punctuation is matched first, so the
+// lookbehind runs only where there is some.
 const MARKED_SENTENCE_END =
-  /(?<=[\p{L}\p{M}]["”’')\]]{0,3})[.!?](?:\d{1,3}(?:[-–,]\d{1,3})*|\(\d{1,3}(?:[-–,]\s?\d{1,3})*\))(?=\s+[\p{Lu}"“‘'])/gu;
-// A blank line and the whitespace after it, matched whole so that a long run
-// of blank lines (a PDF of empty pages) is read once.
-const BLANK_RUN = /\n[ \t\r]*\n\s*/g;
-// What may open a sentence after one: a capital, a number or an opening mark.
-const OPENS_SENTENCE = /^[\p{Lu}\p{N}"“‘'[@]/u;
+  /[.!?](?<=[\p{L}\p{M}]["”’')\]]{0,3}[.!?])(?:\d{1,3}(?:[-–,]\d{1,3})*|\(\d{1,3}(?:[-–,]\s?\d{1,3})*\))(?=\s+[\p{Lu}"“‘'])/gu;
+// What may open a sentence, matched only where it starts at `lastIndex`.
+const OPENS_SENTENCE_AT = new RegExp(OPENER, 'uy');
 
 // A blank line, with LF or CRLF line endings (a draft edited on Windows).
 const BLANK_LINE = /\n[ \t\r]*\n/g;
 // The same, matched only where it starts at `lastIndex`.
 const BLANK_LINE_AT = new RegExp(BLANK_LINE.source, 'y');
+// A blank line and the whitespace after it, matched whole so that a long run
+// of blank lines (a PDF of empty pages) is read once.
+const BLANK_RUN = new RegExp(String.raw`${BLANK_LINE.source}\s*`, 'g');
 
 // How far back from a full stop endsSentence looks for the word before it:
 // further than any abbreviation or initial reaches.
@@ -402,7 +405,8 @@ export function sentenceEnds(text: string): number[] {
   // the sentence before it even with no full stop. A page break that runs on
   // in lower case ends nothing.
   for (const m of text.matchAll(BLANK_RUN)) {
-    if (OPENS_SENTENCE.test(text.slice(m.index + m[0].length, m.index + m[0].length + 2))) out.push(m.index);
+    OPENS_SENTENCE_AT.lastIndex = m.index + m[0].length;
+    if (OPENS_SENTENCE_AT.test(text)) out.push(m.index);
   }
   return out.sort((a, b) => a - b);
 }

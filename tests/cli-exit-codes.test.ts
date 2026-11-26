@@ -273,24 +273,20 @@ test('exit codes: the --yolo cost-cap refusal exits 2', () => {
 test('exit codes: a missing required argument exits 2, with the usage on stderr', () => {
   // citty used to print the usage on stdout and exit 1, as if pensmith had
   // crashed, while an unknown verb exits 2.
+  // A dry run is refused the same way, not with a stack trace.
   const dir = mkdtempSync(join(tmpdir(), 'pensmith-exit-usage-'));
-  for (const [args, missing] of [[['ack', '1'], 'CITEKEY'], [['add'], 'SOURCE']] as const) {
+  for (const [args, verb, missing] of [
+    [['ack', '1'], 'ack', 'CITEKEY'],
+    [['add'], 'add', 'SOURCE'],
+    [['--dry-run', 'ack', '1'], 'ack', 'CITEKEY'],
+  ] as const) {
     const r = runCli([...args], dir);
     const err = stripVTControlCharacters(r.stderr);
     assert.equal(r.status, 2, `pensmith ${args.join(' ')} must exit 2; stdout=${r.stdout} stderr=${r.stderr}`);
     assert.match(err, new RegExp(`Missing required positional argument: ${missing}`));
-    assert.match(err, new RegExp(`USAGE pensmith ${args[0]} \\[OPTIONS\\]`), 'the usage of the verb typed goes with the error');
+    assert.match(err, new RegExp(`USAGE pensmith ${verb} \\[OPTIONS\\]`), 'the usage of the verb typed goes with the error');
+    assert.doesNotMatch(err, /at parseArgs|node_modules/, 'no stack trace');
     assert.equal(r.stdout, '', 'a usage error writes nothing on stdout');
   }
-});
-
-test('exit codes: a dry run with a missing required argument exits 2, not with a stack trace', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'pensmith-exit-usage-'));
-  const r = runCli(['--dry-run', 'ack', '1'], dir);
-  const err = stripVTControlCharacters(r.stderr);
-  assert.equal(r.status, 2, `stdout=${r.stdout} stderr=${r.stderr}`);
-  assert.match(err, /Missing required positional argument: CITEKEY/);
-  assert.match(err, /USAGE pensmith ack \[OPTIONS\]/);
-  assert.doesNotMatch(err, /at parseArgs|node_modules/, 'no stack trace');
-  assert.deepEqual(readdirSync(dir), [], 'a refused dry run writes nothing');
+  assert.deepEqual(readdirSync(dir), [], 'a refused command writes nothing');
 });

@@ -224,6 +224,11 @@ function hasFlag(argv: string[], flag: string): boolean {
   return argv.includes(`--${flag}`);
 }
 
+/** True if argv asks for the usage (`--help` or `-h`). */
+function wantsHelp(argv: string[]): boolean {
+  return hasFlag(argv, 'help') || argv.includes('-h');
+}
+
 /**
  * Verbs that incur NO model/network cost, which the --yolo cost-cap pre-flight
  * skips: inspecting status/library/health, opening a paper or recording an
@@ -240,7 +245,7 @@ const NO_COST_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor', 
 export function shouldRunYoloCapPreflight(argv: string[]): boolean {
   if (!hasFlag(argv, 'yolo')) return false;
   if (hasFlag(argv, 'estimate') || hasFlag(argv, 'dry-run') || isDryRun()) return false;
-  if (argv.includes('--version') || argv.includes('--help') || argv.includes('-h')) return false;
+  if (wantsHelp(argv) || hasFlag(argv, 'version')) return false;
   const v = firstVerb(argv);
   if (v !== null && NO_COST_VERBS.has(v)) return false;
   return true;
@@ -469,11 +474,11 @@ async function dispatchArgv(argv: string[]): Promise<void> {
   // (preflight contract) and parse nothing, so they never raise a usage error.
   // --version with anything else is parsed like any command line, so it never
   // falls into the bare router path.
-  if (argv.includes('--help') || argv.includes('-h') || (argv.length === 1 && argv[0] === '--version')) {
+  if (wantsHelp(argv) || (argv.length === 1 && argv[0] === '--version')) {
     await runMain(command, { rawArgs: argv });
     return;
   }
-  if (argv.includes('--version')) {
+  if (hasFlag(argv, 'version')) {
     await runCommand(command, { rawArgs: argv });
     return;
   }

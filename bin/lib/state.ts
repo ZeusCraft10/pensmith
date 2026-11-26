@@ -66,9 +66,6 @@ import {
   Schema as StateSchema,
   CURRENT_STATE_VERSION,
   type State,
-  type SectionState,
-  type SectionStatus,
-  type VerificationVerdict,
 } from './schemas/state.js';
 import { openSessionLog, type SessionLogger } from './session-log.js';
 
@@ -314,17 +311,11 @@ export async function updateState(
 }
 
 // ---------------------------------------------------------------------------
-// State-mutation helpers (D-13 / TIER-02), each a typed convenience wrapper
-// over updateState.
+// State-mutation helpers (D-13 / TIER-02), typed wrappers over updateState.
 //
-// STATE.json's per-section schema is { n, slug } strict. The per-section
-// state/status/verdict cursors live in PLAN.md frontmatter
-// (PlanFrontmatterSchema), so:
-//   - initSection: writes {n, slug} to STATE.json;
-//   - advanceSection / setSectionStatus / recordVerification: are NO-OPS at
-//     the STATE.json level (they validate input, log an event-kind breadcrumb,
-//     and return the unchanged state). They were kept for the MCP server's
-//     tools, which are gone; nothing calls them now.
+// STATE.json's per-section schema is { n, slug } strict; per-section status
+// and verdicts live in PLAN.md frontmatter (PlanFrontmatterSchema) and
+// VERIFICATION.json. initSection writes {n, slug}.
 // ---------------------------------------------------------------------------
 
 /**
@@ -344,70 +335,6 @@ export async function initSection(
     if (sections.some((s) => s.n === n)) return prev; // idempotent (D-08)
     return { ...prev, sections: [...sections, { n, slug }] };
   });
-}
-
-/**
- * D-08 NO-OP at the STATE.json layer: per-section `state` moved to PLAN.md
- * frontmatter (PlanFrontmatterSchema.status). Validates the toState enum,
- * logs an event-kind breadcrumb, returns the current state unchanged.
- *
- * The real write is to PLAN.md (updatePlanFrontmatter); nothing calls this
- * since the MCP server was removed.
- */
-export async function advanceSection(
-  paperRoot: string,
-  n: number,
-  toState: SectionState,
-): Promise<State> {
-  log().event({
-    event: 'state.advanceSection.noop',
-    paperRoot,
-    n,
-    toState,
-    note: 'D-08 — per-section state lives in PLAN.md frontmatter from v2; STATE.json is pointer-only',
-  });
-  // Return current state unmodified — STATE.json shape is { n, slug } strict
-  // and has no field to receive `toState`. The mutator returns the input
-  // unchanged so saveState's schema-parse round-trip succeeds.
-  return updateState(paperRoot, (prev) => prev);
-}
-
-/**
- * D-08 NO-OP at the STATE.json layer: see advanceSection note.
- */
-export async function setSectionStatus(
-  paperRoot: string,
-  n: number,
-  status: SectionStatus,
-): Promise<State> {
-  log().event({
-    event: 'state.setSectionStatus.noop',
-    paperRoot,
-    n,
-    status,
-    note: 'D-08 — per-section status lives in PLAN.md frontmatter from v2',
-  });
-  return updateState(paperRoot, (prev) => prev);
-}
-
-/**
- * D-08 NO-OP at the STATE.json layer: per-section verdict moved to PLAN.md
- * frontmatter (PlanFrontmatterSchema.last_verification). See advanceSection
- * note.
- */
-export async function recordVerification(
-  paperRoot: string,
-  n: number,
-  verdict: VerificationVerdict,
-): Promise<State> {
-  log().event({
-    event: 'state.recordVerification.noop',
-    paperRoot,
-    n,
-    verdict,
-    note: 'D-08 — per-section verdict lives in PLAN.md frontmatter from v2',
-  });
-  return updateState(paperRoot, (prev) => prev);
 }
 
 // ---------------------------------------------------------------------------

@@ -15,8 +15,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pass1Verdict } from '../lib/bib-fixture.js';
-import { JSON_HEADERS, useMockRegistries } from '../lib/mock-registries.js';
+import { workBinding } from '../../bin/lib/verify/acknowledgements.js';
+import { runPass1 } from '../../bin/lib/verify/pass1.js';
+import { isBlockingVerdict } from '../../bin/lib/verify/verdict-rows.js';
+import { bibFile, pass1Verdict } from '../lib/bib-fixture.js';
+import { JSON_HEADERS, pubmedAnswers, useMockRegistries } from '../lib/mock-registries.js';
 
 const agent = useMockRegistries('pensmith-retraction-signals-');
 
@@ -75,7 +78,6 @@ for (const [type, label] of [
 }
 
 test('Pass 1: an expression of concern is EXPRESSION_OF_CONCERN, which does not block', async () => {
-  const { isBlockingVerdict } = await import('../../bin/lib/verify/verdict-rows.js');
   openAlexAnswers([], 200, notRetracted);
   crossrefHolds('10.5555/tidal.2', { ...WORK, DOI: '10.5555/tidal.2', 'updated-by': [notice('expression_of_concern', '10.5555/tidal.eoc', 'Expression of concern')] });
   const r = await pass1Verdict(entry('10.5555/tidal.2'));
@@ -180,9 +182,6 @@ test('Pass 1: a mismatched entry whose DOI names a retracted work is MIS-CITED, 
 test('Pass 1: a retraction recorded in CITATIONS.bib and acknowledged stays RETRACTED_ACKNOWLEDGED when the record shows none', async () => {
   // The bibliography says the work is retracted; the acknowledgement is what
   // lets it pass, not the registry's silence.
-  const { runPass1 } = await import('../../bin/lib/verify/pass1.js');
-  const { workBinding } = await import('../../bin/lib/verify/acknowledgements.js');
-  const { bibFile } = await import('../lib/bib-fixture.js');
   openAlexAnswers([], 200, notRetracted);
   crossrefHolds('10.5555/tidal.10', { ...WORK, DOI: '10.5555/tidal.10' });
   const binding = workBinding({ DOI: '10.5555/tidal.10' });
@@ -203,29 +202,25 @@ test('Pass 1: a retraction recorded in CITATIONS.bib and acknowledged stays RETR
 });
 
 test('Pass 1: a PubMed record linked to an expression of concern is EXPRESSION_OF_CONCERN, which does not block', async () => {
-  const { isBlockingVerdict } = await import('../../bin/lib/verify/verdict-rows.js');
   const pmid = '31000001';
   // An esummary record shaped as PubMed gives one (see the recorded Wakefield
   // record): a journal article, not a Retracted Publication, with an
   // "Expression of concern in" link.
-  agent().get('https://eutils.ncbi.nlm.nih.gov')
-    .intercept({ path: (p) => p.startsWith('/entrez/eutils/esummary.fcgi?') && p.includes(`id=${pmid}&`), method: 'GET' })
-    .reply(200, JSON.stringify({
-      header: { type: 'esummary', version: '0.3' },
-      result: {
-        uids: [pmid],
-        [pmid]: {
-          uid: pmid, pubdate: '2019 Mar', source: 'Icarus', fulljournalname: 'Icarus',
-          title: 'Tidal Heating in Icy Moons.', authors: [{ name: 'Roe J', authtype: 'Author', clusterid: '' }],
-          pubtype: ['Journal Article'], articleids: [{ idtype: 'pubmed', idtypen: 1, value: pmid }],
-          references: [
-            { refsource: 'Icarus. 2020 Jan;335:113001.', reftype: 'Comment in', pmid: 32000001, note: '' },
-            { refsource: 'Icarus. 2021 Mar;350:114001. doi: 10.5555/tidal.eoc.', reftype: 'Expression of concern in', pmid: 33000001, note: '' },
-          ],
-        },
+  pubmedAnswers(agent(), pmid, 200, JSON.stringify({
+    header: { type: 'esummary', version: '0.3' },
+    result: {
+      uids: [pmid],
+      [pmid]: {
+        uid: pmid, pubdate: '2019 Mar', source: 'Icarus', fulljournalname: 'Icarus',
+        title: 'Tidal Heating in Icy Moons.', authors: [{ name: 'Roe J', authtype: 'Author', clusterid: '' }],
+        pubtype: ['Journal Article'], articleids: [{ idtype: 'pubmed', idtypen: 1, value: pmid }],
+        references: [
+          { refsource: 'Icarus. 2020 Jan;335:113001.', reftype: 'Comment in', pmid: 32000001, note: '' },
+          { refsource: 'Icarus. 2021 Mar;350:114001. doi: 10.5555/tidal.eoc.', reftype: 'Expression of concern in', pmid: 33000001, note: '' },
+        ],
       },
-    }), { headers: JSON_HEADERS })
-    .persist();
+    },
+  }));
   const r = await pass1Verdict(
     '@article{roe2019,\n  title = {Tidal Heating in Icy Moons},\n  author = {Roe, Jane},\n  journal = {Icarus},\n  year = {2019},\n  pmid = {31000001}\n}\n',
   );
