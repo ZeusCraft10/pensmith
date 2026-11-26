@@ -326,7 +326,7 @@ export const writeCommand = defineCommand({
     },
     slug: {
       type: 'string',
-      description: 'Section slug (lowercase-kebab; defaults to "placeholder" in Tier-2 mode).',
+      description: "Section slug: the outline's for this section, which --slug must match. Only with no outline does it name the folder.",
     },
     'max-parallel': {
       type: 'string',

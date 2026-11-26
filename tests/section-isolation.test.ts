@@ -106,6 +106,36 @@ test('a section verb names a section of the outline, or is refused; it never mak
   }
 });
 
+test('with an outline, --slug cannot name a folder the outline does not register', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-slug-outline-'));
+  const home = mkdtempSync(join(tmpdir(), 'pensmith-slug-outline-home-'));
+  await writeOutline(root, numberOutline({
+    title: 'Three Sections',
+    thesis: 'A section is a phase of the outline.',
+    sections: ['intro', 'background', 'methods'].map((slug, i) => ({
+      slug, title: slug, purpose: `Section ${i + 1}.`, depends_on: [], word_target: 300,
+      assigned_sources: [], counterargument: false,
+    })),
+  }));
+  const sections = join(root, '.paper', 'sections');
+  const before = existsSync(sections) ? readdirSync(sections).sort() : [];
+  const cases: Array<[string[], RegExp]> = [
+    [['plan', '3', '--slug', 'foo', '--yolo'], /--slug foo is not section 3's folder: the outline names it 'methods'/],
+    [['write', '3', '--slug', 'foo'], /--slug foo is not section 3's folder/],
+    [['verify', '3', '--slug', 'foo'], /--slug foo is not section 3's folder/],
+    [['ack', '3', 'smith2020', '--slug', 'foo', '--reason', 'discussed'], /--slug foo is not section 3's folder/],
+    // A section the outline does not have is refused even with --slug.
+    [['plan', '7', '--slug', 'appendix', '--yolo'], /section 7 is not in the outline \(its sections are 1, 2, 3\)/],
+  ];
+  for (const [args, reason] of cases) {
+    const r = cli(root, home, ...args);
+    assert.equal(r.status, 2, `${args.join(' ')} is refused\n${r.out}`);
+    assert.match(r.out, reason, r.out);
+    const after = existsSync(sections) ? readdirSync(sections).sort() : [];
+    assert.deepEqual(after, before, `${args.join(' ')} made no section folder`);
+  }
+});
+
 // Five sections, each drawing on one recorded work; the middle one also on a
 // DOI no registry holds.
 const SECTIONS = [

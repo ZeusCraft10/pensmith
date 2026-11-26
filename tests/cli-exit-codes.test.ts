@@ -109,9 +109,18 @@ test('exit codes: verify exits 2 when the section fails verification', () => {
 
 test('exit codes: verify exits 2 when there is no draft to verify', () => {
   const root = seedPaper([{ n: 1, slug: 'intro', draft: 'x\n', verification: CLEAN }]);
-  const r = runCli(['verify', '2', '--slug', 'missing'], root);
+  rmSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'));
+  const r = runCli(['verify', '1'], root);
   assert.match(r.stdout, /DRAFT\.md missing/, r.stdout + r.stderr);
   assert.equal(r.status, 2);
+});
+
+test('exit codes: verify exits 2 for a section the outline does not have, whatever --slug says', () => {
+  const root = seedPaper([{ n: 1, slug: 'intro', draft: 'x\n', verification: CLEAN }]);
+  const r = runCli(['verify', '2', '--slug', 'missing'], root);
+  assert.match(r.stderr, /section 2 is not in the outline/, r.stdout + r.stderr);
+  assert.equal(r.status, 2);
+  assert.equal(existsSync(join(root, '.paper', 'sections', '02-missing')), false);
 });
 
 test('exit codes: verify exits 2 for a section number that is not a positive integer', () => {

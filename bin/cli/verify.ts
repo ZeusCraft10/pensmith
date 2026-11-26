@@ -77,7 +77,7 @@ export const verifyCommand = defineCommand({
     },
     slug: {
       type: 'string',
-      description: 'Section slug (lowercase-kebab; defaults to "placeholder").',
+      description: "Section slug: the outline's for this section, which --slug must match. Only with no outline does it name the folder.",
     },
     yolo: {
       type: 'boolean',

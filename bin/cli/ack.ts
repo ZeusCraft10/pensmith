@@ -47,7 +47,7 @@ export const ackCommand = defineCommand({
     },
     slug: {
       type: 'string',
-      description: 'Section slug (defaults to the one in OUTLINE.md).',
+      description: "Section slug: the outline's for this section, which --slug must match. Only with no outline does it name the folder.",
     },
   },
   async run({ args }) {

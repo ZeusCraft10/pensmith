@@ -98,7 +98,7 @@ export const planCommand = defineCommand({
     },
     slug: {
       type: 'string',
-      description: 'Section slug (defaults to the one in the outline).',
+      description: "Section slug: the outline's for this section, which --slug must match. Only with no outline does it name the folder.",
     },
     revise: {
       type: 'boolean',

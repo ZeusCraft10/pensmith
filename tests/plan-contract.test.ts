@@ -129,19 +129,26 @@ test('the planner\'s JSON becomes a PLAN.md whose frontmatter code wrote from th
   assert.match(body, /^- It weakens once prior anxiety is controlled for\. \(sources: lee2021\)$/m);
 });
 
-test('plan N --slug X, for an X that is not the outline\'s slug for N, still tells the planner the outline\'s purpose for N', async () => {
+test('plan N --slug X is refused when the outline names section N\'s folder otherwise, and asks no model', async () => {
   const root = await paper();
   const seen: Seen[] = [];
   _setGeneratorForTest(answering([PLAN], seen));
   const res = await runPlan(root, 2, { slug: 'my-evidence' });
+  assert.equal(res['exitCode'], 2, JSON.stringify(res));
+  assert.equal(seen.length, 0, 'no model call');
+  assert.equal(existsSync(join(root, '.paper', 'sections', '02-my-evidence')), false, 'no folder the outline does not register');
+});
+
+test('plan N --slug X, for the outline\'s own slug, tells the planner the outline\'s purpose for N', async () => {
+  const root = await paper();
+  const seen: Seen[] = [];
+  _setGeneratorForTest(answering([PLAN], seen));
+  const res = await runPlan(root, 2, { slug: 'evidence' });
   assert.equal(res['ok'], true, JSON.stringify(res));
   const section = /\{"number":2,[^\n]*?"outline_sources":\[[^\]]*\]\}/.exec(seen[0]!.system)?.[0];
   assert.ok(section, 'the section JSON is in the planner prompt');
-  assert.deepEqual(JSON.parse(section), {
-    number: 2, slug: 'my-evidence', title: 'my-evidence', purpose: 'Survey the cohort studies.', depends_on: [],
-    word_target: null, outline_sources: [],
-  });
-  assert.ok(existsSync(planFile(root, '02-my-evidence')), 'PLAN.md is written in the folder --slug names');
+  assert.equal((JSON.parse(section) as { purpose: string }).purpose, 'Survey the cohort studies.');
+  assert.ok(existsSync(planFile(root, '02-evidence')), 'PLAN.md is written in the outline\'s folder');
 });
 
 test('a plan that cites outside the library is repaired once, then refused with exit 2, the stub left as it was', async () => {
