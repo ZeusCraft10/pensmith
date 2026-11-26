@@ -12,7 +12,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -127,6 +127,21 @@ test('warn_at_usd prints the running total once when spending passes it', async 
     process.stderr.write = orig;
   }
   assert.equal(stderr.match(/of the \$5\.00 cost cap/g)?.length, 1, stderr);
+});
+
+test('a call made for a named paper is capped and recorded on that paper, not where the cwd is', async () => {
+  // The cwd (root) is at its cap; the paper the call is for has spent nothing.
+  spent(root, [['write-1', 5]]);
+  const other = mkdtempSync(path.join(tmpdir(), 'pensmith-cost-cap-other-'));
+  const res = await complete({ ...ASK, paperRoot: other });
+  assert.equal(res.text, 'An answer.');
+  const rows = readFileSync(path.join(other, '.paper', 'COSTS.jsonl'), 'utf8').trim().split('\n');
+  assert.equal(rows.length, 1, 'the call is on the named paper\'s ledger');
+  assert.equal(readFileSync(path.join(root, '.paper', 'COSTS.jsonl'), 'utf8').trim().split('\n').length, 1, 'the cwd\'s ledger is untouched');
+  // And the named paper's own cap applies.
+  writeFileSync(path.join(other, '.paper', 'config.toml'), '[budget]\ncost_cap_usd = 0.000001\n');
+  await assert.rejects(complete({ ...ASK, paperRoot: other }), CostCapExceededError);
+  rmSync(other, { recursive: true, force: true });
 });
 
 test('the GPTZero score is skipped when the paper is at its cost cap', async () => {

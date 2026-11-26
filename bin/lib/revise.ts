@@ -133,7 +133,7 @@ export interface ReviseOptions {
    * asks for. Default (production) loads the hash-pinned prompt + invokes the
    * model; tests/CI inject a cassette-backed function (no live LLM).
    */
-  proposeSwap?: (vars: ReviseSwapVars) => Promise<string>;
+  proposeSwap?: (vars: ReviseSwapVars, paperRoot?: string) => Promise<string>;
   /**
    * Approval-gate seam (default-on, PRD §19). Default uses @clack/prompts in a
    * TTY (exit code 3 in a non-TTY without --yolo). Tests inject a boolean.
@@ -741,7 +741,7 @@ async function reviseOnce(opts: ReviseOptions): Promise<ReviseResult> {
   const maxAttempts = opts.yolo ? YOLO_RETRY_CAP + 1 : 1;
   let lastRejection = '';
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const raw = await proposeSwap(vars);
+    const raw = await proposeSwap(vars, opts.paperRoot);
     const validated = validateProposal(raw, failing.citekey, assignedSources);
     if (!validated.ok) {
       lastRejection = validated.reason;

@@ -68,8 +68,9 @@ export class BudgetExceededError extends Error {
   }
 }
 
-function costsPath(): string {
-  return path.join(paperDir(), 'COSTS.jsonl');
+/** The paper's cost ledger: `<root>/.paper/COSTS.jsonl` (the CLI's cwd by default). */
+function costsPath(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'COSTS.jsonl');
 }
 
 /**
@@ -83,8 +84,9 @@ function costsPath(): string {
  */
 export async function totalCost(
   filter: { scope?: BudgetSpec['scope']; scopeId?: string } = {},
+  root: string = projectRoot(),
 ): Promise<number> {
-  const file = costsPath();
+  const file = costsPath(root);
   let raw: string;
   try {
     raw = await fsp.readFile(file, 'utf8');
@@ -126,8 +128,8 @@ export async function totalCost(
  * window; per-section caps bound the worst-case overrun to one extra
  * estimate per parallel section.
  */
-export async function assertBudget(spec: BudgetSpec, estimateUsd: number): Promise<void> {
-  const spent = await totalCost({ scope: spec.scope, scopeId: spec.scopeId });
+export async function assertBudget(spec: BudgetSpec, estimateUsd: number, root: string = projectRoot()): Promise<void> {
+  const spent = await totalCost({ scope: spec.scope, scopeId: spec.scopeId }, root);
   if (spent + estimateUsd > spec.cap) {
     throw new BudgetExceededError(spec, spent, estimateUsd);
   }
@@ -144,9 +146,9 @@ export async function assertBudget(spec: BudgetSpec, estimateUsd: number): Promi
  * prevent cost-leakage: if we can't record a cost, we shouldn't have
  * silently paid for it).
  */
-export async function appendCost(record: CostRecord): Promise<void> {
+export async function appendCost(record: CostRecord, root: string = projectRoot()): Promise<void> {
   const line = JSON.stringify(record) + '\n';
-  await atomicAppendFile(costsPath(), line);
+  await atomicAppendFile(costsPath(root), line);
 }
 
 // ---------- The paper's cost cap ----------
@@ -218,9 +220,9 @@ let warnedAtUsd: number | null = null;
  * The estimate is what the call is expected to use, not its output limit, so
  * one call can end a little past the cap; the next one is then refused.
  */
-export async function assertWithinCostCap(estimateUsd: number): Promise<void> {
-  const cap = resolveCostCap();
-  const spent = await totalCost({});
+export async function assertWithinCostCap(estimateUsd: number, root: string = projectRoot()): Promise<void> {
+  const cap = resolveCostCap(root);
+  const spent = await totalCost({}, root);
   if (spent + estimateUsd > cap.capUsd) throw new CostCapExceededError(cap, spent, estimateUsd);
   if (cap.warnAtUsd !== null && spent + estimateUsd > cap.warnAtUsd && warnedAtUsd !== cap.warnAtUsd) {
     warnedAtUsd = cap.warnAtUsd;

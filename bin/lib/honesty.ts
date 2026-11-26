@@ -223,6 +223,8 @@ export interface GptzeroScoringOptions {
    * it, so the scores before and after humanizing show it once between them.
    */
   disclosed?: boolean;
+  /** The paper scored: the paid call is capped and recorded on its ledger (the cwd when absent). */
+  paperRoot?: string;
 }
 
 /** Why no score was produced: every reason the report can name. */
@@ -356,10 +358,11 @@ async function scoreWithGptzero(
     await assertBudget(
       { scope: 'paper', scopeId: HONESTY_BUDGET_SCOPE_ID, cap: HONESTY_PAPER_CAP_DEFAULT },
       HONESTY_CALL_EST_USD,
+      opts.paperRoot,
     );
     // The score is paid like a model call, so it counts against the paper's
     // cost cap too.
-    await assertWithinCostCap(HONESTY_CALL_EST_USD);
+    await assertWithinCostCap(HONESTY_CALL_EST_USD, opts.paperRoot);
 
     const resp = await httpFetch(GPTZERO_URL, {
       method: 'POST',
@@ -387,7 +390,7 @@ async function scoreWithGptzero(
       scopeId: HONESTY_BUDGET_SCOPE_ID,
       provider: 'other',
       costUsd: HONESTY_CALL_EST_USD,
-    });
+    }, opts.paperRoot);
 
     return parseGptzeroResponse(JSON.parse(resp.body));
   } catch {

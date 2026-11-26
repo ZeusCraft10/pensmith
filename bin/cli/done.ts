@@ -801,7 +801,7 @@ export const doneCommand = defineCommand({
         terminal: canAskInTerminal(process.stderr),
       });
       // One disclosure per run: the consent question, or the first score, shows it.
-      const scoring = { consentGranted: consent.consent, disclosed: consent.disclosed === true };
+      const scoring = { consentGranted: consent.consent, disclosed: consent.disclosed === true, paperRoot };
       const before = consent.consent ? await scoreHonesty(draftMd, undefined, scoring) : null;
       let humanizedPath: string | null = null;
       let after: Awaited<ReturnType<typeof scoreHonesty>> = null;

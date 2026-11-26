@@ -112,6 +112,33 @@ test('concurrent updateState calls serialize (no torn writes; final value is one
   assert.equal(final.paperId, 'paper-race');
 });
 
+test('state events go to the SESSION.log of the paper they are about, not to the cwd\'s', async () => {
+  // The logger was opened once, against the cwd, so a process working on
+  // another paper (a test, the session hook) logged that paper's state into
+  // whatever .paper/ the cwd held.
+  const elsewhere = mkPaperRoot();
+  fs.mkdirSync(path.join(elsewhere, '.paper'), { recursive: true });
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-state-own-'));
+  const { initState, updateState, loadState } = await import('../bin/lib/state.js');
+  const { closeSessionLog } = await import('../bin/lib/session-log.js');
+  const orig = process.cwd();
+  process.chdir(elsewhere);
+  try {
+    await initState(root, { paperId: 'paper-own-log' });
+    await updateState(root, async (s) => ({ ...s, createdAt: '2099-01-03T00:00:00.000Z' }));
+    await loadState(root);
+    await closeSessionLog();
+  } finally {
+    process.chdir(orig);
+  }
+  const own = path.join(root, '.paper', 'SESSION.log');
+  assert.ok(fs.existsSync(own), 'the paper\'s own SESSION.log is written');
+  const lines = fs.readFileSync(own, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { event: string; paperId?: string });
+  assert.deepEqual(new Set(lines.map((l) => l.event)), new Set(['state.init', 'state.update', 'state.load']));
+  assert.ok(lines.every((l) => l.paperId === 'paper-own-log'));
+  assert.equal(fs.existsSync(path.join(elsewhere, '.paper', 'SESSION.log')), false, 'nothing is logged into the cwd\'s paper');
+});
+
 test('forward-incompat: $schemaVersion=999 on disk throws ForwardIncompatError', async () => {
   const root = mkPaperRoot();
   const file = path.join(root, 'STATE.json');

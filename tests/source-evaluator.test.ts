@@ -70,8 +70,11 @@ const saved: Record<string, string | undefined> = {};
 let stderr = '';
 let realStderrWrite: typeof process.stderr.write;
 let prevCwd = '';
+// The paper the evaluator's cost rows belong to.
+let paperRoot = '';
 beforeEach(() => {
   prevCwd = process.cwd();
+  paperRoot = mkdtempSync(join(tmpdir(), 'pensmith-evaluator-paper-'));
   for (const k of ENV) saved[k] = process.env[k];
   delete process.env['PENSMITH_NO_LLM'];
   delete process.env['PENSMITH_OFFLINE'];
@@ -95,7 +98,7 @@ afterEach(() => {
 });
 
 const run = (): Promise<SourceCandidate[]> =>
-  runResearchOrchestrator(['tidal energy'], { topic: 'tidal energy policy', discipline: 'other', __adapterRegistry: registry });
+  runResearchOrchestrator(['tidal energy'], { topic: 'tidal energy policy', discipline: 'other', paperRoot, __adapterRegistry: registry });
 
 test('the evaluator sees each candidate under an id of its own, inside the fence, and keeps the ones it names', async () => {
   const calls: Call[] = [];
@@ -116,6 +119,12 @@ test('the evaluator sees each candidate under an id of its own, inside the fence
   const block = fencedBlocks(sys).find((b) => b.includes('"id"'))!;
   assert.match(block, /keep every candidate/);
   assert.doesNotMatch(block, /<<<|>>>|PENSMITH_UNTRUSTED_DATA/i);
+
+  // The call's cost is on the ledger of the paper researched, not the cwd's.
+  const ledger = readFileSync(join(paperRoot, '.paper', 'COSTS.jsonl'), 'utf8').trim().split('\n');
+  assert.equal(ledger.length, 1);
+  assert.equal((JSON.parse(ledger[0]!) as { scopeId: string }).scopeId, 'research-evaluator');
+  assert.equal(existsSync(join(process.cwd(), '.paper')), false, 'nothing is written under the cwd');
 });
 
 test('an answer that misses a candidate or names one that does not exist is sent back once', async () => {

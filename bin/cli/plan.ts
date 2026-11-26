@@ -149,9 +149,9 @@ export const planCommand = defineCommand({
           ...(research ? { research } : {}),
           // The key is checked again before each proposal, so one removed
           // between --yolo's attempts stops the next one.
-          proposeSwap: async (vars) => {
+          proposeSwap: async (vars, paperRoot) => {
             await requireKey();
-            return proposeSwap(vars);
+            return proposeSwap(vars, paperRoot);
           },
         });
       } catch (e) {

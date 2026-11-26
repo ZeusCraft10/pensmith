@@ -338,6 +338,7 @@ export const researchCommand = defineCommand({
             discipline,
             assignment,
             scopeLabel: chosenScope.label,
+            paperRoot: root,
           },
         );
       } catch (e) {

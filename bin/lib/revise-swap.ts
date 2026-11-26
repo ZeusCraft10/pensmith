@@ -48,9 +48,10 @@ const REVISE_SWAP_SYSTEM =
  * T-11-09) before applying any patch to DRAFT.md.
  *
  * Signature matches ReviseOptions.proposeSwap exactly:
- *   (vars: ReviseSwapVars) => Promise<string>
+ *   (vars: ReviseSwapVars, paperRoot?: string) => Promise<string>
+ * The call's cost is capped and recorded on `paperRoot` (the cwd when absent).
  */
-export async function proposeSwap(vars: ReviseSwapVars): Promise<string> {
+export async function proposeSwap(vars: ReviseSwapVars, paperRoot?: string): Promise<string> {
   // Offline short-circuit (PENSMITH_NO_LLM=1): return a deterministic valid
   // ReviseSwap JSON that recommends mechanical removal of the flagged citation.
   // This preserves the tier-contract parity test behavior: Tier-2 under
@@ -88,6 +89,7 @@ export async function proposeSwap(vars: ReviseSwapVars): Promise<string> {
     scope: 'task',
     scopeId: `revise-${vars.flagged_citekey}`,
     jsonSchema: modelJsonSchema(ReviseSwapSchema),
+    ...(paperRoot !== undefined ? { paperRoot } : {}),
   });
   // Return the raw text — runRevise owns parse + membership guard.
   return result.text;

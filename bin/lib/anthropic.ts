@@ -80,6 +80,11 @@ export interface CompleteOptions {
   /** Labels for the cost ledger row. */
   scope?: BudgetSpec['scope'];
   scopeId?: string;
+  /**
+   * The paper the call is for: its cost cap applies and its ledger gets the
+   * row. Defaults to the cwd, which is the paper for every CLI verb.
+   */
+  paperRoot?: string;
 }
 
 export interface CompleteResult {
@@ -129,7 +134,7 @@ async function generatorFor(call: ResolvedCall): Promise<Generator> {
 const CHARS_PER_TOKEN = 3.5;
 
 /** Write one COSTS.jsonl row per model the call used; returns the total. */
-async function recordCost(call: ResolvedCall, rows: readonly UsageRow[], scope: BudgetSpec['scope'], scopeId: string): Promise<number> {
+async function recordCost(call: ResolvedCall, rows: readonly UsageRow[], scope: BudgetSpec['scope'], scopeId: string, paperRoot?: string): Promise<number> {
   let total = 0;
   for (const r of rows) {
     const costUsd = callCost(call, r);
@@ -143,7 +148,7 @@ async function recordCost(call: ResolvedCall, rows: readonly UsageRow[], scope: 
       inputTokens: r.inputTokens + r.cacheReadTokens + r.cacheWriteTokens,
       outputTokens: r.outputTokens,
       costUsd,
-    });
+    }, paperRoot);
   }
   return total;
 }
@@ -216,7 +221,7 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
     inputTokens: Math.ceil(chars / CHARS_PER_TOKEN),
     outputTokens: call.expectedOutputTokens,
   });
-  await assertWithinCostCap(estimateUsd);
+  await assertWithinCostCap(estimateUsd, opts.paperRoot);
 
   const scope = opts.scope ?? 'task';
   const scopeId = opts.scopeId ?? call.role;
@@ -232,10 +237,10 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
     });
   } catch (err) {
     const used = err instanceof GenerationError ? err.usage : [];
-    if (used.length > 0) await recordCost(call, used, scope, scopeId);
+    if (used.length > 0) await recordCost(call, used, scope, scopeId, opts.paperRoot);
     throw withOutputLimitHint(err, call.role, call.maxTokens);
   }
-  const costUsd = await recordCost(call, result.usage, scope, scopeId);
+  const costUsd = await recordCost(call, result.usage, scope, scopeId, opts.paperRoot);
 
   if (result.stop === 'truncated') throw new TruncatedError(result.model, call.maxTokens);
   if (result.stop === 'refused') {

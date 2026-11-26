@@ -58,7 +58,7 @@ import { randomUUID } from 'node:crypto';
 import { withLock } from './lock.js';
 import { loadAndMigrate } from './migrations/loader.js';
 import { hasLegacyLayout, migrateLegacyLayout } from './migrations/layout.js';
-import { legacyStateFile, paperStateFile } from './paths.js';
+import { legacyStateFile, paperStateFile, projectRoot } from './paths.js';
 import { atomicWriteFile } from './atomic-write.js';
 import v1_to_v2_migration, {
   migrate as migrate_v1_to_v2,
@@ -114,18 +114,21 @@ async function stateFile(paperRoot: string): Promise<string> {
 }
 
 /**
- * Module-level singleton SessionLogger child bound to `module: 'state'`.
- * Lazy-initialized so test files that mutate process.env (LOCALAPPDATA,
- * XDG_DATA_HOME, HOME) BEFORE dynamically importing this module observe
- * the mutated env. openSessionLog reads paths.ts at call-time, so this
- * singleton resolves the log destination at first use, not at import.
+ * The session log of the paper at `paperRoot` (its .paper/SESSION.log, or
+ * the global log while it has no .paper/), one logger per paper. A state
+ * change is logged with the paper it changed, not with whatever paper the
+ * process's cwd holds. Opened at first use, so a test that points the data
+ * folders elsewhere before calling sees its own.
  */
-let _log: SessionLogger | null = null;
-function log(): SessionLogger {
-  if (!_log) {
-    _log = openSessionLog({ scope: 'auto' }).child({ module: 'state' });
+const logs = new Map<string, SessionLogger>();
+function log(paperRoot: string): SessionLogger {
+  const root = projectRoot(paperRoot);
+  let l = logs.get(root);
+  if (!l) {
+    l = openSessionLog({ scope: 'auto', cwd: root }).child({ module: 'state' });
+    logs.set(root, l);
   }
-  return _log;
+  return l;
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +184,7 @@ export async function initState(
     await atomicWriteFile(file, JSON.stringify(seeded, null, 2) + '\n');
   });
 
-  log().event({
+  log(paperRoot).event({
     event: 'state.init',
     paperId: seeded.paperId,
     schemaVersion: seeded.$schemaVersion,
@@ -243,7 +246,7 @@ export async function loadState(paperRoot: string): Promise<State> {
     throw e;
   }
 
-  log().event({
+  log(paperRoot).event({
     event: 'state.load',
     paperId: value.paperId,
     schemaVersion: value.$schemaVersion,
@@ -268,7 +271,7 @@ export async function saveState(paperRoot: string, state: State): Promise<void> 
     await atomicWriteFile(file, JSON.stringify(validated, null, 2) + '\n');
   });
 
-  log().event({
+  log(paperRoot).event({
     event: 'state.save',
     paperId: validated.paperId,
     schemaVersion: validated.$schemaVersion,
@@ -310,7 +313,7 @@ export async function updateState(
     await atomicWriteFile(file, JSON.stringify(next, null, 2) + '\n');
   });
 
-  log().event({
+  log(paperRoot).event({
     event: 'state.update',
     paperId: next.paperId,
     schemaVersion: next.$schemaVersion,

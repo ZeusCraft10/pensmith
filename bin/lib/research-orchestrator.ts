@@ -144,7 +144,7 @@ const EVALUATOR_AUTHORS = 6;
  */
 async function evaluateCandidates(
   candidates: SourceCandidate[],
-  opts: { topic: string; scope: string; discipline: string },
+  opts: { topic: string; scope: string; discipline: string; paperRoot?: string },
 ): Promise<SourceCandidate[]> {
   if (candidates.length === 0) return [];
   const ids = candidates.map((_, i) => `c${i + 1}`);
@@ -174,6 +174,7 @@ async function evaluateCandidates(
       role: 'evaluate',
       scope: 'task',
       scopeId: 'research-evaluator',
+      ...(opts.paperRoot !== undefined ? { paperRoot: opts.paperRoot } : {}),
       schema: EvaluationSchema,
       problemsOf: (e) => evaluationProblems(e, ids),
       noun: 'evaluation',
@@ -208,7 +209,7 @@ export interface ResearchOrchestratorOptions {
   topic: string;
   /** INTK-03 discipline slug (e.g. 'computer-science', 'other'). */
   discipline: string;
-  /** Paper root directory (unused currently — reserved for future path wiring). */
+  /** The paper researched: the evaluator's cost is capped and recorded there (the cwd when absent). */
   paperRoot?: string;
   /**
    * Test-only: injectable adapter registry seam.
@@ -282,6 +283,7 @@ export async function runResearchOrchestrator(
   let scopeLabel: string;
   let adapterRegistry: AdapterRegistry;
   let forceCandidates: SourceCandidate[] | undefined;
+  let paperRoot: string | undefined;
 
   if (Array.isArray(queriesOrOpts)) {
     // Called from research.ts with (queries[], opts).
@@ -291,6 +293,7 @@ export async function runResearchOrchestrator(
     scopeLabel = optsArg?.scopeLabel ?? 'auto';
     adapterRegistry = optsArg?.__adapterRegistry ?? (sources as AdapterRegistry);
     forceCandidates = undefined;
+    paperRoot = optsArg?.paperRoot;
   } else {
     // Called from tests with a single opts object.
     const singleOpts = queriesOrOpts;
@@ -298,6 +301,7 @@ export async function runResearchOrchestrator(
     discipline = singleOpts.discipline;
     scopeLabel = 'auto';
     adapterRegistry = singleOpts.__adapterRegistry ?? (sources as AdapterRegistry);
+    paperRoot = singleOpts.paperRoot;
     forceCandidates = singleOpts.__forceCandidates;
     // When called from tests without explicit queries, derive a default query
     // from the topic string (the topic-disambiguator step belongs to research.ts).
@@ -405,6 +409,7 @@ export async function runResearchOrchestrator(
     topic,
     scope: scopeLabel,
     discipline,
+    ...(paperRoot !== undefined ? { paperRoot } : {}),
   });
 
   return evaluated;

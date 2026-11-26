@@ -20,7 +20,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCassetteFile } from '../bin/lib/http-mock.js';
 
@@ -103,18 +105,24 @@ test('honesty: consented GPTZero POST (cassette-answered) → { aiProbability:0.
   { skip: !existsSync(honestySrcPath) },
   async () => {
     const mod = await import(honestyModUrl.href) as {
-      scoreHonestyWithOptions: (t: string, o?: { consentGranted?: boolean }) => Promise<{ aiProbability: number; classification: string; backend: string } | null>;
+      scoreHonestyWithOptions: (t: string, o?: { consentGranted?: boolean; paperRoot?: string }) => Promise<{ aiProbability: number; classification: string; backend: string } | null>;
     };
     const saved = process.env['GPTZERO_API_KEY'];
     const savedMode = process.env['PENSMITH_TEST_CASSETTES'];
     process.env['GPTZERO_API_KEY'] = 'test-key-offline';
     process.env['PENSMITH_TEST_CASSETTES'] = '1';
+    // The score is paid, so it is a row on the paper's cost ledger: the
+    // ledger of the paper being scored, never one where the cwd happens to be.
+    const paperRoot = mkdtempSync(join(tmpdir(), 'pensmith-honesty-paper-'));
     try {
-      const result = await mod.scoreHonestyWithOptions('some text', { consentGranted: true });
+      const result = await mod.scoreHonestyWithOptions('some text', { consentGranted: true, paperRoot });
       assert.ok(result, 'the cassette-answered POST must yield a score');
       assert.equal(result!.aiProbability, 0.82);
       assert.equal(result!.classification, 'AI_ONLY');
       assert.equal(result!.backend, 'gptzero');
+      const ledger = readFileSync(join(paperRoot, '.paper', 'COSTS.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { scopeId: string });
+      assert.deepEqual(ledger.map((r) => r.scopeId), ['honesty-gptzero']);
+      assert.equal(existsSync(join(process.cwd(), '.paper')), false, 'nothing is written under the cwd');
     } finally {
       if (saved === undefined) delete process.env['GPTZERO_API_KEY'];
       else process.env['GPTZERO_API_KEY'] = saved;

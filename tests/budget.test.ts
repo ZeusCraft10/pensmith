@@ -17,6 +17,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fsp from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
@@ -90,6 +91,34 @@ test('appendCost + totalCost: roundtrip sums match', async () => {
     const total = await totalCost({ scope: 'section', scopeId: '01' });
     assert.equal(Number(total.toFixed(4)), 0.6);
   });
+});
+
+test('the cost ledger and the cost cap are those of the paper root given, not of the cwd', async () => {
+  // A caller that names its paper (done scoring with GPTZero, an in-process
+  // run) must not write a cost row into whatever folder the process is in.
+  const { assertWithinCostCap, CostCapExceededError } = await import('../bin/lib/budget.js');
+  const cwd = await fsp.mkdtemp(path.join(os.tmpdir(), 'pensmith-budget-cwd-'));
+  const paper = await fsp.mkdtemp(path.join(os.tmpdir(), 'pensmith-budget-paper-'));
+  await fsp.mkdir(path.join(paper, '.paper'), { recursive: true });
+  writeFileSync(path.join(paper, '.paper', 'config.toml'), '[budget]\ncost_cap_usd = 0.25\n');
+  const orig = process.cwd();
+  process.chdir(cwd);
+  try {
+    await appendCost(REC({ costUsd: 0.20 }), paper);
+    assert.equal(await totalCost({}, paper), 0.20);
+    assert.equal(await totalCost({}), 0, 'the cwd has no ledger');
+    await fsp.access(path.join(paper, '.paper', 'COSTS.jsonl'));
+    await assert.rejects(fsp.access(path.join(cwd, '.paper')), 'nothing is written under the cwd');
+    // The paper's own cap (0.25) with its own spend (0.20): another 0.10 is refused.
+    await assert.rejects(assertWithinCostCap(0.10, paper), (e: unknown) => e instanceof CostCapExceededError);
+    await assertWithinCostCap(0.10);
+    await assertBudget({ scope: 'section', scopeId: '01', cap: 0.25 }, 0.01, paper);
+    await assert.rejects(assertBudget({ scope: 'section', scopeId: '01', cap: 0.25 }, 0.10, paper), BudgetExceededError);
+  } finally {
+    process.chdir(orig);
+    await fsp.rm(cwd, { recursive: true, force: true });
+    await fsp.rm(paper, { recursive: true, force: true });
+  }
 });
 
 test('totalCost: filters by scopeId', async () => {
