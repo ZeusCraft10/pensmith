@@ -209,7 +209,7 @@ function parseGptzeroResponse(raw: unknown): HonestyScore | null {
   }
 }
 
-/** Options for scoreWithGptzero (HARD-05 consent seam). */
+/** Options for scoreWithGptzero: the consent decision, and whether the disclosure was shown. */
 export interface GptzeroScoringOptions {
   /**
    * The user's consent, decided once per run (decideGptzeroConsent). Only
@@ -217,6 +217,12 @@ export interface GptzeroScoringOptions {
    * asks: done decides consent before either score.
    */
   consentGranted?: boolean;
+  /**
+   * True once the disclosure was shown this run: before the consent
+   * question, or before an earlier score. The score sets it after showing
+   * it, so the scores before and after humanizing show it once between them.
+   */
+  disclosed?: boolean;
 }
 
 /** Why no score was produced: every reason the report can name. */
@@ -227,6 +233,8 @@ export interface GptzeroConsent {
   consent: boolean;
   /** Why the paper is not sent, when it is not. */
   skip?: HonestySkip;
+  /** True when the disclosure was shown with the consent question. */
+  disclosed?: boolean;
 }
 
 /** The [honesty] table of .paper/config.toml, where the one-time answer is kept. */
@@ -286,7 +294,7 @@ export async function decideGptzeroConsent(
   });
   await keepGptzeroConsent(paperRoot, consent);
   if (!consent) process.stdout.write('pensmith: GPTZero honesty scoring declined — nothing was sent, and you will not be asked again for this paper.\n');
-  return consent ? { consent: true } : { consent: false, skip: 'declined' };
+  return consent ? { consent: true, disclosed: true } : { consent: false, skip: 'declined', disclosed: true };
 }
 
 /**
@@ -297,8 +305,9 @@ export async function decideGptzeroConsent(
  *     nothing here asks or treats silence as a yes.
  *   - offline (--offline / --dry-run) → "skipped (offline)" and null; no
  *     request, never a canned score.
- *   - Disclosure (HARD-05) — shown before the POST.
- *   - Size cap (HARD-05) — input truncated to GPTZERO_MAX_BYTES with a note.
+ *   - the disclosure is shown before the first POST of the run, unless the
+ *     consent question already showed it;
+ *   - input over GPTZERO_MAX_BYTES is truncated, with a note.
  *   - live → assertBudget BEFORE the call (paper-scoped cap), then httpFetch
  *     POST with the x-api-key header through the http.ts chokepoint; status
  *     !== 200 → null; parse defensively; appendCost AFTER a successful call.
@@ -322,11 +331,15 @@ async function scoreWithGptzero(
     return null;
   }
 
-  // HARD-05 Step 1: Disclosure before the POST. Copy is read VERBATIM from
-  // the locked references/honesty-framing.md (never inlined).
-  process.stdout.write(`pensmith: ${loadDisclosureNote()}\n`);
+  // The disclosure, before the first POST of the run (unless the consent
+  // question showed it). The copy is read verbatim from the pinned
+  // references/honesty-framing.md, never inlined.
+  if (opts.disclosed !== true) {
+    process.stdout.write(`pensmith: ${loadDisclosureNote()}\n`);
+    opts.disclosed = true;
+  }
 
-  // HARD-05 Step 3: Size cap — truncate over-cap input before POST body.
+  // Size cap: over-cap input is truncated before the POST.
   let postText = text;
   if (Buffer.byteLength(text, 'utf8') > GPTZERO_MAX_BYTES) {
     postText = __truncateForGptzeroTest(text);
@@ -383,7 +396,7 @@ async function scoreWithGptzero(
   }
 }
 
-/** The shipped GPTZero backend (DONE-04); it sends nothing without consent. */
+/** The shipped GPTZero backend; it sends nothing without consent. */
 function gptzeroBackend(opts?: GptzeroScoringOptions): HonestyBackend {
   return { name: 'gptzero', score: (text: string) => scoreWithGptzero(text, opts) };
 }
@@ -435,7 +448,7 @@ export function selectBackend(config?: { honestyBackend?: string }, opts?: Gptze
 
 /**
  * Compute the detection-aware honesty score for `text`. Resolves the backend
- * via selectBackend (DONE-05) and delegates to it. Absent key / no consent /
+ * via selectBackend and delegates to it. Absent key / no consent /
  * offline / unexpected response → null (clean skip). Advisory by
  * construction — never throws, never blocks export.
  */

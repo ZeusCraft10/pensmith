@@ -85,6 +85,13 @@ export interface Pass1Result {
    * alone, because OpenAlex could not be asked; the reason says so too.
    */
   retractionRecordOnly?: true;
+  /**
+   * Set on an UNRESOLVED verdict that running verify again may change: a
+   * registry did not answer, or none was asked (offline). Not set when the
+   * entry has no identifier, or the only registry for it does not hold the
+   * work, which stay as they are until the entry changes.
+   */
+  retryable?: true;
 }
 
 /** A bibliography entry as citation-js reads it (CSL-JSON). */
@@ -272,7 +279,7 @@ async function checkIdentifiers(
   // pass an unchecked citation and FABRICATED would accuse a real one.
   if (isOfflineMode()) {
     const what = ids[0]?.shown ?? 'this entry';
-    return result(ck, 'UNRESOLVED', `registry not queried (offline) — re-run verify with network access to check ${what}`);
+    return { ...result(ck, 'UNRESOLVED', `registry not queried (offline) — re-run verify with network access to check ${what}`), retryable: true };
   }
   if (ids.length === 0) {
     return result(ck, 'UNRESOLVED',
@@ -297,9 +304,11 @@ async function checkIdentifiers(
     }
     const unchecked = misses[0];
     if (unchecked) {
-      return result(ck, 'UNRESOLVED',
+      const r = result(ck, 'UNRESOLVED',
         `${missDetail(unchecked.id, unchecked.r)}; ${id.shown} was found, but every identifier the entry ` +
         'prints must be confirmed — re-run verify later');
+      // A registry that does not hold every work says the same next time.
+      return misses.every((x) => x.r.kind === 'unavailable') ? { ...r, retryable: true } : r;
     }
     return verdictForRecord(ctx, work, id, r.record);
   }
@@ -313,10 +322,10 @@ async function checkIdentifiers(
     }
     return result(ck, 'FABRICATED', `no registry holds a work with this entry's identifiers: ${detail}`);
   }
-  const retry = misses.some((x) => x.r.kind === 'unavailable')
-    ? ' — re-run verify when the registry answers'
-    : ' — check the identifier, or cite an edition a registry lists';
-  return result(ck, 'UNRESOLVED', `${detail}${retry}`);
+  if (misses.some((x) => x.r.kind === 'unavailable')) {
+    return { ...result(ck, 'UNRESOLVED', `${detail} — re-run verify when the registry answers`), retryable: true };
+  }
+  return result(ck, 'UNRESOLVED', `${detail} — check the identifier, or cite an edition a registry lists`);
 }
 
 /**

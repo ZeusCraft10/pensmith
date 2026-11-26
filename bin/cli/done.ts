@@ -35,7 +35,7 @@ import { readBibText } from '../lib/verify/pass1.js';
 import { extractQuotes } from '../lib/quote-extractor.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
-import { decideGptzeroConsent, scoreHonesty, renderHonestyReport, renderHonestySkipped } from '../lib/honesty.js';
+import { decideGptzeroConsent, scoreHonesty, renderHonestyReport, renderHonestySkipped, type HonestySkip } from '../lib/honesty.js';
 import {
   EXPORT_FORMATS,
   exportDraft,
@@ -444,12 +444,16 @@ function describeQuotation(span: string): string {
  *     the keys draftMd cites, and FINAL.md must not add a citation typed as
  *     text or a broken one. Any add/drop/swap is a HARD block.
  * (b) Humanize runs on protected text: every citation must be written as
- *     DRAFT.md writes it (prefix and locator included), and every quotation
- *     must be word for word in DRAFT.md and attributed to the same work. A
- *     citation or quotation the humanizer changed, moved or separated from
- *     its citation is a HARD block, whether or not the source's text can be
- *     read: Pass 3 below can only check a quotation against a source it can
- *     read.
+ *     DRAFT.md writes it (prefix and locator included), in the same order,
+ *     and every quotation must be word for word in DRAFT.md and attributed to
+ *     the same work. A citation or quotation the humanizer changed, separated
+ *     from its citation, or swapped with another claim's is a HARD block,
+ *     whether or not the source's text can be read: Pass 3 below can only
+ *     check a quotation against a source it can read. The order check also
+ *     refuses sentences the humanizer reordered (the safe direction). It
+ *     cannot see a citation moved to the neighbouring sentence with the order
+ *     kept: the protected-text humanizer must keep each citation in its
+ *     sentence.
  * (c) Pass-3 quote re-check on finalMd against the whole CITATIONS.bib, not
  *     only the works the draft cites, so a quote moved onto another work is
  *     still checked; an absent or empty bib is an empty library. Any
@@ -492,6 +496,15 @@ export async function reCheckFinalMd(
     return {
       passed: false,
       reason: `a citation in the humanized FINAL.md is not written as in .paper/DRAFT.md: ${rewritten.join(', ')} (DRAFT.md has ${addedEntries(draftRaw, finalRaw).join(', ') || 'no other'})`,
+    };
+  }
+  // The same citations in another order: one claim now carries another's source.
+  const moved = finalRaw.findIndex((raw, i) => raw !== draftRaw[i]);
+  if (moved !== -1) {
+    return {
+      passed: false,
+      reason: `the citations in the humanized FINAL.md are not in the order .paper/DRAFT.md has them (citation ${moved + 1} is ${finalRaw[moved]}, ` +
+        `where DRAFT.md has ${draftRaw[moved]}), so a claim may now carry another claim's source`,
     };
   }
   const changedQuotes = addedEntries(quotationSpans(finalMd, finalCites), quotationSpans(draftMd, draftCites));
@@ -591,7 +604,14 @@ function pendingExportSummary(issues: GateIssues, format: string, source: string
  * user's answer comes back through `pensmith gate answer <ref> export|cancel`.
  */
 export function pendingExportDecision(issues: GateIssues, record: GateRecord): Record<string, unknown> {
-  return pendingDecision(record, 'export-confirmation', {
+  return pendingDecision(record, EXPORT_PENDING, exportShown(issues));
+}
+
+const EXPORT_PENDING = 'export-confirmation';
+
+/** What the export decision shows: the advisory issues to review. */
+function exportShown(issues: GateIssues): Record<string, unknown> {
+  return {
     needs_confirmation: true,
     issues: {
       unsupported: issues.unsupported.map((r) => r.citekey),
@@ -599,7 +619,7 @@ export function pendingExportDecision(issues: GateIssues, record: GateRecord): R
       plagiarism_hits: issues.plagiarismHits.map((r) => r.phrase.replace(/\s+/g, ' ').slice(0, 80)),
       plagiarism_not_checked: issues.plagiarismUnchecked,
     },
-  });
+  };
 }
 
 /** What done keeps with a pending export confirmation, so the answering run audits nothing again. */
@@ -611,6 +631,8 @@ const ExportAuditSchema = z.object({
     skipped: z.enum(['offline', 'blocked', 'no-answer']).optional(),
   }).strict()),
   honestyReport: z.string(),
+  /** Why the audit has no GPTZero score, or null when it has one. */
+  honestySkip: z.enum(['no-key', 'no-score', 'offline', 'no-consent', 'declined', 'backend-error']).nullable(),
   humanized: z.boolean(),
 }).strict();
 
@@ -618,8 +640,12 @@ interface ExportAudit {
   pass4Results: Pass4Result[];
   plagiarismResults: PlagiarismResult[];
   honestyReport: string;
+  honestySkip: HonestySkip | null;
   humanized: boolean;
 }
+
+/** Skip reasons `--score` overturns: the user had not consented, or had said no. */
+const CONSENT_SKIPS: ReadonlySet<HonestySkip | null> = new Set<HonestySkip | null>(['no-consent', 'declined']);
 
 /** Build the whole-paper `.paper/VERIFICATION.md` report body (a SOURCE
  *  artifact, NOT written into the distinct export dir). */
@@ -742,7 +768,9 @@ export const doneCommand = defineCommand({
     // audit is reused (nothing is searched, scored or humanized again), and an
     // answer given through `pensmith gate answer` decides the export. One
     // kept for another draft, bibliography, format or humanized text is
-    // dropped, and the audit runs again. --yolo needs no confirmation.
+    // dropped, and the audit runs again. --yolo needs no confirmation. So
+    // does `--score` for an audit that had no score for want of consent: it
+    // is the consent the kept audit asked for, so the audit runs again with it.
     const stagedPath = paperFinalStagedFile(paperRoot);
     const binding = { draft_sha256: sha256(draftBytes), bib_sha256: sha256(bibText), format, raw: String(args.raw === true) };
     const keptGate = readGate(paperRoot, 'export');
@@ -752,8 +780,12 @@ export const doneCommand = defineCommand({
       const kept = ExportAuditSchema.safeParse(keptGate.payload);
       const staged = existsSync(stagedPath) ? sha256(readFileSync(stagedPath)) : null;
       if (kept.success && gateStillApplies(keptGate, { ...binding, staged_sha256: staged })) {
-        audit = kept.data as unknown as ExportAudit;
-        if (keptGate.answer) answer = keptGate.answer.options[0] === 'export';
+        if (args.score === true && !keptGate.answer && CONSENT_SKIPS.has(kept.data.honestySkip)) {
+          process.stderr.write('pensmith done: --score gives the consent the kept audit had no score for; the audit runs again with it.\n');
+        } else {
+          audit = kept.data as unknown as ExportAudit;
+          if (keptGate.answer) answer = keptGate.answer.options[0] === 'export';
+        }
       } else {
         process.stderr.write('pensmith done: the export confirmation kept earlier was for another draft, bibliography or format; the audit runs again.\n');
       }
@@ -761,9 +793,9 @@ export const doneCommand = defineCommand({
     const reused = audit !== null;
     if (keptGate && !reused) await closeGate(paperRoot, 'export');
 
-    // 1. DONE-01 whole-paper Pass 4 (orphan audit). 2. DONE-02 plagiarism.
-    // 3. DONE-04 honesty score (before humanize). 4. DONE-03 humanize (staged;
-    // skip-clean if absent / no transport). 5. honesty after.
+    // The audit: the whole-paper Pass 4 (orphaned claims), the plagiarism
+    // check, the honesty score before humanizing, the humanizer (staged;
+    // skipped when none is wired), and the score after.
     if (audit === null) {
       const pass4Results = await runWholePaperPass4(paperRoot);
       const plagiarismResults = await runPlagiarism(draftMd);
@@ -774,7 +806,8 @@ export const doneCommand = defineCommand({
         ...(typeof args.score === 'boolean' ? { score: args.score, noScore: !args.score } : {}),
         terminal: canAskInTerminal(),
       });
-      const scoring = { consentGranted: consent.consent };
+      // One disclosure per run: the consent question, or the first score, shows it.
+      const scoring = { consentGranted: consent.consent, disclosed: consent.disclosed === true };
       const before = consent.consent ? await scoreHonesty(draftMd, undefined, scoring) : null;
       let humanizedPath: string | null = null;
       let after: Awaited<ReturnType<typeof scoreHonesty>> = null;
@@ -789,20 +822,24 @@ export const doneCommand = defineCommand({
         }
       }
       // Honesty report: guard the null score explicitly — the skip line names
-      // why, NEVER a fabricated percent (T-06-05-05).
+      // why, never a made-up percent.
       const honestyReport =
         before === null
           ? renderHonestySkipped(consent.skip ?? 'backend-error')
           : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
-      audit = { pass4Results, plagiarismResults, honestyReport, humanized: humanizedPath !== null };
+      audit = {
+        pass4Results, plagiarismResults, honestyReport,
+        honestySkip: before === null ? (consent.skip ?? 'backend-error') : null,
+        humanized: humanizedPath !== null,
+      };
     }
     const { pass4Results, plagiarismResults, honestyReport } = audit;
     const finalPath: string | null = audit.humanized ? stagedPath : null;
 
-    // GATE-04: re-verify the humanized text before export (HARD block, BEFORE runDoneGate).
-    // Skip only when no humanizer ran (finalPath === null) — i.e. no humanized artifact exists.
-    // --yolo NEVER bypasses this gate (per PRD §14 non-negotiable: verifier gates are unconditional).
-    // --yolo belongs ONLY on the advisory runDoneGate (DONE-09) confirmation below.
+    // The humanized text is checked again before export, and a failure blocks
+    // it, before the export confirmation. It is skipped only when no humanizer
+    // ran. --yolo never skips it: integrity checks are unconditional, and
+    // --yolo belongs only to the advisory confirmation below.
     // The humanized text waits under a staging name (runHumanizer); it becomes
     // FINAL.md only once the export succeeds, so a refusal here leaves no mark
     // that the paper was exported. A kept text is checked again too.
@@ -838,8 +875,8 @@ export const doneCommand = defineCommand({
       }
     }
 
-    // 6. DONE-09 export-confirmation gate. Pass-2 UNSUPPORTED is read from the
-    //    section VERIFICATION.md files (the load-bearing disk→gate feed, HIGH-3).
+    // The export confirmation. Pass-2 UNSUPPORTED rows are read from the
+    // section VERIFICATION.md files: that is what feeds the confirmation.
     const pass2Results = readSectionUnsupported(paperRoot);
     const cancel = async (): Promise<{ ok: false }> => {
       process.stdout.write('pensmith done: export cancelled by user.\n');
@@ -866,6 +903,7 @@ export const doneCommand = defineCommand({
             default: ['cancel'],
             binding: { ...binding, staged_sha256: finalMd === null ? null : sha256(readFileSync(stagedPath)) },
             payload: audit,
+            shown: { pending: EXPORT_PENDING, extra: exportShown(issues) },
           });
         process.stderr.write(
           'pensmith done: exporting needs your confirmation and there is no terminal to ask in. Nothing was exported; the audit is kept until you answer.\n',
@@ -885,7 +923,7 @@ export const doneCommand = defineCommand({
     }
     await closeGate(paperRoot, 'export');
 
-    // 7. DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir.
+    // The export, into the exporter's own export folder.
 
     // The user's chosen citation style, else the discipline preset.
     const citation = resolveCitationStyle(paperRoot);

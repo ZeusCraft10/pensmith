@@ -100,8 +100,12 @@ Read the exit status of every pensmith command.
 ## Flags
 
 - Only add `--yolo` if the user typed it in this conversation. It skips the
-  outline approval and the export confirmation; it never waives a citation
-  check.
+  approval gates: the outline approval, research's choice of scope and of
+  sources, the approval of a citation repair, and the export confirmation.
+  It never waives a citation check, and it never gives GPTZero consent.
+- Only add `--score` after the user agrees to send the paper text to GPTZero
+  for the AI-likelihood score; never add it yourself. `pensmith done` says
+  when that consent is missing.
 - `--dry-run` shows what a step would do without network access or writes.
 - `--estimate` shows the projected model cost without running anything.
 

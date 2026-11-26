@@ -1,33 +1,34 @@
-// bin/cli/research.ts — `pensmith research` verb entrypoint (RSCH-01).
-//
-// Phase 12 (GEN-03): Live-adapter discovery wired. The swap-seam block from
-// Phase 11 has been replaced with real source-discovery via research-orchestrator.
+// bin/cli/research.ts — `pensmith research`: find and screen sources into the library.
 //
 // What this verb does:
-//   1. Hash-pin both D-12 LOCKED slugs at startup.
-//   2. GEN-06 fail-loud probe: assert LLM key configured (non-offline only).
-//   3. Read INTAKE.md → parseIntakeMd → topic/discipline/assignment.
-//   4. Call topic-disambiguator complete() → defensively parse scopes.
-//   5. Scope approval gate (default-ON): select one scope; --yolo → scope[0].
-//   6. Call runResearchOrchestrator (adapter fan-out + dedup + source-evaluator).
-//   7. Candidate approval gate (default-ON): multiselect prune of what the
-//      evaluator kept; --yolo → keep those; zero-candidates → skip gate.
-//      When the evaluator gave no usable answer, the gate offers every
-//      candidate with none selected, and --yolo adds nothing (exit 2,
-//      research not marked done).
+//   1. Load both research prompts first, so a prompt that drifted from its
+//      pinned hash stops the run before any network call.
+//   2. A candidate list kept for the author's choice (below) is applied, or
+//      shown again, first: that needs neither the network nor a model key.
+//   3. Otherwise: offline stops here; a model key must be configured.
+//   4. Read the intake: topic, discipline and assignment.
+//   5. Ask the topic disambiguator for search scopes, parsed defensively (an
+//      answer that cannot be used falls back to the topic as the one query).
+//   6. Scope approval gate (default-on): the author picks one; --yolo takes
+//      the first.
+//   7. runResearchOrchestrator: search the registries, merge duplicates, and
+//      screen the candidates with the source evaluator.
+//   8. Candidate approval gate (default-on): the author prunes what the
+//      evaluator kept; --yolo keeps those; with no candidates there is
+//      nothing to ask. When the evaluator gave no usable answer, the gate
+//      offers every candidate with none selected, and --yolo adds nothing
+//      (exit 2, research not marked done).
 //      Without a terminal each gate keeps its choice (.paper/gates/) and
 //      prints it as JSON with exit 3; `pensmith gate answer <ref> <option>`
 //      continues from there with the author's answer, searching nothing
 //      again for a kept candidate list.
-//   8. Merge the approved candidates (marked retracted where their own
+//   9. Merge the approved candidates (marked retracted where their own
 //      records say so) into .paper/LIBRARY.json (bin/lib/library.ts), which writes
 //      CITATIONS.bib and CITATIONS.ris from it. A work the library already
 //      holds keeps its citekey, and nothing already in it (a source added with
 //      `pensmith add`, an entry edited by hand) is removed or rewritten.
 //
-// D-12 LOCKED prompt slugs: 'topic-disambiguator' + 'source-evaluator'.
-// T-11-10: malformed LLM JSON → WARN + fallback, never a crash.
-// T-11-12: key value never logged here — complete() owns the no-leak header path.
+// The key's value is never printed here; complete() alone puts it in a header.
 
 import { defineCommand } from 'citty';
 import { readFileSync } from 'node:fs';
@@ -49,14 +50,7 @@ import { runResearchOrchestrator, SourceEvaluationError } from '../lib/research-
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../lib/network-mode.js';
 
 // ---------------------------------------------------------------------------
-// Hash-pin enforcement (D-12 defense-in-depth).
-// Keep void loadPrompt reference to prevent unused-import elision.
-// The actual pin calls happen inside run() to catch drift before any network.
-// ---------------------------------------------------------------------------
-void loadPrompt; // reference kept to prevent unused-import elision
-
-// ---------------------------------------------------------------------------
-// Topic-disambiguator response schema (T-12-01 trust boundary).
+// The topic disambiguator's answer, checked before it is used.
 // ---------------------------------------------------------------------------
 const ScopeSchema = z.object({
   label: z.string().min(1),
@@ -93,10 +87,10 @@ function intakeFingerprint(root: string): string | null {
   return null;
 }
 
-/** The topic-disambiguator's scopes, or the topic as the one query when its answer cannot be used (T-12-01). */
+/** The topic-disambiguator's scopes, or the topic as the one query when its answer cannot be used. */
 async function proposeScopes(topic: string, discipline: string, assignment: string): Promise<Scope[]> {
-  // CR-01: sanitize user-controlled strings before interpolation so that
-  // {{...}} tokens in INTAKE.md cannot cause secondary template expansion.
+  // The intake's text is escaped before interpolation, so {{...}} in it
+  // cannot expand as a template token.
   const interpolatedPrompt = interpolate(loadPrompt('topic-disambiguator'), {
     topic: escapeTemplateTokens(topic || '(unknown topic — run pensmith intake first)'),
     discipline: escapeTemplateTokens(discipline),
@@ -141,7 +135,7 @@ async function askScope(scopes: Scope[]): Promise<string> {
   });
   const value = (answer as { value: string }).value;
   if (!scopes.some((sc) => sc.label === value)) {
-    // WR-01: say so rather than silently falling through to the default.
+    // Say so rather than silently falling through to the default.
     process.stderr.write(
       `pensmith research: WARN — scope selection returned unrecognised value "${value}"; falling back to first scope "${scopes[0]!.label}".\n`,
     );
@@ -174,17 +168,22 @@ function showScopes(record: GateRecord, scopes: Scope[]): Record<string, unknown
   return { ok: false, mode: 'pending', ref: record.ref };
 }
 
+/** What the candidate decision shows: each candidate in brief. */
+function candidatesShown(kept: z.infer<typeof KeptCandidatesSchema>): Record<string, unknown> {
+  const candidates = kept.candidates.map((c) => ({
+    key: c.citekey, source: c.source, title: c.title, authors: c.authors.slice(0, 3), year: c.year ?? null,
+    ...(c.doi ? { doi: c.doi } : {}), ...(c.retracted ? { retracted: true } : {}),
+  }));
+  return { scope: kept.scope, evaluated: kept.evaluated, candidates };
+}
+
 /** Print the kept candidates and stop for the author's choice (exit 3). */
 function showCandidates(record: GateRecord, kept: z.infer<typeof KeptCandidatesSchema>): Record<string, unknown> {
   process.stderr.write(
     'pensmith research: choosing which sources to keep needs the user, and there is no terminal to ask in; the candidates are kept until they answer.' +
       (kept.evaluated ? '\n' : ' The source evaluator kept none of them, so none is chosen for them.\n'),
   );
-  const shown = kept.candidates.map((c) => ({
-    key: c.citekey, source: c.source, title: c.title, authors: c.authors.slice(0, 3), year: c.year ?? null,
-    ...(c.doi ? { doi: c.doi } : {}), ...(c.retracted ? { retracted: true } : {}),
-  }));
-  process.stdout.write(`${JSON.stringify(pendingDecision(record, 'research-candidates', { scope: kept.scope, evaluated: kept.evaluated, candidates: shown }))}\n`);
+  process.stdout.write(`${JSON.stringify(pendingDecision(record, 'research-candidates', candidatesShown(kept)))}\n`);
   process.exitCode = EXIT_NEEDS_ANSWER;
   return { ok: false, mode: 'pending', ref: record.ref };
 }
@@ -208,67 +207,20 @@ export const researchCommand = defineCommand({
   async run({ args }) {
     const yolo = args.yolo === true;
 
-    // Validate both D-12 LOCKED slugs at startup (hash-pin defense-in-depth).
+    // Both prompts load first: one that drifted from its pinned hash stops the run here.
     loadPrompt('topic-disambiguator');
     loadPrompt('source-evaluator');
 
     const libraryPath = path.join(paperDir(), 'LIBRARY.json');
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
     const risPath = path.join(paperDir(), 'CITATIONS.ris');
-
-    // Offline (--offline / --dry-run): research is nothing but network calls.
-    // Stop before the LLM and before any write, so an existing library is never
-    // replaced by an empty one.
-    if (isOfflineMode()) {
-      process.stdout.write(
-        `pensmith research: ${OFFLINE_SKIP_NOTE} — no sources were queried; LIBRARY.json and CITATIONS.bib left unchanged.\n`,
-      );
-      return { ok: false, mode: 'offline' };
-    }
-
-    // GEN-06 fail-loud probe: assert a key is configured before doing any LLM work.
-    // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
-    // getProviderApiKey. When PENSMITH_NO_LLM=1 is set, complete() short-circuits to
-    // the offline mock — MissingApiKeyError is never thrown. The probe here is ONLY
-    // for the non-offline case: if no key and no offline mode, we fail loud.
-    // NEVER log the resolved key value — T-11-12 / T-01-07.
-    const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-    if (!noLlm) {
-      try {
-        // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
-        // false-positive with "no config for 'anthropic'". resolveProviderId()
-        // is the single source of truth (shared with complete()).
-        const providerId = await resolveProviderId();
-        await getProviderApiKey(providerId);
-      } catch (e) {
-        if (e instanceof MissingApiKeyError) {
-          process.stderr.write(
-            `pensmith research: ERROR — no LLM key configured.\n` +
-            `Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n` +
-            `Run inside Claude Code (Tier 1) for key-free operation.\n`,
-          );
-          process.exitCode = 1;
-          return { ok: false, mode: 'no-key-configured' };
-        }
-        throw e;
-      }
-    }
-
-    // ── Step 1: the topic, discipline and assignment intake kept. ──
-    const intake = readIntake(process.cwd());
-    if (!intake) {
-      process.stderr.write(
-        'pensmith research: WARN — no intake found in .paper/; continuing with no assignment context (run `pensmith new` first).\n',
-      );
-    }
-    const { topic, discipline, assignment } = intake ?? { topic: '', discipline: 'other', assignment: '' };
-
     const root = process.cwd();
     const binding = { intake_sha256: intakeFingerprint(root) };
 
     // A list of candidates kept for the author's choice: take their answer,
     // ask at a terminal, or show the same list again. Nothing is searched or
-    // screened again. --yolo starts afresh.
+    // screened again, so this needs neither the network nor a model key.
+    // --yolo starts afresh.
     let finalCandidates: SourceCandidate[] | null = null;
     let candidates: SourceCandidate[] = [];
     const keptList = readGate(root, 'research-candidates');
@@ -284,8 +236,47 @@ export const researchCommand = defineCommand({
     if (keptList) await closeGate(root, 'research-candidates');
 
     if (finalCandidates === null) {
-      // ── Step 2: the search scope: one kept for the author's choice, else
-      //    the topic-disambiguator's (D-12 LOCKED slug). ──
+      // Offline (--offline / --dry-run): searching is nothing but network
+      // calls. Stop before the model and before any write, so an existing
+      // library is never replaced by an empty one.
+      if (isOfflineMode()) {
+        process.stdout.write(
+          `pensmith research: ${OFFLINE_SKIP_NOTE} — no sources were queried; LIBRARY.json and CITATIONS.bib left unchanged.\n`,
+        );
+        return { ok: false, mode: 'offline' };
+      }
+
+      // A key must be configured before any model work. PENSMITH_NO_LLM=1
+      // answers from the offline mock inside complete(), so it needs none.
+      // The key's value is never printed.
+      if (process.env['PENSMITH_NO_LLM'] !== '1') {
+        try {
+          await getProviderApiKey(await resolveProviderId());
+        } catch (e) {
+          if (e instanceof MissingApiKeyError) {
+            process.stderr.write(
+              `pensmith research: ERROR — no LLM key configured.\n` +
+              `Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n` +
+              `Run inside Claude Code (Tier 1) for key-free operation.\n`,
+            );
+            process.exitCode = 1;
+            return { ok: false, mode: 'no-key-configured' };
+          }
+          throw e;
+        }
+      }
+
+      // The topic, discipline and assignment intake kept.
+      const intake = readIntake(root);
+      if (!intake) {
+        process.stderr.write(
+          'pensmith research: WARN — no intake found in .paper/; continuing with no assignment context (run `pensmith new` first).\n',
+        );
+      }
+      const { topic, discipline, assignment } = intake ?? { topic: '', discipline: 'other', assignment: '' };
+
+      // ── The search scope: one kept for the author's choice, else the
+      //    topic disambiguator's. ──
       let chosenScope: Scope | null = null;
       const keptScope = readGate(root, 'research-scope');
       if (keptScope && !yolo) {
@@ -313,6 +304,7 @@ export const researchCommand = defineCommand({
               default: [scopes[0]!.label],
               binding,
               payload: { scopes },
+              shown: { pending: 'research-scope', extra: { scopes } },
             });
             return showScopes(record, scopes);
           }
@@ -371,6 +363,7 @@ export const researchCommand = defineCommand({
             default: evaluated ? candidates.map((c) => c.citekey) : [],
             binding,
             payload: kept,
+            shown: { pending: 'research-candidates', extra: candidatesShown(kept) },
           });
           return showCandidates(record, kept);
         }

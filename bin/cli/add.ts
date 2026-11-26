@@ -299,9 +299,12 @@ export const addCommand = defineCommand({
           default: false,
         });
       } else {
+        // A path with spaces or shell characters is quoted, so the command runs as printed.
+        const source = String(args.source);
+        const shown = /^[\w@%+=:,./-]+$/.test(source) ? source : JSON.stringify(source);
         process.stdout.write(
           `pensmith add: not remapped onto any section. To have sections cite it, run ` +
-          `\`pensmith add ${String(args.source)} --remap\` (add \`--section <N>\` for one section); the source is not added twice.\n`,
+          `\`pensmith add ${shown} --remap\` (add \`--section <N>\` for one section); the source is not added twice.\n`,
         );
       }
     }

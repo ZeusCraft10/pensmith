@@ -102,9 +102,16 @@ async function verb(name: 'outline' | 'research' | 'gate', root: string, args: R
   return { exit: Number(process.exitCode ?? 0), res };
 }
 
-/** The last JSON line printed. */
+/**
+ * The last decision line printed. The test runner's own reports reach the
+ * captured stdout too, sometimes with no newline before the verb's line, so
+ * the line is found by its opening key rather than by where it starts.
+ */
 function pending(): Record<string, unknown> {
-  const line = out.trim().split('\n').filter((l) => l.startsWith('{')).pop();
+  const line = out.trim().split('\n')
+    .map((l) => (l.includes('{"pending":') ? l.slice(l.lastIndexOf('{"pending":')) : ''))
+    .filter((l) => l.length > 0)
+    .pop();
   assert.ok(line, `no JSON line on stdout:\n${out}\n${err}`);
   return JSON.parse(line) as Record<string, unknown>;
 }
@@ -192,7 +199,8 @@ test('gate answer refuses an option the decision does not offer, and a ref that 
   const root = await outlinePaper();
   _setGeneratorForTest(model([], () => OUTLINE));
   await verb('outline', root, { yolo: false, force: false });
-  const ref = String(pending()['ref']);
+  const shown = pending();
+  const ref = String(shown['ref']);
   const bad = await verb('gate', root, { action: 'answer', ref, option: 'yes' });
   assert.equal(bad.exit, 2);
   assert.match(err, /not an option here: yes/);
@@ -203,6 +211,7 @@ test('gate answer refuses an option the decision does not offer, and a ref that 
   const list = await verb('gate', root, { action: 'list' });
   assert.equal(list.exit, 0);
   assert.equal(pending()['ref'], ref, '`gate list` shows the decision still waiting');
+  assert.deepEqual(pending(), shown, '`gate list` prints the line the step printed, proposal included');
 });
 
 test('outline: a proposal kept for an intake that changed since is not applied', async () => {
@@ -217,6 +226,96 @@ test('outline: a proposal kept for an intake that changed since is not applied',
   const r = await verb('outline', root, { yolo: false, force: false });
   assert.equal(r.exit, 3);
   assert.equal(calls.length, 2, 'a new proposal is made for the new intake');
+});
+
+const REDONE = {
+  ...OUTLINE,
+  sections: [
+    { slug: 'background', title: 'Background', purpose: 'Set it up.', depends_on: [], word_target: 400, assigned_sources: [], counterargument: false },
+    { slug: 'evidence', title: 'Evidence', purpose: 'Survey it.', depends_on: ['background'], word_target: 900, assigned_sources: ['smith2020'], counterargument: false },
+    { slug: 'objections', title: 'Objections', purpose: 'Answer them.', depends_on: ['evidence'], word_target: 300, assigned_sources: [], counterargument: true },
+  ],
+};
+
+function storedSlugs(root: string): string[] {
+  const stored = JSON.parse(readFileSync(join(root, '.paper', 'OUTLINE.json'), 'utf8')) as { sections: Array<{ slug: string }> };
+  return stored.sections.map((s) => s.slug);
+}
+
+test('outline --force without a terminal: approving the new proposal replaces the outline', async () => {
+  const root = await outlinePaper();
+  let answer: unknown = OUTLINE;
+  const calls: Call[] = [];
+  _setGeneratorForTest(model(calls, () => answer));
+  assert.equal((await verb('outline', root, { yolo: true, force: false })).exit, 0, `${out}\n${err}`);
+  assert.deepEqual(storedSlugs(root), ['introduction', 'evidence']);
+
+  answer = REDONE;
+  const r = await verb('outline', root, { yolo: false, force: true });
+  assert.equal(r.exit, 3, `${out}\n${err}`);
+  const ref = pending()['ref'];
+  assert.deepEqual(storedSlugs(root), ['introduction', 'evidence'], 'nothing is replaced before approval');
+
+  const a = await verb('gate', root, { action: 'answer', ref, option: 'approve' });
+  assert.equal(a.exit, 0, `${out}\n${err}`);
+  assert.doesNotMatch(out, /not regenerating/, 'the approved proposal is not discarded for the old outline');
+  assert.deepEqual(storedSlugs(root), ['background', 'evidence', 'objections'], 'the approved outline replaces the old one');
+  assert.equal(calls.length, 2, 'approving calls no model');
+  assert.deepEqual(gateFiles(root), []);
+});
+
+test('outline --force: rejecting the new proposal keeps the existing outline (exit 2)', async () => {
+  const root = await outlinePaper();
+  let answer: unknown = OUTLINE;
+  _setGeneratorForTest(model([], () => answer));
+  await verb('outline', root, { yolo: true, force: false });
+  answer = REDONE;
+  await verb('outline', root, { yolo: false, force: true });
+  const a = await verb('gate', root, { action: 'answer', ref: pending()['ref'], option: 'reject' });
+  assert.equal(a.exit, 2, `${out}\n${err}`);
+  assert.match(out, /existing outline is kept/);
+  assert.deepEqual(storedSlugs(root), ['introduction', 'evidence']);
+});
+
+test('outline --force: a proposal kept for an outline edited since is not applied', async () => {
+  const root = await outlinePaper();
+  let answer: unknown = OUTLINE;
+  _setGeneratorForTest(model([], () => answer));
+  await verb('outline', root, { yolo: true, force: false });
+  answer = REDONE;
+  await verb('outline', root, { yolo: false, force: true });
+  const ref = pending()['ref'];
+  const md = join(root, '.paper', 'OUTLINE.md');
+  writeFileSync(md, readFileSync(md, 'utf8').replace('| Introduction |', '| Opening |'));
+  const a = await verb('gate', root, { action: 'answer', ref, option: 'approve' });
+  assert.match(err, /proposed for an earlier intake or outline/);
+  assert.equal(a.exit, 2, 'the answer is refused, and no new proposal is paid for');
+  assert.ok(!storedSlugs(root).includes('background'), 'a replacement shown for another outline is never applied');
+});
+
+test('outline --no-counter without a terminal: approving applies the waiver the proposal was made under', async () => {
+  const root = await outlinePaper();
+  writeFileSync(join(root, '.paper', 'INTAKE.json'), JSON.stringify({
+    $schemaVersion: 1, topic: 'tidal power', discipline: 'other', length_words: 1500,
+    citation_style: 'apa', audience: 'a course', counterargument: 'required',
+  }));
+  _setGeneratorForTest(model([], () => OUTLINE));
+  const r = await verb('outline', root, { yolo: false, force: false, 'no-counter': true });
+  assert.equal(r.exit, 3, `${out}\n${err}`);
+  const a = await verb('gate', root, { action: 'answer', ref: pending()['ref'], option: 'approve' });
+  assert.equal(a.exit, 0, `${out}\n${err}`);
+  assert.deepEqual(storedSlugs(root), ['introduction', 'evidence']);
+});
+
+test('outline --yolo with a proposal still kept: it is not shown again (no exit 3)', async () => {
+  const root = await outlinePaper();
+  const calls: Call[] = [];
+  _setGeneratorForTest(model(calls, () => OUTLINE));
+  assert.equal((await verb('outline', root, { yolo: false, force: false })).exit, 3);
+  const r = await verb('outline', root, { yolo: true, force: false });
+  assert.equal(r.exit, 0, `${out}\n${err}`);
+  assert.deepEqual(storedSlugs(root), ['introduction', 'evidence']);
+  assert.deepEqual(gateFiles(root), [], 'the kept proposal is dropped');
 });
 
 // ---------------------------------------------------------------------------
@@ -279,14 +378,34 @@ test('research without a terminal asks for the scope, then the candidates, each 
   assert.deepEqual(gateFiles(root), []);
 });
 
+test('research: answering a kept candidate list needs no model key and no network', async () => {
+  const root = researchProject();
+  const calls: Call[] = [];
+  _setGeneratorForTest(researchModel(calls));
+  await verb('research', root, { yolo: false });
+  await verb('gate', root, { action: 'answer', ref: pending()['ref'], option: 'history' });
+  const cands = pending();
+  assert.equal(cands['gate'], 'research-candidates');
+  const options = cands['options'] as string[];
+
+  // The key is gone and the network is off: choosing from the kept list needs neither.
+  delete process.env['ANTHROPIC_API_KEY'];
+  process.env['PENSMITH_OFFLINE'] = '1';
+  const r = await verb('gate', root, { action: 'answer', ref: cands['ref'], option: options[0] });
+  assert.equal(r.exit, 0, `${out}\n${err}`);
+  const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<{ id: string }>; researched_at?: string };
+  assert.deepEqual(lib.entries.map((e) => e.id), [options[0]]);
+  assert.equal(typeof lib.researched_at, 'string');
+});
+
 // ---------------------------------------------------------------------------
 // plan N --revise, through the CLI (offline: the deterministic proposal)
 // ---------------------------------------------------------------------------
 
-function cli(root: string, args: string[]): { status: number | null; stdout: string; stderr: string } {
+function cli(root: string, args: string[], env: Record<string, string | undefined> = {}): { status: number | null; stdout: string; stderr: string } {
   const r = spawnSync(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, ...args], {
     cwd: root,
-    env: isolatedCliEnv({ PENSMITH_NO_LLM: '1', PENSMITH_OFFLINE: '1', ANTHROPIC_API_KEY: undefined, GPTZERO_API_KEY: undefined }),
+    env: isolatedCliEnv({ PENSMITH_NO_LLM: '1', PENSMITH_OFFLINE: '1', ANTHROPIC_API_KEY: undefined, GPTZERO_API_KEY: undefined, ...env }),
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 60_000,
@@ -310,6 +429,8 @@ function revisePaper(): string {
   writeFileSync(join(pdir, 'STATE.json'), JSON.stringify({ $schemaVersion: 2, paperId: 'gates-revise', createdAt: new Date().toISOString(), sections: [{ n: 1, slug: 'intro' }] }));
   writeFileSync(join(pdir, 'OUTLINE.md'), '| # | slug | title | depends_on | word target | assigned_sources |\n| --- | --- | --- | --- | --- | --- |\n| 1 | intro | Intro | | 300 | ghost2020, real2020 |\n');
   writeFileSync(join(pdir, 'CITATIONS.bib'), '@article{real2020, title={Real}, author={Doe, Jane}, year={2020}, doi={10.1000/real}}\n');
+  // Research has run, so the router reaches the section.
+  writeFileSync(join(pdir, 'RESEARCH.md'), '# Research\n');
   writeFileSync(join(sdir, 'DRAFT.md'), FLAGGED);
   writeFileSync(join(sdir, 'PLAN.md'), `---\nsection: 1\nslug: intro\nstatus: failed\nassigned_sources: [ghost2020, real2020]\nverified_against_draft_hash: null\n---\n## Brief\n\nVoice: plain.\n`);
   writeVerificationFixture(sdir, {
@@ -341,12 +462,72 @@ test('plan --revise without a terminal keeps the proposed change (exit 3, no sta
   assert.deepEqual(gateFiles(root), []);
 });
 
+test('plan --revise: `gate list` shows the kept change as the step did', () => {
+  const root = revisePaper();
+  const p = lastJson(cli(root, ['plan', '1', '--revise']).stdout);
+  const listed = lastJson(cli(root, ['gate', 'list']).stdout);
+  assert.deepEqual(listed, p);
+  assert.equal(listed['pending'], 'revise-approval');
+  assert.match(String(listed['change']), /ghost2020/);
+});
+
+test('plan --revise: applying a kept change needs no model key', () => {
+  const root = revisePaper();
+  const p = lastJson(cli(root, ['plan', '1', '--revise']).stdout);
+  // No model and no key now: the change was proposed already.
+  const a = cli(root, ['gate', 'answer', String(p['ref']), 'approve'], { PENSMITH_NO_LLM: undefined });
+  assert.equal(a.status, 0, `${a.stdout}\n${a.stderr}`);
+  assert.doesNotMatch(a.stderr, /no LLM key configured/);
+  assert.doesNotMatch(readFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8'), /ghost2020/);
+});
+
 test('plan --revise: a rejected change leaves DRAFT.md as it was and exits 2', () => {
   const root = revisePaper();
   const p = lastJson(cli(root, ['plan', '1', '--revise']).stdout);
   const r = cli(root, ['gate', 'answer', String(p['ref']), 'reject']);
   assert.equal(r.status, 2, `${r.stdout}\n${r.stderr}`);
   assert.equal(readFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8'), FLAGGED);
+});
+
+test('plan --revise: a repair that cannot be applied exits 2, and the router stops there instead of sending the paper back to it', async () => {
+  const root = revisePaper();
+  const draft = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
+  const narrative = 'As @ghost2020 shows, barrages change sediment. Tides are regular [@real2020].\n';
+  writeFileSync(draft, narrative);
+  writeVerificationFixture(join(root, '.paper', 'sections', '01-intro'), {
+    n: 1, slug: 'intro', draft: narrative, assignedSources: ['ghost2020', 'real2020'],
+    citations: [{ citekey: 'ghost2020', verdict: 'FABRICATED' }, { citekey: 'real2020', verdict: 'OK' }],
+  });
+  const { resolveNextAction } = await import('../bin/lib/router.js');
+  const before = await resolveNextAction(root);
+  assert.equal(before.verb, 'plan', JSON.stringify(before));
+
+  const r = cli(root, ['plan', '1', '--revise']);
+  assert.equal(r.status, 2, `a refused repair is a refused step:\n${r.stdout}\n${r.stderr}`);
+  assert.match(r.stdout, /Not applied: @ghost2020 is a narrative citation/);
+  assert.equal(readFileSync(draft, 'utf8'), narrative);
+
+  const after = await resolveNextAction(root);
+  assert.equal(after.verb, 'status', `not sent back to the same revise: ${JSON.stringify(after)}`);
+  assert.equal((after as { reason?: string }).reason, 'attention');
+  const why = String((after as { why?: string }).why);
+  assert.match(why, /narrative citation/, 'the reason says why the repair was not applied');
+  assert.match(why, /pensmith plan 1 --revise/, 'another proposal can still be asked for by hand');
+  assert.match(why, /pensmith write 1 --force/);
+
+  // Once the draft is edited, the section is verified again as usual.
+  writeFileSync(draft, 'Barrages change sediment. Tides are regular [@real2020].\n');
+  assert.equal((await resolveNextAction(root)).verb, 'verify');
+});
+
+test('plan --revise: a change the user rejected is not proposed again from bare pensmith', async () => {
+  const root = revisePaper();
+  const p = lastJson(cli(root, ['plan', '1', '--revise']).stdout);
+  assert.equal(cli(root, ['gate', 'answer', String(p['ref']), 'reject']).status, 2);
+  const { resolveNextAction } = await import('../bin/lib/router.js');
+  const d = await resolveNextAction(root);
+  assert.equal(d.verb, 'status', JSON.stringify(d));
+  assert.match(String((d as { why?: string }).why), /the user rejected the change proposed for \[@ghost2020\]/);
 });
 
 test('plan --revise: a change kept for a draft edited since is not applied', () => {

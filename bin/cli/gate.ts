@@ -46,7 +46,11 @@ export const gateCommand = defineCommand({
 
     if (action === 'list') {
       const gates = listGates(root);
-      for (const g of gates) process.stdout.write(`${JSON.stringify(pendingDecision(g, g.gate, g.answer ? { answered: g.answer.options } : {}))}\n`);
+      // The same line the step printed when it stopped, and the answer once given.
+      for (const g of gates) {
+        const extra = { ...(g.shown?.extra ?? {}), ...(g.answer ? { answered: g.answer.options } : {}) };
+        process.stdout.write(`${JSON.stringify(pendingDecision(g, g.shown?.pending ?? g.gate, extra))}\n`);
+      }
       if (gates.length === 0) process.stderr.write('pensmith gate: no decision is waiting.\n');
       return { ok: true, gates: gates.map((g) => g.ref) };
     }

@@ -24,7 +24,7 @@ import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
 
-interface Verified { status: number | null; verification: string; planStatus: unknown; out: string }
+interface Verified { status: number | null; verification: string; record: { citations: Array<{ citekey: string; verdict: string; retry?: true }> }; planStatus: unknown; out: string }
 
 /** A one-section paper citing every key of `bib`, verified by the real CLI. */
 function verify(bib: string): Promise<Verified> {
@@ -46,6 +46,7 @@ function verify(bib: string): Promise<Verified> {
         status,
         out,
         verification: readFileSync(join(sec, 'VERIFICATION.md'), 'utf8'),
+        record: JSON.parse(readFileSync(join(sec, 'VERIFICATION.json'), 'utf8')) as Verified['record'],
         planStatus: parseFrontmatter(readFileSync(join(sec, 'PLAN.md'), 'utf8')).frontmatter['status'],
       });
     });
@@ -124,6 +125,7 @@ test('verify: 429 and 503 from the registries are UNRESOLVED (blocking), never F
   assert.doesNotMatch(v.verification, /FABRICATED/);
   assert.match(v.verification, /^Status: failed$/m, 'an unchecked citation still blocks');
   assert.equal(v.status, 2, v.out);
+  assert.equal(v.record.citations.find((c) => c.citekey === 'outage2020')?.retry, true, 'the record says verify again may decide it');
 });
 
 test('verify: a registry request that gets no answer at all is UNRESOLVED, not FABRICATED', async () => {
@@ -134,6 +136,7 @@ test('verify: a registry request that gets no answer at all is UNRESOLVED, not F
   assert.match(r, /\*\*UNRESOLVED\*\*/);
   assert.doesNotMatch(v.verification, /FABRICATED/);
   assert.equal(v.status, 2, v.out);
+  assert.equal(v.record.citations.find((c) => c.citekey === 'engel2007')?.retry, true);
 });
 
 test('verify: in one section, only the invented DOI is FABRICATED', async () => {

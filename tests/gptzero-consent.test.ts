@@ -118,3 +118,53 @@ test('with no key the report says the key is missing', async () => {
   assert.equal(r.status, 0, r.out);
   assert.match(report(root), /no GPTZERO_API_KEY/);
 });
+
+function gateAnswer(root: string, ref: string, option: string): { status: number | null; out: string } {
+  const env = isolatedCliEnv({
+    PENSMITH_NO_LLM: '1', PENSMITH_OFFLINE: undefined, ANTHROPIC_API_KEY: undefined,
+    GPTZERO_API_KEY: 'gptzero-test-key-not-sent', PENSMITH_COST_CAP_USD: '100',
+  });
+  const r = spawnSync(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, 'gate', 'answer', ref, option], {
+    cwd: root, env, encoding: 'utf8', input: '', timeout: 60_000,
+  });
+  return { status: r.status, out: `${r.stdout ?? ''}\n${r.stderr ?? ''}` };
+}
+
+function pendingRef(out: string): string {
+  const line = out.split('\n').filter((l) => l.startsWith('{')).pop();
+  assert.ok(line, `no pending JSON line:\n${out}`);
+  return String((JSON.parse(line) as { ref?: unknown }).ref);
+}
+
+test('without a terminal, `done --score` while the export confirmation is kept gives consent, and the exported paper is scored', async () => {
+  const root = await compiledPaper();
+  const first = done(root, []);
+  assert.equal(first.status, 3, first.out);
+  assert.match(first.out, /pensmith done --score/, 'done says how to consent');
+  assert.doesNotMatch(first.out, /% AI-generated/);
+
+  const consented = done(root, ['--score']);
+  assert.equal(consented.status, 3, consented.out);
+  assert.match(config(root), /gptzero_consent = true/, 'the consent is kept');
+
+  const a = gateAnswer(root, pendingRef(consented.out), 'export');
+  assert.equal(a.status, 0, a.out);
+  assert.match(report(root), /reads as 82% AI-generated \(gptzero\)/, 'the export that followed the consent has the score');
+  assert.doesNotMatch(report(root), /needs your consent/);
+});
+
+test('at a terminal, the GPTZero disclosure is shown once in a run, with the question, not again before the score', async () => {
+  const root = await compiledPaper();
+  const r = done(root, ['--yolo'], { terminal: true, input: 'y\n' });
+  assert.equal(r.status, 0, r.out);
+  assert.match(report(root), /reads as 82% AI-generated/, 'consent was given and the paper was scored');
+  assert.equal((r.out.match(/the honesty check sends your full paper text to GPTZero/g) ?? []).length, 1, r.out);
+});
+
+test('with consent kept, the disclosure is shown once, before the score', async () => {
+  const root = await compiledPaper();
+  assert.equal(done(root, ['--yolo', '--score']).status, 0);
+  const r = done(root, ['--yolo']);
+  assert.equal(r.status, 0, r.out);
+  assert.equal((r.out.match(/the honesty check sends your full paper text to GPTZero/g) ?? []).length, 1, r.out);
+});

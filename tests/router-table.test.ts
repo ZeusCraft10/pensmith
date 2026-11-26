@@ -157,11 +157,64 @@ test('a section that failed because it cites none of its sources goes to write -
 });
 
 test('a section that failed only because a registry did not answer goes to verify again', async () => {
-  const root = paper({ 1: { status: 'failed', record: { citations: [{ citekey: 'a2020', verdict: 'UNRESOLVED' }] } } });
+  const root = paper({ 1: { status: 'failed', record: { citations: [{
+    citekey: 'a2020', verdict: 'UNRESOLVED', retryable: true,
+    reason: 'DOI 10.1000/a could not be checked (Crossref: HTTP 503) — re-run verify when the registry answers',
+  }] } } });
   const d = await resolveNextAction(root);
   assert.deepEqual(pick(d), { verb: 'verify', n: 1, slug: 'intro' });
   assert.match(why(d), /UNRESOLVED/);
   assert.match(why(d), /network|registry/i);
+});
+
+test('an UNRESOLVED entry with no identifier needs attention: verify would only repeat it', async () => {
+  const reason = 'the entry has no DOI, arXiv ID, PMID or ISBN to look the work up by, so nothing can confirm it — ' +
+    'add one to its CITATIONS.bib entry (or re-add the source with `pensmith add`)';
+  const root = paper({ 1: { status: 'failed', record: { citations: [{ citekey: 'a2020', verdict: 'UNRESOLVED', reason }] } } });
+  const d = await resolveNextAction(root);
+  assert.equal(d.verb, 'status', JSON.stringify(d));
+  assert.equal((d as { reason?: string }).reason, 'attention');
+  assert.deepEqual((d as { section?: unknown }).section, { n: 1, slug: 'intro' });
+  assert.match(why(d), /UNRESOLVED \[@a2020\]/, 'it names the entry');
+  assert.match(why(d), /no DOI, arXiv ID, PMID or ISBN/, 'and why');
+  assert.match(why(d), /pensmith verify 1/, 'and what to run once the entry is fixed');
+});
+
+test('an UNRESOLVED entry the only registry for it does not hold needs attention, not another verify', async () => {
+  const reason = 'Open Library has no record of ISBN 9780000000002 — check the identifier, or cite an edition a registry lists';
+  const root = paper({ 1: { status: 'failed', record: { citations: [{ citekey: 'a2020', verdict: 'UNRESOLVED', reason }] } } });
+  const d = await resolveNextAction(root);
+  assert.equal(d.verb, 'status', JSON.stringify(d));
+  assert.match(why(d), /cite an edition a registry lists/);
+});
+
+test('UNRESOLVED from a record made with the network off goes to verify once the registries can be asked', async () => {
+  const root = paper({ 1: { status: 'failed', record: { citations: [{ citekey: 'a2020', verdict: 'UNRESOLVED', reason: 'the entry has no DOI, arXiv ID, PMID or ISBN' }] } } });
+  const file = join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.json');
+  const { readFileSync } = await import('node:fs');
+  writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')) as object, network_mode: 'offline' }));
+  const d = await resolveNextAction(root);
+  assert.deepEqual(pick(d), { verb: 'verify', n: 1, slug: 'intro' });
+});
+
+test('a verified section whose re-check compile refused goes to verify, not back to the same compile', async () => {
+  const root = paper();
+  const { readFileSync } = await import('node:fs');
+  const { writeCompileRefusal } = await import('../bin/lib/compile-refusal.js');
+  const sdir = join(root, '.paper', 'sections', '02-body');
+  const reason = 'section 2 (body), re-verified since it changed: MIS-CITED [@a2020] — the entry\'s title no longer matches the registry';
+  await writeCompileRefusal(root, [{
+    n: 2, slug: 'body', reasons: [reason],
+    draft_sha256: sha256(readFileSync(join(sdir, 'DRAFT.md'))), verification_sha256: sha256(readFileSync(join(sdir, 'VERIFICATION.json'))),
+  }]);
+  const d = await resolveNextAction(root);
+  assert.deepEqual(pick(d), { verb: 'verify', n: 2, slug: 'body' });
+  assert.match(why(d), /compile refused section 2/);
+  assert.match(why(d), /MIS-CITED \[@a2020\]/);
+
+  // Once verify records the verdicts again, the refusal no longer applies.
+  writeVerificationFixture(sdir, { n: 2, slug: 'body', draft: readFileSync(join(sdir, 'DRAFT.md'), 'utf8'), assignedSources: ['a2020'], advisoryMarkdown: 'verified again' });
+  assert.equal((await resolveNextAction(root)).verb, 'compile');
 });
 
 test('a section that failed only on a citation typed as text needs attention, with what to rewrite', async () => {

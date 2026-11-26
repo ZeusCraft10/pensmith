@@ -48,6 +48,16 @@ test('add without a terminal does not ask whether to remap; it says how, and kee
   assert.match(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'), /10\.1038\/nphys1170/i);
 });
 
+test('add without a terminal quotes a source path with spaces in the command it suggests', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-noterm-add-quoted-'));
+  mkdirSync(join(root, '.paper'));
+  writeFileSync(join(root, '.paper', 'STATE.json'), JSON.stringify({ $schemaVersion: 2, paperId: 'noterm-add-q', createdAt: new Date().toISOString(), sections: [] }));
+  writeFileSync(join(root, 'my refs.bib'), '@book{kuhn1962, title={The Structure of Scientific Revolutions}, author={Kuhn, Thomas S.}, year={1962}, isbn={9780226458083}}\n');
+  const r = cli(root, ['add', 'my refs.bib']);
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  assert.match(r.stdout, /`pensmith add "my refs\.bib" --remap`/, 'the command runs as printed');
+});
+
 test('sketch without a terminal reports its questions (exit 3), crashes on none, and writes nothing', () => {
   const dir = mkdtempSync(join(tmpdir(), 'pensmith-noterm-sketch-'));
   const r = cli(dir, ['sketch']);

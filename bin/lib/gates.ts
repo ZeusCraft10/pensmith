@@ -57,6 +57,8 @@ export const GateRecordSchema = z.object({
   binding: z.record(z.string(), z.string().nullable()),
   /** What the verb kept to apply: its proposal, and what it showed. */
   payload: z.unknown(),
+  /** The pending line the verb printed (its name and what it showed), so `gate list` prints the same. */
+  shown: z.object({ pending: z.string().min(1), extra: z.record(z.string(), z.unknown()) }).strict().optional(),
   answer: z.object({ options: z.array(z.string()), answered_at: z.string().min(1) }).strict().optional(),
 }).strict();
 
@@ -73,6 +75,8 @@ export interface OpenGate {
   default: string[];
   binding: GateRecord['binding'];
   payload: unknown;
+  /** The pending name and what the decision line shows besides the record's own fields. */
+  shown?: GateRecord['shown'];
 }
 
 function gateFile(paperRoot: string, id: string): string {
@@ -102,6 +106,7 @@ export async function openGate(paperRoot: string, spec: OpenGate): Promise<GateR
     created_at,
     binding: spec.binding,
     payload: spec.payload,
+    ...(spec.shown ? { shown: spec.shown } : {}),
   });
   await atomicWriteFile(gateFile(paperRoot, id), `${JSON.stringify(record, null, 2)}\n`);
   return record;
@@ -181,6 +186,7 @@ export function howToAnswer(record: GateRecord): string {
 /**
  * The one JSON line a verb prints when it stops for this decision. `extra`
  * carries what the person needs to see to decide (the proposal itself).
+ * `pensmith gate list` prints the same line from the record's `shown`.
  */
 export function pendingDecision(record: GateRecord, pending: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {

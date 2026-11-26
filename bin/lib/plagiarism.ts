@@ -7,14 +7,14 @@
 // draft, spread across the whole paper when there are more paragraphs than
 // probes (deterministic, no LLM), searches each as an exact quoted phrase,
 // word for word, on the DuckDuckGo HTML endpoint through the http.ts
-// chokepoint, and renders a `## Plagiarism Check (DONE-02)` section for
+// chokepoint, and renders the plagiarism section for
 // VERIFICATION.md that states how many phrases were checked.
 //
 // A search that did not get a real answer is "not checked", never "no
 // matches": DuckDuckGo's bot check (a non-200 status, or its anomaly
 // challenge page), a page that is neither results nor "No results.", a
 // transport error, a cassette miss, or offline mode. A check with any such
-// phrase is incomplete, and the export confirmation says so (DONE-09).
+// phrase is incomplete, and the export confirmation says so.
 //
 // SSRF mitigation (T-06-02-01): the DDG host is hard-coded; the query is the only
 // dynamic component and is encodeURIComponent-escaped. HTML parsing (T-06-02-02)

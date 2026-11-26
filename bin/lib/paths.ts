@@ -581,6 +581,14 @@ export function compileManifestPath(root: string = projectRoot()): string {
   return path.join(paperDir(root), 'COMPILE-MANIFEST.json');
 }
 
+/**
+ * `<root>/.paper/COMPILE-REFUSAL.json`: the verified sections whose re-check
+ * the last compile refused (bin/lib/compile-refusal.ts).
+ */
+export function compileRefusalPath(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'COMPILE-REFUSAL.json');
+}
+
 /** `<root>/.paper/FINAL.md`: the text the last export shipped, written only once it succeeded. */
 export function paperFinalFile(root: string = projectRoot()): string {
   return path.join(paperDir(root), 'FINAL.md');
@@ -608,6 +616,19 @@ export function sectionAcknowledgements(
   root: string = projectRoot(),
 ): string {
   return path.join(strictSectionDir(n, slug, root), 'ACKNOWLEDGEMENTS.json');
+}
+
+/**
+ * Why the last `plan N --revise` of a section left its draft as it was
+ * (bin/lib/revise-outcome.ts), so the router does not send the section back
+ * to the same repair.
+ */
+export function sectionReviseOutcome(
+  n: number,
+  slug: string,
+  root: string = projectRoot(),
+): string {
+  return path.join(strictSectionDir(n, slug, root), 'REVISE.json');
 }
 
 export function sectionResearch(

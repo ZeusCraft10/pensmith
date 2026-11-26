@@ -56,11 +56,12 @@ same decision and redoes no work (no model call, no search, no audit).
    - `export` `export` runs every export check again on the same text and
      exports it; `cancel` exports nothing (exit 2).
 4. A proposal whose files changed since it was made is never applied: the
-   step drops it and works afresh, or (for a revise or an export the user
-   already answered) refuses with exit 2 and says why.
+   step drops it and works afresh, or (for an outline, a revise or an export
+   the user already answered) refuses with exit 2 and says why. An outline
+   proposed with `--force` or `--no-counter` is applied under that flag.
 
 `pensmith gate list` prints every decision still waiting, one JSON line
-each. An unknown `ref`, or an option the decision does not offer, is refused
+each: the same line the step printed when it stopped, proposal included. An unknown `ref`, or an option the decision does not offer, is refused
 with exit 2.
 
 ## In Tier 1

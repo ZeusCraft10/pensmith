@@ -28,6 +28,8 @@ export interface CitationSpec {
   citekey: string;
   verdict: Pass1Verdict;
   reason?: string;
+  /** An UNRESOLVED verdict a registry that did not answer gave (Pass1Result.retryable). */
+  retryable?: boolean;
 }
 
 export interface QuoteSpec {
@@ -65,6 +67,7 @@ export function verificationRecord(spec: VerificationSpec): VerificationRecord {
   const quotes = spec.quotes ?? [];
   const pass1: Pass1Result[] = citations.map((c) => ({
     citekey: c.citekey, verdict: c.verdict, titleJW: c.verdict === 'OK' ? 1 : 0, authorJW: c.verdict === 'OK' ? 1 : 0, reason: c.reason ?? 'fixture',
+    ...(c.retryable ? { retryable: true as const } : {}),
   }));
   const pass3: Pass3Result[] = quotes.map((q) => ({
     citekey: q.citekey, quoteSnippet: q.quote.slice(0, 40), verdict: q.verdict, levRatio: q.verdict === 'OK' ? 1 : 0, reason: q.reason ?? 'fixture',

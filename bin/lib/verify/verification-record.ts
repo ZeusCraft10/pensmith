@@ -56,6 +56,8 @@ const CitationVerdictSchema = z.object({
   /** How well the entry's title and authors matched the registry's record (0..1). */
   title_score: z.number().min(0).max(1),
   author_score: z.number().min(0).max(1),
+  /** On UNRESOLVED: a registry did not answer (or none was asked), so verify again may decide it. */
+  retry: z.literal(true).optional(),
 }).strict();
 
 const QuoteVerdictSchema = z.object({
@@ -219,6 +221,7 @@ export function buildVerificationRecord(input: VerificationInput): VerificationR
     acknowledgements_sha256: input.acknowledgementsSha256 ?? null,
     citations: (input.pass1 ?? []).map((r) => ({
       citekey: r.citekey, verdict: r.verdict, reason: r.reason, title_score: clamp(r.titleJW), author_score: clamp(r.authorJW),
+      ...(r.retryable ? { retry: true as const } : {}),
     })),
     quotes: (input.pass3 ?? []).map((r) => ({
       quote_id: r.quoteId, citekey: r.citekey, quote: r.quoteSnippet, verdict: r.verdict, reason: r.reason,

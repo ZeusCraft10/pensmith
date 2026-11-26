@@ -1,9 +1,9 @@
-// bin/lib/router.ts — the bare `/pensmith` next-step resolver (UX-01).
+// bin/lib/router.ts — the next-step resolver behind bare `/pensmith`.
 //
 // resolveNextAction only reads: STATE.json, the outline (outline-read.ts),
-// each section's PLAN.md, DRAFT.md, VERIFICATION.json and
-// ACKNOWLEDGEMENTS.json, and the paper's COMPILE-MANIFEST.json, DRAFT.md,
-// CITATIONS.bib, FINAL.md and EXPORT.json. It IGNORES HANDOFF.json: a non-done
+// each section's PLAN.md, DRAFT.md, VERIFICATION.json, ACKNOWLEDGEMENTS.json
+// and REVISE.json, and the paper's COMPILE-MANIFEST.json, COMPILE-REFUSAL.json,
+// DRAFT.md, CITATIONS.bib, FINAL.md and EXPORT.json. It IGNORES HANDOFF.json: a non-done
 // HANDOFF must not trap bare /pensmith in a resume loop, so the resolver
 // always returns a concrete next work verb (plan / write / verify / compile /
 // done) or a status terminus, never { verb:'resume' }. The resume verb owns
@@ -17,12 +17,18 @@
 //     what its recorded verdicts (VERIFICATION.json) call for:
 //       * no record, or one about another draft, assigned sources,
 //         acknowledgements or verifier version → verify (a failed or
-//         unverifiable section only; compile checks a verified one again);
+//         unverifiable section only; compile checks a verified one again,
+//         and one whose re-check compile refused goes to verify);
 //       * failed on a citation revise can repair (FABRICATED, MIS-CITED, quote
 //         NOT_FOUND, RETRACTED) → plan N --revise, naming each, and for a
-//         retraction `pensmith ack` too;
+//         retraction `pensmith ack` too; but when the last revise of this
+//         same draft and record changed nothing (REVISE.json) → attention,
+//         with why, so the same refusal is not paid for again;
 //       * failed on placeholder, empty or uncited text → write N --force;
 //       * failed only because a registry did not answer (UNRESOLVED) → verify;
+//         an UNRESOLVED that verify would only repeat (the entry has no
+//         identifier, or the only registry for it does not hold it) →
+//         attention, naming the entry;
 //       * failed on a citation typed as text or a broken bracket, or a
 //         refusal verify recorded → attention, with what to do;
 //       * unverifiable (a quotation nothing could check) → compiled, with a
@@ -60,7 +66,9 @@ import { assignedSourcesFrom } from './plan-status.js';
 import { computeDraftHash } from './draft-hash.js';
 import { readCompileManifest } from './compile-manifest.js';
 import { readExportRecord } from './export-record.js';
-import { isOfflineMode } from './network-mode.js';
+import { currentReviseOutcome } from './revise-outcome.js';
+import { compileRefusalOf } from './compile-refusal.js';
+import { isOfflineMode, networkMode } from './network-mode.js';
 import { isBlockingVerdict } from './verify/verdict-rows.js';
 import { readVerificationRecord, sha256, UNCHECKED_QUOTE, type VerificationRecord } from './verify/verification-record.js';
 import { VERSION } from './version.generated.js';
@@ -256,8 +264,19 @@ function routeRecorded(
   }
 
   // A verified record about this draft: compile re-checks it against the
-  // sources, bibliography and acknowledgements as they are then.
-  if (record.status === 'verified' && record.checked) return null;
+  // sources, bibliography and acknowledgements as they are then. One whose
+  // re-check compile refused goes to verify, which records the verdicts as
+  // they are now; compile would only refuse it again.
+  if (record.status === 'verified' && record.checked) {
+    const refused = compileRefusalOf(paperRoot, n, slug, draft, bytesOrNull(sectionVerificationRecord(n, slug, paperRoot)));
+    if (refused) {
+      return {
+        verb: 'verify', n, slug,
+        why: `compile refused ${where} when it checked it again (${listed(refused.reasons)}); verify ${n} records its verdicts as they are now`,
+      };
+    }
+    return null;
+  }
 
   // A failed or unverifiable record whose inputs changed may now pass.
   if (record.checked && record.draft_hash !== computeDraftHash(draft, [...assignedSources])) {
@@ -305,14 +324,41 @@ function routeRecorded(
       `; if the paper must cite a retracted work (it discusses the retraction), the user can instead run ${
         retracted.map((k) => `\`pensmith ack ${n} ${k} --reason "<why>"\``).join(' or ')} and verify again`;
     const others = blocking.filter((b) => !REPAIRABLE.has(b.verdict));
+    const failedOn = `${where} failed verification: ${listed(repairable.map((b) => b.label))}${others.length > 0 ? ` (also ${listed(others.map((b) => b.label))})` : ''}`;
+    // The last revise of this very draft and record changed nothing: sending
+    // the section back to it would only pay for the same refusal again.
+    const last = currentReviseOutcome(paperRoot, n, slug, draft, bytesOrNull(sectionVerificationRecord(n, slug, paperRoot)));
+    if (last) {
+      return {
+        verb: 'status', reason: 'attention', section: s,
+        why: `${failedOn} — the last \`pensmith plan ${n} --revise\` left DRAFT.md unchanged (${
+          last.outcome === 'rejected' ? `the user rejected the change proposed for [@${last.citekey}]` : `it could not repair [@${last.citekey}]: ${last.reason}`}); ` +
+          `edit that citation in DRAFT.md, redraft with \`pensmith write ${n} --force\`, or run \`pensmith plan ${n} --revise\` for another proposal, ` +
+          `then run \`pensmith verify ${n}\`${ack}`,
+      };
+    }
     return {
       verb: 'plan', n, slug, revise: true,
-      why: `${where} failed verification: ${listed(repairable.map((b) => b.label))}${others.length > 0 ? ` (also ${listed(others.map((b) => b.label))})` : ''} — ` +
-        `\`pensmith plan ${n} --revise\` proposes a repair for the user to approve${ack}`,
+      why: `${failedOn} — \`pensmith plan ${n} --revise\` proposes a repair for the user to approve${ack}`,
     };
   }
   if (blocking.every((b) => b.verdict === 'UNRESOLVED')) {
     const keys = listed(blocking.map((b) => b.label));
+    // verify again can change a verdict a registry that did not answer gave,
+    // and every verdict of a record made offline or from recordings once the
+    // registries can be asked. An entry with no identifier, or one the only
+    // registry for it does not hold, gets the same verdict until it changes.
+    const unresolved = record.citations.filter((c) => c.verdict === 'UNRESOLVED');
+    const sameNetwork = record.network_mode === 'live' || record.network_mode === networkMode();
+    const settled = sameNetwork ? unresolved.filter((c) => c.retry !== true) : [];
+    if (settled.length > 0) {
+      return {
+        verb: 'status', reason: 'attention', section: s,
+        why: `${where} failed verification: ${settled.map((c) => `UNRESOLVED [@${c.citekey}] (${c.reason})`).join('; ')} — ` +
+          `verify ${n} would only repeat ${settled.length > 1 ? 'these' : 'this'} until the entry changes; fix the CITATIONS.bib entry as the reason says ` +
+          `(or \`pensmith add\` the source again), then run \`pensmith verify ${n}\``,
+      };
+    }
     if (isOfflineMode()) {
       return { verb: 'status', reason: 'attention', section: s, why: `${where}: ${keys}: no registry could be asked with the network off; run verify ${n} with network access` };
     }

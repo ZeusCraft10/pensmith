@@ -140,6 +140,17 @@ test('D-08: a stale section whose re-verify FAILS blocks compile (refuse, no DRA
   assert.equal(result.refused, true, 're-verify failure on a stale section must block compile');
   assert.match((result.refuseReasons ?? []).join(' '), /smith2020/, 'refuse names the re-verify-flagged citekey');
   assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false, 'no DRAFT.md when staleness re-verify fails');
+
+  // The refusal is kept for the router (compile writes nothing in a section
+  // folder), bound to the draft and record it checked; a compile that passes clears it.
+  const refusalPath = join(root, '.paper', 'COMPILE-REFUSAL.json');
+  const kept = JSON.parse(readFileSync(refusalPath, 'utf8')) as { sections: Array<{ n: number; slug: string; draft_sha256: string; reasons: string[] }> };
+  assert.deepEqual(kept.sections.map((x) => [x.n, x.slug]), [[1, 'intro']]);
+  assert.equal(kept.sections[0]!.draft_sha256, sha256(readFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'))));
+  assert.match(kept.sections[0]!.reasons.join(' '), /smith2020/);
+  const again = await runCompile({ paperRoot: root, yolo: true, onWarn: () => {}, reVerify: async () => ({ passed: true, failingCitekeys: [] }) });
+  assert.equal(again.refused, false, JSON.stringify(again.refuseReasons));
+  assert.equal(existsSync(refusalPath), false, 'a compile that passes leaves no refusal behind');
 });
 
 test('D-08: NO stale sections → re-verify seam is never called', async () => {

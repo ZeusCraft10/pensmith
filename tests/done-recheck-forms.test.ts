@@ -36,6 +36,13 @@ for (const [what, finalMd, reason] of CHANGES) {
   });
 }
 
+test('GATE-04: two citations swapped between claims block export, though the same citations are there', async () => {
+  const draft = 'Vaccines are safe [@b]. Masks reduce spread [@a].';
+  const r = await reCheckFinalMd('Vaccines are safe [@a]. Masks reduce spread [@b].', draft, bibPath());
+  assert.equal(r.passed, false, 'a swapped citation is a mis-citation');
+  assert.match(r.reason, /not in the order/);
+});
+
 test('GATE-04: reworded prose with the same citations passes', async () => {
   const r = await reCheckFinalMd('Coherence persists [@smith2020, p. 4], and @Jones2019 concurs [-@doe2021].', DRAFT, bibPath());
   assert.deepEqual(r, { passed: true, reason: '' });

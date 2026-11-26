@@ -61,31 +61,53 @@ async function confirmAtTerminal(outlineMd: string): Promise<boolean> {
 const APPROVE = 'approve';
 const REJECT = 'reject';
 
-/** What an outline proposal is about: the intake it was written for. */
-function outlineBinding(root: string): Record<string, string | null> {
+/** The hash of the file at `file`, or null when there is none. */
+function hashOrNull(file: string): string | null {
   try {
-    return { intake_sha256: sha256(readFileSync(paperIntakeFile(root))) };
+    return sha256(readFileSync(file));
   } catch {
-    return { intake_sha256: null };
+    return null;
   }
 }
 
+/**
+ * What an outline proposal is about: the intake it was written for, and the
+ * outline it would replace (none, or the one `--force` asked to redo). An
+ * approval is applied only while both are as they were.
+ */
+function outlineBinding(root: string): Record<string, string | null> {
+  return {
+    intake_sha256: hashOrNull(paperIntakeFile(root)),
+    outline_json_sha256: hashOrNull(paperOutlineFile(root)),
+    outline_md_sha256: hashOrNull(path.join(paperDir(root), 'OUTLINE.md')),
+  };
+}
+
+/** The flags a proposal was made under, kept so that the answer is applied under them too. */
+type OutlineFlags = { force: boolean; 'no-counter': boolean };
+
 /** Keep the checked proposal for the person to approve, print the decision, and stop (exit 3). */
-async function awaitApproval(root: string, proposal: unknown, outlineMd: string, sections: number): Promise<Record<string, unknown>> {
+async function awaitApproval(root: string, flags: OutlineFlags, proposal: unknown, outlineMd: string, sections: number): Promise<Record<string, unknown>> {
   const record = await openGate(root, {
     gate: 'outline',
-    summary: `Approve this outline of ${sections} section(s) and write OUTLINE.md?`,
+    args: flags,
+    summary: flags.force
+      ? `Replace the paper's outline with this one of ${sections} section(s)?`
+      : `Approve this outline of ${sections} section(s) and write OUTLINE.md?`,
     options: [APPROVE, REJECT],
     default: [REJECT],
     binding: outlineBinding(root),
     payload: { proposal },
+    shown: { pending: OUTLINE_PENDING, extra: { outline: outlineMd } },
   });
   return showPending(record, outlineMd);
 }
 
+const OUTLINE_PENDING = 'outline-approval';
+
 function showPending(record: GateRecord, outlineMd: string): Record<string, unknown> {
   process.stderr.write('pensmith outline: the outline needs the user\'s approval and there is no terminal to ask in; it is kept until they answer.\n');
-  process.stdout.write(`${JSON.stringify(pendingDecision(record, 'outline-approval', { outline: outlineMd }))}\n`);
+  process.stdout.write(`${JSON.stringify(pendingDecision(record, OUTLINE_PENDING, { outline: outlineMd }))}\n`);
   process.exitCode = EXIT_NEEDS_ANSWER;
   return { ok: false, mode: 'pending', ref: record.ref };
 }
@@ -166,22 +188,51 @@ export const outlineCommand = defineCommand({
   async run({ args }) {
     const root = process.cwd();
     const outlinePath = path.join(paperDir(root), 'OUTLINE.md');
+    const flags: OutlineFlags = { force: args.force === true, 'no-counter': args['no-counter'] === true };
+    const library = readLibrarySync(root);
+    const intake = readIntake(root);
+
+    // A proposal kept for the user's approval, still about the intake and the
+    // outline it was made to replace: apply their answer, ask at a terminal,
+    // or show the same decision again, with no new model call. It is applied
+    // under the flags it was proposed with (`--force` replaces the outline,
+    // `--no-counter` waives the counterargument section). --yolo, and --force
+    // before an answer, ask for a new proposal instead.
+    const pending = readGate(root, 'outline');
+    if (pending) {
+      const parsed = ProposedOutlineSchema.safeParse((pending.payload as { proposal?: unknown } | null)?.proposal);
+      const applies = parsed.success && gateStillApplies(pending, outlineBinding(root));
+      if (applies && args.yolo !== true && (pending.answer !== undefined || !flags.force)) {
+        const kept = numberOutline(parsed.data);
+        const keptMd = renderOutlineMd(kept);
+        if (!pending.answer && !canAskInTerminal()) return showPending(pending, keptMd);
+        const approved = pending.answer ? pending.answer.options[0] === APPROVE : await confirmAtTerminal(keptMd);
+        await closeGate(root, 'outline');
+        const noCounter = flags['no-counter'] || pending.args['no-counter'] === true;
+        return decide(root, kept, approved, rulesFor(library, intake, noCounter), readOutline(root).ok);
+      }
+      // A proposal for an intake or outline that has changed since is not the user's to approve.
+      await closeGate(root, 'outline');
+      if (!applies) {
+        process.stderr.write('pensmith outline: the outline kept for approval was proposed for an earlier intake or outline, so it was dropped.\n');
+        // An answer to it is not a request for a new (paid) proposal.
+        if (pending.answer) {
+          return refuse(['the answer was for a proposal made before the intake or outline changed'], 'Nothing was written. Run `pensmith outline --force` for a new proposal.');
+        }
+      }
+    }
 
     // An existing outline is kept, and a hand-written or edited one checked and taken in.
-    const existing = args.force === true ? null : readOutline(root);
+    const existing = flags.force ? null : readOutline(root);
     if (existing?.ok && existing.source === 'json') {
       const stored = existing.outline.stored!;
-      // A proposal still waiting for approval was overtaken by this outline.
-      await closeGate(root, 'outline');
       // A deleted OUTLINE.md is rendered again from the list.
       const count = await save(root, stored, existsSync(outlinePath) ? readFileSync(outlinePath, 'utf8') : undefined);
       process.stdout.write(`pensmith outline: OUTLINE.json already has ${count} section(s); not regenerating — pass --force to redo.\n`);
       return { ok: true, path: outlinePath, mode: 'existing', sections: count };
     }
 
-    const library = readLibrarySync(root);
-    const intake = readIntake(root);
-    const rules = rulesFor(library, intake, args['no-counter'] === true);
+    const rules = rulesFor(library, intake, flags['no-counter']);
 
     if (existing !== null) {
       if ((existing.ok && existing.source === 'md') || (!existing.ok && existing.problem === 'edited')) {
@@ -208,25 +259,6 @@ export const outlineCommand = defineCommand({
       }
       // missing, or a placeholder no model wrote: propose one.
     }
-
-    // A proposal kept for the user's approval: apply their answer, ask at a
-    // terminal, or show the same decision again, without a new model call.
-    // --force asks for a new proposal instead.
-    const pending = readGate(root, 'outline');
-    if (pending && args.force !== true) {
-      const parsed = ProposedOutlineSchema.safeParse((pending.payload as { proposal?: unknown } | null)?.proposal);
-      if (parsed.success && gateStillApplies(pending, outlineBinding(root))) {
-        const kept = numberOutline(parsed.data);
-        const keptMd = renderOutlineMd(kept);
-        if (!pending.answer && !canAskInTerminal()) return showPending(pending, keptMd);
-        const approved = pending.answer ? pending.answer.options[0] === APPROVE : await confirmAtTerminal(keptMd);
-        await closeGate(root, 'outline');
-        return decide(root, kept, approved, rules);
-      }
-      // A proposal for an intake that has changed since is not the user's to approve.
-      process.stderr.write('pensmith outline: the outline kept for approval was written for an earlier intake; proposing a new one.\n');
-    }
-    if (pending) await closeGate(root, 'outline');
 
     // The outline's sources are checked against LIBRARY.json; without it no
     // outline could pass, so nothing is asked (or billed).
@@ -284,20 +316,30 @@ export const outlineCommand = defineCommand({
 
     // The approval gate (default-on): --yolo approves; a person at a terminal
     // is asked; without one the checked proposal is kept for their answer.
-    if (args.yolo === true) return decide(root, outline, true, rules);
+    const hadOutline = readOutline(root).ok;
+    if (args.yolo === true) return decide(root, outline, true, rules, hadOutline);
     const md = renderOutlineMd(outline);
-    if (!canAskInTerminal()) return awaitApproval(root, answer.value, md, outline.sections.length);
-    return decide(root, outline, await confirmAtTerminal(md), rules);
+    if (!canAskInTerminal()) return awaitApproval(root, flags, answer.value, md, outline.sections.length);
+    return decide(root, outline, await confirmAtTerminal(md), rules, hadOutline);
   },
 });
 
 /**
  * Write the approved outline, checked again against the library and intake
- * as they are now; a rejected one writes nothing and exits 2.
+ * as they are now; a rejected one writes nothing and exits 2. `replacing`
+ * says whether a usable outline is already there (it is kept on a rejection).
  */
-async function decide(root: string, outline: Outline, approved: boolean, rules: OutlineRules & { problems: string[] }): Promise<Record<string, unknown>> {
+async function decide(
+  root: string,
+  outline: Outline,
+  approved: boolean,
+  rules: OutlineRules & { problems: string[] },
+  replacing: boolean,
+): Promise<Record<string, unknown>> {
   if (!approved) {
-    process.stdout.write('pensmith outline: outline rejected — no OUTLINE.md written. Run `pensmith outline` for a new proposal.\n');
+    process.stdout.write(replacing
+      ? 'pensmith outline: outline rejected — the existing outline is kept. Run `pensmith outline --force` for a new proposal.\n'
+      : 'pensmith outline: outline rejected — no OUTLINE.md written. Run `pensmith outline` for a new proposal.\n');
     process.exitCode = EXIT_REFUSED;
     return { ok: false, mode: 'rejected' };
   }

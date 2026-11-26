@@ -83,6 +83,7 @@ import {
   verificationStaleness,
 } from './verify/verification-record.js';
 import { bibFileSha256, manifestBibEntries, writeCompileManifest, type ManifestSection } from './compile-manifest.js';
+import { writeCompileRefusal, type RefusedSection } from './compile-refusal.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -378,6 +379,8 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
     const loaded: LoadedSection[] = [];
     const refuseReasons: string[] = [];
+    // Verified sections whose re-check failed: the router sends each to verify.
+    const recheckRefused: RefusedSection[] = [];
     const stalenessResolved: StalenessEntry[] = [];
     const manifestSections: ManifestSection[] = [];
 
@@ -437,15 +440,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         const result = await reVerify({ n: os.n, slug: os.slug, draft: sec.draftBytes.toString('utf8') });
         for (const w of result.warnings ?? []) warn(`WARN: ${w}`);
         if (!result.passed) {
-          if (result.reasons && result.reasons.length > 0) {
-            refuseReasons.push(...result.reasons);
-          } else {
-            const named =
-              result.failingCitekeys.length > 0
-                ? result.failingCitekeys.map((ck) => `[@${ck}]`).join(', ')
-                : '(stale, re-verify failed)';
-            refuseReasons.push(`${where}: staleness re-verify FAILED — ${named}`);
-          }
+          const reasons = result.reasons && result.reasons.length > 0
+            ? result.reasons
+            : [`${where}: staleness re-verify FAILED — ${
+              result.failingCitekeys.length > 0 ? result.failingCitekeys.map((ck) => `[@${ck}]`).join(', ') : '(stale, re-verify failed)'}`];
+          refuseReasons.push(...reasons);
+          recheckRefused.push({ n: os.n, slug: os.slug, draft_sha256: sha256(sec.draftBytes), verification_sha256: read.sha256, reasons });
           continue;
         }
         stalenessResolved.push({
@@ -464,6 +464,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     }
 
     // Refuse: no DRAFT.md is written, so a bad citation never escapes.
+    await writeCompileRefusal(opts.paperRoot, recheckRefused);
     if (refuseReasons.length > 0) {
       for (const r of refuseReasons) warn(`REFUSE: ${r}`);
       return refuse(opts.paperRoot, warn, {

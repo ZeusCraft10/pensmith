@@ -26,7 +26,7 @@ import { resolveSectionSlug } from '../lib/section-slug.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { readSectionState } from '../lib/router.js';
 import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
-import { pendingDecision } from '../lib/gates.js';
+import { pendingDecision, readGate } from '../lib/gates.js';
 import { frontmatterProblem, parseFrontmatter } from '../lib/frontmatter.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
@@ -54,6 +54,23 @@ function upstreamPlans(root: string, outline: CheckedOutline, entry: SectionEntr
     }
   }
   return escapeTemplateTokens(JSON.stringify(out, null, 2));
+}
+
+/** Throws MissingApiKeyError when no model key is configured (PENSMITH_NO_LLM needs none). */
+async function requireKey(): Promise<void> {
+  if (process.env['PENSMITH_NO_LLM'] === '1') return;
+  await getProviderApiKey(await resolveProviderId());
+}
+
+/** Say there is no model key, and stop (exit 1). */
+function noKey(): { ok: false; mode: 'no-key-configured' } {
+  process.stderr.write(
+    `pensmith plan: ERROR — no LLM key configured.\n` +
+    `Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n` +
+    `Run inside Claude Code (Tier 1) for key-free operation.\n`,
+  );
+  process.exitCode = 1;
+  return { ok: false, mode: 'no-key-configured' };
 }
 
 export const planCommand = defineCommand({
@@ -101,36 +118,40 @@ export const planCommand = defineCommand({
     const outline = lastCheckedOutline(root);
     const slug = resolveSectionSlug(root, n, args.slug, outline);
 
-    // Without a key there is no planner to ask, and plan says so.
-    if (process.env['PENSMITH_NO_LLM'] !== '1') {
-      try {
-        await getProviderApiKey(await resolveProviderId());
-      } catch (e) {
-        if (e instanceof MissingApiKeyError) {
-          process.stderr.write(
-            `pensmith plan: ERROR — no LLM key configured.\n` +
-            `Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n` +
-            `Run inside Claude Code (Tier 1) for key-free operation.\n`,
-          );
-          process.exitCode = 1;
-          return { ok: false, mode: 'no-key-configured' };
-        }
-        throw e;
-      }
-    }
-
     // `plan <N> --revise` (and `--research`) repair a citation through runRevise,
     // whose membership guard refuses a replacement outside assigned_sources.
+    // A change kept for the user's approval is shown or applied with no model
+    // call, so it needs no key; otherwise a missing key is said first. A kept
+    // change that no longer applies needs a new proposal, which asks for the
+    // key then.
     const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
     if (args.revise === true || research) {
-      const result = await runRevise({
-        paperRoot: root,
-        n,
-        slug,
-        yolo: args.yolo === true,
-        ...(research ? { research } : {}),
-        proposeSwap,
-      });
+      const keptChange = args.yolo !== true && readGate(root, 'revise', n) !== null;
+      if (!keptChange) {
+        try {
+          await requireKey();
+        } catch (e) {
+          if (e instanceof MissingApiKeyError) return noKey();
+          throw e;
+        }
+      }
+      let result: Awaited<ReturnType<typeof runRevise>>;
+      try {
+        result = await runRevise({
+          paperRoot: root,
+          n,
+          slug,
+          yolo: args.yolo === true,
+          ...(research ? { research } : {}),
+          proposeSwap: async (vars) => {
+            await requireKey();
+            return proposeSwap(vars);
+          },
+        });
+      } catch (e) {
+        if (e instanceof MissingApiKeyError) return noKey();
+        throw e;
+      }
       if (result.pending) {
         // No terminal to ask in: the checked change waits for the user's answer.
         process.stderr.write(`pensmith plan --revise: ${result.message}\n`);
@@ -143,9 +164,19 @@ export const planCommand = defineCommand({
         return { ok: false, mode: 'pending', ref: result.pending.ref };
       }
       process.stdout.write(`pensmith plan --revise: ${result.message}\n`);
-      // A change the user rejected is a refused step.
-      if (result.rejected) process.exitCode = EXIT_REFUSED;
-      return { ok: !result.retryExhausted && result.rejected !== true, mode: 'revise', ...result };
+      // A change the user rejected, one that could not be applied, and a
+      // proposal that could not be used are refused steps: DRAFT.md is unchanged.
+      const refused = result.rejected === true || (!result.accepted && result.rejectedReason !== undefined);
+      if (refused) process.exitCode = EXIT_REFUSED;
+      return { ok: !result.retryExhausted && !refused, mode: 'revise', ...result };
+    }
+
+    // Without a key there is no planner to ask, and plan says so.
+    try {
+      await requireKey();
+    } catch (e) {
+      if (e instanceof MissingApiKeyError) return noKey();
+      throw e;
     }
 
     // A finished plan is the user's work, and so is a PLAN.md they broke while

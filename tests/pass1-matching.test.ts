@@ -210,6 +210,7 @@ test('Pass 1: an entry with no identifier at all is UNRESOLVED (blocking), not F
   const r = await verdict(entry('book', 'doe2009', { title: 'A Book Without Identifiers', author: 'Doe, Jane', year: '2009' }));
   assert.equal(r.verdict, 'UNRESOLVED', r.reason);
   assert.match(r.reason, /no DOI, arXiv ID, PMID or ISBN/);
+  assert.equal(r.retryable, undefined, 'verify again would only repeat it: nothing marks it as worth retrying');
 });
 
 test('Pass 1: an invented DOI next to a real arXiv ID is MIS-CITED: the reference list would print the fake DOI', async () => {

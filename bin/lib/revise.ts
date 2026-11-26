@@ -71,6 +71,7 @@ import { assignedSourcesFrom } from './plan-status.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 import { closeGate, gateStillApplies, openGate, readGate, type GateRecord } from './gates.js';
 import { sha256 } from './verify/verification-record.js';
+import { clearReviseOutcome, recordReviseOutcome } from './revise-outcome.js';
 
 // --yolo retry cap: 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
@@ -162,6 +163,8 @@ export interface ReviseResult {
   pendingChange?: string;
   /** True when the user rejected the change at the approval gate. */
   rejected?: boolean;
+  /** True when the answer was for a change proposed for an earlier DRAFT.md or VERIFICATION.md. */
+  answerStale?: boolean;
 }
 
 
@@ -585,6 +588,23 @@ async function writeRetryExhausted(verifPath: string, flagged: string): Promise<
 // ===========================================================================
 
 export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
+  const result = await reviseOnce(opts);
+  // How the revise ended, for the router: a change applied, or one waiting
+  // for approval, clears the last outcome; one that left DRAFT.md as it was
+  // is recorded, so bare `pensmith` does not send the section back to it.
+  if (result.accepted || result.pending) {
+    await clearReviseOutcome(opts.paperRoot, opts.n, opts.slug);
+  } else if (result.flagged_citekey && !result.answerStale && (result.rejected || result.rejectedReason !== undefined)) {
+    await recordReviseOutcome(opts.paperRoot, opts.n, opts.slug, {
+      citekey: result.flagged_citekey,
+      outcome: result.rejected ? 'rejected' : 'refused',
+      reason: result.rejected ? 'the user rejected the change proposed for it' : (result.rejectedReason ?? ''),
+    });
+  }
+  return result;
+}
+
+async function reviseOnce(opts: ReviseOptions): Promise<ReviseResult> {
   const draftPath = sectionDraft(opts.n, opts.slug, opts.paperRoot);
   const planPath = sectionPlan(opts.n, opts.slug, opts.paperRoot);
   const verifPath = sectionVerification(opts.n, opts.slug, opts.paperRoot);
@@ -708,7 +728,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     await closeGate(opts.paperRoot, 'revise', opts.n);
     if (kept.answer) {
       return {
-        ...base, accepted: false, rejected: true,
+        ...base, accepted: false, rejected: true, answerStale: true,
         message: `${base.message} The change answered was proposed for an earlier DRAFT.md or VERIFICATION.md of section ${opts.n}, so it was not applied; DRAFT.md unchanged. Run \`pensmith verify ${opts.n}\`, then revise again.`.trim(),
       };
     }
@@ -746,6 +766,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
       default: ['reject'],
       binding,
       payload: { proposal },
+      shown: { pending: 'revise-approval', extra: { section: opts.n, flagged_citekey: failing.citekey, change: gateNote(prepared.shown, prepared.context) } },
     });
     return { ...base, pending: record, pendingChange: gateNote(prepared.shown, prepared.context), message: `${base.message} The proposed ${proposal.action} for [@${failing.citekey}] waits for the user's approval.`.trim() };
   }
