@@ -253,6 +253,26 @@ test('estimate: a wave write counts only the sections that still need drafting; 
     assert.deepEqual(compile.rows, []);
   });
 
+test('estimate: a wave write prices only the sections it will draft, not stubs or placeholder plans', async () => {
+  // A wave write drafts planned and half-drafted sections; it refuses a stub,
+  // a section with no PLAN.md, and a placeholder PLAN.md when a model is
+  // configured. The projection priced a draft for each of them.
+  const projectEstimate = await loadProject();
+  const root = paperWith(['stub', 'planned', 'writing', 'planned', 'written']);
+  writeFileSync(sectionPlan(4, 's4', root), '---\nsection: 4\nslug: s4\nstatus: planned\nplaceholder: true\n---\n[PENSMITH_NO_LLM placeholder — plan]\n');
+  const extra = sectionPlan(6, 's6', root);
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outlineTable(Array.from({ length: 6 }, (_, i) => ({ n: i + 1, slug: `s${i + 1}`, title: `S${i + 1}` })), 'Outline'));
+  assert.equal(existsSync(extra), false, 'section 6 has no PLAN.md');
+  const saved = process.env['PENSMITH_NO_LLM'];
+  delete process.env['PENSMITH_NO_LLM'];
+  try {
+    const write = await projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'write' } as never);
+    assert.deepEqual(write.rows.map((r) => r.step), ['write §2', 'write §3']);
+  } finally {
+    if (saved !== undefined) process.env['PENSMITH_NO_LLM'] = saved;
+  }
+});
+
 test('estimate: steps are priced with the model runtime.json configures', async () => {
   const projectEstimate = await loadProject();
   const root = paperWith(['planned']);

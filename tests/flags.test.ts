@@ -135,12 +135,15 @@ test('ERGO-01/04: --dry-run / --show-prompts parse on explicit verbs (no "unknow
 // --yolo verb.
 // NOTE: the >50%-cap env knob (PENSMITH_COST_CAP_USD) is introduced by 07-02's
 // pre-flight; a large section count drives the projection over a small cap.
+// The sections are planned: a wave write drafts no stub, so stubs cost nothing.
 // ===========================================================================
 test('H1 / C2-H1: `write --yolo` (NON-GATE) over-cap WITHOUT --estimate exits non-zero (cap refusal)', () => {
     const root = freshRoot();
-    writeState(root, manySections(50));
+    const sections = manySections(50);
+    writeState(root, sections);
     writePaperFile(root, 'RESEARCH.md');
     writePaperFile(root, 'OUTLINE.md');
+    for (const s of sections) writeSectionPlan(root, s.n, s.slug, 'planned');
     const res = runCli(['write', '--yolo'], root, { PENSMITH_COST_CAP_USD: '0.0001' });
     assert.notEqual(res.status, 0,
       'H1/C2-H1: a NON-GATE verb under --yolo over the 50% cap must EXIT NON-ZERO (cap cannot be skipped)');

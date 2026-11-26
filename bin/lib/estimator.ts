@@ -97,8 +97,11 @@ function stepsAfter(d: RouterDecision | null): readonly Step[] {
   }
 }
 
-/** A section's PLAN.md status, and the steps the rest of the paper needs for it. */
-interface Section { n: number; status: string | null; steps: readonly Step[] }
+/**
+ * A section's PLAN.md status, the steps the rest of the paper needs for it,
+ * and whether a wave write drafts it (`waveDrafts`).
+ */
+interface Section { n: number; status: string | null; steps: readonly Step[]; waveDrafts: boolean }
 
 /** Which steps, with which labels, `verb` (null: the rest of the paper) would run. */
 function plannedSteps(
@@ -119,7 +122,7 @@ function plannedSteps(
       return section(verb);
     case 'write':
       if (n !== null) return section('write');
-      return sections.filter((s) => remainingSteps(s.status).includes('write')).map((s) => ['write', `write §${s.n}`]);
+      return sections.filter((s) => s.waveDrafts).map((s) => ['write', `write §${s.n}`]);
     case null:
     case 'next':
     case 'resume': {
@@ -173,7 +176,10 @@ export async function projectEstimate(args: {
           : needsRealPlan(r)
             ? SECTION_PIPELINE
             : remainingSteps(status);
-        return { n, status, steps };
+        // A wave write drafts a planned or half-drafted section, never a stub,
+        // a PLAN.md it cannot read, or a placeholder one.
+        const waveDrafts = sectionVerb(r.status) === 'write' && !needsRealPlan(r);
+        return { n, status, steps, waveDrafts };
       });
     const steps = plannedSteps(args.verb ?? null, args.n ?? null, sections, {
       researched: researchDone(pDir) === true,
