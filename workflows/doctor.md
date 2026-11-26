@@ -1,6 +1,6 @@
 # pensmith doctor
 
-> Run ecosystem self-check — 11 probes across runtime and ecosystem presence. Exits 1 on FAIL.
+> Run ecosystem self-check — 10 probes across runtime and ecosystem presence. Exits 1 on FAIL.
 
 <capability_check>
 required:
@@ -12,7 +12,7 @@ degrade_if_missing:
 
 ## Overview
 
-`pensmith doctor` calls `runDoctor()` (`bin/lib/doctor/probes.ts`) which runs 11 probes
+`pensmith doctor` calls `runDoctor()` (`bin/lib/doctor/probes.ts`) which runs 10 probes
 in parallel via `Promise.allSettled`. Results are rendered via `renderTty()` (human-first
 prose, grouped by severity) or `renderJson()` (the `--json` flag, schema v1 per D-18).
 Exits 0 if all probes are PASS/WARN/SKIP; exits 1 if any probe is FAIL (D-15).
@@ -28,18 +28,19 @@ Probe is READ-ONLY (D-19): no `.paper/` writes, no locks, no atomicWriteFile.
 
 ## Body
 
-1. **Run all 11 probes in parallel** via `runDoctor()` (`bin/lib/doctor/probes.ts`):
-   - **DOCT-01 — runtime:** `node-version` (requires >=20.10.0), `mcp-sdk-presence` (dist/mcp/server.js non-empty)
-   - **DOCT-02 — ecosystem:** `zotero-mcp-presence` (WARN if not in ~/.claude/.mcp.json), `pandoc-presence` (WARN if not on PATH), `humanizer-skill-presence` (WARN if missing at ~/.claude/skills/humanizer/)
+1. **Run all 10 probes in parallel** via `runDoctor()` (`bin/lib/doctor/probes.ts`):
+   - **DOCT-01 — runtime:** `node-version` (FAIL below Node 22.12, the package.json engines floor)
+   - **DOCT-02 — ecosystem:** `zotero-mcp-presence` (WARN if no Zotero MCP server is configured where Claude Code reads MCP servers, or ZOTERO_API_KEY is unset; research does not read from Zotero yet), `pandoc-presence` (WARN if not on PATH), `humanizer-skill-presence` (WARN if no humanizer skill is installed under ~/.claude/skills/, the project's .claude/skills/ or an installed plugin)
    - **DOCT-03 — config:** `contact-email-presence` (WARN if PENSMITH_CONTACT_EMAIL unset)
    - **DOCT-04 — env:** `sync-folder-detection` (WARN if .paper/ inside OneDrive/iCloud/Dropbox/Google Drive)
    - **DOCT-05 — wiring:** `intake-outline-verify-wiring` (FAIL if any of the 6 Phase-3 verbs are unwired)
    - **DOCT-07 — runtime config:** `runtime-config-presence` (WARN if no provider API key set)
-   - **D-03(d) — cassette:** `build-artifact-resolves` (dist/bin/pensmith.js + dist/mcp/server.js non-empty), `http-crossref-ping` (cassette-wiring smoke)
+   - **install:** `build-artifact-resolves` (FAIL unless a CLI entry, `dist/pensmith.mjs` in the plugin or `dist/bin/pensmith.js` in a source build, runs `--version`, and the prompt templates, CSL styles and reference copy it reads are present)
+   - **D-03(d) — cassette:** `http-crossref-ping` (cassette-wiring smoke; SKIP outside the repo)
 
 2. **Render output** based on the `--json` flag:
    - Default (TTY): `renderTty(results)` — human-first prose, severity emoji, probe summary + fix strings sourced from `references/doctor-output.md`.
-   - `--json`: `renderJson(results)` — schema v1 JSON (D-18 shape: `{ schemaVersion:1, probes:{}, summary:{} }`). Tier-contract test (02-07 Case A) compares this output to the Tier-1 `paper://capabilities` resource.
+   - `--json`: `renderJson(results)` — schema v1 JSON (D-18 shape: `{ schemaVersion:1, probes:{}, summary:{} }`).
 
 3. **Exit**: 0 if no FAIL; `process.exit(1)` if any probe severity is FAIL (D-15). WARN and SKIP do not block exit 0.
 
