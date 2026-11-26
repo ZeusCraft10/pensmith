@@ -23,7 +23,7 @@ import {
   type OutlineSection,
   type StoredOutline,
 } from './outline-read.js';
-import { paperDir, paperOutlineFile, parseSectionDirName, sectionPlan, SLUG_RE } from './paths.js';
+import { paperDir, paperOutlineFile, parseSectionDirName, sectionDirName, sectionPlan, SLUG_RE } from './paths.js';
 import { initState, StateAlreadyExistsError, updateState } from './state.js';
 
 /** A section as the outline author proposes it (structured output). */
@@ -142,13 +142,13 @@ export async function writeOutline(root: string, outline: Outline, opts: { keepM
     if (!existsSync(planPath) || planStatus(planPath) === 'stub') await atomicWriteFile(planPath, stubPlan(s));
   }
 
-  const named = new Set(outline.sections.map((s) => `${String(s.n).padStart(2, '0')}-${s.slug}`));
+  const named = new Set(outline.sections.map((s) => sectionDirName(s.n, s.slug)));
   const warnings: string[] = [];
   let dirs: string[] = [];
   try {
     dirs = readdirSync(path.join(paperDir(root), 'sections'));
   } catch {
-    dirs = [];
+    // no sections folder
   }
   for (const d of dirs.sort()) {
     if (named.has(d) || !parseSectionDirName(d)) continue;

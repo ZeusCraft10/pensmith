@@ -2,9 +2,9 @@
 //
 // The section planner returns the plan's content as JSON to a schema
 // (structured output): the sources the section cites, its claims, a brief for
-// the drafter and a voice line. Code checks it (every source is one
-// LIBRARY.json holds, every claim's sources are among them, the brief is not
-// empty), sends a failing answer back once with the problems, and refuses
+// the drafter and a voice line. Code checks it (bin/lib/plan-store.ts: every
+// source is one LIBRARY.json holds, every claim's sources are among them, the
+// brief is not empty), sends a failing answer back once with the problems, and refuses
 // (exit 2, nothing written) if it still fails. Code then writes PLAN.md: its
 // frontmatter (section, slug, title and depends_on from the outline, status
 // 'planned') and a body made of the brief, the voice line and the claims.
@@ -15,66 +15,34 @@
 
 import { defineCommand } from 'citty';
 import { readFileSync } from 'node:fs';
-import { z } from 'zod/v4';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionPlan } from '../lib/paths.js';
 import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
-import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
+import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { readSectionState } from '../lib/router.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
-import { frontmatterProblem, parseFrontmatter, serializeFrontmatter } from '../lib/frontmatter.js';
+import { frontmatterProblem, parseFrontmatter } from '../lib/frontmatter.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
 import { readLibrarySync } from '../lib/library.js';
 import { libraryCatalogJson } from '../lib/library-catalog.js';
 import { lastCheckedOutline } from '../lib/outline-read.js';
-import { checkModelJson, modelJsonSchema } from '../lib/schemas/model-json.js';
-import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
+import { planProblems, renderPlan, SectionPlanSchema, type SectionEntry } from '../lib/plan-store.js';
+import { completeChecked } from '../lib/structured-call.js';
 
-/** What the section planner returns. */
-export const SectionPlanSchema = z.object({
-  assigned_sources: z.array(z.string()),
-  claims: z.array(z.object({ claim: z.string(), sources: z.array(z.string()) }).strict()),
-  brief: z.string(),
-  voice: z.string(),
-}).strict();
-export type SectionPlan = z.infer<typeof SectionPlanSchema>;
-
-/** Every reason `plan` cannot be the section's plan; empty when it can. */
-export function planProblems(plan: SectionPlan, libraryKeys: ReadonlySet<string>): string[] {
-  const problems: string[] = [];
-  const unknown = plan.assigned_sources.filter((k) => !libraryKeys.has(k));
-  if (unknown.length > 0) problems.push(`assigned_sources names ${unknown.join(', ')}, which LIBRARY.json does not hold`);
-  const assigned = new Set(plan.assigned_sources);
-  for (const c of plan.claims) {
-    const outside = c.sources.filter((k) => !assigned.has(k));
-    if (outside.length > 0) problems.push(`the claim "${c.claim.slice(0, 60)}" cites ${outside.join(', ')}, which is not in assigned_sources`);
-  }
-  if (plan.brief.trim().split(/\s+/).filter(Boolean).length < 20) problems.push('the brief is shorter than 20 words');
-  return problems;
-}
-
-interface SectionEntry {
-  n: number;
-  slug: string;
-  title: string;
-  depends_on: string[];
-  purpose: string;
-  word_target: number | null;
-  assigned_sources: string[];
-}
+/** The list `plan` reads the section from: the outline, as last checked. */
+type CheckedOutline = ReturnType<typeof lastCheckedOutline>;
 
 /**
  * Section `n` as the outline has it (as last checked, while a hand edit of
  * OUTLINE.md waits), or the bare minimum when there is no outline entry.
  */
-function sectionEntry(root: string, n: number, slug: string): SectionEntry {
-  const outline = lastCheckedOutline(root);
+function sectionEntry(outline: CheckedOutline, n: number, slug: string): SectionEntry {
   const s = outline?.sections.find((x) => x.n === n && x.slug === slug);
   const stored = outline?.stored?.sections.find((x) => x.n === n);
   return {
@@ -89,8 +57,7 @@ function sectionEntry(root: string, n: number, slug: string): SectionEntry {
 }
 
 /** The briefs of the planned sections `entry` depends on, as data for the prompt. */
-function upstreamPlans(root: string, entry: SectionEntry): string {
-  const outline = lastCheckedOutline(root);
+function upstreamPlans(root: string, outline: CheckedOutline, entry: SectionEntry): string {
   if (!outline) return '[]';
   const out: Array<{ slug: string; brief: string }> = [];
   for (const dep of entry.depends_on) {
@@ -104,36 +71,6 @@ function upstreamPlans(root: string, entry: SectionEntry): string {
     }
   }
   return escapeTemplateTokens(JSON.stringify(out, null, 2));
-}
-
-/** PLAN.md: frontmatter written by code, the planner's content as the body. */
-export function renderPlan(entry: SectionEntry, plan: SectionPlan | null, placeholderText?: string): string {
-  const fm: Record<string, unknown> = {
-    section: entry.n,
-    slug: entry.slug,
-    title: entry.title,
-    depends_on: entry.depends_on,
-    assigned_sources: plan ? plan.assigned_sources : entry.assigned_sources,
-    status: 'planned',
-    verified_against_draft_hash: null,
-  };
-  if (placeholderText !== undefined) fm['placeholder'] = true;
-  PlanFrontmatterSchema.parse(fm);
-  if (!plan) return `${serializeFrontmatter(fm)}\n${placeholderText ?? ''}\n`;
-  const claims = plan.claims.map((c) => `- ${c.claim} (sources: ${c.sources.join(', ') || 'none'})`);
-  return [
-    serializeFrontmatter(fm),
-    '## Brief',
-    '',
-    plan.brief.trim(),
-    '',
-    `Voice: ${plan.voice.trim() || 'formal academic tone'}`,
-    '',
-    '## Claims',
-    '',
-    ...(claims.length > 0 ? claims : ['(none)']),
-    '',
-  ].join('\n');
 }
 
 export const planCommand = defineCommand({
@@ -178,7 +115,8 @@ export const planCommand = defineCommand({
     if (!Number.isInteger(n) || n < 1) {
       throw new Error(`pensmith plan: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
     }
-    const slug = resolveSectionSlug(root, n, args.slug);
+    const outline = lastCheckedOutline(root);
+    const slug = resolveSectionSlug(root, n, args.slug, outline);
 
     // Without a key there is no planner to ask, and plan says so.
     if (process.env['PENSMITH_NO_LLM'] !== '1') {
@@ -252,7 +190,7 @@ export const planCommand = defineCommand({
       return { ok: false, mode: 'no-library' };
     }
     const libraryKeys = new Set(library.entries.map((e) => e.id));
-    const entry = sectionEntry(root, n, slug);
+    const entry = sectionEntry(outline, n, slug);
     const intake = readIntake(root);
     const system = interpolate(loadPrompt('section-planner'), {
       section: escapeTemplateTokens(JSON.stringify({
@@ -261,49 +199,34 @@ export const planCommand = defineCommand({
       })),
       topic: escapeTemplateTokens(intake?.topic || '(no topic recorded)'),
       discipline: escapeTemplateTokens(intake?.discipline ?? 'other'),
-      upstreamPlans: upstreamPlans(root, entry),
-      candidateSources: libraryCatalogJson(root),
+      upstreamPlans: upstreamPlans(root, outline, entry),
+      candidateSources: libraryCatalogJson(library),
     });
-    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      { role: 'user', content: `Plan section ${entry.n}, "${entry.title}".` },
-    ];
-
-    let plan: SectionPlan | null = null;
-    let problems: string[] = [];
-    for (let attempt = 0; attempt < 2 && plan === null; attempt += 1) {
-      const result = await complete({
-        system,
-        messages,
-        role: 'plan',
-        scope: 'section',
-        scopeId: `plan-${n}`,
-        jsonSchema: modelJsonSchema(SectionPlanSchema),
-      });
-      if (result.placeholder) {
-        // No model ran (PENSMITH_NO_LLM): code still writes the frontmatter; the
-        // body is the flagged placeholder, which verify, compile and done refuse.
-        await atomicWriteFile(targetPath, renderPlan(entry, null, result.text));
-        process.stdout.write(`pensmith plan: wrote placeholder PLAN.md to ${targetPath}\n`);
-        return { ok: true, path: targetPath, mode: 'placeholder' };
-      }
-      const checked = checkModelJson(SectionPlanSchema, result.json);
-      problems = checked.ok ? planProblems(checked.value, libraryKeys) : checked.problems;
-      if (checked.ok && problems.length === 0) {
-        plan = checked.value;
-        break;
-      }
-      messages.push(
-        { role: 'assistant', content: result.text },
-        { role: 'user', content: `This plan cannot be used:\n${problems.map((p) => `- ${p}`).join('\n')}\nReturn the corrected plan.` },
-      );
+    const answer = await completeChecked({
+      system,
+      messages: [{ role: 'user', content: `Plan section ${entry.n}, "${entry.title}".` }],
+      role: 'plan',
+      scope: 'section',
+      scopeId: `plan-${n}`,
+      schema: SectionPlanSchema,
+      problemsOf: (plan) => planProblems(plan, libraryKeys),
+      noun: 'plan',
+    });
+    if ('placeholder' in answer) {
+      // No model ran (PENSMITH_NO_LLM): code still writes the frontmatter; the
+      // body is the flagged placeholder, which verify, compile and done refuse.
+      await atomicWriteFile(targetPath, renderPlan(entry, null, answer.placeholder.text));
+      process.stdout.write(`pensmith plan: wrote placeholder PLAN.md to ${targetPath}\n`);
+      return { ok: true, path: targetPath, mode: 'placeholder' };
     }
-    if (plan === null) {
+    if ('problems' in answer) {
+      const { problems } = answer;
       process.stderr.write(`pensmith plan: the plan for section ${n} (${slug}) cannot be used; nothing was written:\n${problems.map((p) => `  - ${p}\n`).join('')}`);
       process.exitCode = EXIT_REFUSED;
       return { ok: false, mode: 'refused', problems };
     }
 
-    await atomicWriteFile(targetPath, renderPlan(entry, plan));
+    await atomicWriteFile(targetPath, renderPlan(entry, answer.value));
     process.stdout.write(`pensmith plan: wrote PLAN.md to ${targetPath}\n`);
     return { ok: true, path: targetPath };
   },

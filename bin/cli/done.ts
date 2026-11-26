@@ -41,7 +41,7 @@ import {
   runHumanizer,
   type ExportFormat,
 } from '../lib/exporter.js';
-import { paperDir } from '../lib/paths.js';
+import { paperDir, sectionDirName } from '../lib/paths.js';
 import { parseBibByCitekey } from '../lib/citations.js';
 import { resolveCitationStyle } from '../lib/citation-style.js';
 import { isPandocPresent } from '../lib/ecosystem-presence.js';
@@ -361,7 +361,7 @@ export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
   const outline = readOutline(paperRoot);
   let entries: string[];
   if (outline.ok) {
-    entries = outline.outline.sections.map((s) => `${String(s.n).padStart(2, '0')}-${s.slug}`);
+    entries = outline.outline.sections.map((s) => sectionDirName(s.n, s.slug));
   } else {
     try {
       entries = readdirSync(sectionsDir);

@@ -25,16 +25,21 @@ const PENSMITH_CONFIG_KEYS = new Set([
   'schema_version', 'project', 'sources', 'verification', 'humanizer', 'style', 'runtime', 'budget', 'network',
 ]);
 
-/** True for the JSON pensmith wrote as STATE.json. */
-function isPensmithState(text: string): boolean {
+/**
+ * For the JSON pensmith wrote as STATE.json (a $schemaVersion, a paperId and
+ * a createdAt), the paper's identity: its paperId and createdAt. Null for any
+ * other text.
+ */
+function pensmithStateId(text: string): string | null {
   try {
     const v = JSON.parse(text) as Record<string, unknown> | null;
-    return (
-      v !== null && typeof v === 'object' && !Array.isArray(v) &&
-      typeof v['$schemaVersion'] === 'number' && typeof v['paperId'] === 'string' && typeof v['createdAt'] === 'string'
-    );
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return null;
+    const { $schemaVersion, paperId, createdAt } = v;
+    return typeof $schemaVersion === 'number' && typeof paperId === 'string' && typeof createdAt === 'string'
+      ? `${paperId} ${createdAt}`
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -84,32 +89,37 @@ export function hasLegacyLayout(root: string): boolean {
   const legacy = legacyStateFile(root);
   if (!existsSync(legacy) || existsSync(paperStateFile(root))) return false;
   try {
-    return isPensmithState(readFileSync(legacy, 'utf8'));
+    return pensmithStateId(readFileSync(legacy, 'utf8')) !== null;
   } catch {
     return false;
   }
 }
 
-/** The paperId and createdAt of a pensmith STATE.json, or null. */
+/** The paperId and createdAt of the pensmith STATE.json at `file`, or null. */
 function stateIdentity(file: string): string | null {
   try {
-    const text = readFileSync(file, 'utf8');
-    if (!isPensmithState(text)) return null;
-    const v = JSON.parse(text) as { paperId: string; createdAt: string };
-    return `${v.paperId} ${v.createdAt}`;
+    return pensmithStateId(readFileSync(file, 'utf8'));
   } catch {
     return null;
   }
 }
 
+/** True when the STATE.json at `legacy` is the same paper (paperId and createdAt) as the one at `target`. */
+function sameState(legacy: string, target: string): boolean {
+  const left = stateIdentity(legacy);
+  return left !== null && left === stateIdentity(target);
+}
+
 /**
  * Remove a root STATE.json that a move stopped before its last step left
- * behind: the same paper (paperId and createdAt) as .paper/STATE.json.
+ * behind: the same paper as .paper/STATE.json. Checked first without the
+ * lock, since pensmith no longer writes the root file: a root STATE.json that
+ * is someone else's (a Hugo site, a Python package) costs no lock.
  */
 async function removeLeftoverState(legacy: string, target: string): Promise<void> {
+  if (!sameState(legacy, target)) return;
   await withLock(target, async () => {
-    const left = stateIdentity(legacy);
-    if (left !== null && left === stateIdentity(target)) await removePath(legacy);
+    if (sameState(legacy, target)) await removePath(legacy);
   });
 }
 
@@ -130,14 +140,23 @@ export async function migrateLegacyLayout(root: string): Promise<boolean> {
     await removeLeftoverState(legacy, target);
     return false;
   }
+  // Someone else's root STATE.json is left alone, without taking the lock.
+  let text: string;
+  try {
+    text = readFileSync(legacy, 'utf8');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false; // another process moved it
+    throw e;
+  }
+  if (pensmithStateId(text) === null) return false;
   let moved = false;
   await withLock(target, async () => {
     if (!existsSync(legacy) || existsSync(target)) return; // another process moved it
-    const text = readFileSync(legacy, 'utf8');
-    if (!isPensmithState(text)) return;
+    const current = readFileSync(legacy, 'utf8');
+    if (pensmithStateId(current) === null) return;
     await moveLegacyConfig(root);
     await ensurePaperGitignore(root);
-    await atomicWriteFile(target, text);
+    await atomicWriteFile(target, current);
     await removePath(legacy);
     moved = true;
   });

@@ -20,6 +20,7 @@ import { findCitations, findRawCitations, findUnparseableCitations } from './cit
 import { parseOutline, type ParsedOutline, type ParsedOutlineSection } from './outline-parse.js';
 import { paperDir, paperOutlineFile, SLUG_RE } from './paths.js';
 import { isPlaceholderText } from './placeholder.js';
+import { kahnOrder } from './scheduler.js';
 
 const StoredSectionSchema = z.object({
   n: z.number().int().min(1).max(99),
@@ -44,7 +45,7 @@ export const StoredOutlineSchema = z.object({
 export type StoredOutline = z.infer<typeof StoredOutlineSchema>;
 export type OutlineSection = z.infer<typeof StoredSectionSchema>;
 
-export function sha256(text: string | Buffer): string {
+function sha256(text: string | Buffer): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
@@ -67,25 +68,6 @@ export interface CheckedSection {
   counterargument?: boolean;
 }
 
-/** The sections of `sections` left in a dependency cycle (Kahn's algorithm). */
-function cycleMembers(sections: readonly CheckedSection[]): string[] {
-  const known = new Set(sections.map((s) => s.slug));
-  const indegree = new Map(sections.map((s) => [s.slug, s.depends_on.filter((d) => known.has(d)).length]));
-  const dependents = new Map<string, string[]>();
-  for (const s of sections) for (const d of s.depends_on) if (known.has(d)) dependents.set(d, [...(dependents.get(d) ?? []), s.slug]);
-  const queue = [...indegree].filter(([, d]) => d === 0).map(([s]) => s);
-  while (queue.length > 0) {
-    const s = queue.shift()!;
-    for (const c of dependents.get(s) ?? []) {
-      const left = indegree.get(c)! - 1;
-      indegree.set(c, left);
-      if (left === 0) queue.push(c);
-    }
-    indegree.delete(s);
-  }
-  return [...indegree.keys()];
-}
-
 /** Why `sections` cannot be walked: bad or repeated slugs and numbers, dependencies that do not resolve or form a cycle. */
 export function structureProblems(sections: readonly CheckedSection[]): string[] {
   const problems: string[] = [];
@@ -106,7 +88,7 @@ export function structureProblems(sections: readonly CheckedSection[]): string[]
       else if (!slugs.has(d)) problems.push(`${at(s)} depends on ${d}, which is not a section of this outline`);
     }
   }
-  const cycle = cycleMembers(sections);
+  const cycle = kahnOrder(sections).residual;
   if (cycle.length > 0) problems.push(`the sections ${cycle.join(', ')} depend on each other in a cycle`);
   return problems;
 }

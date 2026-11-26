@@ -520,6 +520,12 @@ export function slugify(s: string): string {
 //   contract and create a second source of truth (T-3-12 hardening).
 // ---------------------------------------------------------------------------
 
+/** A section folder's name, `NN-slug`, for a STRICTLY-validated bare slug (no slugify pass). */
+export function sectionDirName(n: number, slug: string): string {
+  validateSlug(slug);
+  return `${pad2(n)}-${slug}`;
+}
+
 /**
  * Returns the bare section directory `<root>/.paper/sections/NN-slug` using a
  * STRICTLY-validated bare slug (no slugify pass). Distinct from the legacy
@@ -531,8 +537,7 @@ function strictSectionDir(
   slug: string,
   root: string = projectRoot(),
 ): string {
-  validateSlug(slug);
-  return path.join(paperDir(root), 'sections', `${pad2(n)}-${slug}`);
+  return path.join(paperDir(root), 'sections', sectionDirName(n, slug));
 }
 
 export function sectionPlan(

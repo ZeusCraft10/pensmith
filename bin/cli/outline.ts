@@ -21,16 +21,16 @@ import path from 'node:path';
 import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
 import { paperDir, paperOutlineFile } from '../lib/paths.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
+import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { artifactText } from '../lib/placeholder.js';
 import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
-import { readIntake } from '../lib/intake-record.js';
-import { readLibrarySync } from '../lib/library.js';
+import { readIntake, type IntakeRead } from '../lib/intake-record.js';
+import { readLibrarySync, type Library } from '../lib/library.js';
 import { libraryCatalogJson } from '../lib/library-catalog.js';
 import { parseOutline } from '../lib/outline-parse.js';
-import { checkModelJson, modelJsonSchema } from '../lib/schemas/model-json.js';
+import { completeChecked } from '../lib/structured-call.js';
 import { readOutline, type StoredOutline } from '../lib/outline-read.js';
 import {
   numberOutline,
@@ -68,13 +68,15 @@ async function runApprovalGate(outlineMd: string, yolo: boolean): Promise<boolea
 /** A heading that names an objection, for an outline whose table cannot mark the counterargument section. */
 const COUNTER_TITLE = /\b(counter[- ]?arguments?|objections?|rebuttals?|replies|reply|critiques?|limitations)\b/i;
 
-/** The checks an outline of this paper must pass. */
-function rulesFor(root: string, noCounter: boolean): OutlineRules & { problems: string[] } {
-  const library = readLibrarySync(root);
-  const intake = readIntake(root)?.intake ?? null;
+/** The checks an outline of this paper must pass, given its library (null: unreadable) and its intake. */
+function rulesFor(
+  library: Library | null,
+  intake: IntakeRead | null,
+  noCounter: boolean,
+): OutlineRules & { problems: string[] } {
   return {
     libraryKeys: library ? new Set(library.entries.map((e) => e.id)) : null,
-    counterargumentRequired: !noCounter && intake?.counterargument === 'required',
+    counterargumentRequired: !noCounter && intake?.intake?.counterargument === 'required',
     problems: library ? [] : ['.paper/LIBRARY.json cannot be read, so the assigned sources cannot be checked'],
   };
 }
@@ -139,26 +141,26 @@ export const outlineCommand = defineCommand({
   async run({ args }) {
     const root = process.cwd();
     const outlinePath = path.join(paperDir(root), 'OUTLINE.md');
-    const rules = rulesFor(root, args['no-counter'] === true);
 
     // An existing outline is kept, and a hand-written or edited one checked and taken in.
-    if (args.force !== true) {
-      const existing = readOutline(root);
-      if (existing.ok && existing.source === 'json') {
-        const stored = existing.outline.stored!;
-        // A deleted OUTLINE.md is rendered again from the list.
-        const count = await save(root, stored, existsSync(outlinePath) ? readFileSync(outlinePath, 'utf8') : undefined);
-        process.stdout.write(`pensmith outline: OUTLINE.json already has ${count} section(s); not regenerating — pass --force to redo.\n`);
-        return { ok: true, path: outlinePath, mode: 'existing', sections: count };
-      }
+    const existing = args.force === true ? null : readOutline(root);
+    if (existing?.ok && existing.source === 'json') {
+      const stored = existing.outline.stored!;
+      // A deleted OUTLINE.md is rendered again from the list.
+      const count = await save(root, stored, existsSync(outlinePath) ? readFileSync(outlinePath, 'utf8') : undefined);
+      process.stdout.write(`pensmith outline: OUTLINE.json already has ${count} section(s); not regenerating — pass --force to redo.\n`);
+      return { ok: true, path: outlinePath, mode: 'existing', sections: count };
+    }
+
+    const library = readLibrarySync(root);
+    const intake = readIntake(root);
+    const rules = rulesFor(library, intake, args['no-counter'] === true);
+
+    if (existing !== null) {
       if ((existing.ok && existing.source === 'md') || (!existing.ok && existing.problem === 'edited')) {
         const md = readFileSync(outlinePath, 'utf8');
-        let prior: StoredOutline | null = null;
-        try {
-          prior = JSON.parse(readFileSync(paperOutlineFile(root), 'utf8')) as StoredOutline;
-        } catch {
-          prior = null;
-        }
+        // The list as last checked, when there is one: an 'md' outline has no OUTLINE.json.
+        const prior: StoredOutline | null = existing.ok ? null : existing.stored;
         let outline: Outline;
         try {
           outline = outlineFromTable(md, prior);
@@ -204,43 +206,35 @@ export const outlineCommand = defineCommand({
       }
     }
 
-    const intake = readIntake(root);
     const length = intake?.intake?.length_words ?? 2000;
     const system = interpolate(loadPrompt('outline-author'), {
       topic: escapeTemplateTokens(intake?.topic || '(no topic recorded; run `pensmith new`)'),
       discipline: escapeTemplateTokens(intake?.discipline ?? 'other'),
       length: String(length),
       counterargument: rules.counterargumentRequired ? 'required' : 'optional',
-      candidateSources: libraryCatalogJson(root),
+      candidateSources: libraryCatalogJson(library),
     });
     const user = intake?.assignment || intake?.topic || 'Propose an outline for the paper.';
-    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [{ role: 'user', content: user }];
-    const schema = modelJsonSchema(ProposedOutlineSchema);
-
-    let outline: Outline | null = null;
-    let problems: string[] = [];
-    for (let attempt = 0; attempt < 2 && outline === null; attempt += 1) {
-      const result = await complete({ system, messages, role: 'outline', scope: 'task', scopeId: 'outline', jsonSchema: schema });
-      if (result.placeholder) {
-        // No model ran (PENSMITH_NO_LLM): the placeholder is flagged and is no
-        // section list, so OUTLINE.json is removed rather than left to disagree.
-        await atomicWriteFile(outlinePath, artifactText(result));
-        await removePath(paperOutlineFile(root));
-        process.stdout.write(`pensmith outline: wrote placeholder OUTLINE.md to ${outlinePath} (PENSMITH_NO_LLM: no model wrote an outline).\n`);
-        return { ok: true, path: outlinePath, mode: 'placeholder', sections: 0 };
-      }
-      const checked = checkModelJson(ProposedOutlineSchema, result.json);
-      problems = checked.ok ? outlineProblems(numberOutline(checked.value), rules) : checked.problems;
-      if (problems.length === 0 && checked.ok) {
-        outline = numberOutline(checked.value);
-        break;
-      }
-      messages.push(
-        { role: 'assistant', content: result.text },
-        { role: 'user', content: `This outline cannot be used:\n${problems.map((p) => `- ${p}`).join('\n')}\nReturn the corrected outline.` },
-      );
+    const answer = await completeChecked({
+      system,
+      messages: [{ role: 'user', content: user }],
+      role: 'outline',
+      scope: 'task',
+      scopeId: 'outline',
+      schema: ProposedOutlineSchema,
+      problemsOf: (proposed) => outlineProblems(numberOutline(proposed), rules),
+      noun: 'outline',
+    });
+    if ('placeholder' in answer) {
+      // No model ran (PENSMITH_NO_LLM): the placeholder is flagged and is no
+      // section list, so OUTLINE.json is removed rather than left to disagree.
+      await atomicWriteFile(outlinePath, artifactText(answer.placeholder));
+      await removePath(paperOutlineFile(root));
+      process.stdout.write(`pensmith outline: wrote placeholder OUTLINE.md to ${outlinePath} (PENSMITH_NO_LLM: no model wrote an outline).\n`);
+      return { ok: true, path: outlinePath, mode: 'placeholder', sections: 0 };
     }
-    if (outline === null) return refuse(problems, 'Nothing was written. Run `pensmith outline` again, or write .paper/OUTLINE.md yourself.');
+    if ('problems' in answer) return refuse(answer.problems, 'Nothing was written. Run `pensmith outline` again, or write .paper/OUTLINE.md yourself.');
+    const outline = numberOutline(answer.value);
 
     const md = renderOutlineMd(outline);
     let approved: boolean;

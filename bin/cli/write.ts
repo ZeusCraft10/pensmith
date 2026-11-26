@@ -326,9 +326,9 @@ export const writeCommand = defineCommand({
       const paperRoot = process.cwd();
 
       // A missing, placeholder, hand-edited or section-less outline is
-      // reported here with its reason, rather than as an error thrown by the
-      // wave orchestrator (write-orchestrator.ts reads the list with
-      // readOutlineOrThrow).
+      // reported here with its reason, and the list is handed to the wave
+      // orchestrator (write-orchestrator.ts), which reads it with
+      // readOutlineOrThrow only when it is not given one.
       const outline = readOutline(paperRoot);
       if (!outline.ok || outline.outline.sections.length === 0) {
         process.stderr.write(
@@ -348,6 +348,7 @@ export const writeCommand = defineCommand({
       let capRefusal: CostCapExceededError | null = null;
       const results = await runAllSections(paperRoot, {
         maxParallel,
+        outline: outline.outline,
         writeSection: async (node: SectionNode) => {
           if (capRefusal) {
             process.stderr.write(

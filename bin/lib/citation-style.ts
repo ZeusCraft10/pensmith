@@ -8,11 +8,8 @@
 //   3. the discipline's preset in templates/presets/disciplines.json.
 // A choice pensmith has no CSL file for is reported and the preset is used.
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { normalizeStyleName, resolveStyleName, SUPPORTED_STYLES } from './citations.js';
 import { readIntake } from './intake-record.js';
-import { paperDir } from './paths.js';
 import { readProjectConfig } from './project-config.js';
 
 export interface ResolvedStyle {
@@ -30,26 +27,15 @@ function configuredStyle(paperRoot: string): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
 
-/** A "Citation style: X" answer line in INTAKE.md. Question lines are ignored. */
-export function intakeStyleAnswer(intake: string): string | null {
-  const m = /^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?citation[ -]style(?:\*\*)?[ \t]*:(?:\*\*)?[ \t]*(.+?)[ \t]*$/im.exec(intake);
-  return m?.[1] ? m[1].replace(/\*\*/g, '').trim() : null;
-}
-
 /** The citation style for the paper at `paperRoot`. Never throws. */
 export function resolveCitationStyle(paperRoot: string): ResolvedStyle {
-  let intake = '';
-  try {
-    intake = readFileSync(path.join(paperDir(paperRoot), 'INTAKE.md'), 'utf8');
-  } catch {
-    // no intake yet
-  }
+  // The intake's answer: INTAKE.json's, or (for a paper an older intake
+  // wrote) INTAKE.md's "Citation style:" line (intake-record.ts readIntake).
   const stored = readIntake(paperRoot);
   const warnings: string[] = [];
   const choices: Array<[string | null, ResolvedStyle['source']]> = [
     [configuredStyle(paperRoot), 'config.toml'],
-    [stored?.intake?.citation_style ?? null, 'INTAKE.json'],
-    [intakeStyleAnswer(intake), 'INTAKE.md'],
+    [stored?.citation_style ?? null, stored?.intake ? 'INTAKE.json' : 'INTAKE.md'],
   ];
   for (const [choice, source] of choices) {
     if (!choice) continue;

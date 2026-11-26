@@ -44,8 +44,10 @@ export function resolveSectionSlug(
   paperRoot: string | undefined,
   n: number,
   explicitSlug?: unknown,
+  /** The list as lastCheckedOutline read it, for a caller that already has it. */
+  outline?: { sections: ReadonlyArray<{ n: number; slug: string }> } | null,
 ): string {
   if (typeof explicitSlug === 'string' && explicitSlug.length > 0) return explicitSlug;
-  const sections = lastCheckedOutline(paperRoot ?? process.cwd())?.sections ?? [];
+  const sections = (outline === undefined ? lastCheckedOutline(paperRoot ?? process.cwd()) : outline)?.sections ?? [];
   return sections.find((s) => s.n === n)?.slug ?? 'placeholder';
 }

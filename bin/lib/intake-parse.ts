@@ -6,8 +6,9 @@
 // model ran. It never throws; anything it cannot read falls back to safe
 // defaults (discipline 'other').
 //
-// Exported: parseIntakeMd(text) → { topic, discipline, assignment }, and
-// escapeTemplateTokens, the shared sanitizer for interpolated user text.
+// Exported: parseIntakeMd(text) → { topic, discipline, assignment,
+// citation_style }, intakeStyleAnswer, and escapeTemplateTokens, the shared
+// sanitizer for interpolated user text.
 
 /**
  * Structured output of parseIntakeMd. Feeds directly into the
@@ -20,6 +21,8 @@ export interface ParsedIntake {
   discipline: string;
   /** Full assignment context text for the {{assignment}} slot. */
   assignment: string;
+  /** The "Citation style: X" answer (intakeStyleAnswer), or null. */
+  citation_style: string | null;
 }
 
 // Canonical discipline slug map. Keys are patterns that appear in common
@@ -204,6 +207,12 @@ function extractDiscipline(text: string): string {
   return 'other';
 }
 
+/** A "Citation style: X" answer line in INTAKE.md. Question lines are ignored. */
+export function intakeStyleAnswer(intake: string): string | null {
+  const m = /^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?citation[ -]style(?:\*\*)?[ \t]*:(?:\*\*)?[ \t]*(.+?)[ \t]*$/im.exec(intake);
+  return m?.[1] ? m[1].replace(/\*\*/g, '').trim() : null;
+}
+
 /**
  * Parse the text content of INTAKE.md into structured research inputs.
  *
@@ -223,16 +232,17 @@ function extractDiscipline(text: string): string {
  */
 export function parseIntakeMd(text: string): ParsedIntake {
   if (!text || !text.trim()) {
-    return { topic: '', discipline: 'other', assignment: '' };
+    return { topic: '', discipline: 'other', assignment: '', citation_style: null };
   }
 
+  const citation_style = intakeStyleAnswer(text);
   try {
     const topic = extractTopic(text);
     const discipline = extractDiscipline(text);
     // assignment = full text — topic-disambiguator needs full context.
     const assignment = text.trim();
 
-    return { topic, discipline, assignment };
+    return { topic, discipline, assignment, citation_style };
   } catch {
     // Absolute safety net — should never be reached given the extractors
     // are themselves fully defensive, but belt-and-suspenders matters here
@@ -241,6 +251,7 @@ export function parseIntakeMd(text: string): ParsedIntake {
       topic: text.trim().slice(0, 80),
       discipline: 'other',
       assignment: text.trim(),
+      citation_style,
     };
   }
 }

@@ -24,7 +24,6 @@
 import { defineCommand } from 'citty';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { ask, PromptAbortedError, PromptTimeoutError, type AskOptions } from '../lib/prompts.js';
 import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
@@ -41,6 +40,7 @@ import { initState, loadState, StateAlreadyExistsError } from '../lib/state.js';
 import { registerPaperInGlobalLibrary } from '../lib/global-library.js';
 import { extractPdfText } from '../lib/pdf-text.js';
 import { checkModelJson, modelJsonSchema } from '../lib/schemas/model-json.js';
+import { sha256 } from '../lib/verify/verification-record.js';
 import {
   buildQuestions,
   checkAnswer,
@@ -267,10 +267,6 @@ function pendingFile(cwd: string): string {
   return path.join(paperDir(cwd), 'INTAKE.pending.json');
 }
 
-function sha256(s: string): string {
-  return createHash('sha256').update(s).digest('hex');
-}
-
 type Answers = Partial<Record<QuestionId, string | number>>;
 
 /**
@@ -354,6 +350,21 @@ function storableAnswers(answers: Answers, piiRedact: boolean): Answers {
   const out: Answers = { ...answers };
   for (const id of ['topic', 'audience'] as const) if (out[id] !== undefined) out[id] = redactPii(String(out[id]));
   return out;
+}
+
+/**
+ * The assignment as it may be stored: with PII redaction on, `raw` redacted
+ * (each redaction listed when `reportDiff`), its raw text written only to
+ * INTAKE.raw.local; else `raw`.
+ */
+async function keepAssignment(cwd: string, raw: string, piiRedact: boolean, reportDiff: boolean): Promise<string> {
+  if (!piiRedact) return raw;
+  const redacted = redactPii(raw);
+  if (reportDiff) {
+    for (const d of diffPii(raw, redacted)) process.stdout.write(`pensmith new: [${d.kind}] "${d.raw}" → ${d.tag}\n`);
+  }
+  await atomicWriteFile(path.join(paperDir(cwd), 'INTAKE.raw.local'), raw + '\n');
+  return redacted;
 }
 
 /** The clarifier's answer for `assignment`, or null when no model ran. */
@@ -509,16 +520,8 @@ export const intakeCommand = defineCommand({
     const piiRedact = resolvePiiRedact(cwd, settings.pii_redaction);
     let assignment: string;
     if (rawAssignment) {
-      assignment = rawAssignment;
-      if (piiRedact) {
-        // The raw text goes only to INTAKE.raw.local; everything else sees the redacted text.
-        const redacted = redactPii(rawAssignment);
-        for (const d of diffPii(rawAssignment, redacted)) {
-          process.stdout.write(`pensmith new: [${d.kind}] "${d.raw}" → ${d.tag}\n`);
-        }
-        await atomicWriteFile(path.join(paperDir(cwd), 'INTAKE.raw.local'), rawAssignment + '\n');
-        assignment = redacted;
-      }
+      // The raw text goes only to INTAKE.raw.local; everything else sees the redacted text.
+      assignment = await keepAssignment(cwd, rawAssignment, piiRedact, true);
     } else {
       const kept = readAssignment(cwd);
       if (kept) {
@@ -530,8 +533,7 @@ export const intakeCommand = defineCommand({
           suggested: '',
         });
         if (!typed?.trim()) return refuse('no assignment was given; nothing was saved.');
-        assignment = piiRedact ? redactPii(typed.trim()) : typed.trim();
-        if (piiRedact) await atomicWriteFile(path.join(paperDir(cwd), 'INTAKE.raw.local'), typed.trim() + '\n');
+        assignment = await keepAssignment(cwd, typed.trim(), piiRedact, false);
       } else {
         // The options and answers given so far are kept for the run that brings the assignment.
         const keptAnswers: Answers = { ...readPending(cwd, null)?.answers, ...storableAnswers(answers, piiRedact) };
@@ -572,9 +574,9 @@ export const intakeCommand = defineCommand({
       const kept = pending?.answers[id];
       if (answers[id] === undefined && kept !== undefined) answers[id] = kept;
     }
-    let missing = QUESTION_IDS.filter((id) => answers[id] === undefined);
-    let questions: Question[] = [];
+    const missing = QUESTION_IDS.filter((id) => answers[id] === undefined);
     if (missing.length > 0) {
+      let questions: Question[];
       if (pending?.questions) {
         questions = pending.questions;
       } else {
@@ -602,50 +604,48 @@ export const intakeCommand = defineCommand({
       questions = questions.map((q) =>
         q.id === 'counterargument' && !q.suggested && typeof discipline === 'string' ? { ...q, suggested: presetCounterargument(discipline) } : q,
       );
-    }
 
-    // ── 3. The answers: asked on a terminal, else reported and left pending. ──
-    const ask = _ask ?? (canAskInTerminal() ? askInTerminal : null);
-    if (missing.length > 0 && ask) {
-      for (const q of questions.filter((x) => missing.includes(x.id as QuestionId))) {
-        let why: string | undefined;
-        for (;;) {
-          const typed = await ask(q, why);
-          if (typed === null) return refuse('intake was cancelled; nothing more was saved.');
-          const c = checkAnswer(q.id as QuestionId, typed);
-          if (c.ok) {
-            answers[q.id as QuestionId] = c.value;
-            break;
-          }
-          why = c.why;
-        }
-      }
-      missing = [];
-    }
-    if (missing.length > 0) {
+      // ── 3. The answers: asked on a terminal, else reported and left pending. ──
       const waiting = questions.filter((q) => missing.includes(q.id as QuestionId));
-      const given = storableAnswers(answers, piiRedact);
-      await writePending(cwd, { assignment_sha256: sha256(assignment), questions, answers: given, settings });
-      const keptIds = QUESTION_IDS.filter((id) => given[id] !== undefined);
-      process.stderr.write(
-        `pensmith new: ${waiting.length} intake question(s) need your answers and there is no terminal to ask in. ` +
-          `The assignment${keptIds.length > 0 ? ' and the answers given so far are' : ' is'} kept until intake completes.\n`,
-      );
-      process.stdout.write(
-        `${JSON.stringify({
-          pending: 'intake-questions',
-          gate: 'intake',
-          summary: `Answer ${waiting.length} question(s) about the paper.`,
-          questions: waiting,
-          answered: keptIds,
-          how_to_answer:
-            "Ask the user each question, then run `pensmith new --answers '<JSON object of question id to answer>'` (or the path of a JSON file). " +
-            'Answers already given (answered) are kept; send only the questions listed, or resend one to change it. ' +
-            `The options given so far (${KEPT_OPTIONS}) are kept too.`,
-        })}\n`,
-      );
-      process.exitCode = EXIT_NEEDS_ANSWER;
-      return { ok: false, mode: 'pending', pending: waiting.map((q) => q.id), questions: waiting };
+      const ask = _ask ?? (canAskInTerminal() ? askInTerminal : null);
+      if (ask) {
+        for (const q of waiting) {
+          let why: string | undefined;
+          for (;;) {
+            const typed = await ask(q, why);
+            if (typed === null) return refuse('intake was cancelled; nothing more was saved.');
+            const c = checkAnswer(q.id as QuestionId, typed);
+            if (c.ok) {
+              answers[q.id as QuestionId] = c.value;
+              break;
+            }
+            why = c.why;
+          }
+        }
+      } else {
+        const given = storableAnswers(answers, piiRedact);
+        await writePending(cwd, { assignment_sha256: sha256(assignment), questions, answers: given, settings });
+        const keptIds = QUESTION_IDS.filter((id) => given[id] !== undefined);
+        process.stderr.write(
+          `pensmith new: ${waiting.length} intake question(s) need your answers and there is no terminal to ask in. ` +
+            `The assignment${keptIds.length > 0 ? ' and the answers given so far are' : ' is'} kept until intake completes.\n`,
+        );
+        process.stdout.write(
+          `${JSON.stringify({
+            pending: 'intake-questions',
+            gate: 'intake',
+            summary: `Answer ${waiting.length} question(s) about the paper.`,
+            questions: waiting,
+            answered: keptIds,
+            how_to_answer:
+              "Ask the user each question, then run `pensmith new --answers '<JSON object of question id to answer>'` (or the path of a JSON file). " +
+              'Answers already given (answered) are kept; send only the questions listed, or resend one to change it. ' +
+              `The options given so far (${KEPT_OPTIONS}) are kept too.`,
+          })}\n`,
+        );
+        process.exitCode = EXIT_NEEDS_ANSWER;
+        return { ok: false, mode: 'pending', pending: waiting.map((q) => q.id), questions: waiting };
+      }
     }
 
     // ── 4. Save. ──

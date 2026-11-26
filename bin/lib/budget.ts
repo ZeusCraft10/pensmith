@@ -175,11 +175,10 @@ function positive(v: unknown): number | null {
  */
 export function resolveCostCap(root: string = projectRoot()): CostCap {
   const table = readPaperConfig(root, 'budget');
-  const fromConfig = (key: string): number | null => positive(table[key]);
-  const warnAtUsd = fromConfig('warn_at_usd');
+  const warnAtUsd = positive(table['warn_at_usd']);
   const env = positive(process.env['PENSMITH_COST_CAP_USD']);
   if (env !== null) return { capUsd: env, warnAtUsd, source: 'PENSMITH_COST_CAP_USD' };
-  const configured = fromConfig('cost_cap_usd');
+  const configured = positive(table['cost_cap_usd']);
   if (configured !== null) return { capUsd: configured, warnAtUsd, source: 'config.toml' };
   return { capUsd: DEFAULT_COST_CAP_USD, warnAtUsd, source: 'default' };
 }

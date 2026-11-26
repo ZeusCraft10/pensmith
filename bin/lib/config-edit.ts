@@ -12,6 +12,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { atomicWriteFile } from './atomic-write.js';
+import { escapeRe } from './citation-grammar.js';
 
 type Scalar = string | number | boolean;
 
@@ -25,7 +26,7 @@ function keyLine(key: string, value: Scalar): string {
 function edit(text: string, table: string, values: Record<string, Scalar>): string {
   const lines = text.split(/\r?\n/);
   const nl = text.includes('\r\n') ? '\r\n' : '\n';
-  let start = lines.findIndex((l) => HEADER.exec(l)?.[1] === table);
+  const start = lines.findIndex((l) => HEADER.exec(l)?.[1] === table);
   if (start === -1) {
     const body = Object.entries(values).map(([k, v]) => keyLine(k, v));
     const sep = text === '' ? '' : text.endsWith('\n') ? nl : nl + nl;
@@ -34,7 +35,7 @@ function edit(text: string, table: string, values: Record<string, Scalar>): stri
   for (const [key, value] of Object.entries(values)) {
     let end = lines.findIndex((l, i) => i > start && ANY_HEADER.test(l));
     if (end === -1) end = lines.length;
-    const keyRe = new RegExp(`^\\s*${key.replace(/[-]/g, '\\-')}\\s*=`);
+    const keyRe = new RegExp(`^\\s*${escapeRe(key)}\\s*=`);
     const at = lines.findIndex((l, i) => i > start && i < end && keyRe.test(l));
     if (at !== -1) {
       lines[at] = keyLine(key, value);
@@ -44,7 +45,6 @@ function edit(text: string, table: string, values: Record<string, Scalar>): stri
     let last = end - 1;
     while (last > start && lines[last]!.trim() === '') last -= 1;
     lines.splice(last + 1, 0, keyLine(key, value));
-    start = lines.findIndex((l) => HEADER.exec(l)?.[1] === table);
   }
   return lines.join(nl);
 }

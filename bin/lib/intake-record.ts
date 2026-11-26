@@ -204,17 +204,26 @@ export function readAssignment(root: string): string | null {
   }
 }
 
+/** What readIntake gives. `citation_style` is the stored answer, or INTAKE.md's "Citation style:" line. */
+export interface IntakeRead {
+  topic: string;
+  discipline: string;
+  assignment: string;
+  citation_style: string | null;
+  intake: Intake | null;
+}
+
 /**
  * The paper's intake: INTAKE.json when it is there and valid, else (for a
  * paper intake wrote before INTAKE.json existed) what INTAKE.md says, else null.
  */
-export function readIntake(root: string): { topic: string; discipline: string; assignment: string; intake: Intake | null } | null {
+export function readIntake(root: string): IntakeRead | null {
   const assignment = readAssignment(root) ?? '';
   const file = paperIntakeFile(root);
   if (existsSync(file)) {
     try {
       const intake = IntakeSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
-      return { topic: intake.topic, discipline: intake.discipline, assignment, intake };
+      return { topic: intake.topic, discipline: intake.discipline, assignment, citation_style: intake.citation_style, intake };
     } catch {
       // fall through to INTAKE.md
     }
@@ -222,8 +231,16 @@ export function readIntake(root: string): { topic: string; discipline: string; a
   try {
     const md = readFileSync(path.join(paperDir(root), 'INTAKE.md'), 'utf8');
     const parsed = parseIntakeMd(md);
-    return { topic: parsed.topic, discipline: parsed.discipline, assignment: assignment || parsed.assignment, intake: null };
+    return {
+      topic: parsed.topic,
+      discipline: parsed.discipline,
+      assignment: assignment || parsed.assignment,
+      citation_style: parsed.citation_style,
+      intake: null,
+    };
   } catch {
-    return assignment ? { topic: parseIntakeMd(assignment).topic, discipline: 'other', assignment, intake: null } : null;
+    return assignment
+      ? { topic: parseIntakeMd(assignment).topic, discipline: 'other', assignment, citation_style: null, intake: null }
+      : null;
   }
 }

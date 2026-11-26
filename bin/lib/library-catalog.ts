@@ -6,7 +6,7 @@
 // so its template tokens are escaped before it goes into a prompt.
 
 import { escapeTemplateTokens } from './intake-parse.js';
-import { readLibrarySync } from './library.js';
+import type { Library } from './schemas/library.js';
 
 export interface CatalogEntry {
   citekey: string;
@@ -15,9 +15,9 @@ export interface CatalogEntry {
   first_author?: string;
 }
 
-/** The works in the library of the paper at `root`, in library order. */
-export function libraryCatalog(root: string): CatalogEntry[] {
-  return (readLibrarySync(root)?.entries ?? []).map((e) => {
+/** The works in `library` (as readLibrarySync read it), in library order. */
+export function libraryCatalog(library: Library | null): CatalogEntry[] {
+  return (library?.entries ?? []).map((e) => {
     const year = (e.issued as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
     const first = e.author?.[0] as { family?: string; literal?: string } | undefined;
     const author = first?.family ?? first?.literal;
@@ -31,6 +31,6 @@ export function libraryCatalog(root: string): CatalogEntry[] {
 }
 
 /** libraryCatalog as JSON, ready to interpolate into a prompt. */
-export function libraryCatalogJson(root: string): string {
-  return escapeTemplateTokens(JSON.stringify(libraryCatalog(root), null, 2));
+export function libraryCatalogJson(library: Library | null): string {
+  return escapeTemplateTokens(JSON.stringify(libraryCatalog(library), null, 2));
 }

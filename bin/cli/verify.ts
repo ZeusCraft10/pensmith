@@ -51,6 +51,7 @@ import { assignedSourcesFrom, updatePlanFrontmatter } from '../lib/plan-status.j
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
+import { sectionVerb } from '../lib/router.js';
 
 /** The section's assigned sources from PLAN.md, read once; none when PLAN.md is absent or unreadable. */
 function assignedSourcesOf(planPath: string): string[] {
@@ -112,7 +113,8 @@ export const verifyCommand = defineCommand({
       const record = buildVerificationRecord({ section: n, slug, status, checked: false, reason, draftBytes, assignedSources });
       await writeVerification(recordPath, verifPath, record);
       await updatePlanFrontmatter(planPath, (fm) => {
-        if (!(keepPreDraftStatus && (fm.status === 'stub' || fm.status === 'planned' || fm.status === 'writing'))) fm.status = status;
+        const next = typeof fm.status === 'string' ? sectionVerb(fm.status) : null;
+        if (!(keepPreDraftStatus && (next === 'plan' || next === 'write'))) fm.status = status;
         fm.verified_against_draft_hash = null;
       });
       process.exitCode = EXIT_REFUSED;

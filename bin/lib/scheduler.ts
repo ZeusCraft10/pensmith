@@ -12,7 +12,7 @@
 //     NOTHING. The caller supplies the parsed outline + a slug→PlanFrontmatter
 //     map; wave assignment is recomputed in memory each run.
 //   - Reuse the in-repo Semaphore (budget.ts) — NO new dependency (D-15).
-//   - Kahn assigns computed_wave = max(deps.computed_wave) + 1; roots = wave 1.
+//   - computed_wave = max(deps.computed_wave) + 1 in Kahn order; roots = wave 1.
 //   - A valid override (>= floor) PROMOTES computed_wave; an invalid override
 //     (< floor) THROWS (never silently bumps).
 //   - A dependency cycle is detected after Kahn and THROWS with the residual
@@ -29,6 +29,37 @@ import {
   type SectionNode,
   type WaveGraph,
 } from './schemas/wave-graph.js';
+
+/**
+ * Kahn's algorithm over `depends_on`, counting only dependencies on slugs in
+ * `nodes`: the slugs in topological order (roots first, in input order), and
+ * the residual — every slug left in, or downstream of, a cycle, in input order.
+ */
+export function kahnOrder(
+  nodes: ReadonlyArray<{ slug: string; depends_on: readonly string[] }>,
+): { order: string[]; residual: string[] } {
+  const known = new Set(nodes.map((s) => s.slug));
+  const indegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>(); // dep slug -> [slugs that depend on it]
+  for (const s of nodes) {
+    const realDeps = s.depends_on.filter((d) => known.has(d));
+    indegree.set(s.slug, realDeps.length);
+    for (const dep of realDeps) dependents.set(dep, [...(dependents.get(dep) ?? []), s.slug]);
+  }
+  const queue = [...indegree].filter(([, d]) => d === 0).map(([s]) => s);
+  const order: string[] = [];
+  while (queue.length > 0) {
+    const s = queue.shift()!;
+    order.push(s);
+    for (const c of dependents.get(s) ?? []) {
+      const left = indegree.get(c)! - 1;
+      indegree.set(c, left);
+      if (left === 0) queue.push(c);
+    }
+    indegree.delete(s);
+  }
+  return { order, residual: [...indegree.keys()] };
+}
 
 /**
  * Build the in-memory wave graph (COMP-06 `computeWaves()`): Kahn topological
@@ -64,53 +95,16 @@ export function buildWaveGraph(
     nodes.set(s.slug, node);
   }
 
-  // 2. Kahn's algorithm — assign computed_wave by topological depth.
-  //    in-degree counts only dependencies that are themselves materialized
-  //    nodes (a dep on a not-yet-planned section is treated as already
-  //    satisfied for THIS run).
-  const indegree = new Map<string, number>();
-  const dependents = new Map<string, string[]>(); // dep slug -> [slugs that depend on it]
-  for (const [slug, node] of nodes) {
-    const realDeps = node.depends_on.filter((d) => nodes.has(d));
-    indegree.set(slug, realDeps.length);
-    for (const dep of realDeps) {
-      const list = dependents.get(dep) ?? [];
-      list.push(slug);
-      dependents.set(dep, list);
-    }
-  }
-
-  // Process roots first; assign each node a wave = max(deps.computed_wave)+1.
-  let frontier: string[] = [...nodes.keys()].filter((s) => (indegree.get(s) ?? 0) === 0);
-  // Roots are wave 1 by definition.
-  for (const slug of frontier) nodes.get(slug)!.computed_wave = 1;
-
-  let processed = 0;
-  // Record the topological finalization order so override re-propagation (step 4)
-  // can walk dependencies-before-dependents (audit #33).
-  const topoOrder: string[] = [];
-  while (frontier.length > 0) {
-    const next: string[] = [];
-    for (const slug of frontier) {
-      processed += 1;
-      topoOrder.push(slug);
-      const node = nodes.get(slug)!;
-      for (const child of dependents.get(slug) ?? []) {
-        const childNode = nodes.get(child)!;
-        // child's wave is at least (this dep's wave + 1)
-        childNode.computed_wave = Math.max(childNode.computed_wave, node.computed_wave + 1);
-        const remaining = (indegree.get(child) ?? 0) - 1;
-        indegree.set(child, remaining);
-        if (remaining === 0) next.push(child);
-      }
-    }
-    frontier = next;
-  }
+  // 2. Kahn's algorithm: the topological order, so override re-propagation
+  //    (step 4) can walk dependencies-before-dependents (audit #33). In-degree
+  //    counts only dependencies that are themselves materialized nodes (a dep
+  //    on a not-yet-planned section is treated as already satisfied for THIS
+  //    run). Step 4 assigns every computed_wave.
+  const { order: topoOrder, residual } = kahnOrder([...nodes.values()]);
 
   // 3. Cycle detection (Research §P pitfall 1): any node not processed by Kahn
   //    is part of (or downstream of) a cycle.
-  if (processed !== nodes.size) {
-    const residual = [...nodes.keys()].filter((s) => (indegree.get(s) ?? 0) > 0);
+  if (residual.length > 0) {
     throw new Error(
       `scheduler: dependency cycle detected — unresolved sections: ${residual.join(', ')}`,
     );

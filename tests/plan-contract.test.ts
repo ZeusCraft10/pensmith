@@ -160,7 +160,7 @@ test('a wave write fails only the section whose PLAN.md does not parse, and draf
 
 test('the section-planner prompt\'s own example is a plan the schema and the checks accept', async () => {
   const { loadPrompt } = await import('../bin/lib/prompt-loader.js');
-  const { SectionPlanSchema, planProblems } = await import('../bin/cli/plan.js');
+  const { SectionPlanSchema, planProblems } = await import('../bin/lib/plan-store.js');
   const example = /```json\n([\s\S]*?)\n```/.exec(loadPrompt('section-planner'))?.[1];
   assert.ok(example);
   const plan = SectionPlanSchema.parse(JSON.parse(example));
