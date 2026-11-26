@@ -56,6 +56,33 @@ test('short quote: parts around an ellipsis taken from different sentences are n
   assert.equal(matchQuote('the treatment … was ineffective', near).found, false);
 });
 
+// In text extracted from a numeric-citation paper (Vancouver, IEEE), a full
+// stop is often followed by its reference marker, and a heading stands
+// between paragraphs with no full stop. Each still ends a sentence.
+test('short quote: a sentence end before a reference marker or a heading still splits the parts', () => {
+  const quote = 'the treatment ... was ineffective';
+  for (const src of [
+    'We found the treatment effective.[12] The placebo was ineffective.',
+    'We found the treatment effective.12,13 The placebo was ineffective.',
+    'We found the treatment effective.12-14 The placebo was ineffective.',
+    'We found the treatment effective.(12) The placebo was ineffective.',
+    'We found the treatment effective\n\nResults\n\nThe placebo was ineffective.',
+    'We found the treatment effective\r\n\r\nThe placebo was ineffective.',
+  ]) {
+    assert.equal(matchQuote(quote, src).found, false, JSON.stringify(src));
+  }
+  // Numbers inside a sentence, a page break inside one, and a full stop after
+  // an abbreviation or a number end nothing.
+  for (const src of [
+    'We found the treatment, at 2.5 mg daily, was ineffective.',
+    'We found the treatment (see Section 3.2 Results) was ineffective.',
+    'We found the treatment given daily\n\nwas ineffective.',
+    'We found the treatment (cf. Fig.3 Top) was ineffective.',
+  ]) {
+    assert.equal(matchQuote(quote, src).found, true, JSON.stringify(src));
+  }
+});
+
 test('short quote: a one-word part around an ellipsis is too little to place', () => {
   const src = 'Nothing about the drug was conclusive; it is unclear whether any of it is safe.';
   assert.equal(matchQuote('the drug ... is ... safe', src).found, false);

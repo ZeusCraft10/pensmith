@@ -354,6 +354,15 @@ const ABBREVIATIONS: ReadonlySet<string> = new Set([
 // `.`, `!` or `?`, closing quotes or brackets, then space and a capital or an
 // opening mark: the end of a sentence.
 const SENTENCE_END = /[.!?]["”’')\]]*(?=\s+[\p{Lu}\p{N}"“‘'[@])/gu;
+// In text extracted from a paper with numeric citations, the full stop after a
+// word is often followed by its reference marker as plain digits
+// ("effective.12,13 The", "effective.(12) The"). That still ends the sentence.
+const MARKED_SENTENCE_END =
+  /(?<=[\p{L}\p{M}]["”’')\]]*)[.!?](?:\d{1,3}(?:[-–,]\d{1,3})*|\(\d{1,3}(?:[-–,]\s?\d{1,3})*\))(?=\s+[\p{Lu}"“‘'])/gu;
+// A blank line followed by a capital, a number or an opening mark: a new
+// paragraph or a heading, which ends the sentence before it even with no full
+// stop. A page break that runs on in lower case ends nothing.
+const PARAGRAPH_START = /\n[ \t\r]*\n(?=\s*[\p{Lu}\p{N}"“‘'[@])/gu;
 
 // A blank line, with LF or CRLF line endings (a draft edited on Windows).
 const BLANK_LINE = /\n[ \t\r]*\n/g;
@@ -375,15 +384,19 @@ function endsSentence(text: string, from: number, at: number): boolean {
 }
 
 /**
- * Offsets of the `.`, `!` or `?` that end each sentence of plain text, such as
- * the text extracted from a source.
+ * Offsets, ascending, where each sentence of plain text ends, such as the text
+ * extracted from a source: each `.`, `!` or `?` that ends one, with or without
+ * a reference marker after it, and each paragraph break.
  */
 export function sentenceEnds(text: string): number[] {
   const out: number[] = [];
-  for (const m of text.matchAll(SENTENCE_END)) {
-    if (endsSentence(text, Math.max(0, m.index - WORD_LOOKBACK), m.index)) out.push(m.index);
+  for (const re of [SENTENCE_END, MARKED_SENTENCE_END]) {
+    for (const m of text.matchAll(re)) {
+      if (endsSentence(text, Math.max(0, m.index - WORD_LOOKBACK), m.index)) out.push(m.index);
+    }
   }
-  return out;
+  for (const m of text.matchAll(PARAGRAPH_START)) out.push(m.index);
+  return out.sort((a, b) => a - b);
 }
 
 /**
