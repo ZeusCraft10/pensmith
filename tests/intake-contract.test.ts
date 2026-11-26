@@ -150,6 +150,79 @@ test('without a terminal, answers given on an earlier run are kept until intake 
   assert.ok(!existsSync(join(dir, '.paper', 'INTAKE.pending.json')));
 });
 
+// The options a run gives besides its answers are kept with the answers, since
+// the answering run sends only the questions listed (how_to_answer).
+const EMAIL = 'jane.doe@example.edu';
+const STYLE_SAMPLES = fileURLToPath(new URL('./fixtures/style-samples/paperA', import.meta.url));
+
+function allBut(id: string, extra: Record<string, string> = {}): Record<string, string> {
+  return { ...Object.fromEntries(Object.entries(ALL_ANSWERS).filter(([k]) => k !== id)), ...extra };
+}
+
+test('without a terminal, --pii-redact given on an earlier run still redacts the answering run, which reuses the kept answers', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, 'assignment.md'), `${ASSIGNMENT}\nQuestions to ${EMAIL}.\n`);
+  const first = runCli(['new', '--pii-redact', '--answers', JSON.stringify({ topic: ALL_ANSWERS.topic })], dir);
+  assert.equal(first.status, 3, first.stderr);
+  assert.doesNotMatch(readFileSync(join(dir, '.paper', 'PROJECT.md'), 'utf8'), /jane\.doe/);
+
+  // No flag on the answering run; the topic was given on the first.
+  const second = runCli(['new', '--answers', JSON.stringify(allBut('topic', { audience: `the seminar run by ${EMAIL}` }))], dir);
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  for (const f of ['PROJECT.md', 'INTAKE.json', 'INTAKE.md', 'config.toml']) {
+    assert.doesNotMatch(readFileSync(join(dir, '.paper', f), 'utf8'), /jane\.doe/, f);
+  }
+  const intake = JSON.parse(readFileSync(join(dir, '.paper', 'INTAKE.json'), 'utf8')) as Record<string, unknown>;
+  assert.equal(intake['topic'], ALL_ANSWERS.topic);
+  assert.match(String(intake['audience']), /\[REDACTED:EMAIL\]/);
+  assert.match(readFileSync(join(dir, '.paper', 'config.toml'), 'utf8'), /^pii_redaction = true$/m);
+  // The raw text is only in the file .paper/.gitignore keeps out of git.
+  assert.match(readFileSync(join(dir, '.paper', 'INTAKE.raw.local'), 'utf8'), /jane\.doe/);
+});
+
+test('without a terminal, --goal, --thesis and --style-samples given on an earlier run are kept for the answering run', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, 'assignment.md'), ASSIGNMENT + '\n');
+  const thesis = 'Heavy social media use raises anxiety in adolescents.';
+  const first = runCli(
+    ['new', '--goal', 'learning', '--thesis', thesis, '--style-samples', STYLE_SAMPLES, '--answers', JSON.stringify({ topic: ALL_ANSWERS.topic })],
+    dir,
+  );
+  assert.equal(first.status, 3, first.stderr);
+  assert.ok(!existsSync(join(dir, '.paper', 'STYLE.json')));
+
+  const second = runCli(['new', '--answers', JSON.stringify(allBut('topic'))], dir);
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  assert.match(readFileSync(join(dir, '.paper', 'config.toml'), 'utf8'), /^goal = "learning"$/m);
+  assert.ok(readFileSync(join(dir, '.paper', 'PROJECT.md'), 'utf8').includes(`Thesis: ${thesis}`));
+  const intake = JSON.parse(readFileSync(join(dir, '.paper', 'INTAKE.json'), 'utf8')) as Record<string, unknown>;
+  assert.equal(intake['topic'], ALL_ANSWERS.topic);
+  assert.ok(existsSync(join(dir, '.paper', 'STYLE.json')), second.stdout + second.stderr);
+});
+
+test('with no assignment and no terminal, the options and answers given are kept for the run that brings the assignment', () => {
+  const dir = tmp();
+  const first = runCli(['new', '--pii-redact', '--citation-style', 'apa'], dir);
+  assert.equal(first.status, 3, first.stderr);
+  assert.deepEqual((lastJsonLine(first.stdout)['questions'] as Array<{ id: string }>).map((q) => q.id), ['assignment']);
+  assert.ok(!existsSync(join(dir, '.paper', 'PROJECT.md')));
+  // A second run without the assignment adds to what is kept.
+  const again = runCli(['new', '--goal', 'both'], dir);
+  assert.equal(again.status, 3, again.stderr);
+  assert.deepEqual(lastJsonLine(again.stdout)['answered'], ['citation_style']);
+
+  const second = runCli(['new', '--answers', JSON.stringify({ assignment: `${ASSIGNMENT}\nQuestions to ${EMAIL}.`, ...allBut('citation_style') })], dir);
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  const project = readFileSync(join(dir, '.paper', 'PROJECT.md'), 'utf8');
+  assert.doesNotMatch(project, /jane\.doe/);
+  assert.match(project, /\[REDACTED:EMAIL\]/);
+  const intake = JSON.parse(readFileSync(join(dir, '.paper', 'INTAKE.json'), 'utf8')) as Record<string, unknown>;
+  assert.equal(intake['citation_style'], 'apa');
+  const config = readFileSync(join(dir, '.paper', 'config.toml'), 'utf8');
+  assert.match(config, /^goal = "both"$/m);
+  assert.match(config, /^pii_redaction = true$/m);
+});
+
 test('with no assignment anywhere and no terminal, intake asks for it (exit 3) and sends nothing to a model', () => {
   const dir = tmp();
   const r = runCli(['new'], dir);
@@ -352,6 +425,20 @@ test('a changed assignment asks the clarifier again and drops the answers kept f
   assert.match(seen[1]!.user, /Reform Act/);
   const waiting = (again['questions'] as Waiting).map((q) => q.id);
   assert.deepEqual(waiting, ['topic', 'discipline', 'length_words', 'citation_style', 'counterargument']);
+});
+
+test('with --pii-redact given only on the first run, the model never sees the raw assignment', async () => {
+  const dir = tmp();
+  writeFileSync(join(dir, 'assignment.md'), `${ASSIGNMENT}\nQuestions to ${EMAIL}.\n`);
+  const seen: Array<{ system: string; user: string; schema: unknown }> = [];
+  _setGeneratorForTest(clarifier(seen));
+  const first = await runIntakeOnce(dir, { 'pii-redact': true, answers: JSON.stringify({ topic: 'x' }) });
+  assert.equal(first['mode'], 'pending');
+  const second = await runIntakeOnce(dir, { answers: JSON.stringify({ discipline: 'psychology' }) });
+  assert.equal(second['mode'], 'pending');
+  assert.deepEqual((second['questions'] as Waiting).map((q) => q.id), ['length_words', 'citation_style', 'audience', 'counterargument']);
+  assert.equal(seen.length, 1, 'the questions kept on the first run are reused');
+  for (const s of seen) assert.doesNotMatch(s.system + s.user, /jane\.doe/);
 });
 
 test('a terminal question nobody answers in time ends intake as a refusal, not a crash', async () => {
