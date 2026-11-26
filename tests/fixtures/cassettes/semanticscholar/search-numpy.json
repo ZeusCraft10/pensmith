@@ -1,0 +1,74 @@
+[
+  {
+    "scope": "https://api.semanticscholar.org",
+    "method": "GET",
+    "path": "/graph/v1/paper/search?query=NumPy+array+efficient+numerical+computation&limit=2&fields=title%2Cauthors%2Cyear%2CexternalIds%2Cabstract",
+    "status": 200,
+    "response": {
+      "total": 2348,
+      "offset": 0,
+      "next": 2,
+      "data": [
+        {
+          "paperId": "cef52bea3f13b20d6a31391034b0fccec71c6781",
+          "externalIds": {
+            "MAG": "2994804831",
+            "DBLP": "journals/corr/abs-1102-1523",
+            "ArXiv": "1102.1523",
+            "DOI": "10.1109/MCSE.2011.37",
+            "CorpusId": 16907816
+          },
+          "title": "The NumPy Array: A Structure for Efficient Numerical Computation",
+          "year": 2011,
+          "openAccessPdf": {
+            "url": "https://arxiv.org/pdf/1102.1523",
+            "status": "GREEN",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/1102.1523, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "2066718598",
+              "name": "S. van der Walt"
+            },
+            {
+              "authorId": "2352903157",
+              "name": "S. Colbert"
+            },
+            {
+              "authorId": "2360749417",
+              "name": "G. Varoquaux"
+            }
+          ],
+          "abstract": "In the Python world, NumPy arrays are the standard representation for numerical data and enable efficient implementation of numerical computations in a high-level language. As this effort shows, NumPy performance can be improved through three techniques: vectorizing calculations, avoiding copying data in memory, and minimizing operation counts."
+        },
+        {
+          "paperId": "bbb2ae44740719d7587abc956d624caf2799119b",
+          "externalIds": {
+            "MAG": "75829264",
+            "DOI": "10.2172/1006323",
+            "CorpusId": 57241591
+          },
+          "title": "GAiN: Distributed Array Computation with Python",
+          "year": 2009,
+          "openAccessPdf": {
+            "url": "https://www.osti.gov/servlets/purl/1006323",
+            "status": "GREEN",
+            "license": null,
+            "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.2172/1006323?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.2172/1006323, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "11377616",
+              "name": "J. Daily"
+            }
+          ],
+          "abstract": null
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

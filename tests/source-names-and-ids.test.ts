@@ -107,6 +107,31 @@ test('Semantic Scholar: a keyless search it rate-limits (its real 429) gives no 
   assert.deepEqual(await semanticscholar.search('attention mechanisms'), []);
 });
 
+test('Semantic Scholar: a search answer gives split names and the arXiv ID and DOI of each work', async () => {
+  // A real keyless answer, recorded when Semantic Scholar did not rate-limit it.
+  const hits = await semanticscholar.search('NumPy array efficient numerical computation', { limit: 2 });
+  assert.deepEqual(hits.map((h) => h.title), [
+    'The NumPy Array: A Structure for Efficient Numerical Computation',
+    'GAiN: Distributed Array Computation with Python',
+  ]);
+  const [numpy, gain] = hits as [typeof hits[0], typeof hits[0]];
+  assert.equal(numpy.id, 'cef52bea3f13b20d6a31391034b0fccec71c6781');
+  assert.deepEqual(numpy.names, [
+    { family: 'van der Walt', given: 'S.' },
+    { family: 'Colbert', given: 'S.' },
+    { family: 'Varoquaux', given: 'G.' },
+  ], 'Semantic Scholar writes "S. van der Walt"; the particle stays with the family name');
+  assert.equal(numpy.authors[0], 'van der Walt, S.');
+  assert.equal(numpy.arxiv, '1102.1523', 'externalIds.ArXiv');
+  assert.equal(numpy.doi, '10.1109/MCSE.2011.37');
+  assert.equal(numpy.year, 2011);
+  assert.match(numpy.abstract ?? '', /^In the Python world, NumPy arrays/);
+  assert.deepEqual(gain.names, [{ family: 'Daily', given: 'J.' }]);
+  assert.equal(gain.doi, '10.2172/1006323');
+  assert.equal(gain.arxiv, undefined, 'a work with no arXiv ID gets none');
+  assert.equal(gain.abstract, null, 'no abstract is kept as Semantic Scholar sent it');
+});
+
 test('Zotero: lastName and firstName are kept as they are', async () => {
   const saved = process.env['ZOTERO_API_KEY'];
   process.env['ZOTERO_API_KEY'] = 'test-key';
