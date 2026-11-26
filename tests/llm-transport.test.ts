@@ -787,33 +787,38 @@ const VERB_NO_LLM_ARGS: Partial<Record<GenerativeVerb, string[]>> = {
   intake: ['--answers', JSON.stringify({ assignment: 'Write a 2000-word essay on tidal energy policy.', ...INTAKE_ANSWERS })],
 };
 
+/** An outline with section 1, 'intro': plan, write and revise work only on a section of the outline. */
+async function seedOutline(root: string): Promise<void> {
+  await fsp.writeFile(
+    path.join(root, '.paper', 'OUTLINE.md'),
+    '# Tidal Energy\n\n| # | slug | title | depends_on | word target | assigned_sources |\n| --- | --- | --- | --- | --- | --- |\n| 1 | intro | Introduction | | 300 | |\n',
+  );
+}
+
+/** The verbs that work on one section of the outline. */
+const SECTION_VERBS: ReadonlySet<GenerativeVerb> = new Set(['plan', 'write', 'revise']);
+
 // write drafts only a planned section, so T-11-06 gives it one to draft.
 const VERB_NO_LLM_SETUP: Partial<Record<GenerativeVerb, (root: string) => Promise<void>>> = {
   write: async (root) => {
-    const dir = path.join(root, '.paper', 'sections', '01-placeholder');
+    const dir = path.join(root, '.paper', 'sections', '01-intro');
     await fsp.mkdir(dir, { recursive: true });
-    await fsp.writeFile(path.join(dir, 'PLAN.md'), '---\nsection: 1\nslug: placeholder\ntitle: Placeholder\nassigned_sources: []\nstatus: planned\n---\n## Brief\n\nIntroduce the topic.\n');
+    await fsp.writeFile(path.join(dir, 'PLAN.md'), '---\nsection: 1\nslug: intro\ntitle: Introduction\nassigned_sources: []\nstatus: planned\n---\n## Brief\n\nIntroduce the topic.\n');
   },
 };
 
 for (const verb of VERBS_FOR_INTEGRATION) {
-  test(`T-11-05: verb '${verb}' exits non-zero + stderr banner when no LLM key configured`, async (t) => {
-    if (!(await transportReady())) {
-      t.skip(`anthropic.ts not yet built — skip T-11-05 (${verb})`);
-      return;
-    }
-    if (!VERB_WIRED_PREDICATES[verb]?.()) {
-      t.skip(`verb '${verb}' still has TIER2_* placeholder (not yet wired) — skip T-11-05 (${verb})`);
-      return;
-    }
+  test(`T-11-05: verb '${verb}' exits non-zero + stderr banner when no LLM key configured`, async () => {
+    // These used to skip when the transport, the verb's wiring or the build
+    // was missing, so a regression in any of them passed as a skip.
+    assert.ok(await transportReady(), 'bin/lib/anthropic.ts exports the transport');
+    assert.ok(VERB_WIRED_PREDICATES[verb]?.(), `verb '${verb}' still has a TIER2_* placeholder`);
     const bin = cliBin();
-    if (!existsSync(bin)) {
-      t.skip(`dist/bin/pensmith.js not found — run npm run build first (T-11-05 ${verb})`);
-      return;
-    }
+    assert.ok(existsSync(bin), 'dist/bin/pensmith.js is missing: run `npm run build` (npm run check does) before the tests');
 
     const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), `pensmith-t1105-${verb}-`));
     await fsp.mkdir(path.join(tmpRoot, '.paper'), { recursive: true });
+    if (SECTION_VERBS.has(verb)) await seedOutline(tmpRoot);
 
     try {
       const env: NodeJS.ProcessEnv = {
@@ -869,23 +874,17 @@ for (const verb of VERBS_FOR_INTEGRATION) {
     }
   });
 
-  test(`T-11-06: verb '${verb}' writes NON-placeholder artifact under PENSMITH_NO_LLM=1`, async (t) => {
-    if (!(await transportReady())) {
-      t.skip(`anthropic.ts not yet built — skip T-11-06 (${verb})`);
-      return;
-    }
-    if (!VERB_WIRED_PREDICATES[verb]?.()) {
-      t.skip(`verb '${verb}' still has TIER2_* placeholder (not yet wired) — skip T-11-06 (${verb})`);
-      return;
-    }
+  test(`T-11-06: verb '${verb}' writes NON-placeholder artifact under PENSMITH_NO_LLM=1`, async () => {
+    // These used to skip when the transport, the verb's wiring or the build
+    // was missing, so a regression in any of them passed as a skip.
+    assert.ok(await transportReady(), 'bin/lib/anthropic.ts exports the transport');
+    assert.ok(VERB_WIRED_PREDICATES[verb]?.(), `verb '${verb}' still has a TIER2_* placeholder`);
     const bin = cliBin();
-    if (!existsSync(bin)) {
-      t.skip(`dist/bin/pensmith.js not found — run npm run build first (T-11-06 ${verb})`);
-      return;
-    }
+    assert.ok(existsSync(bin), 'dist/bin/pensmith.js is missing: run `npm run build` (npm run check does) before the tests');
 
     const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), `pensmith-t1106-${verb}-`));
     await fsp.mkdir(path.join(tmpRoot, '.paper'), { recursive: true });
+    if (SECTION_VERBS.has(verb)) await seedOutline(tmpRoot);
     await VERB_NO_LLM_SETUP[verb]?.(tmpRoot);
 
     try {

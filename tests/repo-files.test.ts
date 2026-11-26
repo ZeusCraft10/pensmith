@@ -109,24 +109,13 @@ test('PRIVACY and README-DEV structure checks (README stubs removed — Phase 16
 
 // STYL-04 (Phase 8) — README dual-use disclosure CONTENT CONTRACT.
 //
-// RED-by-skip: the `## Style Match` dual-use disclosure section is authored in
-// Wave 7 (08-07). Until it lands, this test SKIPS (guarded on the section's
-// presence) so the suite stays GREEN through Waves 0-6. When 08-07 adds the
-// section, the guard opens and these assertions MUST pass — encoding the honest-
-// framing contract from CLAUDE.md non-negotiables: the disclosure must be PRESENT
-// and HONEST ("match your established voice", not "impersonate" / "evade
-// detection" / "undetectable", even in negation). Modeled on the
-// honesty-framing.md locked-copy pattern.
-test('STYL-04: README style-match dual-use disclosure is present + honest (RED-by-skip until 08-07)', () => {
+// The honest-framing contract from the CLAUDE.md non-negotiables: the
+// disclosure must be PRESENT and HONEST ("match your established voice", not
+// "impersonate" / "evade detection" / "undetectable", even in negation). It
+// used to pass whenever the section was missing.
+test('STYL-04: README style-match dual-use disclosure is present + honest', () => {
   const readme = read('README.md');
-  const sectionPresent = /##\s*Style Match/i.test(readme);
-  if (!sectionPresent) {
-    // Wave 0-6 RED-by-skip state: the section is authored in 08-07. Assert the
-    // documented forward-reference so the contract is tracked, not silently absent.
-    assert.ok(true, 'STYL-04 pending — `## Style Match` section lands in Wave 7 (08-07)');
-    return;
-  }
-  // Section is present (08-07 landed) — the content contract is now enforced.
+  assert.match(readme, /##\s*Style Match/i, 'README has its Style Match disclosure section');
   assert.match(readme, /match your.*voice|established voice/i,
     'STYL-04: disclosure must frame the feature as matching the user\'s own/established voice');
   assert.ok(!/impersonate/i.test(readme),
@@ -350,14 +339,10 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   { slug: 'tutorial-research-rationale', path: 'templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: 'c39d74a3a1c5a848045345e04ac572c11efd54fe06bf3bb4967a344872e4968e' },
 ];
 for (const pin of PENDING_HASH_PINS) {
-  // WN-3 sentinel entries (hash === `__PENDING_HASH_<slug>__`) are NOT yet
-  // byte-pinned — their real SHA-256 is locked in a later plan's single atomic
-  // re-pin commit (e.g. Phase 9 tutorial prompts re-pin in 09-03). The byte-pin
-  // assertion is RED-by-skip for these until the re-pin lands; the file-exists
-  // loop below still guards their presence. A test{skip} keeps the suite GREEN
-  // while the sentinel is in place, exactly like the loadPrompt sentinel bypass.
-  const isSentinel = pin.hash.startsWith('__PENDING_HASH_');
-  test(`hash-pin: ${pin.path} (${pin.decision})`, { skip: isSentinel }, () => {
+  // Every pin is a real SHA-256 now; a `__PENDING_HASH_<slug>__` placeholder
+  // used to skip its check, so a prompt with no pin passed.
+  test(`hash-pin: ${pin.path} (${pin.decision})`, () => {
+    assert.match(pin.hash, /^[0-9a-f]{64}$/, `${pin.path} has no real pin (${pin.hash})`);
     const bytes = readFileSync(pin.path);
     const hash = createHash('sha256').update(bytes).digest('hex');
     assert.equal(

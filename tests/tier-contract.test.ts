@@ -290,7 +290,7 @@ for (const tc of PHASE_3_CASES) {
   if (tc.name === 'done') continue;
 
   // The CLI must run the verb and produce its declared artifact.
-  test(`tier-contract: ${tc.name} (TIER-06, Plan 09 GREEN)`, { skip: !verbExists }, () => {
+  test(`tier-contract: ${tc.name} (TIER-06, Plan 09 GREEN)`, () => {
     const root = seedPaperFixture();
     // verify-section-scoped seed (Plan 05-04 Task 2): the shared seedPaperFixture
     // deliberately seeds NO section DRAFT.md (other PHASE_3_CASES rely on the
@@ -438,7 +438,7 @@ test('tier-contract: write-wave — verb file exists (D-24)', () => {
   );
 });
 
-test('tier-contract: write-wave parity — both tiers schedule all sections to terminal state (D-02, D-24)', { skip: !writeWaveVerbExists }, () => {
+test('tier-contract: write-wave parity — both tiers schedule all sections to terminal state (D-02, D-24)', () => {
   // --- Tier 2 (forced serial): the registry case's cliArgs (--max-parallel 1) ---
   const t2Root = seedWaveFixture();
   const t2 = runCliCaptureBoth(WRITE_WAVE_CASE.cliArgs, t2Root);
@@ -557,7 +557,7 @@ test('tier-contract: revise — verb file exists (D-24)', () => {
   );
 });
 
-test('tier-contract: revise — plan --revise patches the flagged citation (D-06, D-24)', { skip: !reviseVerbExists }, () => {
+test('tier-contract: revise — plan --revise patches the flagged citation (D-06, D-24)', () => {
   const draftRel = join('.paper', 'sections', `0${MIDDLE_SECTION}-${MIDDLE_SLUG}`, 'DRAFT.md');
 
   // --- Tier 2 (CLI): plan <N> --revise --yolo ---
@@ -637,7 +637,7 @@ function seedWaveDepsFixture(): string {
   return root;
 }
 
-test('tier-contract: write-wave 3-section deps parity — identical settled state + Tier-2 serial WARN (D-02, D-24)', { skip: !writeWaveVerbExists }, () => {
+test('tier-contract: write-wave 3-section deps parity — identical settled state + Tier-2 serial WARN (D-02, D-24)', () => {
   // --- Tier 2 (forced serial --max-parallel 1) ---
   const t2Root = seedWaveDepsFixture();
   const t2 = runCliCaptureBoth(['write', '--max-parallel', '1', '--yolo'], t2Root);
@@ -730,7 +730,7 @@ test('tier-contract: compile — verb file exists (D-24)', () => {
   assert.ok(compileVerbExists, `MISSING: ${COMPILE_CASE.verbFile} — compile must ship its registry entry in-plan`);
 });
 
-test('tier-contract: compile parity — both tier paths produce equivalent DRAFT.md + same Transitions Changed (D-24)', { skip: !compileVerbExists }, () => {
+test('tier-contract: compile parity — both tier paths produce equivalent DRAFT.md + same Transitions Changed (D-24)', () => {
   const t1Root = seedCompileFixture();
   const t1 = runCliInDir(COMPILE_CASE.cliArgs, t1Root);
   assert.equal(t1.exitCode, 0, `compile Tier 1: exit 0 expected; got ${t1.exitCode}. stdout: ${t1.stdout.slice(0, 400)} stderr: ${t1.stderr.slice(0, 400)}`);
@@ -840,7 +840,7 @@ test('tier-contract: done — verb file exists (D-24)', () => {
   );
 });
 
-test('tier-contract: done parity — a run produces a trace-free deliverable in the DISTINCT export dir (D-24)', { skip: !doneVerbExists }, async () => {
+test('tier-contract: done parity — a run produces a trace-free deliverable in the DISTINCT export dir (D-24)', async () => {
   const root = await seedDoneFixture();
   const sourceDraftBefore = readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8');
 
@@ -1019,10 +1019,8 @@ for (const verb of PROMOTED_VERBS) {
   });
 }
 
-const listVerbExists = existsSync(new URL('../bin/cli/list.ts', import.meta.url));
-const openVerbExists = existsSync(new URL('../bin/cli/open.ts', import.meta.url));
 
-test('tier-contract: list parity — both tier paths produce equivalent grouped listing (D-24)', { skip: !listVerbExists }, () => {
+test('tier-contract: list parity — both tier paths produce equivalent grouped listing (D-24)', () => {
   // list is pure-local + deterministic: two runs of the SAME bin/cli/list.ts path
   // (the single path both tiers share — no pensmith_list MCP tool) against the
   // SAME seeded registry must produce equivalent stdout (±20%, TIER-07).
@@ -1049,7 +1047,7 @@ test('tier-contract: list parity — both tier paths produce equivalent grouped 
   );
 });
 
-test('tier-contract: open parity — both tier paths switch the active paper + write an equivalent pointer (D-24)', { skip: !openVerbExists }, () => {
+test('tier-contract: open parity — both tier paths switch the active paper + write an equivalent pointer (D-24)', () => {
   // open is pure-local + deterministic: two runs of the SAME bin/cli/open.ts path
   // against the SAME registered paper-name must each write the active pointer
   // (pensmithDataDir()/active.json) and report the switch (±20%, TIER-07).
@@ -1209,9 +1207,8 @@ test('tier-contract: no unplanned verb — UX02_VERBS stays at exactly 18 (T-07-
 // exactly 16 verbs and NO Phase-10 surface (zotero/ris/style) leaked into the
 // locked set, while 'zotero-mcp' lives ONLY in the sources registry.
 
-const researchVerbExists = existsSync(new URL('../bin/cli/research.ts', import.meta.url));
 
-test('tier-contract: research — emits CITATIONS.ris alongside CITATIONS.bib (CITE-05, D-24)', { skip: !researchVerbExists }, () => {
+test('tier-contract: research — emits CITATIONS.ris alongside CITATIONS.bib (CITE-05, D-24)', () => {
   // research is CLI-only at the tier-contract layer (no pensmith_research MCP
   // tool); the Tier-1 surface is the workflow body delegating to the SAME
   // bin/cli/research.ts → library write path. Run it once in a temp root and assert
