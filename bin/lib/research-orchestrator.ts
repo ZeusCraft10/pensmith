@@ -16,31 +16,38 @@
 //     by. A title alone never merges two records: it cannot tell "Attention
 //     is all you need" from "Attention is not all you need". A candidate with
 //     no identifier is dropped with a WARN, since nothing could verify it.
-//   - source-evaluator parse failure → keep ALL deduped candidates + WARN (T-11-10).
+//   - The source evaluator sees the candidates as fenced data, each under an
+//     id of its own, and answers JSON to a schema checked in code (one repair
+//     round). An answer that still cannot be used keeps nothing on its own:
+//     SourceEvaluationError hands the candidates back for the author to
+//     choose from. Under PENSMITH_NO_LLM no evaluator runs and all are kept.
 //   - SourceCandidateSchema.safeParse per adapter result element (T-11-10).
 //   - Injectable adapter-registry seam for offline tests.
 //   - Marks each record its own data shows as retracted before merging (no
 //     request is made); does NOT write the library — bin/cli/research.ts does.
 //
 // Threat mitigations:
-//   T-12-01: defensive Zod safeParse on all LLM JSON outputs.
-//   T-12-02: candidateSources serialized as JSON (structured) for evaluator prompt.
+//   T-12-01: the evaluator's answer is checked against its schema and the candidate ids.
+//   T-12-02: titles and abstracts reach the evaluator inside the untrusted-data fence.
 //   T-12-03: per-query limit cap = 10; dedup BEFORE evaluator.
 //   T-12-04: 'search' in adapter guard.
 //   T-12-05: no new fetch surface — all network via existing adapter modules.
 //   T-12-06: complete() owns no-leak header path.
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { sources } from './sources/index.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
 import { assignUniqueCitekeys } from './bibtex-write.js';
 import { groupCandidates } from './library.js';
 import { crossCheckRetractions } from './sources/retraction-cross-check.js';
 import { disciplinePreset } from './citations.js';
-import { complete } from './anthropic.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
 import { escapeTemplateTokens } from './intake-parse.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
+import { completeChecked } from './structured-call.js';
+import { CostCapExceededError } from './budget.js';
+import { plainAbstract } from './source-context.js';
+import { fenceUntrusted, stripFenceMarkers } from './untrusted-fence.js';
 
 // ---------------------------------------------------------------------------
 // Injectable adapter registry seam (mirrors zotero-mcp.ts setZoteroClientForTest).
@@ -60,16 +67,42 @@ export interface SearchableAdapter {
 export type AdapterRegistry = Record<string, SearchableAdapter | { fetchById?: unknown }>;
 
 // ---------------------------------------------------------------------------
-// Source-evaluator response schema (Zod — T-12-01 trust boundary).
+// Source-evaluator answer
 // ---------------------------------------------------------------------------
 
-const EvalVerdictSchema = z.object({
-  citekey: z.string().min(1),
-  keep: z.boolean(),
-  reason: z.string().optional(),
-});
+/** What the source evaluator returns: one verdict per candidate, by the id it was shown. */
+const EvaluationSchema = z.object({
+  verdicts: z.array(z.object({ id: z.string(), keep: z.boolean(), reason: z.string() }).strict()),
+}).strict();
+type Evaluation = z.infer<typeof EvaluationSchema>;
 
-const EvalResponseSchema = z.array(EvalVerdictSchema);
+/** Every reason `e` is not one verdict for each of `ids`; empty when it is. */
+function evaluationProblems(e: Evaluation, ids: readonly string[]): string[] {
+  const known = new Set(ids);
+  const seen = new Set<string>();
+  const problems: string[] = [];
+  for (const v of e.verdicts) {
+    if (!known.has(v.id)) problems.push(`${v.id} is not the id of any candidate`);
+    else if (seen.has(v.id)) problems.push(`${v.id} has more than one verdict`);
+    seen.add(v.id);
+  }
+  const missing = ids.filter((id) => !seen.has(id));
+  if (missing.length > 0) problems.push(`no verdict for ${missing.join(', ')}; give one for every candidate`);
+  return problems;
+}
+
+/**
+ * The source evaluator gave no answer that could be used. Nothing is kept on
+ * its own: `candidates` (every one found) go to the author to choose from.
+ */
+export class SourceEvaluationError extends Error {
+  readonly candidates: SourceCandidate[];
+  constructor(candidates: SourceCandidate[], why: string) {
+    super(`the source evaluator gave no usable answer (${why})`);
+    this.name = 'SourceEvaluationError';
+    this.candidates = candidates;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Source preference
@@ -89,116 +122,74 @@ export function sourcePreferenceFor(discipline: string): string[] {
 // Source-evaluator LLM step
 // ---------------------------------------------------------------------------
 
+/** How much of each abstract the evaluator is shown. */
+const EVALUATOR_ABSTRACT_CHARS = 500;
+/** How many authors of each candidate the evaluator is shown. */
+const EVALUATOR_AUTHORS = 6;
+
 /**
- * Run the source-evaluator LLM step to tier the deduplicated candidates.
- *
- * On any parse failure (PENSMITH_NO_LLM=1 mock returns non-JSON, or hostile
- * LLM output): emits a WARN and returns ALL deduped candidates (defensive
- * fallback — T-11-10).
+ * Ask the source evaluator which candidates to keep. Each candidate goes in,
+ * fenced, under an id of its own (c1, c2, ...): two works can share a
+ * provisional citekey, an id cannot. Returns the ones it keeps; throws
+ * SourceEvaluationError when it gives no usable answer, so that nothing is
+ * kept that it did not choose.
  */
 async function evaluateCandidates(
   candidates: SourceCandidate[],
   opts: { topic: string; scope: string; discipline: string },
 ): Promise<SourceCandidate[]> {
   if (candidates.length === 0) return [];
+  const ids = candidates.map((_, i) => `c${i + 1}`);
+  const shown = candidates.map((c, i) => ({
+    id: ids[i]!,
+    title: c.title,
+    authors: c.authors.slice(0, EVALUATOR_AUTHORS),
+    ...(c.year !== undefined ? { year: c.year } : {}),
+    ...(c.container_title ? { venue: c.container_title } : {}),
+    ...(c.doi ? { doi: c.doi } : {}),
+    source: c.source,
+    ...(c.abstract ? { abstract: plainAbstract(c.abstract, EVALUATOR_ABSTRACT_CHARS) } : {}),
+    ...(c.retracted ? { retracted: true } : {}),
+  }));
+  const text = (s: string): string => escapeTemplateTokens(stripFenceMarkers(s));
+  const system = interpolate(loadPrompt('source-evaluator'), {
+    candidateSources: escapeTemplateTokens(fenceUntrusted(JSON.stringify(shown, null, 2))),
+    topic: text(opts.topic),
+    scope: text(opts.scope),
+    discipline: text(opts.discipline),
+  });
 
-  let evalResponseText: string;
+  let answer;
   try {
-    const evaluatorPrompt = loadPrompt('source-evaluator');
-    const interpolatedEvaluator = interpolate(evaluatorPrompt, {
-      // T-12-02: structured JSON encoding prevents direct prompt injection from
-      // abstract/title content. candidateSources is safe in the JSON context.
-      candidateSources: JSON.stringify(
-        candidates.map((c) => ({
-          source: c.source,
-          id: c.id,
-          title: c.title,
-          authors: c.authors,
-          year: c.year,
-          doi: c.doi,
-          // WR-03: cap abstracts at 500 chars to prevent arbitrarily large prompts.
-          // 20-50 candidates × 3000-5000 char abstracts → 60K-150K chars without cap.
-          abstract: c.abstract ? c.abstract.slice(0, 500) : undefined,
-          retracted: c.retracted,
-          citekey: c.citekey,
-        })),
-        null,
-        2,
-      ),
-      // CR-01: escape user-controlled strings before interpolation so {{...}} tokens
-      // in topic/discipline/scope cannot cause secondary template expansion.
-      topic: escapeTemplateTokens(opts.topic),
-      scope: escapeTemplateTokens(opts.scope),
-      discipline: escapeTemplateTokens(opts.discipline),
-    });
-
-    const result = await complete({
-      system:
-        'You are an academic research assistant. Evaluate the candidate sources and ' +
-        'return a JSON array of verdict objects in the exact format specified. ' +
-        'No prose outside the JSON array.',
-      messages: [{ role: 'user', content: interpolatedEvaluator }],
+    answer = await completeChecked({
+      system,
+      messages: [{ role: 'user', content: `Judge the ${candidates.length} candidate sources.` }],
       role: 'evaluate',
       scope: 'task',
       scopeId: 'research-evaluator',
+      schema: EvaluationSchema,
+      problemsOf: (e) => evaluationProblems(e, ids),
+      noun: 'evaluation',
     });
-    evalResponseText = result.text;
   } catch (err) {
+    // The paper is at its cost cap: that is a refusal of its own, not a bad answer.
+    if (err instanceof CostCapExceededError) throw err;
+    throw new SourceEvaluationError(candidates, err instanceof Error ? err.message : String(err));
+  }
+  if ('placeholder' in answer) {
     process.stderr.write(
-      `pensmith research: WARN — source-evaluator LLM call failed (${String(err)}); ` +
-      `keeping all ${candidates.length} deduped candidates (T-11-10 defensive fallback).\n`,
+      `pensmith research: WARN — no source evaluator ran (PENSMITH_NO_LLM); all ${candidates.length} candidates go on unjudged.\n`,
     );
     return candidates;
   }
+  if ('problems' in answer) throw new SourceEvaluationError(candidates, answer.problems.join('; '));
 
-  // Defensive JSON parse (T-12-01 trust boundary).
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(evalResponseText);
-  } catch {
-    process.stderr.write(
-      `pensmith research: WARN — source-evaluator response is not valid JSON ` +
-      `(expected under PENSMITH_NO_LLM=1); keeping all ${candidates.length} candidates ` +
-      `(T-11-10 defensive fallback).\n`,
-    );
-    return candidates;
+  const keep = new Set(answer.value.verdicts.filter((v) => v.keep).map((v) => v.id));
+  const kept = candidates.filter((_, i) => keep.has(ids[i]!));
+  if (kept.length === 0) {
+    process.stderr.write(`pensmith research: WARN — the source evaluator kept none of the ${candidates.length} candidates.\n`);
   }
-
-  const verdictResult = EvalResponseSchema.safeParse(parsed);
-  if (!verdictResult.success) {
-    process.stderr.write(
-      `pensmith research: WARN — source-evaluator response failed schema validation; ` +
-      `keeping all ${candidates.length} candidates (T-11-10 defensive fallback).\n`,
-    );
-    return candidates;
-  }
-
-  const keepSet = new Set(
-    verdictResult.data.filter((v) => v.keep).map((v) => v.citekey),
-  );
-
-  // If the evaluator said keep nothing (edge case: hostile or confused response),
-  // fall back to keeping all candidates.
-  if (keepSet.size === 0) {
-    process.stderr.write(
-      `pensmith research: WARN — source-evaluator returned keep:false for all candidates; ` +
-      `keeping all ${candidates.length} (defensive fallback to avoid empty result).\n`,
-    );
-    return candidates;
-  }
-
-  const filtered = candidates.filter((c) => keepSet.has(c.citekey));
-
-  // If the evaluator filtered out ALL known citekeys (citekey mismatch), fall back.
-  if (filtered.length === 0 && candidates.length > 0) {
-    process.stderr.write(
-      `pensmith research: WARN — source-evaluator citekey mismatch (no candidates match ` +
-      `keep-set); keeping all ${candidates.length} (T-11-10 defensive fallback).\n`,
-    );
-    return candidates;
-  }
-
-  return filtered;
+  return kept;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +233,8 @@ export interface ResearchOrchestratorOptions {
  *   4. Validates each result through SourceCandidateSchema.safeParse (T-11-10).
  *   5. Merges the records of one work by identifier (groupCandidates), keeping
  *      the discipline's preferred source's metadata; drops candidates with none.
- *   6. Calls the source-evaluator LLM step (defensive fallback: keep all on failure).
+ *   6. Calls the source evaluator, which keeps the candidates it names (or
+ *      throws SourceEvaluationError, keeping none, when its answer cannot be used).
  *   7. Returns the final SourceCandidate[].
  *
  * Does NOT write the library: bin/cli/research.ts does, after the user
@@ -402,7 +394,7 @@ export async function runResearchOrchestrator(
   // the key it keeps (an earlier run's key for a work it already holds).
   const uniquelyKeyed = assignUniqueCitekeys(works);
 
-  // Source-evaluator LLM tier step (defensive: keep all on failure).
+  // The source evaluator keeps what it names; a failed evaluation keeps nothing.
   const evaluated = await evaluateCandidates(uniquelyKeyed, {
     topic,
     scope: scopeLabel,

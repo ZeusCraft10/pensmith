@@ -41,7 +41,7 @@ function yearOf(item: LibraryItem): number | undefined {
 }
 
 /** An abstract as plain text: registry markup (JATS tags) and runs of space removed, cut to `max` characters. */
-function plainAbstract(raw: string, max: number): string {
+export function plainAbstract(raw: string, max: number): string {
   const text = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
 }

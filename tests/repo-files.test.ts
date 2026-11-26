@@ -314,7 +314,7 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // dynamic-imports this array (not undefined); single source of truth for the 9 hash-pin slugs.
   { slug: 'intake-clarifier',    path: 'templates/prompts/intake-clarifier.md',    decision: 'D-12', hash: '35d478e8974d5774ad24f040d76e1a63010a2d1a58b854c8245dd8812e4c7957' },  // structured questions, matching ClarifierSchema
   { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e' },
-  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762' },
+  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: '3041488c98481b335ede4e719f3bf298413b9357b970686bc987e0e14b4d0775' },
   { slug: 'outline-author',      path: 'templates/prompts/outline-author.md',      decision: 'D-12', hash: 'ec97b4b7811b99e2da7dd3d42ec84f4d05b4d26335429d68c354e61d3f71a6c6' },  // structured outline, matching ProposedOutlineSchema
   { slug: 'section-planner',     path: 'templates/prompts/section-planner.md',     decision: 'D-12', hash: 'ebfdb9bb370baedca080e2254ba257a86dacf464f0b72331b032e3472ceed766' },  // structured plan, matching SectionPlanSchema
   { slug: 'section-drafter',     path: 'templates/prompts/section-drafter.md',     decision: 'D-12', hash: '0061ca747bebddde9a1e62d97d5f69375ce49867ad29a12860652e3e6738804e' },

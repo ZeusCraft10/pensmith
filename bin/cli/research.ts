@@ -11,8 +11,11 @@
 //   5. Scope approval gate (default-ON): select one scope; --yolo → scope[0];
 //      non-TTY → ApprovalUnavailableError / exit-3.
 //   6. Call runResearchOrchestrator (adapter fan-out + dedup + source-evaluator).
-//   7. Candidate approval gate (default-ON): multiselect prune; --yolo → keep all;
-//      zero-candidates → skip gate; non-TTY → ApprovalUnavailableError / exit-3.
+//   7. Candidate approval gate (default-ON): multiselect prune of what the
+//      evaluator kept; --yolo → keep those; zero-candidates → skip gate;
+//      non-TTY → ApprovalUnavailableError / exit-3. When the evaluator gave
+//      no usable answer, the gate offers every candidate with none selected,
+//      and --yolo adds nothing (exit 2, research not marked done).
 //   8. Merge the approved candidates (marked retracted where their own
 //      records say so) into .paper/LIBRARY.json (bin/lib/library.ts), which writes
 //      CITATIONS.bib and CITATIONS.ris from it. A work the library already
@@ -33,9 +36,10 @@ import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { ask } from '../lib/prompts.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
-import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
+import { runResearchOrchestrator, SourceEvaluationError } from '../lib/research-orchestrator.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../lib/network-mode.js';
 
 // ---------------------------------------------------------------------------
@@ -230,15 +234,37 @@ export const researchCommand = defineCommand({
     }
 
     // ── Step 5: Live discovery — runResearchOrchestrator ──
-    const candidates: SourceCandidate[] = await runResearchOrchestrator(
-      chosenScope.queries,
-      {
-        topic,
-        discipline,
-        assignment,
-        scopeLabel: chosenScope.label,
-      },
-    );
+    // When the source evaluator gives no usable answer, nothing is chosen for
+    // the author: the gate shows every candidate with none selected, and
+    // --yolo (which keeps what the evaluator kept) keeps none.
+    let candidates: SourceCandidate[];
+    let evaluated = true;
+    try {
+      candidates = await runResearchOrchestrator(
+        chosenScope.queries,
+        {
+          topic,
+          discipline,
+          assignment,
+          scopeLabel: chosenScope.label,
+        },
+      );
+    } catch (e) {
+      if (!(e instanceof SourceEvaluationError)) throw e;
+      candidates = e.candidates;
+      evaluated = false;
+      process.stderr.write(`pensmith research: WARN — ${e.message}; no candidate is kept unless you choose it.\n`);
+    }
+
+    if (!evaluated && yolo) {
+      process.stderr.write(
+        `pensmith research: --yolo keeps the candidates the source evaluator keeps, and it kept none, so nothing was added ` +
+        `to LIBRARY.json and research is not marked done. Run \`pensmith research\` again, or without --yolo to choose ` +
+        `from the ${candidates.length} candidates yourself.\n`,
+      );
+      process.exitCode = EXIT_REFUSED;
+      return { ok: false, mode: 'evaluation-failed' };
+    }
 
     // ── Step 6: Candidate approval gate (default-ON) ──
     // Zero-candidate path: skip the gate (nothing to prune).
@@ -264,13 +290,13 @@ export const researchCommand = defineCommand({
           label: `[${c.source}] ${c.title.slice(0, 60)}${c.title.length > 60 ? '…' : ''} (${c.year ?? '?'})`,
           hint: c.authors.slice(0, 2).join(', '),
         })),
-        default: candidates.map((c) => c.citekey),
+        default: evaluated ? candidates.map((c) => c.citekey) : [],
       });
 
       const keepKeys = new Set(
         Array.isArray((pruneAnswer as { value: unknown }).value)
           ? (pruneAnswer as { value: string[] }).value
-          : candidates.map((c) => c.citekey),
+          : [],
       );
       finalCandidates = candidates.filter((c) => keepKeys.has(c.citekey));
     }

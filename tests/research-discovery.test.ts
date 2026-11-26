@@ -3,8 +3,8 @@
 // Behavioral contract for the live-discovery path (research-orchestrator):
 //   (1) fan-out returns >=1 deduped SourceCandidate for a fixture assignment.
 //   (2) two candidates with the same DOI collapse to one (DOI dedup via normalizeDoi).
-//   (3) source-evaluator parse failure under PENSMITH_NO_LLM keeps all candidates
-//       (defensive fallback — T-11-10).
+//   (3) with no evaluator (PENSMITH_NO_LLM) every candidate is kept; an
+//       evaluator answer that cannot be used keeps none (source-evaluator.test.ts).
 //   (4) zero-candidate degenerate case writes a real EMPTY LIBRARY.json with WARN;
 //       assert NO literal `tier2-placeholder` / `PLACEHOLDER_LIBRARY` / `_note`
 //       marker appears in the written file.
@@ -226,12 +226,12 @@ test(
 );
 
 test(
-  'research-discovery: source-evaluator parse failure under PENSMITH_NO_LLM keeps all candidates (T-11-10 defensive fallback)',
+  'research-discovery: with no evaluator to ask (PENSMITH_NO_LLM), every candidate goes on unjudged',
   { skip: !SEAM_WIRED },
   async () => {
-    // Under PENSMITH_NO_LLM=1 the offline mock returns a non-JSON string for the
-    // source-evaluator prompt. The orchestrator must WARN and keep ALL adapter
-    // candidates (not drop them). This test verifies the defensive fallback.
+    // Under PENSMITH_NO_LLM=1 no evaluator runs. The orchestrator must WARN and
+    // keep ALL adapter candidates (not drop them). An evaluator that answers
+    // badly keeps nothing instead (tests/source-evaluator.test.ts).
     const root = mkPaperRoot();
 
     const mod = await import(orchestratorModUrl.href) as {
@@ -265,15 +265,14 @@ test(
       (process.stderr as unknown as { write: typeof origStderrWrite }).write = origStderrWrite;
     }
 
-    // Under PENSMITH_NO_LLM=1 the source-evaluator will fail to parse. Candidates
-    // must NOT be dropped — defensive fallback keeps them all.
+    // Under PENSMITH_NO_LLM=1 no evaluator runs. Candidates must NOT be dropped.
     assert.ok(Array.isArray(candidates!), 'must return an array even on parse failure');
     // The candidates count must be >=0 (no crash). A WARN is expected on stderr when
     // the evaluator parse fails (not required to check exact message here — the
     // important assertion is no crash and no candidate loss).
     assert.ok(
       candidates!.length >= 0,
-      'defensive fallback must keep all candidates (no crash, no drop on parse failure)',
+      'with no evaluator, all candidates are kept (no crash, no drop)',
     );
   },
 );
