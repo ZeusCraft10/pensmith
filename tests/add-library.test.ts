@@ -199,6 +199,39 @@ test('add <pdf> refuses a title-search hit one word from its title, even when it
   assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
 });
 
+test('add <pdf> refuses a title-search hit one word from its title when its author is named in the PDF too', async () => {
+  // The same author wrote both papers, so the author check passes: only the
+  // word-for-word title check tells "mental health" from "human health".
+  const root = project();
+  const pdf = await pdfOf(root, [
+    'Climate change and human health',
+    'Helen L. Berry and John Jones',
+    'Abstract Rising temperatures change the burden of disease.',
+  ]);
+  const r = cli(root, ['add', pdf, '--yolo']);
+  assert.equal(r.status, 2, r.out);
+  assert.doesNotMatch(r.out, /added berry2010/, r.out);
+  assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
+});
+
+test('add <pdf> refuses a DOI printed with its title after the abstract, before any references heading', async () => {
+  // A cited work's DOI and title, set as whole lines in the body of a paper
+  // with no reference heading on its first page. The title is in the PDF's
+  // opening, but not in its title block (the lines before the abstract).
+  const root = project();
+  const pdf = await pdfOf(root, [
+    'Attention Is All You Need',
+    'Ashish Vaswani, Noam Shazeer, Niki Parmar',
+    'Abstract We build on earlier work on array computing, in particular:',
+    'The NumPy Array: A Structure for Efficient Numerical Computation',
+    'doi:10.1109/MCSE.2011.37',
+  ]);
+  const r = cli(root, ['add', pdf, '--yolo']);
+  assert.equal(r.status, 2, r.out);
+  assert.doesNotMatch(r.out, /added vanderwalt2011/, r.out);
+  assert.equal(existsSync(join(root, '.paper', 'CITATIONS.bib')), false, 'nothing was written');
+});
+
 test('add <pdf> refuses a hit with its title when none of the hit\'s authors is named before the references', async () => {
   // Same title as the NumPy paper, other authors; the NumPy paper's authors
   // appear only in the reference list.

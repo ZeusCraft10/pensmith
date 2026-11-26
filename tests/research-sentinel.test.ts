@@ -15,7 +15,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initState } from '../bin/lib/state.js';
@@ -78,6 +78,32 @@ test('router: a research run that finds nothing counts as research, and a later 
   const r = cli(root, ['add', '10.1038/nphys1170', '--yolo']);
   assert.equal(r.status, 0, r.out);
   assert.equal((await resolveNextAction(root)).verb, 'outline');
+  assert.equal(deriveLibraryStatus(root).status, 'research');
+});
+
+test('router: a v1 library research wrote still counts as research after a later add upgrades it to v2', async () => {
+  // A v0.2.0 research run wrote a v1 LIBRARY.json, which carries no run
+  // marker. The first write through the library migrates it to v2, which must
+  // record that research ran, or the router sends the user back to research.
+  const v1 = {
+    $schemaVersion: 1,
+    entries: [{
+      source: 'arxiv', id: '1706.03762', doi: '10.48550/arXiv.1706.03762', title: 'Attention Is All You Need',
+      authors: ['Ashish Vaswani'], year: 2017, citekey: 'vaswani2017', retracted: false, last_verified: '2025-01-01T00:00:00.000Z',
+    }],
+  };
+  const root = await seed({
+    'INTAKE.md': '# Intake\n\nTopic: measurement in quantum optomechanics\n',
+    'LIBRARY.json': `${JSON.stringify(v1)}\n`,
+  });
+  assert.equal((await resolveNextAction(root)).verb, 'outline');
+  const r = cli(root, ['add', '10.1038/nphys1170', '--yolo']);
+  assert.equal(r.status, 0, r.out);
+  const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as Record<string, unknown>;
+  assert.equal(lib['$schemaVersion'], 2, 'add upgraded the library');
+  assert.equal(typeof lib['researched_at'], 'string', 'the migration recorded that research ran');
+  const decision = await resolveNextAction(root);
+  assert.equal(decision.verb, 'outline', `research ran before the upgrade; got ${JSON.stringify(decision)}`);
   assert.equal(deriveLibraryStatus(root).status, 'research');
 });
 
