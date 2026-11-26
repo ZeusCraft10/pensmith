@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _setGeneratorForTest, type Generator } from '../bin/lib/anthropic.js';
-import { runRevise, type ReviseSwapVars } from '../bin/lib/revise.js';
+import { gateNote, runRevise, type ReviseGateContext, type ReviseSwapProposal, type ReviseSwapVars } from '../bin/lib/revise.js';
 import { proposeSwap } from '../bin/lib/revise-swap.js';
 
 const FENCE_OPEN = '<<<PENSMITH_UNTRUSTED_DATA_7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a>>>';
@@ -145,4 +145,50 @@ test('proposeSwap fences the citing sentence and the sources, strips a fence mar
     Object.keys((calls[0]!.schema as { properties: object }).properties).sort(),
     ['action', 'flagged_citekey', 'patch', 'rationale', 'replacement_citekey'],
   );
+});
+
+test('a swap to an assigned key LIBRARY.json holds no record of is shown at the gate as having none', async () => {
+  const root = seed();
+  const shown: ReviseGateContext[] = [];
+  const toMissing = { ...SWAP, replacement_citekey: 'missing2017', patch: { before_excerpt: '[@jones2019]', after_excerpt: '[@missing2017]' } };
+  const res = await runRevise({
+    paperRoot: root, n: 2, slug: 'target', yolo: false,
+    proposeSwap: () => Promise.resolve(JSON.stringify(toMissing)),
+    approve: (_p, context) => { shown.push(context); return Promise.resolve(false); },
+  });
+  assert.equal(res.accepted, false);
+  assert.deepEqual(shown[0], { replacementWithoutRecord: 'missing2017' });
+  const note = gateNote(toMissing as ReviseSwapProposal, shown[0]!);
+  assert.match(note, /\[@missing2017\] — no record in LIBRARY\.json/);
+
+  // A replacement with a record is shown with its title and abstract.
+  const withRecord = gateNote(SWAP as ReviseSwapProposal, {
+    replacement: { citekey: 'baker2018', title: 'The Mechanism Is Robust Across Cohorts', authors: ['Baker, A.'], year: 2018, abstract: 'Across four cohorts.' },
+  });
+  assert.match(withRecord, /^- \[@jones2019\]\n\+ \[@baker2018\]/);
+  assert.match(withRecord, /Replacement: \[@baker2018\] The Mechanism Is Robust Across Cohorts \(Baker, A\., 2018\)/);
+  assert.match(withRecord, /Abstract: Across four cohorts\./);
+});
+
+test('an unreadable LIBRARY.json is named on stderr, not passed over in silence', async () => {
+  const root = seed();
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), '{ not json');
+  let stderr = '';
+  const real = process.stderr.write.bind(process.stderr);
+  (process.stderr as unknown as { write: (s: string | Uint8Array) => boolean }).write = (s) => {
+    stderr += typeof s === 'string' ? s : Buffer.from(s).toString('utf8');
+    return true;
+  };
+  const vars: ReviseSwapVars[] = [];
+  try {
+    await runRevise({
+      paperRoot: root, n: 2, slug: 'target', yolo: false,
+      proposeSwap: (v) => { vars.push(v); return Promise.resolve(JSON.stringify(SWAP)); },
+      approve: () => Promise.resolve(false),
+    });
+  } finally {
+    process.stderr.write = real;
+  }
+  assert.match(stderr, /WARN — \.paper\/LIBRARY\.json cannot be read/);
+  assert.match(vars[0]!.available_sources, /no record in the library/, 'the assigned keys are still named');
 });

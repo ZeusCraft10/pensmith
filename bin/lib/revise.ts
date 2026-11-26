@@ -102,6 +102,8 @@ export interface ReviseSwapVars {
 export interface ReviseGateContext {
   /** The work a swap would cite instead, as LIBRARY.json holds it. */
   replacement?: SourceContextEntry;
+  /** The key a swap would cite instead, when LIBRARY.json holds no record of it. */
+  replacementWithoutRecord?: string;
 }
 
 /** A research hit the --research adapter returns (loose superset of SourceCandidate). */
@@ -311,11 +313,18 @@ function withoutQuotations(
 // The section-planner prompt writes a one-line `Voice: ...` in the ## Brief.
 // ---------------------------------------------------------------------------
 
-/** The paper's library, or an empty one when LIBRARY.json cannot be read (the sources are then named without records). */
+/**
+ * The paper's library, or an empty one when LIBRARY.json cannot be read: the
+ * sources are then named without records, and the author is told why.
+ */
 async function libraryOrEmpty(root: string): Promise<Parameters<typeof sourceContext>[0]> {
   try {
     return await loadLibrary(root);
-  } catch {
+  } catch (e) {
+    process.stderr.write(
+      `pensmith revise: WARN — .paper/LIBRARY.json cannot be read (${(e as Error).message.split('\n')[0]}), so the ` +
+        'replacement is proposed, and shown to you, without the works\' titles and abstracts.\n',
+    );
     return { $schemaVersion: 2, entries: [], bibtex_preamble: [] };
   }
 }
@@ -356,6 +365,17 @@ function describeReplacement(r: SourceContextEntry): string {
   ].join('\n');
 }
 
+/** What the approval gate shows: the change, then the replacement work, or that LIBRARY.json has no record of it. */
+export function gateNote(proposal: ReviseSwapProposal, context: ReviseGateContext): string {
+  const change = `- ${proposal.patch.before_excerpt}\n+ ${proposal.patch.after_excerpt}`;
+  if (context.replacement) return `${change}\n\n${describeReplacement(context.replacement)}`;
+  if (context.replacementWithoutRecord) {
+    return `${change}\n\nReplacement: [@${context.replacementWithoutRecord}] — no record in LIBRARY.json, so its title and ` +
+      'abstract cannot be shown; check that this work exists and supports the sentence before you accept.';
+  }
+  return change;
+}
+
 async function defaultApprove(proposal: ReviseSwapProposal, context: ReviseGateContext): Promise<boolean> {
   if (!process.stdout.isTTY || !process.stdin.isTTY) {
     throw new ApprovalUnavailableError(
@@ -364,10 +384,7 @@ async function defaultApprove(proposal: ReviseSwapProposal, context: ReviseGateC
     );
   }
   const clack = await import('@clack/prompts');
-  const before = proposal.patch.before_excerpt;
-  const after = proposal.patch.after_excerpt;
-  const replacement = context.replacement ? `\n\n${describeReplacement(context.replacement)}` : '';
-  clack.note(`- ${before}\n+ ${after}${replacement}`, `Proposed ${proposal.action} — ${proposal.rationale}`);
+  clack.note(gateNote(proposal, context), `Proposed ${proposal.action} — ${proposal.rationale}`);
   const ok = await clack.confirm({ message: `Apply this ${proposal.action}?` });
   return ok === true && !clack.isCancel(ok);
 }
@@ -658,8 +675,10 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     // deletes text, the gate shows that text, not the model's excerpt.
     const shown: ReviseSwapProposal = patch.removed.length === 0 ? proposal
       : { ...proposal, patch: { before_excerpt: patch.removed.join('\n'), after_excerpt: '(deleted)' } };
-    const replacement = sources.find((src) => src.citekey === proposal.replacement_citekey);
-    const accepted = opts.yolo ? true : await approve(shown, replacement ? { replacement } : {});
+    const key = proposal.replacement_citekey;
+    const replacement = sources.find((src) => src.citekey === key);
+    const context: ReviseGateContext = replacement ? { replacement } : key ? { replacementWithoutRecord: key } : {};
+    const accepted = opts.yolo ? true : await approve(shown, context);
     if (!accepted) {
       return { ...base, accepted: false, message: `${base.message} Proposal rejected at the approval gate — DRAFT.md unchanged.`.trim() };
     }
