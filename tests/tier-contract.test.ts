@@ -22,6 +22,7 @@ import { UX02_VERBS } from '../bin/lib/verbs.js';
 import { pensmithDataDir } from '../bin/lib/paths.js';
 import { sources } from '../bin/lib/sources/index.js';
 import { INTAKE_ANSWERS_JSON } from './lib/intake-answers.js';
+import { outlineTable } from './lib/outline-fixture.js';
 
 const CLI_BIN = 'dist/bin/pensmith.js';
 
@@ -232,18 +233,11 @@ function seedVerifySectionDraft(root: string): void {
  */
 function seedOutline(root: string): void {
   mkdirSync(join(root, '.paper'), { recursive: true });
-  writeFileSync(
-    join(root, '.paper', 'OUTLINE.md'),
-    [
-      '# Tier Contract Fixture', '',
-      '| # | slug | title | depends_on | word target | assigned_sources |',
-      '| --- | --- | --- | --- | --- | --- |',
-      '| 1 | intro | Introduction | | 300 | |',
-      '| 2 | background | Background | | 300 | |',
-      `| ${MIDDLE_SECTION} | ${MIDDLE_SLUG} | Methods | | 300 | |`,
-      '',
-    ].join('\n'),
-  );
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outlineTable([
+    { n: 1, slug: 'intro', title: 'Introduction' },
+    { n: 2, slug: 'background', title: 'Background' },
+    { n: Number(MIDDLE_SECTION), slug: MIDDLE_SLUG, title: 'Methods' },
+  ], 'Tier Contract Fixture'));
 }
 
 /** A planned PLAN.md for the MIDDLE_SECTION dir, for the write-section case. */

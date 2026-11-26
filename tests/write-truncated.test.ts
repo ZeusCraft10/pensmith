@@ -18,25 +18,17 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isolatedCliEnv } from './lib/cli-env.js';
+import { messageStream } from './lib/messages-stream.js';
 import { pensmithDataDir } from '../bin/lib/paths.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 
-function sse(events: Array<Record<string, unknown> & { type: string }>): string {
-  return events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
-}
-
-const CUT_OFF = sse([
-  { type: 'message_start', message: { id: 'm', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 900, output_tokens: 1 } } },
-  { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } },
-  { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: 'c2ln' } },
-  { type: 'content_block_stop', index: 0 },
-  { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
-  { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Quantum coherence in photosynthetic complexes has been' } },
-  { type: 'content_block_stop', index: 1 },
-  { type: 'message_delta', delta: { stop_reason: 'max_tokens', stop_sequence: null }, usage: { output_tokens: 64000 } },
-  { type: 'message_stop' },
-]);
+const CUT_OFF = messageStream({
+  blocks: [{ type: 'thinking', thinking: '' }, { type: 'text', text: 'Quantum coherence in photosynthetic complexes has been' }],
+  stopReason: 'max_tokens',
+  inputTokens: 900,
+  outputTokens: 64000,
+});
 
 function run(args: string[], cwd: string, env: Record<string, string>): Promise<{ status: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {

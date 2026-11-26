@@ -23,6 +23,7 @@ import { pensmithDataDir, sectionPlan } from '../bin/lib/paths.js';
 import { estimateCost } from '../bin/lib/pricing.js';
 import { isolatedCliEnv } from './lib/cli-env.js';
 import { writeVerificationFixture } from './lib/verification-fixture.js';
+import { outlineTable } from './lib/outline-fixture.js';
 
 const ESTIMATOR_MOD = new URL('../bin/lib/estimator.js', import.meta.url).href;
 
@@ -181,10 +182,7 @@ function paperWith(statuses: string[]): string {
   writeState(root, statuses.map((_, i) => ({ n: i + 1, slug: `s${i + 1}` })));
   mkdirSync(join(root, '.paper'), { recursive: true });
   // The outline is the section list the estimator walks.
-  writeFileSync(join(root, '.paper', 'OUTLINE.md'), [
-    '# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |',
-    ...statuses.map((_, i) => `| ${i + 1} | s${i + 1} | S${i + 1} | | 300 | |`), '',
-  ].join('\n'));
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outlineTable(statuses.map((_, i) => ({ n: i + 1, slug: `s${i + 1}`, title: `S${i + 1}` })), 'Outline'));
   writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 2, researched_at: '2026-11-01T00:00:00Z', items: [] }));
   statuses.forEach((status, i) => {
     const plan = sectionPlan(i + 1, `s${i + 1}`, root);
@@ -317,10 +315,7 @@ test('`pensmith --estimate` reads runtime.json once for every row it prices', ()
   writeState(root, Array.from({ length: 10 }, (_, i) => ({ n: i + 1, slug: `sec-${i + 1}` })));
   mkdirSync(join(root, '.paper'), { recursive: true });
   // The sections are the outline's: ten of them, none planned yet.
-  writeFileSync(join(root, '.paper', 'OUTLINE.md'), [
-    '# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |',
-    ...Array.from({ length: 10 }, (_, i) => `| ${i + 1} | sec-${i + 1} | Section ${i + 1} | | 300 | |`), '',
-  ].join('\n'));
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outlineTable(Array.from({ length: 10 }, (_, i) => ({ n: i + 1, slug: `sec-${i + 1}`, title: `Section ${i + 1}` })), 'Outline'));
   try {
     const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url)), '--estimate'], {
       cwd: root,

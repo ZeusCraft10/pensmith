@@ -18,6 +18,7 @@ import { resolveNextAction, sectionVerb } from '../bin/lib/router.js';
 import { withoutWhy } from './lib/router-decision.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 import { isolatedCliEnv } from './lib/cli-env.js';
+import { outlineTable } from './lib/outline-fixture.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -29,10 +30,7 @@ async function paper(status: string | null): Promise<string> {
   await initState(root);
   await initSection(root, 1, 'intro');
   writeFileSync(join(pdir, 'RESEARCH.md'), '# Research\n');
-  writeFileSync(join(pdir, 'OUTLINE.md'), [
-    '# Paper', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |',
-    '| 1 | intro | Introduction | | 300 | |', '',
-  ].join('\n'));
+  writeFileSync(join(pdir, 'OUTLINE.md'), outlineTable([{ n: 1, slug: 'intro', title: 'Introduction' }], 'Paper'));
   const fm = ['section: 1', 'slug: intro', 'title: Introduction', ...(status ? [`status: ${status}`] : []), 'assigned_sources: []'];
   writeFileSync(join(pdir, 'sections', '01-intro', 'PLAN.md'), `---\n${fm.join('\n')}\n---\n\n## Brief\n\nThe plan the user worked on.\n`);
   return root;

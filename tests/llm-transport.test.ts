@@ -42,6 +42,8 @@ import { fileURLToPath } from 'node:url';
 import { pensmithDataDir } from '../bin/lib/paths.js';
 import { INTAKE_ANSWERS } from './lib/intake-answers.js';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
+import { messageStream } from './lib/messages-stream.js';
+import { outlineTable } from './lib/outline-fixture.js';
 
 // ---------------------------------------------------------------------------
 // Local TypeScript interface for the transport public surface.
@@ -199,20 +201,10 @@ async function walkAndReadAll(dir: string): Promise<Array<{ path: string; text: 
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// sseAnswer: a streamed Messages API answer with one text block, as the SDK
-// reads it (complete() always streams).
-// ---------------------------------------------------------------------------
+// A streamed Messages API answer with one text block, as the SDK reads it
+// (complete() always streams).
 function sseAnswer(text: string, usage = { input_tokens: 10, output_tokens: 8 }): string {
-  const events: Array<Record<string, unknown> & { type: string }> = [
-    { type: 'message_start', message: { id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: usage.input_tokens, output_tokens: 1 } } },
-    { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
-    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
-    { type: 'content_block_stop', index: 0 },
-    { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: usage.output_tokens } },
-    { type: 'message_stop' },
-  ];
-  return events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+  return messageStream({ blocks: [{ type: 'text', text }], stopReason: 'end_turn', inputTokens: usage.input_tokens, outputTokens: usage.output_tokens });
 }
 
 const SSE_HEADERS = { headers: { 'content-type': 'text/event-stream' } };
@@ -789,10 +781,7 @@ const VERB_NO_LLM_ARGS: Partial<Record<GenerativeVerb, string[]>> = {
 
 /** An outline with section 1, 'intro': plan, write and revise work only on a section of the outline. */
 async function seedOutline(root: string): Promise<void> {
-  await fsp.writeFile(
-    path.join(root, '.paper', 'OUTLINE.md'),
-    '# Tidal Energy\n\n| # | slug | title | depends_on | word target | assigned_sources |\n| --- | --- | --- | --- | --- | --- |\n| 1 | intro | Introduction | | 300 | |\n',
-  );
+  await fsp.writeFile(path.join(root, '.paper', 'OUTLINE.md'), outlineTable([{ n: 1, slug: 'intro', title: 'Introduction' }], 'Tidal Energy'));
 }
 
 /** The verbs that work on one section of the outline. */
