@@ -15,6 +15,11 @@ const UNSUPPORTED = new Set([
   'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'maxItems', 'format',
 ]);
 
+/** Keywords whose value maps names, not keywords, to schemas: a property called `format` is kept. */
+const NAME_MAPS = new Set(['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas']);
+/** Keywords whose value is data, copied as it is. */
+const DATA = new Set(['const', 'default', 'enum', 'examples']);
+
 function strip(node: unknown): unknown {
   if (Array.isArray(node)) return node.map(strip);
   if (node === null || typeof node !== 'object') return node;
@@ -22,9 +27,15 @@ function strip(node: unknown): unknown {
   for (const [k, v] of Object.entries(node)) {
     if (UNSUPPORTED.has(k)) continue;
     if (k === 'minItems' && typeof v === 'number' && v > 1) continue;
-    out[k] = strip(v);
+    out[k] = DATA.has(k) ? v : NAME_MAPS.has(k) ? stripEach(v) : strip(v);
   }
   return out;
+}
+
+/** A name → schema map with each schema stripped and every name kept. */
+function stripEach(map: unknown): unknown {
+  if (map === null || typeof map !== 'object' || Array.isArray(map)) return strip(map);
+  return Object.fromEntries(Object.entries(map).map(([name, schema]) => [name, strip(schema)]));
 }
 
 /** The JSON Schema to send for `schema`, with the keywords structured outputs refuse removed. */
