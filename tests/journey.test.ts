@@ -34,7 +34,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { citedKeys, findCitations } from '../bin/lib/citation-grammar.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
-import { sectionDirName } from '../bin/lib/paths.js';
 import { assignedSourcesFrom } from '../bin/lib/plan-status.js';
 import { scriptedCli, type CliStreams } from './lib/cli-env.js';
 import { docxParts } from './lib/docx-fixture.js';
@@ -178,7 +177,7 @@ test(`journey: bare pensmith takes an assignment to an exported ${FORMAT}, and a
   const state = JSON.parse(readFileSync(path.join(paper, 'STATE.json'), 'utf8')) as { sections: Array<{ n: number; slug: string }> };
   assert.deepEqual(state.sections.map((s) => [s.n, s.slug]), SECTIONS.map((s, i) => [i + 1, s.slug]));
   const dirs = readdirSync(path.join(paper, 'sections')).sort();
-  assert.deepEqual(dirs, SECTIONS.map((s, i) => sectionDirName(i + 1, s.slug)));
+  assert.deepEqual(dirs, SECTIONS.map((s, i) => `${String(i + 1).padStart(2, '0')}-${s.slug}`));
 
   // ---- each section saw, and cites, only its own works ----
   const writes = calls.filter((c) => c.step === 'write');

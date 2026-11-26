@@ -24,7 +24,7 @@ import { importBibliography, updateLibrary } from '../bin/lib/library.js';
 import { scriptedCli } from './lib/cli-env.js';
 import type { CliOutput } from './lib/export-fixture.js';
 import { fileHashes } from './lib/files.js';
-import { bibEntry, KNOWN_BAD_CITATIONS, VISIBLE_ISLANDS_BIB } from './lib/verify-cli.js';
+import { VISIBLE_ISLANDS_BIB } from './lib/verify-cli.js';
 
 test('section-isolation: slug regex ^[a-z0-9-]+$ is enforced by strict path helpers (T-3-12, ARCH-02)',
   async () => {
@@ -138,8 +138,9 @@ function corpusEntries(keys: string[]): string {
   }).join('\n');
 }
 
-/** A work under a DOI no registry holds, from the known-bad corpus. */
-const FABRICATED = bibEntry(KNOWN_BAD_CITATIONS.find((e) => e.citekey === 'smith2024attention')!);
+const FABRICATED =
+  '@article{smith2024attention,\n  title = {Attention Mechanisms in Modern Transformer Architectures},\n  author = {Smith, A. B.},\n' +
+  '  year = {2024},\n  doi = {10.99999/fake.001}\n}\n';
 
 test('re-doing section 3 of 5 (verify, plan --revise, write --force, verify) changes nothing outside section 3', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-section-isolation-'));
@@ -157,12 +158,13 @@ test('re-doing section 3 of 5 (verify, plan --revise, write --force, verify) cha
   const bib = corpusEntries(['numpy-braced', 'encode-doi', 'salmonella', 'higgs-mass']) + '\n' + VISIBLE_ISLANDS_BIB('leuchtner2022') + '\n' + FABRICATED;
   await updateLibrary(root, (lib, at) => importBibliography(lib, bib, at, 'refs.bib'));
 
-  // Every section planned, drafted (one wave: none depends on another) and
-  // verified by the real CLI.
-  const ns = SECTIONS.map((_, i) => String(i + 1));
-  for (const args of [...ns.map((n) => ['plan', n, '--yolo']), ['write'], ...ns.map((n) => ['verify', n])]) {
-    const r = cli(root, ...args);
-    assert.equal(r.status, 0, `${args.join(' ')}\n${r.out}`);
+  // Each section planned, drafted and verified by the real CLI.
+  for (const [i] of SECTIONS.entries()) {
+    const n = String(i + 1);
+    for (const args of [['plan', n, '--yolo'], ['write', n], ['verify', n]]) {
+      const r = cli(root, ...args);
+      assert.equal(r.status, 0, `${args.join(' ')}\n${r.out}`);
+    }
   }
 
   // The author cites the fabricated work in section 3 by hand.
@@ -192,4 +194,36 @@ test('re-doing section 3 of 5 (verify, plan --revise, write --force, verify) cha
   const record = JSON.parse(readFileSync(join(paper, 'sections', '03-genomes', 'VERIFICATION.json'), 'utf8')) as { status: string };
   assert.equal(record.status, 'verified');
   assert.ok(existsSync(join(paper, 'sections', '03-genomes', 'DRAFT.md.bak')), 'write --force kept the earlier draft');
+});
+
+test('the scripted CLI does not inherit the shell\'s cost cap, contact email or OpenAI key', async () => {
+  // A developer's shell used to reach this file's CLI runs: a small
+  // PENSMITH_COST_CAP_USD refused every `plan N --yolo` above, and a contact
+  // email changed the User-Agent. Set them while the CLI is built and run.
+  const shell = { PENSMITH_COST_CAP_USD: '0.000001', PENSMITH_CONTACT_EMAIL: 'dev@example.org', OPENAI_API_KEY: 'sk-dev-shell-not-sent' };
+  const saved = Object.fromEntries(Object.keys(shell).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, shell);
+  try {
+    const root = mkdtempSync(join(tmpdir(), 'pensmith-shell-env-'));
+    await writeOutline(root, numberOutline({
+      title: 'One Section',
+      thesis: 'The shell is not the test.',
+      sections: [{
+        slug: 'arrays', title: 'Array Computing', purpose: 'Section 1.', depends_on: [], word_target: 300,
+        assigned_sources: ['numpy-braced'], counterargument: false,
+      }],
+    }));
+    await updateLibrary(root, (lib, at) => importBibliography(lib, corpusEntries(['numpy-braced']), at, 'refs.bib'));
+    const cli = redoCli();
+    const plan = cli(root, 'plan', '1', '--yolo');
+    assert.equal(plan.status, 0, `plan 1 --yolo runs on the default cap, not the shell's $0.000001\n${plan.out}`);
+    assert.doesNotMatch(plan.out, /exceeds 50% of the session cap/, plan.out);
+    const doctor = cli(root, 'doctor');
+    assert.match(doctor.out, /PENSMITH_CONTACT_EMAIL is not set/, doctor.out);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
 });
