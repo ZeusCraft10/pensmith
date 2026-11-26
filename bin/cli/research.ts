@@ -190,9 +190,10 @@ function candidatesShown(kept: z.infer<typeof KeptCandidatesSchema>): Record<str
 
 /** Print the kept candidates (`kept`, the ones an answer chooses from) and stop for the author's choice (exit 3). */
 function showCandidates(record: GateRecord, kept: z.infer<typeof KeptCandidatesSchema>): Record<string, unknown> {
+  const because = noneChosenBecause(kept);
   return stopForAnswer(
     'pensmith research: choosing which sources to keep needs the user, and there is no terminal to ask in; the candidates are kept until they answer.' +
-      (noneChosenBecause(kept) ? ` ${noneChosenBecause(kept)}, so none is chosen for them.` : ''),
+      (because ? ` ${because}, so none is chosen for them.` : ''),
     record,
     'research-candidates',
     candidatesShown(kept),

@@ -1,10 +1,8 @@
-// tests/estimator.test.ts — Phase 7 Wave 0 RED scaffold for ERGO-02 / ERGO-03.
+// tests/estimator.test.ts — the cost estimate (`pensmith --estimate`, the
+// done pre-flight). The estimator module must exist: a missing one fails
+// these tests, it is never skipped.
 //
-// RED-by-skip precedent (05-01 / 06-01): every behavioral assertion is
-// skip-guarded on existsSync('bin/lib/estimator.ts'). Until Plan 07-02 lands
-// the module the suite reports SKIPS with ZERO failures.
-//
-// Asserts the EXACT contract from 07-01-PLAN.md <interfaces>:
+// The contract:
 //   export function projectEstimate(args: { paperRoot: string; sessionCapUsd?: number })
 //     : Promise<{ rows: EstimateRow[]; totalUsd: number; exceedsHalfCap: boolean }>
 //   - totalUsd === sum of row.usd
@@ -26,9 +24,6 @@ import { estimateCost } from '../bin/lib/pricing.js';
 import { isolatedCliEnv } from './lib/cli-env.js';
 import { writeVerificationFixture } from './lib/verification-fixture.js';
 
-// RED-by-skip guard — the module under test does not exist until Plan 07-02.
-const ESTIMATOR_SRC = fileURLToPath(new URL('../bin/lib/estimator.ts', import.meta.url));
-const built = existsSync(ESTIMATOR_SRC);
 const ESTIMATOR_MOD = new URL('../bin/lib/estimator.js', import.meta.url).href;
 
 interface EstimateRow { step: string; inputTokens: number; outputTokens: number; usd: number; }
@@ -56,18 +51,8 @@ function writeState(root: string, sections: Array<{ n: number; slug: string }>):
   );
 }
 
-// --- RED-by-skip presence guard ---
-test('ERGO-02: estimator module presence is consistent with Wave-0 RED state', () => {
-  if (built) {
-    assert.ok(built, 'bin/lib/estimator.ts present — behavioral tests active');
-  } else {
-    assert.ok(!built, 'Wave-0: bin/lib/estimator.ts absent (RED-by-skip)');
-  }
-});
-
 // === Shape + totalUsd arithmetic ===
-test('ERGO-02: projectEstimate returns { rows, totalUsd, exceedsHalfCap } with totalUsd === sum(row.usd)',
-  { skip: !built }, async () => {
+test('ERGO-02: projectEstimate returns { rows, totalUsd, exceedsHalfCap } with totalUsd === sum(row.usd)', async () => {
     const projectEstimate = await loadProject();
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
@@ -86,8 +71,7 @@ test('ERGO-02: projectEstimate returns { rows, totalUsd, exceedsHalfCap } with t
   });
 
 // === ERGO-03: exceedsHalfCap predicate arithmetic — over the 50% cap ===
-test('ERGO-03: exceedsHalfCap === true when totalUsd > sessionCapUsd * 0.5',
-  { skip: !built }, async () => {
+test('ERGO-03: exceedsHalfCap === true when totalUsd > sessionCapUsd * 0.5', async () => {
     const projectEstimate = await loadProject();
     const root = freshRoot();
     // Many sections drive the projection up; a tiny cap forces over-50%.
@@ -100,8 +84,7 @@ test('ERGO-03: exceedsHalfCap === true when totalUsd > sessionCapUsd * 0.5',
   });
 
 // === ERGO-03: exceedsHalfCap predicate arithmetic — under the 50% cap ===
-test('ERGO-03: exceedsHalfCap === false when totalUsd <= sessionCapUsd * 0.5',
-  { skip: !built }, async () => {
+test('ERGO-03: exceedsHalfCap === false when totalUsd <= sessionCapUsd * 0.5', async () => {
     const projectEstimate = await loadProject();
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }]);
@@ -113,8 +96,7 @@ test('ERGO-03: exceedsHalfCap === false when totalUsd <= sessionCapUsd * 0.5',
   });
 
 // === T-07-03: projection must not bill — no COSTS.jsonl written ===
-test('T-07-03 / ERGO-02: projectEstimate does NOT write .paper/COSTS.jsonl (no real LLM/network)',
-  { skip: !built }, async () => {
+test('T-07-03 / ERGO-02: projectEstimate does NOT write .paper/COSTS.jsonl (no real LLM/network)', async () => {
     const projectEstimate = await loadProject();
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
@@ -131,8 +113,7 @@ test('T-07-03 / ERGO-02: projectEstimate does NOT write .paper/COSTS.jsonl (no r
   });
 
 // === C2-H1: paper-less dir → empty projection, never throws ===
-test('ERGO-02 / C2-H1: projectEstimate on a paper-less dir → empty projection, no throw',
-  { skip: !built }, async () => {
+test('ERGO-02 / C2-H1: projectEstimate on a paper-less dir → empty projection, no throw', async () => {
     const projectEstimate = await loadProject();
     const root = freshRoot(); // no STATE.json
     let res: EstimateResult | undefined;
@@ -147,8 +128,7 @@ test('ERGO-02 / C2-H1: projectEstimate on a paper-less dir → empty projection,
   });
 
 // === C4-HIGH: invalid-JSON STATE.json → empty projection, never throws ===
-test('ERGO-02 / C4-HIGH: invalid-JSON STATE.json → empty projection, no throw (same as fresh dir)',
-  { skip: !built }, async () => {
+test('ERGO-02 / C4-HIGH: invalid-JSON STATE.json → empty projection, no throw (same as fresh dir)', async () => {
     const projectEstimate = await loadProject();
     const root = freshRoot();
     mkdirSync(join(root, '.paper'), { recursive: true });
@@ -166,8 +146,7 @@ test('ERGO-02 / C4-HIGH: invalid-JSON STATE.json → empty projection, no throw 
   });
 
 // === C4-HIGH: schema-invalid STATE.json → empty projection, never throws ===
-test('ERGO-02 / C4-HIGH: schema-invalid STATE.json (section missing slug) → empty projection, no throw',
-  { skip: !built }, async () => {
+test('ERGO-02 / C4-HIGH: schema-invalid STATE.json (section missing slug) → empty projection, no throw', async () => {
     const projectEstimate = await loadProject();
     const root = freshRoot();
     writeFileSync(
@@ -215,8 +194,7 @@ function paperWith(statuses: string[]): string {
   return root;
 }
 
-test('estimate: `done` on a finished seven-section paper costs only its own pass and is under half the cap',
-  { skip: !built }, async () => {
+test('estimate: `done` on a finished seven-section paper costs only its own pass and is under half the cap', async () => {
     const projectEstimate = await loadProject();
     const root = paperWith(Array.from({ length: 7 }, () => 'verified'));
     const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'done' } as never);
@@ -224,14 +202,14 @@ test('estimate: `done` on a finished seven-section paper costs only its own pass
     assert.equal(res.exceedsHalfCap, false);
   });
 
-test('estimate: a bare run counts only the sections still to finish', { skip: !built }, async () => {
+test('estimate: a bare run counts only the sections still to finish', async () => {
   const projectEstimate = await loadProject();
   const root = paperWith(['verified', 'verified', 'written', 'writing']);
   const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 5 });
   assert.deepEqual(res.rows.map((r) => r.step), ['verify §3', 'write §4', 'verify §4', 'done']);
 });
 
-test('estimate: a failed or unverifiable section is priced as the step the router sends it to', { skip: !built }, async () => {
+test('estimate: a failed or unverifiable section is priced as the step the router sends it to', async () => {
   // A failed section was priced as verify, but the router sends it to
   // plan --revise (a citation revise can repair), write --force (a draft
   // with nothing to check), verify (a registry did not answer) or to the
@@ -254,8 +232,7 @@ test('estimate: a failed or unverifiable section is priced as the step the route
   assert.deepEqual(res.rows.map((r) => r.step), ['revise §1', 'verify §1', 'write §2', 'verify §2', 'verify §3', 'done']);
 });
 
-test('estimate: a wave write counts only the sections that still need drafting; compile costs nothing',
-  { skip: !built }, async () => {
+test('estimate: a wave write counts only the sections that still need drafting; compile costs nothing', async () => {
     const projectEstimate = await loadProject();
     const root = paperWith(['verified', 'writing', 'planned']);
     const write = await projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'write' } as never);
@@ -264,7 +241,7 @@ test('estimate: a wave write counts only the sections that still need drafting; 
     assert.deepEqual(compile.rows, []);
   });
 
-test('estimate: steps are priced with the model runtime.json configures', { skip: !built }, async () => {
+test('estimate: steps are priced with the model runtime.json configures', async () => {
   const projectEstimate = await loadProject();
   const root = paperWith(['planned']);
   const savedXdg = process.env['XDG_DATA_HOME'];
@@ -304,7 +281,7 @@ test('the --yolo pre-flight does not run when no model is called (stub mode or o
   }
 });
 
-test('`pensmith done --yolo` on a finished seven-section paper is not refused by the pre-flight', { skip: !built }, () => {
+test('`pensmith done --yolo` on a finished seven-section paper is not refused by the pre-flight', () => {
   const root = paperWith(Array.from({ length: 7 }, () => 'verified'));
   const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url)), 'done', '--yolo'], {
     cwd: root,
@@ -321,7 +298,7 @@ test('`pensmith done --yolo` on a finished seven-section paper is not refused by
 // so `--estimate` (and the --yolo pre-flight) leaves one runtime.load record in
 // the paper's session log per row. A behaviour-preserving cleanup once cached
 // the price per step, which cut a ten-section estimate's 33 records to 6.
-test('`pensmith --estimate` reads runtime.json once for every row it prices', { skip: !built }, () => {
+test('`pensmith --estimate` reads runtime.json once for every row it prices', () => {
   const root = freshRoot();
   writeState(root, Array.from({ length: 10 }, (_, i) => ({ n: i + 1, slug: `sec-${i + 1}` })));
   mkdirSync(join(root, '.paper'), { recursive: true });
