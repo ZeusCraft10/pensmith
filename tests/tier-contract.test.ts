@@ -1013,7 +1013,6 @@ for (const verb of PROMOTED_VERBS) {
   });
 }
 
-
 test('tier-contract: list parity — both tier paths produce equivalent grouped listing (D-24)', () => {
   // list is pure-local + deterministic: two runs of the SAME bin/cli/list.ts path
   // (the single path both tiers share — no pensmith_list MCP tool) against the
@@ -1200,7 +1199,6 @@ test('tier-contract: no unplanned verb — UX02_VERBS stays at exactly 18 (T-07-
 // compile/done CLI-only asymmetry), and (2) re-asserts the 16-verb bijection:
 // exactly 16 verbs and NO Phase-10 surface (zotero/ris/style) leaked into the
 // locked set, while 'zotero-mcp' lives ONLY in the sources registry.
-
 
 test('tier-contract: research — emits CITATIONS.ris alongside CITATIONS.bib (CITE-05, D-24)', () => {
   // research is CLI-only at the tier-contract layer (no pensmith_research MCP

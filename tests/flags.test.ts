@@ -113,7 +113,6 @@ test('ERGO-01: isOfflineMode() is false by default and true only under PENSMITH_
   }
 });
 
-
 // ===========================================================================
 // Flag declaration — the four global flags parse on the explicit-verb surface.
 // ===========================================================================
