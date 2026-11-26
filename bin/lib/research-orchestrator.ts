@@ -33,12 +33,10 @@
 import { z } from 'zod';
 import { sources } from './sources/index.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { assignUniqueCitekeys } from './bibtex-write.js';
 import { groupCandidates } from './library.js';
 import { crossCheckRetractions } from './sources/retraction-cross-check.js';
-import { packageRoot } from './paths.js';
+import { disciplinePreset } from './citations.js';
 import { complete } from './anthropic.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
 import { escapeTemplateTokens } from './intake-parse.js';
@@ -83,13 +81,8 @@ const EvalResponseSchema = z.array(EvalVerdictSchema);
  * kept when several return it. Empty when the presets cannot be read.
  */
 export function sourcePreferenceFor(discipline: string): string[] {
-  try {
-    const presets = JSON.parse(readFileSync(path.join(packageRoot(), 'templates', 'presets', 'disciplines.json'), 'utf8')) as Record<string, { sourcePreference?: unknown }>;
-    const pref = (presets[discipline.toLowerCase()] ?? presets['other'])?.sourcePreference;
-    return Array.isArray(pref) ? pref.filter((s): s is string => typeof s === 'string') : [];
-  } catch {
-    return [];
-  }
+  const pref = disciplinePreset(discipline)?.['sourcePreference'];
+  return Array.isArray(pref) ? pref.filter((s): s is string => typeof s === 'string') : [];
 }
 
 // ---------------------------------------------------------------------------

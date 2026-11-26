@@ -5,6 +5,7 @@
 // citekey as ID. formatRis in bin/lib/citations.ts does the rendering, so this
 // file never imports citation-js itself.
 
+import { byCitekey } from './bibtex-write.js';
 import { formatRis } from './citations.js';
 import type { Library, LibraryItem } from './schemas/library.js';
 
@@ -17,6 +18,6 @@ function risCsl(item: LibraryItem): Record<string, unknown> {
 
 /** CITATIONS.ris for `library`; '' when it holds nothing. */
 export function libraryRis(library: Pick<Library, 'entries'>): string {
-  const items = [...library.entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const items = [...library.entries].sort(byCitekey);
   return formatRis(items.map(risCsl));
 }

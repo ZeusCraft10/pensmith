@@ -614,20 +614,23 @@ export function normalizeStyleName(name: string): string | null {
 }
 
 /**
- * The default citation style for a discipline slug, read from
- * templates/presets/disciplines.json (the one place presets are defined).
- * An unknown discipline uses the `other` preset.
+ * The preset for a discipline slug, read from templates/presets/disciplines.json
+ * (the one place presets are defined). An unknown discipline uses the `other`
+ * preset; undefined when the presets cannot be read.
  */
-export function resolveStyleName(discipline: string): string {
-  let presets: Record<string, { defaultCitationStyle?: unknown }> = {};
+export function disciplinePreset(discipline: string): Record<string, unknown> | undefined {
   try {
-    presets = JSON.parse(readFileSync(path.join(PKG_ROOT, 'templates', 'presets', 'disciplines.json'), 'utf8')) as typeof presets;
+    const presets = JSON.parse(readFileSync(path.join(PKG_ROOT, 'templates', 'presets', 'disciplines.json'), 'utf8')) as Record<string, Record<string, unknown> | undefined>;
+    return presets[discipline.toLowerCase()] ?? presets['other'];
   } catch {
-    return 'apa';
+    return undefined;
   }
-  const preset = presets[discipline.toLowerCase()] ?? presets['other'];
-  const style = typeof preset?.defaultCitationStyle === 'string' ? normalizeStyleName(preset.defaultCitationStyle) : null;
-  return style ?? 'apa';
+}
+
+/** The default citation style for a discipline slug (its preset's `defaultCitationStyle`), else APA. */
+export function resolveStyleName(discipline: string): string {
+  const style = disciplinePreset(discipline)?.['defaultCitationStyle'];
+  return (typeof style === 'string' ? normalizeStyleName(style) : null) ?? 'apa';
 }
 
 // =====================================================================

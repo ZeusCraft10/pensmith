@@ -13,7 +13,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import { displayName, parseDisplayName, presentNames } from '../author-normalize.js';
-import { arxivFromDoi, bareArxivId, normalizePmcid, normalizePmid } from '../doi.js';
+import { arxivFromDoi, arxivFromLink, bareArxivId, normalizePmcid, normalizePmid } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { askOaPdfs, askSource, contactParam, definedFields, firstString, isGone, RETRACTION_STATUS_TTL_MS, type OaPdfAnswer } from './work-record.js';
 
@@ -55,15 +55,15 @@ const CSL_TYPE: Readonly<Record<string, string>> = {
 };
 
 /** The PubMed or PMC ID an OpenAlex `ids` link names ("https://pubmed.ncbi.nlm.nih.gov/9500320"). */
-function idFromLink(link: string | undefined, normalize: (s: string) => string | null): string | undefined {
+function idFromLink(link: string | undefined, normalize: (s: string) => string | null): string | null {
   const last = (link ?? '').replace(/\/+$/, '').split('/').pop() ?? '';
-  return normalize(last) ?? undefined;
+  return normalize(last);
 }
 
 /** "637-641" from OpenAlex's first and last page. */
 function pages(b: OpenAlexWork['biblio']): string | undefined {
-  const first = firstString(b?.first_page ?? undefined);
-  const last = firstString(b?.last_page ?? undefined);
+  const first = firstString(b?.first_page);
+  const last = firstString(b?.last_page);
   if (!first) return undefined;
   return last && last !== first ? `${first}-${last}` : first;
 }
@@ -93,7 +93,7 @@ function toCandidate(item: OpenAlexWork): SourceCandidate | null {
 
   const citekey = generateCitekey({ authors, year });
   const doi = normalizeDoi(item.doi);
-  const arxiv = bareArxivId(/\/abs\/(.+)$/.exec(item.ids?.arxiv ?? '')?.[1] ?? '') ?? (doi ? arxivFromDoi(doi) : null);
+  const arxiv = bareArxivId(arxivFromLink(item.ids?.arxiv ?? '')) ?? (doi ? arxivFromDoi(doi) : null);
   const venue = item.primary_location?.source;
 
   return {
@@ -109,9 +109,9 @@ function toCandidate(item: OpenAlexWork): SourceCandidate | null {
     ...definedFields({
       pmid: idFromLink(item.ids?.pmid, normalizePmid),
       pmcid: idFromLink(item.ids?.pmcid, normalizePmcid),
-      container_title: venue?.type === 'repository' ? undefined : firstString(venue?.display_name ?? undefined),
-      volume: firstString(item.biblio?.volume ?? undefined),
-      issue: firstString(item.biblio?.issue ?? undefined),
+      container_title: venue?.type === 'repository' ? undefined : firstString(venue?.display_name),
+      volume: firstString(item.biblio?.volume),
+      issue: firstString(item.biblio?.issue),
       page: pages(item.biblio),
     }),
     retracted: false,

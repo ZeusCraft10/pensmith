@@ -19,31 +19,28 @@
 // the library reads them in from the bibliography the first time it writes
 // (bin/lib/library.ts), keeping each entry's text as it was.
 
-import { bareArxivId, normalizePmid } from '../../doi.js';
+import { arxivFromLink, bareArxivId, normalizePmid } from '../../doi.js';
 import { itemFromCandidate, itemIdentities } from '../../library-item.js';
+import { firstString } from '../../sources/work-record.js';
 import type { LibraryItem } from '../../schemas/library.js';
 import type { SourceCandidate } from '../../schemas/source-candidate.js';
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 
-function str(v: unknown): string | undefined {
-  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
-}
-
 /** A v1 entry (a research candidate) as an item, or null when it has nothing to cite. */
 function migrateEntry(raw: unknown, now: string): LibraryItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const e = raw as Record<string, unknown>;
-  const title = str(e['title']);
-  const citekey = str(e['citekey']);
+  const title = firstString(e['title']);
+  const citekey = firstString(e['citekey']);
   if (!title || !citekey) return null;
-  const at = str(e['last_verified']) && ISO.test(String(e['last_verified'])) ? String(e['last_verified']) : now;
-  const source = str(e['source']) ?? 'crossref';
+  const at = firstString(e['last_verified']) && ISO.test(String(e['last_verified'])) ? String(e['last_verified']) : now;
+  const source = firstString(e['source']) ?? 'crossref';
   const authors = Array.isArray(e['authors']) ? e['authors'].filter((a): a is string => typeof a === 'string' && a.trim() !== '') : [];
   const year = typeof e['year'] === 'number' && Number.isInteger(e['year']) ? e['year'] : undefined;
   // v1 kept no arXiv ID or PMID, but an arXiv or PubMed candidate's own id is one.
-  const id = str(e['id']) ?? citekey;
-  const arxiv = source === 'arxiv' ? bareArxivId(/\/abs\/(.+)$/.exec(id)?.[1] ?? id) : null;
+  const id = firstString(e['id']) ?? citekey;
+  const arxiv = source === 'arxiv' ? bareArxivId(arxivFromLink(id) || id) : null;
   const pmid = source === 'pubmed' ? normalizePmid(id) : null;
   const candidate = {
     source,
@@ -53,16 +50,16 @@ function migrateEntry(raw: unknown, now: string): LibraryItem | null {
     title,
     authors,
     ...(year !== undefined ? { year } : {}),
-    ...(str(e['doi']) ? { doi: str(e['doi']) } : {}),
-    ...(str(e['abstract']) ? { abstract: str(e['abstract']) } : {}),
-    ...(str(e['oa_pdf_url']) ? { oa_pdf_url: str(e['oa_pdf_url']) } : {}),
-    ...(str(e['retraction_details']) ? { retraction_details: str(e['retraction_details']) } : {}),
+    ...(firstString(e['doi']) ? { doi: firstString(e['doi']) } : {}),
+    ...(firstString(e['abstract']) ? { abstract: firstString(e['abstract']) } : {}),
+    ...(firstString(e['oa_pdf_url']) ? { oa_pdf_url: firstString(e['oa_pdf_url']) } : {}),
+    ...(firstString(e['retraction_details']) ? { retraction_details: firstString(e['retraction_details']) } : {}),
     retracted: e['retracted'] === true,
     last_verified: at,
     citekey,
     raw: null,
   } as SourceCandidate;
-  return itemFromCandidate(candidate, citekey, at, { provenance: [{ source, id: candidate.id, at }] });
+  return itemFromCandidate(candidate, citekey, at);
 }
 
 /** A v1 entry the migration left out because no identifier names it. */
@@ -71,12 +68,7 @@ export interface LeftOut {
   title: string;
 }
 
-/** Migrate a v1 LIBRARY.json value (or a bare array of entries) to v2. */
-export function migrate(input: unknown, now: string = new Date().toISOString()): unknown {
-  return migrateWithReport(input, now).library;
-}
-
-/** migrate, and the entries it left out because no identifier names them. */
+/** Migrate a v1 LIBRARY.json value (or a bare array of entries) to v2; also the entries it left out because no identifier names them. */
 export function migrateWithReport(input: unknown, now: string = new Date().toISOString()): { library: unknown; leftOut: LeftOut[] } {
   const entries = Array.isArray(input)
     ? input

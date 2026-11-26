@@ -17,7 +17,7 @@
 //   - otherwise, some registry gave no answer (timeout, 429, 5xx) → unavailable
 //     (UNRESOLVED: blocking, and worth retrying).
 
-import { doiFromLink, isbnsIn, looksLikeIsbn, normalizeArxiv, normalizeDoi, normalizeIsbn, normalizePmid } from '../doi.js';
+import { arxivFromLink, doiFromLink, isbnsIn, looksLikeIsbn, normalizeArxiv, normalizeDoi, normalizeIsbn, normalizePmid } from '../doi.js';
 import { lookupDoi as crossrefLookup } from '../sources/crossref.js';
 import { lookupDoi as dataciteLookup } from '../sources/datacite.js';
 import { lookupDoi as doiOrgLookup } from '../sources/doi-content.js';
@@ -56,8 +56,6 @@ export type IdResolution =
       registries: RegistryName[];
     };
 
-const ARXIV_URL = /arxiv\.org\/(?:abs|pdf)\/([^\s?#]+?)(?:\.pdf)?(?:[?#]|$)/i;
-
 /**
  * The arXiv ID registries are asked for: normalizeArxiv's form without its
  * `arxiv:` prefix. A bibliography may write "arXiv: 2103.00020"; the space is
@@ -88,7 +86,7 @@ export function workIdentifiers(csl: Record<string, unknown>, fields: Record<str
     str(fields['arxiv']),
     str(fields['arxivid']),
     eprintType === '' && arxivQueryId(eprint) !== null ? eprint : '',
-    ARXIV_URL.exec(url)?.[1] ?? '',
+    arxivFromLink(url),
   ].find((s) => s !== '');
   if (arxivRaw) {
     const value = arxivQueryId(arxivRaw);

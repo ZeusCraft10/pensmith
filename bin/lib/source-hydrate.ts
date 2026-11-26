@@ -20,8 +20,9 @@
 
 import { search as crossrefSearch, fetchById as crossrefFetchById } from './sources/crossref.js';
 import { fetchById as arxivFetchById } from './sources/arxiv.js';
-import { arxivFromDoi, bareArxivId, normalizeDoi, sameDoi } from './doi.js';
+import { arxivFromDoi, arxivIdsIn, bareArxivId, doisIn, normalizeDoi, sameDoi } from './doi.js';
 import { normalizeForFuzzy } from './fuzzy.js';
+import { firstString, wholeTitle } from './sources/work-record.js';
 import { sameWholeTitle } from './verify/work-match.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
@@ -80,7 +81,7 @@ function words(s: string): string {
  * where the paper speaks of itself. A first page can print a reference list
  * (a short paper, a letter), and its titles and authors are other works'.
  */
-export function openingLines(text: string): string[] {
+function openingLines(text: string): string[] {
   const out: string[] = [];
   for (const raw of text.slice(0, OPENING_CHARS).split(/\r?\n/)) {
     const line = raw.replace(/\s+/g, ' ').trim();
@@ -96,7 +97,7 @@ export function openingLines(text: string): string[] {
  * most TITLE_BLOCK_LINES. A first line that starts with "Abstract" is a title
  * ("Abstract Meaning Representation for Sembanking"), not the abstract.
  */
-export function titleBlock(opening: readonly string[]): string[] {
+function titleBlock(opening: readonly string[]): string[] {
   const abstractAt = opening.findIndex((l, i) => i > 0 && ABSTRACT_START.test(l));
   return opening.slice(0, Math.min(abstractAt < 0 ? opening.length : abstractAt, TITLE_BLOCK_LINES));
 }
@@ -106,7 +107,7 @@ export function titleBlock(opening: readonly string[]): string[] {
  * up to TITLE_MAX_LINES consecutive lines it wraps onto. Whole lines, so a
  * title quoted inside another ("Comment on ...") is not this paper's.
  */
-export function titleInBlock(title: string, block: readonly string[]): boolean {
+function titleInBlock(title: string, block: readonly string[]): boolean {
   for (let i = 0; i < block.length; i++) {
     let span = '';
     for (let k = i; k < Math.min(block.length, i + TITLE_MAX_LINES); k++) {
@@ -119,29 +120,8 @@ export function titleInBlock(title: string, block: readonly string[]): boolean {
 
 /** The candidate's whole title: Crossref keeps a subtitle in a field of its own. */
 function wholeTitleOf(c: SourceCandidate): string {
-  const sub = (c.raw as { subtitle?: unknown } | undefined)?.subtitle;
-  const s = Array.isArray(sub) && typeof sub[0] === 'string' ? sub[0].trim() : '';
-  return s && !words(c.title).endsWith(words(s)) ? `${c.title}: ${s}` : c.title;
-}
-
-/** The DOIs printed in `text`, in order, each once. */
-export function doisIn(text: string): string[] {
-  const out: string[] = [];
-  for (const m of text.matchAll(/\b10\.\d{4,9}\/[^\s"'<>]+/g)) {
-    const d = normalizeDoi(m[0]);
-    if (d && !out.includes(d)) out.push(d);
-  }
-  return out;
-}
-
-/** The arXiv IDs printed in `text` ("arXiv:1706.03762", "arXiv 1706.03762v7", an arxiv.org link), in order, each once. */
-export function arxivIdsIn(text: string): string[] {
-  const out: string[] = [];
-  for (const m of text.matchAll(/\barxiv(?:\.org\/(?:abs|pdf)\/|[:\s]+)(\d{4}\.\d{4,5}(?:v\d+)?)/gi)) {
-    const id = bareArxivId(m[1]!);
-    if (id && !out.includes(id)) out.push(id);
-  }
-  return out;
+  const s = firstString((c.raw as { subtitle?: unknown } | undefined)?.subtitle);
+  return wholeTitle(s && !words(c.title).endsWith(words(s)) ? { title: c.title, subtitle: s } : { title: c.title });
 }
 
 // Lines on a first page that are not the title: links, licences, journal
@@ -149,12 +129,12 @@ export function arxivIdsIn(text: string): string[] {
 const NOT_A_TITLE = /https?:\/\/|www\.|©|\bcopyright\b|\blicen[cs]e|\bdoi\b|\barxiv\b|\bissn\b|\bpreprint\b|\bjournal of\b|\bproceedings\b|\bvol(?:ume)?\.?\s*\d|\breceived\b|\baccepted\b|^\W*\d+\W*$/i;
 
 /** The PDF's likely title: the first line of 8 to 300 characters in `lines` that is not page furniture. */
-export function titleLine(lines: readonly string[]): string | undefined {
+function titleLine(lines: readonly string[]): string | undefined {
   return lines.find((line) => line.length >= 8 && line.length <= 300 && !NOT_A_TITLE.test(line));
 }
 
 /** Share of the candidate's authors whose family name is a word of `text`, 0..1. */
-export function authorsNamedIn(c: SourceCandidate, text: string): number {
+function authorsNamedIn(c: SourceCandidate, text: string): number {
   const inText = new Set(words(text).split(' '));
   const families = (c.names ?? []).map((n) => n.family ?? '').filter(Boolean);
   if (families.length === 0) return 0;
@@ -175,21 +155,19 @@ export async function hydrateFromText(text: string): Promise<Hydration> {
   const opening = openingLines(text);
   const block = titleBlock(opening);
   const openingText = opening.join('\n');
+  const printed = [
+    ...doisIn(openingText).slice(0, MAX_TRIED).map((doi) => ({ look: () => hydrateDoi(doi), shown: `DOI ${doi}`, via: `the DOI printed in the PDF (${doi})` })),
+    ...arxivIdsIn(openingText).slice(0, MAX_TRIED).map((id) => ({ look: () => hydrateArxiv(id), shown: `arXiv:${id}`, via: `the arXiv ID printed in the PDF (${id})` })),
+  ];
   const tried: string[] = [];
-  for (const doi of doisIn(openingText).slice(0, MAX_TRIED)) {
-    const r = await hydrateDoi(doi);
-    if (r.kind === 'found' && titleInBlock(wholeTitleOf(r.candidate), block)) return { ...r, via: `the DOI printed in the PDF (${doi})` };
-    tried.push(`DOI ${doi}`);
+  for (const p of printed) {
+    const r = await p.look();
+    if (r.kind === 'found' && titleInBlock(wholeTitleOf(r.candidate), block)) return { ...r, via: p.via };
+    tried.push(p.shown);
   }
-  for (const id of arxivIdsIn(openingText).slice(0, MAX_TRIED)) {
-    const r = await hydrateArxiv(id);
-    if (r.kind === 'found' && titleInBlock(wholeTitleOf(r.candidate), block)) return { ...r, via: `the arXiv ID printed in the PDF (${id})` };
-    tried.push(`arXiv:${id}`);
-  }
+  const others = tried.length ? `, and ${tried.join(', ')} name other works` : '';
   const title = titleLine(block);
-  if (!title) {
-    return { kind: 'none', reason: `no title line could be read from the PDF${tried.length ? `, and ${tried.join(', ')} name other works` : ''}` };
-  }
+  if (!title) return { kind: 'none', reason: `no title line could be read from the PDF${others}` };
   const hits = await crossrefSearch(title, { limit: 5 });
   let best: { hit: SourceCandidate; named: number } | undefined;
   for (const hit of hits) {
@@ -201,8 +179,7 @@ export async function hydrateFromText(text: string): Promise<Hydration> {
   return {
     kind: 'none',
     reason:
-      `Crossref has no work titled "${title}" by an author the PDF names` +
-      (tried.length ? `, and ${tried.join(', ')} name other works` : '') +
+      `Crossref has no work titled "${title}" by an author the PDF names${others}` +
       ' — add it by its DOI or arXiv ID instead',
   };
 }

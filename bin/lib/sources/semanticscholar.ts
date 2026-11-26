@@ -105,9 +105,9 @@ function toCandidate(item: S2Paper): SourceCandidate | null {
     names,
     year,
     ...definedFields({
-      arxiv: (ext.ArXiv ? bareArxivId(ext.ArXiv) : null) ?? (doi ? arxivFromDoi(doi) : null) ?? undefined,
-      pmid: (ext.PubMed ? normalizePmid(ext.PubMed) : null) ?? undefined,
-      pmcid: pmcid ?? undefined,
+      arxiv: (ext.ArXiv ? bareArxivId(ext.ArXiv) : null) ?? (doi ? arxivFromDoi(doi) : null),
+      pmid: ext.PubMed ? normalizePmid(ext.PubMed) : null,
+      pmcid,
     }),
     abstract: item.abstract,
     retracted: false,

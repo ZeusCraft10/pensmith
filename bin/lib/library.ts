@@ -25,15 +25,15 @@ import * as fsp from 'node:fs/promises';
 import { join } from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
-import { loadAndMigrate, type Migration } from './migrations/loader.js';
-import { migrate as v1ToV2, migrateWithReport as v1ToV2WithReport, type LeftOut } from './migrations/library/v1_to_v2.js';
+import { loadAndMigrate, migrateValue, type Migration } from './migrations/loader.js';
+import { migrateWithReport as v1ToV2WithReport, type LeftOut } from './migrations/library/v1_to_v2.js';
 import { paperDir } from './paths.js';
 import { generateCitekey } from './citekey.js';
-import { freeCitekey, itemBibtex, libraryBibtex, splitBibtex } from './bibtex-write.js';
+import { freeCitekey, itemBibtex, libraryBibtex, splitBibtex, type BibBlock } from './bibtex-write.js';
 import { libraryRis } from './ris-write.js';
 import { candidateIdentities, identityKeys, itemFromBibEntry, itemFromCandidate, itemIdentities } from './library-item.js';
-import { bareArxivId } from './doi.js';
-import { parseBibByCitekey, parseBibFieldsByCitekey } from './citations.js';
+import { arxivFromLink, bareArxivId } from './doi.js';
+import { parseBibForPass1 } from './verify/pass1.js';
 import {
   CURRENT_LIBRARY_VERSION,
   LibraryItemSchema,
@@ -46,7 +46,18 @@ import type { SourceCandidate } from './schemas/source-candidate.js';
 
 export type { Library, LibraryItem } from './schemas/library.js';
 
-const MIGRATIONS: Record<number, Migration> = { 1: (v) => v1ToV2(v) };
+/** The library's migrations; `leftOut` gathers the v1 entries the v1 migration left out. */
+function migrationsInto(leftOut: LeftOut[] = []): Record<number, Migration> {
+  return {
+    1: (v) => {
+      const r = v1ToV2WithReport(v);
+      leftOut.push(...r.leftOut);
+      return r.library;
+    },
+  };
+}
+
+const LIBRARY_SCHEMA = { schema: LibrarySchema, schemaName: 'library', currentVersion: CURRENT_LIBRARY_VERSION } as const;
 
 /** .paper/LIBRARY.json under the project at `root`. */
 export function libraryFile(root: string): string {
@@ -63,24 +74,9 @@ function isMissing(err: unknown): boolean {
 }
 
 /** The library in `file`; `leftOut` gathers the v1 entries a migration left out. */
-async function readFrom(file: string, leftOut?: LeftOut[]): Promise<Library> {
-  const migrations: Record<number, Migration> = leftOut
-    ? {
-      1: (v) => {
-        const r = v1ToV2WithReport(v);
-        leftOut.push(...r.leftOut);
-        return r.library;
-      },
-    }
-    : MIGRATIONS;
+async function readFrom(file: string, leftOut: LeftOut[] = []): Promise<Library> {
   try {
-    return (await loadAndMigrate({
-      file,
-      schema: LibrarySchema,
-      schemaName: 'library',
-      currentVersion: CURRENT_LIBRARY_VERSION,
-      migrations,
-    })) as Library;
+    return (await loadAndMigrate({ file, ...LIBRARY_SCHEMA, migrations: migrationsInto(leftOut) })) as Library;
   } catch (err) {
     if (isMissing(err)) return emptyLibrary();
     throw err;
@@ -102,13 +98,7 @@ export function readLibrarySync(root: string): Library | null {
   const file = libraryFile(root);
   if (!existsSync(file)) return emptyLibrary();
   try {
-    let value: unknown = JSON.parse(readFileSync(file, 'utf8'));
-    const version = typeof (value as { $schemaVersion?: unknown })?.$schemaVersion === 'number'
-      ? (value as { $schemaVersion: number }).$schemaVersion
-      : 1;
-    for (let v = version; v < CURRENT_LIBRARY_VERSION; v++) value = MIGRATIONS[v]!(value);
-    const parsed = LibrarySchema.safeParse(value);
-    return parsed.success ? parsed.data : null;
+    return migrateValue(JSON.parse(readFileSync(file, 'utf8')), { ...LIBRARY_SCHEMA, migrations: migrationsInto() }).value as Library;
   } catch {
     return null;
   }
@@ -118,18 +108,21 @@ export function readLibrarySync(root: string): Library | null {
 // Reading CITATIONS.bib back in.
 // ---------------------------------------------------------------------------
 
-interface ParsedBib {
-  entries: Map<string, Record<string, unknown>>;
-  fields: Map<string, Record<string, string>>;
-}
-
-/** A bibliography as Pass 1 reads it: the CSL entries and the raw fields, by citekey. */
-async function parseBib(text: string): Promise<ParsedBib> {
-  return { entries: await parseBibByCitekey(text), fields: await parseBibFieldsByCitekey(text) };
-}
-
 /** The blocks of a bibliography that are not entries, which the library writes back first. */
 const KEPT_BLOCKS: ReadonlySet<string> = new Set(['string', 'preamble', 'comment', 'text']);
+
+/**
+ * A bibliography's text with LF line endings, its blocks (splitBibtex), and
+ * its @string and @preamble blocks, which an entry may use. A checkout with
+ * CRLF line endings (git's autocrlf) holds the same entries the library
+ * wrote; compared byte for byte, every one would read as edited.
+ */
+function readBlocks(raw: string): { text: string; blocks: BibBlock[]; macros: string[] } {
+  const text = raw.replace(/\r\n?/g, '\n');
+  const blocks = splitBibtex(text);
+  const macros = blocks.filter((b) => b.type === 'string' || b.type === 'preamble').map((b) => b.text.trim());
+  return { text, blocks, macros };
+}
 
 /**
  * Read into `lib` every entry of `bibText` that is not what the library would
@@ -139,17 +132,13 @@ const KEPT_BLOCKS: ReadonlySet<string> = new Set(['string', 'preamble', 'comment
  * the same work. Returns the keys read in.
  */
 async function readInBibliography(lib: Library, rawBibText: string, at: string): Promise<string[]> {
-  // A checkout with CRLF line endings (git's autocrlf) holds the same entries
-  // the library wrote; compared byte for byte, every one would read as edited.
-  const bibText = rawBibText.replace(/\r\n?/g, '\n');
+  const { text: bibText, blocks, macros } = readBlocks(rawBibText);
   if (bibText.trim() === '') return [];
-  const blocks = splitBibtex(bibText);
   // @comment blocks (JabRef keeps its metadata in one) and other text between
   // entries are kept beside the @string and @preamble blocks, written first.
   lib.bibtex_preamble = blocks.filter((b) => KEPT_BLOCKS.has(b.type)).map((b) => b.text.trim());
-  const macros = blocks.filter((b) => b.type === 'string' || b.type === 'preamble').map((b) => b.text.trim());
   // A key given twice is read as Pass 1 reads it: the last entry counts.
-  const entries = new Map(blocks.filter((b) => b.key !== '' && b.type !== 'comment').map((b) => [b.key, b.text.trim()]));
+  const entries = new Map(blocks.filter((b) => b.key !== '').map((b) => [b.key, b.text.trim()]));
   const index = new Map(lib.entries.map((e, i) => [e.id, i]));
   const changed = [...entries].filter(([key, text]) => {
     const i = index.get(key);
@@ -157,28 +146,15 @@ async function readInBibliography(lib: Library, rawBibText: string, at: string):
   });
   if (changed.length === 0) return [];
 
-  let bib: ParsedBib | null = null;
-  try {
-    bib = await parseBib(bibText);
-  } catch {
-    // One unreadable entry stops citation-js reading the file; each changed
-    // entry is then read on its own, and one that still cannot be read is
-    // kept as text alone (verify reports the file as unreadable).
-  }
+  // One unreadable entry stops citation-js reading the file; each changed
+  // entry is then read on its own, and one that still cannot be read is kept
+  // as text alone (verify reports the file as unreadable).
+  const bib = await parseBibForPass1(bibText).catch(() => null);
   const preamble = macros.join('\n');
   for (const [key, text] of changed) {
-    let csl = bib?.entries.get(key);
-    let fields = bib?.fields.get(key);
-    if (!bib) {
-      try {
-        const one = await parseBib(`${preamble}\n${text}\n`);
-        csl = one.entries.get(key);
-        fields = one.fields.get(key);
-      } catch {
-        csl = undefined;
-        fields = undefined;
-      }
-    }
+    const parsed = bib ?? await parseBibForPass1(`${preamble}\n${text}\n`).catch(() => null);
+    const csl = parsed?.entries.get(key);
+    const fields = parsed?.fields.get(key);
     const i = index.get(key);
     const prior = i === undefined ? undefined : lib.entries[i]!;
     const item = itemFromBibEntry(key, text, csl, fields, prior?.custom.added_at ?? at, { source: 'CITATIONS.bib', at });
@@ -286,11 +262,20 @@ interface Group {
   keys: string[];
 }
 
-/** Candidates that share any identifier, grouped as one work each, in first-seen order. */
-function groupByIdentity(candidates: SourceCandidate[]): Group[] {
+/**
+ * The candidates with no identifier, which nothing could verify, and the rest
+ * grouped as one work for each set that shares any identifier, in first-seen
+ * order.
+ */
+function partitionByIdentity(candidates: SourceCandidate[]): { groups: Group[]; skipped: SourceCandidate[] } {
   const groups: Group[] = [];
+  const skipped: SourceCandidate[] = [];
   for (const c of candidates) {
     const keys = candidateIdentities(c);
+    if (keys.length === 0) {
+      skipped.push(c);
+      continue;
+    }
     const hits = groups.filter((g) => g.keys.some((k) => keys.includes(k)));
     const into = hits[0] ?? { members: [], keys: [] };
     if (!hits[0]) groups.push(into);
@@ -302,7 +287,7 @@ function groupByIdentity(candidates: SourceCandidate[]): Group[] {
     into.members.push(c);
     into.keys = [...new Set([...into.keys, ...keys])];
   }
-  return groups;
+  return { groups, skipped };
 }
 
 /**
@@ -344,8 +329,7 @@ export function groupCandidates(
   preference: readonly string[] = [],
 ): { works: SourceCandidate[]; skipped: SourceCandidate[] } {
   const rank = sourceRank(preference);
-  const skipped = candidates.filter((c) => candidateIdentities(c).length === 0);
-  const groups = groupByIdentity(candidates.filter((c) => candidateIdentities(c).length > 0));
+  const { groups, skipped } = partitionByIdentity(candidates);
   return { works: groups.map((g) => mergedCandidate(g, rank)), skipped };
 }
 
@@ -359,8 +343,7 @@ export function groupCandidates(
  * order the sources answered in). Candidates with no identifier are skipped.
  */
 export function mergeCandidates(lib: Library, candidates: SourceCandidate[], at: string, opts: MergeOptions = {}): MergeResult {
-  const skipped = candidates.filter((c) => candidateIdentities(c).length === 0);
-  const groups = groupByIdentity(candidates.filter((c) => candidateIdentities(c).length > 0));
+  const { groups, skipped } = partitionByIdentity(candidates);
   const rank = sourceRank(opts.preference ?? []);
 
   const byIdentity = new Map<string, LibraryItem>();
@@ -390,16 +373,14 @@ export function mergeCandidates(lib: Library, candidates: SourceCandidate[], at:
       known.custom.retracted = true;
       if (c.retraction_details) known.custom.retraction_details = c.retraction_details;
     }
-    for (const k of g.keys) if (!byIdentity.has(k)) byIdentity.set(k, known);
     work.set(g, { citekey: known.id, status: 'existing', title: known.title, candidates: g.members });
   }
 
   fresh.sort((a, b) => (a.base < b.base ? -1 : a.base > b.base ? 1 : a.g.keys[0]! < b.g.keys[0]! ? -1 : 1));
   for (const { g, c, base } of fresh) {
     const citekey = freeCitekey(base, taken);
-    const item = itemFromCandidate(c, citekey, at, { identities: g.keys, provenance: provenanceOf(c) });
+    const item = itemFromCandidate(c, citekey, at, { provenance: provenanceOf(c) });
     lib.entries.push(item);
-    for (const k of g.keys) byIdentity.set(k, item);
     work.set(g, { citekey, status: 'added', title: item.title, candidates: g.members });
   }
 
@@ -422,18 +403,49 @@ export interface ImportResult {
   unidentified: string[];
 }
 
+/** The library's entries by identity key, for an import to find the work an entry names. */
+interface IdentityIndex {
+  /** The first entry, in library order, that any of `ids` names. */
+  find(ids: readonly string[]): number | undefined;
+  /** Record the identities entry `i` has now. */
+  note(i: number): void;
+}
+
+function identityIndex(lib: Library): IdentityIndex {
+  // Each key names the first entry, in library order, that has it.
+  const first = new Map<string, number>();
+  const note = (i: number): void => {
+    for (const k of itemIdentities(lib.entries[i]!)) {
+      const j = first.get(k);
+      if (j === undefined || j > i) first.set(k, i);
+    }
+  };
+  lib.entries.forEach((_, i) => note(i));
+  const find = (ids: readonly string[]): number | undefined => {
+    let best: number | undefined;
+    for (const k of ids) {
+      const j = first.get(k);
+      if (j !== undefined && (best === undefined || j < best)) best = j;
+    }
+    return best;
+  };
+  return { find, note };
+}
+
 /**
  * Put an imported `item` into `lib`: a work the library already holds (by
  * identifier) keeps its key and is not added again; a new one keeps its own
  * key when no work has it, and otherwise gets the next free one. Returns the
  * work and the key it is filed under.
  */
-function placeImported(lib: Library, item: LibraryItem, taken: Set<string>): Omit<MergedWork, 'candidates'> {
+function placeImported(lib: Library, item: LibraryItem, taken: Set<string>, index: IdentityIndex): Omit<MergedWork, 'candidates'> {
   const ids = itemIdentities(item);
-  const known = lib.entries.find((e) => itemIdentities(e).some((k) => ids.includes(k)));
-  if (known) {
+  const at = index.find(ids);
+  if (at !== undefined) {
+    const known = lib.entries[at]!;
     known.custom.identities = [...new Set([...known.custom.identities, ...ids])];
     known.custom.provenance.push(...item.custom.provenance);
+    index.note(at);
     return { citekey: known.id, status: 'existing', title: known.title };
   }
   const key = freeCitekey(item.id, taken);
@@ -443,6 +455,7 @@ function placeImported(lib: Library, item: LibraryItem, taken: Set<string>): Omi
     item.id = key;
   }
   lib.entries.push(item);
+  index.note(lib.entries.length - 1);
   return { citekey: key, status: 'added', title: item.title };
 }
 
@@ -453,18 +466,17 @@ function placeImported(lib: Library, item: LibraryItem, taken: Set<string>): Omi
  * them.
  */
 export async function importBibliography(lib: Library, rawText: string, at: string, file: string): Promise<ImportResult> {
-  const text = rawText.replace(/\r\n?/g, '\n');
-  const blocks = splitBibtex(text);
-  const preamble = blocks.filter((b) => b.type === 'string' || b.type === 'preamble').map((b) => b.text.trim());
-  for (const p of preamble) if (!lib.bibtex_preamble.includes(p)) lib.bibtex_preamble.push(p);
-  const bib = await parseBib(text);
+  const { text, blocks, macros } = readBlocks(rawText);
+  for (const p of macros) if (!lib.bibtex_preamble.includes(p)) lib.bibtex_preamble.push(p);
+  const bib = await parseBibForPass1(text);
   const taken = takenKeys(lib);
+  const index = identityIndex(lib);
   const result: ImportResult = { works: [], unidentified: [] };
   for (const b of blocks) {
-    if (b.key === '' || b.type === 'comment') continue;
+    if (b.key === '') continue;
     const item = itemFromBibEntry(b.key, b.text.trim(), bib.entries.get(b.key), bib.fields.get(b.key), at, { source: 'bibtex', file, at });
     if (itemIdentities(item).length === 0) result.unidentified.push(b.key);
-    result.works.push(placeImported(lib, item, taken));
+    result.works.push(placeImported(lib, item, taken, index));
   }
   return result;
 }
@@ -521,6 +533,7 @@ function normalizedCsl(raw: Record<string, unknown>): Record<string, unknown> {
  */
 export function importCslJson(lib: Library, items: unknown[], at: string, file: string): ImportResult {
   const taken = takenKeys(lib);
+  const index = identityIndex(lib);
   const result: ImportResult = { works: [], unidentified: [] };
   for (const raw of items) {
     if (!raw || typeof raw !== 'object') continue;
@@ -535,7 +548,7 @@ export function importCslJson(lib: Library, items: unknown[], at: string, file: 
     });
     const fields = Object.fromEntries(Object.entries(csl).filter(([k]) => k !== 'custom' && k !== 'citation-key'));
     const str = (k: string): string | undefined => (typeof csl[k] === 'string' ? (csl[k] as string) : undefined);
-    const arxiv = bareArxivId(/arxiv\.org\/(?:abs|pdf)\/([^\s?#]+)/i.exec(str('URL') ?? '')?.[1] ?? '') ?? bareArxivId(str('number') ?? '');
+    const arxiv = bareArxivId(arxivFromLink(str('URL') ?? '')) ?? bareArxivId(str('number') ?? '');
     const item = LibraryItemSchema.parse({
       ...fields,
       id: key,
@@ -543,13 +556,13 @@ export function importCslJson(lib: Library, items: unknown[], at: string, file: 
       title: str('title') ?? '',
       custom: {
         ...(arxiv ? { arxiv } : {}),
-        identities: identityKeys({ doi: str('DOI'), arxiv: arxiv ?? undefined, pmid: str('PMID'), pmcid: str('PMCID'), isbn: str('ISBN') }),
+        identities: identityKeys({ doi: str('DOI'), arxiv, pmid: str('PMID'), pmcid: str('PMCID'), isbn: str('ISBN') }),
         provenance: [{ source: 'csl-json', file, at }],
         added_at: at,
       },
     });
     if (itemIdentities(item).length === 0) result.unidentified.push(key);
-    result.works.push(placeImported(lib, item, taken));
+    result.works.push(placeImported(lib, item, taken, index));
   }
   return result;
 }

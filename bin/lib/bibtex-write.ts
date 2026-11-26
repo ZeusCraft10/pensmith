@@ -171,9 +171,12 @@ export function itemBibtex(item: LibraryItem): string {
   return formatBibtex([renderedCsl(item)], new Map([[item.id, identifierFields(item)]])).trim();
 }
 
+/** Citekey order, the order both views of the library (CITATIONS.bib and CITATIONS.ris) list items in. */
+export const byCitekey = (a: LibraryItem, b: LibraryItem): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
 /** CITATIONS.bib for `library`: the blocks that are not entries (@string, @preamble, @comment, other text) first, then every item in citekey order. */
 export function libraryBibtex(library: Pick<Library, 'entries' | 'bibtex_preamble'>): string {
-  const items = [...library.entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const items = [...library.entries].sort(byCitekey);
   const blocks = [...library.bibtex_preamble.map((b) => b.trim()), ...items.map(itemBibtex)];
   return blocks.length === 0 ? '' : `${blocks.join('\n\n')}\n`;
 }

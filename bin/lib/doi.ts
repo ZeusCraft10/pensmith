@@ -23,6 +23,13 @@
 //     - the DOI a doi.org / dx.doi.org link names (one of the URL forms in
 //       DOI_PREFIXES), percent-decoded, query and fragment cut; '' otherwise
 //
+//   arxivFromLink(url)  ──→  string
+//     - the arXiv ID an arxiv.org/abs or /pdf link names, as written (version
+//       kept, `.pdf` cut); '' otherwise
+//
+//   doisIn(text) / arxivIdsIn(text)  ──→  string[]
+//     - the DOIs / bare arXiv IDs printed in free text, in order, each once
+//
 //   normalizeArxiv(input)  ──→  string | null
 //     - strip 'arxiv:' prefix (case-insensitive)
 //     - new format: YYMM.NNNNN[vV]    → canonical 'arxiv:NNNN.NNNNN[vN]'
@@ -141,6 +148,16 @@ export function doiFromLink(url: string): string {
   }
 }
 
+/** The DOIs printed in `text`, normalized, in order, each once. */
+export function doisIn(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\b10\.\d{4,9}\/[^\s"'<>]+/g)) {
+    const d = normalizeDoi(m[0]);
+    if (d && !out.includes(d)) out.push(d);
+  }
+  return out;
+}
+
 /**
  * Whether two strings name the same DOI. DOIs are case-insensitive and come
  * with or without a `doi:` / doi.org prefix, so a raw string comparison calls
@@ -231,6 +248,29 @@ export function arxivFromDoi(doi: string): string | null {
   return m ? bareArxivId(m[1]!) : null;
 }
 
+// An arxiv.org abstract or PDF link ("arxiv.org/abs/1706.03762v7",
+// "arxiv.org/pdf/1706.03762.pdf").
+const ARXIV_LINK = /arxiv\.org\/(?:abs|pdf)\/([^\s?#]+?)(?:\.pdf)?(?:[?#]|$)/i;
+
+/**
+ * The arXiv ID an arxiv.org abstract or PDF link names, as the link writes it
+ * (version kept, `.pdf` cut), or '' when `url` is not such a link. bareArxivId
+ * gives the form a library stores.
+ */
+export function arxivFromLink(url: string): string {
+  return ARXIV_LINK.exec(url)?.[1] ?? '';
+}
+
+/** The arXiv IDs printed in `text` ("arXiv:1706.03762", "arXiv 1706.03762v7", an arxiv.org link), bare, in order, each once. */
+export function arxivIdsIn(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\barxiv(?:\.org\/(?:abs|pdf)\/|[:\s]+)(\d{4}\.\d{4,5}(?:v\d+)?)/gi)) {
+    const id = bareArxivId(m[1]!);
+    if (id && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
 /**
  * Type-guard form of normalizeArxiv.
  */
@@ -279,6 +319,13 @@ export function isPmcid(s: string): boolean {
   return normalizePmcid(s) !== null;
 }
 
+/** The ISBN-13 check digit for its first 12 digits. */
+function isbn13CheckDigit(body12: string): number {
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(body12[i]) * (i % 2 === 0 ? 1 : 3);
+  return (10 - (sum % 10)) % 10;
+}
+
 /** Whether the check digit of a 10- or 13-character ISBN body is right. */
 function isbnCheckDigitOk(body: string): boolean {
   if (/^\d{9}[\dX]$/.test(body)) {
@@ -286,12 +333,15 @@ function isbnCheckDigitOk(body: string): boolean {
     for (let i = 0; i < 10; i++) sum += (body[i] === 'X' ? 10 : Number(body[i])) * (10 - i);
     return sum % 11 === 0;
   }
-  if (/^\d{13}$/.test(body)) {
-    let sum = 0;
-    for (let i = 0; i < 13; i++) sum += Number(body[i]) * (i % 2 === 0 ? 1 : 3);
-    return sum % 10 === 0;
-  }
+  if (/^\d{13}$/.test(body)) return isbn13CheckDigit(body) === Number(body[12]);
   return false;
+}
+
+/** The ISBN-13 of a valid ISBN-10 or ISBN-13 (already normalized), so both spellings of one book agree. */
+export function isbn13(isbn: string): string {
+  if (isbn.length === 13) return isbn;
+  const body = `978${isbn.slice(0, 9)}`;
+  return `${body}${isbn13CheckDigit(body)}`;
 }
 
 /**

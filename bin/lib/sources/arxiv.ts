@@ -18,7 +18,7 @@
 import { fetch as httpFetch } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import { displayName, parseDisplayName, presentNames } from '../author-normalize.js';
-import { bareArxivId } from '../doi.js';
+import { arxivFromLink, bareArxivId } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { askRegistry, unavailable, yearOf, type Lookup, type WorkRecord } from './work-record.js';
 
@@ -122,7 +122,7 @@ function toCandidate(entry: ArxivEntry): SourceCandidate | null {
   if (names.length === 0) return null;
   const authors = names.map(displayName);
   const citekey = generateCitekey({ authors, year });
-  const arxiv = bareArxivId(/\/abs\/(.+)$/.exec(entry.id)?.[1] ?? '');
+  const arxiv = bareArxivId(arxivFromLink(entry.id));
 
   return {
     source: 'arxiv',

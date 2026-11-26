@@ -35,7 +35,7 @@ import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropi
 import { getProviderApiKey } from '../lib/runtime.js';
 import { ask } from '../lib/prompts.js';
 import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
-import { runResearchOrchestrator, sourcePreferenceFor } from '../lib/research-orchestrator.js';
+import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../lib/network-mode.js';
 
 // ---------------------------------------------------------------------------
@@ -301,7 +301,9 @@ export const researchCommand = defineCommand({
     // knows research is done (`pensmith add` writes the library too).
     const merged = await updateLibrary(process.cwd(), (lib, at) => {
       lib.researched_at = at;
-      return mergeCandidates(lib, finalCandidates, at, { preference: sourcePreferenceFor(discipline) });
+      // The orchestrator already merged each work's records under the
+      // discipline's source preference, so these are one candidate per work.
+      return mergeCandidates(lib, finalCandidates, at);
     });
     const added = merged.works.filter((w) => w.status === 'added').length;
 

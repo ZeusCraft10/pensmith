@@ -32,7 +32,7 @@ import { defineCommand } from 'citty';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { extractPdfText } from '../lib/pdf-text.js';
-import { bareArxivId, isDoi, normalizeDoi } from '../lib/doi.js';
+import { bareArxivId, doisIn, isDoi, normalizeDoi } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
@@ -78,8 +78,7 @@ function reportOffline(what: string): { ok: false } {
 function scrapeDoiFromHtml(html: string): string | null {
   const meta = /<meta[^>]+(?:name|property)=["'](?:citation_doi|dc\.identifier|doi)["'][^>]+content=["']([^"']+)["']/i.exec(html);
   if (meta?.[1]) return normalizeDoi(meta[1]);
-  const inline = /\b10\.\d{4,9}\/[^\s"'<>]+/.exec(html);
-  return inline ? normalizeDoi(inline[0]) : null;
+  return doisIn(html)[0] ?? null;
 }
 
 /** What a source turned out to be. */
@@ -174,7 +173,7 @@ async function storeWork(root: string, ing: Extract<Ingested, { kind: 'work' }> 
         item.custom.local_text = rel;
       }
     }
-    return { works: r.works.map(({ citekey, status, title }) => ({ citekey, status, title })), unidentified: [] };
+    return { works: r.works, unidentified: [] };
   });
 }
 

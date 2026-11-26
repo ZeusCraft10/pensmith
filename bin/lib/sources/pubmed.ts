@@ -63,10 +63,6 @@ function articleId(rec: PubmedRecord, idtype: string): string | undefined {
   return undefined;
 }
 
-function extractDoi(rec: PubmedRecord): string | undefined {
-  return articleId(rec, 'doi');
-}
-
 /** A PubMed author as a CSL name: a collective name whole, a person as surname and initials. */
 function cslName(a: PubmedAuthor): CslName | null {
   const name = String(a.name ?? '').trim();
@@ -85,7 +81,7 @@ function toCandidate(rec: PubmedRecord): SourceCandidate | null {
   const authors = names.map(displayName);
 
   const year = parseYear(rec.pubdate);
-  const doi = extractDoi(rec);
+  const doi = articleId(rec, 'doi');
   const citekey = generateCitekey({ authors, year });
   const pmcid = normalizePmcid(articleId(rec, 'pmc') ?? '');
 
@@ -211,7 +207,7 @@ export async function lookupPmid(pmid: string): Promise<Lookup> {
       journalArticle: true,
       raw: rec,
     };
-    const doi = extractDoi(rec);
+    const doi = articleId(rec, 'doi');
     if (doi) record.doi = doi;
     return { kind: 'found', registry: 'PubMed', record };
   });

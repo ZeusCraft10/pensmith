@@ -25,6 +25,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { paperDir } from '../lib/paths.js';
 import { readLibrarySync } from '../lib/library.js';
+import { cslDateYear } from '../lib/sources/work-record.js';
 import { readProjectConfig } from '../lib/project-config.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
 
@@ -98,8 +99,8 @@ export function buildResearchDonePayload(
   const sources: ResearchDoneSource[] = (readLibrarySync(paperRoot)?.entries ?? []).map((item) => {
     const out: ResearchDoneSource = { citekey: item.id };
     if (item.title) out.title = item.title;
-    const year = (item.issued as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
-    if (typeof year === 'number') out.year = year;
+    const year = cslDateYear(item.issued);
+    if (year !== undefined) out.year = year;
     return out;
   });
 

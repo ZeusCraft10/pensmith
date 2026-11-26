@@ -9,25 +9,28 @@
 // spells it.
 
 import { parseDisplayName, parsePubmedName, presentNames } from './author-normalize.js';
-import { arxivFromDoi, bareArxivId, doiFromLink, isbnsIn, normalizeDoi, normalizeIsbn, normalizePmcid, normalizePmid } from './doi.js';
+import {
+  arxivFromDoi,
+  arxivFromLink,
+  bareArxivId,
+  doiFromLink,
+  isbn13,
+  isbnsIn,
+  normalizeDoi,
+  normalizeIsbn,
+  normalizePmcid,
+  normalizePmid,
+} from './doi.js';
+import { firstString } from './sources/work-record.js';
 import type { CslName, SourceCandidate } from './schemas/source-candidate.js';
 import type { LibraryItem, Provenance } from './schemas/library.js';
 
-/** ISBN-13 for a valid ISBN-10 or ISBN-13 (already normalized), so both spellings match. */
-function isbn13(isbn: string): string {
-  if (isbn.length === 13) return isbn;
-  const body = `978${isbn.slice(0, 9)}`;
-  let sum = 0;
-  for (let i = 0; i < 12; i++) sum += Number(body[i]) * (i % 2 === 0 ? 1 : 3);
-  return `${body}${(10 - (sum % 10)) % 10}`;
-}
-
 interface IdFields {
-  doi?: string | undefined;
-  arxiv?: string | undefined;
-  pmid?: string | undefined;
-  pmcid?: string | undefined;
-  isbn?: string | undefined;
+  doi?: string | null | undefined;
+  arxiv?: string | null | undefined;
+  pmid?: string | null | undefined;
+  pmcid?: string | null | undefined;
+  isbn?: string | null | undefined;
 }
 
 /** The identity keys of a work with these identifiers, most reliable first. */
@@ -78,21 +81,21 @@ function defaultType(c: SourceCandidate): string {
 
 /**
  * The library item for a research candidate, under `citekey`. Only the
- * candidate's own identifiers are printed; `identities` may add those of other
- * records of the same work, which are used only to find it again.
+ * candidate's own identifiers are printed; those of other records of the same
+ * work (`also_known_as`) are kept only to find it again.
  */
 export function itemFromCandidate(
   c: SourceCandidate,
   citekey: string,
   at: string,
-  opts: { identities?: readonly string[]; provenance?: readonly Provenance[] } = {},
+  opts: { provenance?: readonly Provenance[] } = {},
 ): LibraryItem {
   const item: LibraryItem = {
     id: citekey,
     type: c.csl_type ?? defaultType(c),
     title: c.title,
     custom: {
-      identities: [...new Set([...candidateIdentities(c), ...(opts.identities ?? [])])],
+      identities: candidateIdentities(c),
       retracted: c.retracted === true,
       provenance: [...(opts.provenance ?? [{ source: c.source, id: c.id, at }, ...(c.merged_from ?? []).map((m) => ({ ...m, at }))])],
       added_at: at,
@@ -156,23 +159,21 @@ export function itemFromBibEntry(
   const url = typeof item['URL'] === 'string' ? (item['URL'] as string) : (f['url'] ?? '');
   const arxiv = bareArxivId(eprintType === 'arxiv' || eprintType === '' ? eprint : '')
     ?? bareArxivId(f['arxiv'] ?? f['arxivid'] ?? '')
-    ?? bareArxivId(/arxiv\.org\/(?:abs|pdf)\/([^\s?#]+?)(?:\.pdf)?(?:[?#]|$)/i.exec(url)?.[1] ?? '');
+    ?? bareArxivId(arxivFromLink(url));
   const pmid = normalizePmid(f['pmid'] ?? (eprintType === 'pubmed' ? eprint : ''));
   if (pmid && !item['PMID']) item['PMID'] = pmid;
   const doi = typeof item['DOI'] === 'string' ? (item['DOI'] as string) : (f['doi'] || doiFromLink(url));
-  const titleRaw = item['title'];
-  const title = typeof titleRaw === 'string' ? titleRaw : Array.isArray(titleRaw) ? String(titleRaw[0] ?? '') : '';
   return {
     ...item,
     id: key,
     type: typeof item['type'] === 'string' && item['type'] ? (item['type'] as string) : 'document',
-    title,
+    title: firstString(item['title']) ?? '',
     custom: {
       ...(arxiv ? { arxiv } : {}),
       identities: identityKeys({
-        doi: doi || undefined,
-        arxiv: arxiv ?? undefined,
-        pmid: pmid ?? undefined,
+        doi,
+        arxiv,
+        pmid,
         pmcid: typeof item['PMCID'] === 'string' ? (item['PMCID'] as string) : undefined,
         isbn: typeof item['ISBN'] === 'string' ? (item['ISBN'] as string) : f['isbn'],
       }),

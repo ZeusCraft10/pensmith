@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { addToLibrary, loadLibrary, mergeCandidates, readLibrarySync } from '../bin/lib/library.js';
+import { addToLibrary, importBibliography, importCslJson, loadLibrary, mergeCandidates, readLibrarySync } from '../bin/lib/library.js';
 import { ForwardIncompatError } from '../bin/lib/migrations/loader.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
 import type { Library } from '../bin/lib/schemas/library.js';
@@ -123,6 +123,30 @@ test('new works are keyed in a fixed order, whatever order the sources answered 
   mergeCandidates(two, [b, a], AT);
   const keys = (l: Library): string[] => l.entries.map((e) => `${e.id}=${e.DOI}`).sort();
   assert.deepEqual(keys(one), keys(two));
+});
+
+test('a CSL-JSON item whose link is an arXiv PDF is the preprint, as a .bib entry with that link is', async () => {
+  // Zotero and other managers often keep only the PDF link of a preprint.
+  const url = 'https://arxiv.org/pdf/1706.03762.pdf';
+  const lib = emptyLibrary();
+  const csl = importCslJson(lib, [{
+    id: 'vaswani2017',
+    type: 'article',
+    title: 'Attention Is All You Need',
+    author: [{ family: 'Vaswani', given: 'Ashish' }],
+    issued: { 'date-parts': [[2017]] },
+    URL: url,
+  }], AT, 'refs.json');
+  assert.deepEqual(csl.unidentified, [], 'the link names the preprint');
+  assert.equal(lib.entries[0]!.custom.arxiv, '1706.03762');
+  const bib = await importBibliography(
+    lib,
+    `@misc{vaswani2017attention,\n  title = {Attention Is All You Need},\n  author = {Vaswani, Ashish},\n  year = {2017},\n  url = {${url}}\n}\n`,
+    AT,
+    'refs.bib',
+  );
+  assert.deepEqual(bib.works.map((w) => `${w.citekey}:${w.status}`), ['vaswani2017:existing'], 'one work, however it was imported');
+  assert.equal(lib.entries.length, 1);
 });
 
 test('10 concurrent adds of different works all land, each under its own key', async () => {

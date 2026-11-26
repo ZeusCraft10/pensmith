@@ -473,13 +473,15 @@ async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<
   const merged = await addToLibrary(root, candidates, { via: { source: 'revise --research', section: opts.n } });
   const keyOf = new Map<SourceCandidate, string>();
   for (const w of merged.works) for (const c of w.candidates) keyOf.set(c, w.citekey);
-  const listed = hits
-    .map((h, i) => ({ h, key: keyOf.get(candidates[i]!) }))
-    .filter((x): x is { h: ResearchHit; key: string } => x.key !== undefined);
+  const keys = candidates.map((c) => keyOf.get(c));
+  const listed = hits.flatMap((h, i) => {
+    const key = keys[i];
+    return key === undefined ? [] : [{ h, key }];
+  });
   const citekeysAdded = [...new Set(listed.map((x) => x.key))];
   // Research leaves out a work no DOI, arXiv ID, PMID or ISBN names, since
   // nothing could verify it; say which, rather than drop them unseen.
-  const skipped = hits.filter((_, i) => keyOf.get(candidates[i]!) === undefined);
+  const skipped = hits.filter((_, i) => keys[i] === undefined);
   if (skipped.length > 0) {
     process.stderr.write(
       `pensmith revise: WARN — ${skipped.length} hit(s) had no DOI, arXiv ID, PubMed ID or ISBN and were not added: ` +

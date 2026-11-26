@@ -96,11 +96,15 @@ function readVersion(raw: unknown): number {
   return 1;
 }
 
-export async function loadAndMigrate<TSchema extends z.ZodTypeAny>(
-  opts: LoadOptions<TSchema>,
-): Promise<z.infer<TSchema>> {
-  const raw = await fsp.readFile(opts.file, 'utf8');
-  let value: unknown = JSON.parse(raw);
+/**
+ * Steps 2-5 on a value already read: check its version, migrate it to
+ * `currentVersion` and validate it. `migrated` says whether a migration ran.
+ * For a reader that cannot wait on loadAndMigrate's read.
+ */
+export function migrateValue<TSchema extends z.ZodTypeAny>(
+  value: unknown,
+  opts: Omit<LoadOptions<TSchema>, 'file' | 'writeBack'>,
+): { value: z.infer<TSchema>; migrated: boolean } {
   const diskVersion = readVersion(value);
 
   if (diskVersion > opts.currentVersion) {
@@ -123,18 +127,26 @@ export async function loadAndMigrate<TSchema extends z.ZodTypeAny>(
   if (!parsed.success) {
     throw new SchemaValidationError(opts.schemaName, parsed.error.issues);
   }
+  return { value: parsed.data as z.infer<TSchema>, migrated: v !== diskVersion };
+}
+
+export async function loadAndMigrate<TSchema extends z.ZodTypeAny>(
+  opts: LoadOptions<TSchema>,
+): Promise<z.infer<TSchema>> {
+  const raw = await fsp.readFile(opts.file, 'utf8');
+  const { value, migrated } = migrateValue(JSON.parse(raw), opts);
 
   // Write-back gate: only if a migration actually ran (v advanced beyond
   // diskVersion) AND the caller opted in. Default writeBack:false leaves
   // disk untouched even if migrations ran — useful for read-only replay
   // tools and dry-run validators.
   // A dry run uses the upgraded value in memory and leaves the file as it is.
-  if (v !== diskVersion && opts.writeBack === true && !isDryRun()) {
+  if (migrated && opts.writeBack === true && !isDryRun()) {
     // Audit #35: append the trailing newline every other JSON writer emits
     // (state.ts, library.ts) so a migrated file stays byte-consistent with a
     // freshly-written one — no spurious "\ No newline at end of file" git diff.
-    await atomicWriteFile(opts.file, JSON.stringify(parsed.data, null, 2) + '\n');
+    await atomicWriteFile(opts.file, JSON.stringify(value, null, 2) + '\n');
   }
 
-  return parsed.data as z.infer<TSchema>;
+  return value;
 }
