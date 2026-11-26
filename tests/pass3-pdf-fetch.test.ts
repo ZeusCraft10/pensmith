@@ -8,9 +8,11 @@
 // the SSRF guard refuses a private address, and a redirect is followed only
 // through the same guard.
 
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
+import dnsPromises from 'node:dns/promises';
 import * as fsp from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -247,6 +249,67 @@ test('pass 3: a link that failed for one quotation is asked again for the next q
   assert.match(results[1]!.reason, /vor\.pdf/);
   assert.equal(hits[`${OA}/vor.pdf`], 2, 'the failed link was asked again');
   assert.equal(hits[`${OA}/preprint.pdf`], 1);
+});
+
+// OpenAlex lists an arXiv preprint's PDF at the very address Pass 3 reads the
+// work's arXiv PDF from (https://arxiv.org/pdf/<id>). When that link fails as
+// the DOI's (an HTML page, a 404), arXiv's PDF is still asked for as the
+// arXiv ID's: one failed answer must not leave a misquotation unchecked. A
+// PDF already read is not fetched again.
+const ARXIV_ID = '2109.00022';
+const ARXIV_DOI = `10.48550/arXiv.${ARXIV_ID}`;
+const ARXIV_PDF = `https://arxiv.org/pdf/${ARXIV_ID}`;
+const MISQUOTE = '# Results\n\nThey write that "In this paper, we study a stronger version of this question by replacing holes with visible islands" [@k, p. 1].\n';
+
+/** Run Pass 3 on `draft` citing arXiv's DOI of a work, with OpenAlex listing its arXiv PDF and `answer` serving that PDF. */
+async function arxivDoiPass3(
+  draft: string,
+  answer: (hits: number) => { statusCode: number; data: Buffer | string; headers: Record<string, string> },
+): Promise<{ results: Pass3Result[]; hits: number }> {
+  _resetWarnedForTest();
+  const agent = mockAgent();
+  agent.get('https://api.openalex.org').intercept({ path: (p) => p.startsWith('/works/doi:'), method: 'GET' }).reply(200,
+    JSON.stringify({ id: 'https://openalex.org/W2', doi: `https://doi.org/${ARXIV_DOI.toLowerCase()}`, best_oa_location: { is_oa: true, pdf_url: ARXIV_PDF }, locations: [] }),
+    { headers: JSON_HEADERS }).persist();
+  let hits = 0;
+  agent.get('https://arxiv.org').intercept({ path: `/pdf/${ARXIV_ID}`, method: 'GET' }).reply(() => {
+    hits += 1;
+    const a = answer(hits);
+    return { statusCode: a.statusCode, data: a.data, responseOptions: { headers: a.headers } };
+  }).persist();
+  // arxiv.org is a host name, so the SSRF guard resolves it: a public address
+  // answers in place of real DNS.
+  const lookup = mock.method(dnsPromises, 'lookup', async () => [{ address: '93.184.215.14', family: 4 }]);
+  syncBuiltinESMExports();
+  try {
+    return { results: await runPass3(draft, new Map([['k', { DOI: ARXIV_DOI }]])), hits };
+  } finally {
+    lookup.mock.restore();
+    syncBuiltinESMExports();
+  }
+}
+
+test('pass 3: arXiv\'s PDF that failed as the DOI\'s open-access link is asked for again as the arXiv ID\'s, so the misquotation is NOT_FOUND', async () => {
+  const { results, hits } = await arxivDoiPass3(MISQUOTE, (n) => (n === 1 ? login() : pdf()));
+  assert.deepEqual(results.map((r) => r.verdict), ['NOT_FOUND'], show(results));
+  assert.match(results[0]!.reason, /checked against the arXiv PDF https:\/\/arxiv\.org\/pdf\/2109\.00022$/);
+  assert.equal(hits, 2, 'arXiv was asked again');
+});
+
+test('pass 3: when arXiv\'s PDF fails as the DOI\'s link and as the arXiv ID\'s, the reason names both', async () => {
+  const { results, hits } = await arxivDoiPass3(MISQUOTE, () => ({ statusCode: 404, data: '', headers: { 'content-type': 'text/html' } }));
+  assert.deepEqual(results.map((r) => r.verdict), ['PDF_UNAVAILABLE'], show(results));
+  assert.equal(hits, 2);
+  assert.equal(results[0]!.reason,
+    `PDF fetch/parse failed: ${ARXIV_PDF}: HTTP 404; set PENSMITH_CONTACT_EMAIL so Unpaywall can be asked too; ` +
+    `the arXiv PDF of ${ARXIV_ID} could not be read: ${ARXIV_PDF}: HTTP 404`);
+});
+
+test('pass 3: arXiv\'s PDF read as the DOI\'s open-access link is not fetched again', async () => {
+  const { results, hits } = await arxivDoiPass3(DRAFT, pdf);
+  assert.deepEqual(results.map((r) => r.verdict), ['OK', 'NOT_FOUND'], show(results));
+  assert.match(results[0]!.reason, /checked against the OA PDF https:\/\/arxiv\.org\/pdf\/2109\.00022$/);
+  assert.equal(hits, 1);
 });
 
 // The harness removes each test's HTTP cache folder after the test.

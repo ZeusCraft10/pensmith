@@ -4,9 +4,8 @@
 // For a work with a DOI, the PDF links come from OpenAlex first, which needs
 // no contact email. When none of them gives text, Unpaywall is asked too, if
 // PENSMITH_CONTACT_EMAIL is set (Unpaywall refuses a request without one): it
-// often knows another copy. A work known by its arXiv ID is then read from
-// arXiv's own PDF of it. Each link is tried once, in turn, until one gives a
-// PDF.
+// often knows another copy. Each link is tried in turn until one gives a PDF.
+// A work known by its arXiv ID is read from arXiv's own PDF of it.
 //
 // A PDF is fetched as bytes, never through the UTF-8 text body, which destroys
 // its compressed streams, and never through the HTTP cache, which stores text.
@@ -141,9 +140,11 @@ function linksFrom(registry: string, a: OaPdfAnswer, notes: string[]): string[] 
  * The text of the first PDF of a work that gives one: its DOI's open-access
  * links (OpenAlex's, then Unpaywall's), then arXiv's PDF of its arXiv ID
  * (`2003.02433`, `cs/0112017`), which a work kept under its arXiv record, and
- * many computer-science papers with no DOI at all, can still be read from. A
- * link is fetched once: OpenAlex lists an arXiv preprint's PDF at the same
- * address. `seen` holds the texts already read in this run, by link. The
+ * many computer-science papers with no DOI at all, can still be read from.
+ * `seen` holds the texts already read in this run, by link. OpenAlex often
+ * lists an arXiv preprint's PDF at that same address. A text read there is
+ * not fetched again, but a link that failed as the DOI's is asked again as the
+ * arXiv ID's, so one failed answer does not leave a quotation unchecked. The
  * `reason` of none says, for the DOI and the arXiv ID, why each gave no text.
  */
 export async function workText(
@@ -177,12 +178,13 @@ export async function workText(
     // Nothing was tried when no registry listed an open-access PDF.
     reasons.push(tried.size === 0 ? `No OA PDF available for DOI ${ids.doi}: ${why}` : `PDF fetch/parse failed: ${why}`);
   }
-  // arXiv serves the latest version, or the one the ID names ("2003.02433v2").
-  const arxivPdf = ids.arxiv ? `https://arxiv.org/pdf/${ids.arxiv}` : null;
-  if (arxivPdf && !tried.has(arxivPdf)) {
+  if (ids.arxiv) {
+    // arXiv serves the latest version, or the one the ID names ("2003.02433v2").
+    // Not through `read`: a DOI link at this address that failed is asked again.
     const failures: string[] = [];
-    const viaArxiv = await read([arxivPdf], failures);
-    if (viaArxiv) return { ...viaArxiv, via: 'arXiv PDF' };
+    const got = await firstPdfText([`https://arxiv.org/pdf/${ids.arxiv}`], seen, failures);
+    if (got.kind === 'text') return { ...got, via: 'arXiv PDF' };
+    scanned ||= got.scanned;
     reasons.push(`the arXiv PDF of ${ids.arxiv} could not be read: ${failures.join('; ')}`);
   }
   return { kind: 'none', scanned, reason: reasons.join('; ') };
