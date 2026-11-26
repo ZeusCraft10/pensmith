@@ -4,9 +4,10 @@
 //   1. The assignment comes from --from <file> (`-` for stdin), else an
 //      assignment.txt / .md / .pdf in the folder, else the one kept from an
 //      earlier run, else it is asked for. A thesis (--thesis, from `sketch`,
-//      or the one kept) is added to it once, as its last paragraph, and stands
-//      alone when there is no assignment; `--thesis ''` clears it. It is kept
-//      word for word in .paper/PROJECT.md before any model sees it.
+//      or the one kept) is added to it once, as its last paragraph, marked as
+//      the one intake added, and stands alone when there is no assignment;
+//      `--thesis ''` clears it. It is kept word for word in .paper/PROJECT.md
+//      before any model sees it.
 //   2. The intake clarifier suggests answers to six questions (topic,
 //      discipline, length, citation style, audience, counterargument) as
 //      structured JSON. It is asked only when an answer is still missing.
@@ -55,6 +56,7 @@ import {
   renderIntakeMd,
   renderProjectMd,
   splitThesis,
+  withoutThesisMark,
   withThesis,
   type ClarifierAnswer,
   type Question,
@@ -401,9 +403,10 @@ function keptRawAssignment(cwd: string, stored: string): string {
 }
 
 /** The clarifier's answer for `assignment`, or null when no model ran. */
-async function askClarifier(assignment: string): Promise<ClarifierAnswer | null> {
+async function askClarifier(kept: string): Promise<ClarifierAnswer | null> {
   const prompt = loadPrompt('intake-clarifier');
   // The assignment (redacted when PII redaction is on) is the user turn.
+  const assignment = withoutThesisMark(kept);
   const system = _interpolate(prompt, { assignment });
   const result = await complete({
     system,

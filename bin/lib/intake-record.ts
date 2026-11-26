@@ -144,7 +144,7 @@ const DEFAULT_QUESTIONS: Record<QuestionId, string> = {
  */
 export function buildQuestions(assignment: string, clarifier: ClarifierAnswer | null): Question[] {
   const fromModel = new Map((clarifier?.questions ?? []).map((q) => [q.id, q]));
-  const fallbackTopic = clarifier?.topic.trim() || parseIntakeMd(assignment).topic;
+  const fallbackTopic = clarifier?.topic.trim() || parseIntakeMd(withoutThesisMark(assignment)).topic;
   return QUESTION_IDS.map((id) => {
     const q = fromModel.get(id);
     let suggested = q?.suggested.trim() ?? '';
@@ -187,12 +187,19 @@ export function normalizeThesis(thesis: string): string {
   return thesis.replace(/\s+/g, ' ').trim();
 }
 
-// The paragraph withThesis adds: the last one, a single `Thesis: ...` line.
-const LAST_THESIS = /(?:^|\r?\n[ \t]*\r?\n)Thesis:[ \t]+([^\r\n]*\S)[ \t]*$/;
+/**
+ * The line that marks the thesis paragraph withThesis adds, so a `Thesis:`
+ * line the assignment itself ends with (a rubric's) is never taken for it,
+ * replaced or cleared. An HTML comment, which Markdown viewers do not show;
+ * readers of the assignment are given it without the mark.
+ */
+export const THESIS_MARK = '<!-- the thesis given to pensmith new -->';
+// The paragraph withThesis adds: the last one, the mark and a single `Thesis: ...` line.
+const LAST_THESIS = /(?:^|\r?\n[ \t]*\r?\n)<!-- the thesis given to pensmith new -->[ \t]*\r?\nThesis:[ \t]+([^\r\n]*\S)[ \t]*$/;
 
 /**
  * An assignment as intake keeps it, split into the text it was given and the
- * thesis paragraph added to it (null when it ends with none).
+ * thesis paragraph intake added to it (null when it ends with none).
  */
 export function splitThesis(assignment: string): { base: string; thesis: string | null } {
   const text = assignment.trim();
@@ -202,14 +209,20 @@ export function splitThesis(assignment: string): { base: string; thesis: string 
 }
 
 /**
- * `base` with `thesis` added as its last paragraph, unless it already ends
- * with that thesis: a thesis is in the assignment at most once. With no base,
- * the thesis alone is the assignment; with no thesis, the base is.
+ * `base` with `thesis` added as its last, marked paragraph, unless it already
+ * ends with that thesis: a thesis is in the assignment at most once. With no
+ * base, the thesis alone is the assignment; with no thesis, the base is.
  */
 export function withThesis(base: string, thesis: string): string {
   const text = base.trim();
   if (!thesis || splitThesis(text).thesis === thesis) return text;
-  return [text, `Thesis: ${thesis}`].filter(Boolean).join('\n\n');
+  return [text, `${THESIS_MARK}\nThesis: ${thesis}`].filter(Boolean).join('\n\n');
+}
+
+/** The kept assignment as a reader (a model, the outline) is given it: its thesis paragraph without the mark. */
+export function withoutThesisMark(assignment: string): string {
+  const { base, thesis } = splitThesis(assignment);
+  return thesis === null ? base : [base, `Thesis: ${thesis}`].filter(Boolean).join('\n\n');
 }
 
 /** PROJECT.md: the assignment word for word, last in the file. */
@@ -248,7 +261,7 @@ export interface IntakeRead {
  * paper intake wrote before INTAKE.json existed) what INTAKE.md says, else null.
  */
 export function readIntake(root: string): IntakeRead | null {
-  const assignment = readAssignment(root) ?? '';
+  const assignment = withoutThesisMark(readAssignment(root) ?? '');
   const file = paperIntakeFile(root);
   if (existsSync(file)) {
     try {
