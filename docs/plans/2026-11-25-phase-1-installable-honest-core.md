@@ -67,7 +67,7 @@ Defaults (the owner may revise these later):
 
 ## Tasks
 
-Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs in a parallel worktree and is merged before T15.
+Order: T01 → T13 and T15 run sequentially on the branch, with the controller follow-ups A2F (after T09) and A3F (after T13). T14 (packaging) runs in a parallel worktree and is merged before T15.
 
 ### T01 — Live network by default; cassettes are test-only
 **Issues:** `cassette-replay-production-default`, `http-ignores-proxy-env`, `cassette-committed-personal-email`
@@ -276,6 +276,51 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - Carry-over from T06: when a section fails only on RETRACTED, the router's reason names `pensmith ack <n> <key> --reason "..."` as well as revising. The ack action itself is Phase 2's.
 - Carry-over (T06/T14): `pensmith gate` makes the 18th verb. Add it to `UX02_VERBS` (`bin/lib/verbs.ts`) with a `workflows/gate.md`, and update the verb-count pins (cli-verbs, nl-triggers, tier-contract). Every backticked `pensmith <verb>` in SKILL.md must be one of them.
 
+### A3F — A3 review follow-ups (controller follow-up to A2F and T10–T13)
+**Issues:** the parked finding and the minor review findings from A2F and T10–T13, plus the real bugs their simplify passes flagged and left for a fix round. The A2F–T13 reports in `/tmp/claude-0/-home-user-pensmith/d215d403-59ed-5fd5-8322-103c08c7e93a/scratchpad/phase1/reports/` hold the evidence. Re-check each item against the current code first.
+- **A kept thesis must never replace the kept assignment.** This is important; T11 parked it. The repro at HEAD, with `PENSMITH_NO_LLM=1` and no terminal:
+  - Run 1: `new --thesis 'SM raises anxiety.' --answers '{"assignment":"PSYC 210 …","topic":"…"}'` exits 3. PROJECT.md holds the assignment and the thesis.
+  - Run 2: `new --answers '{the other five}'` exits 3 again. PROJECT.md's Assignment section now holds only `Thesis: SM raises anxiety.`, and `topic` is asked again.
+  - The same loss happens with `--from brief.txt --thesis T` followed by an answering run without `--from`.
+  - It also happens on sketch's three-run path: `new --thesis X`, then `new --answers '{"assignment":A}'`, then `new --answers '{all six}'`.
+
+  Required behaviour:
+  - A run that brings no assignment text starts from the kept one.
+  - A thesis, given now or kept, is added to it at most once.
+  - An assignment kept earlier is never dropped.
+  - Adding a thesis on a later run (`new --answers '{"assignment":A}'`, then `new --thesis T --answers '{rest}'`) gives A plus `Thesis: T`, and the answers already given survive it.
+  - An explicit `--thesis ''` clears a kept thesis.
+
+  Write a CLI regression test for each path.
+- **Model failures.** The OpenAI-compatible generator (`bin/lib/generators/openai.ts`) reports a missed deadline as `ProviderError('connection')`. Give it the `timeout` kind that the Anthropic path gives; T10's simplify flagged this.
+  - Check the bodyless-response rule in `bin/lib/http.ts` too. `chokepointFetch` refuses a HEAD or a 304 that declares a large Content-Length, and `fetch()` skips the declared-length check for 204 and 304. Use one shared rule, with tests.
+- **OpenAI output caps.**
+  - Add the common OpenAI chat models to `MODEL_OUTPUT_LIMITS.openai` (`bin/lib/llm-config.ts`): 32768 for the gpt-4.1 family, 4096 for gpt-4-turbo and gpt-3.5-turbo.
+  - When a provider answers 400 because the output limit is too large, the error names `roles.<role>.maxTokens` in runtime.json.
+- **Empty model turn.** `pensmith new` must never send an empty user message, which the Messages API rejects with a 400. Check whether any path still can (a whitespace-only assignment, for example), and refuse it or skip the clarifier.
+- **Years in prompts.**
+  - A hand-edited non-integer year (`issued [[2019.5]]`) makes `pensmith write N` exit 1 with a ZodError before any model call.
+  - String date-parts (`[["2019","3"]]`, as Zotero exports write them) show no year.
+  - Accept any integer year, including pre-1500 and negative ones, and a leading numeric string. Drop a non-integer, and never throw. Test with 1265, -350, "2019" and 2019.5.
+- **Placeholder plans.** `write` drafts from a placeholder PLAN.md (written under `PENSMITH_NO_LLM`) when a real model is configured. Refuse it with exit 2 and the advice `pensmith plan N --force`, as verify, compile and done refuse placeholders.
+- **`add <pdf>` identity** (A2F concern, T09 minor).
+  - On the DOI path, a hit whose title appears anywhere in the first 30 lines is accepted when no line starts with `Abstract` (for example `Summary` or `a b s t r a c t`).
+  - `REFERENCES_HEADING` (`bin/lib/source-hydrate.ts`) misses `References and Notes`, `Notes`, `Endnotes`, `Literatur` and `Références`.
+  - The T09 reviewer's P3 and P4 probes still store the wrong work.
+  - A PDF whose identity cannot be confirmed is refused with exit 2. It is never stored as another work.
+- **Gates (T12/T13 minors).**
+  - `ExportAuditSchema.honestySkip` (`bin/cli/done.ts`) is required. An audit kept by an earlier build therefore fails the strict parse, done says the confirmation "was for another draft, bibliography or format", and it audits again. Make the field optional, with a missing value meaning unknown, or give a schema mismatch its own message.
+  - `outline --yolo` closes an answered but unapplied kept proposal, and a `--force` replacement is then lost silently. Apply an answered kept proposal before the `--yolo` skip, and drop only an unanswered one.
+  - The refusal for a stale outline answer always advises `--force`. Advise it only when the proposal was made with `--force`.
+  - `plan --revise` requires an API key even when it only applies a kept, answered proposal, which needs no model call.
+  - research's non-TTY refusal says the evaluator "kept none" when it gave no usable answer. Word it from the actual cause.
+- **Estimator.** `--estimate` prices a failed section as verify, but the router sends it to `plan --revise` or `write --force`. Price the step the router will run.
+- **Docs and comments** (A2F minors).
+  - `workflows/*.md` still describe pensmith's removed MCP server (`MCP state.read`, `MCP library.read`, `MCP state.update`, "keep the MCP stdio frame clean", "if no MCP tools: …"), and `verifyDoi` running at add time. Drop or reword those lines. Phase 2 replaces these bodies, but until then they must not describe code that is gone.
+  - Trim the stale verb-count comments ("locked UX-02 16 verbs", "No 17th verb", "15 of the 16 verbs") in `bin/cli/done.ts`, `compile.ts`, `stubs.ts`, `plan.ts`, `sketch.ts` and `bin/lib/sources/zotero-mcp.ts`. There are 18 verbs.
+  - README's Pass 3 row says a heading ends a sentence, but only a heading set off by a blank line does. Say exactly that, or name the single-newline heading as a known gap.
+  - Drop the decision IDs from the comments A2F rewrote (`bin/lib/state.ts`, `bin/lib/outline.ts`, `bin/lib/write-orchestrator.ts`), and rewrap the long goal comment in `bin/cli/intake.ts`.
+
 ### T14 — Packaging: installable plugin + bundled CLI (parallel worktree)
 **Issues:** `plugin-manifest-uninstallable`, Phase-1 part of `tier1-no-executable-path`, `root-mcp-json-project-scope`, `sessionstart-context-not-delivered`, `hooks-write-into-every-project`, `hooks-no-entrypoint-wrong-state`, `stop-hook-useless`, `handoff-size-bound-rejects`, `mcp-verbs-write-stdout`, `mcp-surface-noop-and-unwired`, `mcp-resources-wrong-root`, `mcp-tools-expose-yolo-and-paperroot`, `skill-descriptions-overtrigger`, `ci-gates-pin-invalid-plugin-format`, `build-ships-compiled-tests`, `package-deps-engines-hygiene`, `ecosystem-presence-wrong-paths`, `docs-inaccurate`
 - `plugin/` is the only installed payload. Root `.claude-plugin/marketplace.json` uses `"source": "./plugin"`; remove the root `plugin.json`. `plugin/` contains:
@@ -348,6 +393,10 @@ Order: T01 → T13 and T15 run sequentially on the branch. T14 (packaging) runs 
 - Carry-over from T06: record OpenAlex answers for the corpora, so their OK reasons no longer end with "OpenAlex could not be asked (PENSMITH_CASSETTE_MISS)".
 - Carry-over from T05: the research-side cassettes (the Crossref `works-attention` search entry, Semantic Scholar, OpenAlex) claim Crossref holds arXiv DOIs. Correct them, or re-record them.
 - Carry-over from T07: tests leave about 30 `pensmith-bib-fixture-*` temp folders behind (`tests/lib/bib-fixture.ts`). Remove each in the test's teardown; the runner's tmp isolation should catch any others.
+- Carry-over from the T10–T13 simplify passes (test hygiene they could not do):
+  - Share one Messages-API SSE helper (`tests/lib/messages-stream.ts`) across `write-truncated` and the other hand-built SSE fixtures.
+  - Share one `outlineTable()` helper across the estimator and section-status-stub tests.
+- Carry-over from T12: one full-suite gate lost a TAP line from a passing file (the "PRODUCER (2)" line; the file passed 3/3 when run alone). Make the runner's pass and fail counts and its exit status independent of interleaved TAP output, so that a lost line can never hide a failing test.
 
 ## Phase 1 exit criteria (controller verifies before declaring done)
 
