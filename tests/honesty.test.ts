@@ -130,9 +130,23 @@ test('HARD-05: text over GPTZERO_MAX_BYTES is cut to it before the POST', () => 
   const truncated = __truncateForGptzeroTest(oversize);
   assert.equal(Buffer.byteLength(truncated, 'utf8'), GPTZERO_MAX_BYTES);
   assert.equal(__truncateForGptzeroTest('short'), 'short', 'text under the cap is sent as it is');
-  // Multi-byte text is cut on a character boundary, never inside one.
-  const wide = 'é'.repeat(GPTZERO_MAX_BYTES);
-  const cut = __truncateForGptzeroTest(wide);
-  assert.ok(Buffer.byteLength(cut, 'utf8') <= GPTZERO_MAX_BYTES);
-  assert.doesNotMatch(cut, /�/, 'no broken character at the cut');
+});
+
+test('HARD-05: multi-byte text is cut on a character boundary, never inside one', () => {
+  // A leading ASCII byte puts the cap in the middle of a character: for
+  // 2-, 3- and 4-byte characters, each offset that is not a multiple of the
+  // character's width lands inside one.
+  for (const ch of ['é', '€', '𝑥']) {
+    const width = Buffer.byteLength(ch, 'utf8');
+    for (let lead = 0; lead < width; lead++) {
+      const text = 'a'.repeat(lead) + ch.repeat(Math.ceil(GPTZERO_MAX_BYTES / width) + 1);
+      const cut = __truncateForGptzeroTest(text);
+      const bytes = Buffer.byteLength(cut, 'utf8');
+      const label = `${lead} ASCII byte(s) then U+${ch.codePointAt(0)!.toString(16).toUpperCase()}`;
+      assert.ok(bytes <= GPTZERO_MAX_BYTES, `${label}: ${bytes} bytes is over the cap`);
+      assert.ok(bytes > GPTZERO_MAX_BYTES - width, `${label}: cut ${GPTZERO_MAX_BYTES - bytes} bytes short of the cap`);
+      assert.doesNotMatch(cut, /\uFFFD/, `${label}: no broken character at the cut`);
+      assert.ok(text.startsWith(cut), `${label}: the cut is a prefix of the text`);
+    }
+  }
 });

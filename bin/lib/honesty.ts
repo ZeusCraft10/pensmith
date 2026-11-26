@@ -119,10 +119,14 @@ export const GPTZERO_MAX_BYTES = 50_000;
  */
 export function __truncateForGptzeroTest(text: string): string {
   if (Buffer.byteLength(text, 'utf8') <= GPTZERO_MAX_BYTES) return text;
-  // Slice by character count until the byte length fits. We over-slice slightly
-  // via byte-length and then trim — safe because UTF-8 chars are at most 4 bytes.
+  // Cutting the bytes at the cap can split a character. Decoding the partial
+  // character gives U+FFFD, which is 3 bytes and so can push the text over the
+  // cap. Back the cut off any continuation bytes (10xxxxxx) to the start of
+  // the character it is inside.
   const buf = Buffer.from(text, 'utf8');
-  return buf.slice(0, GPTZERO_MAX_BYTES).toString('utf8');
+  let end = GPTZERO_MAX_BYTES;
+  while (end > 0 && (buf[end]! & 0xc0) === 0x80) end--;
+  return buf.subarray(0, end).toString('utf8');
 }
 
 // ============================================================
