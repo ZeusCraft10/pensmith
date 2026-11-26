@@ -182,17 +182,22 @@ export function renderIntakeMd(intake: Intake): string {
   ].join('\n');
 }
 
-/** PROJECT.md: the assignment word for word. */
+/** PROJECT.md: the assignment word for word, last in the file. */
 export function renderProjectMd(title: string, assignment: string): string {
   return `# ${title}\n\n## Assignment\n\n${assignment.trim()}\n`;
 }
 
-/** The assignment kept in .paper/PROJECT.md, or null. */
+/**
+ * The assignment kept in .paper/PROJECT.md, or null. It is everything after
+ * the `## Assignment` heading, since renderProjectMd writes nothing after it:
+ * a rubric's own `## Requirements` heading is part of the assignment.
+ */
 export function readAssignment(root: string): string | null {
   try {
     const text = readFileSync(path.join(paperDir(root), 'PROJECT.md'), 'utf8');
-    const m = /^## Assignment[ \t]*\r?\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(text);
-    const body = m?.[1]?.trim();
+    const m = /^## Assignment[ \t]*\r?\n/m.exec(text);
+    if (!m) return null;
+    const body = text.slice(m.index + m[0].length).trim();
     return body ? body : null;
   } catch {
     return null;

@@ -105,6 +105,51 @@ test('without a terminal the questions are reported with exit 3, and the answeri
   assert.ok(!existsSync(join(dir, '.paper', 'INTAKE.pending.json')));
 });
 
+// A rubric often has headings of its own.
+const ASSIGNMENT_MD = [
+  '# PSYC 210, paper 2',
+  '',
+  'Write an argumentative essay on social media and teen anxiety.',
+  '',
+  '## Requirements',
+  '',
+  '- About 2,000 words',
+  '- APA style',
+  '- At least six peer-reviewed sources',
+  '',
+  '## Assignment',
+  '',
+  'Submit it on the course page.',
+].join('\n');
+
+test('an assignment with headings of its own is read back whole', async () => {
+  const { readIntake } = await import('../bin/lib/intake-record.js');
+  const dir = tmp();
+  writeFileSync(join(dir, 'assignment.md'), ASSIGNMENT_MD + '\n');
+  const r = runCli(['new', '--answers', JSON.stringify(ALL_ANSWERS)], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(readIntake(dir)?.assignment, ASSIGNMENT_MD);
+});
+
+test('without a terminal, answers given on an earlier run are kept until intake completes', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, 'assignment.md'), ASSIGNMENT + '\n');
+  const first = runCli(['new', '--citation-style', 'apa'], dir);
+  assert.equal(first.status, 3, first.stderr);
+  const asked = (lastJsonLine(first.stdout)['questions'] as Array<{ id: string }>).map((q) => q.id);
+  assert.deepEqual(asked, ['topic', 'discipline', 'length_words', 'audience', 'counterargument']);
+  assert.ok(!existsSync(join(dir, '.paper', 'INTAKE.json')));
+
+  // Answering exactly the questions listed completes intake.
+  const rest = Object.fromEntries(Object.entries(ALL_ANSWERS).filter(([id]) => id !== 'citation_style'));
+  const second = runCli(['new', '--answers', JSON.stringify(rest)], dir);
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  const intake = JSON.parse(readFileSync(join(dir, '.paper', 'INTAKE.json'), 'utf8')) as Record<string, unknown>;
+  assert.equal(intake['citation_style'], 'apa');
+  assert.equal(intake['topic'], ALL_ANSWERS.topic);
+  assert.ok(!existsSync(join(dir, '.paper', 'INTAKE.pending.json')));
+});
+
 test('with no assignment anywhere and no terminal, intake asks for it (exit 3) and sends nothing to a model', () => {
   const dir = tmp();
   const r = runCli(['new'], dir);
@@ -249,18 +294,77 @@ test('on a terminal every question is asked with the clarifier\'s suggestion, an
   assert.equal(intake['length_words'], 8 * 275);
 });
 
-test('the answering run after exit 3 asks the model nothing again', async () => {
+/** runIntake, leaving the exit code as it found it. */
+async function runIntakeOnce(dir: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  try {
+    return await runIntake(dir, args);
+  } finally {
+    process.exitCode = 0;
+  }
+}
+
+type Waiting = Array<{ id: string; question: string; suggested: string }>;
+
+test('a partial answering run after exit 3 reuses the kept questions and asks the model nothing again', async () => {
+  // The assignment comes from outside the folder, so later runs use the copy
+  // kept in PROJECT.md; it has headings of its own.
+  const dir = tmp();
+  const elsewhere = tmp('pensmith-brief-');
+  writeFileSync(join(elsewhere, 'brief.md'), ASSIGNMENT_MD + '\n');
+  const seen: Array<{ system: string; user: string; schema: unknown }> = [];
+  _setGeneratorForTest(clarifier(seen));
+
+  const first = await runIntakeOnce(dir, { from: join(elsewhere, 'brief.md') });
+  assert.equal(first['mode'], 'pending');
+  assert.equal(seen.length, 1);
+
+  const second = await runIntakeOnce(dir, { answers: JSON.stringify({ topic: 'x', discipline: 'psychology' }) });
+  assert.equal(second['mode'], 'pending');
+  assert.equal(seen.length, 1, 'the questions from the first run are reused');
+  const waiting = second['questions'] as Waiting;
+  assert.deepEqual(waiting.map((q) => q.id), ['length_words', 'citation_style', 'audience', 'counterargument']);
+  // The clarifier's wording and suggestions are kept, not pensmith's defaults.
+  assert.deepEqual(waiting[0], { id: 'length_words', question: 'How long?', suggested: '2000' });
+  assert.equal(waiting[1]!.suggested, 'APA');
+
+  const third = await runIntakeOnce(dir, {
+    answers: JSON.stringify({ length_words: '2000', citation_style: 'apa', audience: 'a seminar', counterargument: 'none' }),
+  });
+  assert.equal(third['ok'], true, JSON.stringify(third));
+  assert.equal(seen.length, 1);
+  const intake = JSON.parse(readFileSync(join(dir, '.paper', 'INTAKE.json'), 'utf8')) as Record<string, unknown>;
+  assert.equal(intake['topic'], 'x');
+  assert.equal(intake['discipline'], 'psychology');
+});
+
+test('a changed assignment asks the clarifier again and drops the answers kept for the old one', async () => {
   const dir = tmp();
   writeFileSync(join(dir, 'assignment.txt'), ASSIGNMENT);
   const seen: Array<{ system: string; user: string; schema: unknown }> = [];
   _setGeneratorForTest(clarifier(seen));
-  const first = await runIntake(dir, {});
-  assert.equal(first['mode'], 'pending');
-  assert.equal(process.exitCode, 3);
-  process.exitCode = 0;
-  const second = await runIntake(dir, { answers: JSON.stringify({ ...ALL_ANSWERS, topic: 'x', discipline: 'psychology' }) });
-  assert.equal(second['ok'], true);
-  assert.equal(seen.length, 1, 'the questions from the first run are reused');
+  await runIntakeOnce(dir, { answers: JSON.stringify({ topic: 'x', discipline: 'psychology' }) });
+  assert.equal(seen.length, 1);
+
+  writeFileSync(join(dir, 'assignment.txt'), 'HIST 330. Write 3,000 words on the 1832 Reform Act. Chicago notes.');
+  const again = await runIntakeOnce(dir, { answers: JSON.stringify({ audience: 'a seminar' }) });
+  assert.equal(again['mode'], 'pending');
+  assert.equal(seen.length, 2, 'the questions kept for the old assignment are not reused');
+  assert.match(seen[1]!.user, /Reform Act/);
+  const waiting = (again['questions'] as Waiting).map((q) => q.id);
+  assert.deepEqual(waiting, ['topic', 'discipline', 'length_words', 'citation_style', 'counterargument']);
+});
+
+test('a terminal question nobody answers in time ends intake as a refusal, not a crash', async () => {
+  const { PassThrough } = await import('node:stream');
+  const { askInTerminal } = await import('../bin/cli/intake.js');
+  const stdin = new PassThrough(); // open, and nobody types
+  const answer = await askInTerminal(
+    { id: 'topic', question: 'In a short phrase, what is the paper about?', suggested: '' },
+    undefined,
+    { mode: 'numbered', timeoutMs: 30, stdin, stderr: new PassThrough() },
+  );
+  assert.equal(answer, null);
+  stdin.destroy();
 });
 
 test('research and the citation style read the stored answers, not question text', async () => {
