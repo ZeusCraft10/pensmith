@@ -234,9 +234,10 @@ export const researchCommand = defineCommand({
     }
 
     // ── Step 5: Live discovery — runResearchOrchestrator ──
-    // When the source evaluator gives no usable answer, nothing is chosen for
-    // the author: the gate shows every candidate with none selected, and
-    // --yolo (which keeps what the evaluator kept) keeps none.
+    // When the source evaluator gives no usable answer, or keeps none,
+    // nothing is chosen for the author: the gate shows every candidate with
+    // none selected, and --yolo (which keeps what the evaluator kept) adds
+    // nothing and leaves research not done.
     let candidates: SourceCandidate[];
     let evaluated = true;
     try {
@@ -272,9 +273,13 @@ export const researchCommand = defineCommand({
     let finalCandidates: SourceCandidate[] = candidates;
     if (candidates.length > 0 && !yolo) {
       if (!process.stdout.isTTY || !process.stdin.isTTY) {
+        // --yolo keeps what the evaluator kept, so it is no way out when the
+        // evaluator kept none.
         const err = new ApprovalUnavailableError(
           'research: candidate approval requires an interactive terminal. ' +
-          'Use --yolo to auto-accept all candidates (CLAUDE.md non-negotiable: approval-gates default-on).',
+          (evaluated
+            ? 'Use --yolo to keep the candidates the source evaluator kept (CLAUDE.md non-negotiable: approval-gates default-on).'
+            : 'The source evaluator kept none of them, so nothing is chosen for you; run `pensmith research` at a terminal to choose from them yourself.'),
         );
         process.stderr.write(`pensmith ${err.message}\n`);
         process.exitCode = err.exitCode;
@@ -304,7 +309,7 @@ export const researchCommand = defineCommand({
     if (finalCandidates.length === 0) {
       process.stderr.write(
         `pensmith research: WARN — 0 candidates remain after discovery ` +
-        `(${candidates.length > 0 ? 'all pruned by approval gate' : 'no results from adapters'}); ` +
+        `(${candidates.length > 0 ? 'none chosen at the approval gate' : 'the searches found none'}); ` +
         `nothing added to LIBRARY.json.\n`,
       );
     }

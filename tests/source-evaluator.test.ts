@@ -166,12 +166,22 @@ test('an evaluator answer that still cannot be used keeps nothing on its own', a
   await assert.rejects(run(), /connection reset/);
 });
 
-test('an evaluator that keeps nothing keeps nothing', async () => {
+// An evaluator that rejects every candidate may have misjudged the topic, and
+// research that keeps nothing is not done: the candidates go back to the
+// author with none chosen, as for an answer that cannot be used.
+const rejectAll = (c: Call): unknown => ({ verdicts: shown(c.system).map((s) => ({ id: s.id, keep: false, reason: 'off-scope' })) });
+
+test('an evaluator that keeps nothing keeps nothing, and hands every candidate back to the author', async () => {
   const calls: Call[] = [];
-  _setGeneratorForTest(evaluator(calls, (c) => ({ verdicts: shown(c.system).map((s) => ({ id: s.id, keep: false, reason: 'off-scope' })) })));
-  const kept = await run();
-  assert.deepEqual(kept, []);
-  assert.match(stderr, /kept none of the 3/);
+  _setGeneratorForTest(evaluator(calls, rejectAll));
+  await assert.rejects(run(), (e: unknown) => {
+    assert.ok(e instanceof SourceEvaluationError, String(e));
+    assert.equal(e.keptNone, true);
+    assert.equal(e.candidates.length, 3);
+    assert.match(e.message, /kept none of the 3 candidates/);
+    return true;
+  });
+  assert.equal(calls.length, 1, 'a usable answer is not sent back');
 });
 
 test('the evaluator prompt keeps a retracted work for the author to see, as research.md says, rather than dropping it', () => {
@@ -222,6 +232,42 @@ test('research --yolo with an evaluator answer that cannot be used adds nothing,
   assert.equal(lib.researched_at, undefined, 'the router still sees research as not done');
 });
 
+test('research --yolo with an evaluator that keeps none adds nothing, records no run, and exits 2', async () => {
+  const root = project();
+  _setGeneratorForTest(researchModel([], rejectAll));
+  const res = await research(root, { yolo: true });
+  assert.equal(res['exitCode'], 2, `${JSON.stringify(res)}\n${stderr}`);
+  assert.match(stderr, /kept none/);
+  assert.match(stderr, /nothing was added/i);
+  assert.doesNotMatch(stderr, /no results from adapters/, 'the searches did find candidates');
+  const lib = existsSync(join(root, '.paper', 'LIBRARY.json'))
+    ? JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: unknown[]; researched_at?: string }
+    : { entries: [] };
+  assert.deepEqual(lib.entries, []);
+  assert.equal(lib.researched_at, undefined, 'the router still sees research as not done');
+});
+
+test('research without a terminal does not offer --yolo when the evaluator kept none, since --yolo would add nothing', async () => {
+  for (const evaluate of [rejectAll, (): unknown => 'not json']) {
+    const root = project();
+    stderr = '';
+    process.exitCode = 0;
+    _setGeneratorForTest(researchModel([], evaluate));
+    const res = await research(root, {});
+    assert.equal(res['exitCode'], 3, `${JSON.stringify(res)}\n${stderr}`);
+    assert.match(stderr, /candidate approval requires an interactive terminal/);
+    assert.doesNotMatch(stderr, /--yolo/);
+  }
+  // After a usable evaluation, --yolo keeps what it kept, not every candidate.
+  const root = project();
+  stderr = '';
+  process.exitCode = 0;
+  _setGeneratorForTest(researchModel([], (c) => ({ verdicts: shown(c.system).map((s, i) => ({ id: s.id, keep: i === 0, reason: 'x' })) })));
+  const res = await research(root, {});
+  assert.equal(res['exitCode'], 3, stderr);
+  assert.doesNotMatch(stderr, /auto-accept all candidates/);
+});
+
 test('research --yolo keeps what the evaluator kept', async () => {
   const root = project();
   const calls: Call[] = [];
@@ -266,6 +312,18 @@ test('at a terminal, a failed evaluation offers every candidate with none chosen
   assert.doesNotMatch(stderr, /\[default:/, 'nothing is selected beforehand');
   const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: unknown[] };
   assert.deepEqual(lib.entries, []);
+});
+
+test('at a terminal, an evaluator that keeps none offers every candidate with none chosen', async () => {
+  const root = project();
+  _setGeneratorForTest(researchModel([], rejectAll));
+  const res = await atTerminal(() => research(root, {}));
+  assert.equal(res['exitCode'], 0, stderr);
+  assert.match(stderr, /kept none of the \d+ candidates; no candidate is kept unless you choose it/);
+  assert.match(stderr, /Select candidates to keep/, 'the author is shown them');
+  assert.doesNotMatch(stderr, /\[default:/, 'nothing is selected beforehand');
+  assert.match(stderr, /none chosen at the approval gate/);
+  assert.doesNotMatch(stderr, /no results from adapters|the searches found none/);
 });
 
 test('at a terminal, after a usable evaluation Enter keeps what the evaluator kept', async () => {

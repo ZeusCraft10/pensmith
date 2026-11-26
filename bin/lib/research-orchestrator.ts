@@ -18,9 +18,10 @@
 //     no identifier is dropped with a WARN, since nothing could verify it.
 //   - The source evaluator sees the candidates as fenced data, each under an
 //     id of its own, and answers JSON to a schema checked in code (one repair
-//     round). An answer that still cannot be used keeps nothing on its own:
-//     SourceEvaluationError hands the candidates back for the author to
-//     choose from. Under PENSMITH_NO_LLM no evaluator runs and all are kept.
+//     round). An answer that still cannot be used, or one that keeps none,
+//     keeps nothing on its own: SourceEvaluationError hands the candidates
+//     back for the author to choose from. Under PENSMITH_NO_LLM no evaluator
+//     runs and all are kept.
 //   - SourceCandidateSchema.safeParse per adapter result element (T-11-10).
 //   - Injectable adapter-registry seam for offline tests.
 //   - Marks each record its own data shows as retracted before merging (no
@@ -92,15 +93,23 @@ function evaluationProblems(e: Evaluation, ids: readonly string[]): string[] {
 }
 
 /**
- * The source evaluator gave no answer that could be used. Nothing is kept on
- * its own: `candidates` (every one found) go to the author to choose from.
+ * The source evaluator gave no answer that could be used, or kept none of the
+ * candidates. Nothing is kept on its own: `candidates` (every one found) go
+ * to the author to choose from, since an evaluator that rejects every one may
+ * have misjudged the topic, and research that keeps nothing is not done.
  */
 export class SourceEvaluationError extends Error {
   readonly candidates: SourceCandidate[];
-  constructor(candidates: SourceCandidate[], why: string) {
-    super(`the source evaluator gave no usable answer (${why})`);
+  /** True when the evaluator answered and kept none; false when it gave no usable answer. */
+  readonly keptNone: boolean;
+  /** `why` is the reason its answer could not be used, or null when it kept none. */
+  constructor(candidates: SourceCandidate[], why: string | null) {
+    super(why === null
+      ? `the source evaluator kept none of the ${candidates.length} candidates`
+      : `the source evaluator gave no usable answer (${why})`);
     this.name = 'SourceEvaluationError';
     this.candidates = candidates;
+    this.keptNone = why === null;
   }
 }
 
@@ -131,8 +140,8 @@ const EVALUATOR_AUTHORS = 6;
  * Ask the source evaluator which candidates to keep. Each candidate goes in,
  * fenced, under an id of its own (c1, c2, ...): two works can share a
  * provisional citekey, an id cannot. Returns the ones it keeps; throws
- * SourceEvaluationError when it gives no usable answer, so that nothing is
- * kept that it did not choose.
+ * SourceEvaluationError when it gives no usable answer or keeps none, so that
+ * nothing is kept that it did not choose.
  */
 async function evaluateCandidates(
   candidates: SourceCandidate[],
@@ -186,9 +195,7 @@ async function evaluateCandidates(
 
   const keep = new Set(answer.value.verdicts.filter((v) => v.keep).map((v) => v.id));
   const kept = candidates.filter((_, i) => keep.has(ids[i]!));
-  if (kept.length === 0) {
-    process.stderr.write(`pensmith research: WARN — the source evaluator kept none of the ${candidates.length} candidates.\n`);
-  }
+  if (kept.length === 0) throw new SourceEvaluationError(candidates, null);
   return kept;
 }
 
@@ -234,7 +241,8 @@ export interface ResearchOrchestratorOptions {
  *   5. Merges the records of one work by identifier (groupCandidates), keeping
  *      the discipline's preferred source's metadata; drops candidates with none.
  *   6. Calls the source evaluator, which keeps the candidates it names (or
- *      throws SourceEvaluationError, keeping none, when its answer cannot be used).
+ *      throws SourceEvaluationError, keeping none, when its answer cannot be
+ *      used or keeps none).
  *   7. Returns the final SourceCandidate[].
  *
  * Does NOT write the library: bin/cli/research.ts does, after the user
