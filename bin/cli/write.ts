@@ -34,7 +34,7 @@ import { loadLibrary, type Library } from '../lib/library.js';
 import { sectionEntry } from '../lib/plan-store.js';
 import { sourceContext } from '../lib/source-context.js';
 import { getProviderApiKey } from '../lib/runtime.js';
-import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
+import { sectionNumberArg, sectionSlugArg } from '../lib/section-slug.js';
 import { artifactText, isPlaceholderParsed } from '../lib/placeholder.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { CostCapExceededError } from '../lib/budget.js';
@@ -484,11 +484,11 @@ export const writeCommand = defineCommand({
     }
 
     // ---- Single-section mode: positional <n> present ----
-    // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
-    // wins; 'placeholder' only if no outline row exists).
+    // The slug comes from the outline's section n; an explicit --slug wins.
     const paperRoot = process.cwd();
     const outline = lastCheckedOutline(paperRoot);
-    const slug = resolveSectionSlug(paperRoot, n, args.slug, outline);
+    const slug = sectionSlugArg('write', paperRoot, n, args.slug, outline);
+    if (slug === null) return { ok: false, mode: 'not-in-outline' };
     // Construct the goal-aware subscriber for a single-section re-do too, so a
     // re-write in learning/both mode still re-annotates TUTORIAL.md. goal=draft
     // yields undefined → the emit/flush below are no-ops and DRAFT.md is

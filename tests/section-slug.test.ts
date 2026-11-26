@@ -1,10 +1,10 @@
-// tests/section-slug.test.ts — audit #23 regression.
+// tests/section-slug.test.ts — a section's slug comes from the outline.
 //
-// The Tier-2 per-section verbs (plan/write/verify) used to default the slug to
-// the literal 'placeholder' when no --slug was given, operating on a section
-// directory that never matched what `outline` registered. resolveSectionSlug now
-// reads the slug from OUTLINE.md for section n; explicit --slug still wins;
-// 'placeholder' is only the last-resort fallback.
+// The per-section verbs (plan/write/verify) used to default the slug to the
+// literal 'placeholder' when no --slug was given, operating on a section
+// directory that never matched what `outline` registered. resolveSectionSlug
+// reads the slug from the outline for section n; an explicit --slug still
+// wins; and with neither there is no slug, so the verb is refused.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,13 +39,14 @@ test('audit #23: an explicit slug always wins over OUTLINE.md', () => {
   assert.equal(resolveSectionSlug(root, 1, 'custom-slug'), 'custom-slug');
 });
 
-test('audit #23: no OUTLINE.md → placeholder fallback (never throws)', () => {
+// tests/section-isolation.test.ts runs each verb with no outline.
+test('no OUTLINE.md: no slug (never throws)', () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-slug-none-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
-  assert.equal(resolveSectionSlug(root, 1), 'placeholder');
+  assert.equal(resolveSectionSlug(root, 1), null);
 });
 
-test('audit #23: a section number absent from OUTLINE.md → placeholder fallback', () => {
+test('a section number absent from OUTLINE.md: no slug', () => {
   const root = seedOutline([{ n: 1, slug: 'intro' }]);
-  assert.equal(resolveSectionSlug(root, 5), 'placeholder');
+  assert.equal(resolveSectionSlug(root, 5), null);
 });

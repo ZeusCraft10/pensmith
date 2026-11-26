@@ -16,7 +16,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseBibForPass1 } from '../lib/verify/pass1.js';
 import { paperDir, sectionAcknowledgements, sectionVerificationRecord } from '../lib/paths.js';
-import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
+import { sectionNumberArg, sectionSlugArg } from '../lib/section-slug.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { readVerificationRecord } from '../lib/verify/verification-record.js';
 import { recordAcknowledgement, workBinding } from '../lib/verify/acknowledgements.js';
@@ -67,7 +67,8 @@ export const ackCommand = defineCommand({
       return refuse(`say why the paper cites this retracted work: pensmith ack ${n} ${citekey} --reason "<why>". The reason is recorded with the acknowledgement.`);
     }
 
-    const slug = resolveSectionSlug(process.cwd(), n, args.slug);
+    const slug = sectionSlugArg('ack', process.cwd(), n, args.slug);
+    if (slug === null) return { ok: false, status: 'not-in-outline' };
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
     // Read as Pass 1 reads it, so the acknowledgement binds the work Pass 1 checks.
     const bib = await parseBibForPass1(existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '');

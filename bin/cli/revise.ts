@@ -30,8 +30,7 @@ import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
-
-const DEFAULT_SLUG = 'placeholder';
+import { sectionSlugArg } from '../lib/section-slug.js';
 
 export const reviseCommand = defineCommand({
   meta: {
@@ -69,7 +68,8 @@ export const reviseCommand = defineCommand({
     if (!Number.isInteger(n) || n < 1) {
       throw new Error(`pensmith revise: <n> (or --section) must be a positive integer; got ${JSON.stringify(rawN)}`);
     }
-    const slug = args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG;
+    const slug = sectionSlugArg('revise', process.cwd(), n, args.slug);
+    if (slug === null) return { ok: false, status: 'not-in-outline' };
     const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
 
     // GEN-06 fail-loud probe: assert a key is configured BEFORE calling runRevise.

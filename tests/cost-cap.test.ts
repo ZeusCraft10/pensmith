@@ -19,6 +19,8 @@ import { fileURLToPath } from 'node:url';
 import { complete, _setGeneratorForTest, type Generator } from '../bin/lib/anthropic.js';
 import { CostCapExceededError, resolveCostCap } from '../bin/lib/budget.js';
 import { scoreHonestyWithOptions } from '../bin/lib/honesty.js';
+import { numberOutline, writeOutline } from '../bin/lib/outline-store.js';
+import { importBibliography, updateLibrary } from '../bin/lib/library.js';
 import { isolatedCliEnv } from './lib/cli-env.js';
 
 const ENV_KEYS = ['PENSMITH_NO_LLM', 'PENSMITH_COST_CAP_USD', 'PENSMITH_OFFLINE', 'GPTZERO_API_KEY', 'PENSMITH_TEST_CASSETTES'];
@@ -152,9 +154,15 @@ test('the GPTZero score is skipped when the paper is at its cost cap', async () 
   assert.equal(result, null, 'no score: the call would have passed the paper cap');
 });
 
-test('the CLI refuses a step over the cap with exit 2 and a plain message', () => {
+test('the CLI refuses a step over the cap with exit 2 and a plain message', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'pensmith-cost-cap-cli-'));
   mkdirSync(path.join(dir, '.paper'), { recursive: true });
+  // A section to plan, with a work to plan it from: only the cap stops it.
+  await writeOutline(dir, numberOutline({
+    title: 'Capped', thesis: '',
+    sections: [{ slug: 'intro', title: 'Introduction', purpose: 'Open.', depends_on: [], word_target: 300, assigned_sources: ['doe2020'], counterargument: false }],
+  }));
+  await updateLibrary(dir, (lib, at) => importBibliography(lib, '@article{doe2020,\n  title = {A Study},\n  author = {Doe, Jane},\n  year = {2020},\n  doi = {10.1000/real}\n}\n', at, 'refs.bib'));
   spent(dir, [['write-1', 5]]);
   const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url)), 'plan', '1'], {
     cwd: dir,
@@ -166,7 +174,7 @@ test('the CLI refuses a step over the cap with exit 2 and a plain message', () =
   assert.match(r.stderr, /REFUSED/);
   assert.match(r.stderr, /cost cap/);
   assert.doesNotMatch(r.stderr, /\n\s+at /, 'no stack trace');
-  assert.ok(!existsSync(path.join(dir, '.paper', 'sections')) || !existsSync(path.join(dir, '.paper', 'sections', '01-placeholder', 'PLAN.md')), 'no PLAN.md written');
+  assert.match(readFileSync(path.join(dir, '.paper', 'sections', '01-intro', 'PLAN.md'), 'utf8'), /^status: stub$/m, 'the plan was not written');
   rmSync(dir, { recursive: true, force: true });
 });
 

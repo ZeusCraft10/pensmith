@@ -43,6 +43,8 @@ const CLI_BIN_ABS = resolve(CLI_BIN);
 // If you change the fixture so N != 5, recompute as MIDDLE_SECTION =
 // String(Math.ceil(N / 2)) and NEVER let MIDDLE_SECTION === '1'.
 const MIDDLE_SECTION = '3';  // D-02 LOCKED — derived from known-good-fixture N=5
+// The middle section's slug in the outline seeded for the section verbs.
+const MIDDLE_SLUG = 'methods';
 
 // These cases assert real CLI execution against a temp .paper/ fixture.
 // Workflow-static invariants (`## Body`, REAL_VERB_LOADERS keys) live in
@@ -82,13 +84,13 @@ const PHASE_3_CASES: Phase3Case[] = [
     name: 'plan-section',
     cliArgs: ['plan', MIDDLE_SECTION, '--yolo'],
     verbFile: 'bin/cli/plan.ts',
-    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/PLAN.md`,
+    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-${MIDDLE_SLUG}/PLAN.md`,
   },
   {
     name: 'write-section',
     cliArgs: ['write', MIDDLE_SECTION, '--yolo'],
     verbFile: 'bin/cli/write.ts',
-    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/DRAFT.md`,
+    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-${MIDDLE_SLUG}/DRAFT.md`,
   },
   {
     // Plan 04-03 (CONTRIBUTING.md D-24): wave-mode write registers its
@@ -110,7 +112,7 @@ const PHASE_3_CASES: Phase3Case[] = [
     name: 'verify-section',
     cliArgs: ['verify', MIDDLE_SECTION, '--yolo'],
     verbFile: 'bin/cli/verify.ts',
-    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/VERIFICATION.md`,
+    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-${MIDDLE_SLUG}/VERIFICATION.md`,
   },
   {
     // Plan 04-04 (CONTRIBUTING.md D-24): the revise body lands in this plan, so
@@ -125,7 +127,7 @@ const PHASE_3_CASES: Phase3Case[] = [
     cliArgs: ['plan', MIDDLE_SECTION, '--revise', '--yolo'],
     verbFile: 'bin/cli/revise.ts',
     // The patched section DRAFT.md is the load-bearing terminal artifact.
-    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/DRAFT.md`,
+    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-${MIDDLE_SLUG}/DRAFT.md`,
   },
   {
     // Plan 04-05 (CONTRIBUTING.md D-24): the compile body (workflows/compile.md)
@@ -209,14 +211,14 @@ function seedPaperFixture(): string {
 /**
  * verify-section-scoped DRAFT.md seed (Plan 05-04 Task 2). Writes a minimal,
  * deterministic section DRAFT.md carrying a single [@citekey] sentence into the
- * MIDDLE_SECTION placeholder dir so `pensmith verify` reaches the advisory Pass
+ * MIDDLE_SECTION dir so `pensmith verify` reaches the advisory Pass
  * 2/4 passes instead of short-circuiting on a missing draft. The citekey
  * (vaswani2017attention) is an entry in the seeded known-good CITATIONS.bib, but
  * that entry has no DOI, so Pass 1 still blocks it. Kept OUT of seedPaperFixture so the
  * other PHASE_3_CASES retain their clean "no DRAFT.md → unverifiable" state.
  */
 function seedVerifySectionDraft(root: string): void {
-  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`);
+  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-${MIDDLE_SLUG}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'DRAFT.md'),
@@ -224,13 +226,33 @@ function seedVerifySectionDraft(root: string): void {
   );
 }
 
-/** A planned PLAN.md for the MIDDLE_SECTION placeholder dir, for the write-section case. */
+/**
+ * An outline whose section MIDDLE_SECTION is MIDDLE_SLUG: a section verb works
+ * only on a section of the outline (one that is not in it is refused).
+ */
+function seedOutline(root: string): void {
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(
+    join(root, '.paper', 'OUTLINE.md'),
+    [
+      '# Tier Contract Fixture', '',
+      '| # | slug | title | depends_on | word target | assigned_sources |',
+      '| --- | --- | --- | --- | --- | --- |',
+      '| 1 | intro | Introduction | | 300 | |',
+      '| 2 | background | Background | | 300 | |',
+      `| ${MIDDLE_SECTION} | ${MIDDLE_SLUG} | Methods | | 300 | |`,
+      '',
+    ].join('\n'),
+  );
+}
+
+/** A planned PLAN.md for the MIDDLE_SECTION dir, for the write-section case. */
 function seedPlannedSection(root: string): void {
-  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`);
+  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-${MIDDLE_SLUG}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'PLAN.md'),
-    `---\nsection: ${MIDDLE_SECTION}\nslug: placeholder\ntitle: Placeholder\nassigned_sources: []\nstatus: planned\n---\n## Brief\n\nSet out the background.\n`,
+    `---\nsection: ${MIDDLE_SECTION}\nslug: ${MIDDLE_SLUG}\ntitle: Methods\nassigned_sources: []\nstatus: planned\n---\n## Brief\n\nSet out the background.\n`,
   );
 }
 
@@ -279,6 +301,7 @@ for (const tc of PHASE_3_CASES) {
     // unperturbed. The citekey (vaswani2017attention) is in the seeded
     // known-good CITATIONS.bib, but that entry has no DOI, so Pass 1 still
     // blocks it.
+    if (tc.name === 'plan-section' || tc.name === 'write-section' || tc.name === 'verify-section') seedOutline(root);
     if (tc.name === 'verify-section') {
       seedVerifySectionDraft(root);
     }
@@ -476,12 +499,13 @@ const REVISE_CASE = PHASE_3_CASES.find((c) => c.name === 'revise')!;
 /**
  * Seed a section with a flagged VERIFICATION.md + matching PLAN.md/DRAFT.md so
  * `plan <N> --revise` has a failing
- * citation to repair. n = MIDDLE_SECTION (3), slug 'placeholder' to match the
- * registry expectedArtifact.
+ * citation to repair. n = MIDDLE_SECTION (3), slug MIDDLE_SLUG, as the seeded
+ * outline names it.
  */
 function seedReviseFixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-revise-'));
-  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`);
+  seedOutline(root);
+  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-${MIDDLE_SLUG}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'DRAFT.md'),
@@ -492,8 +516,8 @@ function seedReviseFixture(): string {
     [
       '---',
       `section: ${MIDDLE_SECTION}`,
-      'slug: placeholder',
-      'title: Placeholder',
+      `slug: ${MIDDLE_SLUG}`,
+      'title: Methods',
       'depends_on: []',
       'assigned_sources:',
       '  - smith2020',
@@ -511,7 +535,7 @@ function seedReviseFixture(): string {
   writeFileSync(
     join(dir, 'VERIFICATION.md'),
     [
-      `# VERIFICATION (Section ${MIDDLE_SECTION}, placeholder)`,
+      `# VERIFICATION (Section ${MIDDLE_SECTION}, ${MIDDLE_SLUG})`,
       '',
       'Status: failed',
       '',
@@ -534,7 +558,7 @@ test('tier-contract: revise — verb file exists (D-24)', () => {
 });
 
 test('tier-contract: revise — plan --revise patches the flagged citation (D-06, D-24)', { skip: !reviseVerbExists }, () => {
-  const draftRel = join('.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`, 'DRAFT.md');
+  const draftRel = join('.paper', 'sections', `0${MIDDLE_SECTION}-${MIDDLE_SLUG}`, 'DRAFT.md');
 
   // --- Tier 2 (CLI): plan <N> --revise --yolo ---
   const t2Root = seedReviseFixture();
@@ -551,7 +575,7 @@ test('tier-contract: revise — plan --revise patches the flagged citation (D-06
   // An accepted revise must also reset verified_against_draft_hash to null
   // (D-05 invalidation). The seeded PLAN.md had verified_against_draft_hash:
   // 'stalehash'.
-  const planRel = join('.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`, 'PLAN.md');
+  const planRel = join('.paper', 'sections', `0${MIDDLE_SECTION}-${MIDDLE_SLUG}`, 'PLAN.md');
   const t2Plan = readFileSync(join(t2Root, planRel), 'utf8');
   assert.ok(!t2Plan.includes('stalehash'), 'revise: stale hash must be cleared from PLAN.md');
   assert.match(t2Plan, /verified_against_draft_hash:\s*(null|~|)\s*$/m, 'revise: verified_against_draft_hash must be reset to null (D-05)');

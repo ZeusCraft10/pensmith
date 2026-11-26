@@ -22,7 +22,7 @@ import { proposeSwap } from '../lib/revise-swap.js';
 import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { resolveSectionSlug } from '../lib/section-slug.js';
+import { sectionSlugArg } from '../lib/section-slug.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { readSectionState } from '../lib/router.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
@@ -127,7 +127,8 @@ export const planCommand = defineCommand({
       throw new Error(`pensmith plan: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
     }
     const outline = lastCheckedOutline(root);
-    const slug = resolveSectionSlug(root, n, args.slug, outline);
+    const slug = sectionSlugArg('plan', root, n, args.slug, outline);
+    if (slug === null) return { ok: false, mode: 'not-in-outline' };
 
     // `plan <N> --revise` (and `--research`) repair a citation through runRevise,
     // whose membership guard refuses a replacement outside assigned_sources.

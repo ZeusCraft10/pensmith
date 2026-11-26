@@ -48,7 +48,7 @@ import { citationWarnings, recordOnlyRetractionWarning, unattributedWarning } fr
 import { readAcknowledgements } from '../lib/verify/acknowledgements.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { assignedSourcesFrom, updatePlanFrontmatter } from '../lib/plan-status.js';
-import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
+import { sectionNumberArg, sectionSlugArg } from '../lib/section-slug.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { sectionVerb } from '../lib/router.js';
@@ -88,9 +88,9 @@ export const verifyCommand = defineCommand({
   async run({ args }) {
     const n = sectionNumberArg('verify', args.n);
     if (n === null) return { ok: false, status: 'invalid-input' };
-    // The slug comes from OUTLINE.md for section n (an explicit --slug wins;
-    // 'placeholder' only if no outline row exists).
-    const slug = resolveSectionSlug(process.cwd(), n, args.slug);
+    // The slug comes from the outline's section n; an explicit --slug wins.
+    const slug = sectionSlugArg('verify', process.cwd(), n, args.slug);
+    if (slug === null) return { ok: false, status: 'not-in-outline' };
     const draftPath = sectionDraft(n, slug);
     const verifPath = sectionVerification(n, slug);
     const recordPath = sectionVerificationRecord(n, slug);

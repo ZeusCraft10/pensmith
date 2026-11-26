@@ -322,9 +322,8 @@ export const addCommand = defineCommand({
       if (secRaw !== undefined) {
         const n = Number(secRaw);
         const explicit = typeof slugRaw === 'string' && slugRaw.length > 0 ? slugRaw : undefined;
-        const slug =
-          Number.isInteger(n) && n >= 1 ? resolveSectionSlug(paperRoot, n, explicit) : 'placeholder';
-        if (!Number.isInteger(n) || n < 1 || (slug === 'placeholder' && explicit === undefined)) {
+        const slug = Number.isInteger(n) && n >= 1 ? resolveSectionSlug(paperRoot, n, explicit) : null;
+        if (slug === null) {
           process.stdout.write(
             `pensmith add: --section ${String(secRaw)} could not be resolved to a section slug ` +
             `(pass --slug, or run \`pensmith outline\` first) — no sections remapped.\n`,
