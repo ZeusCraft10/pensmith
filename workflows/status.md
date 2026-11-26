@@ -33,6 +33,6 @@ the "next:" line. stdout-only, no `.paper/` writes.
    - `corrupt` → "corrupt/unreadable PLAN.md — needs attention"
    - else → `r.status`
 
-3. **Resolve next action** via `resolveNextAction(paperRoot, { stopAfterResearch })` where `stopAfterResearch` is derived from the paper mode config via `readGoalFromConfig(paperRoot)`. Never throws. Print `  next: <verb>` (or `<verb> §<n>` for per-section verbs).
+3. **Resolve next action** via `resolveNextAction(paperRoot, { stopAfterResearch })` where `stopAfterResearch` is derived from the paper mode config via `readGoalFromConfig(paperRoot)`. Never throws. Print `  next: <verb>` (or `<verb> §<n>` for per-section verbs, with `--revise` or `--force` when the decision carries it), then `  why: <reason>`.
 
 4. Shell fallback (TIER-06): `pensmith status`.

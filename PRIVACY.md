@@ -28,8 +28,8 @@ a model server on your own machine works.
 | `api.semanticscholar.org` | Research | Search terms, and your Semantic Scholar key if you set one. |
 | `api.unpaywall.org` | Pass 3 of the verifier, to find open-access text for a quoted source when OpenAlex lists no PDF of it that can be read, only when `PENSMITH_CONTACT_EMAIL` is set | DOIs and your contact email (Unpaywall requires one). |
 | Publisher and repository hosts | Pass 3 (the open-access PDF an OpenAlex or Unpaywall record points to, and the redirects it follows from there) and `pensmith add <url>` | A plain download request for that URL. Links to private or local addresses are refused. |
-| `html.duckduckgo.com` | The plagiarism check during `pensmith done` | A few short distinctive phrases taken from your draft. |
-| `api.gptzero.me` | The AI-likelihood score during `pensmith done`, only with `GPTZERO_API_KEY` set, after a consent prompt (in this alpha, `--yolo` also skips that prompt) | Your paper text, cut to 50 KB. |
+| `html.duckduckgo.com` | The plagiarism check during `pensmith done` | Up to ten phrases of up to eight words, one per paragraph, each searched as an exact quoted phrase. A search DuckDuckGo blocks or does not answer is reported as not checked. |
+| `api.gptzero.me` | The AI-likelihood score during `pensmith done`, only with `GPTZERO_API_KEY` set and your consent: asked once per paper at a terminal (default no) or given with `pensmith done --score`, and kept in `.paper/config.toml`. `--yolo` never gives it, and `--no-score` skips the score | Your paper text, cut to 50 KB. |
 
 When `PENSMITH_CONTACT_EMAIL` is set, requests to the scholarly registries
 carry it in the `User-Agent` header, and requests to Crossref and OpenAlex
