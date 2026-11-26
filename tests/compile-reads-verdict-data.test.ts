@@ -100,3 +100,24 @@ test('a cited CITATIONS.bib entry changed after verify: compile re-checks the se
   assert.match(c.out, /\[@vaswani2017\] is MIS-CITED/);
   assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false, 'no manuscript is written');
 });
+
+test('verdicts an older verifier recorded are stale: compile re-checks the section with this one', () => {
+  // An older, more lenient verifier passed a citation this one fails. Its
+  // record still matches the draft, the bib and the acknowledgements.
+  const { root, sec } = seedPaper();
+  assert.equal(cli(root, ['verify', '1', '--slug', 'intro']).status, 2);
+  const recordPath = join(sec, 'VERIFICATION.json');
+  const record = JSON.parse(readFileSync(recordPath, 'utf8')) as Record<string, unknown> & {
+    citations: Array<Record<string, unknown>>;
+  };
+  record['verifier_version'] = '0.2.0';
+  record['status'] = 'verified';
+  record.citations = record.citations.map((c) => ({ ...c, verdict: 'OK', reason: 'matches the record' }));
+  writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
+
+  const c = cli(root, ['compile']);
+  assert.equal(c.status, 2, c.out);
+  assert.match(c.out, /stale \(verified by pensmith 0\.2\.0, not by this verifier \([^)]+\)\)/);
+  assert.ok(c.out.includes(`[@${KEY}] is FABRICATED`), c.out);
+  assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false, 'no manuscript is written');
+});

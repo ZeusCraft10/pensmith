@@ -12,8 +12,9 @@
 //     keeps as verified_against_draft_hash);
 //   - bib_entries: a hash of each cited CITATIONS.bib entry, as verify read it;
 //   - acknowledgements_sha256: the section's ACKNOWLEDGEMENTS.json;
-//   - verifier_version and network_mode: which verifier ran, and whether it
-//     could reach the registries.
+//   - verifier_version and network_mode: which verifier ran (compile checks a
+//     record from another version again), and whether it could reach the
+//     registries.
 // A record with `checked: false` is a refusal: verify stopped before any pass
 // ran, and `reason` says why. It never lets a section through.
 
@@ -319,12 +320,18 @@ export interface SectionNow {
 }
 
 /**
- * Why the record's verdicts no longer describe the section: its draft or
- * assigned sources, a cited CITATIONS.bib entry, or its acknowledgements
- * changed since verify. Empty when they still apply.
+ * Why the record's verdicts no longer describe the section: another version of
+ * the verifier recorded them, or its draft or assigned sources, a cited
+ * CITATIONS.bib entry, or its acknowledgements changed since verify. Empty
+ * when they still apply.
  */
 export function verificationStaleness(record: VerificationRecord, now: SectionNow): string[] {
   const why: string[] = [];
+  // An older verifier may have passed what this one blocks, so its verdicts
+  // are checked again rather than trusted.
+  if (record.verifier_version !== VERSION) {
+    why.push(`verified by pensmith ${record.verifier_version}, not by this verifier (${VERSION})`);
+  }
   // draft_hash binds the draft and the assigned sources together, as verify
   // hashed them; draft_sha256 only says which of the two changed.
   if (record.draft_hash !== computeDraftHash(now.draftBytes, [...now.assignedSources])) {
