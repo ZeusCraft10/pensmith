@@ -80,6 +80,11 @@ export interface Pass1Result {
   titleJW: number;
   authorJW: number;
   reason: string;
+  /**
+   * Set when the work's retraction status was read from its registry record
+   * alone, because OpenAlex could not be asked; the reason says so too.
+   */
+  retractionRecordOnly?: true;
 }
 
 /** A bibliography entry as citation-js reads it (CSL-JSON). */
@@ -197,12 +202,14 @@ async function verdictForRecord(ctx: CiteContext, work: ClaimedWork, id: WorkId,
     return retractedResult(ctx, `${matched}, but the work is retracted: ${r.retracted.map(describeSignal).join('; ')}`,
       m.titleScore, m.authorScore);
   }
-  if (r.concerns.length > 0) {
-    return result(ck, 'EXPRESSION_OF_CONCERN',
+  const note = r.note ? `; ${r.note}` : '';
+  const out = r.concerns.length > 0
+    ? result(ck, 'EXPRESSION_OF_CONCERN',
       `${matched}; an expression of concern was published about it: ${r.concerns.map(describeSignal).join('; ')} — ` +
-      'say so where it is cited, or cite another source', m.titleScore, m.authorScore);
-  }
-  return result(ck, 'OK', r.note ? `${matched}; ${r.note}` : matched, m.titleScore, m.authorScore);
+      `say so where it is cited, or cite another source${note}`, m.titleScore, m.authorScore)
+    : result(ck, 'OK', `${matched}${note}`, m.titleScore, m.authorScore);
+  if (r.note) out.retractionRecordOnly = true;
+  return out;
 }
 
 /** Pass-1 deterministic verdict for a single cited key. */

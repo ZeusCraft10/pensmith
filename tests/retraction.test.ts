@@ -153,6 +153,30 @@ test('an expression of concern warns but does not block; OpenAlex confirms the w
   assert.match(v.out, /WARN.*expression of concern/i);
 });
 
+/** A DataCite DOI with no OpenAlex answer recorded: OpenAlex cannot be asked about it. */
+const VASWANI =
+  '@misc{vaswani2017,\n  title = {Attention Is All You Need},\n' +
+  '  author = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, Lukasz and Polosukhin, Illia},\n' +
+  '  year = {2017},\n  doi = {10.48550/arXiv.1706.03762}\n}\n';
+
+test('verify says how many citations had their retraction status read from the record alone', () => {
+  // When OpenAlex cannot be asked, a citation is OK on what its registry
+  // record says. That gap used to show only in VERIFICATION.md.
+  const root = seedPaper(VASWANI + CONCERN);
+  const v = cli(root, 'verify', '1', '--slug', 'intro');
+  assert.equal(v.status, 0, v.out);
+  assert.match(row(root, 'vaswani2017'), /OpenAlex could not be asked/);
+  assert.match(
+    v.out,
+    /WARN — section 1: the retraction status of 1 citation was read from its registry record alone, since OpenAlex could not be asked/,
+  );
+
+  // Every citation checked against OpenAlex too: nothing to say.
+  const checked = seedPaper(CONCERN);
+  const c = cli(checked, 'verify', '1', '--slug', 'intro');
+  assert.doesNotMatch(c.out, /registry record alone/);
+});
+
 test('--yolo never waives RETRACTED', () => {
   const root = seedPaper(WAKEFIELD);
   const v = cli(root, 'verify', '1', '--slug', 'intro', '--yolo');
