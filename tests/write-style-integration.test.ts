@@ -1,18 +1,11 @@
-// tests/write-style-integration.test.ts — Phase 8 Wave 0 RED-by-skip scaffold
-// for STYL-03 (the drafter voice-hint blend) + Pitfall 7 (resolution priority).
-//
-// RED-by-skip via SOURCE-GREP (mirrors [07-01]): READY = bin/cli/write.ts
-// references `styleProfilePath` (the field 08-02/08-06 add to DrafterInput and
-// wire into the writer). A bare existsSync is insufficient — write.ts already
-// exists. Until 08-06 wires STYLE.json into the drafter, every test SKIPS so
-// `npm test` stays GREEN.
+// tests/write-style-integration.test.ts — STYL-03, the drafter's voice.
 //
 // Contract pinned (Pitfall 7): the drafter's effective voice hint follows the
 // priority PLAN.md `voice_hint` > style-match render (styleMatchToVoiceHint over
 // STYLE.json) > default. A non-empty PLAN.md voice_hint MUST WIN over a present
 // STYLE.json — the user's explicit per-section direction is never overridden by
-// the inferred style profile. 08-06 exposes a `resolveVoiceHint` chokepoint that
-// implements this precedence; this test pins its behavior.
+// the inferred style profile. write.ts's `resolveVoiceHint` implements this
+// precedence; this test pins its behavior.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,20 +18,8 @@ function repoPath(rel: string): string {
   return fileURLToPath(new URL('../' + rel, import.meta.url));
 }
 
-// SOURCE-GREP skip-predicate: write.ts must reference the STYLE.json wiring.
-function writeStyleWired(): boolean {
-  const writePath = repoPath('bin/cli/write.ts');
-  if (!fs.existsSync(writePath)) return false;
-  return /styleProfilePath/.test(fs.readFileSync(writePath, 'utf8'));
-}
-
-const READY = writeStyleWired();
-
 const PAPER_A = repoPath('tests/fixtures/style-samples/paperA');
 
-// Runtime URL.href specifiers so tsc stays clean while the symbols are pending:
-//   - style-match.ts (08-02) is not built yet
-//   - write.ts exists but resolveVoiceHint is added in 08-06
 const SM_MOD = new URL('../bin/lib/style-match.js', import.meta.url);
 const WRITE_MOD = new URL('../bin/cli/write.js', import.meta.url);
 
@@ -61,7 +42,7 @@ function mkTmp(): string {
   return tmp;
 }
 
-test('STYL-03 / Pitfall 7: a non-empty PLAN.md voice_hint WINS over a present STYLE.json', { skip: !READY }, async () => {
+test('STYL-03 / Pitfall 7: a non-empty PLAN.md voice_hint WINS over a present STYLE.json', async () => {
   mkTmp();
 
   // Build a real STYLE.json from the committed paperA samples.
@@ -84,7 +65,7 @@ test('STYL-03 / Pitfall 7: a non-empty PLAN.md voice_hint WINS over a present ST
   );
 });
 
-test('STYL-03 / Pitfall 7: absent PLAN.md voice_hint falls back to the style-match render (then default)', { skip: !READY }, async () => {
+test('STYL-03 / Pitfall 7: absent PLAN.md voice_hint falls back to the style-match render (then default)', async () => {
   mkTmp();
   const { buildStyleProfile, styleMatchToVoiceHint } = (await import(SM_MOD.href)) as StyleMatchMod;
   const profile = await buildStyleProfile(PAPER_A);

@@ -30,7 +30,7 @@ import { frontmatterProblem, parseFrontmatter } from '../lib/frontmatter.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake } from '../lib/intake-record.js';
 import { readLibrarySync } from '../lib/library.js';
-import { libraryCatalogJson } from '../lib/library-catalog.js';
+import { renderLibraryContext } from '../lib/source-context.js';
 import { lastCheckedOutline } from '../lib/outline-read.js';
 import { planProblems, renderPlan, SectionPlanSchema, type SectionEntry } from '../lib/plan-store.js';
 import { completeChecked } from '../lib/structured-call.js';
@@ -200,7 +200,7 @@ export const planCommand = defineCommand({
       topic: escapeTemplateTokens(intake?.topic || '(no topic recorded)'),
       discipline: escapeTemplateTokens(intake?.discipline ?? 'other'),
       upstreamPlans: upstreamPlans(root, outline, entry),
-      candidateSources: libraryCatalogJson(library),
+      candidateSources: renderLibraryContext(library),
     });
     const answer = await completeChecked({
       system,

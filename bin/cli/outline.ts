@@ -28,7 +28,7 @@ import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
 import { escapeTemplateTokens } from '../lib/intake-parse.js';
 import { readIntake, type IntakeRead } from '../lib/intake-record.js';
 import { readLibrarySync, type Library } from '../lib/library.js';
-import { libraryCatalogJson } from '../lib/library-catalog.js';
+import { renderLibraryContext } from '../lib/source-context.js';
 import { parseOutline } from '../lib/outline-parse.js';
 import { completeChecked } from '../lib/structured-call.js';
 import { readOutline, type StoredOutline } from '../lib/outline-read.js';
@@ -212,7 +212,7 @@ export const outlineCommand = defineCommand({
       discipline: escapeTemplateTokens(intake?.discipline ?? 'other'),
       length: String(length),
       counterargument: rules.counterargumentRequired ? 'required' : 'optional',
-      candidateSources: libraryCatalogJson(library),
+      candidateSources: renderLibraryContext(library),
     });
     const user = intake?.assignment || intake?.topic || 'Propose an outline for the paper.';
     const answer = await completeChecked({
