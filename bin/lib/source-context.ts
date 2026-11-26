@@ -40,9 +40,15 @@ function yearOf(item: LibraryItem): number | undefined {
   return typeof y === 'number' ? y : undefined;
 }
 
+/**
+ * A markup tag: `<` then a letter or `/` (`<jats:p>`, `</i>`, `<br/>`). A `<`
+ * before a space or a digit is a comparison ("p < 0.05", "x<0.5") and stays.
+ */
+const TAG = /<\/?[A-Za-z][\w.:-]*(?:\s[^<>]*)?\/?>/g;
+
 /** An abstract as plain text: registry markup (JATS tags) and runs of space removed, cut to `max` characters. */
 export function plainAbstract(raw: string, max: number): string {
-  const text = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = raw.replace(TAG, ' ').replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
 }
 
