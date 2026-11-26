@@ -1,165 +1,119 @@
-// tests/pricing.test.ts — table integrity + cost-math + error coverage for
-// bin/lib/pricing.ts (W11 sibling A).
+// tests/pricing.test.ts — the price table and cost arithmetic in
+// bin/lib/pricing.ts.
 //
-// Pure tests — no I/O, no env-override, no tmpdir. The pricing module is a
-// frozen constant + a pure function so every test runs synchronously against
-// in-memory values. Cost-math assertions use the vendor-derived rates
-// (anthropic claude-opus-4 $15/$75 per Mtok, claude-sonnet-4 $3/$15,
-// gpt-4o-mini $0.15/$0.60); when a vendor changes its pricing the assertion
-// constants here MUST be bumped together with bin/lib/pricing.ts.
+// The table used to know only model IDs no API serves (claude-opus-4,
+// claude-sonnet-4, claude-haiku-4), and it threw UnknownModelError for every
+// other name, so no Anthropic configuration could both price and run. It now
+// lists the current models by provider name, and a model it does not list is
+// priced at the provider's highest listed rates with a warning: it never
+// throws. When a vendor changes a rate, change the constants here with
+// bin/lib/pricing.ts.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  MODEL_PRICES,
-  estimateCost,
-  UnknownModelError,
-} from '../bin/lib/pricing.js';
+import { MODEL_PRICES, estimateCost, isKnownModel, priceFor } from '../bin/lib/pricing.js';
 
-test('estimateCost: claude-opus-4 1M-in / 1M-out = $15 + $75 = $90', () => {
-  const cost = estimateCost({
-    providerId: 'anthropic',
-    modelId: 'claude-opus-4',
-    inputTokens: 1_000_000,
-    outputTokens: 1_000_000,
-  });
-  assert.equal(cost, 90);
+const M = 1_000_000;
+const near = (a: number, b: number): boolean => Math.abs(a - b) < 1e-9;
+
+function captureStderr<T>(fn: () => T): { value: T; stderr: string } {
+  const orig = process.stderr.write.bind(process.stderr);
+  let stderr = '';
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8');
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { value: fn(), stderr };
+  } finally {
+    process.stderr.write = orig;
+  }
+}
+
+test('current Anthropic models are priced per million input/output tokens', () => {
+  const cases: Array<[string, number, number]> = [
+    ['claude-opus-5-5', 4, 20],
+    ['claude-sonnet-5-5', 2, 10],
+    ['claude-haiku-5-5', 0.1, 0.5],
+    ['claude-fable-5-2', 8, 40],
+  ];
+  // 50K prompt tokens: under Claude Haiku 5.5's long-prompt threshold.
+  for (const [model, input, output] of cases) {
+    assert.ok(near(estimateCost({ provider: 'anthropic', modelId: model, inputTokens: 50_000, outputTokens: 0 }), input * 0.05), `${model} input rate`);
+    assert.ok(near(estimateCost({ provider: 'anthropic', modelId: model, inputTokens: 0, outputTokens: M }), output), `${model} output rate`);
+  }
 });
 
-test('estimateCost: claude-sonnet-4 100k-in / 50k-out = $0.30 + $0.75 = $1.05', () => {
-  const cost = estimateCost({
-    providerId: 'anthropic',
-    modelId: 'claude-sonnet-4',
-    inputTokens: 100_000,
-    outputTokens: 50_000,
-  });
-  // 0.1 * 3 + 0.05 * 15 = 0.3 + 0.75 = 1.05
-  assert.ok(
-    Math.abs(cost - 1.05) < 1e-9,
-    `expected ~1.05, got ${cost}`,
-  );
+test('Claude Haiku 5.5 is cheaper up to 100K prompt tokens and dearer past them', () => {
+  assert.ok(near(estimateCost({ provider: 'anthropic', modelId: 'claude-haiku-5-5', inputTokens: 100_000, outputTokens: 10_000 }), 0.01 + 0.005));
+  assert.ok(near(estimateCost({ provider: 'anthropic', modelId: 'claude-haiku-5-5', inputTokens: 200_000, outputTokens: 10_000 }), 0.1 + 0.025));
 });
 
-test('estimateCost: gpt-4o-mini 1M-in / 1M-out = $0.15 + $0.60 = $0.75', () => {
-  const cost = estimateCost({
-    providerId: 'openai',
-    modelId: 'gpt-4o-mini',
-    inputTokens: 1_000_000,
-    outputTokens: 1_000_000,
-  });
-  // 0.15 + 0.60 = 0.75
-  assert.ok(
-    Math.abs(cost - 0.75) < 1e-9,
-    `expected ~0.75, got ${cost}`,
-  );
+test('older model IDs that are still served are priced', () => {
+  for (const model of ['claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-fable-5-1']) {
+    assert.ok(isKnownModel('anthropic', model), `${model} is in the table`);
+  }
+  // Retired IDs are not.
+  for (const model of ['claude-opus-4', 'claude-sonnet-4', 'claude-haiku-4']) {
+    assert.equal(isKnownModel('anthropic', model), false, `${model} is not served and not listed`);
+  }
 });
 
-test('estimateCost throws UnknownModelError for unknown provider', () => {
-  assert.throws(
-    () => estimateCost({
-      providerId: 'mystery-vendor',
-      modelId: 'x',
-      inputTokens: 0,
-      outputTokens: 0,
-    }),
-    (e: unknown) => e instanceof UnknownModelError,
-  );
+test('cache reads and writes are priced', () => {
+  const cost = estimateCost({ provider: 'anthropic', modelId: 'claude-opus-5-5', inputTokens: 0, outputTokens: 0, cacheReadTokens: M, cacheWriteTokens: M });
+  assert.ok(near(cost, 0.2 + 5), `cache read $0.20 plus 5-minute write $5.00 per Mtok (got ${cost})`);
 });
 
-test('estimateCost throws UnknownModelError for unknown model on known provider', () => {
-  assert.throws(
-    () => estimateCost({
-      providerId: 'anthropic',
-      modelId: 'imaginary-model-9000',
-      inputTokens: 0,
-      outputTokens: 0,
-    }),
-    (e: unknown) => e instanceof UnknownModelError,
-  );
+test('an unlisted model is priced at the provider\'s highest rates, with a warning, and never throws', () => {
+  const { value, stderr } = captureStderr(() =>
+    estimateCost({ provider: 'anthropic', modelId: 'claude-imaginary-9', inputTokens: M, outputTokens: M }));
+  const highestIn = Math.max(...Object.values(MODEL_PRICES.anthropic!).map((p) => p.longContext?.inputPerMtok ?? p.inputPerMtok));
+  const highestOut = Math.max(...Object.values(MODEL_PRICES.anthropic!).map((p) => p.longContext?.outputPerMtok ?? p.outputPerMtok));
+  assert.ok(near(value, highestIn + highestOut), `priced at $${highestIn}/$${highestOut} (got ${value})`);
+  assert.match(stderr, /no price is listed for anthropic\/claude-imaginary-9/);
+  // Only once per model.
+  const again = captureStderr(() => estimateCost({ provider: 'anthropic', modelId: 'claude-imaginary-9', inputTokens: 1, outputTokens: 1 }));
+  assert.equal(again.stderr, '');
 });
 
-test('estimateCost throws RangeError on negative input tokens', () => {
-  assert.throws(
-    () => estimateCost({
-      providerId: 'anthropic',
-      modelId: 'claude-opus-4',
-      inputTokens: -1,
-      outputTokens: 0,
-    }),
-    (e: unknown) => e instanceof RangeError,
-  );
+test('an unknown provider is priced at the highest rate listed anywhere', () => {
+  const { value } = captureStderr(() => priceFor('mystery-vendor', 'x'));
+  const all = Object.values(MODEL_PRICES).flatMap((m) => Object.values(m));
+  assert.equal(value.outputPerMtok, Math.max(...all.map((p) => p.longContext?.outputPerMtok ?? p.outputPerMtok)));
 });
 
-test('MODEL_PRICES is deeply frozen (outer + each inner provider record + each leaf ModelPrice — FLAG-03)', () => {
-  assert.ok(Object.isFrozen(MODEL_PRICES), 'MODEL_PRICES outer must be frozen');
-  assert.ok(
-    Object.isFrozen(MODEL_PRICES.anthropic),
-    'MODEL_PRICES.anthropic must be frozen',
-  );
-  assert.ok(
-    Object.isFrozen(MODEL_PRICES.openai),
-    'MODEL_PRICES.openai must be frozen',
-  );
-  // FLAG-03 regression: every leaf ModelPrice value object must ALSO be
-  // frozen. The pre-fix code froze only the outer record and each provider
-  // record but left the leaves writable. Verify at least one well-known
-  // leaf — exhaustive coverage follows in the loop below.
-  assert.ok(
-    Object.isFrozen(MODEL_PRICES.anthropic?.['claude-opus-4']),
-    'MODEL_PRICES.anthropic[claude-opus-4] leaf must be frozen (FLAG-03)',
-  );
-  // Exhaustive: every leaf across every provider must be frozen.
-  for (const [providerKey, models] of Object.entries(MODEL_PRICES)) {
-    for (const [modelKey, price] of Object.entries(models)) {
-      assert.ok(
-        Object.isFrozen(price),
-        `MODEL_PRICES.${providerKey}[${modelKey}] leaf must be frozen`,
-      );
+test('rates set in runtime.json replace the table\'s', () => {
+  assert.equal(estimateCost({ provider: 'openai', modelId: 'llama3.3', inputTokens: M, outputTokens: M, override: { inputPerMtok: 0, outputPerMtok: 0 } }), 0);
+});
+
+test('OpenAI models keep their rates; the gpt-5 placeholder (a copy of gpt-4o) is gone', () => {
+  assert.ok(near(estimateCost({ provider: 'openai', modelId: 'gpt-4o-mini', inputTokens: M, outputTokens: M }), 0.75));
+  assert.equal(isKnownModel('openai', 'gpt-5'), false);
+});
+
+test('estimateCost throws RangeError on negative token counts', () => {
+  assert.throws(() => estimateCost({ provider: 'anthropic', modelId: 'claude-opus-5-5', inputTokens: -1, outputTokens: 0 }), RangeError);
+  assert.throws(() => estimateCost({ provider: 'anthropic', modelId: 'claude-opus-5-5', inputTokens: 0, outputTokens: 0, cacheReadTokens: -5 }), RangeError);
+});
+
+test('MODEL_PRICES is deeply frozen', () => {
+  assert.ok(Object.isFrozen(MODEL_PRICES));
+  for (const [provider, models] of Object.entries(MODEL_PRICES)) {
+    assert.ok(Object.isFrozen(models), `${provider} table frozen`);
+    for (const [model, price] of Object.entries(models)) {
+      assert.ok(Object.isFrozen(price), `${provider}/${model} frozen`);
     }
   }
-  // Behavioral assertion: under strict mode, an assignment to a frozen
-  // leaf field must THROW (this file is an ES module, which is strict by
-  // default). Verifies the freeze is enforced, not just declared.
-  assert.throws(
-    () => {
-      (MODEL_PRICES.anthropic!['claude-opus-4'] as { inputPerMtok: number }).inputPerMtok = 99;
-    },
-    TypeError,
-    'mutation of a frozen leaf must throw TypeError under strict mode',
-  );
+  assert.throws(() => {
+    (MODEL_PRICES.anthropic!['claude-opus-5-5'] as { inputPerMtok: number }).inputPerMtok = 99;
+  }, TypeError);
 });
 
-test('every entry has non-negative rates and currency=USD', () => {
+test('every entry has non-negative rates and currency USD', () => {
   for (const [provider, models] of Object.entries(MODEL_PRICES)) {
     for (const [model, price] of Object.entries(models)) {
-      assert.ok(
-        price.inputPerMtok >= 0,
-        `${provider}/${model} inputPerMtok must be >= 0 (got ${price.inputPerMtok})`,
-      );
-      assert.ok(
-        price.outputPerMtok >= 0,
-        `${provider}/${model} outputPerMtok must be >= 0 (got ${price.outputPerMtok})`,
-      );
-      assert.equal(
-        price.currency,
-        'USD',
-        `${provider}/${model} currency must be USD (got ${price.currency})`,
-      );
+      assert.ok(price.inputPerMtok >= 0 && price.outputPerMtok >= 0, `${provider}/${model} rates`);
+      assert.equal(price.currency, 'USD');
     }
   }
-});
-
-test('table contains required Phase-1 entries (claude-opus-4, claude-sonnet-4, gpt-4o-mini)', () => {
-  assert.ok(
-    MODEL_PRICES.anthropic?.['claude-opus-4'],
-    'anthropic/claude-opus-4 must be in MODEL_PRICES',
-  );
-  assert.ok(
-    MODEL_PRICES.anthropic?.['claude-sonnet-4'],
-    'anthropic/claude-sonnet-4 must be in MODEL_PRICES',
-  );
-  assert.ok(
-    MODEL_PRICES.openai?.['gpt-4o-mini'],
-    'openai/gpt-4o-mini must be in MODEL_PRICES',
-  );
 });

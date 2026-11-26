@@ -91,7 +91,7 @@ const DEFAULT_CAP_USD = 0.50;
 
 /** Default model per provider when runtime config has no defaultModel. */
 const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
-  anthropic: 'claude-haiku-4',
+  anthropic: 'claude-opus-5-5',
   openai: 'gpt-4o',
 };
 
@@ -353,7 +353,7 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
   const defaultModel =
     providerCfg?.defaultModel ??
     PROVIDER_DEFAULT_MODELS[providerName] ??
-    'claude-haiku-4';
+    'claude-opus-5-5';
   const modelId = opts.model ?? defaultModel;
 
   // ── Step 3: key resolution (propagates MissingApiKeyError) ──
@@ -371,7 +371,7 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
   const messagesChars = opts.messages.reduce((acc, m) => acc + m.content.length, 0);
   const estimatedInputTokens = Math.ceil((systemChars + messagesChars) / 4);
   const estimateUsd = estimateCost({
-    providerId,
+    provider: providerName,
     modelId,
     inputTokens: estimatedInputTokens,
     outputTokens: maxTokens,
@@ -483,12 +483,12 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
     ts: new Date().toISOString(),
     scope,
     scopeId,
-    provider: providerId as 'anthropic' | 'openai',
+    provider: providerName,
     model: modelId,
     inputTokens: actualIn,
     outputTokens: actualOut,
     costUsd: estimateCost({
-      providerId,
+      provider: providerName,
       modelId,
       inputTokens: actualIn,
       outputTokens: actualOut,

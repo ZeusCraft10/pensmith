@@ -35,12 +35,11 @@ export interface EstimateResult {
   exceedsHalfCap: boolean;
 }
 
-// Default provider + model for the projection. anthropic/claude-sonnet-4 exists
-// in MODEL_PRICES (pricing.ts) and is the production-typical balanced default.
+// Default provider + model for the projection: the transport's default model.
 // Kept as a module constant (not a runtime.ts read) so projectEstimate stays a
 // pure, IO-light projection that never touches the platform data dir.
 const DEFAULT_PROVIDER_ID = 'anthropic';
-const DEFAULT_MODEL_ID = 'claude-sonnet-4';
+const DEFAULT_MODEL_ID = 'claude-opus-5-5';
 
 // Default session cap when the dispatcher does not pass a configured cap
 // (mirrors the documented $5 default; the dispatcher passes
@@ -69,7 +68,7 @@ const WHOLE_PAPER_STEPS = ['research', 'outline', 'compile', 'done'] as const;
 function rowFor(step: string, label: string): EstimateRow {
   const heur = STEP_HEURISTICS[step as keyof typeof STEP_HEURISTICS];
   const usd = estimateCost({
-    providerId: DEFAULT_PROVIDER_ID,
+    provider: DEFAULT_PROVIDER_ID,
     modelId: DEFAULT_MODEL_ID,
     inputTokens: heur.inputTokens,
     outputTokens: heur.outputTokens,
