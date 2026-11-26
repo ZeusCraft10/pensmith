@@ -10,6 +10,7 @@
 
 import { z } from 'zod/v4';
 import { serializeFrontmatter } from './frontmatter.js';
+import type { lastCheckedOutline } from './outline-read.js';
 import { PlanFrontmatterSchema } from './schemas/plan-frontmatter.js';
 
 /** What the section planner returns. */
@@ -44,6 +45,25 @@ export interface SectionEntry {
   purpose: string;
   word_target: number | null;
   assigned_sources: string[];
+}
+
+/**
+ * Section `n` as the outline has it (as lastCheckedOutline read it, while a
+ * hand edit of OUTLINE.md waits), or the bare minimum when there is no
+ * outline entry. The planner and the drafter are shown the section from here.
+ */
+export function sectionEntry(outline: ReturnType<typeof lastCheckedOutline>, n: number, slug: string): SectionEntry {
+  const s = outline?.sections.find((x) => x.n === n && x.slug === slug);
+  const stored = outline?.stored?.sections.find((x) => x.n === n && x.slug === slug);
+  return {
+    n,
+    slug,
+    title: s?.title ?? slug,
+    depends_on: s?.depends_on ?? [],
+    purpose: stored?.purpose ?? '',
+    word_target: s?.estimated_word_count ?? null,
+    assigned_sources: s?.assigned_sources ?? [],
+  };
 }
 
 /** PLAN.md: frontmatter written by code, the planner's content as the body. */

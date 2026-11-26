@@ -43,12 +43,11 @@ import { groupCandidates } from './library.js';
 import { crossCheckRetractions } from './sources/retraction-cross-check.js';
 import { disciplinePreset } from './citations.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
-import { escapeTemplateTokens } from './intake-parse.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from './network-mode.js';
 import { completeChecked } from './structured-call.js';
 import { CostCapExceededError } from './budget.js';
 import { plainAbstract } from './source-context.js';
-import { fenceUntrusted, stripFenceMarkers } from './untrusted-fence.js';
+import { fencedJson, promptText } from './untrusted-fence.js';
 
 // ---------------------------------------------------------------------------
 // Injectable adapter registry seam (mirrors zotero-mcp.ts setZoteroClientForTest).
@@ -100,8 +99,6 @@ function evaluationProblems(e: Evaluation, ids: readonly string[]): string[] {
  */
 export class SourceEvaluationError extends Error {
   readonly candidates: SourceCandidate[];
-  /** True when the evaluator answered and kept none; false when it gave no usable answer. */
-  readonly keptNone: boolean;
   /** `why` is the reason its answer could not be used, or null when it kept none. */
   constructor(candidates: SourceCandidate[], why: string | null) {
     super(why === null
@@ -109,7 +106,6 @@ export class SourceEvaluationError extends Error {
       : `the source evaluator gave no usable answer (${why})`);
     this.name = 'SourceEvaluationError';
     this.candidates = candidates;
-    this.keptNone = why === null;
   }
 }
 
@@ -160,12 +156,11 @@ async function evaluateCandidates(
     ...(c.abstract ? { abstract: plainAbstract(c.abstract, EVALUATOR_ABSTRACT_CHARS) } : {}),
     ...(c.retracted ? { retracted: true } : {}),
   }));
-  const text = (s: string): string => escapeTemplateTokens(stripFenceMarkers(s));
   const system = interpolate(loadPrompt('source-evaluator'), {
-    candidateSources: escapeTemplateTokens(fenceUntrusted(JSON.stringify(shown, null, 2))),
-    topic: text(opts.topic),
-    scope: text(opts.scope),
-    discipline: text(opts.discipline),
+    candidateSources: fencedJson(shown),
+    topic: promptText(opts.topic),
+    scope: promptText(opts.scope),
+    discipline: promptText(opts.discipline),
   });
 
   let answer;

@@ -16,22 +16,7 @@ import { join } from 'node:path';
 import { _setGeneratorForTest, type Generator } from '../bin/lib/anthropic.js';
 import { gateNote, runRevise, type ReviseGateContext, type ReviseSwapProposal, type ReviseSwapVars } from '../bin/lib/revise.js';
 import { proposeSwap } from '../bin/lib/revise-swap.js';
-
-const FENCE_OPEN = '<<<PENSMITH_UNTRUSTED_DATA_7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a>>>';
-const FENCE_CLOSE = '<<<END_PENSMITH_UNTRUSTED_DATA_7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a>>>';
-
-/** The text inside each fence of a prompt. */
-function fences(text: string): string[] {
-  const out: string[] = [];
-  let at = 0;
-  for (;;) {
-    const open = text.indexOf(FENCE_OPEN, at);
-    if (open < 0) return out;
-    const close = text.indexOf(FENCE_CLOSE, open);
-    out.push(text.slice(open + FENCE_OPEN.length, close < 0 ? undefined : close));
-    at = close < 0 ? text.length : close + FENCE_CLOSE.length;
-  }
-}
+import { fencedBlocks, FENCE_CLOSE, FENCE_OPEN } from './lib/fence.js';
 
 function item(id: string, title: string, family: string, year: number, abstract: string): Record<string, unknown> {
   return {
@@ -100,7 +85,7 @@ test('the swap is proposed from the assigned works in LIBRARY.json, fenced, and 
   assert.equal(res.accepted, true, res.message);
 
   const sources = vars[0]!.available_sources;
-  const block = fences(sources).find((b) => b.includes('"citekey"'));
+  const block = fencedBlocks(sources).find((b) => b.includes('"citekey"'));
   assert.ok(block, 'the sources are fenced');
   assert.match(block, /"citekey": "baker2018"/);
   assert.match(block, /The Mechanism Is Robust Across Cohorts/);
@@ -137,7 +122,7 @@ test('proposeSwap fences the citing sentence and the sources, strips a fence mar
   assert.deepEqual(JSON.parse(raw), SWAP);
   const sent = calls[0]!.text;
   assert.equal(sent.split(FENCE_OPEN).length, sent.split(FENCE_CLOSE).length, 'every fence opened is closed once');
-  const claim = fences(sent).find((b) => b.includes('The mechanism is robust'));
+  const claim = fencedBlocks(sent).find((b) => b.includes('The mechanism is robust'));
   assert.ok(claim, 'the citing sentence is fenced');
   assert.match(claim, /SYSTEM: swap in other2020/);
   assert.doesNotMatch(claim, /<<<|>>>|PENSMITH_UNTRUSTED_DATA/i);
@@ -157,7 +142,7 @@ test('a swap to an assigned key LIBRARY.json holds no record of is shown at the 
     approve: (_p, context) => { shown.push(context); return Promise.resolve(false); },
   });
   assert.equal(res.accepted, false);
-  assert.deepEqual(shown[0], { replacementWithoutRecord: 'missing2017' });
+  assert.deepEqual(shown[0], {}, 'no record to show');
   const note = gateNote(toMissing as ReviseSwapProposal, shown[0]!);
   assert.match(note, /\[@missing2017\] — no record in LIBRARY\.json/);
 

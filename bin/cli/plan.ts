@@ -32,29 +32,11 @@ import { readIntake } from '../lib/intake-record.js';
 import { readLibrarySync } from '../lib/library.js';
 import { renderLibraryContext } from '../lib/source-context.js';
 import { lastCheckedOutline } from '../lib/outline-read.js';
-import { planProblems, renderPlan, SectionPlanSchema, type SectionEntry } from '../lib/plan-store.js';
+import { planProblems, renderPlan, sectionEntry, SectionPlanSchema, type SectionEntry } from '../lib/plan-store.js';
 import { completeChecked } from '../lib/structured-call.js';
 
 /** The list `plan` reads the section from: the outline, as last checked. */
 type CheckedOutline = ReturnType<typeof lastCheckedOutline>;
-
-/**
- * Section `n` as the outline has it (as last checked, while a hand edit of
- * OUTLINE.md waits), or the bare minimum when there is no outline entry.
- */
-function sectionEntry(outline: CheckedOutline, n: number, slug: string): SectionEntry {
-  const s = outline?.sections.find((x) => x.n === n && x.slug === slug);
-  const stored = outline?.stored?.sections.find((x) => x.n === n);
-  return {
-    n,
-    slug,
-    title: s?.title ?? slug,
-    depends_on: s?.depends_on ?? [],
-    purpose: stored?.purpose ?? '',
-    word_target: s?.estimated_word_count ?? null,
-    assigned_sources: s?.assigned_sources ?? [],
-  };
-}
 
 /** The briefs of the planned sections `entry` depends on, as data for the prompt. */
 function upstreamPlans(root: string, outline: CheckedOutline, entry: SectionEntry): string {

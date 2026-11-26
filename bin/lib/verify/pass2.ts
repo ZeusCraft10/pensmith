@@ -27,6 +27,7 @@
 import { complete } from '../anthropic.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
 import { findCitations, paragraphBreaks, sentenceSpan } from '../citation-grammar.js';
+import { FENCE_CLOSE, FENCE_OPEN } from '../untrusted-fence.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
 //
@@ -35,9 +36,6 @@ import { findCitations, paragraphBreaks, sentenceSpan } from '../citation-gramma
 // Strip/neutralize any occurrence of the fence open/close substrings from
 // user-supplied variables BEFORE interpolation. The prompt template bodies are
 // NOT changed by this fix, so no WN-3 re-pin is needed.
-const FENCE_UUID = '7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a';
-const FENCE_OPEN  = `<<<PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
-const FENCE_CLOSE = `<<<END_PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
 
 /**
  * Remove any occurrence of the fence open/close markers from a string that

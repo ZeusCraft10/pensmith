@@ -60,9 +60,9 @@ import {
   type Quote,
 } from './citation-grammar.js';
 import { oneLine, parseVerdictRowDetails, type VerdictRow } from './verify/verdict-rows.js';
-import { addToLibrary, loadLibrary } from './library.js';
+import { addToLibrary, loadLibrary, type Library } from './library.js';
 import { renderSourceContext, sourceContext, type SourceContextEntry } from './source-context.js';
-import { stripFenceMarkers } from './untrusted-fence.js';
+import { promptText } from './untrusted-fence.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
 import { assignedSourcesFrom } from './plan-status.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
@@ -100,10 +100,8 @@ export interface ReviseSwapVars {
 
 /** What the approval gate is shown besides the proposal. */
 export interface ReviseGateContext {
-  /** The work a swap would cite instead, as LIBRARY.json holds it. */
+  /** The work a swap would cite instead, as LIBRARY.json holds it (absent when it holds no record of it). */
   replacement?: SourceContextEntry;
-  /** The key a swap would cite instead, when LIBRARY.json holds no record of it. */
-  replacementWithoutRecord?: string;
 }
 
 /** A research hit the --research adapter returns (loose superset of SourceCandidate). */
@@ -309,15 +307,14 @@ function withoutQuotations(
 }
 
 // ---------------------------------------------------------------------------
-// Voice-hint extraction.
-// The section-planner prompt writes a one-line `Voice: ...` in the ## Brief.
+// The assigned works the swap is proposed from.
 // ---------------------------------------------------------------------------
 
 /**
- * The paper's library, or an empty one when LIBRARY.json cannot be read: the
- * sources are then named without records, and the author is told why.
+ * The paper's library, or null when LIBRARY.json cannot be read: the sources
+ * are then named without records, and the author is told why.
  */
-async function libraryOrEmpty(root: string): Promise<Parameters<typeof sourceContext>[0]> {
+async function libraryOrNull(root: string): Promise<Library | null> {
   try {
     return await loadLibrary(root);
   } catch (e) {
@@ -325,9 +322,14 @@ async function libraryOrEmpty(root: string): Promise<Parameters<typeof sourceCon
       `pensmith revise: WARN — .paper/LIBRARY.json cannot be read (${(e as Error).message.split('\n')[0]}), so the ` +
         'replacement is proposed, and shown to you, without the works\' titles and abstracts.\n',
     );
-    return { $schemaVersion: 2, entries: [], bibtex_preamble: [] };
+    return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Voice-hint extraction.
+// The section-planner prompt writes a one-line `Voice: ...` in the ## Brief.
+// ---------------------------------------------------------------------------
 
 function voiceHint(planMd: string): string {
   const m = /(^|\n)\s*Voice:\s*([^\n]+)/i.exec(planMd);
@@ -369,8 +371,8 @@ function describeReplacement(r: SourceContextEntry): string {
 export function gateNote(proposal: ReviseSwapProposal, context: ReviseGateContext): string {
   const change = `- ${proposal.patch.before_excerpt}\n+ ${proposal.patch.after_excerpt}`;
   if (context.replacement) return `${change}\n\n${describeReplacement(context.replacement)}`;
-  if (context.replacementWithoutRecord) {
-    return `${change}\n\nReplacement: [@${context.replacementWithoutRecord}] — no record in LIBRARY.json, so its title and ` +
+  if (proposal.replacement_citekey) {
+    return `${change}\n\nReplacement: [@${proposal.replacement_citekey}] — no record in LIBRARY.json, so its title and ` +
       'abstract cannot be shown; check that this work exists and supports the sentence before you accept.';
   }
   return change;
@@ -642,13 +644,13 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   const approve = opts.approve ?? defaultApprove;
   const draftMd = readFileSync(draftPath, 'utf8');
 
-  const { sources, missing } = sourceContext(await libraryOrEmpty(opts.paperRoot), assignedSources);
+  const { sources, missing } = sourceContext(await libraryOrNull(opts.paperRoot), assignedSources);
   const vars: ReviseSwapVars = {
     flagged_citekey: failing.citekey,
     verifier_reason: failing.reason,
     claim_context: claimContext(draftMd, failing),
     available_sources: renderSourceContext(sources) + (missing.length > 0
-      ? `\n\nAssigned, but with no record in the library to judge them by: ${stripFenceMarkers(missing.join(', '))}.`
+      ? `\n\nAssigned, but with no record in the library to judge them by: ${promptText(missing.join(', '))}.`
       : ''),
     voice_hint: voiceHint(planMd),
   };
@@ -675,9 +677,8 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     // deletes text, the gate shows that text, not the model's excerpt.
     const shown: ReviseSwapProposal = patch.removed.length === 0 ? proposal
       : { ...proposal, patch: { before_excerpt: patch.removed.join('\n'), after_excerpt: '(deleted)' } };
-    const key = proposal.replacement_citekey;
-    const replacement = sources.find((src) => src.citekey === key);
-    const context: ReviseGateContext = replacement ? { replacement } : key ? { replacementWithoutRecord: key } : {};
+    const replacement = sources.find((src) => src.citekey === proposal.replacement_citekey);
+    const context: ReviseGateContext = replacement ? { replacement } : {};
     const accepted = opts.yolo ? true : await approve(shown, context);
     if (!accepted) {
       return { ...base, accepted: false, message: `${base.message} Proposal rejected at the approval gate — DRAFT.md unchanged.`.trim() };

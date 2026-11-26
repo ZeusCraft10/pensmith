@@ -20,10 +20,9 @@ import {
   findRawCitations,
   findUnparseableCitations,
 } from './citation-grammar.js';
-import { escapeTemplateTokens } from './intake-parse.js';
 import { interpolate, loadPrompt } from './prompt-loader.js';
 import { renderSourceContext, SourceContextEntrySchema } from './source-context.js';
-import { stripFenceMarkers } from './untrusted-fence.js';
+import { promptText } from './untrusted-fence.js';
 
 /** Everything the drafter prompt is rendered from, and nothing else. */
 export const DrafterInputSchema = z.object({
@@ -66,12 +65,11 @@ const BRIEF_CHARS = 12_000;
 /** The drafter's system prompt, from `input` alone, once it is checked. */
 export function renderDrafterPrompt(input: unknown, assignedSources: readonly string[]): string {
   assertDrafterInput(input, assignedSources);
-  const text = (s: string): string => escapeTemplateTokens(stripFenceMarkers(s));
   return interpolate(loadPrompt('section-drafter'), {
-    section: text(JSON.stringify(input.section)),
-    paper: text(JSON.stringify(input.paper)),
-    brief: text(input.brief.slice(0, BRIEF_CHARS)),
-    voice: text(input.voice),
+    section: promptText(JSON.stringify(input.section)),
+    paper: promptText(JSON.stringify(input.paper)),
+    brief: promptText(input.brief.slice(0, BRIEF_CHARS)),
+    voice: promptText(input.voice),
     sources: renderSourceContext(input.sources),
   });
 }

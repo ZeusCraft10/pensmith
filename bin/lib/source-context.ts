@@ -12,8 +12,9 @@
 
 import { z } from 'zod/v4';
 import { displayName } from './author-normalize.js';
-import { escapeTemplateTokens } from './intake-parse.js';
-import { fenceUntrusted } from './untrusted-fence.js';
+import { decodeEntities } from './csl-html.js';
+import { cslDateYear } from './sources/work-record.js';
+import { fencedJson } from './untrusted-fence.js';
 import type { Library, LibraryItem } from './schemas/library.js';
 import type { CslName } from './schemas/source-candidate.js';
 
@@ -34,11 +35,6 @@ const AUTHORS_SHOWN = 6;
 
 /** How much of an abstract a prompt is shown, unless the caller says otherwise. */
 export const ABSTRACT_CHARS = 2000;
-
-function yearOf(item: LibraryItem): number | undefined {
-  const y = (item.issued as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
-  return typeof y === 'number' ? y : undefined;
-}
 
 /**
  * A markup tag: `<` then a letter or `/` (`<jats:p>`, `</i>`, `<br/>`). A `<`
@@ -61,17 +57,6 @@ const INLINE_TAGS: ReadonlySet<string> = new Set([
   'styled-content', 'sub', 'sup', 'tex-math', 'tt', 'u', 'underline', 'xref',
 ]);
 
-/** The character entities registries leave in abstracts. */
-const ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
-
-function decodeEntities(text: string): string {
-  return text.replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (whole, dec?: string, hex?: string, name?: string) => {
-    const code = dec !== undefined ? Number(dec) : hex !== undefined ? parseInt(hex, 16) : null;
-    if (code !== null) return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
-    return ENTITIES[name!.toLowerCase()] ?? whole;
-  });
-}
-
 /** An abstract as plain text: registry markup (JATS tags) and entities resolved, runs of space removed, cut to `max` characters. */
 export function plainAbstract(raw: string, max: number): string {
   const untagged = raw.replace(TAG, (_tag, name: string) => (INLINE_TAGS.has(name.toLowerCase()) ? '' : ' '));
@@ -83,7 +68,7 @@ function entryOf(item: LibraryItem, abstractChars: number): SourceContextEntry {
   const names = (item.author ?? item.editor ?? []) as CslName[];
   const authors = names.slice(0, AUTHORS_SHOWN).map(displayName).filter((n) => n.length > 0);
   if (names.length > AUTHORS_SHOWN) authors.push('et al.');
-  const year = yearOf(item);
+  const year = cslDateYear(item.issued);
   const venue = item['container-title'] ?? item.publisher;
   const abstract = item.abstract ? plainAbstract(item.abstract, abstractChars) : '';
   return {
@@ -99,14 +84,14 @@ function entryOf(item: LibraryItem, abstractChars: number): SourceContextEntry {
 
 /**
  * The works `keys` name, in that order, and the keys the library holds no
- * work for. A key named twice is shown once.
+ * work for (every key, for no library). A key named twice is shown once.
  */
 export function sourceContext(
-  library: Library,
+  library: Library | null,
   keys: readonly string[],
   opts: { abstractChars?: number } = {},
 ): { sources: SourceContextEntry[]; missing: string[] } {
-  const byKey = new Map(library.entries.map((e) => [e.id, e]));
+  const byKey = new Map((library?.entries ?? []).map((e) => [e.id, e]));
   const sources: SourceContextEntry[] = [];
   const missing: string[] = [];
   for (const key of new Set(keys)) {
@@ -119,7 +104,7 @@ export function sourceContext(
 
 /** `sources` as fenced JSON, ready to interpolate into a prompt. */
 export function renderSourceContext(sources: readonly SourceContextEntry[]): string {
-  return escapeTemplateTokens(fenceUntrusted(JSON.stringify(sources, null, 2)));
+  return fencedJson(sources);
 }
 
 /**
@@ -131,7 +116,6 @@ const LIBRARY_ABSTRACT_CHARS = 600;
 
 /** Every work in the library (none for null), in library order, as fenced JSON for the outline author and the planner. */
 export function renderLibraryContext(library: Library | null): string {
-  if (!library) return renderSourceContext([]);
-  const keys = library.entries.map((e) => e.id);
+  const keys = library?.entries.map((e) => e.id) ?? [];
   return renderSourceContext(sourceContext(library, keys, { abstractChars: LIBRARY_ABSTRACT_CHARS }).sources);
 }

@@ -35,6 +35,7 @@ import { readOutlineOrThrow } from './outline-read.js';
 import { frontmatterProblem, parseFrontmatter } from './frontmatter.js';
 import { sectionPlan } from './paths.js';
 import { PlanFrontmatterSchema, type PlanFrontmatter } from './schemas/plan-frontmatter.js';
+import { sectionVerb } from './router.js';
 import { buildWaveGraph, runWave } from './scheduler.js';
 import type { SectionNode } from './schemas/wave-graph.js';
 import { readFile } from 'node:fs/promises';
@@ -101,18 +102,17 @@ export interface RunAllSectionsOpts {
   force?: boolean;
 }
 
-/** The statuses a section is drafted from without --force: planned, or a draft that did not finish. */
-const DRAFTABLE: ReadonlySet<string> = new Set(['planned', 'writing']);
-
 /**
  * Why section `n`, whose PLAN.md has `status`, is not drafted, or null when it
- * is. A stub has no plan to draft from, --force or not. A section already
- * drafted (written, verified, failed, ...) is the author's work: it is
- * drafted again only with --force.
+ * is: when the router's next verb for it is write (planned, or a draft that
+ * did not finish). A stub has no plan to draft from, --force or not. A section
+ * already drafted (written, verified, failed, ...) is the author's work: it
+ * is drafted again only with --force.
  */
 export function draftRefusal(n: number, status: string, force: boolean): string | null {
-  if (status === 'stub') return `it has no plan yet; run \`pensmith plan ${n}\` first`;
-  if (DRAFTABLE.has(status) || force) return null;
+  const verb = sectionVerb(status);
+  if (verb === 'plan') return `it has no plan yet; run \`pensmith plan ${n}\` first`;
+  if (verb === 'write' || force) return null;
   return `it is already drafted (status ${status}); nothing was changed. Run \`pensmith write ${n} --force\` to draft it again (the current DRAFT.md is kept as DRAFT.md.bak)`;
 }
 

@@ -11,12 +11,12 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0',
 };
 
-/** Decode the HTML character references citeproc emits. */
+/** Decode HTML character references; one that names no character (`&#0;`, past U+10FFFF) is left as it is. */
 export function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, body: string) => {
     if (body[0] === '#') {
       const code = body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
     }
     return NAMED_ENTITIES[body.toLowerCase()] ?? m;
   });

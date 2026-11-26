@@ -28,11 +28,10 @@ import type { SectionNode } from '../lib/schemas/wave-graph.js';
 import { styleMatchToVoiceHint } from '../lib/style-match.js';
 import { StyleProfileSchema, type StyleProfile } from '../lib/schemas/style.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
-import { parseFrontmatter } from '../lib/frontmatter.js';
-import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
-import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
+import { isNoLlmMode, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { completeChecked } from '../lib/structured-call.js';
-import { loadLibrary } from '../lib/library.js';
+import { loadLibrary, type Library } from '../lib/library.js';
+import { sectionEntry } from '../lib/plan-store.js';
 import { sourceContext } from '../lib/source-context.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
@@ -148,22 +147,24 @@ function makeSubscriberNonFatal(paperRoot: string): TutorialSubscriber | undefin
 }
 
 /**
- * Best-effort read of a section PLAN.md's `assigned_sources` citekeys for the
- * single-section provenance emit. Returns [] when the PLAN.md is absent or
- * unparseable — never throws (mirrors loadStyleProfile's degrade-to-default).
+ * What every section of one `write` run reads alike, read once per run: the
+ * outline (as lastCheckedOutline reads it), STYLE.json, and LIBRARY.json,
+ * loaded only when a section has sources to show.
  */
-function readAssignedSources(planPath: string): string[] {
-  try {
-    if (!existsSync(planPath)) return [];
-    const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
-    return PlanFrontmatterSchema.parse(frontmatter).assigned_sources;
-  } catch {
-    return [];
-  }
+interface WriteRun {
+  outline: ReturnType<typeof lastCheckedOutline>;
+  profile: StyleProfile | undefined;
+  library: () => Promise<Library>;
+}
+
+/** A WriteRun for the paper at `paperRoot`, with `outline` as the section list. */
+function writeRun(paperRoot: string, outline: WriteRun['outline']): WriteRun {
+  let library: Promise<Library> | undefined;
+  return { outline, profile: loadStyleProfile(paperRoot), library: () => (library ??= loadLibrary(paperRoot)) };
 }
 
 /** The works a section's plan assigns, from LIBRARY.json, with the keys it holds none for. */
-async function sectionSources(root: string, n: number, slug: string, assigned: string[]): Promise<DrafterInput['sources']> {
+async function sectionSources(run: WriteRun, n: number, slug: string, assigned: string[]): Promise<DrafterInput['sources']> {
   if (assigned.length === 0) {
     // An introduction or conclusion may need none, but the author should
     // know the drafter had nothing to cite.
@@ -175,7 +176,7 @@ async function sectionSources(root: string, n: number, slug: string, assigned: s
   }
   let library;
   try {
-    library = await loadLibrary(root);
+    library = await run.library();
   } catch (e) {
     throw new DraftRefusedError(
       `not drafted: .paper/LIBRARY.json cannot be read (${(e as Error).message.split('\n')[0]}), ` +
@@ -214,9 +215,15 @@ function reportGaps(n: number, slug: string, gaps: SectionDraft['gaps']): void {
  * Draft one section: build the drafter's input from the outline, PLAN.md and
  * LIBRARY.json, render the prompt from it, ask for a draft that cites only
  * the section's sources, and save it as DRAFT.md. Both `pensmith write <n>`
- * and each node of a wave write run through here.
+ * and each node of a wave write run through here. Returns DRAFT.md's path
+ * and the sources the plan assigns.
  */
-async function writeOneSection(n: number, slug: string, force: boolean): Promise<string> {
+async function writeOneSection(
+  n: number,
+  slug: string,
+  force: boolean,
+  run: WriteRun,
+): Promise<{ path: string; assigned: string[] }> {
   const paperRoot = process.cwd();
   const planPath = sectionPlan(n, slug, paperRoot);
   // The PLAN.md is checked as a wave write checks it: one that cannot be
@@ -227,28 +234,16 @@ async function writeOneSection(n: number, slug: string, force: boolean): Promise
   } catch (e) {
     throw new DraftRefusedError(`not drafted: ${unusablePlanReason(n, e)}.`);
   }
-  const status = plan?.frontmatter.status ?? 'stub';
-  const refusal = draftRefusal(n, status, force);
-  if (refusal || !plan) throw new DraftRefusedError(`not drafted: ${refusal ?? 'it has no PLAN.md'}.`);
-  const planMd = plan.text;
-  const body = plan.body;
-  const assigned = plan.frontmatter.assigned_sources;
-  const sources = await sectionSources(paperRoot, n, slug, assigned);
+  // No PLAN.md reads as a stub, which is always refused.
+  const refusal = draftRefusal(n, plan?.frontmatter.status ?? 'stub', force);
+  if (refusal !== null || plan === null) throw new DraftRefusedError(`not drafted: ${refusal}.`);
+  const { text: planMd, body, frontmatter: { status, assigned_sources: assigned } } = plan;
+  const sources = await sectionSources(run, n, slug, assigned);
 
-  const outline = lastCheckedOutline(paperRoot);
-  const entry = outline?.sections.find((s) => s.n === n && s.slug === slug);
-  const stored = outline?.stored?.sections.find((s) => s.n === n && s.slug === slug);
-  const title = entry?.title ?? slug;
-  const profile = loadStyleProfile(paperRoot);
+  const { outline, profile } = run;
+  const { title, purpose, depends_on, word_target } = sectionEntry(outline, n, slug);
   const input: DrafterInput = {
-    section: {
-      number: n,
-      slug,
-      title,
-      purpose: stored?.purpose ?? '',
-      depends_on: entry?.depends_on ?? [],
-      word_target: entry?.estimated_word_count && entry.estimated_word_count > 0 ? entry.estimated_word_count : null,
-    },
+    section: { number: n, slug, title, purpose, depends_on, word_target: word_target && word_target > 0 ? word_target : null },
     paper: { title: outline?.paper_title ?? '', thesis: outline?.stored?.thesis ?? '' },
     brief: body.trim() || `(The plan gives no brief: write the section "${title}" as the outline describes it.)`,
     voice: resolveVoiceHint({ planMd, ...(profile ? { styleProfile: profile } : {}) }),
@@ -305,7 +300,7 @@ async function writeOneSection(n: number, slug: string, force: boolean): Promise
       `(PLAN.md absent/unwritable); the router may not advance this section to verify.\n`,
     );
   }
-  return targetPath;
+  return { path: targetPath, assigned };
 }
 
 export const writeCommand = defineCommand({
@@ -350,7 +345,7 @@ export const writeCommand = defineCommand({
     if (!waveMode && n === null) return { ok: false, mode: 'invalid-input' };
     // Without a key there is no drafter to ask, and write says so before it
     // looks at any section (in a wave, before the first one starts).
-    if (process.env['PENSMITH_NO_LLM'] !== '1') {
+    if (!isNoLlmMode()) {
       try {
         await getProviderApiKey(await resolveProviderId());
       } catch (e) {
@@ -395,6 +390,7 @@ export const writeCommand = defineCommand({
       // so the `subscriber ? … : undefined` below makes the Foundation callback a
       // no-op — the zero-branch mechanism. Foundation never imports tutorial.ts.
       const subscriber = makeSubscriberNonFatal(paperRoot);
+      const run = writeRun(paperRoot, outline.outline);
       // Once one section is refused over the cost cap, the paper is at its
       // ceiling: sections not yet started are not attempted.
       let capRefusal: CostCapExceededError | null = null;
@@ -413,7 +409,7 @@ export const writeCommand = defineCommand({
             JSON.stringify({ event: 'section_start', wave: node.computed_wave, section: node.slug }) + '\n',
           );
           try {
-            await writeOneSection(node.n, node.slug, force);
+            await writeOneSection(node.n, node.slug, force, run);
           } catch (e) {
             if (e instanceof CostCapExceededError) capRefusal ??= e;
             process.stderr.write(`pensmith write: section ${node.n} (${node.slug}): ${describeFailure(e)}\n`);
@@ -483,16 +479,17 @@ export const writeCommand = defineCommand({
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
     const paperRoot = process.cwd();
-    const slug = resolveSectionSlug(paperRoot, n, args.slug);
+    const outline = lastCheckedOutline(paperRoot);
+    const slug = resolveSectionSlug(paperRoot, n, args.slug, outline);
     // Construct the goal-aware subscriber for a single-section re-do too, so a
     // re-write in learning/both mode still re-annotates TUTORIAL.md. goal=draft
     // yields undefined → the emit/flush below are no-ops and DRAFT.md is
     // byte-unchanged for every goal (the writer never sees the subscriber).
     const subscriber = makeSubscriberNonFatal(paperRoot);
 
-    let targetPath: string;
+    let written: { path: string; assigned: string[] };
     try {
-      targetPath = await writeOneSection(n, slug, force);
+      written = await writeOneSection(n, slug, force, writeRun(paperRoot, outline));
     } catch (e) {
       if (e instanceof DraftRefusedError) {
         process.stderr.write(`pensmith write: section ${n} (${slug}): ${describeFailure(e)}\n`);
@@ -509,14 +506,14 @@ export const writeCommand = defineCommand({
           n,
           slug,
           planPath: sectionPlan(n, slug, paperRoot),
-          assignedSources: readAssignedSources(sectionPlan(n, slug, paperRoot)),
+          assignedSources: written.assigned,
         },
       });
       await subscriber.flush();
     }
 
-    process.stdout.write(`pensmith write: wrote DRAFT.md to ${targetPath}\n`);
-    return { ok: true, path: targetPath, mode: 'real' };
+    process.stdout.write(`pensmith write: wrote DRAFT.md to ${written.path}\n`);
+    return { ok: true, path: written.path, mode: 'real' };
   },
 });
 

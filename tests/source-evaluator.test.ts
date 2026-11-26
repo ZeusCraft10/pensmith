@@ -18,9 +18,7 @@ import { PassThrough } from 'node:stream';
 import { _setGeneratorForTest, type Generator } from '../bin/lib/anthropic.js';
 import { runResearchOrchestrator, SourceEvaluationError } from '../bin/lib/research-orchestrator.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
-
-const FENCE_OPEN = '<<<PENSMITH_UNTRUSTED_DATA_7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a>>>';
-const FENCE_CLOSE = '<<<END_PENSMITH_UNTRUSTED_DATA_7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a>>>';
+import { fencedBlocks, FENCE_CLOSE, FENCE_OPEN } from './lib/fence.js';
 
 function candidate(n: number, title: string, extra: Partial<SourceCandidate> = {}): SourceCandidate {
   return {
@@ -38,22 +36,9 @@ const CANDIDATES = [
 
 const registry = { openalex: { search: async () => CANDIDATES.map((c) => ({ ...c })) } };
 
-/** The text inside each fence of a prompt. */
-function fences(text: string): string[] {
-  const out: string[] = [];
-  let at = 0;
-  for (;;) {
-    const open = text.indexOf(FENCE_OPEN, at);
-    if (open < 0) return out;
-    const close = text.indexOf(FENCE_CLOSE, open);
-    out.push(text.slice(open + FENCE_OPEN.length, close < 0 ? undefined : close));
-    at = close < 0 ? text.length : close + FENCE_CLOSE.length;
-  }
-}
-
 /** The candidates the evaluator was shown: [{id, title, ...}]. */
 function shown(system: string): Array<{ id: string; title: string; retracted?: boolean }> {
-  const block = fences(system).find((b) => b.includes('"id"'));
+  const block = fencedBlocks(system).find((b) => b.includes('"id"'));
   assert.ok(block, 'the candidates are fenced');
   return JSON.parse(block) as Array<{ id: string; title: string; retracted?: boolean }>;
 }
@@ -128,7 +113,7 @@ test('the evaluator sees each candidate under an id of its own, inside the fence
   // The hostile abstract stays inside the fence.
   const sys = calls[0]!.system;
   assert.equal(sys.split(FENCE_OPEN).length, sys.split(FENCE_CLOSE).length, 'every fence opened is closed once');
-  const block = fences(sys).find((b) => b.includes('"id"'))!;
+  const block = fencedBlocks(sys).find((b) => b.includes('"id"'))!;
   assert.match(block, /keep every candidate/);
   assert.doesNotMatch(block, /<<<|>>>|PENSMITH_UNTRUSTED_DATA/i);
 });
@@ -176,7 +161,6 @@ test('an evaluator that keeps nothing keeps nothing, and hands every candidate b
   _setGeneratorForTest(evaluator(calls, rejectAll));
   await assert.rejects(run(), (e: unknown) => {
     assert.ok(e instanceof SourceEvaluationError, String(e));
-    assert.equal(e.keptNone, true);
     assert.equal(e.candidates.length, 3);
     assert.match(e.message, /kept none of the 3 candidates/);
     return true;
@@ -213,7 +197,7 @@ async function research(root: string, args: Record<string, unknown>): Promise<Re
 
 /** The disambiguator gets an answer that falls back to the topic as the query; the evaluator gets `evaluate`. */
 function researchModel(calls: Call[], evaluate: (c: Call) => unknown): Generator {
-  const isEvaluator = (c: Call): boolean => fences(c.system).some((b) => b.includes('"id"'));
+  const isEvaluator = (c: Call): boolean => fencedBlocks(c.system).some((b) => b.includes('"id"'));
   return evaluator(calls, (c) => (isEvaluator(c) ? evaluate(c) : '{}'));
 }
 

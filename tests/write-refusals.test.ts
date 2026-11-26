@@ -10,7 +10,7 @@
 // `write abc` reported the missing key (exit 1) instead of the bad input
 // (exit 2).
 
-import test, { afterEach, beforeEach } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,6 +20,7 @@ import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 import { writeOutline, type Outline } from '../bin/lib/outline-store.js';
 import { renderPlan } from '../bin/lib/plan-store.js';
 import { initState } from '../bin/lib/state.js';
+import { runWrite, useWriteHarness } from './lib/write-harness.js';
 import { runCli } from './lib/export-fixture.js';
 
 const OUTLINE: Outline = {
@@ -83,41 +84,7 @@ function drafter(calls: Call[], answers: Array<{ draft: string; gaps: unknown[] 
 
 const CITED = { draft: 'Daily use predicted later anxiety in a large cohort [@hayes2020].', gaps: [] };
 
-let prevCwd = '';
-const ENV = ['PENSMITH_NO_LLM', 'ANTHROPIC_API_KEY', 'PENSMITH_OFFLINE'];
-const saved: Record<string, string | undefined> = {};
-let stderr = '';
-let realStderrWrite: typeof process.stderr.write;
-beforeEach(() => {
-  prevCwd = process.cwd();
-  for (const k of ENV) saved[k] = process.env[k];
-  delete process.env['PENSMITH_NO_LLM'];
-  delete process.env['PENSMITH_OFFLINE'];
-  process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test-not-sent';
-  stderr = '';
-  realStderrWrite = process.stderr.write.bind(process.stderr);
-  (process.stderr as unknown as { write: (s: string | Uint8Array) => boolean }).write = (s) => {
-    stderr += typeof s === 'string' ? s : Buffer.from(s).toString('utf8');
-    return true;
-  };
-});
-afterEach(() => {
-  process.stderr.write = realStderrWrite;
-  _setGeneratorForTest(null);
-  process.chdir(prevCwd);
-  process.exitCode = 0;
-  for (const k of ENV) {
-    if (saved[k] === undefined) delete process.env[k];
-    else process.env[k] = saved[k];
-  }
-});
-
-async function runWrite(root: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const { writeCommand } = await import('../bin/cli/write.js');
-  process.chdir(root);
-  const res = (await (writeCommand.run as (c: { args: Record<string, unknown> }) => Promise<Record<string, unknown>>)({ args: { yolo: true, ...args } })) ?? {};
-  return { ...res, exitCode: process.exitCode ?? 0 };
-}
+const io = useWriteHarness();
 
 /** The `pensmith write ...` command a message tells the author to run, as write's arguments. */
 function advisedWrite(text: string): Record<string, unknown> {
@@ -132,7 +99,7 @@ async function followAdvice(root: string, text: string): Promise<void> {
   const calls: Call[] = [];
   _setGeneratorForTest(drafter(calls, [CITED]));
   const res = await runWrite(root, advisedWrite(text));
-  assert.equal(res['exitCode'], 0, `the advised write must work:\n${stderr}`);
+  assert.equal(res['exitCode'], 0, `the advised write must work:\n${io.stderr}`);
   assert.equal(calls.length, 1);
   assert.match(readFileSync(draftFile(root), 'utf8'), /\[@hayes2020\]/);
   assert.equal(statusOf(root), 'written');
@@ -168,7 +135,7 @@ test('a forced re-draft that is refused leaves a verified section verified, so a
   const calls: Call[] = [];
   _setGeneratorForTest(drafter(calls, [{ draft: 'Sleep matters too [@park2019].', gaps: [] }]));
   const forced = await runWrite(root, { n: 1, force: true });
-  assert.equal(forced['exitCode'], 2, stderr);
+  assert.equal(forced['exitCode'], 2, io.stderr);
   assert.equal(calls.length, 2, 'sent back once, then refused');
   assert.equal(readFileSync(draftFile(root), 'utf8'), kept, 'DRAFT.md is unchanged');
   assert.ok(!existsSync(`${draftFile(root)}.bak`));
@@ -176,7 +143,7 @@ test('a forced re-draft that is refused leaves a verified section verified, so a
 
   process.exitCode = 0;
   const plain = await runWrite(root, { 'max-parallel': '1' });
-  assert.equal(plain['exitCode'], 0, stderr);
+  assert.equal(plain['exitCode'], 0, io.stderr);
   assert.equal(calls.length, 2, 'a wave write does not draft it again');
   assert.equal(readFileSync(draftFile(root), 'utf8'), kept);
 });
@@ -194,16 +161,16 @@ for (const [what, text] of [
     _setGeneratorForTest(drafter(calls, [CITED]));
 
     const one = await runWrite(root, { n: 1 });
-    assert.equal(one['exitCode'], 2, stderr);
-    assert.match(stderr, /section 1 \(evidence\).*PLAN\.md cannot be used.*`pensmith plan 1 --force`/);
-    assert.doesNotMatch(stderr, /no plan yet/);
+    assert.equal(one['exitCode'], 2, io.stderr);
+    assert.match(io.stderr, /section 1 \(evidence\).*PLAN\.md cannot be used.*`pensmith plan 1 --force`/);
+    assert.doesNotMatch(io.stderr, /no plan yet/);
 
-    stderr = '';
+    io.stderr = '';
     process.exitCode = 0;
     const wave = await runWrite(root, { 'max-parallel': '1' });
-    assert.notEqual(wave['exitCode'], 0, stderr);
-    assert.match(stderr, /section 1 \(evidence\).*PLAN\.md cannot be used.*`pensmith plan 1 --force`/);
-    assert.doesNotMatch(stderr, /no plan yet/);
+    assert.notEqual(wave['exitCode'], 0, io.stderr);
+    assert.match(io.stderr, /section 1 \(evidence\).*PLAN\.md cannot be used.*`pensmith plan 1 --force`/);
+    assert.doesNotMatch(io.stderr, /no plan yet/);
     assert.equal(calls.length, 0, 'nothing was asked of the model');
     assert.equal(readFileSync(planFile(root), 'utf8'), text, 'the PLAN.md is left as the user wrote it');
   });

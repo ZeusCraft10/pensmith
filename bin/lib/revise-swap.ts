@@ -23,11 +23,10 @@
 // complete() owns the no-leak header path; we never bind the key to any variable.
 
 import { complete, isNoLlmMode } from './anthropic.js';
-import { escapeTemplateTokens } from './intake-parse.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
 import { ReviseSwapSchema, type ReviseSwapVars } from './revise.js';
 import { modelJsonSchema } from './schemas/model-json.js';
-import { fenceUntrusted, stripFenceMarkers } from './untrusted-fence.js';
+import { promptFenced, promptText } from './untrusted-fence.js';
 
 /**
  * System prompt for the revise-swap LLM call.
@@ -75,13 +74,12 @@ export async function proposeSwap(vars: ReviseSwapVars): Promise<string> {
   // third-party abstracts, so it goes in fenced like the sources (which
   // runRevise rendered fenced already); the other values are stripped of
   // anything that could pass for a fence marker.
-  const text = (v: string): string => escapeTemplateTokens(stripFenceMarkers(v));
   const interpolated = interpolate(loadPrompt('revise-swap'), {
-    flagged_citekey: text(vars.flagged_citekey),
-    verifier_reason: text(vars.verifier_reason),
-    claim_context: escapeTemplateTokens(fenceUntrusted(vars.claim_context)),
+    flagged_citekey: promptText(vars.flagged_citekey),
+    verifier_reason: promptText(vars.verifier_reason),
+    claim_context: promptFenced(vars.claim_context),
     available_sources: vars.available_sources,
-    voice_hint: text(vars.voice_hint),
+    voice_hint: promptText(vars.voice_hint),
   });
   const result = await complete({
     system: REVISE_SWAP_SYSTEM,

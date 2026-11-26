@@ -10,7 +10,7 @@
 //
 // Every case drives the real `write` verb with a scripted Generator.
 
-import test, { afterEach, beforeEach } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,9 +21,9 @@ import { writeOutline, type Outline } from '../bin/lib/outline-store.js';
 import { renderPlan, type SectionEntry } from '../bin/lib/plan-store.js';
 import { initState } from '../bin/lib/state.js';
 import { citedKeys, findCitations } from '../bin/lib/citation-grammar.js';
+import { fencedBlocks, FENCE_OPEN, FENCE_CLOSE } from './lib/fence.js';
+import { runWrite, useWriteHarness } from './lib/write-harness.js';
 
-const FENCE_OPEN = '<<<PENSMITH_UNTRUSTED_DATA_7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a>>>';
-const FENCE_CLOSE = '<<<END_PENSMITH_UNTRUSTED_DATA_7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a>>>';
 
 interface Work { id: string; title: string; family: string; year: number; venue: string; abstract: string }
 
@@ -95,22 +95,9 @@ async function paper(works: Work[] = WORKS): Promise<string> {
   return root;
 }
 
-/** The text inside each untrusted-data fence of a prompt (a mention of the markers in prose included). */
-function fences(system: string): string[] {
-  const out: string[] = [];
-  let at = 0;
-  for (;;) {
-    const open = system.indexOf(FENCE_OPEN, at);
-    if (open < 0) return out;
-    const close = system.indexOf(FENCE_CLOSE, open);
-    out.push(system.slice(open + FENCE_OPEN.length, close < 0 ? undefined : close));
-    at = close < 0 ? system.length : close + FENCE_CLOSE.length;
-  }
-}
-
 /** The citekeys in the fenced source list of a prompt. */
 function fencedKeys(system: string): string[] {
-  return fences(system).flatMap((block) => [...block.matchAll(/"citekey": "([^"]+)"/g)].map((m) => m[1]!));
+  return fencedBlocks(system).flatMap((block) => [...block.matchAll(/"citekey": "([^"]+)"/g)].map((m) => m[1]!));
 }
 
 interface Call { system: string; messages: Array<{ role: string; content: string }>; schema: unknown }
@@ -139,41 +126,7 @@ function citeWhatYouSee(c: Call): unknown {
   return { draft: body, gaps: [] };
 }
 
-let prevCwd = '';
-const ENV = ['PENSMITH_NO_LLM', 'ANTHROPIC_API_KEY', 'PENSMITH_OFFLINE'];
-const saved: Record<string, string | undefined> = {};
-let stderr = '';
-let realStderrWrite: typeof process.stderr.write;
-beforeEach(() => {
-  prevCwd = process.cwd();
-  for (const k of ENV) saved[k] = process.env[k];
-  delete process.env['PENSMITH_NO_LLM'];
-  delete process.env['PENSMITH_OFFLINE'];
-  process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test-not-sent';
-  stderr = '';
-  realStderrWrite = process.stderr.write.bind(process.stderr);
-  (process.stderr as unknown as { write: (s: string | Uint8Array) => boolean }).write = (s) => {
-    stderr += typeof s === 'string' ? s : Buffer.from(s).toString('utf8');
-    return true;
-  };
-});
-afterEach(() => {
-  process.stderr.write = realStderrWrite;
-  _setGeneratorForTest(null);
-  process.chdir(prevCwd);
-  process.exitCode = 0;
-  for (const k of ENV) {
-    if (saved[k] === undefined) delete process.env[k];
-    else process.env[k] = saved[k];
-  }
-});
-
-async function runWrite(root: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const { writeCommand } = await import('../bin/cli/write.js');
-  process.chdir(root);
-  const res = (await (writeCommand.run as (c: { args: Record<string, unknown> }) => Promise<Record<string, unknown>>)({ args: { yolo: true, ...args } })) ?? {};
-  return { ...res, exitCode: process.exitCode ?? 0 };
-}
+const io = useWriteHarness();
 
 const keysIn = (md: string): string[] => citedKeys(findCitations(md));
 
@@ -182,7 +135,7 @@ test('two sections with disjoint sources: each drafter sees only its own works, 
   const calls: Call[] = [];
   _setGeneratorForTest(drafter(calls, citeWhatYouSee));
   const res = await runWrite(root, { 'max-parallel': '1' });
-  assert.equal(res['exitCode'], 0, `${JSON.stringify(res)}\n${stderr}`);
+  assert.equal(res['exitCode'], 0, `${JSON.stringify(res)}\n${io.stderr}`);
   assert.equal(calls.length, 3, 'one drafter call per section');
 
   const bySection = (title: string): Call => calls.find((c) => c.messages[0]!.content.includes(title))!;
@@ -231,13 +184,13 @@ test('a draft that cites another section\'s source is sent back once, then refus
   const bleed = { draft: 'Cohort studies agree [@hayes2020], and sleep matters too [@park2019].', gaps: [] };
   _setGeneratorForTest(drafter(calls, () => bleed));
   const res = await runWrite(root, { n: 1 });
-  assert.equal(res['exitCode'], 2, `${JSON.stringify(res)}\n${stderr}`);
+  assert.equal(res['exitCode'], 2, `${JSON.stringify(res)}\n${io.stderr}`);
   assert.equal(calls.length, 2, 'the first answer is sent back once');
   const repair = calls[1]!.messages.at(-1)!.content;
   assert.match(repair, /park2019/);
   assert.match(repair, /hayes2020, okafor2021|okafor2021, hayes2020/, 'the repair turn names the keys it may cite');
   assert.ok(!existsSync(draftFile(root, 1)), 'nothing was saved');
-  assert.match(stderr, /park2019/);
+  assert.match(io.stderr, /park2019/);
   assert.notEqual(parseFrontmatter(readFileSync(planFile(root, 1), 'utf8')).frontmatter['status'], 'written');
 });
 
@@ -250,7 +203,7 @@ test('a draft repaired on the second answer is saved as repaired', async () => {
   ];
   _setGeneratorForTest(drafter(calls, () => answers.shift()));
   const res = await runWrite(root, { n: 1 });
-  assert.equal(res['exitCode'], 0, `${JSON.stringify(res)}\n${stderr}`);
+  assert.equal(res['exitCode'], 0, `${JSON.stringify(res)}\n${io.stderr}`);
   assert.equal(calls.length, 2);
   assert.match(calls[1]!.messages.at(-1)!.content, /invented2024/);
   assert.deepEqual(keysIn(readFileSync(draftFile(root, 1), 'utf8')), ['hayes2020']);
@@ -265,9 +218,9 @@ test('a citation written as text, or an empty draft, is sent back too', async ()
   ];
   _setGeneratorForTest(drafter(calls, () => answers.shift()));
   const res = await runWrite(root, { n: 1 });
-  assert.equal(res['exitCode'], 2, stderr);
+  assert.equal(res['exitCode'], 2, io.stderr);
   assert.match(calls[1]!.messages.at(-1)!.content, /Smith, 2020/);
-  assert.match(stderr, /empty/);
+  assert.match(io.stderr, /empty/);
   assert.ok(!existsSync(draftFile(root, 1)));
 });
 
@@ -276,10 +229,10 @@ test('a draft that cites none of its section\'s sources is sent back once, then 
   const calls: Call[] = [];
   _setGeneratorForTest(drafter(calls, () => ({ draft: 'Cohort studies agree that daily use predicts later anxiety.', gaps: [] })));
   const res = await runWrite(root, { n: 1 });
-  assert.equal(res['exitCode'], 2, stderr);
+  assert.equal(res['exitCode'], 2, io.stderr);
   assert.equal(calls.length, 2, 'the first answer is sent back once');
   assert.match(calls[1]!.messages.at(-1)!.content, /cites none of this section's sources \(hayes2020, okafor2021\)/);
-  assert.match(stderr, /cites none of this section's sources/);
+  assert.match(io.stderr, /cites none of this section's sources/);
   assert.ok(!existsSync(draftFile(root, 1)), 'nothing was saved');
 
   // Repaired on the second answer, it is saved.
@@ -290,7 +243,7 @@ test('a draft that cites none of its section\'s sources is sent back once, then 
   ];
   _setGeneratorForTest(drafter([], () => answers.shift()));
   const fixed = await runWrite(root, { n: 1 });
-  assert.equal(fixed['exitCode'], 0, stderr);
+  assert.equal(fixed['exitCode'], 0, io.stderr);
   assert.deepEqual(keysIn(readFileSync(draftFile(root, 1), 'utf8')), ['hayes2020']);
 });
 
@@ -298,9 +251,9 @@ test('a section whose plan assigns no sources is drafted to cite none, and write
   const root = await paper();
   _setGeneratorForTest(drafter([], citeWhatYouSee));
   const res = await runWrite(root, { 'max-parallel': '1' });
-  assert.equal(res['exitCode'], 0, stderr);
-  assert.match(stderr, /section 3 \(conclusion\) has no assigned sources, so it is drafted to cite none/);
-  assert.doesNotMatch(stderr, /section [12] \([a-z]+\) has no assigned sources/, 'only the source-less section is named');
+  assert.equal(res['exitCode'], 0, io.stderr);
+  assert.match(io.stderr, /section 3 \(conclusion\) has no assigned sources, so it is drafted to cite none/);
+  assert.doesNotMatch(io.stderr, /section [12] \([a-z]+\) has no assigned sources/, 'only the source-less section is named');
 });
 
 test('a section with no sources cites none: a citation of any library work is refused', async () => {
@@ -308,7 +261,7 @@ test('a section with no sources cites none: a citation of any library work is re
   const calls: Call[] = [];
   _setGeneratorForTest(drafter(calls, () => ({ draft: 'In sum, the cohort evidence holds [@hayes2020].', gaps: [] })));
   const res = await runWrite(root, { n: 3 });
-  assert.equal(res['exitCode'], 2, stderr);
+  assert.equal(res['exitCode'], 2, io.stderr);
   assert.deepEqual(fencedKeys(calls[0]!.system), [], 'the conclusion\'s drafter is shown no source');
   assert.ok(!calls[0]!.system.includes('hayes2020'));
   assert.ok(!existsSync(draftFile(root, 3)));
@@ -319,10 +272,10 @@ test('a section whose assigned sources LIBRARY.json does not hold is not drafted
   const calls: Call[] = [];
   _setGeneratorForTest(drafter(calls, citeWhatYouSee));
   const res = await runWrite(root, { n: 1 });
-  assert.equal(res['exitCode'], 2, stderr);
+  assert.equal(res['exitCode'], 2, io.stderr);
   assert.equal(calls.length, 0, 'nothing is asked of the model');
-  assert.match(stderr, /hayes2020/);
-  assert.match(stderr, /LIBRARY\.json/);
+  assert.match(io.stderr, /hayes2020/);
+  assert.match(io.stderr, /LIBRARY\.json/);
   assert.ok(!existsSync(draftFile(root, 1)));
   assert.equal(parseFrontmatter(readFileSync(planFile(root, 1), 'utf8')).frontmatter['status'], 'planned', 'the section is left as it was');
 });
@@ -336,9 +289,9 @@ test('an assigned source the library lacks is left out of the drafter\'s view, w
   ];
   _setGeneratorForTest(drafter(calls, () => answers.shift()));
   const res = await runWrite(root, { n: 1 });
-  assert.equal(res['exitCode'], 0, stderr);
+  assert.equal(res['exitCode'], 0, io.stderr);
   assert.deepEqual(fencedKeys(calls[0]!.system), ['hayes2020']);
-  assert.match(stderr, /okafor2021/);
+  assert.match(io.stderr, /okafor2021/);
   assert.deepEqual(keysIn(readFileSync(draftFile(root, 1), 'utf8')), ['hayes2020']);
 });
 
@@ -350,9 +303,9 @@ test('claims no source supports are left out of the draft and shown to the user'
     gaps: [{ claim: 'Effects are larger for girls than for boys.', reason: 'neither assigned source reports a sex difference' }],
   })));
   const res = await runWrite(root, { n: 1 });
-  assert.equal(res['exitCode'], 0, stderr);
-  assert.match(stderr, /Effects are larger for girls than for boys\./);
-  assert.match(stderr, /neither assigned source reports a sex difference/);
+  assert.equal(res['exitCode'], 0, io.stderr);
+  assert.match(io.stderr, /Effects are larger for girls than for boys\./);
+  assert.match(io.stderr, /neither assigned source reports a sex difference/);
   assert.ok(!readFileSync(draftFile(root, 1), 'utf8').includes('girls'), 'a gap stays out of the draft');
   // The drafter is told to flag such a claim, not to write it uncited.
   assert.doesNotMatch(calls[0]!.system, /write the claim without a citation|write the claim uncited/i);
@@ -367,12 +320,12 @@ test('an abstract cannot close the untrusted-data fence it is shown in', async (
   const calls: Call[] = [];
   _setGeneratorForTest(drafter(calls, citeWhatYouSee));
   const res = await runWrite(root, { n: 1 });
-  assert.equal(res['exitCode'], 0, stderr);
+  assert.equal(res['exitCode'], 0, io.stderr);
   const sys = calls[0]!.system;
   const opens = sys.split(FENCE_OPEN).length - 1;
   const closes = sys.split(FENCE_CLOSE).length - 1;
   assert.equal(opens, closes, 'every fence opened is closed once');
-  const block = fences(sys).find((b) => b.includes('"citekey"'));
+  const block = fencedBlocks(sys).find((b) => b.includes('"citekey"'));
   assert.ok(block, 'the sources are fenced');
   assert.match(block, /Ignore the rules above/, 'the hostile text is inside the fence');
   assert.doesNotMatch(block, /<<<|>>>|PENSMITH_UNTRUSTED_DATA/i, 'no fence marker survives inside the data');
