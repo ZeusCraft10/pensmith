@@ -618,8 +618,11 @@ const ExportAuditSchema = z.object({
     skipped: z.enum(PLAGIARISM_SKIPS).optional(),
   }).strict()),
   honestyReport: z.string(),
-  /** Why the audit has no GPTZero score, or null when it has one. */
-  honestySkip: z.enum(HONESTY_SKIPS).nullable(),
+  /**
+   * Why the audit has no GPTZero score, or null when it has one. An audit kept
+   * by an earlier build has no such field: why it has no score is unknown.
+   */
+  honestySkip: z.enum(HONESTY_SKIPS).nullable().optional(),
   humanized: z.boolean(),
 }).strict();
 
@@ -764,8 +767,12 @@ export const doneCommand = defineCommand({
     if (keptGate && args.yolo !== true) {
       const kept = ExportAuditSchema.safeParse(keptGate.payload);
       const staged = existsSync(stagedPath) ? sha256(readFileSync(stagedPath)) : null;
-      if (kept.success && gateStillApplies(keptGate, { ...binding, staged_sha256: staged })) {
-        if (args.score === true && !keptGate.answer && CONSENT_SKIPS.has(kept.data.honestySkip)) {
+      if (!kept.success) {
+        process.stderr.write('pensmith done: the export confirmation kept earlier cannot be read by this version of pensmith; the audit runs again.\n');
+      } else if (gateStillApplies(keptGate, { ...binding, staged_sha256: staged })) {
+        // With no reason kept, the audit may have had no score for want of consent.
+        const skip = kept.data.honestySkip;
+        if (args.score === true && !keptGate.answer && (skip === undefined || CONSENT_SKIPS.has(skip))) {
           process.stderr.write('pensmith done: --score gives the consent the kept audit had no score for; the audit runs again with it.\n');
         } else {
           audit = {

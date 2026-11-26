@@ -168,3 +168,42 @@ test('with consent kept, the disclosure is shown once, before the score', async 
   assert.equal(r.status, 0, r.out);
   assert.equal((r.out.match(/the honesty check sends your full paper text to GPTZero/g) ?? []).length, 1, r.out);
 });
+
+test('an export confirmation kept by an earlier build, with no honestySkip, is reused, and --score still runs the audit again', async () => {
+  // The kept audit's honestySkip was required, so a record written before
+  // the field existed failed the strict parse: done said it was "for another
+  // draft, bibliography or format" and audited again.
+  const root = await compiledPaper();
+  const first = done(root, []);
+  assert.equal(first.status, 3, first.out);
+  const gateFile = join(root, '.paper', 'gates', 'export.json');
+  const record = JSON.parse(readFileSync(gateFile, 'utf8')) as { payload: Record<string, unknown> };
+  assert.ok('honestySkip' in record.payload, 'this build keeps the reason');
+  delete record.payload['honestySkip'];
+  writeFileSync(gateFile, JSON.stringify(record, null, 2));
+
+  const again = done(root, []);
+  assert.equal(again.status, 3, again.out);
+  assert.doesNotMatch(again.out, /another draft, bibliography or format/, again.out);
+  assert.doesNotMatch(again.out, /audit runs again/, again.out);
+
+  // Whether that audit had consent is unknown, so --score audits again with it.
+  const scored = done(root, ['--score']);
+  assert.equal(scored.status, 3, scored.out);
+  assert.match(scored.out, /--score gives the consent/, scored.out);
+  assert.match(config(root), /gptzero_consent = true/);
+});
+
+test('an export confirmation pensmith cannot read is reported as such, not as one for another draft', async () => {
+  const root = await compiledPaper();
+  const first = done(root, []);
+  assert.equal(first.status, 3, first.out);
+  const gateFile = join(root, '.paper', 'gates', 'export.json');
+  const record = JSON.parse(readFileSync(gateFile, 'utf8')) as { payload: Record<string, unknown> };
+  record.payload['humanized'] = 'perhaps';
+  writeFileSync(gateFile, JSON.stringify(record, null, 2));
+  const again = done(root, []);
+  assert.equal(again.status, 3, again.out);
+  assert.doesNotMatch(again.out, /another draft, bibliography or format/, again.out);
+  assert.match(again.out, /cannot be read/, again.out);
+});
