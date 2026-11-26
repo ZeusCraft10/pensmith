@@ -33,6 +33,7 @@ import { isOfflineMode, OfflineEgressError } from './network-mode.js';
 import { callCost, resolveCall, type ResolvedCall } from './llm-config.js';
 import {
   GenerationError,
+  ProviderError,
   RefusalError,
   TruncatedError,
   type Effort,
@@ -157,6 +158,26 @@ function assertMessages(messages: CompleteOptions['messages']): void {
   if (last?.role !== 'user') {
     throw new Error(`anthropic.ts: the last message must have role 'user'; got '${last?.role}'`);
   }
+  // The Messages API answers an empty user turn with an HTTP 400, after the call was made.
+  if (!last.content.trim()) throw new Error('anthropic.ts: complete() was given an empty user message');
+}
+
+/**
+ * `err` with the runtime.json setting to change when the provider refused the
+ * output limit sent for this role as too large (an HTTP 400 naming it).
+ */
+function withOutputLimitHint(err: unknown, role: LlmRole, maxTokens: number): unknown {
+  if (!(err instanceof ProviderError) || err.kind !== 'bad_request') return err;
+  if (!/\bmax_(?:completion_)?tokens\b/i.test(err.message)) return err;
+  const hinted = new ProviderError(
+    err.kind,
+    err.status,
+    `${err.message}\nThe model takes fewer output tokens than the ${maxTokens} sent for ${role}: ` +
+      `set roles.${role}.maxTokens for this provider in runtime.json to the model's limit.`,
+    { cause: err },
+  );
+  hinted.usage = err.usage;
+  return hinted;
 }
 
 /**
@@ -212,7 +233,7 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
   } catch (err) {
     const used = err instanceof GenerationError ? err.usage : [];
     if (used.length > 0) await recordCost(call, used, scope, scopeId);
-    throw err;
+    throw withOutputLimitHint(err, call.role, call.maxTokens);
   }
   const costUsd = await recordCost(call, result.usage, scope, scopeId);
 

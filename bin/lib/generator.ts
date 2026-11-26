@@ -140,3 +140,22 @@ export class ProviderError extends GenerationError {
     this.status = status;
   }
 }
+
+/**
+ * The error for a model that missed its deadline: the answer did not start
+ * ('head'), after a request that may have reached the provider and is
+ * therefore not sent again, or the answer stopped arriving partway ('idle').
+ */
+export function timeoutError(missed: 'head' | 'idle', model: string, timeoutMs: number, cause: unknown): ProviderError {
+  const seconds = timeoutMs >= 1000 ? `${Math.round(timeoutMs / 1000)} s` : `${timeoutMs} ms`;
+  if (missed === 'idle') {
+    return new ProviderError('timeout', null, `${model} stopped sending for ${seconds} partway through its answer; nothing was saved. Run the step again.`, { cause });
+  }
+  return new ProviderError(
+    'timeout',
+    null,
+    `${model} did not answer within ${seconds}. The request was not sent again, because the ` +
+    'first attempt may have reached the API and may still be billed. Run the step again.',
+    { cause },
+  );
+}

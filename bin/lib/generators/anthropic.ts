@@ -22,11 +22,12 @@
 // Anthropic recommends for it.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { chokepointFetch, HttpDeadlineError, RequestNotResentError } from '../http.js';
+import { chokepointFetch, missedDeadline } from '../http.js';
 import {
   EFFORTS,
   GenerationError,
   ProviderError,
+  timeoutError,
   type Effort,
   type GenerateRequest,
   type GenerateResult,
@@ -182,40 +183,11 @@ function usageRows(
   return [row(served, usage)];
 }
 
-/**
- * Which deadline `err`, or an error it was caused by, says was missed: the
- * answer did not start ('head', from http.ts, after a request that may have
- * reached the API) or the stream went quiet partway ('idle', from undici).
- * The SDK wraps both as a connection or generic error, which they are not.
- */
-function missedDeadline(err: unknown): 'head' | 'idle' | null {
-  let e: unknown = err;
-  for (let depth = 0; e instanceof Error && depth < 5; depth += 1) {
-    if (e instanceof RequestNotResentError) return 'head';
-    if (e instanceof HttpDeadlineError && e.mayHaveReachedServer) return 'head';
-    if ((e as { code?: unknown }).code === 'UND_ERR_BODY_TIMEOUT') return 'idle';
-    e = (e as { cause?: unknown }).cause;
-  }
-  return null;
-}
-
 /** A pensmith error for what the SDK threw. */
 function providerError(err: unknown, model: string, timeoutMs: number): GenerationError {
   if (err instanceof GenerationError) return err;
   const missed = missedDeadline(err);
-  const seconds = timeoutMs >= 1000 ? `${Math.round(timeoutMs / 1000)} s` : `${timeoutMs} ms`;
-  if (missed === 'head') {
-    return new ProviderError(
-      'timeout',
-      null,
-      `${model} did not answer within ${seconds}. The request was not sent again, because the ` +
-      'first attempt may have reached the API and may still be billed. Run the step again.',
-      { cause: err },
-    );
-  }
-  if (missed === 'idle') {
-    return new ProviderError('timeout', null, `${model} stopped sending for ${seconds} partway through its answer; nothing was saved. Run the step again.`, { cause: err });
-  }
+  if (missed) return timeoutError(missed, model, timeoutMs, err);
   if (err instanceof Anthropic.APIConnectionTimeoutError) {
     return new ProviderError('timeout', null, `the request to the Anthropic API timed out (${model})`, { cause: err });
   }

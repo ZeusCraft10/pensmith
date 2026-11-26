@@ -27,6 +27,7 @@ import {
 } from '../bin/lib/anthropic.js';
 import { _resetBucketsForTest } from '../bin/lib/http.js';
 import { anthropicGenerator } from '../bin/lib/generators/anthropic.js';
+import { openAiGenerator } from '../bin/lib/generators/openai.js';
 import { pensmithDataDir } from '../bin/lib/paths.js';
 import { estimateCost } from '../bin/lib/pricing.js';
 
@@ -487,4 +488,92 @@ test('an OpenAI-compatible server at a configured base URL (a local model) is us
   assert.equal(res.text, 'Local answer.');
   assert.equal(seen[0]!.body['model'], 'llama3.3');
   assert.equal(res.costUsd, 0);
+});
+
+test('an OpenAI-compatible answer that does not start within the deadline is a timeout, and the request is sent once', async () => {
+  // It used to be a ProviderError of kind connection ("could not reach"),
+  // which hid that the model was asked and did not answer in time.
+  process.env['OPENAI_API_KEY'] = 'sk-openai-test';
+  await writeRuntime({ openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY', defaultModel: 'gpt-4o' } });
+  let hits = 0;
+  agent.get('https://api.openai.com')
+    .intercept({ path: (p) => p.startsWith('/v1/chat/completions'), method: 'POST' })
+    .reply(() => {
+      hits += 1;
+      return { statusCode: 200, data: JSON.stringify(chat('Late.', 'stop')), responseOptions: { headers: { 'content-type': 'application/json' } } };
+    })
+    .delay(300)
+    .persist();
+  _setGeneratorForTest(openAiGenerator({ apiKey: 'sk-openai-test', timeoutMs: 50 }));
+  await assert.rejects(complete({ ...ASK, role: 'write' }), (e: unknown) => {
+    assert.ok(e instanceof ProviderError, `got ${String(e)}`);
+    assert.equal(e.kind, 'timeout');
+    assert.match(e.message, /did not answer within/);
+    assert.match(e.message, /not sent again/);
+    assert.doesNotMatch(e.message, /could not reach/);
+    return true;
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(hits, 1, 'one request reached the server');
+});
+
+test('common OpenAI chat models are never sent an output limit past their own', async () => {
+  // A role default of 64,000 (write) or 16,000 (intake) is past what these
+  // models allow, and OpenAI answers that with an HTTP 400.
+  process.env['OPENAI_API_KEY'] = 'sk-openai-test';
+  const seen = answerChat('https://api.openai.com', '/v1/chat/completions', 200, chat('An answer.', 'stop'));
+  const expected: Array<[string, number]> = [
+    ['gpt-4.1', 32_768], ['gpt-4.1-mini', 32_768], ['gpt-4.1-nano', 32_768], ['gpt-4.1-2025-04-14', 32_768],
+    ['gpt-4-turbo', 4_096], ['gpt-3.5-turbo', 4_096],
+  ];
+  for (const [model] of expected) {
+    await writeRuntime({ openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY', defaultModel: model } });
+    await complete({ ...ASK, role: 'write' });
+  }
+  assert.deepEqual(seen.map((s) => [s.body['model'], s.body['max_completion_tokens']]), expected);
+});
+
+test('an HTTP 400 for an output limit past the model\'s names the runtime.json setting for that role', async () => {
+  process.env['OPENAI_API_KEY'] = 'sk-openai-test';
+  await writeRuntime({ openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY', defaultModel: 'o-something-new' } });
+  answerChat('https://api.openai.com', '/v1/chat/completions', 400, {
+    error: {
+      message: 'max_completion_tokens is too large: 64000. This model supports at most 32768 completion tokens, whereas you provided 64000.',
+      type: 'invalid_request_error', param: 'max_completion_tokens', code: 'invalid_value',
+    },
+  });
+  await assert.rejects(complete({ ...ASK, role: 'write' }), (e: unknown) => {
+    assert.ok(e instanceof ProviderError, `got ${String(e)}`);
+    assert.equal(e.kind, 'bad_request');
+    assert.match(e.message, /roles\.write\.maxTokens/);
+    assert.match(e.message, /runtime\.json/);
+    return true;
+  });
+  // Any other 400 keeps its own message.
+  await agent.close();
+  agent = new MockAgent();
+  agent.disableNetConnect();
+  setGlobalDispatcher(agent);
+  answerChat('https://api.openai.com', '/v1/chat/completions', 400, { error: { message: 'Invalid schema for response_format', type: 'invalid_request_error' } });
+  await assert.rejects(complete({ ...ASK, role: 'plan' }), (e: unknown) => {
+    assert.ok(e instanceof ProviderError);
+    assert.doesNotMatch(e.message, /maxTokens/);
+    return true;
+  });
+});
+
+test('an empty user turn is refused before any provider is asked', async () => {
+  // The Messages API answers an empty user message with an HTTP 400.
+  let calls = 0;
+  _setGeneratorForTest({
+    async generate(req) {
+      calls += 1;
+      return { text: 'x', model: req.model, stop: 'complete', stopReason: 'end_turn', usage: [] };
+    },
+  });
+  for (const content of ['', '  \n\t ']) {
+    await assert.rejects(complete({ system: 'S', messages: [{ role: 'user', content }], role: 'intake' }), /empty/);
+  }
+  assert.equal(calls, 0);
+  assert.equal(costRows().length, 0);
 });

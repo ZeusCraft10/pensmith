@@ -7,11 +7,12 @@
 // max_completion_tokens, which OpenAI's reasoning models require (they refuse
 // max_tokens), and finish_reason says whether the answer is whole.
 
-import { fetch as httpFetch } from '../http.js';
+import { fetch as httpFetch, missedDeadline } from '../http.js';
 import { VERSION } from '../version.generated.js';
 import {
   GenerationError,
   ProviderError,
+  timeoutError,
   type GenerateRequest,
   type GenerateResult,
   type Generator,
@@ -28,6 +29,8 @@ export interface OpenAiGeneratorOptions {
   apiKey: string;
   /** The API root, ending before /chat/completions. OpenAI's when absent. */
   baseUrl?: string;
+  /** How long the whole answer may take (10 minutes when absent). */
+  timeoutMs?: number;
 }
 
 function stopKind(reason: unknown): StopKind {
@@ -63,6 +66,7 @@ export function openAiGenerator(opts: OpenAiGeneratorOptions): Generator {
   const base = (opts.baseUrl ?? OPENAI_DEFAULT_BASE_URL).replace(/\/+$/, '');
   const url = `${base}/chat/completions`;
   const host = new URL(url).host;
+  const timeoutMs = opts.timeoutMs ?? COMPLETION_TIMEOUT_MS;
   return {
     async generate(req: GenerateRequest): Promise<GenerateResult> {
       const body: Record<string, unknown> = {
@@ -92,13 +96,15 @@ export function openAiGenerator(opts: OpenAiGeneratorOptions): Generator {
           source: 'generic',
           noCache: true,
           untrusted: false,
-          timeoutMs: COMPLETION_TIMEOUT_MS,
+          timeoutMs,
           maxBodyBytes: MAX_RESPONSE_BYTES,
         });
       } catch (err) {
         // http.ts throws a 429 or 5xx it gave up retrying, with the response attached.
         const failed = err as { status?: unknown; response?: { body?: string } };
         if (typeof failed.status === 'number') throw statusError(failed.status, failed.response?.body ?? '', host);
+        const missed = missedDeadline(err);
+        if (missed) throw timeoutError(missed, req.model, timeoutMs, err);
         const detail = err instanceof Error ? err.message : String(err);
         throw new ProviderError('connection', null, `could not reach ${host}: ${detail}`, { cause: err });
       }

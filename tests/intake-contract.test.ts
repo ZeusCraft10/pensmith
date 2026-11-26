@@ -508,3 +508,22 @@ test('the disciplines intake accepts are the presets templates/presets/disciplin
   assert.equal(disciplineFromAnswer('History of Science'), 'history');
   assert.equal(disciplineFromAnswer('Nursing'), 'other');
 });
+
+test('a blank assignment never reaches the model as an empty user turn: intake asks for the assignment instead', async () => {
+  // The Messages API answers an empty user message with a 400.
+  const seen: Array<{ system: string; user: string; schema: unknown }> = [];
+  _setGeneratorForTest(clarifier(seen));
+  const blankFile = tmp();
+  writeFileSync(join(blankFile, 'assignment.txt'), '  \n\n\t \n');
+  const cases: Array<[string, string, Record<string, unknown>]> = [
+    ['a blank assignment.txt', blankFile, {}],
+    ['a blank --answers assignment', tmp(), { answers: JSON.stringify({ assignment: ' \n\t ' }) }],
+    ['a blank --thesis', tmp(), { thesis: ' \n ' }],
+  ];
+  for (const [what, dir, args] of cases) {
+    const res = await runIntakeOnce(dir, args);
+    assert.equal(res['mode'], 'pending', what);
+    assert.deepEqual(res['pending'], ['assignment'], what);
+  }
+  assert.equal(seen.length, 0, 'no model call was made');
+});

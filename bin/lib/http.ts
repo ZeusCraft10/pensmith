@@ -222,6 +222,23 @@ export class RequestNotResentError extends Error {
 }
 
 /**
+ * Which deadline `err`, or an error it was caused by, says was missed: the
+ * answer did not start ('head', after a request that may have reached the
+ * server) or a streamed body went quiet partway ('idle', from undici). An SDK
+ * wraps both as a connection or generic error, which they are not.
+ */
+export function missedDeadline(err: unknown): 'head' | 'idle' | null {
+  let e: unknown = err;
+  for (let depth = 0; e instanceof Error && depth < 5; depth += 1) {
+    if (e instanceof RequestNotResentError) return 'head';
+    if (e instanceof HttpDeadlineError && e.mayHaveReachedServer) return 'head';
+    if ((e as { code?: unknown }).code === 'UND_ERR_BODY_TIMEOUT') return 'idle';
+    e = (e as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
+/**
  * Wait for the response head, but never longer than `timeoutMs` in total.
  * undici's headersTimeout starts only once a connection exists, and through a
  * proxy the CONNECT runs on the proxy pool's own 300 s default, so a stalled

@@ -61,6 +61,11 @@ const MODEL_OUTPUT_LIMITS: Readonly<Record<ProviderName, Readonly<Record<string,
     'gpt-4o': 16_384,
     'gpt-4o-2024-05-13': 4_096,
     'gpt-4o-mini': 16_384,
+    'gpt-4.1': 32_768,
+    'gpt-4.1-mini': 32_768,
+    'gpt-4.1-nano': 32_768,
+    'gpt-4-turbo': 4_096,
+    'gpt-3.5-turbo': 4_096,
   },
 };
 
