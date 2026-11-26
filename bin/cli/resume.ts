@@ -14,9 +14,9 @@ import { defineCommand } from 'citty';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir } from '../lib/paths.js';
-import { resolveNextAction } from '../lib/router.js';
+import { decisionArgs, resolveNextAction } from '../lib/router.js';
 import { HandoffSchema, type Handoff } from '../lib/schemas/handoff.js';
-import { dispatchVerb } from '../pensmith.js';
+import { dispatchVerb, nextStepLine } from '../pensmith.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './goal.js';
 
 function safeReadHandoff(paperRoot: string): Handoff | null {
@@ -73,15 +73,10 @@ export const resumeCommand = defineCommand({
       return { ok: true, mode: 'learning-end-state' };
     }
 
-    process.stderr.write(`pensmith resume: → ${decision.verb}\n`);
-
-    const verbArgs: Record<string, unknown> = {};
-    if ('n' in decision) verbArgs.n = decision.n;
-    if ('slug' in decision) verbArgs.slug = decision.slug;
-    if ('reason' in decision) verbArgs.reason = decision.reason;
+    process.stderr.write(`${nextStepLine('pensmith resume', decision)}\n`);
 
     const result = await dispatchVerb(decision.verb, {
-      args: verbArgs,
+      args: decisionArgs(decision),
       globalFlags: {
         yolo: args.yolo === true,
         estimate: args.estimate === true,

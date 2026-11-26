@@ -78,13 +78,18 @@ export const statusCommand = defineCommand({
     // callers next/resume/bare; status only reports).
     const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
     const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
+    const flags = [
+      ...('revise' in decision && decision.revise ? ['--revise'] : []),
+      ...('force' in decision && decision.force ? ['--force'] : []),
+    ];
     const next =
       decision.verb === 'status'
         ? `status (${decision.reason})`
         : 'n' in decision
-          ? `${decision.verb} §${decision.n}`
+          ? [`${decision.verb} §${decision.n}`, ...flags].join(' ')
           : decision.verb;
     lines.push(`  next: ${next}`);
+    if (decision.why) lines.push(`  why: ${decision.why}`);
 
     process.stdout.write(lines.join('\n') + '\n');
     return { ok: true, next: decision.verb };

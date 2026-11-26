@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { outlineForStateFixture } from './lib/outline-fixture.js';
+import { writeCompileManifestFixture, writeVerificationFixture } from './lib/verification-fixture.js';
 
 // RED-by-skip guard — the module under test does not exist until Plan 07-02.
 const ROUTER_SRC = fileURLToPath(new URL('../bin/lib/router.ts', import.meta.url));
@@ -78,6 +79,17 @@ function writeSectionPlan(root: string, n: number, slug: string, status: string)
   const dir = join(root, '.paper', 'sections', `${pad(n)}-${slug}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'PLAN.md'), `---\nstatus: ${status}\n---\n# Section ${n}\n`);
+}
+
+// A section verify passed: PLAN.md 'verified', its DRAFT.md, and the verdicts
+// verify records for that draft. The router reads the verdicts, not the
+// status alone: a 'verified' PLAN.md with no record goes back to verify.
+function writeVerifiedSection(root: string, n: number, slug: string): void {
+  writeSectionPlan(root, n, slug, 'verified');
+  const dir = join(root, '.paper', 'sections', `${pad(n)}-${slug}`);
+  const draft = `Section ${n} text.\n`;
+  writeFileSync(join(dir, 'DRAFT.md'), draft);
+  writeVerificationFixture(dir, { n, slug, draft });
 }
 
 // Write a per-section PLAN.md whose YAML frontmatter THROWS in
@@ -149,21 +161,22 @@ test('UX-01 (e): all verified, no DRAFT.md → { verb: "compile" }', { skip: !bu
   writeState(root, [{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
   writePaperFile(root, 'RESEARCH.md');
   writePaperFile(root, 'OUTLINE.md');
-  writeSectionPlan(root, 1, 'intro', 'verified');
-  writeSectionPlan(root, 2, 'methods', 'verified');
+  writeVerifiedSection(root, 1, 'intro');
+  writeVerifiedSection(root, 2, 'methods');
   const decision = await resolveNextAction(root);
   assert.equal(decision.verb, 'compile', 'UX-01: all-verified + no DRAFT.md routes to compile');
 });
 
-// === (f) DRAFT.md present, no FINAL.md → done ===
-test('UX-01 (f): DRAFT.md present, no FINAL.md → { verb: "done" }', { skip: !built }, async () => {
+// === (f) DRAFT.md from a gated compile, not exported yet → done ===
+test('UX-01 (f): DRAFT.md present (with its compile manifest), no FINAL.md → { verb: "done" }', { skip: !built }, async () => {
   const resolveNextAction = await loadResolve();
   const root = freshRoot();
   writeState(root, [{ n: 1, slug: 'intro' }]);
   writePaperFile(root, 'RESEARCH.md');
   writePaperFile(root, 'OUTLINE.md');
-  writeSectionPlan(root, 1, 'intro', 'verified');
+  writeVerifiedSection(root, 1, 'intro');
   writePaperFile(root, 'DRAFT.md');
+  await writeCompileManifestFixture(root, [{ n: 1, slug: 'intro' }]);
   const decision = await resolveNextAction(root);
   assert.equal(decision.verb, 'done', 'UX-01: DRAFT.md + no FINAL.md routes to done');
 });
@@ -219,8 +232,9 @@ test('UX-01 / C3-HIGH-1 (i): first section "verifying" → { verb: "verify", n, 
     assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "verifying" routes to verify');
   });
 
-// === (j) failed → verify (NOT continue/compile) — KEY totality assertion ===
-test('UX-01 / C3-HIGH-1 (j): first section "failed" → { verb: "verify" } NOT continue/compile (non-undefined)',
+// === (j) failed, no recorded verdicts → verify (NOT continue/compile) ===
+// A failed section WITH verdicts goes where they say (tests/router-table.test.ts).
+test('UX-01 / C3-HIGH-1 (j): first section "failed" with no recorded verdicts → { verb: "verify" } NOT continue/compile (non-undefined)',
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
@@ -228,18 +242,18 @@ test('UX-01 / C3-HIGH-1 (j): first section "failed" → { verb: "verify" } NOT c
     const decision = await resolveNextAction(root);
     assert.notEqual(decision, undefined, 'C3-HIGH-1: resolver must not return undefined for "failed"');
     assert.equal(typeof decision.verb, 'string', 'C3-HIGH-1: decision.verb must be a string');
-    assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "failed" re-attempts verify (must NOT continue to compile)');
+    assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "failed" with nothing recorded is verified (must NOT continue to compile)');
   });
 
-// === (k) unverifiable → verify (NOT continue/compile) ===
-test('UX-01 / C3-HIGH-1 (k): first section "unverifiable" → { verb: "verify" } NOT continue/compile (non-undefined)',
+// === (k) unverifiable, no recorded verdicts → verify (NOT continue/compile) ===
+test('UX-01 / C3-HIGH-1 (k): first section "unverifiable" with no recorded verdicts → { verb: "verify" } NOT continue/compile (non-undefined)',
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
     writeSectionPlan(root, 1, 'intro', 'unverifiable');
     const decision = await resolveNextAction(root);
     assert.notEqual(decision, undefined, 'C3-HIGH-1: resolver must not return undefined for "unverifiable"');
-    assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "unverifiable" re-attempts verify (must NOT continue to compile)');
+    assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "unverifiable" with nothing recorded is verified (must NOT continue to compile)');
   });
 
 // === (l) MIXED STUCK CASE: [verified, failed, verified] + no DRAFT.md ===
@@ -251,9 +265,9 @@ test('UX-01 / C3-HIGH-1 (l): mixed [verified,failed,verified] + no DRAFT.md → 
       { n: 2, slug: 'methods' },
       { n: 3, slug: 'results' },
     ]);
-    writeSectionPlan(root, 1, 'intro', 'verified');
+    writeVerifiedSection(root, 1, 'intro');
     writeSectionPlan(root, 2, 'methods', 'failed');
-    writeSectionPlan(root, 3, 'results', 'verified');
+    writeVerifiedSection(root, 3, 'results');
     // Intentionally NO DRAFT.md — the stuck middle section must NOT let the
     // walk fall through to undefined and must NOT prematurely compile.
     const decision = await resolveNextAction(root);

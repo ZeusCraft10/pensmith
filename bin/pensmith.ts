@@ -55,7 +55,7 @@ import { VERSION } from './lib/version.generated.js';
 import { UX02_VERBS, canonicalVerb, unknownOptionMessage, unknownVerbMessage, type Ux02Verb } from './lib/verbs.js';
 import { setMirrorPromptsToStderr } from './lib/session-log.js';
 import { projectEstimate } from './lib/estimator.js';
-import { resolveNextAction, type RouterDecision } from './lib/router.js';
+import { decisionArgs, decisionCommand, resolveNextAction, type RouterDecision } from './lib/router.js';
 import { migrateLegacyLayout } from './lib/migrations/layout.js';
 import { isDryRun } from './lib/atomic-write.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
@@ -321,12 +321,22 @@ function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
  */
 function refuseSectionVerb(verb: Ux02Verb, decision: RouterDecision): number {
   const at = 'n' in decision && 'slug' in decision ? ` (section ${decision.n} ${decision.slug})` : '';
+  const why = decision.why ? `, because ${decision.why}` : '';
   process.stderr.write(
     `pensmith ${verb}: no section is ready to ${verb} right now — the next step is ` +
-    `\`pensmith ${decision.verb}\`${at}. Pass a section number ` +
+    `\`${decisionCommand(decision)}\`${at}${why}. Pass a section number ` +
     `(e.g. \`pensmith ${verb} 2\`) to ${verb} a specific section.\n`,
   );
   return EXIT_REFUSED;
+}
+
+/**
+ * The line that says which step the router chose and why, on stderr, so the
+ * dispatched verb's stdout stays its own.
+ */
+export function nextStepLine(prefix: string, decision: RouterDecision): string {
+  const step = decision.verb === 'status' ? `status (${decision.reason})` : decisionCommand(decision);
+  return `${prefix}: → ${step}${decision.why ? ` — ${decision.why}` : ''}`;
 }
 
 /** The router's next step for the paper, with the goal's stop-after-research applied. */
@@ -335,13 +345,6 @@ async function routeNext(paperRoot: string): Promise<{ stop: boolean; decision: 
   return { stop, decision: await resolveNextAction(paperRoot, { stopAfterResearch: stop }) };
 }
 
-/** The decision's section (n, slug) as verb args, when it has one. */
-function decisionArgs(decision: RouterDecision): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  if ('n' in decision) out['n'] = decision.n;
-  if ('slug' in decision) out['slug'] = decision.slug;
-  return out;
-}
 
 /**
  * `--dry-run`: work out the step that would run — the named command with its
@@ -369,13 +372,13 @@ async function runDryRun(argv: string[], verb: Ux02Verb | null): Promise<number>
   if (bareSectionVerb && decision.verb !== verb) return refuseSectionVerb(verb, decision);
   if (decision.verb === 'status' || decision.verb === 'resume') {
     const why = decision.verb === 'status' && decision.reason === 'done'
-      ? 'the paper is finished'
-      : 'the paper needs attention (run `pensmith status`)';
+      ? `the paper is finished (${decision.why})`
+      : `the paper needs attention (run \`pensmith status\`)${decision.why ? `: ${decision.why}` : ''}`;
     process.stdout.write(`pensmith --dry-run: nothing to run — ${why}.\n${DRY_RUN_TRAILER}\n`);
     return EXIT_OK;
   }
   const step = describeStep({ verb: decision.verb, args: decisionArgs(decision) }, paperRoot);
-  process.stdout.write(renderDryRun(`pensmith --dry-run: the next step is \`${step.command}\`.`, step));
+  process.stdout.write(renderDryRun(`pensmith --dry-run: the next step is \`${step.command}\`, because ${decision.why}.`, step));
   return EXIT_OK;
 }
 
@@ -575,10 +578,9 @@ async function dispatchArgv(argv: string[]): Promise<void> {
     return;
   }
 
-  const verbArgs: Record<string, unknown> = decisionArgs(decision);
-  if ('reason' in decision) verbArgs.reason = decision.reason;
+  process.stderr.write(`${nextStepLine('pensmith', decision)}\n`);
   await dispatchVerb(decision.verb, {
-    args: verbArgs,
+    args: decisionArgs(decision),
     globalFlags: {
       yolo: hasFlag(argv, 'yolo'),
       estimate: hasFlag(argv, 'estimate'),

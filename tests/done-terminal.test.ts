@@ -1,10 +1,11 @@
 // tests/done-terminal.test.ts — audit #15 regression.
 //
-// The router's terminal state is "DRAFT.md present AND FINAL.md present"
-// (router.ts:216-218). In Tier 2 there is no humanizer, so runHumanizer returns
-// null, FINAL.md is never written, and bare `pensmith`/next/resume re-run the
-// whole export pipeline on every invocation instead of reaching the done
-// terminus. `done` now writes FINAL.md from the exported source when absent.
+// The router counts a paper done once FINAL.md is the recorded export of the
+// current compile (FINAL.md + .paper/EXPORT.json). In Tier 2 there is no
+// humanizer, so runHumanizer returns null; done must still write FINAL.md and
+// the export record from the text it exported, or bare `pensmith`/next/resume
+// re-run the whole export pipeline on every invocation instead of reaching the
+// done terminus.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initState, initSection } from '../bin/lib/state.js';
 import { resolveNextAction } from '../bin/lib/router.js';
+import { withoutWhy } from './lib/router-decision.js';
 import { doneCommand } from '../bin/cli/done.js';
 import { writeCompileManifestFixture, writeVerificationFixture } from './lib/verification-fixture.js';
 
@@ -63,5 +65,5 @@ test('audit #15: Tier-2 done writes FINAL.md so the router reaches the terminal 
 
   assert.ok(existsSync(join(root, '.paper', 'FINAL.md')), 'done must write FINAL.md when no humanizer ran');
   const decision = await resolveNextAction(root);
-  assert.deepEqual(decision, { verb: 'status', reason: 'done' }, `router must reach terminal; got ${JSON.stringify(decision)}`);
+  assert.deepEqual(withoutWhy(decision), { verb: 'status', reason: 'done' }, `router must reach terminal; got ${JSON.stringify(decision)}`);
 });

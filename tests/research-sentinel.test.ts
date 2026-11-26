@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initState } from '../bin/lib/state.js';
 import { resolveNextAction } from '../bin/lib/router.js';
+import { withoutWhy } from './lib/router-decision.js';
 import { deriveLibraryStatus } from '../bin/lib/global-library.js';
 import { cli } from './lib/export-fixture.js';
 
@@ -110,5 +111,5 @@ test('router: a v1 library research wrote still counts as research after a later
 test('router: a LIBRARY.json that cannot be read is surfaced, not taken for research done', async () => {
   const root = await seed({ 'LIBRARY.json': '{"$schemaVersion":2,"entries":[' });
   const decision = await resolveNextAction(root);
-  assert.deepEqual(decision, { verb: 'status', reason: 'attention' });
+  assert.deepEqual(withoutWhy(decision), { verb: 'status', reason: 'attention' });
 });

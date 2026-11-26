@@ -21,7 +21,7 @@ import {
 import { parseBibForPass1, pass1CitedKeys, readBibText, type Pass1Result, type Pass1Verdict } from '../../bin/lib/verify/pass1.js';
 import type { Pass3Result, Pass3Verdict } from '../../bin/lib/verify/pass3.js';
 import { isBlockingVerdict } from '../../bin/lib/verify/verdict-rows.js';
-import { manifestBibEntries, writeCompileManifest } from '../../bin/lib/compile-manifest.js';
+import { bibFileSha256, manifestBibEntries, writeCompileManifest } from '../../bin/lib/compile-manifest.js';
 import { paperDir, sectionDraft, sectionVerificationRecord } from '../../bin/lib/paths.js';
 
 export interface CitationSpec {
@@ -103,7 +103,8 @@ export async function fixtureBibHashes(bibText: string, draft: string): Promise<
 /**
  * Write .paper/COMPILE-MANIFEST.json for the files as they are now, as compile
  * does after writing .paper/DRAFT.md: the hashes of the compiled draft, of each
- * section's DRAFT.md and VERIFICATION.json, and of each cited bibliography entry.
+ * section's DRAFT.md and VERIFICATION.json, of each cited bibliography entry
+ * and of CITATIONS.bib.
  */
 export async function writeCompileManifestFixture(paperRoot: string, sections: ReadonlyArray<{ n: number; slug: string }>): Promise<void> {
   const compiled = readFileSync(join(paperDir(paperRoot), 'DRAFT.md'));
@@ -120,5 +121,6 @@ export async function writeCompileManifestFixture(paperRoot: string, sections: R
       re_verified: false,
     })),
     bib_entries: manifestBibEntries(pass1CitedKeys(compiled.toString('utf8')), bib),
+    bib_sha256: bibFileSha256(readBibText(paperRoot)),
   });
 }

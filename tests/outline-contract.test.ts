@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { _setGeneratorForTest, type Generator } from '../bin/lib/anthropic.js';
 import { parseOutline } from '../bin/lib/outline-parse.js';
 import { resolveNextAction } from '../bin/lib/router.js';
+import { withoutWhy } from './lib/router-decision.js';
 import { initSection, initState, loadState } from '../bin/lib/state.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 import { resolveSectionSlug } from '../bin/lib/section-slug.js';
@@ -130,7 +131,7 @@ test('a prompt-compliant outline becomes OUTLINE.json, a rendered OUTLINE.md, ST
     { section: fm['section'], slug: fm['slug'], title: fm['title'], status: fm['status'], assigned_sources: fm['assigned_sources'] },
     { section: 2, slug: 'evidence', title: 'What the Evidence Shows', status: 'stub', assigned_sources: ['smith2020', 'lee2021'] },
   );
-  assert.deepEqual(await resolveNextAction(root), { verb: 'plan', n: 1, slug: 'introduction' });
+  assert.deepEqual(withoutWhy(await resolveNextAction(root)), { verb: 'plan', n: 1, slug: 'introduction' });
 });
 
 test('an outline that breaks a rule is repaired once, then refused with exit 2 and nothing written', async () => {
@@ -191,7 +192,7 @@ test('every reader walks the outline, not STATE.json', async () => {
   const stateFile = join(root, '.paper', 'STATE.json');
   const state = JSON.parse(readFileSync(stateFile, 'utf8')) as Record<string, unknown>;
   writeFileSync(stateFile, JSON.stringify({ ...state, sections: [{ n: 1, slug: 'stale' }] }));
-  assert.deepEqual(await resolveNextAction(root), { verb: 'plan', n: 1, slug: 'introduction' });
+  assert.deepEqual(withoutWhy(await resolveNextAction(root)), { verb: 'plan', n: 1, slug: 'introduction' });
   assert.equal(resolveSectionSlug(root, 3), 'objections');
   const { statusCommand } = await import('../bin/cli/status.js');
   const out: string[] = [];
@@ -343,7 +344,7 @@ test('OUTLINE.md with its line endings changed (a Windows checkout) or a final n
   writeFileSync(mdFile, md.replace(/\n/g, '\r\n') + '\r\n');
   const r = readOutline(root);
   assert.equal(r.ok, true, r.ok ? '' : r.detail);
-  assert.deepEqual(await resolveNextAction(root), { verb: 'plan', n: 1, slug: 'introduction' });
+  assert.deepEqual(withoutWhy(await resolveNextAction(root)), { verb: 'plan', n: 1, slug: 'introduction' });
 });
 
 test('the outline author is shown the library as fenced data, abstracts included', async () => {

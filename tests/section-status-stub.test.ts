@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initSection, initState } from '../bin/lib/state.js';
 import { resolveNextAction, sectionVerb } from '../bin/lib/router.js';
+import { withoutWhy } from './lib/router-decision.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 import { isolatedCliEnv } from './lib/cli-env.js';
 
@@ -41,9 +42,9 @@ test('the router plans a stub (or a PLAN.md with no status) and writes a planned
   assert.equal(sectionVerb('stub'), 'plan');
   assert.equal(sectionVerb('planned'), 'write');
   assert.equal(sectionVerb('writing'), 'write');
-  assert.deepEqual(await resolveNextAction(await paper('stub')), { verb: 'plan', n: 1, slug: 'intro' });
-  assert.deepEqual(await resolveNextAction(await paper(null)), { verb: 'plan', n: 1, slug: 'intro' });
-  assert.deepEqual(await resolveNextAction(await paper('planned')), { verb: 'write', n: 1, slug: 'intro' });
+  assert.deepEqual(withoutWhy(await resolveNextAction(await paper('stub'))), { verb: 'plan', n: 1, slug: 'intro' });
+  assert.deepEqual(withoutWhy(await resolveNextAction(await paper(null))), { verb: 'plan', n: 1, slug: 'intro' });
+  assert.deepEqual(withoutWhy(await resolveNextAction(await paper('planned'))), { verb: 'write', n: 1, slug: 'intro' });
 });
 
 function runPlan(root: string, ...extra: string[]): { status: number | null; stdout: string; stderr: string } {

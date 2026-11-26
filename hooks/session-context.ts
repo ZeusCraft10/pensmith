@@ -26,9 +26,13 @@ export function describeNextStep(d: RouterDecision): string {
     case 'outline':
       return 'draft the outline, which the user must approve (`pensmith outline`)';
     case 'plan':
-      return `plan section ${d.n} (${safeSlug(d.slug)}) (\`pensmith plan ${d.n}\`)`;
+      return d.revise
+        ? `repair the citation the verifier flagged in section ${d.n} (${safeSlug(d.slug)}), which the user must approve (\`pensmith plan ${d.n} --revise\`)`
+        : `plan section ${d.n} (${safeSlug(d.slug)}) (\`pensmith plan ${d.n}\`)`;
     case 'write':
-      return `draft section ${d.n} (${safeSlug(d.slug)}) (\`pensmith write ${d.n}\`)`;
+      return d.force
+        ? `draft section ${d.n} (${safeSlug(d.slug)}) again (\`pensmith write ${d.n} --force\`)`
+        : `draft section ${d.n} (${safeSlug(d.slug)}) (\`pensmith write ${d.n}\`)`;
     case 'verify':
       return `verify the citations in section ${d.n} (${safeSlug(d.slug)}) (\`pensmith verify ${d.n}\`)`;
     case 'compile':

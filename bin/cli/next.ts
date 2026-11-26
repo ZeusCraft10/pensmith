@@ -11,8 +11,8 @@
 // (tier/scripting parity).
 
 import { defineCommand } from 'citty';
-import { resolveNextAction } from '../lib/router.js';
-import { dispatchVerb } from '../pensmith.js';
+import { decisionArgs, resolveNextAction } from '../lib/router.js';
+import { dispatchVerb, nextStepLine } from '../pensmith.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './goal.js';
 
 export const nextCommand = defineCommand({
@@ -43,16 +43,10 @@ export const nextCommand = defineCommand({
       return { ok: true, mode: 'learning-end-state' };
     }
 
-    process.stderr.write(`pensmith next: → ${decision.verb}\n`);
-
-    // Build the per-verb args from the decision (n/slug where applicable).
-    const verbArgs: Record<string, unknown> = {};
-    if ('n' in decision) verbArgs.n = decision.n;
-    if ('slug' in decision) verbArgs.slug = decision.slug;
-    if ('reason' in decision) verbArgs.reason = decision.reason;
+    process.stderr.write(`${nextStepLine('pensmith next', decision)}\n`);
 
     return dispatchVerb(decision.verb, {
-      args: verbArgs,
+      args: decisionArgs(decision),
       globalFlags: {
         yolo: args.yolo === true,
         estimate: args.estimate === true,
