@@ -43,18 +43,18 @@ below is the prompt that drives the verb under both Tier 1 and Tier 2.
 
 ## Body
 
-1. **Parse args**: `pensmith write <N> [--force]` — `N` is the 1-based section number. Read the outline to resolve the slug. A section is drafted only when its PLAN.md `status` is `planned` or `writing`; a `stub` (no plan yet) is refused with exit 2 (run `pensmith plan <N>`), and a section already drafted (`written`, `verifying`, `verified`, `failed`, `unverifiable`) is refused with exit 2 unless `--force` is given, which keeps the old draft as `DRAFT.md.bak`.
+1. **Parse args**: `pensmith write <N> [--force]` — `N` is the 1-based section number. Read the outline to resolve the slug. A section is drafted only when its PLAN.md `status` is `planned` or `writing`; a `stub` (no plan yet) is refused with exit 2 (run `pensmith plan <N>`), and a section already drafted (`written`, `verifying`, `verified`, `failed`, `unverifiable`) is refused with exit 2 unless `--force` is given, which keeps the old draft as `DRAFT.md.bak` and leaves the section's status as it was until the new draft is saved. A PLAN.md that cannot be read, or whose frontmatter does not check, is refused with exit 2 (run `pensmith plan <N> --force`).
 
 2. **Read inputs**:
    - `<sectionPlan(n, slug)>` → `.paper/sections/<NN>-<slug>/PLAN.md`: its `assigned_sources` and its body (the brief, the voice line, the claims), without the frontmatter.
    - `.paper/OUTLINE.json` → the section's title, purpose, `depends_on` and word target, and the paper's title and thesis.
-   - `.paper/LIBRARY.json` → the works `assigned_sources` names: citekey, title, authors, year, venue, abstract (`bin/lib/source-context.ts`). The drafter sees ONLY these, never the rest of the library (PRD §7.6). An assigned key the library lacks is left out with a WARN; when the plan assigns sources and the library holds none of them, the section is not drafted (exit 2, no model call). A section that assigns none is drafted to cite none.
+   - `.paper/LIBRARY.json` → the works `assigned_sources` names: citekey, title, authors, year, venue, abstract (`bin/lib/source-context.ts`). The drafter sees ONLY these, never the rest of the library (PRD §7.6). An assigned key the library lacks is left out with a WARN; when the plan assigns sources and the library holds none of them, the section is not drafted (exit 2, no model call). A section that assigns none is drafted to cite none, and write says so on stderr.
 
 3. **Set status to `'writing'`** in PLAN.md (`updatePlanFrontmatter`), so a draft that fails leaves the section to be written again.
 
 4. **Build the drafter input** (`bin/lib/drafter-input.ts`): `{section, paper, brief, voice, sources}`. `renderDrafterPrompt` checks that exact object (`assertDrafterInput`: no field beyond the schema's, no source the PLAN.md does not assign) and renders `templates/prompts/section-drafter.md` from it alone. The sources go in as JSON inside the untrusted-data fence, stripped of anything that could close it.
 
-5. **Run the drafter** with `SectionDraftSchema` as the answer's JSON Schema: `{draft, gaps}`. `draftProblems` refuses an empty draft, a citation of any key outside the section's sources, a citation typed as text (author-year, DOI, URL) and a bracket that is no citation. A failing answer is sent back once with the problems; if the second fails too, nothing is saved and the verb exits 2. `gaps` (claims the plan asks for that no source supports) stay out of the draft and are printed to stderr for the author.
+5. **Run the drafter** with `SectionDraftSchema` as the answer's JSON Schema: `{draft, gaps}`. `draftProblems` refuses an empty draft, a citation of any key outside the section's sources, a draft that cites none of its sources when it has some (verify would fail it), a citation typed as text (author-year, DOI, URL) and a bracket that is no citation. A failing answer is sent back once with the problems; if the second fails too, nothing is saved and the verb exits 2. `gaps` (claims the plan asks for that no source supports) stay out of the draft and are printed to stderr for the author.
 
 6. **Write `<sectionDraft(n, slug)>`** = `.paper/sections/<NN>-<slug>/DRAFT.md` via `bin/lib/atomic-write.ts` (D-07 chokepoint).
 

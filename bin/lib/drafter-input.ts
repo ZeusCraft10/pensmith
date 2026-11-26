@@ -9,8 +9,9 @@
 // Out: JSON to SectionDraftSchema: the draft, and the claims the plan asks for
 // that no source supports ("gaps"), which stay out of the draft and are shown
 // to the author. draftProblems gives every reason a draft cannot be saved: it
-// is empty, or cites a key outside the section's sources, or writes a
-// citation as text. write.ts sends a failing draft back once, then refuses.
+// is empty, cites a key outside the section's sources, cites none of them
+// when it has some, or writes a citation as text. write.ts sends a failing
+// draft back once, then refuses.
 
 import { z } from 'zod/v4';
 import {
@@ -91,12 +92,21 @@ export function draftProblems(d: SectionDraft, sourceKeys: readonly string[]): s
   const problems: string[] = [];
   const cites = findCitations(d.draft);
   const allowed = new Set(sourceKeys);
-  const outside = citedKeys(cites).filter((k) => !allowed.has(k));
+  const cited = citedKeys(cites);
+  const outside = cited.filter((k) => !allowed.has(k));
   if (outside.length > 0) {
     problems.push(
       `it cites ${outside.join(', ')}, which ${outside.length === 1 ? 'is' : 'are'} not among this section's sources ` +
         `(${sourceKeys.length > 0 ? sourceKeys.join(', ') : 'it has none'}); cite only those, ` +
         'or leave the claim out of the draft and list it in gaps',
+    );
+  }
+  // verify fails a draft that cites none of the sources its plan assigns,
+  // since none of its claims could be checked; the drafter fixes that here.
+  if (sourceKeys.length > 0 && !cited.some((k) => allowed.has(k))) {
+    problems.push(
+      `it cites none of this section's sources (${sourceKeys.join(', ')}), so none of its claims can be checked; ` +
+        'cite each source as [@citekey] where it supports a claim',
     );
   }
   for (const r of findRawCitations(d.draft, cites)) {

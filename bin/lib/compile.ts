@@ -363,7 +363,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       if (isPlaceholderText(sec.draft)) {
         refuseReasons.push(
           `${where}: DRAFT.md is placeholder text, not a draft (PENSMITH_NO_LLM) — ` +
-          `re-run 'pensmith write ${os.n}' with a model configured`,
+          `re-run 'pensmith write ${os.n} --force' with a model configured`,
         );
         continue;
       }

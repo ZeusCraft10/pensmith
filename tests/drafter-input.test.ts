@@ -70,6 +70,10 @@ test('draft problems: keys outside the section\'s sources, citations typed as te
   assert.match(draftProblems({ draft: 'It works, see doi:10.48550/arXiv.1706.03762.', gaps: [] }, ['vaswani2017']).join(), /as text/);
   assert.match(draftProblems({ draft: 'It works [@ vaswani2017].', gaps: [] }, ['vaswani2017']).join(), /not a citation pensmith can read/);
   assert.deepEqual(draftProblems({ draft: '\n  \n', gaps: [] }, ['vaswani2017']), ['the draft is empty']);
+  // A draft that cites none of the section's sources fails verify, so it is sent back here.
+  assert.match(draftProblems({ draft: 'Attention suffices for translation.', gaps: [] }, ['vaswani2017']).join(), /cites none of this section's sources \(vaswani2017\)/);
+  assert.match(draftProblems({ draft: 'It works [@devlin2018].', gaps: [] }, ['vaswani2017']).join(), /cites none of this section's sources/);
+  assert.deepEqual(draftProblems({ draft: 'The argument in brief.', gaps: [] }, []), [], 'a section with no sources may cite none');
 });
 
 test('the section-drafter prompt\'s own example is a draft the schema and the checks accept', () => {

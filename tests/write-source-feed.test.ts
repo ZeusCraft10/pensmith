@@ -271,6 +271,38 @@ test('a citation written as text, or an empty draft, is sent back too', async ()
   assert.ok(!existsSync(draftFile(root, 1)));
 });
 
+test('a draft that cites none of its section\'s sources is sent back once, then refused, since verify would fail it', async () => {
+  const root = await paper();
+  const calls: Call[] = [];
+  _setGeneratorForTest(drafter(calls, () => ({ draft: 'Cohort studies agree that daily use predicts later anxiety.', gaps: [] })));
+  const res = await runWrite(root, { n: 1 });
+  assert.equal(res['exitCode'], 2, stderr);
+  assert.equal(calls.length, 2, 'the first answer is sent back once');
+  assert.match(calls[1]!.messages.at(-1)!.content, /cites none of this section's sources \(hayes2020, okafor2021\)/);
+  assert.match(stderr, /cites none of this section's sources/);
+  assert.ok(!existsSync(draftFile(root, 1)), 'nothing was saved');
+
+  // Repaired on the second answer, it is saved.
+  process.exitCode = 0;
+  const answers = [
+    { draft: 'Cohort studies agree that daily use predicts later anxiety.', gaps: [] },
+    { draft: 'Cohort studies agree that daily use predicts later anxiety [@hayes2020].', gaps: [] },
+  ];
+  _setGeneratorForTest(drafter([], () => answers.shift()));
+  const fixed = await runWrite(root, { n: 1 });
+  assert.equal(fixed['exitCode'], 0, stderr);
+  assert.deepEqual(keysIn(readFileSync(draftFile(root, 1), 'utf8')), ['hayes2020']);
+});
+
+test('a section whose plan assigns no sources is drafted to cite none, and write says so', async () => {
+  const root = await paper();
+  _setGeneratorForTest(drafter([], citeWhatYouSee));
+  const res = await runWrite(root, { 'max-parallel': '1' });
+  assert.equal(res['exitCode'], 0, stderr);
+  assert.match(stderr, /section 3 \(conclusion\) has no assigned sources, so it is drafted to cite none/);
+  assert.doesNotMatch(stderr, /section [12] \([a-z]+\) has no assigned sources/, 'only the source-less section is named');
+});
+
 test('a section with no sources cites none: a citation of any library work is refused', async () => {
   const root = await paper();
   const calls: Call[] = [];

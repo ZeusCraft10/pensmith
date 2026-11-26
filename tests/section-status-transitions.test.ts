@@ -22,8 +22,13 @@ import { planCommand } from '../bin/cli/plan.js';
 import { writeCommand } from '../bin/cli/write.js';
 import { verifyCommand } from '../bin/cli/verify.js';
 
+// A PLAN.md as `pensmith plan` writes it: write checks its frontmatter
+// against the PLAN.md schema (section, slug and title included).
 const PLAN = [
   '---',
+  'section: 1',
+  'slug: intro',
+  'title: Introduction',
   'status: planned',
   'assigned_sources: []',
   '---',

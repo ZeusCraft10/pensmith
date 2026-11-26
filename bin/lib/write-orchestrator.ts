@@ -32,7 +32,7 @@
 import { Semaphore } from './budget.js';
 import type { ParsedOutline } from './outline-parse.js';
 import { readOutlineOrThrow } from './outline-read.js';
-import { parseFrontmatter } from './frontmatter.js';
+import { frontmatterProblem, parseFrontmatter } from './frontmatter.js';
 import { sectionPlan } from './paths.js';
 import { PlanFrontmatterSchema, type PlanFrontmatter } from './schemas/plan-frontmatter.js';
 import { buildWaveGraph, runWave } from './scheduler.js';
@@ -116,25 +116,42 @@ export function draftRefusal(n: number, status: string, force: boolean): string 
   return `it is already drafted (status ${status}); nothing was changed. Run \`pensmith write ${n} --force\` to draft it again (the current DRAFT.md is kept as DRAFT.md.bak)`;
 }
 
+/** A section's PLAN.md: its text, its checked frontmatter and its body. */
+export interface SectionPlanFile {
+  text: string;
+  frontmatter: PlanFrontmatter;
+  body: string;
+}
+
 /**
- * Read a single section's PLAN.md frontmatter and validate it against
+ * Read a single section's PLAN.md and validate its frontmatter against
  * PlanFrontmatterSchema. Returns `null` when the PLAN.md is absent — the
  * scheduler treats a not-yet-planned section as "skip this run" (D-04).
+ * Throws when it cannot be read or its frontmatter cannot be used.
  */
-async function loadPlanFrontmatter(
-  paperRoot: string,
-  n: number,
-  slug: string,
-): Promise<PlanFrontmatter | null> {
-  let raw: string;
+export async function loadSectionPlan(paperRoot: string, n: number, slug: string): Promise<SectionPlanFile | null> {
+  let text: string;
   try {
-    raw = await readFile(sectionPlan(n, slug, paperRoot), 'utf8');
+    text = await readFile(sectionPlan(n, slug, paperRoot), 'utf8');
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw err;
   }
-  const { frontmatter } = parseFrontmatter(raw);
-  return PlanFrontmatterSchema.parse(frontmatter);
+  // A YAML slip (a lost colon, a deleted closing ---) can still parse, as a
+  // PLAN.md with no status, which reads as a stub. It is the user's broken
+  // plan, not a stub, and `pensmith plan N` refuses to replace it without --force.
+  const problem = frontmatterProblem(text);
+  if (problem !== null) throw new Error(`its frontmatter cannot be read: ${problem}`);
+  const { frontmatter, body } = parseFrontmatter(text);
+  return { text, frontmatter: PlanFrontmatterSchema.parse(frontmatter), body };
+}
+
+/** Why section `n` is not drafted when loadSectionPlan threw `e` for its PLAN.md, with what to do. */
+export function unusablePlanReason(n: number, e: unknown): string {
+  const why = e instanceof ZodError
+    ? e.issues.map((i) => `${i.path.join('.') || '(frontmatter)'}: ${i.message}`).join('; ')
+    : (e as Error).message;
+  return `its PLAN.md cannot be used (${why}); plan it again with \`pensmith plan ${n} --force\``;
 }
 
 /**
@@ -175,16 +192,13 @@ export async function runAllSections(
   for (const s of outline.sections) {
     if (allow && !allow.has(s.slug)) continue;
     try {
-      const plan = await loadPlanFrontmatter(paperRoot, s.n, s.slug);
+      const plan = (await loadSectionPlan(paperRoot, s.n, s.slug))?.frontmatter;
       if (!plan) continue;
       const refusal = draftRefusal(s.n, plan.status, opts.force === true);
       if (refusal) skipped.push({ slug: s.slug, n: s.n, status: 'skipped', error: refusal });
       else plans.set(s.slug, plan);
     } catch (e) {
-      const why = e instanceof ZodError
-        ? e.issues.map((i) => `${i.path.join('.') || '(frontmatter)'}: ${i.message}`).join('; ')
-        : (e as Error).message;
-      unusable.push({ slug: s.slug, n: s.n, status: 'failed', error: `its PLAN.md cannot be used (${why}); plan it again with \`pensmith plan ${s.n} --force\``, unusablePlan: true });
+      unusable.push({ slug: s.slug, n: s.n, status: 'failed', error: unusablePlanReason(s.n, e), unusablePlan: true });
     }
   }
 

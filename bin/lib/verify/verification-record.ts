@@ -178,7 +178,7 @@ export function decideStatus(input: StatusInput): StatusDecision {
   if (uncited) {
     decision.reason =
       `the draft cites none of its assigned sources (${input.assignedSources.join(', ')}), so none of its claims was checked — ` +
-      `redraft it with citations (\`pensmith write ${input.section}\`), or empty assigned_sources in PLAN.md if the section needs none`;
+      `redraft it with citations (\`pensmith write ${input.section} --force\`), or empty assigned_sources in PLAN.md if the section needs none`;
   }
   return decision;
 }

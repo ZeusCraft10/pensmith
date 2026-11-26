@@ -133,13 +133,13 @@ export const verifyCommand = defineCommand({
     if (isPlaceholderText(draftMd)) {
       const reason =
         `DRAFT.md is placeholder text from PENSMITH_NO_LLM, not a draft — re-run ` +
-        `\`pensmith write ${n}\` with a model configured.`;
+        `\`pensmith write ${n} --force\` with a model configured.`;
       await refuse('failed', reason, draftBytes);
       process.stdout.write(`pensmith verify: section ${n} ${reason} Wrote failed VERIFICATION.md to ${verifPath}\n`);
       return { ok: false, status: 'failed', path: verifPath };
     }
     if (draftMd.trim().length === 0) {
-      const reason = `DRAFT.md is empty, so there is nothing to verify — re-run \`pensmith write ${n}\`.`;
+      const reason = `DRAFT.md is empty, so there is nothing to verify — re-run \`pensmith write ${n} --force\`.`;
       await refuse('failed', reason, draftBytes);
       process.stdout.write(`pensmith verify: section ${n} ${reason} Wrote failed VERIFICATION.md to ${verifPath}\n`);
       return { ok: false, status: 'failed', path: verifPath };

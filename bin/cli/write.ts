@@ -20,9 +20,9 @@ import path from 'node:path';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { readGoalFromConfig } from './goal.js';
 import { sectionDraft, sectionPlan, paperDir } from '../lib/paths.js';
-import { assignedSourcesFrom, updatePlanFrontmatter } from '../lib/plan-status.js';
+import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { draftProblems, renderDrafterPrompt, SectionDraftSchema, type DrafterInput, type SectionDraft } from '../lib/drafter-input.js';
-import { draftRefusal, runAllSections } from '../lib/write-orchestrator.js';
+import { draftRefusal, loadSectionPlan, runAllSections, unusablePlanReason, type SectionPlanFile } from '../lib/write-orchestrator.js';
 import { lastCheckedOutline, readOutline } from '../lib/outline-read.js';
 import type { SectionNode } from '../lib/schemas/wave-graph.js';
 import { styleMatchToVoiceHint } from '../lib/style-match.js';
@@ -36,7 +36,6 @@ import { loadLibrary } from '../lib/library.js';
 import { sourceContext } from '../lib/source-context.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { resolveSectionSlug, sectionNumberArg } from '../lib/section-slug.js';
-import { readSectionState } from '../lib/router.js';
 import { artifactText } from '../lib/placeholder.js';
 import { EXIT_REFUSED } from '../lib/exit-codes.js';
 import { CostCapExceededError } from '../lib/budget.js';
@@ -165,7 +164,15 @@ function readAssignedSources(planPath: string): string[] {
 
 /** The works a section's plan assigns, from LIBRARY.json, with the keys it holds none for. */
 async function sectionSources(root: string, n: number, slug: string, assigned: string[]): Promise<DrafterInput['sources']> {
-  if (assigned.length === 0) return [];
+  if (assigned.length === 0) {
+    // An introduction or conclusion may need none, but the author should
+    // know the drafter had nothing to cite.
+    process.stderr.write(
+      `pensmith write: section ${n} (${slug}) has no assigned sources, so it is drafted to cite none; ` +
+        'a claim that needs a source is listed as a gap, not written.\n',
+    );
+    return [];
+  }
   let library;
   try {
     library = await loadLibrary(root);
@@ -212,16 +219,20 @@ function reportGaps(n: number, slug: string, gaps: SectionDraft['gaps']): void {
 async function writeOneSection(n: number, slug: string, force: boolean): Promise<string> {
   const paperRoot = process.cwd();
   const planPath = sectionPlan(n, slug, paperRoot);
-  const refusal = draftRefusal(n, readSectionState(planPath).status, force);
-  if (refusal) throw new DraftRefusedError(`not drafted: ${refusal}.`);
-  let planMd = '';
+  // The PLAN.md is checked as a wave write checks it: one that cannot be
+  // read, or whose frontmatter cannot be used, is planned again with --force.
+  let plan: SectionPlanFile | null;
   try {
-    planMd = readFileSync(planPath, 'utf8');
-  } catch {
-    planMd = '';
+    plan = await loadSectionPlan(paperRoot, n, slug);
+  } catch (e) {
+    throw new DraftRefusedError(`not drafted: ${unusablePlanReason(n, e)}.`);
   }
-  const { frontmatter, body } = parseFrontmatter(planMd);
-  const assigned = assignedSourcesFrom(frontmatter);
+  const status = plan?.frontmatter.status ?? 'stub';
+  const refusal = draftRefusal(n, status, force);
+  if (refusal || !plan) throw new DraftRefusedError(`not drafted: ${refusal ?? 'it has no PLAN.md'}.`);
+  const planMd = plan.text;
+  const body = plan.body;
+  const assigned = plan.frontmatter.assigned_sources;
   const sources = await sectionSources(paperRoot, n, slug, assigned);
 
   const outline = lastCheckedOutline(paperRoot);
@@ -245,11 +256,16 @@ async function writeOneSection(n: number, slug: string, force: boolean): Promise
   };
   const system = renderDrafterPrompt(input, assigned);
 
-  // 'writing' before the call: a draft that fails leaves the section to be
-  // written again, never stranded.
-  await updatePlanFrontmatter(planPath, (fm) => {
-    fm.status = 'writing';
-  });
+  // A planned section is 'writing' during the call, so a draft that does not
+  // finish leaves it to be written again. A drafted section being drafted
+  // again (--force) keeps its status until the new draft is saved: its
+  // DRAFT.md is unchanged until then, and 'writing' would let a plain
+  // `pensmith write` replace it.
+  if (status === 'planned') {
+    await updatePlanFrontmatter(planPath, (fm) => {
+      fm.status = 'writing';
+    });
+  }
 
   const sourceKeys = sources.map((s) => s.citekey);
   const answer = await completeChecked({
@@ -327,6 +343,11 @@ export const writeCommand = defineCommand({
   },
   async run({ args }) {
     const force = args.force === true;
+    // An <n> that is not a section number is invalid input (exit 2), with a
+    // key or without one.
+    const waveMode = args.n === undefined || args.n === null || args.n === '';
+    const n = waveMode ? null : sectionNumberArg('write', args.n);
+    if (!waveMode && n === null) return { ok: false, mode: 'invalid-input' };
     // Without a key there is no drafter to ask, and write says so before it
     // looks at any section (in a wave, before the first one starts).
     if (process.env['PENSMITH_NO_LLM'] !== '1') {
@@ -350,7 +371,7 @@ export const writeCommand = defineCommand({
     // When <n> is absent, schedule the sections that have something to draft
     // into waves and write them wave by wave, each through writeOneSection.
     // Progress streams as JSON lines to stdout; warnings go to stderr.
-    if (args.n === undefined || args.n === null || args.n === '') {
+    if (n === null) {
       const rawMax = typeof args['max-parallel'] === 'string' ? Number(args['max-parallel']) : DEFAULT_MAX_PARALLEL;
       const maxParallel = Number.isInteger(rawMax) && rawMax >= 1 ? rawMax : DEFAULT_MAX_PARALLEL;
 
@@ -459,8 +480,6 @@ export const writeCommand = defineCommand({
     }
 
     // ---- Single-section mode: positional <n> present ----
-    const n = sectionNumberArg('write', args.n);
-    if (n === null) return { ok: false, mode: 'invalid-input' };
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
     const paperRoot = process.cwd();
