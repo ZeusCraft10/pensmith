@@ -21,6 +21,7 @@ import { loadState } from './state.js';
 import { readOutline } from './outline-read.js';
 import { paperDir, sectionPlan } from './paths.js';
 import { needsRealPlan, readSectionState, recordedSectionDecision, researchDone, sectionVerb, type RouterDecision } from './router.js';
+import { draftRefusal } from './write-orchestrator.js';
 import { callCost, resolveCall } from './llm-config.js';
 import type { LlmRole } from './generator.js';
 import { DEFAULT_COST_CAP_USD } from './budget.js';
@@ -97,11 +98,8 @@ function stepsAfter(d: RouterDecision | null): readonly Step[] {
   }
 }
 
-/**
- * A section's PLAN.md status, the steps the rest of the paper needs for it,
- * and whether a wave write drafts it (`waveDrafts`).
- */
-interface Section { n: number; status: string | null; steps: readonly Step[]; waveDrafts: boolean }
+/** The steps the rest of the paper needs for a section, and whether a wave write drafts it. */
+interface Section { n: number; steps: readonly Step[]; waveDrafts: boolean }
 
 /** Which steps, with which labels, `verb` (null: the rest of the paper) would run. */
 function plannedSteps(
@@ -176,10 +174,10 @@ export async function projectEstimate(args: {
           : needsRealPlan(r)
             ? SECTION_PIPELINE
             : remainingSteps(status);
-        // A wave write drafts a planned or half-drafted section, never a stub,
-        // a PLAN.md it cannot read, or a placeholder one.
-        const waveDrafts = sectionVerb(r.status) === 'write' && !needsRealPlan(r);
-        return { n, status, steps, waveDrafts };
+        // A wave write drafts what runAllSections does (draftRefusal), and
+        // never a PLAN.md it cannot read or a placeholder one.
+        const waveDrafts = draftRefusal(n, r.status, false) === null && !needsRealPlan(r);
+        return { n, steps, waveDrafts };
       });
     const steps = plannedSteps(args.verb ?? null, args.n ?? null, sections, {
       researched: researchDone(pDir) === true,

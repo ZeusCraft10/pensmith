@@ -26,7 +26,7 @@
 // `runPass3(draftMd, bibByCitekey, fieldsByCitekey)` checks a draft.
 
 import { matchQuote, type QuoteSource } from './quote-match.js';
-import { arxivText, openAccessText, type SourceText } from './source-text.js';
+import { workText } from './source-text.js';
 import { workIdentifiers } from './resolve.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../network-mode.js';
 import { arxivFromDoi } from '../doi.js';
@@ -106,7 +106,7 @@ export async function runPass3(
       continue;
     }
 
-    const got = await sourceText(doi, arxiv, texts);
+    const got = await workText({ doi, arxiv }, texts);
     if (got.kind === 'none') {
       push(got.scanned ? 'TEXT_UNAVAILABLE' : 'PDF_UNAVAILABLE', got.reason);
       continue;
@@ -115,31 +115,4 @@ export async function runPass3(
     push(match.found ? 'OK' : 'NOT_FOUND', `quote ${match.reason}, checked against the ${got.via} ${got.url}`);
   }
   return results;
-}
-
-/**
- * The text a quotation of a work is checked against: the first open-access
- * PDF of its DOI that gives text, else its arXiv PDF. `reason` says, for each
- * one tried, why it gave none.
- */
-async function sourceText(
-  doi: string | null,
-  arxiv: string | null,
-  texts: Map<string, QuoteSource>,
-): Promise<(Extract<SourceText, { kind: 'text' }> & { via: string }) | Extract<SourceText, { kind: 'none' }>> {
-  const reasons: string[] = [];
-  let scanned = false;
-  if (doi) {
-    const got = await openAccessText(doi, texts);
-    if (got.kind === 'text') return { ...got, via: 'OA PDF' };
-    scanned = got.scanned;
-    reasons.push(got.noLinks ? `No OA PDF available for DOI ${doi}: ${got.reason}` : `PDF fetch/parse failed: ${got.reason}`);
-  }
-  if (arxiv) {
-    const got = await arxivText(arxiv, texts);
-    if (got.kind === 'text') return { ...got, via: 'arXiv PDF' };
-    scanned ||= got.scanned;
-    reasons.push(`the arXiv PDF of ${arxiv} could not be read: ${got.reason}`);
-  }
-  return { kind: 'none', scanned, noLinks: false, reason: reasons.join('; ') };
 }

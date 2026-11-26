@@ -318,9 +318,12 @@ test('outline --yolo with a proposal still kept: it is not shown again (no exit 
   assert.deepEqual(gateFiles(root), [], 'the kept proposal is dropped');
 });
 
-/** Record `option` as the answer to the kept outline decision, as `gate answer` does before it runs outline. */
-function answerKeptOutline(root: string, option: string): void {
-  const file = join(root, '.paper', 'gates', 'outline.json');
+/**
+ * Record `option` as the answer to the kept decision `id` ('outline',
+ * 'revise-1'), as `gate answer` does before it runs the step again.
+ */
+function answerKept(root: string, id: string, option: string): void {
+  const file = join(root, '.paper', 'gates', `${id}.json`);
   const record = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
   record['answer'] = { options: [option], answered_at: new Date().toISOString() };
   writeFileSync(file, JSON.stringify(record, null, 2));
@@ -338,7 +341,7 @@ test('outline --yolo with a kept --force proposal the user approved: the approve
   assert.equal((await verb('outline', root, { yolo: true, force: false })).exit, 0, `${out}\n${err}`);
   answer = REDONE;
   assert.equal((await verb('outline', root, { yolo: false, force: true })).exit, 3, `${out}\n${err}`);
-  answerKeptOutline(root, 'approve');
+  answerKept(root, 'outline', 'approve');
 
   const r = await verb('outline', root, { yolo: true, force: false });
   assert.equal(r.exit, 0, `${out}\n${err}`);
@@ -352,7 +355,7 @@ test('outline --yolo with a kept proposal the user rejected: nothing is written,
   const calls: Call[] = [];
   _setGeneratorForTest(model(calls, () => OUTLINE));
   assert.equal((await verb('outline', root, { yolo: false, force: false })).exit, 3);
-  answerKeptOutline(root, 'reject');
+  answerKept(root, 'outline', 'reject');
   const r = await verb('outline', root, { yolo: true, force: false });
   assert.equal(r.exit, 2, `${out}\n${err}`);
   assert.ok(!existsSync(join(root, '.paper', 'OUTLINE.json')));
@@ -681,14 +684,6 @@ test('plan --revise --yolo: a model key removed between proposals stops the next
   assert.equal(readFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8'), FLAGGED);
 });
 
-/** Record `option` as the answer to section 1's kept revise change, as `gate answer` does before it runs plan --revise. */
-function answerKeptRevise(root: string, option: string): void {
-  const file = join(root, '.paper', 'gates', 'revise-1.json');
-  const record = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-  record['answer'] = { options: [option], answered_at: new Date().toISOString() };
-  writeFileSync(file, JSON.stringify(record, null, 2));
-}
-
 test('plan --revise --yolo with a kept change the user approved: exactly that change is applied, with no new proposal', async () => {
   // The answer was recorded, but the run that applies it did not finish. A
   // later `plan 1 --revise --yolo` dropped the approved change and asked the
@@ -702,7 +697,7 @@ test('plan --revise --yolo with a kept change the user approved: exactly that ch
   let answer: unknown = swap;
   _setGeneratorForTest(model(calls, () => answer));
   assert.equal((await verb('plan', root, { n: '1', revise: true, yolo: false, force: false })).exit, 3, `${out}\n${err}`);
-  answerKeptRevise(root, 'approve');
+  answerKept(root, 'revise-1', 'approve');
   answer = { ...swap, replacement_citekey: 'nobody2099', patch: { before_excerpt: '[@ghost2020]', after_excerpt: '[@nobody2099]' } };
 
   const r = await verb('plan', root, { n: '1', revise: true, yolo: true, force: false });
@@ -715,7 +710,7 @@ test('plan --revise --yolo with a kept change the user approved: exactly that ch
 test('plan --revise --yolo with a kept change the user rejected: DRAFT.md is left as it was, and the rejection stands', () => {
   const root = revisePaper();
   assert.equal(cli(root, ['plan', '1', '--revise']).status, 3);
-  answerKeptRevise(root, 'reject');
+  answerKept(root, 'revise-1', 'reject');
   const r = cli(root, ['plan', '1', '--revise', '--yolo']);
   assert.equal(r.status, 2, `${r.stdout}\n${r.stderr}`);
   assert.equal(readFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8'), FLAGGED, 'no new change is applied');

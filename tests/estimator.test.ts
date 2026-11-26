@@ -177,12 +177,13 @@ test('ERGO-02 / C4-HIGH: schema-invalid STATE.json (section missing slug) → em
 // seven-section paper was refused before it ran, though done makes one
 // advisory pass.
 
-function paperWith(statuses: string[]): string {
+/** A paper whose section i+1 has a PLAN.md of status `statuses[i]`; the outline lists `outlined` sections. */
+function paperWith(statuses: string[], outlined = statuses.length): string {
   const root = freshRoot();
   writeState(root, statuses.map((_, i) => ({ n: i + 1, slug: `s${i + 1}` })));
   mkdirSync(join(root, '.paper'), { recursive: true });
   // The outline is the section list the estimator walks.
-  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outlineTable(statuses.map((_, i) => ({ n: i + 1, slug: `s${i + 1}`, title: `S${i + 1}` })), 'Outline'));
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outlineTable(Array.from({ length: outlined }, (_, i) => ({ n: i + 1, slug: `s${i + 1}`, title: `S${i + 1}` })), 'Outline'));
   writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 2, researched_at: '2026-11-01T00:00:00Z', items: [] }));
   statuses.forEach((status, i) => {
     const plan = sectionPlan(i + 1, `s${i + 1}`, root);
@@ -190,6 +191,22 @@ function paperWith(statuses: string[]): string {
     writeFileSync(plan, `---\nsection: ${i + 1}\nslug: s${i + 1}\nstatus: ${status}\n---\n`);
   });
   return root;
+}
+
+/** Section `n`'s PLAN.md as PENSMITH_NO_LLM writes it: planned, and a placeholder. */
+function placeholderPlan(root: string, n: number): void {
+  writeFileSync(sectionPlan(n, `s${n}`, root), `---\nsection: ${n}\nslug: s${n}\nstatus: planned\nplaceholder: true\n---\n[PENSMITH_NO_LLM placeholder — plan]\n`);
+}
+
+/** Run `fn` with a model configured (PENSMITH_NO_LLM unset), as a placeholder PLAN.md is refused only then. */
+async function withModelConfigured<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = process.env['PENSMITH_NO_LLM'];
+  delete process.env['PENSMITH_NO_LLM'];
+  try {
+    return await fn();
+  } finally {
+    if (saved !== undefined) process.env['PENSMITH_NO_LLM'] = saved;
+  }
 }
 
 test('estimate: `done` on a finished seven-section paper costs only its own pass and is under half the cap', async () => {
@@ -233,15 +250,9 @@ test('estimate: a failed or unverifiable section is priced as the step the route
 test('estimate: a planned section whose PLAN.md is a placeholder is priced from planning, as the router sends it to plan --force', async () => {
   const projectEstimate = await loadProject();
   const root = paperWith(['planned', 'planned']);
-  writeFileSync(sectionPlan(1, 's1', root), '---\nsection: 1\nslug: s1\nstatus: planned\nplaceholder: true\n---\n[PENSMITH_NO_LLM placeholder — plan]\n');
-  const saved = process.env['PENSMITH_NO_LLM'];
-  delete process.env['PENSMITH_NO_LLM'];
-  try {
-    const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 5 });
-    assert.deepEqual(res.rows.map((r) => r.step), ['plan §1', 'write §1', 'verify §1', 'write §2', 'verify §2', 'done']);
-  } finally {
-    if (saved !== undefined) process.env['PENSMITH_NO_LLM'] = saved;
-  }
+  placeholderPlan(root, 1);
+  const res = await withModelConfigured(() => projectEstimate({ paperRoot: root, sessionCapUsd: 5 }));
+  assert.deepEqual(res.rows.map((r) => r.step), ['plan §1', 'write §1', 'verify §1', 'write §2', 'verify §2', 'done']);
 });
 
 test('estimate: a wave write counts only the sections that still need drafting; compile costs nothing', async () => {
@@ -258,19 +269,11 @@ test('estimate: a wave write prices only the sections it will draft, not stubs o
   // a section with no PLAN.md, and a placeholder PLAN.md when a model is
   // configured. The projection priced a draft for each of them.
   const projectEstimate = await loadProject();
-  const root = paperWith(['stub', 'planned', 'writing', 'planned', 'written']);
-  writeFileSync(sectionPlan(4, 's4', root), '---\nsection: 4\nslug: s4\nstatus: planned\nplaceholder: true\n---\n[PENSMITH_NO_LLM placeholder — plan]\n');
-  const extra = sectionPlan(6, 's6', root);
-  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outlineTable(Array.from({ length: 6 }, (_, i) => ({ n: i + 1, slug: `s${i + 1}`, title: `S${i + 1}` })), 'Outline'));
-  assert.equal(existsSync(extra), false, 'section 6 has no PLAN.md');
-  const saved = process.env['PENSMITH_NO_LLM'];
-  delete process.env['PENSMITH_NO_LLM'];
-  try {
-    const write = await projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'write' } as never);
-    assert.deepEqual(write.rows.map((r) => r.step), ['write §2', 'write §3']);
-  } finally {
-    if (saved !== undefined) process.env['PENSMITH_NO_LLM'] = saved;
-  }
+  const root = paperWith(['stub', 'planned', 'writing', 'planned', 'written'], 6);
+  placeholderPlan(root, 4);
+  assert.equal(existsSync(sectionPlan(6, 's6', root)), false, 'section 6 has no PLAN.md');
+  const write = await withModelConfigured(() => projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'write' } as never));
+  assert.deepEqual(write.rows.map((r) => r.step), ['write §2', 'write §3']);
 });
 
 test('estimate: steps are priced with the model runtime.json configures', async () => {

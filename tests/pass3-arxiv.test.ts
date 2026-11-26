@@ -20,9 +20,7 @@ import { reCheckFinalMd } from '../bin/cli/done.js';
 import { runPass3 } from '../bin/lib/verify/pass3.js';
 import { parseBibForPass1 } from '../bin/lib/verify/pass1.js';
 import { readIntake } from '../bin/lib/intake-record.js';
-import type { VerificationRecord } from '../bin/lib/verify/verification-record.js';
 import { runCli } from './lib/export-fixture.js';
-import { outlineTable } from './lib/outline-fixture.js';
 import { verifySection } from './lib/verify-cli.js';
 
 // As CITATIONS.bib writes a work kept under its arXiv record.
@@ -64,8 +62,7 @@ test('a work with a DOI, printed with only its arXiv ID, is checked against its 
 
 test('verify checks a quotation of a computer-science work added by its arXiv ID, and blocks a changed one', () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-pass3-arxiv-'));
-  const sec = join(root, '.paper', 'sections', '01-intro');
-  mkdirSync(sec, { recursive: true });
+  mkdirSync(join(root, '.paper'), { recursive: true });
   writeFileSync(join(root, '.paper', 'INTAKE.md'), '# Intake\n\nTopic: promise constraint satisfaction\nDiscipline: computer-science\n');
   assert.equal(readIntake(root)?.discipline, 'computer-science');
 
@@ -76,22 +73,14 @@ test('verify checks a quotation of a computer-science work added by its arXiv ID
   assert.doesNotMatch(bib, /\bdoi = /i, 'kept under its arXiv record alone');
   const key = /^@\w+\{([^,]+),/m.exec(bib)![1]!;
 
-  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outlineTable([{ n: 1, slug: 'intro', title: 'Introduction', sources: [key] }]));
-  writeFileSync(join(sec, 'PLAN.md'), `---\nsection: 1\nslug: intro\ntitle: Introduction\nstatus: written\nassigned_sources: [${key}]\n---\n# Introduction\n`);
-  const verify = (quote: string): { status: number | null; out: string; quotes: VerificationRecord['quotes'] } => {
-    writeFileSync(join(sec, 'DRAFT.md'), quoting(key, quote));
-    const r = runCli(['verify', '1'], root);
-    const record = JSON.parse(readFileSync(join(sec, 'VERIFICATION.json'), 'utf8')) as VerificationRecord;
-    return { status: r.status, out: r.stdout + r.stderr, quotes: record.quotes };
-  };
-
-  const ok = verify(NOTE_SAYS);
+  // verify reads no intake, so the bibliography `add` wrote is verified on its own.
+  const ok = verifySection(quoting(key, NOTE_SAYS), bib);
   assert.equal(ok.status, 0, ok.out);
-  assert.deepEqual(ok.quotes.map((q) => q.verdict), ['OK'], ok.out);
+  assert.deepEqual(ok.record.quotes.map((q) => q.verdict), ['OK'], ok.out);
 
-  const changed = verify(NOTE_CHANGED);
+  const changed = verifySection(quoting(key, NOTE_CHANGED), bib);
   assert.equal(changed.status, 2, changed.out);
-  assert.deepEqual(changed.quotes.map((q) => q.verdict), ['NOT_FOUND'], changed.out);
+  assert.deepEqual(changed.record.quotes.map((q) => q.verdict), ['NOT_FOUND'], changed.out);
 });
 
 test('verify reads a work\'s arXiv ID from its eprint field alone, as a hand-written bibliography gives it', () => {

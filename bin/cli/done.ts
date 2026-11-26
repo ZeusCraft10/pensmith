@@ -29,7 +29,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { runPass3 } from '../lib/verify/pass3.js';
-import { readBibText } from '../lib/verify/pass1.js';
+import { parseBibForPass1, readBibText, type Bib } from '../lib/verify/pass1.js';
 import { extractQuotes } from '../lib/quote-extractor.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { PLAGIARISM_SKIPS, runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
@@ -44,7 +44,6 @@ import {
 } from '../lib/exporter.js';
 import { paperDir, paperFinalFile, paperFinalStagedFile, sectionDirName } from '../lib/paths.js';
 import { closeGate, gateStillApplies, openGate, readGate, stopForAnswer } from '../lib/gates.js';
-import { parseBibByCitekey, parseBibFieldsByCitekey } from '../lib/citations.js';
 import { resolveCitationStyle } from '../lib/citation-style.js';
 import { isPandocPresent } from '../lib/ecosystem-presence.js';
 import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
@@ -522,12 +521,10 @@ export async function reCheckFinalMd(
     // Unreadable: read as an empty library.
   }
 
-  let bibByCitekey: Map<string, { DOI?: string }>;
-  let fieldsByCitekey: Map<string, Record<string, string>>;
+  // Read as Pass 1 reads it: the raw fields hold an arXiv ID, which citation-js drops.
+  let bib: Bib;
   try {
-    bibByCitekey = await parseBibByCitekey<{ DOI?: string }>(bibText);
-    // The raw fields hold an arXiv ID, which citation-js drops.
-    fieldsByCitekey = await parseBibFieldsByCitekey(bibText);
+    bib = await parseBibForPass1(bibText);
   } catch {
     // Unparseable bib → skip-clean (no DOIs to check against).
     return { passed: true, reason: '' };
@@ -535,10 +532,10 @@ export async function reCheckFinalMd(
 
   let pass3Results;
   try {
-    pass3Results = await runPass3(finalMd, bibByCitekey, fieldsByCitekey);
+    pass3Results = await runPass3(finalMd, bib.entries, bib.fields);
   } catch (err) {
     // GATE-04 FAIL-CLOSED: an unexpected runPass3 error is NOT a clean pass.
-    // We already have a valid bibByCitekey map here, so an exception is unexpected
+    // We already have a valid bibliography here, so an exception is unexpected
     // (not a "nothing to do" case like the bib-parse catch above). Fail closed so
     // a humanizer-introduced NOT_FOUND quote that also triggers a runPass3 bug
     // cannot silently escape the gate. Log to stderr and block export.

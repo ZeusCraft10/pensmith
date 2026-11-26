@@ -4,8 +4,9 @@
 // For a work with a DOI, the PDF links come from OpenAlex first, which needs
 // no contact email. When none of them gives text, Unpaywall is asked too, if
 // PENSMITH_CONTACT_EMAIL is set (Unpaywall refuses a request without one): it
-// often knows another copy. Each link is tried in turn until one gives a PDF.
-// A work known by its arXiv ID is read from arXiv's own PDF of it.
+// often knows another copy. A work known by its arXiv ID is then read from
+// arXiv's own PDF of it. Each link is tried once, in turn, until one gives a
+// PDF.
 //
 // A PDF is fetched as bytes, never through the UTF-8 text body, which destroys
 // its compressed streams, and never through the HTTP cache, which stores text.
@@ -75,13 +76,17 @@ async function fetchPdf(url: string): Promise<{ bytes: Buffer } | { reason: stri
   return { reason: 'too many redirects' };
 }
 
-export type SourceText =
-  | { kind: 'text'; url: string; source: QuoteSource }
-  /** `noLinks`: no registry listed an open-access PDF, so nothing was fetched. */
-  | { kind: 'none'; scanned: boolean; noLinks: boolean; reason: string };
-
 /** A text found: the PDF link it came from, and the text prepared for matching. */
-type FoundText = Extract<SourceText, { kind: 'text' }>;
+interface FoundText {
+  kind: 'text';
+  url: string;
+  source: QuoteSource;
+}
+
+export type SourceText =
+  /** `via`: the copy the text was read from ("OA PDF", "arXiv PDF"). */
+  | (FoundText & { via: string })
+  | { kind: 'none'; scanned: boolean; reason: string };
 
 /**
  * The text of the first PDF among `urls` that gives one, adding why each
@@ -133,48 +138,52 @@ function linksFrom(registry: string, a: OaPdfAnswer, notes: string[]): string[] 
 }
 
 /**
- * The text of the first open-access PDF of `doi` that gives one: OpenAlex's
- * links first, then Unpaywall's links not tried yet. `seen` holds the texts
- * already read in this run, by link.
+ * The text of the first PDF of a work that gives one: its DOI's open-access
+ * links (OpenAlex's, then Unpaywall's), then arXiv's PDF of its arXiv ID
+ * (`2003.02433`, `cs/0112017`), which a work kept under its arXiv record, and
+ * many computer-science papers with no DOI at all, can still be read from. A
+ * link is fetched once: OpenAlex lists an arXiv preprint's PDF at the same
+ * address. `seen` holds the texts already read in this run, by link. The
+ * `reason` of none says, for the DOI and the arXiv ID, why each gave no text.
  */
-export async function openAccessText(doi: string, seen: Map<string, QuoteSource>): Promise<SourceText> {
-  const notes: string[] = [];
-  const failures: string[] = [];
+export async function workText(
+  ids: { doi: string | null; arxiv: string | null },
+  seen: Map<string, QuoteSource>,
+): Promise<SourceText> {
+  const reasons: string[] = [];
   const tried = new Set<string>();
   let scanned = false;
-  const fromRegistry = async (registry: string, answer: OaPdfAnswer): Promise<FoundText | null> => {
-    const urls = linksFrom(registry, answer, notes).filter((u) => !tried.has(u)).slice(0, MAX_LINKS);
-    for (const u of urls) tried.add(u);
-    const got = await firstPdfText(urls, seen, failures);
+  /** The text of the first of `urls` not tried yet that gives one, adding why each other failed to `failures`. */
+  const read = async (urls: readonly string[], failures: string[]): Promise<FoundText | null> => {
+    const fresh = urls.filter((u) => !tried.has(u)).slice(0, MAX_LINKS);
+    for (const u of fresh) tried.add(u);
+    const got = await firstPdfText(fresh, seen, failures);
     if (got.kind === 'text') return got;
     scanned ||= got.scanned;
     return null;
   };
-  const viaOpenAlex = await fromRegistry('OpenAlex', await openAlexPdfs(doi));
-  if (viaOpenAlex) return viaOpenAlex;
-  if (contactEmail()) {
-    const viaUnpaywall = await fromRegistry('Unpaywall', await unpaywallPdfs(doi));
-    if (viaUnpaywall) return viaUnpaywall;
-  } else {
-    notes.push('set PENSMITH_CONTACT_EMAIL so Unpaywall can be asked too');
+  if (ids.doi) {
+    const notes: string[] = [];
+    const failures: string[] = [];
+    const viaOpenAlex = await read(linksFrom('OpenAlex', await openAlexPdfs(ids.doi), notes), failures);
+    if (viaOpenAlex) return { ...viaOpenAlex, via: 'OA PDF' };
+    if (contactEmail()) {
+      const viaUnpaywall = await read(linksFrom('Unpaywall', await unpaywallPdfs(ids.doi), notes), failures);
+      if (viaUnpaywall) return { ...viaUnpaywall, via: 'OA PDF' };
+    } else {
+      notes.push('set PENSMITH_CONTACT_EMAIL so Unpaywall can be asked too');
+    }
+    const why = [...failures, ...notes].join('; ');
+    // Nothing was tried when no registry listed an open-access PDF.
+    reasons.push(tried.size === 0 ? `No OA PDF available for DOI ${ids.doi}: ${why}` : `PDF fetch/parse failed: ${why}`);
   }
-  return { kind: 'none', scanned, noLinks: tried.size === 0, reason: [...failures, ...notes].join('; ') };
-}
-
-/** Where arXiv serves the PDF of `id`: its latest version, or the one `id` names ("2003.02433v2"). */
-export function arxivPdfUrl(id: string): string {
-  return `https://arxiv.org/pdf/${id}`;
-}
-
-/**
- * The text of the arXiv PDF of `id` (`2003.02433`, `cs/0112017`). A work kept
- * under its arXiv record prints no DOI, and many computer-science papers have
- * none, but arXiv serves its text. Fetched as any other PDF link, through the
- * SSRF guard and the body cap.
- */
-export async function arxivText(id: string, seen: Map<string, QuoteSource>): Promise<SourceText> {
-  const failures: string[] = [];
-  const got = await firstPdfText([arxivPdfUrl(id)], seen, failures);
-  if (got.kind === 'text') return got;
-  return { kind: 'none', scanned: got.scanned, noLinks: false, reason: failures.join('; ') };
+  // arXiv serves the latest version, or the one the ID names ("2003.02433v2").
+  const arxivPdf = ids.arxiv ? `https://arxiv.org/pdf/${ids.arxiv}` : null;
+  if (arxivPdf && !tried.has(arxivPdf)) {
+    const failures: string[] = [];
+    const viaArxiv = await read([arxivPdf], failures);
+    if (viaArxiv) return { ...viaArxiv, via: 'arXiv PDF' };
+    reasons.push(`the arXiv PDF of ${ids.arxiv} could not be read: ${failures.join('; ')}`);
+  }
+  return { kind: 'none', scanned, reason: reasons.join('; ') };
 }

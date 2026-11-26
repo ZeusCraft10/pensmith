@@ -192,21 +192,14 @@ function wordsAfter(block: readonly string[], opening: readonly string[], last: 
  */
 function anotherWorkAbove(c: SourceCandidate, block: readonly string[], first: number): boolean {
   const above = block.slice(0, first);
-  return above.some(
-    (line, i) =>
-      NOTICE.test(line) ||
-      (!label(line) && (namesSomeoneElse(c, line) || (titleLike(line) && !proseAt(above, i) && !bylineOf(c, line)))),
-  );
-}
-
-/** Whether `line` reads as a byline and names someone who is not one of `c`'s authors. */
-function namesSomeoneElse(c: SourceCandidate, line: string): boolean {
-  return bylineNames(line)?.some((name) => shareNamed(c, bylineWords(name)) === 0) ?? false;
-}
-
-/** Whether `line` reads as a byline that names only `c`'s authors. */
-function bylineOf(c: SourceCandidate, line: string): boolean {
-  return bylineNames(line)?.every((name) => shareNamed(c, bylineWords(name)) > 0) ?? false;
+  return above.some((line, i) => {
+    if (NOTICE.test(line)) return true;
+    if (label(line)) return false;
+    // A byline is another work's when it names someone who is not one of `c`'s authors.
+    const names = bylineNames(line);
+    if (names) return names.some((name) => shareNamed(c, bylineWords(name)) === 0);
+    return titleLike(line) && !proseAt(above, i);
+  });
 }
 
 // Lower-case words that cannot end a sentence ("... hereby grants permission
@@ -520,8 +513,9 @@ export async function hydrateFromText(text: string): Promise<Hydration> {
     notes.push(whyNot(p.shown, r, spans.length > 0));
   }
   const others = notes.length ? `, and ${notes.join('; ')}` : '';
+  const refused = (why: string): Hydration => ({ kind: 'none', reason: `${why}${others}${ADD_BY_ID}` });
   const title = titleLine(block);
-  if (!title) return { kind: 'none', reason: `no title line could be read from the PDF${others}${ADD_BY_ID}` };
+  if (!title) return refused('no title line could be read from the PDF');
   const hits = await crossrefSearch(title, { limit: 5 });
   const openingNames = nameWords(openingText);
   const ranked: RankedHit[] = [];
@@ -542,15 +536,13 @@ export async function hydrateFromText(text: string): Promise<Hydration> {
   }
   const [best, next] = ranked.sort(rankHits);
   if (best && next && rankHits(best, next) === 0) {
-    return {
-      kind: 'none',
-      reason:
-        `Crossref has several works titled "${title}" whose authors the PDF names alike ` +
-        `(${[best, next].map((r) => r.hit.doi ?? r.hit.title).join(', ')})${others}${ADD_BY_ID}`,
-    };
+    return refused(
+      `Crossref has several works titled "${title}" whose authors the PDF names alike ` +
+        `(${[best, next].map((r) => r.hit.doi ?? r.hit.title).join(', ')})`,
+    );
   }
   if (best) return { kind: 'found', candidate: best.hit, via: `a Crossref title search for "${title}"` };
-  return { kind: 'none', reason: `Crossref has no work titled "${title}" by an author the PDF names${others}${ADD_BY_ID}` };
+  return refused(`Crossref has no work titled "${title}" by an author the PDF names`);
 }
 
 // What a refused PDF's reason ends with: the way to add the work anyway.

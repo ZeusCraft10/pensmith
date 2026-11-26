@@ -218,8 +218,7 @@ export const planCommand = defineCommand({
       return { ok: false, mode: 'no-library' };
     }
     const libraryKeys = new Set(library.entries.map((e) => e.id));
-    // The planner is told the outline's purpose for section n.
-    const entry = { ...sectionEntry(outline, n, slug), purpose: outline?.stored?.sections.find((x) => x.n === n)?.purpose ?? '' };
+    const entry = sectionEntry(outline, n, slug);
     const intake = readIntake(root);
     const system = interpolate(loadPrompt('section-planner'), {
       section: escapeTemplateTokens(JSON.stringify({
