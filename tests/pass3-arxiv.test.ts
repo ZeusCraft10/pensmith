@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { reCheckFinalMd } from '../bin/cli/done.js';
 import { runPass3 } from '../bin/lib/verify/pass3.js';
 import { parseBibForPass1 } from '../bin/lib/verify/pass1.js';
 import { readIntake } from '../bin/lib/intake-record.js';
@@ -100,4 +101,21 @@ test('verify reads a work\'s arXiv ID from its eprint field alone, as a hand-wri
   const changed = verifySection(quoting('wrochna2022', NOTE_CHANGED), NOTE_BIB);
   assert.equal(changed.status, 2, changed.out);
   assert.deepEqual(changed.record.quotes.map((q) => q.verdict), ['NOT_FOUND'], changed.out);
+});
+
+test('done\'s check of a humanized FINAL.md reads a work\'s arXiv ID from its eprint field, and blocks a quotation its arXiv PDF does not print', async () => {
+  // The humanizer's output is checked against the source itself, not only
+  // against DRAFT.md: a DRAFT.md quotation that was never in the source must
+  // not reach the export because FINAL.md repeats it word for word.
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-pass3-arxiv-final-'));
+  const bibPath = join(root, 'CITATIONS.bib');
+  writeFileSync(bibPath, NOTE_BIB);
+
+  const real = quoting('wrochna2022', NOTE_SAYS);
+  assert.deepEqual(await reCheckFinalMd(real, real, bibPath), { passed: true, reason: '' });
+
+  const changed = quoting('wrochna2022', NOTE_CHANGED);
+  const r = await reCheckFinalMd(changed, changed, bibPath);
+  assert.equal(r.passed, false, r.reason);
+  assert.match(r.reason, /Pass-3 quote NOT_FOUND in humanized FINAL\.md: \[@wrochna2022\]/);
 });
