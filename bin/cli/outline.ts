@@ -184,13 +184,14 @@ export const outlineCommand = defineCommand({
     // outline it was made to replace: apply their answer, ask at a terminal,
     // or show the same decision again, with no new model call. It is applied
     // under the flags it was proposed with (`--force` replaces the outline,
-    // `--no-counter` waives the counterargument section). --yolo, and --force
-    // before an answer, ask for a new proposal instead.
+    // `--no-counter` waives the counterargument section). An answer the user
+    // gave is applied whatever this run's flags; before an answer, --yolo and
+    // --force ask for a new proposal instead.
     const pending = readGate(root, 'outline');
     if (pending) {
       const parsed = ProposedOutlineSchema.safeParse((pending.payload as { proposal?: unknown } | null)?.proposal);
       const applies = parsed.success && gateStillApplies(pending, outlineBinding(root));
-      if (applies && args.yolo !== true && (pending.answer !== undefined || !flags.force)) {
+      if (applies && (pending.answer !== undefined || (args.yolo !== true && !flags.force))) {
         const kept = numberOutline(parsed.data);
         const keptMd = renderOutlineMd(kept);
         if (!pending.answer && !canAskInTerminal(process.stdout)) return showPending(pending, keptMd);
@@ -206,7 +207,9 @@ export const outlineCommand = defineCommand({
         process.stderr.write('pensmith outline: the outline kept for approval was proposed for an earlier intake or outline, so it was dropped.\n');
         // An answer to it is not a request for a new (paid) proposal.
         if (pending.answer) {
-          return refuse(['the answer was for a proposal made before the intake or outline changed'], 'Nothing was written. Run `pensmith outline --force` for a new proposal.');
+          // Only a proposal made to replace an outline needs --force to be made again.
+          const again = pending.args['force'] === true ? 'pensmith outline --force' : 'pensmith outline';
+          return refuse(['the answer was for a proposal made before the intake or outline changed'], `Nothing was written. Run \`${again}\` for a new proposal.`);
         }
       }
     }

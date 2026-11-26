@@ -318,6 +318,77 @@ test('outline --yolo with a proposal still kept: it is not shown again (no exit 
   assert.deepEqual(gateFiles(root), [], 'the kept proposal is dropped');
 });
 
+/** Record `option` as the answer to the kept outline decision, as `gate answer` does before it runs outline. */
+function answerKeptOutline(root: string, option: string): void {
+  const file = join(root, '.paper', 'gates', 'outline.json');
+  const record = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+  record['answer'] = { options: [option], answered_at: new Date().toISOString() };
+  writeFileSync(file, JSON.stringify(record, null, 2));
+}
+
+test('outline --yolo with a kept --force proposal the user approved: the approved replacement is applied, not lost', async () => {
+  // The answer was recorded, but the outline run that applies it did not
+  // finish. A later `outline --yolo` closed the kept proposal and kept the
+  // old outline ("not regenerating"), so the replacement the user approved
+  // was lost without a word.
+  const root = await outlinePaper();
+  let answer: unknown = OUTLINE;
+  const calls: Call[] = [];
+  _setGeneratorForTest(model(calls, () => answer));
+  assert.equal((await verb('outline', root, { yolo: true, force: false })).exit, 0, `${out}\n${err}`);
+  answer = REDONE;
+  assert.equal((await verb('outline', root, { yolo: false, force: true })).exit, 3, `${out}\n${err}`);
+  answerKeptOutline(root, 'approve');
+
+  const r = await verb('outline', root, { yolo: true, force: false });
+  assert.equal(r.exit, 0, `${out}\n${err}`);
+  assert.deepEqual(storedSlugs(root), ['background', 'evidence', 'objections'], 'the approved replacement is the outline');
+  assert.equal(calls.length, 2, 'applying it calls no model');
+  assert.deepEqual(gateFiles(root), []);
+});
+
+test('outline --yolo with a kept proposal the user rejected: nothing is written, and the rejection stands', async () => {
+  const root = await outlinePaper();
+  const calls: Call[] = [];
+  _setGeneratorForTest(model(calls, () => OUTLINE));
+  assert.equal((await verb('outline', root, { yolo: false, force: false })).exit, 3);
+  answerKeptOutline(root, 'reject');
+  const r = await verb('outline', root, { yolo: true, force: false });
+  assert.equal(r.exit, 2, `${out}\n${err}`);
+  assert.ok(!existsSync(join(root, '.paper', 'OUTLINE.json')));
+  assert.equal(calls.length, 1, 'no new proposal is paid for');
+});
+
+test('outline: a stale answered proposal advises --force only when it was proposed with --force', async () => {
+  // Proposed with no outline present: a plain `pensmith outline` proposes again.
+  const plain = await outlinePaper();
+  _setGeneratorForTest(model([], () => OUTLINE));
+  await verb('outline', plain, { yolo: false, force: false });
+  const ref = pending()['ref'];
+  writeFileSync(join(plain, '.paper', 'INTAKE.json'), JSON.stringify({
+    $schemaVersion: 1, topic: 'wave power', discipline: 'other', length_words: 1500,
+    citation_style: 'apa', audience: 'a course', counterargument: 'optional',
+  }));
+  const a = await verb('gate', plain, { action: 'answer', ref, option: 'approve' });
+  assert.equal(a.exit, 2, `${out}\n${err}`);
+  assert.match(out + err, /Run `pensmith outline` for a new proposal/);
+  assert.doesNotMatch(out + err, /pensmith outline --force/);
+
+  // Proposed with --force to replace an outline: --force is what proposes again.
+  const forced = await outlinePaper();
+  let answer: unknown = OUTLINE;
+  _setGeneratorForTest(model([], () => answer));
+  await verb('outline', forced, { yolo: true, force: false });
+  answer = REDONE;
+  await verb('outline', forced, { yolo: false, force: true });
+  const fref = pending()['ref'];
+  const md = join(forced, '.paper', 'OUTLINE.md');
+  writeFileSync(md, readFileSync(md, 'utf8').replace('| Introduction |', '| Opening |'));
+  const b = await verb('gate', forced, { action: 'answer', ref: fref, option: 'approve' });
+  assert.equal(b.exit, 2, `${out}\n${err}`);
+  assert.match(out + err, /Run `pensmith outline --force` for a new proposal/);
+});
+
 /** The kept outline decision's file, as JSON. */
 function keptOutline(root: string): { file: string; record: Record<string, unknown> & { shown?: { pending: string; extra: Record<string, unknown> } } } {
   const file = join(root, '.paper', 'gates', 'outline.json');
