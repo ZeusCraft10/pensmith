@@ -83,6 +83,18 @@ test('short quote: a sentence end before a reference marker or a heading still s
   }
 });
 
+test('short quote: a long run of blank lines or brackets in the source is read in linear time', () => {
+  // A PDF of empty pages extracts as a long run of newlines; a damaged one
+  // can hold a long run of any character.
+  for (const run of ['\n'.repeat(200_000), `a${')'.repeat(200_000)}. The end`]) {
+    const src = `We found the treatment, given daily, was ineffective.${run} and so on`;
+    const t0 = performance.now();
+    assert.equal(matchQuote('the treatment ... was ineffective', src).found, true);
+    const ms = performance.now() - t0;
+    assert.ok(ms < 1000, `${ms.toFixed(0)} ms`);
+  }
+});
+
 test('short quote: a one-word part around an ellipsis is too little to place', () => {
   const src = 'Nothing about the drug was conclusive; it is unclear whether any of it is safe.';
   assert.equal(matchQuote('the drug ... is ... safe', src).found, false);

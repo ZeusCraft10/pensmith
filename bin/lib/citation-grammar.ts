@@ -357,12 +357,15 @@ const SENTENCE_END = /[.!?]["”’')\]]*(?=\s+[\p{Lu}\p{N}"“‘'[@])/gu;
 // In text extracted from a paper with numeric citations, the full stop after a
 // word is often followed by its reference marker as plain digits
 // ("effective.12,13 The", "effective.(12) The"). That still ends the sentence.
+// The marks between the word and the full stop are bounded, so a long run of
+// them is read in linear time.
 const MARKED_SENTENCE_END =
-  /(?<=[\p{L}\p{M}]["”’')\]]*)[.!?](?:\d{1,3}(?:[-–,]\d{1,3})*|\(\d{1,3}(?:[-–,]\s?\d{1,3})*\))(?=\s+[\p{Lu}"“‘'])/gu;
-// A blank line followed by a capital, a number or an opening mark: a new
-// paragraph or a heading, which ends the sentence before it even with no full
-// stop. A page break that runs on in lower case ends nothing.
-const PARAGRAPH_START = /\n[ \t\r]*\n(?=\s*[\p{Lu}\p{N}"“‘'[@])/gu;
+  /(?<=[\p{L}\p{M}]["”’')\]]{0,3})[.!?](?:\d{1,3}(?:[-–,]\d{1,3})*|\(\d{1,3}(?:[-–,]\s?\d{1,3})*\))(?=\s+[\p{Lu}"“‘'])/gu;
+// A blank line and the whitespace after it, matched whole so that a long run
+// of blank lines (a PDF of empty pages) is read once.
+const BLANK_RUN = /\n[ \t\r]*\n\s*/g;
+// What may open a sentence after one: a capital, a number or an opening mark.
+const OPENS_SENTENCE = /^[\p{Lu}\p{N}"“‘'[@]/u;
 
 // A blank line, with LF or CRLF line endings (a draft edited on Windows).
 const BLANK_LINE = /\n[ \t\r]*\n/g;
@@ -395,7 +398,12 @@ export function sentenceEnds(text: string): number[] {
       if (endsSentence(text, Math.max(0, m.index - WORD_LOOKBACK), m.index)) out.push(m.index);
     }
   }
-  for (const m of text.matchAll(PARAGRAPH_START)) out.push(m.index);
+  // A blank line before a capital is a new paragraph or a heading, which ends
+  // the sentence before it even with no full stop. A page break that runs on
+  // in lower case ends nothing.
+  for (const m of text.matchAll(BLANK_RUN)) {
+    if (OPENS_SENTENCE.test(text.slice(m.index + m[0].length, m.index + m[0].length + 2))) out.push(m.index);
+  }
   return out.sort((a, b) => a - b);
 }
 
