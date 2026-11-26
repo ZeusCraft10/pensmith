@@ -27,10 +27,9 @@
 //     (Research §P-5); we never nest Semaphore.withLock (§P-4).
 
 import { Semaphore } from './budget.js';
-import { loadOutline } from './outline.js';
-import { parseOutline } from './outline-parse.js';
+import { readOutlineOrThrow } from './outline-read.js';
 import { parseFrontmatter } from './frontmatter.js';
-import { sectionPlan, paperDir } from './paths.js';
+import { sectionPlan } from './paths.js';
 import { PlanFrontmatterSchema, type PlanFrontmatter } from './schemas/plan-frontmatter.js';
 import { buildWaveGraph, runWave } from './scheduler.js';
 import type { SectionNode } from './schemas/wave-graph.js';
@@ -131,8 +130,7 @@ export async function runAllSections(
   }
 
   // 1. Load + parse the outline (reader-order section list + dependency graph).
-  const raw = await loadOutline(paperDir(paperRoot));
-  const outline = parseOutline(raw);
+  const outline = readOutlineOrThrow(paperRoot);
 
   // 2. Build the slug→PlanFrontmatter map. A section with NO PLAN.md is skipped
   //    (buildWaveGraph omits it). Honor an `only` allow-list by skipping any

@@ -47,6 +47,7 @@ import { loadAndMigrate } from './migrations/loader.js';
 import { loadState, StateNotFoundError } from './state.js';
 import { Schema as StateSchema, type State } from './schemas/state.js';
 import { readSectionState, researchDone } from './router.js';
+import { readOutline } from './outline-read.js';
 import { legacyStateFile, paperDir, paperStateFile, sectionPlan, pensmithGlobalLibraryIndexPath } from './paths.js';
 import {
   GlobalLibrarySchema,
@@ -333,7 +334,7 @@ const PAST_PLANNED_SECTION_STATES = new Set([
  *   (2) STATE.json present:
  *       no .paper/RESEARCH.md                             → intake
  *       RESEARCH.md present, no .paper/OUTLINE.md         → research
- *       OUTLINE.md present, sections absent/empty         → outline
+ *       an outline (outline-store.ts) with no usable sections → outline
  *   (3) sections present:
  *       Y = sections.length; X = count past 'planned'.
  *       NOT all sections 'verified'                       → sectioning {done:X,total:Y}
@@ -371,7 +372,6 @@ export function deriveLibraryStatus(
     if (stateRead.absent) return { status: 'intake' };
     if (stateRead.corrupt || !stateRead.state) return { status: 'unknown' };
 
-    const state = stateRead.state;
     const pDir = paperDir(folderPath);
 
     // (2) STATE.json present — walk the on-disk stage probes, which never
@@ -380,9 +380,9 @@ export function deriveLibraryStatus(
     const researched = researchDone(pDir);
     if (researched === null) return { status: 'unknown' };
     if (!researched) return { status: 'intake' };
-    if (!existsSync(join(pDir, 'OUTLINE.md'))) return { status: 'research' };
-
-    const sections = Array.isArray(state.sections) ? state.sections : [];
+    const outline = readOutline(folderPath);
+    if (!outline.ok && outline.problem === 'missing') return { status: 'research' };
+    const sections = outline.ok ? outline.outline.sections : [];
     if (sections.length === 0) return { status: 'outline' };
 
     // (3) Sections present: count past-planned (X) of total (Y) and whether all

@@ -23,6 +23,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { outlineForStateFixture } from './lib/outline-fixture.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 
@@ -90,7 +91,8 @@ function writeState(root: string, sections: Array<{ n: number; slug: string }>):
 function writePaperFile(root: string, name: string): void {
   const pDir = join(root, '.paper');
   mkdirSync(pDir, { recursive: true });
-  writeFileSync(join(pDir, name), `# ${name}\n`);
+  // The outline is the section list: a table of the STATE.json fixture's sections.
+  writeFileSync(join(pDir, name), name === 'OUTLINE.md' ? outlineForStateFixture(root) : `# ${name}\n`);
 }
 
 function writeSectionPlan(root: string, n: number, slug: string, status: string): void {

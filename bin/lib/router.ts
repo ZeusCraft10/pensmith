@@ -1,8 +1,8 @@
 // bin/lib/router.ts — Phase 7 Plan 07-02. The bare `/pensmith` state-aware
 // next-WORK-verb resolver (UX-01).
 //
-// resolveNextAction is a PURE FUNCTION over STATE.json + per-section PLAN.md
-// frontmatter. It IGNORES HANDOFF.json entirely (H4 — see the PINNED ORDERING
+// resolveNextAction is a PURE FUNCTION over STATE.json, the outline
+// (outline-store.ts) and per-section PLAN.md frontmatter. It IGNORES HANDOFF.json entirely (H4 — see the PINNED ORDERING
 // in 07-RESEARCH): a non-done HANDOFF must NOT trap bare /pensmith in a resume
 // loop, so the resolver always returns a concrete next WORK verb (plan / write /
 // verify / compile / done) or a status terminus, NEVER { verb:'resume' }. The
@@ -17,7 +17,7 @@
 //     SyntaxError, SchemaValidationError, ForwardIncompatError, EACCES/EPERM —
 //     the file is PRESENT but corrupt/schema-invalid) routes to
 //     { verb:'status', reason:'attention' } + a stderr diagnostic, never re-thrown.
-//   - state.sections ?? [] (C4-HIGH): guarded before any .sort()/iteration.
+//   - the sections come from the outline (readOutline, which never throws).
 //   - per-section PLAN.md (C5-HIGH): read through the SHARED guarded
 //     readSectionState helper — absent → plan, present-but-corrupt → status/
 //     attention+section, never throwing.
@@ -39,6 +39,7 @@ import { join } from 'node:path';
 import { loadState, StateNotFoundError } from './state.js';
 import { paperDir, sectionPlan } from './paths.js';
 import { parseFrontmatter } from './frontmatter.js';
+import { readOutline } from './outline-read.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -200,9 +201,9 @@ export async function resolveNextAction(
     // loadState translates ONLY ENOENT → StateNotFoundError. CATCH-ALL then
     // reclassify: absent → new; present-but-corrupt/schema-invalid/forward-
     // incompat/permission-denied → status/attention. NEVER re-throw.
-    let state;
+    // STATE.json says a paper was started; its sections are not read here.
     try {
-      state = await loadState(paperRoot);
+      await loadState(paperRoot);
     } catch (e) {
       if (e instanceof StateNotFoundError) return { verb: 'new' };
       process.stderr.write(
@@ -229,10 +230,15 @@ export async function resolveNextAction(
       return { verb: 'status', reason: 'done' };
     }
 
-    if (!existsSync(join(pDir, 'OUTLINE.md'))) return { verb: 'outline' };
-
-    // C4-HIGH SECTIONS-NULL GUARD: schema makes sections .optional().
-    const sections = state.sections ?? [];
+    // The outline is the one list of sections (outline-store.ts). With none
+    // yet, a placeholder, or a hand edit to check, the next step is outline.
+    const outline = readOutline(paperRoot);
+    if (!outline.ok) {
+      if (outline.problem !== 'invalid') return { verb: 'outline' };
+      process.stderr.write(`[pensmith] ${outline.detail}\n`);
+      return { verb: 'status', reason: 'attention' };
+    }
+    const sections = outline.outline.sections;
     if (sections.length === 0) return { verb: 'outline' };
 
     // Walk sections ascending by n; the FIRST non-'verified' section decides

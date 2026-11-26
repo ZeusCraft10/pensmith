@@ -28,32 +28,21 @@ below is the prompt that drives the verb under both Tier 1 (Task/MCP) and Tier 2
 
 ## Outputs
 
-- `.paper/OUTLINE.md` — human-readable Markdown outline (committed)
-- `.paper/sections/<NN>-<slug>/` — one empty directory per section (PLAN.md lands in the `plan` verb)
+- `.paper/OUTLINE.json`: the paper's section list, the one every verb walks
+- `.paper/OUTLINE.md`: the outline rendered for reading: title, thesis, the section table, each section's purpose
+- `.paper/STATE.json` `sections`: replaced from the list on every outline write
+- `.paper/sections/<NN>-<slug>/PLAN.md`: a stub per section (`status: stub`), written by code from the outline entry
 
 ## Body
 
-1. **Read `.paper/INTAKE.md` and `.paper/LIBRARY.json`** as inputs (LIBRARY.json includes any `retracted: true` flags from `research` step 5).
+1. **Read inputs**: `.paper/INTAKE.json` (topic, discipline, length, counterargument), the assignment in `.paper/PROJECT.md`, and the works in `.paper/LIBRARY.json`.
 
-2. **Generate outline** (OUTL-01 / OUTL-02): invoke `templates/prompts/outline-author.md` (D-12 LOCKED slug per Plan 03 CONTEXT D-12) → list of sections `{n, slug, title, depends_on, estimated_word_count, assigned_sources: [citekey, ...]}`.
+2. **Generate the outline** with `templates/prompts/outline-author.md`, as structured output (`ProposedOutlineSchema` in `bin/lib/outline-store.ts`): `{title, thesis, sections: [{slug, title, purpose, depends_on, word_target, assigned_sources, counterargument}]}`. pensmith numbers the sections in order.
 
-3. **Validate**:
-   - `PlanFrontmatterSchema.parse(entry)` for each section (D-04 refinements: slug format, no-self-ref, status enum from D-08-AMENDED).
-   - Walker check (OUTL-04): all `depends_on` slugs resolve to an existing section in this outline AND no cycles (Tarjan or simple DFS — `bin/lib/outline-walker.ts` or inline DFS in the verb).
+3. **Check it in code** (`outlineProblems`): unique bare slugs; `depends_on` names other sections and forms no cycle; a section marked `counterargument` when the intake says one is required (unless `--no-counter`); every assigned source is a citekey LIBRARY.json holds; no title or heading holds a citation. A failing outline is sent back once with the problems; if it fails again, nothing is written and outline exits 2.
 
-4. **APPROVAL GATE** (OUTL-03 — PRD non-negotiable):
-   - Print the outline to stdout in a human-readable table: `| # | slug | title | depends_on | word target | assigned_sources |`.
-   - **Retraction annotation (Codex MEDIUM consensus #19 / OpenCode MEDIUM — locked)**: for any section whose `assigned_sources` contains a citekey marked `retracted: true` in LIBRARY.json, append a `RETRACTED` annotation line of the literal form:
+4. **APPROVAL GATE** (PRD non-negotiable): show the rendered outline. Unless `--yolo` was typed by the user, ask for approval (AskUserQuestion in Tier 1, a terminal prompt in Tier 2); with no terminal the CLI exits 3.
 
-     ```text
-     > ⚠ Section ${n} (${slug}) — ${k} of ${total} assigned sources flagged as RETRACTED. Recommend revising before approval.
-     ```
+5. **Write** `OUTLINE.json`, `OUTLINE.md`, STATE.json's sections and the stub PLAN.md files. A section folder no section names any more is reported and left in place. An existing outline is not regenerated without `--force`; a hand edit of OUTLINE.md (or a hand-written OUTLINE.md) is checked by the same rules and taken in by `pensmith outline`, and until then the router sends the paper back to outline.
 
-   - Unless `--yolo` flag is set: pause via `AskUserQuestion` (Tier 1) or `@clack/prompts` (Tier 2) and request user confirmation: `approve / edit / cancel`.
-   - If `edit`: loop back to step 2 with the user's feedback appended as additional context to the `outline-author.md` prompt.
-   - If `cancel`: exit non-zero, no state mutation.
-   - If `--yolo` is set: skip the prompt and proceed (auto-approve — but the RETRACTED annotations are still emitted to stderr for the audit trail).
-
-5. **Persist `.paper/OUTLINE.md`** (atomic via `bin/lib/atomic-write.ts`, D-07 chokepoint) as human-readable Markdown. Create `.paper/sections/<NN>-<slug>/` directory per section (empty — `PLAN.md` lands when `plan` verb runs). Use `bin/lib/paths.ts sectionDir(n, slug)` (Plan 03 Wave 2) for the path.
-
-6. **Shell fallback** (TIER-06 equivalence path): `pensmith outline [--yolo]`.
+6. **Shell fallback (TIER-06)**: `pensmith outline [--yolo] [--force] [--no-counter]`.

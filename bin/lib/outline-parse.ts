@@ -1,14 +1,13 @@
 // bin/lib/outline-parse.ts — PURE parser for the on-disk .paper/OUTLINE.md.
 //
-// Phase 4 Plan 04-01. The raw-file READ side lives in bin/lib/outline.ts
-// (loadOutline); this module is the string→object PARSE side and performs NO
-// fs I/O — keeping it pure makes the wave scheduler (scheduler.ts) and the
-// compile pipeline (Plan 05) trivially testable.
+// It reads the section table of an OUTLINE.md and performs no fs I/O. The
+// section list every verb walks comes from bin/lib/outline-store.ts, which
+// reads OUTLINE.json, or this table for a hand-written outline.
 //
 // =========================================================================
 // LOCKED .paper/OUTLINE.md FORMAT (derived from workflows/outline.md §4/§5)
 // =========================================================================
-// The production `outline` verb persists the outline as human-readable GFM:
+// `pensmith outline` renders the outline as human-readable GFM:
 //   1. An H1 title line:  `# <Paper Title>`
 //   2. A GFM pipe table with the header row (column order LOCKED):
 //        | # | slug | title | depends_on | word target | assigned_sources |
@@ -22,7 +21,7 @@
 //   title            -> title (raw cell text)
 //   depends_on       -> depends_on (comma-split bare slugs; empty cell = [])
 //   word target      -> estimated_word_count (optional positive int)
-//   assigned_sources -> ignored by the wave graph (not consumed here)
+//   assigned_sources -> assigned_sources (comma-split citekeys; empty cell = [])
 //
 // A malformed data row (wrong column count, non-numeric `#`, bad slug, bad
 // word target) throws an Error naming the 1-based SOURCE line number, mirroring
@@ -42,6 +41,8 @@ export interface ParsedOutlineSection {
   estimated_word_count?: number;
   /** Bare slugs this section depends on (empty array when none). */
   depends_on: string[];
+  /** The citekeys the outline assigns the section (empty array when none). */
+  assigned_sources?: string[];
 }
 
 export interface ParsedOutline {
@@ -123,7 +124,7 @@ export function parseOutline(raw: string): ParsedOutline {
       );
     }
 
-    const [nCell, slugCell, titleCell, depsCell, wordCell] = cells as [
+    const [nCell, slugCell, titleCell, depsCell, wordCell, sourcesCell] = cells as [
       string, string, string, string, string, string,
     ];
 
@@ -171,6 +172,7 @@ export function parseOutline(raw: string): ParsedOutline {
       slug,
       title: titleCell,
       depends_on,
+      assigned_sources: sourcesCell.split(',').map((k) => k.trim()).filter((k) => k.length > 0),
     };
 
     const wordTrimmed = wordCell.trim();

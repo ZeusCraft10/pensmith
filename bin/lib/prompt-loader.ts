@@ -70,7 +70,7 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   'intake-clarifier':    '35d478e8974d5774ad24f040d76e1a63010a2d1a58b854c8245dd8812e4c7957',  // structured questions (intake-record.ts ClarifierSchema)
   'topic-disambiguator': '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e',  // D-12 LOCKED (research split #1)
   'source-evaluator':    '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762',  // D-12 LOCKED (research split #2)
-  'outline-author':      'f5124245f29c71de31ed2c330097d2141bba80c04d8a2d2cef955e0669068f42',  // D-12 LOCKED
+  'outline-author':      '15aa2e6a80f677365171842fe1ade70afa9cb667728cfb59fbff5102c084b0b6',  // structured outline (outline-store.ts ProposedOutlineSchema)
   'section-planner':     'e2991033be0f7e0b28a20ffc0bfa03355e999daf445070b709077c310d5ee5b5',  // D-12 LOCKED
   'section-drafter':     'baf0172b4e2e96a2d2a1a6c35b5cf548faafd9436f1405e863060c619caa1d34',  // D-12 LOCKED
   'pass1-fuzzy-judge':   'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e',  // D-12 LOCKED + D-13 DORMANT in Phase 3

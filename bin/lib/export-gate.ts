@@ -21,7 +21,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir, sectionAcknowledgements, sectionDraft, sectionVerificationRecord } from './paths.js';
-import { parseOutline } from './outline-parse.js';
+import { readOutline } from './outline-read.js';
 import { readCompileManifest, type ManifestSection } from './compile-manifest.js';
 import { isPlaceholderText } from './placeholder.js';
 import { isOfflineMode } from './network-mode.js';
@@ -120,11 +120,9 @@ export async function runExportBlockingGate(paperRoot: string, compiled?: Buffer
 
   // The outline must still hold exactly the sections compile used.
   let outlineSections: Array<{ n: number; slug: string }> = [];
-  try {
-    outlineSections = parseOutline(readFileSync(join(paperDir(paperRoot), 'OUTLINE.md'), 'utf8')).sections;
-  } catch {
-    reasons.push(`.paper/OUTLINE.md has no section table to check the compile against — ${RECOMPILE}`);
-  }
+  const outline = readOutline(paperRoot);
+  if (outline.ok) outlineSections = outline.outline.sections;
+  else reasons.push(`the outline cannot be checked against the compile (${outline.detail}) — ${RECOMPILE}`);
   const listed = (xs: ReadonlyArray<{ n: number; slug: string }>): string =>
     xs.slice().sort((a, b) => a.n - b.n).map((s) => `${s.n}-${s.slug}`).join(', ');
   if (outlineSections.length > 0 && listed(outlineSections) !== listed(manifest.sections)) {

@@ -33,6 +33,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { outlineForStateFixture } from './lib/outline-fixture.js';
 
 // Runtime import specifier (.js — NodeNext ESM under tsx maps to the .ts).
 // Using URL.href keeps the path opaque to tsc so typecheck passes pre-build.
@@ -238,7 +239,7 @@ test('LIB-05 (4): N sections seeded, M past-planned → "sectioning" with a REAL
   const { sectionPlan } = await import('../bin/lib/paths.js');
   const { atomicWriteFile } = await import('../bin/lib/atomic-write.js');
 
-  // 3 sections; 2 are past 'planned' (written / verified), 1 is still 'planned'.
+  // 3 sections; 2 are drafted or beyond (written / verified), 1 is planned only.
   const sections: Array<{ n: number; slug: string; status: string }> = [
     { n: 1, slug: 'intro', status: 'written' },
     { n: 2, slug: 'methods', status: 'verified' },
@@ -250,6 +251,8 @@ test('LIB-05 (4): N sections seeded, M past-planned → "sectioning" with a REAL
       `---\nsection: ${s.n}\nslug: ${s.slug}\ntitle: ${s.slug}\nstatus: ${s.status}\n---\n# ${s.slug}\n`;
     await atomicWriteFile(sectionPlan(s.n, s.slug, root), body);
   }
+  // The outline is the section list the status is derived from.
+  fs.writeFileSync(path.join(root, '.paper', 'OUTLINE.md'), outlineForStateFixture(root));
 
   const { deriveLibraryStatus } = await glib();
   const r = deriveLibraryStatus(root);
@@ -279,6 +282,7 @@ test('LIB-05 (5): all sections verified, no DRAFT.md → "compile"; +DRAFT.md �
       `---\nsection: ${s.n}\nslug: ${s.slug}\ntitle: ${s.slug}\nstatus: verified\n---\n# ${s.slug}\n`,
     );
   }
+  fs.writeFileSync(path.join(root, '.paper', 'OUTLINE.md'), outlineForStateFixture(root));
 
   const { deriveLibraryStatus } = await glib();
   assert.equal(deriveLibraryStatus(root).status, 'compile', 'all-verified, no DRAFT.md → compile');

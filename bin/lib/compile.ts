@@ -9,7 +9,7 @@
 // Pipeline:
 //   0. Acquire .paper/.compile.lock for the whole run, so no other compile
 //      races on the output files.
-//   1. parseOutline; for each section in outline order:
+//   1. readOutline (outline-store.ts); for each section in outline order:
 //        - read PLAN.md frontmatter (assigned_sources), the section's DRAFT.md
 //          bytes and the verdicts verify recorded in VERIFICATION.json (never
 //          the Markdown report rendered from them);
@@ -39,8 +39,8 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir, sectionAcknowledgements, sectionDraft, sectionPlan, sectionVerificationRecord } from './paths.js';
-import { loadOutline } from './outline.js';
-import { parseOutline, type ParsedOutlineSection } from './outline-parse.js';
+import { type ParsedOutlineSection } from './outline-parse.js';
+import { readOutline } from './outline-read.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { atomicRename, atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
@@ -308,25 +308,19 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
   const lockResource = join(paperDir(opts.paperRoot), '.compile.lock');
 
   return withLock(lockResource, async (): Promise<CompileResult> => {
-    // ---- Step 1: load sections in OUTLINE order + refuse-gate + staleness ----
-    // Audit M2: a missing / section-less OUTLINE.md is a REFUSAL (the CLI prints
-    // refuseReasons), not a raw parseOutline stack trace. loadOutline returns ''
-    // for an absent file and parseOutline throws "no section table" on '' or a
-    // placeholder, so both degenerate cases land here gracefully.
-    const raw = await loadOutline(paperDir(opts.paperRoot));
-    let outline: ReturnType<typeof parseOutline>;
-    try {
-      outline = parseOutline(raw);
-    } catch {
+    // ---- Step 1: load sections in outline order + refuse-gate + staleness ----
+    // No usable outline (none, a placeholder, an unchecked hand edit, or a
+    // table that cannot be read) is a refusal with the reason, never a stack trace.
+    const read = readOutline(opts.paperRoot);
+    if (!read.ok) {
       return refuse(opts.paperRoot, {
         refused: true,
-        refuseReasons: [
-          "no usable outline: .paper/OUTLINE.md has no section table — run 'pensmith outline' first",
-        ],
+        refuseReasons: [`no usable outline: ${read.detail}`],
         sectionsCount: 0,
         staleResolvedCount: 0,
       });
     }
+    const outline = read.outline;
     if (outline.sections.length === 0) {
       return refuse(opts.paperRoot, {
         refused: true,

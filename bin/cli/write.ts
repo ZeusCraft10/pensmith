@@ -31,7 +31,7 @@ import { sectionDraft, sectionPlan, paperDir } from '../lib/paths.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { assertDrafterInput } from '../lib/drafter-input.js';
 import { runAllSections } from '../lib/write-orchestrator.js';
-import { parseOutline } from '../lib/outline-parse.js';
+import { readOutline } from '../lib/outline-read.js';
 import type { SectionNode } from '../lib/schemas/wave-graph.js';
 import { styleMatchToVoiceHint } from '../lib/style-match.js';
 import { StyleProfileSchema, type StyleProfile } from '../lib/schemas/style.js';
@@ -330,16 +330,10 @@ export const writeCommand = defineCommand({
       // (write-orchestrator.ts calls parseOutline, which throws "no section
       // table" on an absent/placeholder outline). Pre-check here and degrade
       // gracefully, mirroring `done`'s "run 'pensmith compile' first" stance.
-      const outlinePath = path.join(paperDir(paperRoot), 'OUTLINE.md');
-      let outlineSectionCount = 0;
-      try {
-        outlineSectionCount = parseOutline(readFileSync(outlinePath, 'utf8')).sections.length;
-      } catch {
-        outlineSectionCount = 0;
-      }
-      if (outlineSectionCount === 0) {
+      const outline = readOutline(paperRoot);
+      if (!outline.ok || outline.outline.sections.length === 0) {
         process.stderr.write(
-          `pensmith write: no usable outline at ${outlinePath} — run \`pensmith outline\` ` +
+          `pensmith write: no usable outline (${outline.ok ? 'it has no sections' : outline.detail}) — run \`pensmith outline\` ` +
           `to create the section table first.\n`,
         );
         process.exitCode = EXIT_REFUSED;

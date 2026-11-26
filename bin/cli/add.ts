@@ -39,7 +39,7 @@ import { withLock } from '../lib/lock.js';
 import { confirmOrNo } from '../lib/prompts.js';
 import { paperDir, sectionPlan } from '../lib/paths.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
-import { loadState } from '../lib/state.js';
+import { readOutline } from '../lib/outline-read.js';
 import { fetch as httpFetch } from '../lib/http.js';
 import { isOfflineMode } from '../lib/network-mode.js';
 import { importBibliography, importCslJson, mergeCandidates, updateLibrary, type ImportResult } from '../lib/library.js';
@@ -195,12 +195,8 @@ async function remapSections(
   if (only) {
     targets = [only];
   } else {
-    try {
-      const state = await loadState(paperRoot);
-      targets = (state.sections ?? []).map((s) => ({ n: s.n, slug: s.slug }));
-    } catch {
-      targets = [];
-    }
+    const outline = readOutline(paperRoot);
+    targets = outline.ok ? outline.outline.sections.map((s) => ({ n: s.n, slug: s.slug })) : [];
   }
 
   let updatedCount = 0;

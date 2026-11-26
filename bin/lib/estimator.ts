@@ -18,6 +18,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { loadState } from './state.js';
+import { readOutline } from './outline-read.js';
 import { paperDir, sectionPlan } from './paths.js';
 import { readSectionState, researchDone, sectionVerb } from './router.js';
 import { callCost, resolveCall } from './llm-config.js';
@@ -136,9 +137,10 @@ export async function projectEstimate(args: {
 }): Promise<EstimateResult> {
   const empty: EstimateResult = { rows: [], totalUsd: 0, exceedsHalfCap: false };
   try {
-    const state = await loadState(args.paperRoot);
+    await loadState(args.paperRoot);
     const pDir = paperDir(args.paperRoot);
-    const sections: Section[] = [...(state.sections ?? [])]
+    const outline = readOutline(args.paperRoot);
+    const sections: Section[] = [...(outline.ok ? outline.outline.sections : [])]
       .sort((a, b) => a.n - b.n)
       .map(({ n, slug }) => {
         const r = readSectionState(sectionPlan(n, slug, args.paperRoot));
@@ -146,7 +148,7 @@ export async function projectEstimate(args: {
       });
     const steps = plannedSteps(args.verb ?? null, args.n ?? null, sections, {
       researched: researchDone(pDir) === true,
-      outlined: existsSync(path.join(pDir, 'OUTLINE.md')) && sections.length > 0,
+      outlined: sections.length > 0,
       finished: existsSync(path.join(pDir, 'FINAL.md')),
     });
 

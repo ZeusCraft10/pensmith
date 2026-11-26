@@ -9,11 +9,8 @@
 // OUTLINE.md is absent/malformed or has no row for N (e.g. a bare Tier-2 probe
 // before any outline exists).
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { EXIT_REFUSED } from './exit-codes.js';
-import { paperDir } from './paths.js';
-import { parseOutline } from './outline-parse.js';
+import { readOutline } from './outline-read.js';
 
 /** `raw` as a section number (a positive integer), or null. */
 export function parseSectionNumber(raw: unknown): number | null {
@@ -37,10 +34,11 @@ export function sectionNumberArg(verb: string, raw: unknown): number | null {
 /**
  * Resolve the slug for section `n`. Precedence:
  *   1. an explicit, non-empty string slug (caller's --slug),
- *   2. the slug registered for section `n` in OUTLINE.md,
- *   3. 'placeholder' (OUTLINE.md absent/malformed, or no row for `n`).
+ *   2. the slug of section `n` in the outline (outline-read.ts); while a hand
+ *      edit of OUTLINE.md waits to be checked, the list as last checked,
+ *   3. 'placeholder' (no usable outline, or no section `n`).
  *
- * Never throws — a missing or malformed OUTLINE.md falls through to (3).
+ * Never throws.
  */
 export function resolveSectionSlug(
   paperRoot: string | undefined,
@@ -48,13 +46,7 @@ export function resolveSectionSlug(
   explicitSlug?: unknown,
 ): string {
   if (typeof explicitSlug === 'string' && explicitSlug.length > 0) return explicitSlug;
-  try {
-    const outlinePath = join(paperDir(paperRoot), 'OUTLINE.md');
-    const parsed = parseOutline(readFileSync(outlinePath, 'utf8'));
-    const section = parsed.sections.find((s) => s.n === n);
-    if (section?.slug) return section.slug;
-  } catch {
-    // OUTLINE.md absent or malformed — fall through to the placeholder default.
-  }
-  return 'placeholder';
+  const outline = readOutline(paperRoot ?? process.cwd());
+  const sections = outline.ok ? outline.outline.sections : outline.problem === 'edited' ? outline.stored.sections : [];
+  return sections.find((s) => s.n === n)?.slug ?? 'placeholder';
 }

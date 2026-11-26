@@ -18,6 +18,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { outlineForStateFixture } from './lib/outline-fixture.js';
 
 // RED-by-skip guard — the module under test does not exist until Plan 07-02.
 const ROUTER_SRC = fileURLToPath(new URL('../bin/lib/router.ts', import.meta.url));
@@ -65,10 +66,12 @@ function writeState(root: string, sections: Array<{ n: number; slug: string }>):
   );
 }
 
-function writePaperFile(root: string, name: string, body = '# ' + name + '\n'): void {
+function writePaperFile(root: string, name: string, body?: string): void {
   const pDir = join(root, '.paper');
   mkdirSync(pDir, { recursive: true });
-  writeFileSync(join(pDir, name), body);
+  // The outline is the section list the router walks: a table of the sections
+  // the STATE.json fixture names.
+  writeFileSync(join(pDir, name), body ?? (name === 'OUTLINE.md' ? outlineForStateFixture(root) : `# ${name}\n`));
 }
 
 function writeSectionPlan(root: string, n: number, slug: string, status: string): void {

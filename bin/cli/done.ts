@@ -55,6 +55,7 @@ import {
   type Citation,
 } from '../lib/citation-grammar.js';
 import { EXIT_ERROR, EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
+import { readOutline } from '../lib/outline-read.js';
 import { isPlaceholderText } from '../lib/placeholder.js';
 import { recheckExportText, runExportBlockingGate } from '../lib/export-gate.js';
 import { readVerificationRecord } from '../lib/verify/verification-record.js';
@@ -355,11 +356,18 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
  */
 export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
   const sectionsDir = join(paperDir(paperRoot), 'sections');
+  // The outline's sections only: a folder the outline no longer names is not
+  // part of the paper. Without an outline, every section folder is read.
+  const outline = readOutline(paperRoot);
   let entries: string[];
-  try {
-    entries = readdirSync(sectionsDir);
-  } catch {
-    return []; // no sections dir → nothing to report
+  if (outline.ok) {
+    entries = outline.outline.sections.map((s) => `${String(s.n).padStart(2, '0')}-${s.slug}`);
+  } else {
+    try {
+      entries = readdirSync(sectionsDir);
+    } catch {
+      return []; // no sections dir → nothing to report
+    }
   }
   const out: Pass2Result[] = [];
   for (const entry of entries) {

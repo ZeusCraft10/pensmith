@@ -200,7 +200,11 @@ function paperWith(statuses: string[]): string {
   const root = freshRoot();
   writeState(root, statuses.map((_, i) => ({ n: i + 1, slug: `s${i + 1}` })));
   mkdirSync(join(root, '.paper'), { recursive: true });
-  writeFileSync(join(root, '.paper', 'OUTLINE.md'), '# Outline\n');
+  // The outline is the section list the estimator walks.
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), [
+    '# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |',
+    ...statuses.map((_, i) => `| ${i + 1} | s${i + 1} | S${i + 1} | | 300 | |`), '',
+  ].join('\n'));
   writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 2, researched_at: '2026-11-01T00:00:00Z', items: [] }));
   statuses.forEach((status, i) => {
     const plan = sectionPlan(i + 1, `s${i + 1}`, root);
@@ -297,6 +301,11 @@ test('`pensmith --estimate` reads runtime.json once for every row it prices', { 
   const root = freshRoot();
   writeState(root, Array.from({ length: 10 }, (_, i) => ({ n: i + 1, slug: `sec-${i + 1}` })));
   mkdirSync(join(root, '.paper'), { recursive: true });
+  // The sections are the outline's: ten of them, none planned yet.
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), [
+    '# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |',
+    ...Array.from({ length: 10 }, (_, i) => `| ${i + 1} | sec-${i + 1} | Section ${i + 1} | | 300 | |`), '',
+  ].join('\n'));
   try {
     const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url)), '--estimate'], {
       cwd: root,
@@ -311,8 +320,8 @@ test('`pensmith --estimate` reads runtime.json once for every row it prices', { 
     });
     assert.equal(r.status, 0, `stdout=${r.stdout} stderr=${r.stderr}`);
     const rows = r.stdout.split('\n').filter((l) => / in=\d+ out=\d+ → \$/.test(l));
-    // research, outline, plan/write/verify for each of the ten sections, done.
-    assert.equal(rows.length, 33, r.stdout);
+    // research, plan/write/verify for each of the ten sections, done.
+    assert.equal(rows.length, 32, r.stdout);
     const log = readFileSync(join(root, '.paper', 'SESSION.log'), 'utf8');
     const loads = log.split('\n').filter((l) => l.includes('"event":"runtime.load"'));
     assert.equal(loads.length, rows.length, `one runtime.load per priced row\n${log}`);

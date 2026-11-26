@@ -16,6 +16,7 @@
 
 import { defineCommand } from 'citty';
 import { loadState, StateNotFoundError } from '../lib/state.js';
+import { readOutline } from '../lib/outline-read.js';
 import type { State } from '../lib/schemas/state.js';
 import { resolveNextAction, readSectionState } from '../lib/router.js';
 import { sectionPlan } from '../lib/paths.js';
@@ -47,10 +48,14 @@ export const statusCommand = defineCommand({
       return { ok: false, reason: 'corrupt-state' };
     }
 
-    const sections = state.sections ?? [];
+    // The sections are the outline's (outline-store.ts), the one list.
+    const outline = readOutline(paperRoot);
+    const sections = outline.ok ? outline.outline.sections : [];
     const lines: string[] = ['pensmith status:', `  paper: ${state.paperId}`, '  sections:'];
 
-    if (sections.length === 0) {
+    if (!outline.ok && outline.problem !== 'missing') {
+      lines.push(`    (${outline.detail})`);
+    } else if (sections.length === 0) {
       lines.push('    (none yet)');
     } else {
       for (const { n, slug } of [...sections].sort((a, b) => a.n - b.n)) {

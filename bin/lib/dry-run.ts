@@ -83,9 +83,9 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
     case 'outline':
       return {
         command,
-        summary: 'Propose a section outline from the intake.',
-        reads: [paper('INTAKE.md')],
-        writes: [paper('OUTLINE.md'), `${paper('STATE.json')} (sections)`],
+        summary: 'Propose a section outline from the intake and the library, checked before it is shown.',
+        reads: [paper('INTAKE.json'), paper('PROJECT.md'), paper('LIBRARY.json'), paper('OUTLINE.md')],
+        writes: [paper('OUTLINE.json'), paper('OUTLINE.md'), `${paper('STATE.json')} (sections)`, '.paper/sections/<NN>-<slug>/PLAN.md (stubs)'],
         model: '1 call (outline author)',
         network: MODEL_PROVIDER,
         asks: 'approve the outline',
