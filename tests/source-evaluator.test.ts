@@ -253,6 +253,37 @@ test('research without a terminal does not offer --yolo when the evaluator kept 
   assert.doesNotMatch(stderr, /auto-accept all candidates/);
 });
 
+test('research says why nothing is chosen: the evaluator kept none, or gave no usable answer', async () => {
+  // Both used to read "kept none", the second contradicting the WARN above it.
+  const cases: Array<[string, (c: Call) => unknown, RegExp, RegExp]> = [
+    ['kept none', rejectAll, /kept none of them/, /gave no usable answer/],
+    ['no usable answer', () => 'not json', /gave no usable answer/, /kept none/],
+  ];
+  for (const [what, evaluate, says, never] of cases) {
+    const root = project();
+    stderr = '';
+    process.exitCode = 0;
+    _setGeneratorForTest(researchModel([], evaluate));
+    const res = await research(root, {});
+    assert.equal(res['exitCode'], 3, `${what}: ${stderr}`);
+    const refusal = stderr.split('\n').find((l) => l.includes('no terminal to ask in')) ?? '';
+    assert.match(refusal, says, `${what}: ${refusal}`);
+    assert.doesNotMatch(refusal, never, `${what}: ${refusal}`);
+    const gate = JSON.parse(readFileSync(join(root, '.paper', 'gates', 'research-candidates.json'), 'utf8')) as { summary: string };
+    assert.match(gate.summary, says, `${what}: ${gate.summary}`);
+    assert.doesNotMatch(gate.summary, never, `${what}: ${gate.summary}`);
+
+    // --yolo says the same.
+    const yoloRoot = project();
+    stderr = '';
+    process.exitCode = 0;
+    const y = await research(yoloRoot, { yolo: true });
+    assert.equal(y['exitCode'], 2, `${what}: ${stderr}`);
+    const line = stderr.split('\n').find((l) => l.includes('--yolo keeps the candidates')) ?? '';
+    assert.match(line, what === 'kept none' ? /it kept none/ : /it gave no usable answer/, `${what}: ${line}`);
+  }
+});
+
 test('research --yolo keeps what the evaluator kept', async () => {
   const root = project();
   const calls: Call[] = [];

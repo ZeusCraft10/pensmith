@@ -99,6 +99,8 @@ function evaluationProblems(e: Evaluation, ids: readonly string[]): string[] {
  */
 export class SourceEvaluationError extends Error {
   readonly candidates: SourceCandidate[];
+  /** True when the evaluator answered and kept none; false when it gave no usable answer. */
+  readonly keptNone: boolean;
   /** `why` is the reason its answer could not be used, or null when it kept none. */
   constructor(candidates: SourceCandidate[], why: string | null) {
     super(why === null
@@ -106,6 +108,7 @@ export class SourceEvaluationError extends Error {
       : `the source evaluator gave no usable answer (${why})`);
     this.name = 'SourceEvaluationError';
     this.candidates = candidates;
+    this.keptNone = why === null;
   }
 }
 

@@ -66,8 +66,20 @@ type Scope = z.infer<typeof ScopeSchema>;
 const KeptCandidatesSchema = z.object({
   candidates: z.array(SourceCandidateSchema).min(1),
   evaluated: z.boolean(),
+  /** When not evaluated: true when the evaluator kept none, false when it gave no usable answer. */
+  kept_none: z.boolean().optional(),
   scope: z.string(),
 });
+
+/**
+ * Why none of the candidates is chosen for the author, or null when the
+ * evaluator chose some. A choice kept by an earlier build does not say which.
+ */
+function noneChosenBecause(kept: { evaluated: boolean; kept_none?: boolean | undefined }): string | null {
+  if (kept.evaluated) return null;
+  if (kept.kept_none === undefined) return 'The source evaluator chose none of them';
+  return kept.kept_none ? 'The source evaluator kept none of them' : 'The source evaluator gave no usable answer';
+}
 
 /** What a kept choice is about: the intake research was asked for. */
 function intakeFingerprint(root: string): string | null {
@@ -180,7 +192,7 @@ function candidatesShown(kept: z.infer<typeof KeptCandidatesSchema>): Record<str
 function showCandidates(record: GateRecord, kept: z.infer<typeof KeptCandidatesSchema>): Record<string, unknown> {
   return stopForAnswer(
     'pensmith research: choosing which sources to keep needs the user, and there is no terminal to ask in; the candidates are kept until they answer.' +
-      (kept.evaluated ? '' : ' The source evaluator kept none of them, so none is chosen for them.'),
+      (noneChosenBecause(kept) ? ` ${noneChosenBecause(kept)}, so none is chosen for them.` : ''),
     record,
     'research-candidates',
     candidatesShown(kept),
@@ -316,6 +328,7 @@ export const researchCommand = defineCommand({
       // none selected, and --yolo (which keeps what the evaluator kept) adds
       // nothing and leaves research not done.
       let evaluated = true;
+      let keptNone = false;
       try {
         candidates = await runResearchOrchestrator(
           chosenScope.queries,
@@ -330,12 +343,13 @@ export const researchCommand = defineCommand({
         if (!(e instanceof SourceEvaluationError)) throw e;
         candidates = e.candidates;
         evaluated = false;
+        keptNone = e.keptNone;
         process.stderr.write(`pensmith research: WARN — ${e.message}; no candidate is kept unless you choose it.\n`);
       }
 
       if (!evaluated && yolo) {
         process.stderr.write(
-          `pensmith research: --yolo keeps the candidates the source evaluator keeps, and it kept none, so nothing was added ` +
+          `pensmith research: --yolo keeps the candidates the source evaluator keeps, and ${keptNone ? 'it kept none' : 'it gave no usable answer'}, so nothing was added ` +
           `to LIBRARY.json and research is not marked done. Run \`pensmith research\` again, or without --yolo to choose ` +
           `from the ${candidates.length} candidates yourself.\n`,
         );
@@ -350,11 +364,12 @@ export const researchCommand = defineCommand({
       finalCandidates = candidates;
       if (candidates.length > 0 && !yolo) {
         if (!canAskInTerminal(process.stdout)) {
-          const kept = { candidates, evaluated, scope: chosenScope.label };
+          const kept = { candidates, evaluated, ...(evaluated ? {} : { kept_none: keptNone }), scope: chosenScope.label };
+          const because = noneChosenBecause(kept);
           const record = await openGate(root, {
             gate: 'research-candidates',
             summary: `Which of the ${candidates.length} candidate sources should the library keep?` +
-              (evaluated ? '' : ' The source evaluator gave no usable answer, so none is chosen for you.'),
+              (because ? ` ${because}, so none is chosen for you.` : ''),
             options: candidates.map((c) => c.citekey),
             multiple: true,
             default: evaluated ? candidates.map((c) => c.citekey) : [],
