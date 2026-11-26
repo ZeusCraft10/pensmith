@@ -13,6 +13,8 @@ import assert from 'node:assert/strict';
 import * as fsp from 'node:fs/promises';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
 import {
@@ -24,6 +26,7 @@ import {
   GenerationError,
 } from '../bin/lib/anthropic.js';
 import { _resetBucketsForTest } from '../bin/lib/http.js';
+import { anthropicGenerator } from '../bin/lib/generators/anthropic.js';
 import { pensmithDataDir } from '../bin/lib/paths.js';
 import { estimateCost } from '../bin/lib/pricing.js';
 
@@ -221,6 +224,67 @@ test('a 529 that does not clear is a ProviderError of kind overloaded', async ()
   await assert.rejects(complete({ ...ASK, role: 'plan' }), (e: unknown) => e instanceof ProviderError && e.kind === 'overloaded' && e.status === 529);
   assert.equal(seen.length, 3, 'the first attempt and two retries');
   assert.equal(costRows().length, 0, 'nothing was generated, so nothing is charged');
+});
+
+test('an answer that does not start within the deadline is a timeout, and the request is sent once', async () => {
+  // The SDK retries a failed fetch; http.ts refuses to send a POST that may
+  // have reached the API again. The error used to say the API "could not be
+  // reached", which hid that the model was asked and did not answer in time.
+  let hits = 0;
+  agent.get('https://api.anthropic.com')
+    .intercept({ path: (p) => p.startsWith('/v1/messages'), method: 'POST' })
+    .reply(() => {
+      hits += 1;
+      return { statusCode: 200, data: messageStream({ blocks: [{ type: 'text', text: 'Late.' }], stopReason: 'end_turn' }), responseOptions: { headers: { 'content-type': 'text/event-stream' } } };
+    })
+    .delay(300)
+    .persist();
+  _setGeneratorForTest(anthropicGenerator({ apiKey: KEY, timeoutMs: 50 }));
+  await assert.rejects(complete({ ...ASK, role: 'write' }), (e: unknown) => {
+    assert.ok(e instanceof ProviderError, `got ${String(e)}`);
+    assert.equal(e.kind, 'timeout');
+    assert.match(e.message, /did not answer within/);
+    assert.match(e.message, /not sent again/);
+    assert.doesNotMatch(e.message, /could not reach/);
+    return true;
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(hits, 1, 'one request reached the API');
+});
+
+test('a stream that goes quiet partway is a timeout, and the tokens it reported are charged', async () => {
+  // MockAgent cannot stall a body halfway, so a local server sends the start
+  // of an answer and then nothing.
+  const server = createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write(messageStream({ blocks: [], stopReason: 'end_turn', inputTokens: 1200 }).split('event: message_delta')[0]);
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const savedNoProxy = [process.env['NO_PROXY'], process.env['no_proxy']];
+  process.env['NO_PROXY'] = '127.0.0.1';
+  process.env['no_proxy'] = '127.0.0.1';
+  setGlobalDispatcher(prevDispatcher);
+  try {
+    _setGeneratorForTest(anthropicGenerator({ apiKey: KEY, baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, timeoutMs: 200 }));
+    await assert.rejects(complete({ ...ASK, role: 'write' }), (e: unknown) => {
+      assert.ok(e instanceof ProviderError, `got ${String(e)}`);
+      assert.equal(e.kind, 'timeout');
+      assert.match(e.message, /stopped sending for 200 ms partway through its answer/);
+      return true;
+    });
+    assert.equal(costRows()[0]?.['inputTokens'], 1200);
+  } finally {
+    setGlobalDispatcher(agent);
+    for (const [k, v] of [['NO_PROXY', savedNoProxy[0]], ['no_proxy', savedNoProxy[1]]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    server.closeAllConnections();
+    await new Promise<void>((r) => server.close(() => r()));
+  }
 });
 
 test('a rejected key is a ProviderError of kind auth that does not echo the key', async () => {

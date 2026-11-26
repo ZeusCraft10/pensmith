@@ -20,7 +20,7 @@
 // retried on the model Anthropic recommends for it.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { chokepointFetch } from '../http.js';
+import { chokepointFetch, HttpDeadlineError, RequestNotResentError } from '../http.js';
 import {
   GenerationError,
   ProviderError,
@@ -73,6 +73,8 @@ export interface AnthropicGeneratorOptions {
   apiKey: string;
   /** Another endpoint for the Messages API; the SDK's default (or ANTHROPIC_BASE_URL) when absent. */
   baseUrl?: string;
+  /** How long the response head may take, and the stream may then go quiet (5 minutes when absent). */
+  timeoutMs?: number;
 }
 
 type Params = Anthropic.Beta.Messages.MessageCreateParamsStreaming;
@@ -159,9 +161,40 @@ export function usageRows(
   return [row(served, usage)];
 }
 
+/**
+ * Which deadline `err`, or an error it was caused by, says was missed: the
+ * answer did not start ('head', from http.ts, after a request that may have
+ * reached the API) or the stream went quiet partway ('idle', from undici).
+ * The SDK wraps both as a connection or generic error, which they are not.
+ */
+function missedDeadline(err: unknown): 'head' | 'idle' | null {
+  let e: unknown = err;
+  for (let depth = 0; e instanceof Error && depth < 5; depth += 1) {
+    if (e instanceof RequestNotResentError) return 'head';
+    if (e instanceof HttpDeadlineError && e.mayHaveReachedServer) return 'head';
+    if ((e as { code?: unknown }).code === 'UND_ERR_BODY_TIMEOUT') return 'idle';
+    e = (e as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
 /** A pensmith error for what the SDK threw. */
-function providerError(err: unknown, model: string): GenerationError {
+function providerError(err: unknown, model: string, timeoutMs: number): GenerationError {
   if (err instanceof GenerationError) return err;
+  const missed = missedDeadline(err);
+  const seconds = timeoutMs >= 1000 ? `${Math.round(timeoutMs / 1000)} s` : `${timeoutMs} ms`;
+  if (missed === 'head') {
+    return new ProviderError(
+      'timeout',
+      null,
+      `${model} did not answer within ${seconds}. The request was not sent again, because the ` +
+      'first attempt may have reached the API and may still be billed. Run the step again.',
+      { cause: err },
+    );
+  }
+  if (missed === 'idle') {
+    return new ProviderError('timeout', null, `${model} stopped sending for ${seconds} partway through its answer; nothing was saved. Run the step again.`, { cause: err });
+  }
   if (err instanceof Anthropic.APIConnectionTimeoutError) {
     return new ProviderError('timeout', null, `the request to the Anthropic API timed out (${model})`, { cause: err });
   }
@@ -188,11 +221,12 @@ function providerError(err: unknown, model: string): GenerationError {
 export function anthropicGenerator(opts: AnthropicGeneratorOptions): Generator {
   return {
     async generate(req: GenerateRequest): Promise<GenerateResult> {
+      const timeoutMs = opts.timeoutMs ?? STREAM_TIMEOUT_MS;
       const client = new Anthropic({
         apiKey: opts.apiKey,
         authToken: null,
         ...(opts.baseUrl ? { baseURL: opts.baseUrl } : {}),
-        fetch: chokepointFetch({ source: 'generic', timeoutMs: STREAM_TIMEOUT_MS, maxBodyBytes: MAX_STREAM_BYTES, untrusted: false }),
+        fetch: chokepointFetch({ source: 'generic', timeoutMs, maxBodyBytes: MAX_STREAM_BYTES, untrusted: false }),
         maxRetries: 2,
         timeout: SDK_TIMEOUT_MS,
         logLevel: 'warn',
@@ -209,7 +243,7 @@ export function anthropicGenerator(opts: AnthropicGeneratorOptions): Generator {
       try {
         message = await stream.finalMessage();
       } catch (err) {
-        const failure = providerError(err, req.model);
+        const failure = providerError(err, req.model, timeoutMs);
         failure.usage = usageRows(stream.currentMessage, req.model);
         throw failure;
       }
