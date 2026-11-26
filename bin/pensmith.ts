@@ -379,7 +379,7 @@ async function runDryRun(argv: string[], verb: Ux02Verb | null): Promise<number>
     return EXIT_OK;
   }
   const step = describeStep({ verb: decision.verb, args: decisionArgs(decision) }, paperRoot);
-  process.stdout.write(renderDryRun(`pensmith --dry-run: the next step is \`${step.command}\`, because ${decision.why}.`, step));
+  process.stdout.write(renderDryRun(`pensmith --dry-run: the next step is \`${decisionCommand(decision)}\`, because ${decision.why}.`, step));
   return EXIT_OK;
 }
 

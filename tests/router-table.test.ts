@@ -317,3 +317,12 @@ test('status and a dry run show the repair step for a failed section, with the r
   assert.equal(dry.status, 0, dry.stderr);
   assert.match(dry.stdout, /pensmith plan 1 --revise/);
 });
+
+test('a dry run names the routed command with its flags (write --force for placeholder text)', () => {
+  const root = paper({
+    1: { status: 'failed', record: { status: 'failed', checked: false, citations: [], reason: 'DRAFT.md is placeholder text from PENSMITH_NO_LLM, not a draft' } },
+  });
+  const dry = cli(root, ['--dry-run']);
+  assert.equal(dry.status, 0, dry.stderr);
+  assert.match(dry.stdout, /the next step is `pensmith write 1 --force`, because section 1 \(intro\) was not verified: DRAFT\.md is placeholder text/);
+});
