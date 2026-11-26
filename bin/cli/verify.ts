@@ -88,7 +88,8 @@ export const verifyCommand = defineCommand({
   async run({ args }) {
     const n = sectionNumberArg('verify', args.n);
     if (n === null) return { ok: false, status: 'invalid-input' };
-    // The slug comes from the outline's section n; an explicit --slug wins.
+    // The slug is the outline's for section n, and a --slug must match it
+    // (it names the folder only when there is no outline).
     const slug = sectionSlugArg('verify', process.cwd(), n, args.slug);
     if (slug === null) return { ok: false, status: 'not-in-outline' };
     const draftPath = sectionDraft(n, slug);

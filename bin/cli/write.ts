@@ -484,7 +484,8 @@ export const writeCommand = defineCommand({
     }
 
     // ---- Single-section mode: positional <n> present ----
-    // The slug comes from the outline's section n; an explicit --slug wins.
+    // The slug is the outline's for section n, and a --slug must match it
+    // (it names the folder only when there is no outline).
     const paperRoot = process.cwd();
     const outline = lastCheckedOutline(paperRoot);
     const slug = sectionSlugArg('write', paperRoot, n, args.slug, outline);
