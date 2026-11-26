@@ -335,7 +335,9 @@ test('ack --dry-run writes nothing', () => {
   cli(root, 'verify', '1', '--slug', 'intro');
   const r = cli(root, 'ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', REASON, '--dry-run');
   assert.equal(r.status, 0, r.out);
-  assert.match(r.out, /ACKNOWLEDGEMENTS\.json/);
+  // ack reads the section's acknowledgements to add to them, then writes them.
+  assert.match(r.out, /Reads: .*ACKNOWLEDGEMENTS\.json/);
+  assert.match(r.out, /Writes: .*ACKNOWLEDGEMENTS\.json/);
   assert.equal(existsSync(ackFile(root)), false);
 });
 

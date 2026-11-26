@@ -167,7 +167,7 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
       return {
         command: typeof args['citekey'] === 'string' ? `${command} ${args['citekey']}` : command,
         summary: 'Record that this section cites a RETRACTED work knowingly, with your reason.',
-        reads: [paper('CITATIONS.bib'), sec('VERIFICATION.json')],
+        reads: [paper('CITATIONS.bib'), sec('VERIFICATION.json'), sec('ACKNOWLEDGEMENTS.json')],
         writes: [sec('ACKNOWLEDGEMENTS.json')],
         model: NO_MODEL,
         network: NO_NETWORK,
