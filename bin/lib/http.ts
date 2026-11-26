@@ -40,6 +40,14 @@
 // politely — per ARCH-13.
 //
 // =================================================================
+//   Size limit
+// =================================================================
+// A response body is read under a byte limit (maxBodyBytes, default
+// DEFAULT_MAX_BODY_BYTES): past it the request fails with
+// ResponseTooLargeError, and the rest is not read. chokepointFetch, the fetch
+// the Anthropic SDK is given, streams its bodies under the same kind of limit.
+//
+// =================================================================
 //   Per-source TokenBucket (ARCH-13)
 // =================================================================
 // Polite-pool RPS table (RESEARCH §RQ-1):

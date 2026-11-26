@@ -8,14 +8,16 @@ logs live in your user data folder.
 What does leave your machine is listed below: requests to scholarly
 registries, to the model provider you configure, and to the optional checks
 you turn on. All of them go through one HTTP module (`bin/lib/http.ts`), which
-refuses private, loopback and link-local addresses.
+refuses private, loopback and link-local addresses in links that come from a
+registry or a page. The model endpoint you configure is used as you set it, so
+a model server on your own machine works.
 
 ## Hosts pensmith contacts
 
 | Host | When | What is sent |
 | --- | --- | --- |
-| `api.anthropic.com` | Intake clarifying questions, outline, section plans and drafts, the advisory verifier passes, and citation repair | The prompt for that step: your assignment and intake answers, the outline, the metadata of the sources assigned to the section, and the section draft. Needs `ANTHROPIC_API_KEY`. |
-| `api.openai.com` | The same steps, only if you configure the OpenAI-compatible provider instead | The same prompts. |
+| `api.anthropic.com` | Intake clarifying questions, outline, section plans and drafts, the advisory verifier passes, and citation repair | The prompt for that step: your assignment and intake answers, the outline, the metadata of the sources assigned to the section, and the section draft. Needs `ANTHROPIC_API_KEY`. A `baseUrl` set for the provider in `runtime.json` replaces this host. |
+| `api.openai.com` | The same steps, only if you configure the OpenAI-compatible provider instead | The same prompts. A `baseUrl` set for the provider (a server such as Ollama on your own machine) replaces this host. |
 | `api.openalex.org` | Research, adding a source, checking citations, Pass 1's retraction cross-check for a cited DOI whose registry record does not show a retraction, and Pass 3, to find the open-access PDF of a quoted source | Search terms from your topic, titles and DOIs. |
 | `api.crossref.org` | Research, adding a source, and Pass 1 of the verifier (every cited DOI) | DOIs and title searches. For a PDF you add that prints no DOI or arXiv ID of its own, the PDF's title line, never its text. |
 | `api.datacite.org` | Pass 1, for a cited DOI Crossref does not hold (arXiv, Zenodo, figshare and other DataCite DOIs), or when Crossref could not be reached | That DOI. |
@@ -31,8 +33,9 @@ refuses private, loopback and link-local addresses.
 
 When `PENSMITH_CONTACT_EMAIL` is set, requests to the scholarly registries
 carry it in the `User-Agent` header, and requests to Crossref and OpenAlex
-also carry it as a `mailto` parameter, as their polite-use policies ask. It is
-not stored or logged. When it is not set, nothing identifying is sent.
+also carry it as a `mailto` parameter, as their polite-use policies ask.
+Requests to the model provider do not. It is not stored or logged. When it is
+not set, nothing identifying is sent.
 
 Pensmith does not contact Zotero itself. It only reads your Claude Code
 config to see whether a Zotero MCP server is set up there.

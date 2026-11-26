@@ -160,9 +160,9 @@ In this alpha, `pensmith done` skips the humanize step (see [Status](#status)).
 **Flags** (on any command where they apply):
 
 - `--dry-run`: print what a step would do and run nothing: no model call, no registry lookup, no file written.
-- `--estimate`: print the projected token use and cost, and run nothing.
+- `--estimate`: print the projected token use and cost of what the command would still run, priced with the configured model, and run nothing.
 - `--show-prompts`: echo every model prompt to stderr.
-- `--yolo`: skip the outline approval and the export confirmation. It never waives a citation verdict, and it refuses to start when the estimated cost is more than half of the cost cap.
+- `--yolo`: skip the outline approval and the export confirmation. It never waives a citation verdict, and it refuses to start when the estimated cost of what it would run is more than half of the cost cap.
 
 **Environment variables:**
 
@@ -170,13 +170,48 @@ In this alpha, `pensmith done` skips the humanize step (see [Status](#status)).
 |----------|---------|
 | `ANTHROPIC_API_KEY` | Model provider key. Needed for intake questions, outlines, plans and drafts in this alpha, in the plugin and on the command line. |
 | `PENSMITH_CONTACT_EMAIL` | Contact address sent to the scholarly registries in the `User-Agent`, and to Crossref and OpenAlex as a `mailto` parameter, as their polite-use policies ask. Unpaywall needs it: without it, Pass 3 finds open-access text through OpenAlex only. |
-| `PENSMITH_COST_CAP_USD` | The session cost cap the `--yolo` pre-flight checks against (default 5). |
+| `PENSMITH_COST_CAP_USD` | The paper's cost cap in USD (default 5; see [Models and cost](#models-and-cost)). It overrides `cost_cap_usd` in `config.toml`. |
 | `PENSMITH_S2_API_KEY` | *Optional.* Semantic Scholar API key. |
 | `GPTZERO_API_KEY` | *Optional.* Enables the AI-likelihood score during `pensmith done`, after a consent prompt. |
 | `ZOTERO_API_KEY` | *Optional.* Doctor reports whether a Zotero MCP server is configured; research does not read from Zotero yet in this alpha. |
 | `PENSMITH_NO_LLM=1` | Test stub mode: every model call returns placeholder text, which verify, compile and done refuse. A stub run can never be exported. |
 
 [PRIVACY.md](PRIVACY.md) lists every host pensmith contacts, when, and what it sends.
+
+### Models and cost
+
+In this alpha every model call is made with your API key. By default it goes to Anthropic's `claude-opus-5-5`, with the effort and output limit each step needs: drafting and outlining get the most, classifying a source or a claim the least. To choose other models, write a `runtime.json` in pensmith's data folder (`~/.local/share/pensmith/` on Linux, `~/Library/Application Support/pensmith/` on macOS, `%LOCALAPPDATA%\pensmith\` on Windows):
+
+```json
+{
+  "$schemaVersion": 1,
+  "providers": {
+    "anthropic": {
+      "name": "anthropic",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "defaultModel": "claude-opus-5-5",
+      "roles": {
+        "verify": { "model": "claude-haiku-5-5" },
+        "write": { "effort": "high", "maxTokens": 64000 }
+      }
+    }
+  }
+}
+```
+
+- The first provider listed is the one used. Its `defaultModel` applies to every step a role does not override.
+- The roles are `intake`, `research`, `evaluate` (judging search results), `outline`, `plan`, `write`, `revise` and `verify` (the advisory verifier passes). Each takes `model`, `effort` (`low`, `medium`, `high`, `xhigh` or `max`), `maxTokens` (the output limit, thinking included) and `expectedOutputTokens` (what the cost check assumes a call uses).
+- An OpenAI-compatible server works too: `"name": "openai"`, with `baseUrl` for one you run (for example `http://127.0.0.1:11434/v1` for Ollama) and `"pricePerMtok": { "input": 0, "output": 0 }` when it costs nothing. `apiKeyEnv` must still name a variable that is set; a local server ignores its value.
+
+Answers are streamed, so a long draft does not time out, and busy (429/529) answers are retried. An answer cut off at its output limit, or declined by the model, is never saved: the step fails, says why, and can be run again.
+
+Each call's cost is written to `.paper/COSTS.jsonl`, priced from the tokens the provider reports. Before every call pensmith checks that what the paper has spent so far, plus the call's estimate, stays within the cost cap: `PENSMITH_COST_CAP_USD` if set, else `cost_cap_usd` under `[budget]` in `.paper/config.toml` (or the project's `config.toml`), else $5. A call that would pass it is refused before anything is sent, with exit status 2. The check uses what a call usually costs, not its limit, so the last call can end a little past the cap; the next one is refused. `warn_at_usd` in the same table prints the running total once spending passes it. A model pensmith has no price for is costed at the highest rate it lists, with a warning.
+
+```toml
+[budget]
+cost_cap_usd = 5.00
+warn_at_usd = 2.00
+```
 
 ## Style Match
 
