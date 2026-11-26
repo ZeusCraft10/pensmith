@@ -11,19 +11,16 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { readIntake, THESIS_MARK } from '../bin/lib/intake-record.js';
-import { isolatedCliEnv } from './lib/cli-env.js';
-
-const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
-const TSX_LOADER = import.meta.resolve('tsx');
+import { readAssignment, readIntake, THESIS_MARK } from '../bin/lib/intake-record.js';
+import { runCli } from './lib/export-fixture.js';
 
 const ASSIGNMENT = 'PSYC 210 essay. Write about 2,000 words on whether social media use causes anxiety in adolescents. APA style.';
 const THESIS = 'SM raises anxiety.';
+// What PROJECT.md keeps for ASSIGNMENT with THESIS added, written out rather than built with withThesis.
+const KEPT_WITH_THESIS = `${ASSIGNMENT}\n\n${THESIS_MARK}\nThesis: ${THESIS}`;
 const ALL = {
   topic: 'social media and anxiety',
   discipline: 'psychology',
@@ -34,24 +31,12 @@ const ALL = {
 };
 const REST = Object.fromEntries(Object.entries(ALL).filter(([k]) => k !== 'topic'));
 
-function runCli(args: string[], cwd: string): { status: number | null; stdout: string; stderr: string } {
-  const r = spawnSync(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, ...args], {
-    cwd,
-    env: isolatedCliEnv({ PENSMITH_NO_LLM: '1' }),
-    encoding: 'utf8',
-  });
-  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
-}
-
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'pensmith-thesis-'));
 }
 
-/** The text under `## Assignment` in PROJECT.md. */
-function keptAssignment(dir: string): string {
-  const md = readFileSync(join(dir, '.paper', 'PROJECT.md'), 'utf8');
-  return md.slice(md.indexOf('## Assignment\n') + '## Assignment\n'.length).trim();
-}
+/** The text under `## Assignment` in PROJECT.md ('' when there is none). */
+const keptAssignment = (dir: string): string => readAssignment(dir) ?? '';
 
 function intakeJson(dir: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(dir, '.paper', 'INTAKE.json'), 'utf8')) as Record<string, unknown>;
@@ -65,11 +50,11 @@ test('a thesis kept with the assignment survives the answering run, which keeps 
   const dir = tmp();
   const first = runCli(['new', '--thesis', THESIS, '--answers', JSON.stringify({ assignment: ASSIGNMENT, topic: ALL.topic })], dir);
   assert.equal(first.status, 3, first.stderr);
-  assert.equal(keptAssignment(dir), `${ASSIGNMENT}\n\n${THESIS_MARK}\nThesis: ${THESIS}`);
+  assert.equal(keptAssignment(dir), KEPT_WITH_THESIS);
 
   const second = runCli(['new', '--answers', JSON.stringify(REST)], dir);
   assert.equal(second.status, 0, second.stdout + second.stderr);
-  assert.equal(keptAssignment(dir), `${ASSIGNMENT}\n\n${THESIS_MARK}\nThesis: ${THESIS}`);
+  assert.equal(keptAssignment(dir), KEPT_WITH_THESIS);
   assert.equal(intakeJson(dir)['topic'], ALL.topic);
 });
 
@@ -81,7 +66,7 @@ test('--from brief.txt --thesis T, then an answering run without --from, keeps t
 
   const second = runCli(['new', '--answers', JSON.stringify(REST)], dir);
   assert.equal(second.status, 0, second.stdout + second.stderr);
-  assert.equal(keptAssignment(dir), `${ASSIGNMENT}\n\n${THESIS_MARK}\nThesis: ${THESIS}`);
+  assert.equal(keptAssignment(dir), KEPT_WITH_THESIS);
   assert.equal(intakeJson(dir)['topic'], ALL.topic);
 });
 
@@ -92,11 +77,11 @@ test("sketch's three runs (thesis, then assignment, then answers) keep the assig
 
   const second = runCli(['new', '--answers', JSON.stringify({ assignment: ASSIGNMENT })], dir);
   assert.equal(second.status, 3, second.stderr);
-  assert.equal(keptAssignment(dir), `${ASSIGNMENT}\n\n${THESIS_MARK}\nThesis: ${THESIS}`);
+  assert.equal(keptAssignment(dir), KEPT_WITH_THESIS);
 
   const third = runCli(['new', '--answers', JSON.stringify(ALL)], dir);
   assert.equal(third.status, 0, third.stdout + third.stderr);
-  assert.equal(keptAssignment(dir), `${ASSIGNMENT}\n\n${THESIS_MARK}\nThesis: ${THESIS}`);
+  assert.equal(keptAssignment(dir), KEPT_WITH_THESIS);
 });
 
 test('answers given with a thesis alone count for the assignment given next', () => {
@@ -107,7 +92,7 @@ test('answers given with a thesis alone count for the assignment given next', ()
   assert.equal(second.status, 3, second.stderr);
   const third = runCli(['new', '--answers', JSON.stringify(REST)], dir);
   assert.equal(third.status, 0, third.stdout + third.stderr);
-  assert.equal(keptAssignment(dir), `${ASSIGNMENT}\n\n${THESIS_MARK}\nThesis: ${THESIS}`);
+  assert.equal(keptAssignment(dir), KEPT_WITH_THESIS);
   assert.equal(intakeJson(dir)['topic'], ALL.topic);
 });
 
@@ -119,7 +104,7 @@ test('a thesis given on a later run is added to the kept assignment, and the ans
 
   const second = runCli(['new', '--thesis', THESIS, '--answers', JSON.stringify(REST)], dir);
   assert.equal(second.status, 0, second.stdout + second.stderr);
-  assert.equal(keptAssignment(dir), `${ASSIGNMENT}\n\n${THESIS_MARK}\nThesis: ${THESIS}`);
+  assert.equal(keptAssignment(dir), KEPT_WITH_THESIS);
   assert.equal(intakeJson(dir)['topic'], ALL.topic);
 });
 
@@ -154,7 +139,7 @@ test("an explicit --thesis '' clears a kept thesis, during intake and after it",
   const dir2 = tmp();
   const done = runCli(['new', '--thesis', THESIS, '--answers', JSON.stringify({ assignment: ASSIGNMENT, ...ALL })], dir2);
   assert.equal(done.status, 0, done.stdout + done.stderr);
-  assert.equal(keptAssignment(dir2), `${ASSIGNMENT}\n\n${THESIS_MARK}\nThesis: ${THESIS}`);
+  assert.equal(keptAssignment(dir2), KEPT_WITH_THESIS);
   const redo = runCli(['new', '--thesis', '', '--answers', JSON.stringify(ALL)], dir2);
   assert.equal(redo.status, 0, redo.stdout + redo.stderr);
   assert.equal(keptAssignment(dir2), ASSIGNMENT);

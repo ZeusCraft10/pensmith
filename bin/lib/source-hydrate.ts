@@ -140,16 +140,22 @@ function titleSpans(title: string, block: readonly string[]): Array<[number, num
 
 /**
  * Whether `c` is the work whose title and byline head the PDF: its whole
- * title is printed as whole lines of the title block, and either one of its
- * authors is named in the BYLINE_LINES opening lines after it, with nothing
- * above it showing that another work heads the PDF, or its byline is printed
- * right above it. A work with no personal author has no byline, so its title
- * must be the block's first title line.
+ * title is printed as whole lines of the title block (`spans`, titleSpans of
+ * its title), and either one of its authors is named in the BYLINE_LINES
+ * opening lines after it, with nothing above it showing that another work
+ * heads the PDF, or its byline is printed right above it. A work with no
+ * personal author has no byline, so its title must be the block's first
+ * title line, with only page furniture above it.
  */
-function titleHeadsPdf(c: SourceCandidate, block: readonly string[], opening: readonly string[]): boolean {
+function titleHeadsPdf(
+  c: SourceCandidate,
+  spans: ReadonlyArray<readonly [number, number]>,
+  block: readonly string[],
+  opening: readonly string[],
+): boolean {
   const hasAuthors = (c.names ?? []).some((n) => n.family);
-  return titleSpans(wholeTitleOf(c), block).some(([first, last]) => {
-    if (!hasAuthors) return first === titleLineIndex(block) && !block.slice(0, first).some((line) => NOTICE.test(line));
+  return spans.some(([first, last]) => {
+    if (!hasAuthors) return titleLike(block[first]!) && block.slice(0, first).every(furniture);
     if (shareNamed(c, wordsAfter(block, opening, last)) > 0) return !anotherWorkAbove(c, block, first);
     return bylineAbove(c, block, first, opening[last + 1]);
   });
@@ -188,6 +194,11 @@ function namesSomeoneElse(c: SourceCandidate, line: string): boolean {
   return bylineNames(line)?.some((name) => shareNamed(c, bylineWords(name)) === 0) ?? false;
 }
 
+/** The BYLINE_LINES lines of the block right above line `first`, where a byline printed above a title is. */
+function linesAbove(block: readonly string[], first: number): string[] {
+  return block.slice(Math.max(0, first - BYLINE_LINES), first);
+}
+
 /**
  * Whether `c`'s byline is printed in the BYLINE_LINES lines right above line
  * `first`: each of them is page furniture or names one of its authors, and
@@ -197,13 +208,12 @@ function namesSomeoneElse(c: SourceCandidate, line: string): boolean {
  * line (`after`) carries one is a reference's.
  */
 function bylineAbove(c: SourceCandidate, block: readonly string[], first: number, after: string | undefined): boolean {
-  const from = Math.max(0, first - BYLINE_LINES);
-  const byline = block.slice(from, first);
+  const byline = linesAbove(block, first);
   const namesC = (line: string): boolean => shareNamed(c, bylineWords(line)) > 0 && !REFERENCE_START.test(line) && !REFERENCE_TAIL.test(line);
   return (
     shareNamed(c, bylineWords(byline.join('\n'))) > 0 &&
     byline.every((line) => furniture(line) || namesC(line)) &&
-    block.slice(0, from).every(furniture) &&
+    block.slice(0, first - byline.length).every(furniture) &&
     !(after !== undefined && REFERENCE_TAIL.test(after))
   );
 }
@@ -310,15 +320,9 @@ function titleLike(line: string): boolean {
   return line.length >= 8 && line.length <= 300 && !NOT_A_TITLE.test(line);
 }
 
-/** Where the PDF's likely title is: the first line in `lines` that can be a title, or -1. */
-function titleLineIndex(lines: readonly string[]): number {
-  return lines.findIndex(titleLike);
-}
-
-/** The PDF's likely title line, if any. */
+/** The PDF's likely title line, if any: the first line in `lines` that can be a title. */
 function titleLine(lines: readonly string[]): string | undefined {
-  const i = titleLineIndex(lines);
-  return i < 0 ? undefined : lines[i];
+  return lines.find(titleLike);
 }
 
 /**
@@ -350,22 +354,39 @@ function bylineWords(text: string): Set<string> {
   return out;
 }
 
-/** Share of the candidate's authors whose family name is one of `inText`, 0..1. */
-function shareNamed(c: SourceCandidate, inText: ReadonlySet<string>): number {
-  const families = (c.names ?? []).map((n) => n.family ?? '').filter(Boolean);
-  if (families.length === 0) return 0;
-  const named = families.filter((f) => {
-    const last = words(f).split(' ').pop() ?? '';
-    return last.length >= 2 && inText.has(last);
-  });
-  return named.length / families.length;
+// Each candidate's family keys (familyKeys), computed once: shareNamed is
+// asked about the same candidate for every line near each title span.
+const familyKeysOf = new WeakMap<SourceCandidate, readonly string[]>();
+
+/** The word each of the candidate's family names is matched by: its last word, one per named author. */
+function familyKeys(c: SourceCandidate): readonly string[] {
+  let keys = familyKeysOf.get(c);
+  if (keys === undefined) {
+    keys = (c.names ?? [])
+      .map((n) => n.family ?? '')
+      .filter(Boolean)
+      .map((f) => words(f).split(' ').pop() ?? '');
+    familyKeysOf.set(c, keys);
+  }
+  return keys;
 }
 
-/** Why the work an identifier printed in the PDF names is not taken for it. */
-function whyNot(shown: string, r: Hydration, block: readonly string[]): string {
+/** Share of the candidate's authors whose family name is one of `inText`, 0..1. */
+function shareNamed(c: SourceCandidate, inText: ReadonlySet<string>): number {
+  const keys = familyKeys(c);
+  if (keys.length === 0) return 0;
+  return keys.filter((k) => k.length >= 2 && inText.has(k)).length / keys.length;
+}
+
+/**
+ * Why the work an identifier printed in the PDF names is not taken for it.
+ * `titlePrinted`: the found work's title is printed as whole lines of the
+ * title block.
+ */
+function whyNot(shown: string, r: Hydration, titlePrinted: boolean): string {
   if (r.kind === 'none') return r.reason;
   if (r.kind === 'mismatch') return `the registry answered ${shown} with the record of ${r.returned}`;
-  return titleSpans(wholeTitleOf(r.candidate), block).length > 0
+  return titlePrinted
     ? `${shown} names "${r.candidate.title}", whose title the PDF prints but not as its own, with its byline`
     : `${shown} names another work, "${r.candidate.title}"`;
 }
@@ -387,14 +408,16 @@ export async function hydrateFromText(text: string): Promise<Hydration> {
   const notes: string[] = [];
   for (const p of printed) {
     const r = await p.look();
-    if (r.kind === 'found' && titleHeadsPdf(r.candidate, block, opening)) return { ...r, via: p.via };
-    notes.push(whyNot(p.shown, r, block));
+    const spans = r.kind === 'found' ? titleSpans(wholeTitleOf(r.candidate), block) : [];
+    if (r.kind === 'found' && titleHeadsPdf(r.candidate, spans, block, opening)) return { ...r, via: p.via };
+    notes.push(whyNot(p.shown, r, spans.length > 0));
   }
   const others = notes.length ? `, and ${notes.join('; ')}` : '';
   const title = titleLine(block);
   if (!title) return { kind: 'none', reason: `no title line could be read from the PDF${others}` };
   const hits = await crossrefSearch(title, { limit: 5 });
   let best: { hit: SourceCandidate; named: number } | undefined;
+  const openingNames = nameWords(openingText);
   for (const hit of hits) {
     const heads = titleSpans(wholeTitleOf(hit), block).filter(
       ([first, last]) => !anotherWorkAbove(hit, block, first) || bylineAbove(hit, block, first, opening[last + 1]),
@@ -402,10 +425,10 @@ export async function hydrateFromText(text: string): Promise<Hydration> {
     if (heads.length === 0) continue;
     // The whole opening may name an author, but only a byline next to the
     // title is read with an affiliation letter set against a name.
-    const inText = nameWords(openingText);
+    const inText = new Set(openingNames);
     for (const [first, last] of heads) {
-      const near = [...bylineWords(block.slice(Math.max(0, first - BYLINE_LINES), first).join('\n')), ...wordsAfter(block, opening, last)];
-      for (const w of near) inText.add(w);
+      for (const w of bylineWords(linesAbove(block, first).join('\n'))) inText.add(w);
+      for (const w of wordsAfter(block, opening, last)) inText.add(w);
     }
     const named = shareNamed(hit, inText);
     if (named > 0 && (!best || named > best.named)) best = { hit, named };

@@ -11,9 +11,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod/v4';
+import { escapeRe } from './citation-grammar.js';
 import { disciplinePreset, normalizeStyleName, SUPPORTED_STYLES } from './citations.js';
 import { parseIntakeMd } from './intake-parse.js';
-import { paperDir, paperIntakeFile } from './paths.js';
+import { paperDir, paperIntakeFile, paperProjectFile } from './paths.js';
 
 /** The questions intake asks, in the order it asks them. */
 export const QUESTION_IDS = ['topic', 'discipline', 'length_words', 'citation_style', 'audience', 'counterargument'] as const;
@@ -144,7 +145,7 @@ const DEFAULT_QUESTIONS: Record<QuestionId, string> = {
  */
 export function buildQuestions(assignment: string, clarifier: ClarifierAnswer | null): Question[] {
   const fromModel = new Map((clarifier?.questions ?? []).map((q) => [q.id, q]));
-  const fallbackTopic = clarifier?.topic.trim() || parseIntakeMd(withoutThesisMark(assignment)).topic;
+  const fallbackTopic = clarifier?.topic.trim() || parseIntakeMd(assignment).topic;
   return QUESTION_IDS.map((id) => {
     const q = fromModel.get(id);
     let suggested = q?.suggested.trim() ?? '';
@@ -195,7 +196,7 @@ export function normalizeThesis(thesis: string): string {
  */
 export const THESIS_MARK = '<!-- the thesis given to pensmith new -->';
 // The paragraph withThesis adds: the last one, the mark and a single `Thesis: ...` line.
-const LAST_THESIS = /(?:^|\r?\n[ \t]*\r?\n)<!-- the thesis given to pensmith new -->[ \t]*\r?\nThesis:[ \t]+([^\r\n]*\S)[ \t]*$/;
+const LAST_THESIS = new RegExp(String.raw`(?:^|\r?\n[ \t]*\r?\n)${escapeRe(THESIS_MARK)}[ \t]*\r?\nThesis:[ \t]+([^\r\n]*\S)[ \t]*$`);
 
 /**
  * An assignment as intake keeps it, split into the text it was given and the
@@ -237,7 +238,7 @@ export function renderProjectMd(title: string, assignment: string): string {
  */
 export function readAssignment(root: string): string | null {
   try {
-    const text = readFileSync(path.join(paperDir(root), 'PROJECT.md'), 'utf8');
+    const text = readFileSync(paperProjectFile(root), 'utf8');
     const m = /^## Assignment[ \t]*\r?\n/m.exec(text);
     if (!m) return null;
     const body = text.slice(m.index + m[0].length).trim();

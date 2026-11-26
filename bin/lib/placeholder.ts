@@ -33,11 +33,16 @@ export function markPlaceholder(text: string): string {
 export function isPlaceholderText(text: string): boolean {
   if (text.includes(NO_LLM_PLACEHOLDER_PREFIX)) return true;
   try {
-    return parseFrontmatter(text).frontmatter['placeholder'] === true;
+    return isPlaceholderParsed(text, parseFrontmatter(text).frontmatter);
   } catch {
     // A body that merely starts with a `---` rule is not frontmatter.
     return false;
   }
+}
+
+/** isPlaceholderText for `text` whose frontmatter the caller has already parsed. */
+export function isPlaceholderParsed(text: string, frontmatter: { placeholder?: unknown }): boolean {
+  return text.includes(NO_LLM_PLACEHOLDER_PREFIX) || frontmatter.placeholder === true;
 }
 
 /** Text for a saved artifact: flagged when it came from the placeholder path. */

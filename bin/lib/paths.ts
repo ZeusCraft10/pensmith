@@ -329,6 +329,11 @@ export function paperIntakeFile(root: string = projectRoot()): string {
   return path.join(paperDir(root), 'INTAKE.json');
 }
 
+/** `<root>/.paper/PROJECT.md`: the assignment intake keeps, word for word (bin/lib/intake-record.ts). */
+export function paperProjectFile(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'PROJECT.md');
+}
+
 /** Options bag for sectionDir (ARCH-20 / D-15 letter-suffix reservation). */
 export interface SectionDirOpts {
   /**

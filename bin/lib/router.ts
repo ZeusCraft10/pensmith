@@ -71,7 +71,7 @@ import { readExportRecord } from './export-record.js';
 import { currentReviseOutcome } from './revise-outcome.js';
 import { readCompileRefusal, refusalFor, type CompileRefusal } from './compile-refusal.js';
 import { isOfflineMode, networkMode } from './network-mode.js';
-import { isNoLlmMode, isPlaceholderText } from './placeholder.js';
+import { isNoLlmMode, isPlaceholderParsed } from './placeholder.js';
 import { isBlockingVerdict, REPAIRABLE_VERDICTS, TEXT_VERDICTS } from './verify/verdict-rows.js';
 import { fileSha256, readVerificationRecord, sha256, UNCHECKED_QUOTE, type VerificationRecord } from './verify/verification-record.js';
 import { VERSION } from './version.generated.js';
@@ -137,7 +137,7 @@ export function readSectionState(planPath: string): SectionStateRead {
       corrupt: false,
       absent: false,
       assignedSources: assignedSourcesFrom(frontmatter),
-      placeholder: isPlaceholderText(text),
+      placeholder: isPlaceholderParsed(text, frontmatter),
     };
   } catch (e) {
     process.stderr.write(
@@ -253,6 +253,17 @@ interface RecordedWalk {
   refusal: () => CompileRefusal | null;
   /** The DRAFT.md and VERIFICATION.json hashes each section that is through was routed on, by sectionKey. */
   through: Map<string, { draft: string; verification: string }>;
+}
+
+/** A RecordedWalk over the paper at `paperRoot` that has routed nothing yet. */
+function recordedWalk(paperRoot: string, warn: (w: string) => void): RecordedWalk {
+  let refusal: CompileRefusal | null | undefined;
+  return {
+    paperRoot,
+    warn,
+    refusal: () => (refusal === undefined ? (refusal = readCompileRefusal(paperRoot)) : refusal),
+    through: new Map(),
+  };
 }
 
 /**
@@ -419,13 +430,7 @@ export function recordedSectionDecision(
   planStatus: string,
   assignedSources: readonly string[],
 ): RouterDecision | null {
-  let refusal: CompileRefusal | null | undefined;
-  return routeRecorded({
-    paperRoot,
-    warn: () => {},
-    refusal: () => (refusal === undefined ? (refusal = readCompileRefusal(paperRoot)) : refusal),
-    through: new Map(),
-  }, s, planStatus, assignedSources);
+  return routeRecorded(recordedWalk(paperRoot, () => {}), s, planStatus, assignedSources);
 }
 
 /**
@@ -525,13 +530,7 @@ export async function resolveNextAction(
 
     // Walk the sections in order; the first one not through decides.
     const warnings: string[] = [];
-    let refusal: CompileRefusal | null | undefined;
-    const walk: RecordedWalk = {
-      paperRoot,
-      warn: (w) => warnings.push(w),
-      refusal: () => (refusal === undefined ? (refusal = readCompileRefusal(paperRoot)) : refusal),
-      through: new Map(),
-    };
+    const walk = recordedWalk(paperRoot, (w) => warnings.push(w));
     for (const { n, slug } of [...sections].sort((a, b) => a.n - b.n)) {
       const where = `section ${n} (${slug})`;
       const r = readSectionState(sectionPlan(n, slug, paperRoot));

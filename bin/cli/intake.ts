@@ -35,7 +35,7 @@ import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropi
 import { getProviderApiKey } from '../lib/runtime.js';
 import { SUPPORTED_STYLES } from '../lib/citations.js';
 import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
-import { paperConfigFile, paperDir, paperIntakeFile } from '../lib/paths.js';
+import { paperConfigFile, paperDir, paperIntakeFile, paperProjectFile } from '../lib/paths.js';
 import { ensurePaperGitignore } from '../lib/paper-gitignore.js';
 import { readProjectConfig } from '../lib/project-config.js';
 import { setConfigValues } from '../lib/config-edit.js';
@@ -403,10 +403,9 @@ function keptRawAssignment(cwd: string, stored: string): string {
 }
 
 /** The clarifier's answer for `assignment`, or null when no model ran. */
-async function askClarifier(kept: string): Promise<ClarifierAnswer | null> {
+async function askClarifier(assignment: string): Promise<ClarifierAnswer | null> {
   const prompt = loadPrompt('intake-clarifier');
   // The assignment (redacted when PII redaction is on) is the user turn.
-  const assignment = withoutThesisMark(kept);
   const system = _interpolate(prompt, { assignment });
   const result = await complete({
     system,
@@ -560,16 +559,13 @@ export const intakeCommand = defineCommand({
     const keptParts = keptRaw === null ? null : splitThesis(keptRaw);
     const rawAssignment = withThesis(brought || keptParts?.base || '', thesisArg ?? keptParts?.thesis ?? '');
     let assignment: string;
+    const projectMd = paperProjectFile(cwd);
     if (rawAssignment) {
-      if (rawAssignment === keptRaw && !piiRedact) {
-        assignment = keptStored!;
-      } else {
-        // The raw text goes only to INTAKE.raw.local; everything else sees the redacted text.
-        assignment = await keepAssignment(cwd, rawAssignment, piiRedact, brought !== '' || rawAssignment !== keptRaw);
-      }
+      // The raw text goes only to INTAKE.raw.local; everything else sees the redacted text.
+      assignment = await keepAssignment(cwd, rawAssignment, piiRedact, brought !== '' || rawAssignment !== keptRaw);
     } else {
       // The kept text was only a thesis, and this run clears it.
-      if (keptStored !== null) await removePath(path.join(paperDir(cwd), 'PROJECT.md'));
+      if (keptStored !== null) await removePath(projectMd);
       if (_ask || canAskInTerminal(process.stdout)) {
         const typed = await (_ask ?? askInTerminal)({
           id: 'assignment',
@@ -604,7 +600,6 @@ export const intakeCommand = defineCommand({
         return { ok: false, mode: 'pending', pending: ['assignment'] };
       }
     }
-    const projectMd = path.join(paperDir(cwd), 'PROJECT.md');
     const meta = resolvePaperMeta(cwd);
     if (readAssignment(cwd) !== assignment) {
       await atomicWriteFile(projectMd, renderProjectMd(meta.name, assignment));
@@ -641,7 +636,9 @@ export const intakeCommand = defineCommand({
             throw e;
           }
         }
-        questions = buildQuestions(assignment, await askClarifier(assignment));
+        // A reader is given the assignment without the thesis mark.
+        const readable = withoutThesisMark(assignment);
+        questions = buildQuestions(readable, await askClarifier(readable));
       }
       // The counterargument default is the discipline's, once the discipline is known.
       const discipline = answers['discipline'];
