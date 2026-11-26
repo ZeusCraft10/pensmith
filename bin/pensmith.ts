@@ -20,12 +20,11 @@
  */
 // bin/pensmith.ts — Tier 2 dispatcher.
 //
-// D-03: citty@^0.2.2 (locked).
-// D-05: the 16 verbs of REQUIREMENTS.md UX-02, plus `ack` (acknowledge a
+// citty@^0.2.2 parses the command line.
+// The verbs are the 16 of REQUIREMENTS.md UX-02, plus `ack` (acknowledge a
 //   RETRACTED citation). Words like `export`/`humanize`/`gpt-zero`/`plagiarism`
 //   are aliases or parts of other verbs, not verbs of their own.
-// Pitfall 7 — DO NOT console.log here; this binary is the CLI, not
-// the MCP server, but consistency matters for future stdio surfaces.
+// No console.log here: stdout carries only what a verb prints.
 //
 // WR-03 + WR-06 (cross-AI review): the verb list is owned by
 // bin/lib/verbs.ts (UX02_VERBS); this dispatcher builds subCommands by
@@ -83,33 +82,21 @@ type AnyCommandDef = CommandDef<any>;
  */
 export const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyCommandDef>>> = {
   doctor: () => import('./cli/doctor.js').then((m) => m.doctorCommand),
-  // Phase 3 Plan 03-07 Task 7.2 — 6 new real verbs.
-  // CYCLE-2 M-1 reconciliation: `new` is the UX02_VERBS canonical key
-  // (README quick-start), but the implementation file is `./cli/intake.ts`
-  // (the canonical filename matching workflows/intake.md). Both point to
-  // the same CommandDef.
+  // `new` is the verb (README quick start); its implementation is
+  // ./cli/intake.ts, named for the intake step.
   new: () => import('./cli/intake.js').then((m) => m.intakeCommand),
   research: () => import('./cli/research.js').then((m) => m.researchCommand),
   outline: () => import('./cli/outline.js').then((m) => m.outlineCommand),
   plan: () => import('./cli/plan.js').then((m) => m.planCommand),
   write: () => import('./cli/write.js').then((m) => m.writeCommand),
   verify: () => import('./cli/verify.js').then((m) => m.verifyCommand),
-  // Phase 4 Plan 04-05 — compile is one of the locked 16 (no new verb); promote
-  // the Phase-2 dispatcher stub to the real keystone pipeline loader.
   compile: () => import('./cli/compile.js').then((m) => m.compileCommand),
-  // Phase 6 Plan 06-05 — done is one of the locked 16 (no new verb); promote the
-  // Phase-2 dispatcher stub to the real export-pipeline loader (DONE-01/03/09).
   done: () => import('./cli/done.js').then((m) => m.doneCommand),
-  // Phase 7 Plan 07-02 — next/status/resume promoted from stubs to real verbs.
   next: () => import('./cli/next.js').then((m) => m.nextCommand),
   status: () => import('./cli/status.js').then((m) => m.statusCommand),
   resume: () => import('./cli/resume.js').then((m) => m.resumeCommand),
-  // Phase 8 Plan 08-01 — list/open promoted from Phase-2 stubs (no 17th verb;
-  // both are already members of the locked-16 UX02_VERBS).
   list: () => import('./cli/list.js').then((m) => m.listCommand),
   open: () => import('./cli/open.js').then((m) => m.openCommand),
-  // Phase 8 Plan 08-04 — sketch/add promoted from Phase-2 stubs (no 17th verb;
-  // both are already members of the locked-16 UX02_VERBS).
   sketch: () => import('./cli/sketch.js').then((m) => m.sketchCommand),
   add: () => import('./cli/add.js').then((m) => m.addCommand),
   ack: () => import('./cli/ack.js').then((m) => m.ackCommand),
@@ -238,25 +225,24 @@ function hasFlag(argv: string[], flag: string): boolean {
 }
 
 /**
- * Verbs that incur NO model/network cost. The --yolo cap pre-flight must not
- * hard-refuse these (audit #24): inspecting status/library/health, opening a
- * paper or recording an acknowledgement should work even over an over-cap
- * project.
+ * Verbs that incur NO model/network cost, which the --yolo cost-cap pre-flight
+ * skips: inspecting status/library/health, opening a paper or recording an
+ * acknowledgement should work even over an over-cap project.
  */
-const READ_ONLY_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor', 'open', 'ack']);
+const NO_COST_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor', 'open', 'ack']);
 
 /**
  * Whether the --yolo cost-cap pre-flight should run for this argv (audit #24).
  * It runs ONLY for cost-incurring execution: --yolo present, NOT a no-cost
  * preview (--estimate) or citty meta (--version/--help), and NOT an explicit
- * read-only verb. A bare invocation (no verb) runs the pipeline, so it counts.
+ * no-cost verb. A bare invocation (no verb) runs the pipeline, so it counts.
  */
 export function shouldRunYoloCapPreflight(argv: string[]): boolean {
   if (!hasFlag(argv, 'yolo')) return false;
   if (hasFlag(argv, 'estimate') || hasFlag(argv, 'dry-run') || isDryRun()) return false;
   if (argv.includes('--version') || argv.includes('--help') || argv.includes('-h')) return false;
   const v = firstVerb(argv);
-  if (v !== null && READ_ONLY_VERBS.has(v)) return false;
+  if (v !== null && NO_COST_VERBS.has(v)) return false;
   return true;
 }
 
@@ -451,7 +437,7 @@ async function dispatchArgv(argv: string[]): Promise<void> {
   //     load errors, so a paper-less dir / corrupt STATE.json sees an empty
   //     estimate.
   //
-  //     Audit #24: a read-only verb (status/list/doctor/open) and the --estimate
+  //     Audit #24: a no-cost verb (NO_COST_VERBS) and the --estimate
   //     preview incur NO model/network cost, so the cap must NOT hard-refuse them
   //     — `pensmith status --yolo` or `pensmith --estimate --yolo` should still
   //     work over an over-cap project. --version/--help are citty meta and bypass
