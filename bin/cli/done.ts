@@ -78,7 +78,9 @@ export interface GateIssues {
   orphanClaimCount: number;
   /** Plagiarism results that returned at least one match URL. */
   plagiarismHits: PlagiarismResult[];
-  /** True iff ANY of the three buckets is non-empty. */
+  /** Phrases the plagiarism check could not search: it is incomplete, not clean. */
+  plagiarismUnchecked: number;
+  /** True iff ANY of the buckets is non-empty or the plagiarism check is incomplete. */
   hasIssues: boolean;
 }
 
@@ -101,9 +103,10 @@ export function collectGateIssues(input: {
     (r) => Array.isArray(r.matches) && r.matches.length > 0,
   );
   const orphanClaimCount = orphanClaims.reduce((sum, r) => sum + r.orphanCount, 0);
+  const plagiarismUnchecked = (input.plagiarismResults ?? []).filter((r) => r.skipped !== undefined).length;
   const hasIssues =
-    unsupported.length > 0 || orphanClaims.length > 0 || plagiarismHits.length > 0;
-  return { unsupported, orphanClaims, orphanClaimCount, plagiarismHits, hasIssues };
+    unsupported.length > 0 || orphanClaims.length > 0 || plagiarismHits.length > 0 || plagiarismUnchecked > 0;
+  return { unsupported, orphanClaims, orphanClaimCount, plagiarismHits, plagiarismUnchecked, hasIssues };
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +145,11 @@ function writeGateSummary(issues: GateIssues): void {
       .join(' | ');
     process.stdout.write(
       `  - ${issues.plagiarismHits.length} distinctive phrase(s) with web matches (plagiarism): ${sample}\n`,
+    );
+  }
+  if (issues.plagiarismUnchecked > 0) {
+    process.stdout.write(
+      `  - the plagiarism check is incomplete: ${issues.plagiarismUnchecked} phrase(s) could not be searched, so it does not show the paper is clean\n`,
     );
   }
   process.stdout.write('These are advisory only — review before confirming export.\n');
@@ -570,8 +578,11 @@ function canAskInTerminal(): boolean {
 /** The one-line question the export confirmation asks. */
 function pendingExportSummary(issues: GateIssues, format: string, source: string): string {
   const count = issues.unsupported.length + issues.orphanClaimCount + issues.plagiarismHits.length;
+  const incomplete = issues.plagiarismUnchecked > 0
+    ? ` The plagiarism check is incomplete (${issues.plagiarismUnchecked} phrase(s) not searched).`
+    : '';
   return `Export ${source} as ${format}? ` +
-    (issues.hasIssues ? `${count} advisory issue(s) to review first.` : 'No advisory issues were found.');
+    (count > 0 ? `${count} advisory issue(s) to review first.` : 'No advisory issues were found.') + incomplete;
 }
 
 /**
@@ -586,6 +597,7 @@ export function pendingExportDecision(issues: GateIssues, record: GateRecord): R
       unsupported: issues.unsupported.map((r) => r.citekey),
       orphan_claims: issues.orphanClaimCount,
       plagiarism_hits: issues.plagiarismHits.map((r) => r.phrase.replace(/\s+/g, ' ').slice(0, 80)),
+      plagiarism_not_checked: issues.plagiarismUnchecked,
     },
   });
 }
@@ -593,7 +605,11 @@ export function pendingExportDecision(issues: GateIssues, record: GateRecord): R
 /** What done keeps with a pending export confirmation, so the answering run audits nothing again. */
 const ExportAuditSchema = z.object({
   pass4Results: z.array(z.object({ orphanCount: z.number() }).passthrough()),
-  plagiarismResults: z.array(z.object({ phrase: z.string(), matches: z.array(z.string()) }).passthrough()),
+  plagiarismResults: z.array(z.object({
+    phrase: z.string(),
+    matches: z.array(z.string()),
+    skipped: z.enum(['offline', 'blocked', 'no-answer']).optional(),
+  }).strict()),
   honestyReport: z.string(),
   humanized: z.boolean(),
 }).strict();

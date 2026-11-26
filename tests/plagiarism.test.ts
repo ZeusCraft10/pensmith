@@ -12,9 +12,8 @@
 // Cassette mode (set by the test runner): http.ts answers each phrase's search
 // from tests/fixtures/cassettes/duckduckgo/html-search.json when the request was
 // recorded, and nothing else gets hits. The synthetic cassette is keyed by the
-// request the extractor really sends for the draft below ("transformer relies
-// solely attention mechanisms"); it used to carry a query no phrase could
-// produce and only matched through a first-entry fallback.
+// request the extractor really sends for the draft below: the exact quoted
+// phrase "The transformer relies solely on attention mechanisms".
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
