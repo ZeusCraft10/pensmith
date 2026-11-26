@@ -7,8 +7,10 @@
 //     arXiv's own DOIs (10.48550/arXiv.<id>) are read from arXiv;
 //   - a PDF is identified by a DOI or arXiv ID printed in its opening (before
 //     any reference list), and only when the work that identifier names has
-//     the PDF's title word for word in its title block (the lines before the
-//     abstract): a first page can also print cited works' DOIs and titles;
+//     its title printed word for word in the PDF's title block (the lines
+//     before the abstract) with its authors named in the lines after it, as
+//     a paper prints its own title and byline: a first page can also print
+//     cited works' DOIs and titles;
 //   - failing that, by a Crossref title search, whose hit is accepted only
 //     when its whole title is the PDF's, word for word, and one of its
 //     authors is named in the opening; of several such hits, the one with
@@ -64,12 +66,25 @@ const MAX_TRIED = 3;
 const TITLE_BLOCK_LINES = 30;
 /** The lines a title can wrap onto. */
 const TITLE_MAX_LINES = 4;
+/** The lines after a title that can hold its byline, the authors' names. */
+const BYLINE_LINES = 3;
 
 // The heading of a reference list ("References", "7 References", "VI.
-// BIBLIOGRAPHY"). What follows it names other works, their titles and authors.
-const REFERENCES_HEADING = /^(?:[\divxlc]+\.?\s+)?(?:references|bibliography|works cited|literature cited|reference list|cited literature)\s*:?$/i;
+// BIBLIOGRAPHY", "References and Notes", "Références"). What follows it names
+// other works, their titles and authors.
+const REFERENCES_HEADING = new RegExp(
+  '^(?:[\\divxlc]+\\.?\\s+)?(?:' +
+    [
+      'references(?: and notes)?', 'notes(?: and references)?', 'endnotes', 'bibliography', 'works cited', 'literature cited',
+      'reference list', 'cited literature', 'literatur(?:e|verzeichnis)?', 'r[eé]f[eé]rences(?: bibliographiques)?',
+      'referencias(?: bibliogr[aá]ficas)?', 'referenzen', 'bibliograf[ií]a', 'bibliographie',
+    ].join('|') +
+    ')\\s*:?$',
+  'i',
+);
 // The line that opens the abstract; the title and authors come before it.
-const ABSTRACT_START = /^abstract\b/i;
+// Some journals label it "Summary", and some space its letters out.
+const ABSTRACT_START = /^(?:abstract|a b s t r a c t|summary)\b/i;
 
 /** Lowercased words of `s`, accents removed, joined by single spaces. */
 function words(s: string): string {
@@ -86,7 +101,7 @@ function openingLines(text: string): string[] {
   for (const raw of text.slice(0, OPENING_CHARS).split(/\r?\n/)) {
     const line = raw.replace(/\s+/g, ' ').trim();
     if (!line) continue;
-    if (REFERENCES_HEADING.test(line)) break;
+    if (REFERENCES_HEADING.test(line.normalize('NFC'))) break;
     out.push(line);
   }
   return out;
@@ -103,19 +118,41 @@ function titleBlock(opening: readonly string[]): string[] {
 }
 
 /**
- * Whether `title` is printed as whole lines of the title block: one line, or
- * up to TITLE_MAX_LINES consecutive lines it wraps onto. Whole lines, so a
- * title quoted inside another ("Comment on ...") is not this paper's.
+ * Where `title` is printed as whole lines of the title block, as [first,
+ * last] line indexes: one line, or up to TITLE_MAX_LINES consecutive lines it
+ * wraps onto. Whole lines, so a title quoted inside another ("Comment on
+ * ...") is not this paper's.
  */
-function titleInBlock(title: string, block: readonly string[]): boolean {
+function titleSpans(title: string, block: readonly string[]): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
   for (let i = 0; i < block.length; i++) {
     let span = '';
     for (let k = i; k < Math.min(block.length, i + TITLE_MAX_LINES); k++) {
       span = span ? `${span} ${block[k]}` : block[k]!;
-      if (sameWholeTitle(span, title)) return true;
+      if (sameWholeTitle(span, title)) spans.push([i, k]);
     }
   }
-  return false;
+  return spans;
+}
+
+function titleInBlock(title: string, block: readonly string[]): boolean {
+  return titleSpans(title, block).length > 0;
+}
+
+/**
+ * Whether `c` is the work whose title and byline head the PDF: its whole
+ * title is printed as whole lines of the title block, and one of its authors
+ * is named in the BYLINE_LINES opening lines after it. A cited work's title
+ * set as a line of the body is followed by its DOI or the next sentence, not
+ * by its authors. A work with no personal author has no byline, so its title
+ * must be the block's first title line.
+ */
+function titleHeadsPdf(c: SourceCandidate, block: readonly string[], opening: readonly string[]): boolean {
+  const hasAuthors = (c.names ?? []).some((n) => n.family);
+  const head = titleLineIndex(block);
+  return titleSpans(wholeTitleOf(c), block).some(([first, last]) =>
+    hasAuthors ? authorsNamedIn(c, opening.slice(last + 1, last + 1 + BYLINE_LINES).join('\n')) > 0 : first === head,
+  );
 }
 
 /** The candidate's whole title: Crossref keeps a subtitle in a field of its own. */
@@ -128,9 +165,15 @@ function wholeTitleOf(c: SourceCandidate): string {
 // furniture, identifiers.
 const NOT_A_TITLE = /https?:\/\/|www\.|©|\bcopyright\b|\blicen[cs]e|\bdoi\b|\barxiv\b|\bissn\b|\bpreprint\b|\bjournal of\b|\bproceedings\b|\bvol(?:ume)?\.?\s*\d|\breceived\b|\baccepted\b|^\W*\d+\W*$/i;
 
-/** The PDF's likely title: the first line of 8 to 300 characters in `lines` that is not page furniture. */
+/** Where the PDF's likely title is: the first line of 8 to 300 characters in `lines` that is not page furniture, or -1. */
+function titleLineIndex(lines: readonly string[]): number {
+  return lines.findIndex((line) => line.length >= 8 && line.length <= 300 && !NOT_A_TITLE.test(line));
+}
+
+/** The PDF's likely title line, if any. */
 function titleLine(lines: readonly string[]): string | undefined {
-  return lines.find((line) => line.length >= 8 && line.length <= 300 && !NOT_A_TITLE.test(line));
+  const i = titleLineIndex(lines);
+  return i < 0 ? undefined : lines[i];
 }
 
 /** Share of the candidate's authors whose family name is a word of `text`, 0..1. */
@@ -147,7 +190,7 @@ function authorsNamedIn(c: SourceCandidate, text: string): number {
 
 /**
  * The work a PDF's `text` is: the work an identifier printed in its opening
- * names, when that work's title is the PDF's title; else the Crossref hit for
+ * names, when that work's title and byline head the PDF; else the Crossref hit for
  * its title line whose whole title is the PDF's and whose authors the opening
  * names, the one with most of them named.
  */
@@ -162,7 +205,7 @@ export async function hydrateFromText(text: string): Promise<Hydration> {
   const tried: string[] = [];
   for (const p of printed) {
     const r = await p.look();
-    if (r.kind === 'found' && titleInBlock(wholeTitleOf(r.candidate), block)) return { ...r, via: p.via };
+    if (r.kind === 'found' && titleHeadsPdf(r.candidate, block, opening)) return { ...r, via: p.via };
     tried.push(p.shown);
   }
   const others = tried.length ? `, and ${tried.join(', ')} name other works` : '';
