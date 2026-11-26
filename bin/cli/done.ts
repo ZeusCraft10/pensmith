@@ -44,7 +44,7 @@ import {
 } from '../lib/exporter.js';
 import { paperDir, paperFinalFile, paperFinalStagedFile, sectionDirName } from '../lib/paths.js';
 import { closeGate, gateStillApplies, openGate, readGate, stopForAnswer } from '../lib/gates.js';
-import { parseBibByCitekey } from '../lib/citations.js';
+import { parseBibByCitekey, parseBibFieldsByCitekey } from '../lib/citations.js';
 import { resolveCitationStyle } from '../lib/citation-style.js';
 import { isPandocPresent } from '../lib/ecosystem-presence.js';
 import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
@@ -523,8 +523,11 @@ export async function reCheckFinalMd(
   }
 
   let bibByCitekey: Map<string, { DOI?: string }>;
+  let fieldsByCitekey: Map<string, Record<string, string>>;
   try {
     bibByCitekey = await parseBibByCitekey<{ DOI?: string }>(bibText);
+    // The raw fields hold an arXiv ID, which citation-js drops.
+    fieldsByCitekey = await parseBibFieldsByCitekey(bibText);
   } catch {
     // Unparseable bib → skip-clean (no DOIs to check against).
     return { passed: true, reason: '' };
@@ -532,7 +535,7 @@ export async function reCheckFinalMd(
 
   let pass3Results;
   try {
-    pass3Results = await runPass3(finalMd, bibByCitekey);
+    pass3Results = await runPass3(finalMd, bibByCitekey, fieldsByCitekey);
   } catch (err) {
     // GATE-04 FAIL-CLOSED: an unexpected runPass3 error is NOT a clean pass.
     // We already have a valid bibByCitekey map here, so an exception is unexpected

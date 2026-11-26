@@ -30,6 +30,6 @@ export async function checkCitationsAndQuotes(text: string, opts: CheckTextOptio
   });
   const pass3 = opts.pass3 === false
     ? []
-    : await runPass3(text, opts.bib.entries as Map<string, { DOI?: string; URL?: string }>);
+    : await runPass3(text, opts.bib.entries as Map<string, { DOI?: string; URL?: string }>, opts.bib.fields);
   return { pass1, pass3 };
 }

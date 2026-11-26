@@ -85,8 +85,12 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
      doi.org link in the `url` field counts). Find its open-access PDF links
      (`bin/lib/verify/source-text.ts`): OpenAlex's best open-access location and its other
      open-access locations first. When none of them gives text, Unpaywall's links not tried yet,
-     when `PENSMITH_CONTACT_EMAIL` is set. If there are none → `verdict = 'PDF_UNAVAILABLE'`,
-     with a reason that names what each registry said (and says to set the email when it is unset).
+     when `PENSMITH_CONTACT_EMAIL` is set. A work with an arXiv ID (an `eprint` with
+     `archiveprefix = {arXiv}`, an `arxiv` field, an arxiv.org link, or arXiv's own DOI) is then
+     read from its arXiv PDF, `https://arxiv.org/pdf/<id>`: a work kept under its arXiv record
+     (the computer-science preference) prints no DOI. If none gives text →
+     `verdict = 'PDF_UNAVAILABLE'`, with a reason that names what each source said (and says to
+     set the email when it is unset).
    - **(b)** Fetch the first link that serves a PDF: bytes (`bodyBytes`, never the text body or the
      HTTP cache), through the SSRF guard, following redirects. A page served as HTML is not a PDF,
      and a damaged PDF that pdf.js cannot read is skipped; either way the next link is tried.

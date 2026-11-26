@@ -1,0 +1,12 @@
+[
+  {
+    "scope": "https://export.arxiv.org",
+    "method": "GET",
+    "path": "/api/query?id_list=2205.14719",
+    "status": 200,
+    "response": "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\" xmlns:arxiv=\"http://arxiv.org/schemas/atom\" xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://arxiv.org/api/eYFaXaHzvBv/ccxVHRooG6keXsE</id>\n  <title>arXiv Query: search_query=&amp;id_list=2205.14719&amp;start=0&amp;max_results=10</title>\n  <updated>2026-11-26T20:12:00Z</updated>\n  <link href=\"https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=10&amp;id_list=2205.14719\" type=\"application/atom+xml\"/>\n  <opensearch:itemsPerPage>10</opensearch:itemsPerPage>\n  <opensearch:totalResults>1</opensearch:totalResults>\n  <opensearch:startIndex>0</opensearch:startIndex>\n  <entry>\n    <id>http://arxiv.org/abs/2205.14719v1</id>\n    <title>A note on hardness of promise hypergraph colouring</title>\n    <updated>2022-05-29T17:11:23Z</updated>\n    <link href=\"https://arxiv.org/abs/2205.14719v1\" rel=\"alternate\" type=\"text/html\"/>\n    <link href=\"https://arxiv.org/pdf/2205.14719v1\" rel=\"related\" type=\"application/pdf\" title=\"pdf\"/>\n    <summary>We show a slightly simpler proof the following theorem by I. Dinur, O. Regev, and C. Smyth: for all $c \\geq 2$, it is NP-hard to find a $c$-colouring of a 2-coloruable 3-uniform hypergraph. We recast this result in the algebraic framework for Promise CSPs, using only a weaker version of the PCP theorem.</summary>\n    <category term=\"cs.DM\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <published>2022-05-29T17:11:23Z</published>\n    <arxiv:primary_category term=\"cs.DM\"/>\n    <author>\n      <name>Marcin Wrochna</name>\n    </author>\n  </entry>\n</feed>\n",
+    "responseHeaders": {
+      "content-type": "application/atom+xml; charset=utf-8"
+    }
+  }
+]

@@ -15,3 +15,11 @@ because a PDF does not survive being stored as JSON text.
 answers under the 10.0000 test prefix, for the cases no real record shows
 reliably: a work with no open-access PDF, and an open-access link that serves
 a login page instead of a PDF.
+
+`arxiv-2205.14719.pdf` is the arXiv PDF of M. Wrochna, "A note on hardness
+of promise hypergraph colouring", arXiv:2205.14719v1 (29 May 2022), which has
+no DOI. It is distributed under the Creative Commons Attribution 4.0 licence
+(https://creativecommons.org/licenses/by/4.0/) and is kept here unmodified,
+as https://arxiv.org/pdf/2205.14719 served it on 2026-11-26, with arXiv's
+record of it in `../arxiv/pass3-promise-colouring.json`. Pass 3 tests check
+quotations of a work known only by its arXiv ID against its extracted text.

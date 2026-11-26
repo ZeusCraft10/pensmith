@@ -1,10 +1,11 @@
 // bin/lib/verify/source-text.ts — the open-access text Pass 3 checks a
 // quotation against.
 //
-// The PDF links come from OpenAlex first, which needs no contact email. When
-// none of them gives text, Unpaywall is asked too, if PENSMITH_CONTACT_EMAIL
-// is set (Unpaywall refuses a request without one): it often knows another
-// copy. Each link is tried in turn until one gives a PDF.
+// For a work with a DOI, the PDF links come from OpenAlex first, which needs
+// no contact email. When none of them gives text, Unpaywall is asked too, if
+// PENSMITH_CONTACT_EMAIL is set (Unpaywall refuses a request without one): it
+// often knows another copy. Each link is tried in turn until one gives a PDF.
+// A work known by its arXiv ID is read from arXiv's own PDF of it.
 //
 // A PDF is fetched as bytes, never through the UTF-8 text body, which destroys
 // its compressed streams, and never through the HTTP cache, which stores text.
@@ -158,4 +159,22 @@ export async function openAccessText(doi: string, seen: Map<string, QuoteSource>
     notes.push('set PENSMITH_CONTACT_EMAIL so Unpaywall can be asked too');
   }
   return { kind: 'none', scanned, noLinks: tried.size === 0, reason: [...failures, ...notes].join('; ') };
+}
+
+/** Where arXiv serves the PDF of `id`: its latest version, or the one `id` names ("2003.02433v2"). */
+export function arxivPdfUrl(id: string): string {
+  return `https://arxiv.org/pdf/${id}`;
+}
+
+/**
+ * The text of the arXiv PDF of `id` (`2003.02433`, `cs/0112017`). A work kept
+ * under its arXiv record prints no DOI, and many computer-science papers have
+ * none, but arXiv serves its text. Fetched as any other PDF link, through the
+ * SSRF guard and the body cap.
+ */
+export async function arxivText(id: string, seen: Map<string, QuoteSource>): Promise<SourceText> {
+  const failures: string[] = [];
+  const got = await firstPdfText([arxivPdfUrl(id)], seen, failures);
+  if (got.kind === 'text') return got;
+  return { kind: 'none', scanned: got.scanned, noLinks: false, reason: failures.join('; ') };
 }
