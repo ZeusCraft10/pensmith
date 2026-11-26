@@ -232,6 +232,20 @@ test('estimate: a failed or unverifiable section is priced as the step the route
   assert.deepEqual(res.rows.map((r) => r.step), ['revise §1', 'verify §1', 'write §2', 'verify §2', 'verify §3', 'done']);
 });
 
+test('estimate: a planned section whose PLAN.md is a placeholder is priced from planning, as the router sends it to plan --force', async () => {
+  const projectEstimate = await loadProject();
+  const root = paperWith(['planned', 'planned']);
+  writeFileSync(sectionPlan(1, 's1', root), '---\nsection: 1\nslug: s1\nstatus: planned\nplaceholder: true\n---\n[PENSMITH_NO_LLM placeholder — plan]\n');
+  const saved = process.env['PENSMITH_NO_LLM'];
+  delete process.env['PENSMITH_NO_LLM'];
+  try {
+    const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 5 });
+    assert.deepEqual(res.rows.map((r) => r.step), ['plan §1', 'write §1', 'verify §1', 'write §2', 'verify §2', 'done']);
+  } finally {
+    if (saved !== undefined) process.env['PENSMITH_NO_LLM'] = saved;
+  }
+});
+
 test('estimate: a wave write counts only the sections that still need drafting; compile costs nothing', async () => {
     const projectEstimate = await loadProject();
     const root = paperWith(['verified', 'writing', 'planned']);

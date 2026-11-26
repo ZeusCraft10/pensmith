@@ -89,9 +89,13 @@ test('section status: plan marks the section planned so the router advances plan
   assert.ok(existsSync(planPath), 'plan must write PLAN.md');
   assert.equal(planStatus(planPath).status, 'planned', 'plan must mark the plan finished (planned)');
 
-  // The router now advances to write instead of looping on plan.
-  const after = await resolveNextAction(root);
+  // The router now advances to write instead of looping on plan. The plan was
+  // written under PENSMITH_NO_LLM, so it is a placeholder: write drafts from
+  // it only in that mode, and with a model configured the router plans again.
+  const after = await withEnvCwd(root, () => resolveNextAction(root));
   assert.equal(after.verb, 'write', `router must advance plan->write; got ${JSON.stringify(after)}`);
+  const withModel = await resolveNextAction(root);
+  assert.equal(withModel.verb, 'plan', `a placeholder plan is planned again with a model; got ${JSON.stringify(withModel)}`);
 });
 
 test('section status (audit #8/#9): write -> "written", verify -> "verified", router reaches compile', async () => {

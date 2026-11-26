@@ -20,7 +20,7 @@ import path from 'node:path';
 import { loadState } from './state.js';
 import { readOutline } from './outline-read.js';
 import { paperDir, sectionPlan } from './paths.js';
-import { readSectionState, recordedSectionDecision, researchDone, sectionVerb, type RouterDecision } from './router.js';
+import { needsRealPlan, readSectionState, recordedSectionDecision, researchDone, sectionVerb, type RouterDecision } from './router.js';
 import { callCost, resolveCall } from './llm-config.js';
 import type { LlmRole } from './generator.js';
 import { DEFAULT_COST_CAP_USD } from './budget.js';
@@ -166,10 +166,13 @@ export async function projectEstimate(args: {
         const status = r.absent ? null : r.status;
         // A failed or unverifiable section goes where its recorded verdicts
         // send it (plan --revise, write --force, verify, or the person).
+        // A placeholder PLAN.md is planned again first (plan --force).
         const recorded = status === 'failed' || status === 'unverifiable';
         const steps = recorded
           ? stepsAfter(recordedSectionDecision(args.paperRoot, { n, slug }, status, r.assignedSources))
-          : remainingSteps(status);
+          : needsRealPlan(r)
+            ? SECTION_PIPELINE
+            : remainingSteps(status);
         return { n, status, steps };
       });
     const steps = plannedSteps(args.verb ?? null, args.n ?? null, sections, {

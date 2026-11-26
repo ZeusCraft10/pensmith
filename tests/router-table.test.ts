@@ -105,6 +105,31 @@ function why(d: RouterDecision): string {
   return w as string;
 }
 
+// ---- placeholder plans ----
+
+test('a planned section whose PLAN.md is a placeholder goes to plan --force when a model is configured, as write requires', async () => {
+  // write refuses to draft from a placeholder PLAN.md (written under
+  // PENSMITH_NO_LLM) once a model is configured; the router used to send the
+  // section to write anyway, so bare `pensmith` stopped at that refusal.
+  const saved = process.env['PENSMITH_NO_LLM'];
+  try {
+    for (const status of ['planned', 'writing']) {
+      const root = paper({ 1: { status, draft: null, record: null } });
+      const plan = join(root, '.paper', 'sections', '01-intro', 'PLAN.md');
+      writeFileSync(plan, `---\nsection: 1\nslug: intro\nstatus: ${status}\nassigned_sources: [a2020]\nplaceholder: true\n---\n[PENSMITH_NO_LLM placeholder — plan]\n`);
+      delete process.env['PENSMITH_NO_LLM'];
+      const d = await resolveNextAction(root);
+      assert.deepEqual(pick(d), { verb: 'plan', n: 1, slug: 'intro', force: true }, status);
+      assert.match(why(d), /placeholder/);
+      // Without a model the placeholder is what a plan is, and write drafts from it.
+      process.env['PENSMITH_NO_LLM'] = '1';
+      assert.equal((await resolveNextAction(root)).verb, 'write', status);
+    }
+  } finally {
+    if (saved === undefined) delete process.env['PENSMITH_NO_LLM']; else process.env['PENSMITH_NO_LLM'] = saved;
+  }
+});
+
 // ---- failed sections ----
 
 test('a section verify failed on a fabricated citation goes to plan --revise, naming the citation, not back to verify', async () => {

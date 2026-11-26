@@ -13,7 +13,9 @@
 //   - no STATE.json → new; no research run → research; no usable outline →
 //     outline.
 //   - each section in order: no PLAN.md or a stub → plan; planned / writing →
-//     write; written / verifying → verify; failed, unverifiable or verified →
+//     write, but plan N --force when its PLAN.md is a placeholder written
+//     under PENSMITH_NO_LLM and a model is configured, since write refuses to
+//     draft from one; written / verifying → verify; failed, unverifiable or verified →
 //     what its recorded verdicts (VERIFICATION.json) call for:
 //       * no record, or one about another draft, assigned sources,
 //         acknowledgements or verifier version → verify (a failed or
@@ -69,6 +71,7 @@ import { readExportRecord } from './export-record.js';
 import { currentReviseOutcome } from './revise-outcome.js';
 import { readCompileRefusal, refusalFor, type CompileRefusal } from './compile-refusal.js';
 import { isOfflineMode, networkMode } from './network-mode.js';
+import { isNoLlmMode, isPlaceholderText } from './placeholder.js';
 import { isBlockingVerdict, REPAIRABLE_VERDICTS, TEXT_VERDICTS } from './verify/verdict-rows.js';
 import { fileSha256, readVerificationRecord, sha256, UNCHECKED_QUOTE, type VerificationRecord } from './verify/verification-record.js';
 import { VERSION } from './version.generated.js';
@@ -83,7 +86,7 @@ export type RouterDecision =
   | { verb: 'new'; why: string }
   | { verb: 'research'; why: string }
   | { verb: 'outline'; why: string }
-  | { verb: 'plan'; n: number; slug: string; why: string; revise?: true }
+  | { verb: 'plan'; n: number; slug: string; why: string; revise?: true; force?: true }
   | { verb: 'write'; n: number; slug: string; why: string; force?: true }
   | { verb: 'verify'; n: number; slug: string; why: string }
   | { verb: 'compile'; why: string }
@@ -107,6 +110,8 @@ export interface SectionStateRead {
   absent: boolean;
   /** The sources the PLAN.md assigns (assignedSourcesFrom); none when absent or corrupt. */
   assignedSources: string[];
+  /** true if the PLAN.md is placeholder output (PENSMITH_NO_LLM), not a plan. */
+  placeholder: boolean;
 }
 
 /**
@@ -121,23 +126,34 @@ export interface SectionStateRead {
  */
 export function readSectionState(planPath: string): SectionStateRead {
   if (!existsSync(planPath)) {
-    return { status: 'stub', corrupt: false, absent: true, assignedSources: [] };
+    return { status: 'stub', corrupt: false, absent: true, assignedSources: [], placeholder: false };
   }
   try {
-    const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
+    const text = readFileSync(planPath, 'utf8');
+    const { frontmatter } = parseFrontmatter(text);
     const status = (frontmatter as { status?: unknown }).status;
     return {
       status: typeof status === 'string' ? status : 'stub',
       corrupt: false,
       absent: false,
       assignedSources: assignedSourcesFrom(frontmatter),
+      placeholder: isPlaceholderText(text),
     };
   } catch (e) {
     process.stderr.write(
       `[pensmith] PLAN.md at ${planPath} is unreadable/corrupt: ${(e as Error).message}\n`,
     );
-    return { status: 'stub', corrupt: true, absent: false, assignedSources: [] };
+    return { status: 'stub', corrupt: true, absent: false, assignedSources: [], placeholder: false };
   }
+}
+
+/**
+ * Whether a planned (or half-drafted) section must be planned again before
+ * write drafts it: its PLAN.md is a placeholder written under PENSMITH_NO_LLM,
+ * and a model is configured, which write refuses to draft from.
+ */
+export function needsRealPlan(r: SectionStateRead): boolean {
+  return (r.status === 'planned' || r.status === 'writing') && r.placeholder && !isNoLlmMode();
 }
 
 /**
@@ -521,6 +537,9 @@ export async function resolveNextAction(
       const r = readSectionState(sectionPlan(n, slug, paperRoot));
       if (r.absent) return { verb: 'plan', n, slug, why: `${where} has no PLAN.md yet` };
       if (r.corrupt) return { verb: 'status', reason: 'attention', section: { n, slug }, why: `${where}'s PLAN.md cannot be read` };
+      if (needsRealPlan(r)) {
+        return { verb: 'plan', n, slug, force: true, why: `${where}'s PLAN.md is a placeholder written without a model (PENSMITH_NO_LLM), not a plan` };
+      }
       switch (r.status) {
         case 'stub':
           return { verb: 'plan', n, slug, why: `${where} is not planned yet` };

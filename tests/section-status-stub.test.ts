@@ -76,7 +76,15 @@ test('planning a stub marks it planned, so the router goes on to write it', asyn
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const fm = parseFrontmatter(readFileSync(join(root, '.paper', 'sections', '01-intro', 'PLAN.md'), 'utf8')).frontmatter;
   assert.equal(fm['status'], 'planned');
-  assert.equal((await resolveNextAction(root)).verb, 'write');
+  // The plan was written under PENSMITH_NO_LLM, so it is a placeholder: the
+  // router sends it to write in that mode, and to plan --force with a model.
+  const saved = process.env['PENSMITH_NO_LLM'];
+  process.env['PENSMITH_NO_LLM'] = '1';
+  try {
+    assert.equal((await resolveNextAction(root)).verb, 'write');
+  } finally {
+    if (saved === undefined) delete process.env['PENSMITH_NO_LLM']; else process.env['PENSMITH_NO_LLM'] = saved;
+  }
 });
 
 test('the workflow bodies name only statuses the schema has, with their meaning', async () => {
