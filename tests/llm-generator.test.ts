@@ -345,6 +345,33 @@ test('a provider keyed "claude" in runtime.json is priced as Anthropic', async (
   assert.ok(Math.abs(res.costUsd! - estimateCost({ provider: 'anthropic', modelId: 'claude-opus-5-5', inputTokens: 100, outputTokens: 10 })) < 1e-12);
 });
 
+test('older models get thinking turned on and only the effort levels they take', async () => {
+  // Opus 4.6 to 4.8 and Sonnet 4.6 run without thinking unless asked; Opus 4.6
+  // and Sonnet 4.6 have no xhigh, and Opus 4.5 takes only low, medium and high.
+  // An effort a model does not take is a 400, so it is lowered to one it does.
+  const cases: Array<[string, string, string]> = [
+    ['claude-opus-5-5', 'xhigh', 'xhigh'],
+    ['claude-opus-4-8', 'max', 'max'],
+    ['claude-opus-4-7', 'xhigh', 'xhigh'],
+    ['claude-opus-4-6', 'xhigh', 'high'],
+    ['claude-sonnet-4-6', 'max', 'max'],
+    ['claude-opus-4-5', 'max', 'high'],
+  ];
+  const seen = answerMessages({ body: messageStream({ blocks: [{ type: 'text', text: 'ok' }], stopReason: 'end_turn' }) });
+  for (const [model, effort] of cases) {
+    await writeRuntime({ anthropic: { name: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY', roles: { write: { model, effort } } } });
+    await complete({ ...ASK, role: 'write' });
+  }
+  cases.forEach(([model, , sentEffort], i) => {
+    const body = seen[i]!.body;
+    assert.equal(body['model'], model);
+    assert.equal((body['output_config'] as { effort?: string }).effort, sentEffort, `${model} effort`);
+    // Opus 5.5 thinks adaptively by default; Opus 4.5 has no adaptive thinking.
+    const noThinkingField = model === 'claude-opus-5-5' || model === 'claude-opus-4-5';
+    assert.deepEqual(body['thinking'], noThinkingField ? undefined : { type: 'adaptive' }, `${model} thinking`);
+  });
+});
+
 test('an unlisted model runs, with no effort sent, and is costed at the highest rate', async () => {
   await writeRuntime({ anthropic: { name: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY', defaultModel: 'claude-future-9' } });
   const seen = answerMessages({ body: messageStream({ model: 'claude-future-9', blocks: [{ type: 'text', text: 'ok' }], stopReason: 'end_turn', inputTokens: 1000, outputTokens: 1000 }) });

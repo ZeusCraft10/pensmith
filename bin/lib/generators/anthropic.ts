@@ -15,15 +15,19 @@
 //
 // No temperature, top_p or top_k is sent (current models refuse them), and the
 // last turn is always the user's (no prefill). Thinking is left at the
-// model's default: adaptive on every current model. Where the model supports
-// it, a request opts into server-side fallbacks, so a safety decline is
-// retried on the model Anthropic recommends for it.
+// model's default where that is adaptive (the 5.x models); Opus 4.6 to 4.8
+// and Sonnet 4.6 run without thinking unless asked, so they are sent
+// `thinking: adaptive`. Where the model supports it, a request opts into
+// server-side fallbacks, so a safety decline is retried on the model
+// Anthropic recommends for it.
 
 import Anthropic from '@anthropic-ai/sdk';
 import { chokepointFetch, HttpDeadlineError, RequestNotResentError } from '../http.js';
 import {
+  EFFORTS,
   GenerationError,
   ProviderError,
+  type Effort,
   type GenerateRequest,
   type GenerateResult,
   type Generator,
@@ -62,6 +66,31 @@ const EFFORT_MODELS: ReadonlySet<string> = new Set([
   'claude-mythos-5',
 ]);
 
+/** Models that run without thinking unless `thinking: adaptive` is sent. */
+const ADAPTIVE_ON_REQUEST: ReadonlySet<string> = new Set([
+  'claude-opus-4-8',
+  'claude-opus-4-7',
+  'claude-opus-4-6',
+  'claude-sonnet-4-6',
+]);
+
+/** Models in EFFORT_MODELS that take only some levels; the rest take all five. */
+const EFFORT_LEVELS: Readonly<Record<string, readonly Effort[]>> = {
+  'claude-opus-4-6': ['low', 'medium', 'high', 'max'],
+  'claude-sonnet-4-6': ['low', 'medium', 'high', 'max'],
+  'claude-opus-4-5': ['low', 'medium', 'high'],
+};
+
+/** `effort`, or the highest level below it that `model` takes (another is a 400). */
+function effortFor(model: string, effort: Effort): Effort {
+  const levels = EFFORT_LEVELS[model];
+  if (!levels) return effort;
+  for (let i = EFFORTS.indexOf(effort); i >= 0; i -= 1) {
+    if (levels.includes(EFFORTS[i]!)) return EFFORTS[i]!;
+  }
+  return levels[0]!;
+}
+
 /** How long the response head may take, and how long the stream may then go quiet. */
 const STREAM_TIMEOUT_MS = 300_000;
 /** The SDK's own limit on one attempt. */
@@ -88,8 +117,9 @@ export function anthropicParams(req: GenerateRequest): Params {
     stream: true,
   };
   if (req.system) params['system'] = req.system;
+  if (ADAPTIVE_ON_REQUEST.has(req.model)) params['thinking'] = { type: 'adaptive' };
   const outputConfig: Record<string, unknown> = {};
-  if (req.effort && EFFORT_MODELS.has(req.model)) outputConfig['effort'] = req.effort;
+  if (req.effort && EFFORT_MODELS.has(req.model)) outputConfig['effort'] = effortFor(req.model, req.effort);
   if (req.jsonSchema) outputConfig['format'] = { type: 'json_schema', schema: req.jsonSchema };
   if (Object.keys(outputConfig).length > 0) params['output_config'] = outputConfig;
   if (FALLBACK_MODELS.has(req.model)) {
