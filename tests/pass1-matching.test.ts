@@ -19,7 +19,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runPass1, runPass1Unit } from '../bin/lib/verify/pass1.js';
+import { runPass1 } from '../bin/lib/verify/pass1.js';
+import { matchWork } from '../bin/lib/verify/work-match.js';
+import { nameFromDisplay, type WorkRecord } from '../bin/lib/sources/work-record.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
 import { pass1Verdict as verdict } from './lib/bib-fixture.js';
 import { throughLibrary } from './lib/library-views.js';
@@ -267,30 +269,35 @@ test('Pass 1: a DOI given only as a doi.org link in `url` is looked up as the DO
   }
 });
 
-test('runPass1Unit: a name that starts with a comma is compared as written, not dropped', () => {
+/** A Crossref record of `title` by `authors`, for matchWork. */
+const crossrefRecord = (title: string, authors: string[]): WorkRecord => ({
+  registry: 'Crossref', title, authors: authors.map(nameFromDisplay), years: [], venues: [], journalArticle: false, raw: {},
+});
+
+test('matchWork: a name that starts with a comma is compared as written, not dropped', () => {
   // ", Smith" once parsed as an empty family name, which the matcher skips:
   // with no name left to compare, the author check passed. It is now a
   // display name, as the registry adapters read one.
-  const unit = (claimed: string, actual: string) => runPass1Unit({
-    claimed: { title: 'Attention Is All You Need', authors: [claimed], doi: '10.1/x' },
-    actual: { title: 'Attention Is All You Need', authors: [actual], doi: '10.1/x' },
-  });
+  const match = (claimed: string, actual: string) => matchWork(
+    { title: 'Attention Is All You Need', authors: [nameFromDisplay(claimed)] },
+    crossrefRecord('Attention Is All You Need', [actual]),
+  );
   for (const [claimed, actual] of [[', Smith', 'Jones, Bob'], [',Smith', 'Jones, Bob'], ['Jones, Bob', ', Smith']] as const) {
-    const r = unit(claimed, actual);
-    assert.equal(r.verdict, 'MIS-CITED', `${claimed} vs ${actual}: ${r.reason}`);
-    assert.equal(r.authorJW, 0);
+    const m = match(claimed, actual);
+    assert.equal(m.ok, false, `${claimed} vs ${actual}: ${m.problems.join('; ')}`);
+    assert.equal(m.authorScore, 0);
   }
-  assert.equal(unit(', Smith', ', Smith').verdict, 'OK');
+  assert.equal(match(', Smith', ', Smith').ok, true);
 });
 
-test('runPass1Unit: a record title labelled "RETRACTED:" is a title mismatch there, never OK', () => {
-  // runPass1Unit has no retraction check of its own. The label is set aside
-  // only by runPass1, which then reads it as RETRACTED (tests/retraction.test.ts,
-  // tests/sources/retraction-signals.test.ts); here it stays a blocking verdict.
-  const r = runPass1Unit({
-    claimed: { title: 'Tidal Heating in Icy Moons', authors: ['Jane Roe'], doi: '10.5555/x' },
-    actual: { title: 'RETRACTED: Tidal Heating in Icy Moons', authors: ['Jane Roe'], doi: '10.5555/x' },
-  });
-  assert.equal(r.verdict, 'MIS-CITED', r.reason);
-  assert.match(r.reason, /the title is not the one Crossref gives \("RETRACTED: Tidal Heating in Icy Moons"\)/);
+test('matchWork: a record title labelled "RETRACTED:" does not match the title alone', () => {
+  // runPass1 sets the label aside and reads it as RETRACTED
+  // (tests/retraction.test.ts, tests/sources/retraction-signals.test.ts); the
+  // matcher itself never treats the labelled title as the same one.
+  const m = matchWork(
+    { title: 'Tidal Heating in Icy Moons', authors: [nameFromDisplay('Jane Roe')] },
+    crossrefRecord('RETRACTED: Tidal Heating in Icy Moons', ['Jane Roe']),
+  );
+  assert.equal(m.ok, false);
+  assert.match(m.problems.join('; '), /the title is not the one Crossref gives \("RETRACTED: Tidal Heating in Icy Moons"\)/);
 });

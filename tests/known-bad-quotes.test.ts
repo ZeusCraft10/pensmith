@@ -1,113 +1,54 @@
-// tests/known-bad-quotes.test.ts — Wave 0 stub for SC-3 / VRFY-04.
-// Tests: Pass-3 flags 10/10 fixtures in known-bad-quotes.json as NOT_FOUND.
+// tests/known-bad-quotes.test.ts — the known-bad quotation corpus, through the
+// real `pensmith verify`.
 //
-// The fixture (known-bad-quotes.json) is created in Task 0.3.
-// Production code required: verifier Pass 3 entrypoint (bin/lib/verifier.ts)
-// Until then: existence assertion fires RED; behavioral test skips gracefully.
+// This used to call a test-only twin of Pass 3 against "snippets" shorter than
+// the quotations, so a quote could only fail to fit and every case was
+// NOT_FOUND whatever the matcher did. Now a section quotes the corpus from a
+// real paper whose open-access PDF is recorded (arXiv:2109.00022, CC BY 4.0),
+// and the real CLI finds the PDF through OpenAlex, extracts its text and
+// checks each quotation: the faithful quotations are OK and every fabricated
+// or distorted one is NOT_FOUND, which blocks.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { VISIBLE_ISLANDS_BIB, verifySection } from './lib/verify-cli.js';
 
-const fixturePath = fileURLToPath(new URL('../tests/fixtures/known-bad-quotes.json', import.meta.url));
-const verifyCliPath = new URL('../bin/cli/verify.ts', import.meta.url);
+interface Corpus {
+  source: { citekey: string; doi: string };
+  known_good: string[];
+  known_bad: Array<{ quote: string; distortion: string }>;
+}
 
-// Distortion artifact codepoints from D-06 / known-bad-quotes spec.
-// At least 5 entries must carry one of these in their claimed_quote.
-const DISTORTION_CODEPOINTS = [
-  'ﬁ',  // U+FB01 LATIN SMALL LIGATURE FI
-  '­',  // U+00AD SOFT HYPHEN
-  '“',  // U+201C LEFT DOUBLE QUOTATION MARK
-  '”',  // U+201D RIGHT DOUBLE QUOTATION MARK
-  '—',  // U+2014 EM DASH
-  '̀',  // U+0300 COMBINING GRAVE ACCENT (diacritic)
-  '́',  // U+0301 COMBINING ACUTE ACCENT
-  '̈',  // U+0308 COMBINING DIAERESIS (ï, ë, etc.)
-  'é',  // U+00E9 LATIN SMALL LETTER E WITH ACUTE (é)
-  'ï',  // U+00EF LATIN SMALL LETTER I WITH DIAERESIS (ï)
-];
+const CORPUS = JSON.parse(readFileSync(new URL('./fixtures/known-bad-quotes.json', import.meta.url), 'utf8')) as Corpus;
 
-test('known-bad-quotes: fixture file exists (SC-3)', () => {
-  assert.ok(
-    existsSync(fixturePath),
-    'MISSING: tests/fixtures/known-bad-quotes.json — Task 0.3 must create this fixture',
-  );
+/** A quotation in running text, cited to the paper with a page locator. */
+const quoted = (q: string, key: string): string => (/^[“"]/.test(q) ? `As the authors put it, ${q} [@${key}, p. 2].` : `As the authors put it, "${q}" [@${key}, p. 2].`);
+
+test('the corpus has ten known-bad quotations, at least five with characters a PDF copy leaves', () => {
+  assert.equal(CORPUS.known_bad.length, 10);
+  const marks = /[\uFB01\u00AD\u201C\u201D\u2014]/;
+  assert.ok(CORPUS.known_bad.filter((b) => marks.test(b.quote)).length >= 5);
 });
 
-test('known-bad-quotes: fixture contains ≥ 10 entries with expected_verdict: "NOT_FOUND" (SC-3)',
-  { skip: !existsSync(fixturePath) },
-  () => {
-    const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8')) as unknown[];
-    assert.ok(Array.isArray(fixtures), 'known-bad-quotes.json must be a JSON array');
-    assert.ok(fixtures.length >= 10, `known-bad-quotes.json must have ≥ 10 entries, has ${fixtures.length}`);
-    for (const entry of fixtures) {
-      const e = entry as Record<string, unknown>;
-      assert.equal(
-        e['expected_verdict'],
-        'NOT_FOUND',
-        `Every entry must have expected_verdict: "NOT_FOUND", got: ${JSON.stringify(e['expected_verdict'])}`,
-      );
-    }
-  },
-);
+test('pensmith verify finds the faithful quotations and gives every known-bad one NOT_FOUND', () => {
+  const key = CORPUS.source.citekey;
+  const draft = `# Introduction\n\n${[...CORPUS.known_good, ...CORPUS.known_bad.map((b) => b.quote)].map((q) => quoted(q, key)).join('\n\n')}\n`;
+  const v = verifySection(draft, VISIBLE_ISLANDS_BIB(key));
+  assert.equal(v.status, 2, `fabricated quotations block\n${v.out}`);
+  assert.equal(v.record.status, 'failed');
+  assert.deepEqual(v.record.citations.map((c) => [c.citekey, c.verdict]), [[key, 'OK']], 'the work itself is real');
 
-test('known-bad-quotes: ≥ 5 entries carry distortion-artifact codepoints in claimed_quote (SC-3)',
-  { skip: !existsSync(fixturePath) },
-  () => {
-    const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8')) as Array<Record<string, unknown>>;
-    let distortionCount = 0;
-    for (const entry of fixtures) {
-      const claimed = entry['claimed_quote'] as string;
-      if (DISTORTION_CODEPOINTS.some(cp => claimed.includes(cp))) {
-        distortionCount++;
-      }
-    }
-    assert.ok(
-      distortionCount >= 5,
-      `known-bad-quotes.json must have ≥ 5 entries with distortion-artifact codepoints, has ${distortionCount}`,
-    );
-  },
-);
-
-test('known-bad-quotes: bin/cli/verify.ts production module exists (SC-3)',
-  { skip: !existsSync(fixturePath) },
-  () => {
-    assert.ok(
-      existsSync(verifyCliPath),
-      'MISSING: bin/cli/verify.ts — Wave 4 must create before Pass-3 deterministic corpus test can run (SC-3)',
-    );
-  },
-);
-
-test('known-bad-quotes: Pass-3 flags 10/10 fixtures as NOT_FOUND (SC-3, VRFY-04)',
-  { skip: !existsSync(fixturePath) || !existsSync(verifyCliPath) },
-  async () => {
-    // CYCLE-2 H-4: known-bad-quotes.test.ts MUST import `runPass3Unit`
-    // (the fixture-shape helper that takes claimedQuote + pdfText directly),
-    // NOT `runPass3` (which expects DOIs, Unpaywall, extractPdfText). Each
-    // fixture row provides `actual_pdf_snippet` — the slice of the real
-    // paper that the claimed quote is being compared against. The claim is
-    // fabricated or distorted, so the levenshtein-substring ratio is below
-    // threshold → NOT_FOUND.
-    const { runPass3Unit } = await import('../bin/lib/verify/pass3.js');
-    const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8')) as Array<Record<string, unknown>>;
-
-    let notFoundCount = 0;
-    for (const entry of fixtures) {
-      const result = runPass3Unit({
-        claimedQuote: entry['claimed_quote'] as string,
-        pdfText: entry['actual_pdf_snippet'] as string,
-      });
-      if (result.verdict === 'NOT_FOUND') {
-        notFoundCount++;
-      }
-    }
-
-    assert.equal(
-      notFoundCount,
-      fixtures.length,
-      `Pass-3 must flag all ${fixtures.length} fixtures as NOT_FOUND, only flagged ${notFoundCount} (SC-3)`,
-    );
-  },
-);
+  const byStart = (q: string) => v.record.quotes.find((r) => q.replace(/[“”"]/g, '').startsWith(r.quote.replace(/[“”"…]/g, '').trim().slice(0, 40)));
+  for (const q of CORPUS.known_good) {
+    const row = byStart(q);
+    assert.equal(row?.verdict, 'OK', `faithful: ${q}\n${JSON.stringify(row)}`);
+  }
+  for (const b of CORPUS.known_bad) {
+    const row = v.record.quotes.filter((r) => r.verdict === 'NOT_FOUND').find((r) => b.quote.replace(/[“”"]/g, '').startsWith(r.quote.replace(/[“”"…]/g, '').trim().slice(0, 30)));
+    assert.ok(row, `${b.distortion}: ${b.quote}\n${JSON.stringify(v.record.quotes, null, 1)}`);
+    assert.match(row.reason, /arxiv\.org\/pdf\/2109\.00022/, 'checked against the recorded open-access PDF');
+  }
+  assert.equal(v.record.quotes.filter((r) => r.verdict === 'NOT_FOUND').length, 10, '10/10 known-bad quotations are NOT_FOUND');
+  assert.equal(v.record.quotes.filter((r) => r.verdict === 'OK').length, CORPUS.known_good.length);
+});

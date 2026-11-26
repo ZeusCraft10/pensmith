@@ -1,0 +1,51 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/pensmith-openalex-down",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.0000/pensmith-openalex-down",
+        "type": "journal-article",
+        "title": [
+          "Sediment Budgets of Tidal Estuaries"
+        ],
+        "author": [
+          {
+            "given": "Jane",
+            "family": "Doe",
+            "sequence": "first",
+            "affiliation": []
+          }
+        ],
+        "container-title": [
+          "Journal of Fixtures"
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2020
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.0000/pensmith-openalex-down?select=id,doi,title,is_retracted",
+    "status": 503,
+    "response": "Service Unavailable",
+    "responseHeaders": {
+      "content-type": "text/plain"
+    }
+  }
+]

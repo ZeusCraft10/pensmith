@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
 import { bibFile } from './lib/bib-fixture.js';
+import { citationVerdicts, verifySection } from './lib/verify-cli.js';
 
 const CORPUS = fileURLToPath(new URL('./fixtures/pass1-known-good.bib', import.meta.url));
 
@@ -29,4 +30,18 @@ test('Pass 1: every entry of the known-good corpus is OK', async () => {
   assert.deepEqual(results.map((r) => r.citekey), keys);
   const wrong = results.filter((r) => r.verdict !== 'OK').map((r) => `${r.citekey}: ${r.verdict} — ${r.reason}`);
   assert.deepEqual(wrong, []);
+  // OpenAlex answered the retraction cross-check for every work it holds
+  // (recorded: tests/fixtures/cassettes/openalex/known-good-retraction.json).
+  const unchecked = results.filter((r) => /OpenAlex could not be asked/.test(r.reason)).map((r) => `${r.citekey}: ${r.reason}`);
+  assert.deepEqual(unchecked, []);
+});
+
+test('pensmith verify: a section citing the whole known-good corpus is verified', () => {
+  const corpus = readFileSync(CORPUS, 'utf8');
+  const keys = [...corpus.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
+  const v = verifySection(`# Introduction\n\n${keys.map((k) => `One claim here rests on this work [@${k}].`).join('\n')}\n`, corpus);
+  assert.equal(v.status, 0, v.out);
+  assert.equal(v.record.status, 'verified');
+  assert.deepEqual(Object.entries(citationVerdicts(v.record)).filter(([, verdict]) => verdict !== 'OK'), []);
+  assert.equal(v.record.citations.length, keys.length);
 });

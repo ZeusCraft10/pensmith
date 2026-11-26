@@ -1,0 +1,155 @@
+[
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.99999/fake.001",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.99999/fake.002",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.99999/fake.003",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.1145/3591234.9999999",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.1016/j.cell.2099.01.001",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.1371/journal.pone.9999999",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.1126/science.abz9999",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.48550/arXiv.2399.99999",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  },
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.1093/nar/gkz9999",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    }
+  }
+]

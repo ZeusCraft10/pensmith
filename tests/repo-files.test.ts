@@ -280,7 +280,7 @@ test('tests/fixtures/known-bad-citations.json hash-pin (SC-2)', () => {
   const bytes = readFileSync('tests/fixtures/known-bad-citations.json');
   const hash = createHash('sha256').update(bytes).digest('hex');
   // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('tests/fixtures/known-bad-citations.json')).digest('hex'))"
-  const PINNED = '1463e10c57dec4bebfa7a85b8a383250c77d46120c5c3371832d47d9b7907d1e';
+  const PINNED = '5b56b8a3a1572a654e1d71d936c1ff4598e9eb117917c3c339651fa0b6759d4c';
   assert.equal(hash, PINNED, `tests/fixtures/known-bad-citations.json drifted from locked copy (SC-2). Update PINNED to ${hash} if the edit was intentional.`);
 });
 
@@ -288,7 +288,7 @@ test('tests/fixtures/known-bad-quotes.json hash-pin (SC-3)', () => {
   const bytes = readFileSync('tests/fixtures/known-bad-quotes.json');
   const hash = createHash('sha256').update(bytes).digest('hex');
   // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('tests/fixtures/known-bad-quotes.json')).digest('hex'))"
-  const PINNED = 'fac23138c6a8a7a9a5af1ce15e1124978bb557a78da806df2959cebb16e2381e';
+  const PINNED = '8d5f2be53bab160bdca3e9436424984129f1370ef8a451522bfd2279ae5d32c8';
   assert.equal(hash, PINNED, `tests/fixtures/known-bad-quotes.json drifted from locked copy (SC-3). Update PINNED to ${hash} if the edit was intentional.`);
 });
 

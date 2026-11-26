@@ -1,0 +1,118 @@
+[
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.1109/mcse.2011.37?select=id,doi,title,is_retracted",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W2146292423",
+      "doi": "https://doi.org/10.1109/mcse.2011.37",
+      "title": "The NumPy Array: A Structure for Efficient Numerical Computation",
+      "is_retracted": false
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.1103/physrevlett.114.191803?select=id,doi,title,is_retracted",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W1694905212",
+      "doi": "https://doi.org/10.1103/physrevlett.114.191803",
+      "title": "Combined Measurement of the Higgs Boson Mass in p p Collisions at s = 7 and 8 TeV with the ATLAS and CMS Experiments",
+      "is_retracted": false
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.1128/iai.66.9.4305-4312.1998?select=id,doi,title,is_retracted",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W2125288218",
+      "doi": "https://doi.org/10.1128/.66.9.4305-4312.1998",
+      "title": "Comparison of Sample Sequences of the Salmonella typhi Genome to the Sequence of the Complete Escherichia coli K-12 Genome",
+      "is_retracted": false
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.1038/nature11247?select=id,doi,title,is_retracted",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W2259938310",
+      "doi": "https://doi.org/10.1038/nature11247",
+      "title": "An integrated encyclopedia of DNA elements in the human genome",
+      "is_retracted": false
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.48550/arxiv.1706.03762?select=id,doi,title,is_retracted",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W2626778328",
+      "doi": "https://doi.org/10.48550/arxiv.1706.03762",
+      "title": "Attention Is All You Need",
+      "is_retracted": false
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.5281/zenodo.592536?select=id,doi,title,is_retracted",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W6912517022",
+      "doi": "https://doi.org/10.5281/zenodo.592536",
+      "title": "Matplotlib: Visualization with Python",
+      "is_retracted": false
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.20651/jslis.62.1_1?select=id,doi,title,is_retracted",
+    "status": 404,
+    "response": {
+      "error": "Not Found",
+      "message": "Work doi:10.20651/jslis.62.1_1 not found"
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/doi:10.20651/jslis.62.1_1?select=id,doi,best_oa_location,locations",
+    "status": 404,
+    "response": {
+      "error": "Not Found",
+      "message": "Work doi:10.20651/jslis.62.1_1 not found"
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

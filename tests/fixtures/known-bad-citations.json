@@ -1,110 +1,151 @@
 [
   {
-    "citekey": "fake2024a",
+    "citekey": "smith2024attention",
     "title": "Attention Mechanisms in Modern Transformer Architectures",
-    "authors": ["Smith, A.B."],
+    "authors": ["Smith, A. B."],
     "year": 2024,
+    "journal": "Journal of Machine Learning Research",
     "doi": "10.99999/fake.001",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+    "expected_verdict": "FABRICATED",
+    "why": "a DOI under a prefix no agency issues: Crossref, DataCite and doi.org all answer 404"
   },
   {
-    "citekey": "fake2023b",
+    "citekey": "johnson2023survey",
     "title": "Deep Learning for Natural Language Processing: A Survey",
-    "authors": ["Johnson, C.D."],
+    "authors": ["Johnson, C. D."],
     "year": 2023,
+    "journal": "Computational Linguistics",
     "doi": "10.99999/fake.002",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+    "expected_verdict": "FABRICATED",
+    "why": "a DOI under a prefix no agency issues"
   },
   {
-    "citekey": "fake2022c",
+    "citekey": "williams2022selfattention",
     "title": "Self-Attention Networks for Sequence Modeling",
-    "authors": ["Williams, E.F."],
+    "authors": ["Williams, E. F."],
     "year": 2022,
+    "journal": "Neural Computation",
     "doi": "10.99999/fake.003",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+    "expected_verdict": "FABRICATED",
+    "why": "a DOI under a prefix no agency issues"
   },
   {
-    "citekey": "fake2021d",
-    "title": "Efficient Transformers: A Survey of Scalable Approaches",
-    "authors": ["Brown, G.H."],
-    "year": 2021,
-    "doi": "10.99999/fake.004",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
-  },
-  {
-    "citekey": "fake2020e",
-    "title": "Bidirectional Encoder Representations from Transformers",
-    "authors": ["Davis, I.J."],
-    "year": 2020,
-    "doi": "10.99999/fake.005",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
-  },
-  {
-    "citekey": "fab2024a",
+    "citekey": "wilson2023code",
     "title": "Generative Pre-trained Transformers for Code Understanding",
-    "authors": ["Wilson, K.L."],
-    "year": 2024,
-    "doi": "10.1145/xxxxxxx.xxxxxxx",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "Real ACM prefix but fabricated suffix — DOI resolves to 404 or metadata mismatch"
-  },
-  {
-    "citekey": "fab2023b",
-    "title": "Cross-Attention Mechanisms for Multi-Modal Fusion",
-    "authors": ["Moore, M.N."],
+    "authors": ["Wilson, K. L.", "Moore, M. N."],
     "year": 2023,
-    "doi": "10.1145/yyyyyyy.yyyyyyy",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "Real ACM prefix but fabricated suffix — title/author Jaro-Winkler mismatch"
+    "journal": "ACM Transactions on Software Engineering and Methodology",
+    "doi": "10.1145/3591234.9999999",
+    "expected_verdict": "FABRICATED",
+    "why": "a real publisher prefix (ACM) with a suffix that was never registered"
   },
   {
-    "citekey": "fab2022c",
-    "title": "Large Language Models and Their Applications in Science",
-    "authors": ["Taylor, O.P."],
-    "year": 2022,
-    "doi": "10.1145/zzzzzzz.zzzzzzz",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "Real ACM prefix but fabricated suffix — resolves to wrong paper"
+    "citekey": "taylor2099cell",
+    "title": "Large Language Models and Their Applications in Cell Biology",
+    "authors": ["Taylor, O. P."],
+    "year": 2099,
+    "journal": "Cell",
+    "doi": "10.1016/j.cell.2099.01.001",
+    "expected_verdict": "FABRICATED",
+    "why": "a DOI shaped like a Cell article from a year that has not happened"
   },
   {
-    "citekey": "fab2021d",
-    "title": "Sparse Transformer: Scaling Attention to Long Sequences",
-    "authors": ["Anderson, Q.R."],
+    "citekey": "anderson2021sparse",
+    "title": "Sparse Transformers Scale Attention to Long Sequences",
+    "authors": ["Anderson, Q. R."],
     "year": 2021,
-    "doi": "10.1145/aaaaaaa.aaaaaaa",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "Real ACM prefix but fabricated suffix — title/author Jaro-Winkler < threshold"
+    "journal": "PLoS ONE",
+    "doi": "10.1371/journal.pone.9999999",
+    "expected_verdict": "FABRICATED",
+    "why": "a PLOS ONE-shaped DOI that was never registered"
   },
   {
-    "citekey": "fab2020e",
+    "citekey": "thomas2020vision",
     "title": "Attention Is All You Need for Vision Tasks",
-    "authors": ["Thomas, S.T."],
+    "authors": ["Thomas, S. T."],
     "year": 2020,
-    "doi": "10.1145/bbbbbbb.bbbbbbb",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "Real ACM prefix but fabricated suffix — close title but wrong authors"
+    "journal": "Science",
+    "doi": "10.1126/science.abz9999",
+    "expected_verdict": "FABRICATED",
+    "why": "a Science-shaped DOI that was never registered"
   },
   {
-    "citekey": "fab2019f",
+    "citekey": "jackson2023memory",
     "title": "Memory-Augmented Neural Networks with External Attention",
-    "authors": ["Jackson, U.V."],
-    "year": 2019,
-    "doi": "10.1145/ccccccc.ccccccc",
-    "expected_verdict": "MIS-CITED",
-    "expected_reason": "Real ACM prefix but fabricated suffix — resolves to different paper entirely"
+    "authors": ["Jackson, U. V."],
+    "year": 2023,
+    "doi": "10.48550/arXiv.2399.99999",
+    "expected_verdict": "FABRICATED",
+    "why": "an arXiv DOI for an arXiv ID that cannot exist (month 99); DataCite, which registers arXiv DOIs, answers 404"
   },
   {
-    "citekey": "fake2018g",
-    "title": "Recurrent Attention for Machine Translation",
-    "authors": ["Harris, W.X."],
-    "year": 2018,
-    "doi": "10.99999/fake.012",
+    "citekey": "harris2019nar",
+    "title": "Recurrent Attention for Genome Annotation",
+    "authors": ["Harris, W. X."],
+    "year": 2019,
+    "journal": "Nucleic Acids Research",
+    "doi": "10.1093/nar/gkz9999",
+    "expected_verdict": "FABRICATED",
+    "why": "a Nucleic Acids Research-shaped DOI that was never registered"
+  },
+  {
+    "citekey": "lee2024nature",
+    "title": "Quantum Coherence in Photosynthetic Complexes at Room Temperature",
+    "authors": ["Lee, H."],
+    "year": 2024,
+    "journal": "Nature",
+    "doi": "10.1038/s41586-024-99999-x",
+    "expected_verdict": "FABRICATED",
+    "why": "a Nature-shaped DOI that was never registered"
+  },
+  {
+    "citekey": "he2016numpydoi",
+    "title": "Deep Residual Learning for Image Recognition",
+    "authors": ["He, Kaiming", "Zhang, Xiangyu"],
+    "year": 2016,
+    "journal": "Computing in Science and Engineering",
+    "doi": "10.1109/MCSE.2011.37",
     "expected_verdict": "MIS-CITED",
-    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+    "why": "a real DOI (the NumPy paper) given for another work"
+  },
+  {
+    "citekey": "smith2011numpy",
+    "title": "The NumPy Array: A Structure for Efficient Numerical Computation",
+    "authors": ["Smith, John", "Doe, Jane"],
+    "year": 2011,
+    "journal": "Computing in Science and Engineering",
+    "doi": "10.1109/MCSE.2011.37",
+    "expected_verdict": "MIS-CITED",
+    "why": "the right work credited to authors who did not write it"
+  },
+  {
+    "citekey": "encode2002",
+    "title": "An integrated encyclopedia of DNA elements in the human genome",
+    "authors": ["{ENCODE Project Consortium}"],
+    "year": 2002,
+    "journal": "Nature",
+    "doi": "10.1038/nature11247",
+    "expected_verdict": "MIS-CITED",
+    "why": "the right work with a year ten years off"
+  },
+  {
+    "citekey": "mcclelland1998genetics",
+    "title": "Comparison of sample sequences of the Salmonella typhi genome to the sequence of the complete Escherichia coli K-12 genome",
+    "authors": ["McClelland, M.", "Wilson, R. K."],
+    "year": 1998,
+    "journal": "Nature Genetics",
+    "doi": "10.1128/IAI.66.9.4305-4312.1998",
+    "expected_verdict": "MIS-CITED",
+    "why": "the right work in a journal it did not appear in (Infection and Immunity)"
+  },
+  {
+    "citekey": "wakefield1998",
+    "title": "Ileal-lymphoid-nodular hyperplasia, non-specific colitis, and pervasive developmental disorder in children",
+    "authors": ["Wakefield, A. J.", "Murch, S. H.", "Anthony, A."],
+    "year": 1998,
+    "journal": "The Lancet",
+    "doi": "10.1016/S0140-6736(97)11096-0",
+    "expected_verdict": "RETRACTED",
+    "why": "a real paper its publisher retracted (Crossref updated-by, OpenAlex is_retracted)"
   }
 ]

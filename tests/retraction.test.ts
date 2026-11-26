@@ -153,19 +153,22 @@ test('an expression of concern warns but does not block; OpenAlex confirms the w
   assert.match(v.out, /WARN.*expression of concern/i);
 });
 
-/** A DataCite DOI with no OpenAlex answer recorded: OpenAlex cannot be asked about it. */
-const VASWANI =
-  '@misc{vaswani2017,\n  title = {Attention Is All You Need},\n' +
-  '  author = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, Lukasz and Polosukhin, Illia},\n' +
-  '  year = {2017},\n  doi = {10.48550/arXiv.1706.03762}\n}\n';
+/**
+ * A work whose OpenAlex lookup answers 503 (synthetic, under the 10.0000 test
+ * prefix: tests/fixtures/cassettes/registry-errors/synthetic-openalex-down.json),
+ * so OpenAlex cannot be asked whether it is retracted.
+ */
+const OUTAGE =
+  '@article{doe2020,\n  title = {Sediment Budgets of Tidal Estuaries},\n  author = {Doe, Jane},\n' +
+  '  journal = {Journal of Fixtures},\n  year = {2020},\n  doi = {10.0000/pensmith-openalex-down}\n}\n';
 
 test('verify says how many citations had their retraction status read from the record alone', () => {
   // When OpenAlex cannot be asked, a citation is OK on what its registry
   // record says. That gap used to show only in VERIFICATION.md.
-  const root = seedPaper(VASWANI + CONCERN);
+  const root = seedPaper(OUTAGE + CONCERN);
   const v = cli(root, 'verify', '1', '--slug', 'intro');
   assert.equal(v.status, 0, v.out);
-  assert.match(row(root, 'vaswani2017'), /OpenAlex could not be asked/);
+  assert.match(row(root, 'doe2020'), /OpenAlex could not be asked whether it is retracted \(HTTP 503\)/);
   assert.match(
     v.out,
     /WARN — section 1: the retraction status of 1 citation was read from its registry record alone, since OpenAlex could not be asked/,

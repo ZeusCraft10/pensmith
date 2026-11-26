@@ -20,9 +20,7 @@
 //   - UNATTRIBUTED     a long quotation that cites nothing, so no source can be
 //                      checked (does not block; the section is unverifiable)
 //
-// `runPass3(draftMd, bibByCitekey)` checks a draft; `runPass3Unit({
-// claimedQuote, pdfText })` checks one quotation against a given text, for
-// the known-bad-quotes corpus.
+// `runPass3(draftMd, bibByCitekey)` checks a draft.
 
 import { matchQuote, type QuoteSource } from './quote-match.js';
 import { openAccessText } from './source-text.js';
@@ -108,15 +106,4 @@ export async function runPass3(
     push(match.found ? 'OK' : 'NOT_FOUND', `quote ${match.reason}, checked against the OA PDF ${got.url}`);
   }
   return results;
-}
-
-/**
- * Check one quotation against a source text, with no HTTP and no PDF: the
- * same match runPass3 makes once it has the text.
- */
-export function runPass3Unit(input: {
-  claimedQuote: string;
-  pdfText: string;
-}): { verdict: Pass3Verdict } {
-  return { verdict: matchQuote(input.claimedQuote, input.pdfText).found ? 'OK' : 'NOT_FOUND' };
 }

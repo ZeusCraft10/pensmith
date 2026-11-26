@@ -52,7 +52,7 @@ import {
 import { isOfflineMode } from '../network-mode.js';
 import { oneLine } from './verdict-rows.js';
 import { normalizeDoi, sameDoi } from '../doi.js';
-import { cslDateYear, cslNames, firstString, nameFromDisplay, type WorkName, type WorkRecord } from '../sources/work-record.js';
+import { cslDateYear, cslNames, firstString, type WorkName, type WorkRecord } from '../sources/work-record.js';
 import { matchWork, withoutRetractionLabel, type ClaimedWork } from './work-match.js';
 import { registryList, resolveId, workIdentifiers, type IdResolution, type WorkId } from './resolve.js';
 
@@ -438,33 +438,4 @@ export async function runFreshnessForDraft(
   return probeFreshnessAll(
     pass1CitedKeys(draftMd).map((ck) => ({ citekey: ck, doi: entries.get(ck)?.DOI ?? null })),
   );
-}
-
-/**
- * Fixture-shape helper for tests/known-bad-citations.test.ts: a synthetic
- * `{ claimed, actual }` pair with no HTTP, BibTeX or DRAFT.md. It applies the
- * same comparison as runPass1 (`actual: null` is a DOI no registry holds).
- */
-export function runPass1Unit(input: {
-  claimed: { title: string; authors: string[]; doi: string | null; retracted?: boolean };
-  actual: { title: string; authors: string[]; doi: string | null } | null;
-}): Omit<Pass1Result, 'citekey'> {
-  const unit = (verdict: Pass1Verdict, reason: string, titleJW = 0, authorJW = 0) => ({ verdict, titleJW, authorJW, reason });
-  if (!input.claimed.doi) return unit('UNRESOLVED', 'no identifier in the claimed citation to look the work up by');
-  if (input.claimed.retracted) return unit('RETRACTED', 'cited a retracted work');
-  if (!input.actual) return unit('FABRICATED', `DOI ${input.claimed.doi} is not registered`);
-  const record: WorkRecord = {
-    registry: 'Crossref',
-    title: input.actual.title ?? '',
-    authors: (input.actual.authors ?? []).map(nameFromDisplay),
-    years: [],
-    venues: [],
-    journalArticle: false,
-    raw: input.actual,
-    ...(input.actual.doi ? { doi: input.actual.doi } : {}),
-  };
-  const m = matchWork({ title: input.claimed.title ?? '', authors: (input.claimed.authors ?? []).map(nameFromDisplay) }, record);
-  return m.ok
-    ? unit('OK', 'matches the record', m.titleScore, m.authorScore)
-    : unit('MIS-CITED', m.problems.join('; '), m.titleScore, m.authorScore);
 }

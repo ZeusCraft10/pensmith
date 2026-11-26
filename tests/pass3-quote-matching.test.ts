@@ -13,11 +13,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { runPass3Unit } from '../bin/lib/verify/pass3.js';
 import { matchQuote, prepareSource } from '../bin/lib/verify/quote-match.js';
 import { extractPdfText } from '../bin/lib/pdf-text.js';
 
-const verdict = (quote: string, source: string): string => runPass3Unit({ claimedQuote: quote, pdfText: source }).verdict;
+// The verdict Pass 3 gives once it has the source's text (runPass3 calls matchQuote).
+const verdict = (quote: string, source: string): string => (matchQuote(quote, source).found ? 'OK' : 'NOT_FOUND');
 
 const SOURCE =
   'Across all twelve cohorts, the treatment did not reduce mortality in patients over 65 years of age, ' +
