@@ -182,6 +182,36 @@ export function renderIntakeMd(intake: Intake): string {
   ].join('\n');
 }
 
+/** A thesis as intake keeps it: one line, so it stays one `Thesis: ...` paragraph. */
+export function normalizeThesis(thesis: string): string {
+  return thesis.replace(/\s+/g, ' ').trim();
+}
+
+// The paragraph withThesis adds: the last one, a single `Thesis: ...` line.
+const LAST_THESIS = /(?:^|\r?\n[ \t]*\r?\n)Thesis:[ \t]+([^\r\n]*\S)[ \t]*$/;
+
+/**
+ * An assignment as intake keeps it, split into the text it was given and the
+ * thesis paragraph added to it (null when it ends with none).
+ */
+export function splitThesis(assignment: string): { base: string; thesis: string | null } {
+  const text = assignment.trim();
+  const m = LAST_THESIS.exec(text);
+  if (!m) return { base: text, thesis: null };
+  return { base: text.slice(0, m.index).trim(), thesis: m[1]! };
+}
+
+/**
+ * `base` with `thesis` added as its last paragraph, unless it already ends
+ * with that thesis: a thesis is in the assignment at most once. With no base,
+ * the thesis alone is the assignment; with no thesis, the base is.
+ */
+export function withThesis(base: string, thesis: string): string {
+  const text = base.trim();
+  if (!thesis || splitThesis(text).thesis === thesis) return text;
+  return [text, `Thesis: ${thesis}`].filter(Boolean).join('\n\n');
+}
+
 /** PROJECT.md: the assignment word for word, last in the file. */
 export function renderProjectMd(title: string, assignment: string): string {
   return `# ${title}\n\n## Assignment\n\n${assignment.trim()}\n`;
