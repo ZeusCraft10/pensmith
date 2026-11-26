@@ -36,8 +36,11 @@ export const CURRENT_STATE_VERSION = 2;
 //
 // PlanFrontmatterSchema.status MIRRORS this enum (plan-frontmatter.ts);
 // HandoffSchema.section_pointers[].state IMPORTS this enum (handoff.ts).
+// 'stub' is an outline entry not planned yet; 'planned' is a finished plan,
+// ready to draft. They used to share 'planned', which sent a planned section
+// back to plan.
 export const SectionStateSchema = z.enum([
-  'planned', 'writing', 'written', 'verifying', 'verified', 'failed', 'unverifiable',
+  'stub', 'planned', 'writing', 'written', 'verifying', 'verified', 'failed', 'unverifiable',
 ]);
 export type SectionState = z.infer<typeof SectionStateSchema>;
 

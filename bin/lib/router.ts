@@ -64,7 +64,7 @@ export type RouterDecision =
  * Normalized, NEVER-THROWS result of reading a per-section PLAN.md (C6-HIGH).
  */
 export interface SectionStateRead {
-  /** parsed `status` frontmatter, defaulted to 'planned' when absent. */
+  /** parsed `status` frontmatter, defaulted to 'stub' (not planned yet) when absent. */
   status: string;
   /** true if the file was PRESENT but readFileSync/parseFrontmatter threw. */
   corrupt: boolean;
@@ -79,12 +79,12 @@ export interface SectionStateRead {
  * parseFrontmatter(readFileSync(planPath)) on a per-section PLAN.md.
  *
  * NEVER throws:
- *   - absent file (existsSync false)                    → { status:'planned', corrupt:false, absent:true }
- *   - present-but-corrupt/unreadable (C5-HIGH —          → { status:'planned', corrupt:true,  absent:false }
+ *   - absent file (existsSync false)                    → { status:'stub', corrupt:false, absent:true }
+ *   - present-but-corrupt/unreadable (C5-HIGH —          → { status:'stub', corrupt:true,  absent:false }
  *     readFileSync EACCES/EISDIR/TOCTOU after the          + one-line stderr diagnostic
  *     existsSync probe, OR parseFrontmatter on
  *     malformed YAML / alias-to-missing-anchor)
- *   - well-formed                                        → { status:<fm.status ?? 'planned'>, corrupt:false, absent:false }
+ *   - well-formed                                        → { status:<fm.status ?? 'stub'>, corrupt:false, absent:false }
  *
  * Mirrors the repo's own hooks/pre-compact.ts:178-187 guard around the IDENTICAL
  * parseFrontmatter(readFileSync(planPath,'utf8')) call. This is the ONLY
@@ -92,13 +92,13 @@ export interface SectionStateRead {
  */
 export function readSectionState(planPath: string): SectionStateRead {
   if (!existsSync(planPath)) {
-    return { status: 'planned', corrupt: false, absent: true };
+    return { status: 'stub', corrupt: false, absent: true };
   }
   try {
     const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
     const status = (frontmatter as { status?: unknown }).status;
     return {
-      status: typeof status === 'string' ? status : 'planned',
+      status: typeof status === 'string' ? status : 'stub',
       corrupt: false,
       absent: false,
     };
@@ -106,7 +106,7 @@ export function readSectionState(planPath: string): SectionStateRead {
     process.stderr.write(
       `[pensmith] PLAN.md at ${planPath} is unreadable/corrupt: ${(e as Error).message}\n`,
     );
-    return { status: 'planned', corrupt: true, absent: false };
+    return { status: 'stub', corrupt: true, absent: false };
   }
 }
 
@@ -120,9 +120,10 @@ export function sectionVerb(status: string): 'plan' | 'write' | 'verify' | 'veri
   switch (status) {
     case 'verified':
       return 'verified';
-    case 'planned':
+    case 'stub':
       return 'plan';
-    case 'writing':
+    case 'planned':
+    case 'writing': // a draft that did not finish
       return 'write';
     case 'written':
     case 'verifying':

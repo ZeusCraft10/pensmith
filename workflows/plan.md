@@ -45,16 +45,16 @@ The implementation lives in `bin/cli/plan.ts` (created by Plan 07).
 
 3. **Run planner**: invoke the section-planner prompt with `{section, library_subset, intake}` interpolation → returns `PlanFrontmatter` YAML + a `## Brief` narrative section.
 
-4. **Validate PlanFrontmatter**: `PlanFrontmatterSchema.parse(yaml)`. The schema refuses self-ref via `depends_on` (D-04) and validates the D-08-AMENDED `status` enum. The initial status MUST be `'planned'` (D-08-AMENDED enum default for a newly-planned section).
+4. **Status contract** (`SectionStateSchema` in `bin/lib/schemas/state.ts`): an outline entry not planned yet is `stub`, and a finished plan is `planned`, which the router sends on to `write`. A PLAN.md with no status counts as `stub`. Plan only a `stub` (or a missing PLAN.md); a section with any other status already has a plan, and `pensmith plan <N>` refuses it with exit 2 unless `--force` is given.
 
 5. **Write `<sectionPlan(n, slug)>`** = `.paper/sections/<NN>-<slug>/PLAN.md` via `bin/lib/atomic-write.ts` (D-07 chokepoint):
-   - YAML frontmatter (validated) with `status: 'planned'` (D-08-AMENDED LOCKED enum default).
+   - YAML frontmatter with `status: 'planned'`.
    - `## Brief` section with the planner-authored narrative.
    - Set `verified_against_draft_hash: null` (no draft yet → hash invalidated by definition).
 
 6. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/`. Use `bin/lib/paths.ts sectionDir(n, slug)` (Plan 03 Wave 2) as the only filesystem-write target. The `tests/section-isolation.test.ts` mtime gate enforces this in CI.
 
-7. **Shell fallback** (TIER-06 equivalence path): `pensmith plan <N> [--revise] [--research <query>] [--yolo]`.
+7. **Shell fallback** (TIER-06 equivalence path): `pensmith plan <N> [--force] [--revise] [--research <query>] [--yolo]`.
 
 ## Revise body (PLAN-02 / D-05 / D-06 — citation repair behind the approval gate)
 

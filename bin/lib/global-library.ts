@@ -392,7 +392,7 @@ export function deriveLibraryStatus(
     let allVerified = true;
     for (const sec of sections) {
       const r = readSectionState(sectionPlan(sec.n, sec.slug, folderPath));
-      const status = r.corrupt || r.absent ? 'planned' : r.status;
+      const status = r.corrupt || r.absent ? 'stub' : r.status;
       if (status === 'verified') {
         done += 1;
       } else {

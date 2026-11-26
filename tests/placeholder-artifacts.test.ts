@@ -96,14 +96,14 @@ test('placeholder: complete() under PENSMITH_NO_LLM says its text is a placehold
 });
 
 test('placeholder: write, plan, new and outline flag their placeholder output in frontmatter', () => {
-  const root = paper(null, 'planned');
-  const w = runCli(['write', '1'], root);
-  assert.equal(w.status, 0, w.stdout + w.stderr);
-  assert.equal(parseFrontmatter(readFileSync(sectionFile(root, 'DRAFT.md'), 'utf8')).frontmatter['placeholder'], true, 'DRAFT.md');
-
+  const root = paper(null, 'stub');
   const p = runCli(['plan', '1'], root);
   assert.equal(p.status, 0, p.stdout + p.stderr);
   assert.equal(parseFrontmatter(readFileSync(sectionFile(root, 'PLAN.md'), 'utf8')).frontmatter['placeholder'], true, 'PLAN.md');
+
+  const w = runCli(['write', '1'], root);
+  assert.equal(w.status, 0, w.stdout + w.stderr);
+  assert.equal(parseFrontmatter(readFileSync(sectionFile(root, 'DRAFT.md'), 'utf8')).frontmatter['placeholder'], true, 'DRAFT.md');
 
   // intake saves the user's answers, which no model wrote, so nothing it
   // saves is a placeholder; with no answers it waits for them (exit 3).

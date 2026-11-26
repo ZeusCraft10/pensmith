@@ -209,7 +209,7 @@ test('H1: a --yolo verb UNDER the 50% cap exits 0 (no false refusal)',
     writeState(root, [{ n: 1, slug: 'intro' }]);
     writePaperFile(root, 'RESEARCH.md');
     writePaperFile(root, 'OUTLINE.md');
-    writeSectionPlan(root, 1, 'intro', 'planned');
+    writeSectionPlan(root, 1, 'intro', 'stub');
     // Phase 11 (GEN-06): all generative verbs (plan, write, research) now require
     // either a real API key OR PENSMITH_NO_LLM=1 (offline mode). The H1 test is
     // testing budget-gate behavior (under-cap → exit 0), not LLM key behavior.

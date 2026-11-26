@@ -42,9 +42,10 @@ export const PlanFrontmatterSchema = z.object({
   verified_against_draft_hash: z.string().nullable().default(null),
   // D-08-AMENDED enum (mirrors SectionStateSchema in state.ts; HandoffSchema
   // imports SectionStateSchema directly to avoid a third lock-step copy).
+  // A PLAN.md that names no status has not been planned.
   status: z.enum([
-    'planned', 'writing', 'written', 'verifying', 'verified', 'failed', 'unverifiable',
-  ]).default('planned'),
+    'stub', 'planned', 'writing', 'written', 'verifying', 'verified', 'failed', 'unverifiable',
+  ]).default('stub'),
   // CYCLE-4 M-2: explicit optional field that admits the raw verdict object
   // written by the v1→v2 migration. z.unknown() (not .passthrough()) keeps
   // the rest of the schema strict-by-default while letting the forensics blob

@@ -95,7 +95,7 @@ function snapshot(dir: string): Map<string, string> {
 
 const PLAN_VERIFIED_DRAFT = 'Tidal barrages change estuary sediment over decades [@real2020].\n';
 
-/** A paper mid-pipeline: section 1 verified, section 2 planned, nothing compiled yet. */
+/** A paper mid-pipeline: section 1 verified, section 2 an outline stub, nothing compiled yet. */
 function paperMidway(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-dry-run-'));
   const pdir = join(root, '.paper');
@@ -134,7 +134,7 @@ function paperMidway(): string {
   writeVerificationFixture(join(pdir, 'sections', '01-intro'), { n: 1, slug: 'intro', draft: PLAN_VERIFIED_DRAFT, assignedSources: ['real2020'] });
   writeFileSync(
     join(pdir, 'sections', '02-methods', 'PLAN.md'),
-    '---\nsection: 2\nslug: methods\ntitle: Methods\nstatus: planned\nassigned_sources: []\n---\n## Brief\n\nDescribe the methods.\n',
+    '---\nsection: 2\nslug: methods\ntitle: Methods\nstatus: stub\nassigned_sources: []\n---\n## Brief\n\nDescribe the methods.\n',
   );
   return root;
 }
@@ -239,7 +239,7 @@ test('dry run: research, outline, compile and done change nothing where the real
 
 test('dry run: bare `pensmith`, `next` and `resume` name the step the router would take', async () => {
   const root = paperMidway();
-  // Section 1 is verified; section 2's status is "planned", which the router
+  // Section 1 is verified; section 2 is an outline stub, which the router
   // sends to plan. The dry run must name that step and change nothing.
   for (const args of [['--dry-run'], ['next', '--dry-run'], ['resume', '--dry-run']]) {
     await assertDryRunChangesNothing(args, root, [/the next step is `pensmith plan 2`/, /\.paper\/sections\/02-methods\/PLAN\.md/]);

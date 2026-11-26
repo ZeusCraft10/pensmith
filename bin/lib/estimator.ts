@@ -69,11 +69,11 @@ const SECTION_PIPELINE: readonly Step[] = ['plan', 'write', 'verify'];
 
 /**
  * The steps a section still needs: from the verb the router would run for its
- * PLAN.md status to the end of the pipeline. No PLAN.md counts as 'planned',
+ * PLAN.md status to the end of the pipeline. No PLAN.md counts as 'stub',
  * and a status pensmith does not know as the whole pipeline.
  */
 function remainingSteps(status: string | null): readonly Step[] {
-  const verb = sectionVerb(status ?? 'planned');
+  const verb = sectionVerb(status ?? 'stub');
   if (verb === 'verified') return [];
   return SECTION_PIPELINE.slice(verb === null ? 0 : SECTION_PIPELINE.indexOf(verb));
 }

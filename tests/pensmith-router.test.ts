@@ -125,16 +125,16 @@ test('UX-01 (c): RESEARCH.md present, no OUTLINE.md → { verb: "outline" }', { 
   assert.equal(decision.verb, 'outline', 'UX-01: OUTLINE.md missing routes to outline');
 });
 
-// === (d) section with a 'planned' PLAN.md → plan ===
-test('UX-01 (d): planned section → { verb: "plan", n, slug }', { skip: !built }, async () => {
+// === (d) section with a 'stub' PLAN.md (an outline entry not planned yet) → plan ===
+test('UX-01 (d): stub section → { verb: "plan", n, slug }', { skip: !built }, async () => {
   const resolveNextAction = await loadResolve();
   const root = freshRoot();
   writeState(root, [{ n: 1, slug: 'intro' }]);
   writePaperFile(root, 'RESEARCH.md');
   writePaperFile(root, 'OUTLINE.md');
-  writeSectionPlan(root, 1, 'intro', 'planned');
+  writeSectionPlan(root, 1, 'intro', 'stub');
   const decision = await resolveNextAction(root);
-  assert.equal(decision.verb, 'plan', 'UX-01: planned section routes to plan');
+  assert.equal(decision.verb, 'plan', 'UX-01: a stub section routes to plan');
   assert.equal(decision.n, 1, 'UX-01: plan decision carries n');
   assert.equal(decision.slug, 'intro', 'UX-01: plan decision carries slug');
 });
@@ -372,7 +372,7 @@ test('UX-01 / H4: a valid non-done HANDOFF resolves to the next WORK verb, NEVER
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
-    writeSectionPlan(root, 1, 'intro', 'planned');
+    writeSectionPlan(root, 1, 'intro', 'stub');
     // A VALID non-done HANDOFF.json — the original design returned { verb:'resume' }
     // here, looping forever. The resolver must ignore it.
     writeFileSync(
@@ -390,7 +390,7 @@ test('UX-01 / H4: a valid non-done HANDOFF resolves to the next WORK verb, NEVER
             plan_path: join(root, '.paper', 'sections', '01-intro', 'PLAN.md'),
             draft_path: null,
             verification_path: null,
-            state: 'planned',
+            state: 'stub',
           },
         ],
       }),
@@ -399,5 +399,5 @@ test('UX-01 / H4: a valid non-done HANDOFF resolves to the next WORK verb, NEVER
     assert.notEqual(decision.verb, 'resume',
       'H4: resolveNextAction must NEVER return resume (bare /pensmith must always advance)');
     assert.equal(decision.verb, 'plan',
-      'H4: with a planned section the next WORK verb is plan (HANDOFF is ignored)');
+      'H4: with a stub section the next WORK verb is plan (HANDOFF is ignored)');
   });

@@ -58,7 +58,7 @@ async function withEnvCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-test('section status (second-loop finding): plan sets status:writing so the router advances plan->write', async () => {
+test('section status: plan marks the section planned so the router advances plan->write', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-plan-'));
   mkdirSync(join(root, '.paper', 'sections', '01-intro'), { recursive: true });
   await initState(root);
@@ -82,7 +82,7 @@ test('section status (second-loop finding): plan sets status:writing so the rout
 
   const planPath = join(root, '.paper', 'sections', '01-intro', 'PLAN.md');
   assert.ok(existsSync(planPath), 'plan must write PLAN.md');
-  assert.equal(planStatus(planPath).status, 'writing', 'plan must set PLAN.md status to writing');
+  assert.equal(planStatus(planPath).status, 'planned', 'plan must mark the plan finished (planned)');
 
   // The router now advances to write instead of looping on plan.
   const after = await resolveNextAction(root);

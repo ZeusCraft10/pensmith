@@ -112,7 +112,7 @@ export const verifyCommand = defineCommand({
       const record = buildVerificationRecord({ section: n, slug, status, checked: false, reason, draftBytes, assignedSources });
       await writeVerification(recordPath, verifPath, record);
       await updatePlanFrontmatter(planPath, (fm) => {
-        if (!(keepPreDraftStatus && (fm.status === 'planned' || fm.status === 'writing'))) fm.status = status;
+        if (!(keepPreDraftStatus && (fm.status === 'stub' || fm.status === 'planned' || fm.status === 'writing'))) fm.status = status;
         fm.verified_against_draft_hash = null;
       });
       process.exitCode = EXIT_REFUSED;

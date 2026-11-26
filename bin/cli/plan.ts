@@ -25,7 +25,10 @@ import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropi
 import { getProviderApiKey } from '../lib/runtime.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
-import { artifactText } from '../lib/placeholder.js';
+import { artifactText, isPlaceholderText } from '../lib/placeholder.js';
+import { readSectionState } from '../lib/router.js';
+import { EXIT_REFUSED } from '../lib/exit-codes.js';
+import { readFileSync } from 'node:fs';
 
 export const planCommand = defineCommand({
   meta: {
@@ -51,6 +54,11 @@ export const planCommand = defineCommand({
     research: {
       type: 'string',
       description: 'Section-scoped additional research query (PLAN-03 / D-09).',
+    },
+    force: {
+      type: 'boolean',
+      description: 'Plan again, replacing a finished PLAN.md.',
+      default: false,
     },
     yolo: {
       type: 'boolean',
@@ -116,6 +124,22 @@ export const planCommand = defineCommand({
       return { ok: !result.retryExhausted, mode: 'revise', ...result };
     }
 
+    // A finished plan is the user's work: replace it only when asked to. An
+    // outline stub, and a placeholder no model wrote, are not finished plans.
+    const targetPath = sectionPlan(n, slug);
+    const existing = readSectionState(targetPath);
+    if (!existing.absent && !existing.corrupt && existing.status !== 'stub' && args.force !== true) {
+      const text = readFileSync(targetPath, 'utf8');
+      if (!isPlaceholderText(text)) {
+        process.stderr.write(
+          `pensmith plan: section ${n} (${slug}) already has a plan (status ${existing.status}); nothing was changed. ` +
+            `Run \`pensmith plan ${n} --force\` to plan it again, or \`pensmith plan ${n} --revise\` to repair a flagged citation.\n`,
+        );
+        process.exitCode = EXIT_REFUSED;
+        return { ok: false, mode: 'already-planned' };
+      }
+    }
+
     // Normal plan path: call complete() with the 'section-planner' prompt
     // (D-12 LOCKED slug). The prompt expects {{section}}, {{candidateSources}},
     // {{topic}}, {{discipline}}, and {{upstreamPlans}}.
@@ -132,7 +156,6 @@ export const planCommand = defineCommand({
       discipline: 'other',
       upstreamPlans: '[]',
     });
-    const targetPath = sectionPlan(n, slug);
     const result = await complete({
       system:
         'You are an academic section planner. Generate a PLAN.md document in the ' +
@@ -145,14 +168,10 @@ export const planCommand = defineCommand({
     });
     await atomicWriteFile(targetPath, artifactText(result));
 
-    // Second-loop finding (Theme A): authoritatively mark the section 'writing'
-    // so the router (router.ts:201) advances plan -> write instead of looping on
-    // plan forever. The CLI owns this transition — it must NOT depend on the
-    // model emitting `status:` in the PLAN.md frontmatter (the offline placeholder
-    // has none, and the section-planner prompt does not mandate it). Mirrors how
-    // write sets 'written' (#9) and verify sets 'verified' (#8).
+    // The CLI marks the plan finished ('planned'), so the router goes on to
+    // write; it never depends on the model writing a status.
     await updatePlanFrontmatter(targetPath, (fm) => {
-      fm.status = 'writing';
+      fm.status = 'planned';
     });
     process.stdout.write(`pensmith plan: wrote PLAN.md to ${targetPath}\n`);
     return { ok: true, path: targetPath };
