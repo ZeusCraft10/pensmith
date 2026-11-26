@@ -59,7 +59,7 @@ import { resolveNextAction, type RouterDecision } from './lib/router.js';
 import { isDryRun } from './lib/atomic-write.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 import { EXIT_ERROR, EXIT_OK, EXIT_REFUSED } from './lib/exit-codes.js';
-import { OFFLINE_SKIP_NOTE } from './lib/network-mode.js';
+import { OFFLINE_SKIP_NOTE, isOfflineMode } from './lib/network-mode.js';
 import { GenerationError } from './lib/generator.js';
 import { CostCapExceededError, resolveCostCap } from './lib/budget.js';
 
@@ -247,6 +247,8 @@ const NO_COST_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor', 
 export function shouldRunYoloCapPreflight(argv: string[]): boolean {
   if (!hasFlag(argv, 'yolo')) return false;
   if (hasFlag(argv, 'estimate') || hasFlag(argv, 'dry-run') || isDryRun()) return false;
+  // Stub mode and offline make no paid call, so there is nothing to cap.
+  if (process.env['PENSMITH_NO_LLM'] === '1' || isOfflineMode()) return false;
   if (wantsHelp(argv) || hasFlag(argv, 'version')) return false;
   const v = firstVerb(argv);
   if (v !== null && NO_COST_VERBS.has(v)) return false;
@@ -259,6 +261,23 @@ export function shouldRunYoloCapPreflight(argv: string[]): boolean {
  */
 function configuredCapUsd(): number {
   return resolveCostCap(process.cwd()).capUsd;
+}
+
+/** The section number typed after a section verb (`write 3`), or null. */
+function typedSectionNumber(argv: string[]): number | null {
+  const i = commandWordIndex(argv);
+  const tok = i === -1 ? undefined : argv.slice(i + 1).find((t) => !t.startsWith('-'));
+  return tok !== undefined && /^\d+$/.test(tok) ? Number(tok) : null;
+}
+
+/** The --estimate / --yolo projection of what this argv would run. */
+function estimateFor(argv: string[]): ReturnType<typeof projectEstimate> {
+  return projectEstimate({
+    paperRoot: process.cwd(),
+    sessionCapUsd: configuredCapUsd(),
+    verb: firstVerb(argv),
+    n: typedSectionNumber(argv),
+  });
 }
 
 /** Index of the first argv token that is not a flag (the command word), or -1. */
@@ -459,7 +478,7 @@ async function dispatchArgv(argv: string[]): Promise<void> {
   //     work over an over-cap project. --version/--help are citty meta and bypass
   //     too. Bare/cost verbs still get the refusal.
   if (shouldRunYoloCapPreflight(argv)) {
-    const est = await projectEstimate({ paperRoot: process.cwd(), sessionCapUsd: configuredCapUsd() });
+    const est = await estimateFor(argv);
     if (est.exceedsHalfCap) {
       process.stderr.write(
         'pensmith: REFUSED — --yolo estimate exceeds 50% of the session cap (ARCH-11).\n',
@@ -470,7 +489,7 @@ async function dispatchArgv(argv: string[]): Promise<void> {
 
   // (d) --estimate → print the projection table and exit 0 WITHOUT a verb.
   if (hasFlag(argv, 'estimate')) {
-    const est = await projectEstimate({ paperRoot: process.cwd(), sessionCapUsd: configuredCapUsd() });
+    const est = await estimateFor(argv);
     const out: string[] = ['pensmith estimate (token + USD projection, estimated ±50%):'];
     for (const r of est.rows) {
       out.push(`  ${r.step}: in=${r.inputTokens} out=${r.outputTokens} → $${r.usd.toFixed(4)}`);

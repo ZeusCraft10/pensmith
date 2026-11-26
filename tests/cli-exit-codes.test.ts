@@ -265,7 +265,9 @@ test('exit codes: the --yolo cost-cap refusal exits 2', () => {
   const root = seedPaper(
     Array.from({ length: 40 }, (_, i) => ({ n: i + 1, slug: `s${i + 1}`, draft: 'x\n', verification: CLEAN, status: 'planned' })),
   );
-  const r = runCli(['write', '--yolo'], root, { PENSMITH_COST_CAP_USD: '0.0001' });
+  // The pre-flight guards paid calls, so stub mode and offline (which make
+  // none) skip it: this run is live, and refused before anything is sent.
+  const r = runCli(['write', '--yolo'], root, { PENSMITH_COST_CAP_USD: '0.0001', PENSMITH_NO_LLM: '0', PENSMITH_OFFLINE: '0' });
   assert.match(r.stderr, /REFUSED/, r.stdout + r.stderr);
   assert.equal(r.status, 2);
 });

@@ -1,26 +1,29 @@
-// bin/lib/estimator.ts — Phase 7 Plan 07-02. The `--estimate` token + USD
-// projection (ERGO-02) and the 50%-cap PREDICATE the --yolo pre-flight reads
-// (ERGO-03).
+// bin/lib/estimator.ts — the `--estimate` token and USD projection, and the
+// 50%-of-cap predicate the --yolo pre-flight reads.
 //
-// projectEstimate is a PURE projection pass: it reads STATE.json to count the
-// remaining sections, applies a static per-step token heuristic, and prices each
-// step via estimateCost() from pricing.ts. ZERO LLM calls, ZERO network calls,
-// ZERO COSTS.jsonl writes (Pitfall 8 / T-07-03 / T-07-06). It imports ONLY
-// pricing.ts (pure math) + state.ts (read) — NEVER verify/pass2.ts /
-// verify/pass4.ts / the Anthropic SDK / runtime.ts LLM paths.
+// projectEstimate counts only the work still to do: for a verb, what that verb
+// will run (one section's plan, the sections a wave write would draft, the
+// Pass 4 run of done); for a bare `pensmith`, next or resume, what the rest of
+// the paper needs, by each section's PLAN.md status. A verb that makes no model
+// call (compile, status, add, ...) costs nothing. Each step is priced with the
+// model its role would use (bin/lib/llm-config.ts), so a configured cheaper or
+// dearer model changes the figure.
 //
-// The 50%-cap REFUSAL (hard exit) lives in the dispatcher pre-flight, NOT here;
-// this module computes only the pure `exceedsHalfCap` boolean (review H1 split).
-//
-// LOAD-ERROR GUARD (C2-H1 / C4-HIGH — load-bearing): the loadState call is
-// wrapped in a CATCH-ALL try/catch. A paper-less dir (StateNotFoundError) AND a
-// present-but-corrupt/schema-invalid STATE.json (SyntaxError / SchemaValidationError
-// / ForwardIncompatError / EACCES) BOTH return the empty projection
-// { rows:[], totalUsd:0, exceedsHalfCap:false } so the --yolo cap pre-flight sees
-// "under cap" and NEVER crashes. Never re-thrown.
+// It is a forecast: no model call, no network request, no COSTS.jsonl row.
+// The refusal itself lives in the dispatcher; this module only computes
+// `exceedsHalfCap`. Any failure to read the paper (no STATE.json, a corrupt
+// one, an unreadable runtime.json) gives the empty projection, never a throw,
+// so the pre-flight can never crash a command.
 
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { estimateCost } from './pricing.js';
 import { loadState } from './state.js';
+import { paperDir, sectionPlan } from './paths.js';
+import { readSectionState, researchDone } from './router.js';
+import { resolveCall } from './llm-config.js';
+import type { LlmRole } from './generator.js';
+import { DEFAULT_COST_CAP_USD } from './budget.js';
 
 export interface EstimateRow {
   step: string;
@@ -35,96 +38,144 @@ export interface EstimateResult {
   exceedsHalfCap: boolean;
 }
 
-// Default provider + model for the projection: the transport's default model.
-// Kept as a module constant (not a runtime.ts read) so projectEstimate stays a
-// pure, IO-light projection that never touches the platform data dir.
-const DEFAULT_PROVIDER_ID = 'anthropic';
-const DEFAULT_MODEL_ID = 'claude-opus-5-5';
+type Step = 'new' | 'research' | 'outline' | 'plan' | 'write' | 'verify' | 'revise' | 'done';
 
-// Default session cap when the dispatcher does not pass a configured cap
-// (mirrors the documented $5 default; the dispatcher passes
-// PENSMITH_COST_CAP_USD when set so a lowered cap tightens the H1 threshold).
-const DEFAULT_SESSION_CAP_USD = 5.0;
-
-// STEP_HEURISTICS — static token-count estimates per workflow step. Conservative
-// (≈2× expected; label output as "estimated ±50%"). plan/write/verify are
-// PER-SECTION (multiplied by the section count). Calibrate via empirical runs.
-const STEP_HEURISTICS = Object.freeze({
+// Static token counts per step: conservative (about twice what a run usually
+// uses), so label the output "estimated ±50%". plan, write and verify are per
+// section; verify and done are the advisory Pass 2 and Pass 4 calls.
+const STEP_HEURISTICS: Readonly<Record<Step, { inputTokens: number; outputTokens: number }>> = {
   new: { inputTokens: 5_000, outputTokens: 2_000 },
   research: { inputTokens: 50_000, outputTokens: 8_000 },
   outline: { inputTokens: 10_000, outputTokens: 3_000 },
-  plan: { inputTokens: 8_000, outputTokens: 2_000 }, // per section
-  write: { inputTokens: 15_000, outputTokens: 5_000 }, // per section
-  verify: { inputTokens: 20_000, outputTokens: 3_000 }, // per section
-  compile: { inputTokens: 20_000, outputTokens: 5_000 },
+  plan: { inputTokens: 8_000, outputTokens: 2_000 },
+  write: { inputTokens: 15_000, outputTokens: 5_000 },
+  verify: { inputTokens: 20_000, outputTokens: 3_000 },
+  revise: { inputTokens: 8_000, outputTokens: 2_000 },
   done: { inputTokens: 30_000, outputTokens: 5_000 },
-} as const);
+};
 
-// The per-section steps (one row per section in STATE.json).
-const PER_SECTION_STEPS = ['plan', 'write', 'verify'] as const;
-// The whole-paper steps (a single row each).
-const WHOLE_PAPER_STEPS = ['research', 'outline', 'compile', 'done'] as const;
+/** The role whose model prices each step. */
+const STEP_ROLE: Readonly<Record<Step, LlmRole>> = {
+  new: 'intake',
+  research: 'research',
+  outline: 'outline',
+  plan: 'plan',
+  write: 'write',
+  verify: 'verify',
+  revise: 'revise',
+  done: 'verify',
+};
 
-function rowFor(step: string, label: string): EstimateRow {
-  const heur = STEP_HEURISTICS[step as keyof typeof STEP_HEURISTICS];
-  const usd = estimateCost({
-    provider: DEFAULT_PROVIDER_ID,
-    modelId: DEFAULT_MODEL_ID,
-    inputTokens: heur.inputTokens,
-    outputTokens: heur.outputTokens,
-  });
-  return { step: label, inputTokens: heur.inputTokens, outputTokens: heur.outputTokens, usd };
+/** The steps a section still needs, by its PLAN.md status (the router's walk). */
+function remainingSteps(status: string | null): Step[] {
+  switch (status) {
+    case 'verified':
+      return [];
+    case 'writing':
+      return ['write', 'verify'];
+    case 'written':
+    case 'verifying':
+    case 'failed':
+    case 'unverifiable':
+      return ['verify'];
+    default:
+      // No PLAN.md, 'planned', or a status pensmith does not know.
+      return ['plan', 'write', 'verify'];
+  }
+}
+
+interface Section { n: number; slug: string; status: string | null }
+
+/** Which steps, with which labels, `verb` (null: the rest of the paper) would run. */
+function plannedSteps(
+  verb: string | null,
+  n: number | null,
+  sections: readonly Section[],
+  paper: { researched: boolean; outlined: boolean; finished: boolean },
+): Array<[Step, string]> {
+  const section = (s: Step): Array<[Step, string]> => [[s, n !== null ? `${s} §${n}` : s]];
+  switch (verb) {
+    case 'new':
+      return [['new', 'new']];
+    case 'research':
+      return [['research', 'research']];
+    case 'outline':
+      return [['outline', 'outline']];
+    case 'plan':
+    case 'verify':
+      return section(verb);
+    case 'write':
+      if (n !== null) return section('write');
+      return sections.filter((s) => remainingSteps(s.status).includes('write')).map((s) => ['write', `write §${s.n}`]);
+    case 'done':
+      return [['done', 'done']];
+    case null:
+    case 'next':
+    case 'resume': {
+      const steps: Array<[Step, string]> = [];
+      if (!paper.researched) steps.push(['research', 'research']);
+      if (!paper.outlined) steps.push(['outline', 'outline']);
+      for (const s of sections) {
+        for (const step of remainingSteps(s.status)) steps.push([step, `${step} §${s.n}`]);
+      }
+      if (!paper.finished) steps.push(['done', 'done']);
+      return steps;
+    }
+    default:
+      // compile, status, list, doctor, open, ack, add, sketch: no model call.
+      return [];
+  }
 }
 
 /**
- * Project the token + USD cost of completing the active paper at `paperRoot`.
+ * Project the token and USD cost of what `verb` (or, with none, the rest of
+ * the paper at `paperRoot`) would still run.
  *
- * Returns { rows, totalUsd, exceedsHalfCap } where:
- *   - totalUsd === sum of rows[].usd
- *   - exceedsHalfCap === (totalUsd > (sessionCapUsd ?? 5.0) * 0.5)
- *
- * NEVER throws for ANY on-disk STATE.json — a paper-less dir AND a corrupt /
- * schema-invalid STATE.json both return the empty projection (C2-H1 / C4-HIGH).
- * NEVER bills (no COSTS.jsonl write, no LLM, no network).
+ * Returns { rows, totalUsd, exceedsHalfCap }, where totalUsd is the sum of the
+ * rows and exceedsHalfCap is totalUsd > (sessionCapUsd ?? $5) * 0.5. Never
+ * throws, never bills.
  */
 export async function projectEstimate(args: {
   paperRoot: string;
   sessionCapUsd?: number;
+  /** The verb that will run; null or absent for a bare `pensmith`. */
+  verb?: string | null;
+  /** The section number given to a section verb, if any. */
+  n?: number | null;
 }): Promise<EstimateResult> {
-  // C2-H1 / C4-HIGH LOAD-ERROR GUARD: any load/parse failure (absent file OR
-  // present-but-corrupt) → empty projection. Never re-throw.
-  let state;
+  const empty: EstimateResult = { rows: [], totalUsd: 0, exceedsHalfCap: false };
   try {
-    state = await loadState(args.paperRoot);
-  } catch {
-    return { rows: [], totalUsd: 0, exceedsHalfCap: false };
-  }
+    const state = await loadState(args.paperRoot);
+    const pDir = paperDir(args.paperRoot);
+    const sections: Section[] = [...(state.sections ?? [])]
+      .sort((a, b) => a.n - b.n)
+      .map(({ n, slug }) => {
+        const r = readSectionState(sectionPlan(n, slug, args.paperRoot));
+        return { n, slug, status: r.absent ? null : r.status };
+      });
+    const steps = plannedSteps(args.verb ?? null, args.n ?? null, sections, {
+      researched: researchDone(pDir) === true,
+      outlined: existsSync(path.join(pDir, 'OUTLINE.md')) && sections.length > 0,
+      finished: existsSync(path.join(pDir, 'FINAL.md')),
+    });
 
-  const sections = state.sections ?? [];
-  const rows: EstimateRow[] = [];
-
-  // Whole-paper steps (one row each).
-  rows.push(rowFor('research', 'research'));
-  rows.push(rowFor('outline', 'outline'));
-
-  // Per-section steps (one row per section per step).
-  for (const { n } of sections) {
-    for (const step of PER_SECTION_STEPS) {
-      rows.push(rowFor(step, `${step} §${n}`));
+    const rows: EstimateRow[] = [];
+    for (const [step, label] of steps) {
+      const heur = STEP_HEURISTICS[step];
+      const call = await resolveCall({ role: STEP_ROLE[step] });
+      const usd = estimateCost({
+        provider: call.providerName,
+        modelId: call.model,
+        inputTokens: heur.inputTokens,
+        outputTokens: heur.outputTokens,
+        ...(call.pricePerMtok ? { override: call.pricePerMtok } : {}),
+      });
+      rows.push({ step: label, inputTokens: heur.inputTokens, outputTokens: heur.outputTokens, usd });
     }
+    const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);
+    const cap = args.sessionCapUsd ?? DEFAULT_COST_CAP_USD;
+    return { rows, totalUsd, exceedsHalfCap: totalUsd > cap * 0.5 };
+  } catch {
+    return empty;
   }
-
-  // compile + done (whole-paper terminal steps).
-  rows.push(rowFor('compile', 'compile'));
-  rows.push(rowFor('done', 'done'));
-
-  // Reference WHOLE_PAPER_STEPS so the const documents intent (and stays in step
-  // with STEP_HEURISTICS) without an unused-binding lint failure.
-  void WHOLE_PAPER_STEPS;
-
-  const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);
-  const sessionCap = args.sessionCapUsd ?? DEFAULT_SESSION_CAP_USD;
-  const exceedsHalfCap = totalUsd > sessionCap * 0.5;
-
-  return { rows, totalUsd, exceedsHalfCap };
 }

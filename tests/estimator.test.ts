@@ -16,10 +16,14 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pensmithDataDir, sectionPlan } from '../bin/lib/paths.js';
+import { estimateCost } from '../bin/lib/pricing.js';
+import { isolatedCliEnv } from './lib/cli-env.js';
 
 // RED-by-skip guard — the module under test does not exist until Plan 07-02.
 const ESTIMATOR_SRC = fileURLToPath(new URL('../bin/lib/estimator.ts', import.meta.url));
@@ -182,3 +186,102 @@ test('ERGO-02 / C4-HIGH: schema-invalid STATE.json (section missing slug) → em
     assert.deepEqual(res!.rows, [], 'C4-HIGH: schema-invalid STATE.json yields an empty rows projection');
     assert.equal(res!.exceedsHalfCap, false, 'C4-HIGH: schema-invalid STATE.json is under-cap');
   });
+
+// === Only the work still to do, priced with the configured model ===
+//
+// The projection used to add research, outline, plan/write/verify for every
+// section and compile and done, whatever was already finished and whatever
+// verb was asked for, priced at a retired model. `pensmith done --yolo` on any
+// seven-section paper was refused before it ran, though done makes one
+// advisory pass.
+
+function paperWith(statuses: string[]): string {
+  const root = freshRoot();
+  writeState(root, statuses.map((_, i) => ({ n: i + 1, slug: `s${i + 1}` })));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), '# Outline\n');
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 2, researched_at: '2026-11-01T00:00:00Z', items: [] }));
+  statuses.forEach((status, i) => {
+    const plan = sectionPlan(i + 1, `s${i + 1}`, root);
+    mkdirSync(dirname(plan), { recursive: true });
+    writeFileSync(plan, `---\nsection: ${i + 1}\nslug: s${i + 1}\nstatus: ${status}\n---\n`);
+  });
+  return root;
+}
+
+test('estimate: `done` on a finished seven-section paper costs only its own pass and is under half the cap',
+  { skip: !built }, async () => {
+    const projectEstimate = await loadProject();
+    const root = paperWith(Array.from({ length: 7 }, () => 'verified'));
+    const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'done' } as never);
+    assert.deepEqual(res.rows.map((r) => r.step), ['done']);
+    assert.equal(res.exceedsHalfCap, false);
+  });
+
+test('estimate: a bare run counts only the sections still to finish', { skip: !built }, async () => {
+  const projectEstimate = await loadProject();
+  const root = paperWith(['verified', 'verified', 'written', 'writing']);
+  const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 5 });
+  assert.deepEqual(res.rows.map((r) => r.step), ['verify §3', 'write §4', 'verify §4', 'done']);
+});
+
+test('estimate: a wave write counts only the sections that still need drafting; compile costs nothing',
+  { skip: !built }, async () => {
+    const projectEstimate = await loadProject();
+    const root = paperWith(['verified', 'writing', 'planned']);
+    const write = await projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'write' } as never);
+    assert.deepEqual(write.rows.map((r) => r.step), ['write §2', 'write §3']);
+    const compile = await projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'compile' } as never);
+    assert.deepEqual(compile.rows, []);
+  });
+
+test('estimate: steps are priced with the model runtime.json configures', { skip: !built }, async () => {
+  const projectEstimate = await loadProject();
+  const root = paperWith(['planned']);
+  const savedXdg = process.env['XDG_DATA_HOME'];
+  const savedHome = process.env['HOME'];
+  const savedLad = process.env['LOCALAPPDATA'];
+  const data = mkdtempSync(join(tmpdir(), 'pensmith-estimator-data-'));
+  process.env['XDG_DATA_HOME'] = data;
+  process.env['HOME'] = data;
+  process.env['LOCALAPPDATA'] = data;
+  try {
+    const byDefault = await projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'write', n: 1 } as never);
+    const dir = pensmithDataDir();
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'runtime.json'), JSON.stringify({ $schemaVersion: 1, providers: { anthropic: { name: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY', defaultModel: 'claude-haiku-5-5' } } }));
+    const configured = await projectEstimate({ paperRoot: root, sessionCapUsd: 5, verb: 'write', n: 1 } as never);
+    const heur = configured.rows[0]!;
+    assert.equal(heur.step, 'write §1');
+    assert.ok(Math.abs(heur.usd - estimateCost({ provider: 'anthropic', modelId: 'claude-haiku-5-5', inputTokens: heur.inputTokens, outputTokens: heur.outputTokens })) < 1e-12);
+    assert.ok(Math.abs(byDefault.rows[0]!.usd - estimateCost({ provider: 'anthropic', modelId: 'claude-opus-5-5', inputTokens: heur.inputTokens, outputTokens: heur.outputTokens })) < 1e-12);
+  } finally {
+    if (savedXdg === undefined) delete process.env['XDG_DATA_HOME']; else process.env['XDG_DATA_HOME'] = savedXdg;
+    if (savedHome === undefined) delete process.env['HOME']; else process.env['HOME'] = savedHome;
+    if (savedLad === undefined) delete process.env['LOCALAPPDATA']; else process.env['LOCALAPPDATA'] = savedLad;
+  }
+});
+
+test('the --yolo pre-flight does not run when no model is called (stub mode or offline)', async () => {
+  const { shouldRunYoloCapPreflight } = await import('../bin/pensmith.js');
+  for (const [k, v] of [['PENSMITH_NO_LLM', '1'], ['PENSMITH_OFFLINE', '1']] as const) {
+    const saved = process.env[k];
+    process.env[k] = v;
+    try {
+      assert.equal(shouldRunYoloCapPreflight(['write', '--yolo']), false, `${k}=1 makes no paid call`);
+    } finally {
+      if (saved === undefined) delete process.env[k]; else process.env[k] = saved;
+    }
+  }
+});
+
+test('`pensmith done --yolo` on a finished seven-section paper is not refused by the pre-flight', { skip: !built }, () => {
+  const root = paperWith(Array.from({ length: 7 }, () => 'verified'));
+  const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url)), 'done', '--yolo'], {
+    cwd: root,
+    env: isolatedCliEnv({ PENSMITH_NO_LLM: undefined, PENSMITH_OFFLINE: undefined, PENSMITH_COST_CAP_USD: undefined }),
+    encoding: 'utf8',
+    timeout: 60_000,
+  });
+  assert.doesNotMatch(r.stderr, /--yolo estimate exceeds/, `stderr=${r.stderr}`);
+});
