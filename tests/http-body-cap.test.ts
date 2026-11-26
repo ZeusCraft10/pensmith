@@ -139,3 +139,47 @@ test('chokepointFetch never sends a POST again after a deadline it may have reac
   await new Promise((r) => setTimeout(r, 600));
   assert.equal(hits, 1, 'one request reached the server');
 });
+
+// ---------------------------------------------------------------------------
+// Responses with no body: one rule for fetch() and chokepointFetch()
+// ---------------------------------------------------------------------------
+
+// The answer to a HEAD and a 204, 205 or 304 carry no body, whatever their
+// content-length says: it describes the representation a GET would return.
+// fetch() used to refuse a 304 or 204 that declared a large length, and
+// chokepointFetch() a HEAD or 304.
+const BIG = String(200_000_000);
+
+test('fetch reads no body from a 204 or 304, and does not refuse it for the length it declares', async () => {
+  for (const status of [204, 304]) {
+    mockAgent().get(ORIGIN).intercept({ path: `/bodyless-${status}`, method: 'GET' })
+      .reply(status, '', { headers: { 'content-type': 'application/pdf', 'content-length': BIG } });
+    const res = await fetch(`${ORIGIN}/bodyless-${status}`, { source: 'crossref', noCache: true, maxBodyBytes: 1024 });
+    assert.equal(res.status, status);
+    assert.equal(res.body, '');
+    assert.equal(res.bodyBytes?.length ?? 0, 0);
+  }
+});
+
+test('chokepointFetch gives a HEAD or a 304 a null body, and does not refuse it for the length it declares', async () => {
+  const f = chokepointFetch({ source: 'generic', timeoutMs: 5_000, maxBodyBytes: 1024, untrusted: false });
+  mockAgent().get(API).intercept({ path: '/v1/models', method: 'HEAD' })
+    .reply(200, '', { headers: { 'content-type': 'application/json', 'content-length': BIG } });
+  const head = await f(`${API}/v1/models`, { method: 'HEAD' });
+  assert.equal(head.status, 200);
+  assert.equal(head.body, null);
+  assert.equal(head.headers.get('content-length'), BIG);
+
+  mockAgent().get(API).intercept({ path: '/v1/models', method: 'GET' })
+    .reply(304, '', { headers: { 'content-length': BIG } });
+  const notModified = await f(`${API}/v1/models`, { method: 'GET' });
+  assert.equal(notModified.status, 304);
+  assert.equal(notModified.body, null);
+});
+
+test('a response with a body is still refused up front by chokepointFetch when its declared length is past the limit', async () => {
+  mockAgent().get(API).intercept({ path: '/v1/messages', method: 'POST' })
+    .reply(200, 'small', { headers: { 'content-type': 'text/event-stream', 'content-length': BIG } });
+  const f = chokepointFetch({ source: 'generic', timeoutMs: 5_000, maxBodyBytes: 1024, untrusted: false });
+  await assert.rejects(f(`${API}/v1/messages`, { method: 'POST', body: '{}' }), ResponseTooLargeError);
+});

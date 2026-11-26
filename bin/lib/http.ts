@@ -793,6 +793,19 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 /** The default limit on one response body: far above any registry answer. */
 const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024;
 
+/** Statuses whose response cannot carry a body (the Response constructor refuses one). */
+const NULL_BODY_STATUSES: ReadonlySet<number> = new Set([101, 204, 205, 304]);
+
+/**
+ * True when the response to `method` with `status` has no body, whatever its
+ * content-length says: the answer to a HEAD, or a 101, 204, 205 or 304. Its
+ * content-length then gives the size of what a GET would return, so it is not
+ * checked against the size limit, and nothing is read.
+ */
+function bodyless(method: string, status: number): boolean {
+  return method === 'HEAD' || NULL_BODY_STATUSES.has(status);
+}
+
 /**
  * Refuse a response whose declared length is already past `limit`, destroying
  * its unread body first.
@@ -990,10 +1003,9 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     });
     // Read the raw bytes once, stopping at the size limit. `text`
     // is the UTF-8 decode for text consumers; `bodyBytes` preserves the exact
-    // bytes for binary content (PDFs fetched by URL). A HEAD answer has no
-    // body, and its content-length is the size a GET would return.
+    // bytes for binary content (PDFs fetched by URL).
     let bodyBytes: Buffer;
-    if (method === 'HEAD') {
+    if (bodyless(method, statusCode)) {
       await body.dump();
       bodyBytes = Buffer.alloc(0);
     } else {
@@ -1090,9 +1102,6 @@ export interface ChokepointFetchOptions {
   untrusted: boolean;
 }
 
-/** Statuses whose response cannot carry a body (the Response constructor refuses one). */
-const NULL_BODY_STATUSES: ReadonlySet<number> = new Set([101, 204, 205, 304]);
-
 function requestBody(body: RequestInit['body']): string | Buffer | undefined {
   if (body == null) return undefined;
   if (typeof body === 'string') return body;
@@ -1166,7 +1175,7 @@ export function chokepointFetch(opts: ChokepointFetchOptions): (input: string | 
 
     if (isCassetteMode()) {
       const r = await replayFromCassette(method, url, opts.maxBodyBytes);
-      return new Response(NULL_BODY_STATUSES.has(r.status) ? null : r.bodyBytes, { status: r.status, headers: r.headers });
+      return new Response(bodyless(method, r.status) ? null : r.bodyBytes, { status: r.status, headers: r.headers });
     }
 
     const headers: Record<string, string> = {};
@@ -1189,11 +1198,11 @@ export function chokepointFetch(opts: ChokepointFetchOptions): (input: string | 
       throw e;
     }
     const { statusCode, headers: rh, body: resBody } = head;
-    assertDeclaredLength(rh, resBody, url, opts.maxBodyBytes);
-    if (NULL_BODY_STATUSES.has(statusCode)) {
+    if (bodyless(method, statusCode)) {
       resBody.destroy();
       return new Response(null, { status: statusCode, headers: responseHeaders(rh) });
     }
+    assertDeclaredLength(rh, resBody, url, opts.maxBodyBytes);
     return new Response(cappedStream(resBody, url, opts.maxBodyBytes), {
       status: statusCode,
       headers: responseHeaders(rh),
@@ -1214,8 +1223,9 @@ async function replayFromCassette(
 ): Promise<HttpResponse & { bodyBytes: Buffer }> {
   const { replayCassette } = await import('./http-mock.js');
   const r = replayCassette(method, url);
-  const body = method === 'HEAD' ? '' : r.body;
-  const bodyBytes = method === 'HEAD' ? Buffer.alloc(0) : (r.bytes ?? Buffer.from(body, 'utf8'));
+  const none = bodyless(method, r.status);
+  const body = none ? '' : r.body;
+  const bodyBytes = none ? Buffer.alloc(0) : (r.bytes ?? Buffer.from(body, 'utf8'));
   if (bodyBytes.length > maxBodyBytes) throw new ResponseTooLargeError(url, maxBodyBytes);
   return { status: r.status, headers: r.headers, body, bodyBytes, cached: false };
 }
