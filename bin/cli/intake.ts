@@ -496,6 +496,7 @@ export const intakeCommand = defineCommand({
     const result = await complete({
       system: interpolatedPrompt,
       messages: [{ role: 'user', content: egressSeed }],
+      role: 'intake',
       scope: 'task',
       scopeId: 'intake',
     });

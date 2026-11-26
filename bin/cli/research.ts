@@ -169,6 +169,7 @@ export const researchCommand = defineCommand({
         'research topic and propose search scopes. Return a JSON object in the ' +
         'exact format specified in the prompt. No prose outside the JSON object.',
       messages: [{ role: 'user', content: interpolatedPrompt }],
+      role: 'research',
       scope: 'task',
       scopeId: 'research',
     });

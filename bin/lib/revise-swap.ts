@@ -76,6 +76,7 @@ export async function proposeSwap(vars: ReviseSwapVars): Promise<string> {
   const result = await complete({
     system: REVISE_SWAP_SYSTEM,
     messages: [{ role: 'user', content: interpolated }],
+    role: 'revise',
     scope: 'task',
     scopeId: `revise-${vars.flagged_citekey}`,
   });

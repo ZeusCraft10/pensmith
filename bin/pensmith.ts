@@ -60,6 +60,7 @@ import { isDryRun } from './lib/atomic-write.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 import { EXIT_ERROR, EXIT_OK, EXIT_REFUSED } from './lib/exit-codes.js';
 import { OFFLINE_SKIP_NOTE } from './lib/network-mode.js';
+import { GenerationError } from './lib/generator.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -383,6 +384,13 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   } catch (e) {
     if (isUsageError(e)) {
       await refuseUsage(argv, e);
+      return;
+    }
+    // A model call that gave no usable answer (cut off, declined, the provider
+    // failing) is reported in plain words, not as a stack trace.
+    if (e instanceof GenerationError) {
+      process.stderr.write(`pensmith: ${e.exitCode === EXIT_REFUSED ? 'REFUSED' : 'ERROR'} — ${e.message}\n`);
+      process.exitCode = e.exitCode;
       return;
     }
     process.stderr.write(`${inspect(e)}\n`);

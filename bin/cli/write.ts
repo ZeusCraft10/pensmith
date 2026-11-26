@@ -233,6 +233,7 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
   const result = await complete({
     system: interpolatedDrafterPrompt,
     messages: [{ role: 'user', content: `Write section ${n} (${slug}).` }],
+    role: 'write',
     scope: 'section',
     scopeId: `write-${n}`,
   });

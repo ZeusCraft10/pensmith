@@ -381,14 +381,17 @@ export default [
     ],
   },
 
-  // === HTTP/path chokepoint EXEMPTION for tests/llm-transport.test.ts (Phase 11) ===
-  // tests/llm-transport.test.ts MUST import undici (MockAgent / setGlobalDispatcher)
-  // to intercept LLM REST calls routed through bin/lib/http.ts (same as http.test.ts).
+  // === HTTP/path chokepoint EXEMPTION for the LLM transport tests ===
+  // tests/llm-transport.test.ts and tests/llm-generator.test.ts MUST import undici
+  // (MockAgent / setGlobalDispatcher) to answer model calls routed through
+  // bin/lib/http.ts (same as http.test.ts), and write runtime.json fixtures.
+  // tests/write-truncated.test.ts runs a local node:http server that speaks the
+  // Messages API for a spawned CLI, which a MockAgent cannot reach.
   // It also MUST use fsp.writeFile directly to seed COSTS.jsonl for the budget-gate
   // test (T-11-02) — this is test-only setup code, not production artifact I/O.
   // Scoped to this test file only.
   {
-    files: ['tests/llm-transport.test.ts'],
+    files: ['tests/llm-transport.test.ts', 'tests/llm-generator.test.ts', 'tests/write-truncated.test.ts'],
     rules: {
       'no-restricted-imports': 'off',
       'no-restricted-syntax': 'off',

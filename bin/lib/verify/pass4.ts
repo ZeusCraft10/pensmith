@@ -112,10 +112,10 @@ const SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+/;
 // $5 session cap even for paragraph-dense papers on claude-haiku-4.
 const PASS4_SECTION_CAP_DEFAULT = 0.5;
 
-// Output-token cap for the orphan-label call (also the budget pre-estimate
-// ceiling inside complete()). complete() estimates input tokens from content
-// length and records ACTUAL cost post-call, so no fixed input estimate is needed.
-const EST_OUTPUT_TOKENS = 60;
+// What the orphan-label call is expected to use, thinking included, for the
+// budget check. The output limit is the verify role's: a limit this small would
+// cut off the thinking a current model does first.
+const EST_OUTPUT_TOKENS = 300;
 
 /** Step-3 advisory label vocabulary (parsed from the orphan-label response). */
 type OrphanLabel = 'claim' | 'definition' | 'UNCLEAR';
@@ -430,10 +430,12 @@ export async function runPass4(
         const res = await complete({
           system: '',
           messages: [{ role: 'user', content: prompt }],
+          role: 'verify',
+          // A one-word label: less than the role's usual answer.
+          expectedOutputTokens: EST_OUTPUT_TOKENS,
           scope: 'section',
           scopeId,
           scopeCapUsd: cap,
-          maxTokens: EST_OUTPUT_TOKENS,
         });
         label = parseOrphanLabel(res.text);
       } catch {

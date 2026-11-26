@@ -139,6 +139,7 @@ export const planCommand = defineCommand({
         'exact YAML frontmatter + ## Brief format specified in the prompt. ' +
         'Your output is the PLAN.md file content only — no prose outside the document.',
       messages: [{ role: 'user', content: interpolatedPlan }],
+      role: 'plan',
       scope: 'section',
       scopeId: `plan-${n}`,
     });

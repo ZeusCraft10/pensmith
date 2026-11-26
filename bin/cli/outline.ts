@@ -215,6 +215,7 @@ export const outlineCommand = defineCommand({
     const result = await complete({
       system: interpolatedPrompt,
       messages: [{ role: 'user', content: intakeContent }],
+      role: 'outline',
       scope: 'task',
       scopeId: 'outline',
     });

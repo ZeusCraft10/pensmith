@@ -11,6 +11,9 @@
 // T-11-07: Anthropic provider → correct POST body + header shape to api.anthropic.com.
 // T-11-08: OpenAI provider → correct POST body + header shape to api.openai.com.
 //
+// The provider answers are streamed Messages API events (complete() streams
+// through the SDK); tests/llm-generator.test.ts covers the answer shapes.
+//
 // Skip strategy: every behavioral test guards on `transportReady()` — a
 // feature-detect that tries a dynamic import of bin/lib/anthropic.js via URL.href
 // and checks that the module exports `complete` and `isNoLlmMode` functions.
@@ -197,6 +200,24 @@ async function walkAndReadAll(dir: string): Promise<Array<{ path: string; text: 
 }
 
 // ---------------------------------------------------------------------------
+// sseAnswer: a streamed Messages API answer with one text block, as the SDK
+// reads it (complete() always streams).
+// ---------------------------------------------------------------------------
+function sseAnswer(text: string, usage = { input_tokens: 10, output_tokens: 8 }): string {
+  const events: Array<Record<string, unknown> & { type: string }> = [
+    { type: 'message_start', message: { id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: usage.input_tokens, output_tokens: 1 } } },
+    { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
+    { type: 'content_block_stop', index: 0 },
+    { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: usage.output_tokens } },
+    { type: 'message_stop' },
+  ];
+  return events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+}
+
+const SSE_HEADERS = { headers: { 'content-type': 'text/event-stream' } };
+
+// ---------------------------------------------------------------------------
 // Per-verb source-grep predicates.
 // A verb is "not yet wired" if its source file still contains the TIER2_*
 // placeholder constant. This prevents the integration tests from running
@@ -333,7 +354,7 @@ test('T-11-02: complete() raises BudgetExceededError BEFORE any HTTP call when b
       scope: 'task',
       scopeId: 'test-budget',
       provider: 'anthropic',
-      model: 'claude-haiku-4',
+      model: 'claude-opus-5-5',
       inputTokens: 100000,
       outputTokens: 10000,
       costUsd: 1.00,
@@ -398,18 +419,12 @@ test('T-11-03: API key value never leaks to disk files, stdout, or stderr (no-le
 
     const pool = agent.get('https://api.anthropic.com');
     pool
-      .intercept({ path: '/v1/messages', method: 'POST' })
+      .intercept({ path: (p) => p.startsWith('/v1/messages'), method: 'POST' })
       .reply(200, (_opts?: { headers?: Record<string, string | string[]>; body?: string }) => {
         capturedRequestHeaders = (_opts?.headers ?? {}) as Record<string, string | string[]>;
         intercepted.push(true);
-        return JSON.stringify({
-          id: 'msg_test',
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'text', text: 'Test response for no-leak assertion.' }],
-          usage: { input_tokens: 10, output_tokens: 8 },
-        });
-      }, { headers: { 'content-type': 'application/json' } });
+        return sseAnswer('Test response for no-leak assertion.');
+      }, SSE_HEADERS);
 
     // Also enable the pool so disableNetConnect doesn't block our mocked route
     // (undici MockAgent allows the registered intercepts even with disableNetConnect).
@@ -554,26 +569,20 @@ test('T-11-07: Anthropic provider sends correct POST body and headers to api.ant
     const pool = agent.get('https://api.anthropic.com');
     pool
       .intercept({
-        path: '/v1/messages',
+        path: (p) => p.startsWith('/v1/messages'),
         method: 'POST',
       })
       .reply(200, (_opts?: { headers?: Record<string, string | string[]>; body?: string }) => {
         capturedHeaders = (_opts?.headers ?? {}) as Record<string, string | string[]>;
         capturedBody = typeof _opts?.body === 'string' ? _opts.body : '';
-        return JSON.stringify({
-          id: 'msg_shape_test',
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'text', text: 'Anthropic shape test response.' }],
-          usage: { input_tokens: 12, output_tokens: 6 },
-        });
-      }, { headers: { 'content-type': 'application/json' } });
+        return sseAnswer('Anthropic shape test response.', { input_tokens: 12, output_tokens: 6 });
+      }, SSE_HEADERS);
 
     const { complete } = await loadTransport();
     const result = await complete({
       system: 'You are an academic writing assistant.',
       messages: [{ role: 'user', content: 'Write a one-sentence intro.' }],
-      model: 'claude-haiku-4',
+      model: 'claude-haiku-5-5',
       maxTokens: 256,
       scope: 'task',
       scopeId: 'anthropic-shape-test',
@@ -701,7 +710,9 @@ test('T-11-08: OpenAI provider sends correct POST body and Authorization header 
     }
 
     assert.ok('model' in body, 'OpenAI body must include "model"');
-    assert.ok('max_tokens' in body, 'OpenAI body must include "max_tokens"');
+    // The output limit is max_completion_tokens: OpenAI's reasoning models refuse max_tokens.
+    assert.ok('max_completion_tokens' in body, 'OpenAI body must include "max_completion_tokens"');
+    assert.ok(!('max_tokens' in body), 'OpenAI body must not include "max_tokens"');
     assert.ok(Array.isArray(body['messages']), 'OpenAI body must include "messages" array');
 
     // OpenAI folds system into messages[0] with role:'system'

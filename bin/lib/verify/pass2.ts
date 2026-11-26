@@ -118,11 +118,6 @@ function collectClaimPairs(draftMd: string): ClaimPair[] {
 // many-citation sections using claude-haiku-4 (~$0.007/call).
 const PASS2_SECTION_CAP_DEFAULT = 0.5;
 
-// Output-token cap for the claim-support call (also the budget pre-estimate
-// ceiling inside complete()). claude-haiku-4 at this size ≈ $0.0024 — well under
-// the per-section cap. complete() estimates input tokens from content length and
-// records ACTUAL cost post-call, so no fixed input estimate is needed here.
-const EST_OUTPUT_TOKENS = 300;
 
 /** Normalize a CSL-style title (string | string[]) to a single string. */
 function normalizeTitle(title: Pass2BibEntry['title']): string {
@@ -242,10 +237,10 @@ export async function runPass2(
       const res = await complete({
         system: '',
         messages: [{ role: 'user', content: prompt }],
+        role: 'verify',
         scope: 'section',
         scopeId,
         scopeCapUsd: cap,
-        maxTokens: EST_OUTPUT_TOKENS,
       });
       results.push(parsePass2Response(res.text, pair.citekey, pair.claimSentence, abstract));
     } catch (err) {

@@ -138,6 +138,7 @@ async function evaluateCandidates(
         'return a JSON array of verdict objects in the exact format specified. ' +
         'No prose outside the JSON array.',
       messages: [{ role: 'user', content: interpolatedEvaluator }],
+      role: 'evaluate',
       scope: 'task',
       scopeId: 'research-evaluator',
     });

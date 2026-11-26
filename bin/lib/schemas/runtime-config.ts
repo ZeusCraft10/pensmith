@@ -16,13 +16,30 @@
 // a runtime config with zero providers is non-functional, so reject early.
 
 import { z } from 'zod';
+import { EFFORTS, LLM_ROLES, type Effort, type LlmRole } from '../generator.js';
 
 export const CURRENT_RUNTIME_CONFIG_VERSION = 1;
 
+/** What one role (write, plan, verify, ...) uses instead of the provider's defaults. */
+export const RoleConfigSchema = z.object({
+  model: z.string().min(1).optional(),
+  effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional(),
+  maxTokens: z.number().int().positive().optional(),
+  expectedOutputTokens: z.number().int().positive().optional(),
+});
+
+// The fields after defaultModel are optional, so a v1 file without them still
+// parses unchanged and no schema version bump is needed.
 export const ProviderSchema = z.object({
   name: z.enum(['anthropic', 'openai']),
   apiKeyEnv: z.string().min(1),
   defaultModel: z.string().min(1).optional(),
+  /** Another endpoint: an OpenAI-compatible server (Ollama, vLLM) or an Anthropic gateway. */
+  baseUrl: z.string().url().optional(),
+  /** Per-role overrides, keyed by role. */
+  roles: z.record(z.enum(LLM_ROLES as [LlmRole, ...LlmRole[]]), RoleConfigSchema).optional(),
+  /** The provider's own rates, in place of the price table's (0 for a local server). */
+  pricePerMtok: z.object({ input: z.number().nonnegative(), output: z.number().nonnegative() }).optional(),
 });
 
 export const Schema = z.object({
