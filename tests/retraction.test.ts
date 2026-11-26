@@ -226,6 +226,24 @@ test('pensmith ack records the acknowledgement in the section folder, bound to t
   assert.match(c.out, /WARN.*wakefield1998.*retracted/i);
 });
 
+test('an entry with a PMID and no DOI is acknowledged by its PMID; verify then passes with a warning', () => {
+  const root = seedPaper(wakefield('pmid = {9500320}'));
+  assert.equal(cli(root, 'verify', '1', '--slug', 'intro').status, 2);
+  const a = cli(root, 'ack', '1', 'wakefield1998', '--slug', 'intro', '--reason', REASON);
+  assert.equal(a.status, 0, a.out);
+  assert.match(a.out, /pmid:9500320/);
+  const [ack] = (JSON.parse(readFileSync(ackFile(root), 'utf8')) as { acknowledgements: Array<Record<string, unknown>> }).acknowledgements;
+  assert.equal(ack?.['work'], 'pmid:9500320');
+  assert.equal(ack?.['work_sha256'], sha256('pmid:9500320'));
+
+  const v = cli(root, 'verify', '1', '--slug', 'intro');
+  assert.equal(v.status, 0, v.out);
+  const r = row(root, 'wakefield1998');
+  assert.match(r, /\*\*RETRACTED_ACKNOWLEDGED\*\*/);
+  assert.match(r, /Retracted Publication/);
+  assert.ok(r.includes(REASON), r);
+});
+
 test('an acknowledgement does not carry over to another work cited under the same key', () => {
   const root = seedPaper(WAKEFIELD);
   cli(root, 'verify', '1', '--slug', 'intro');

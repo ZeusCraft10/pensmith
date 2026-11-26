@@ -176,3 +176,62 @@ test('Pass 1: a mismatched entry whose DOI names a retracted work is MIS-CITED, 
   assert.equal(r.verdict, 'MIS-CITED', r.reason);
   assert.match(r.reason, /retract/i);
 });
+
+test('Pass 1: a retraction recorded in CITATIONS.bib and acknowledged stays RETRACTED_ACKNOWLEDGED when the record shows none', async () => {
+  // The bibliography says the work is retracted; the acknowledgement is what
+  // lets it pass, not the registry's silence.
+  const { runPass1 } = await import('../../bin/lib/verify/pass1.js');
+  const { workBinding } = await import('../../bin/lib/verify/acknowledgements.js');
+  const { bibFile } = await import('../lib/bib-fixture.js');
+  openAlexAnswers([], 200, notRetracted);
+  crossrefHolds('10.5555/tidal.10', { ...WORK, DOI: '10.5555/tidal.10' });
+  const binding = workBinding({ DOI: '10.5555/tidal.10' });
+  assert.ok(binding);
+  const ack = {
+    kind: 'retracted' as const, citekey: 'roe2019', work: binding.work, work_sha256: binding.sha256,
+    reason: 'The section discusses the retraction.', acknowledged_at: '2026-11-26T00:00:00.000Z',
+  };
+  const bib = bibFile(entry('10.5555/tidal.10', ',\n  note = {RETRACTED}'));
+  const draft = '# S\n\nA claim [@roe2019].\n';
+  const [acked] = await runPass1(draft, bib, { acknowledgements: [ack], section: 1 });
+  assert.equal(acked?.verdict, 'RETRACTED_ACKNOWLEDGED', acked?.reason);
+  assert.match(acked!.reason, /recorded as retracted in CITATIONS\.bib/);
+  assert.match(acked!.reason, /The section discusses the retraction\./);
+  // Without the acknowledgement it blocks, with no lookup needed.
+  const [blocked] = await runPass1(draft, bib, { section: 1 });
+  assert.equal(blocked?.verdict, 'RETRACTED', blocked?.reason);
+});
+
+test('Pass 1: a PubMed record linked to an expression of concern is EXPRESSION_OF_CONCERN, which does not block', async () => {
+  const { isBlockingVerdict } = await import('../../bin/lib/verify/verdict-rows.js');
+  const pmid = '31000001';
+  // An esummary record shaped as PubMed gives one (see the recorded Wakefield
+  // record): a journal article, not a Retracted Publication, with an
+  // "Expression of concern in" link.
+  agent().get('https://eutils.ncbi.nlm.nih.gov')
+    .intercept({ path: (p) => p.startsWith('/entrez/eutils/esummary.fcgi?') && p.includes(`id=${pmid}&`), method: 'GET' })
+    .reply(200, JSON.stringify({
+      header: { type: 'esummary', version: '0.3' },
+      result: {
+        uids: [pmid],
+        [pmid]: {
+          uid: pmid, pubdate: '2019 Mar', source: 'Icarus', fulljournalname: 'Icarus',
+          title: 'Tidal Heating in Icy Moons.', authors: [{ name: 'Roe J', authtype: 'Author', clusterid: '' }],
+          pubtype: ['Journal Article'], articleids: [{ idtype: 'pubmed', idtypen: 1, value: pmid }],
+          references: [
+            { refsource: 'Icarus. 2020 Jan;335:113001.', reftype: 'Comment in', pmid: 32000001, note: '' },
+            { refsource: 'Icarus. 2021 Mar;350:114001. doi: 10.5555/tidal.eoc.', reftype: 'Expression of concern in', pmid: 33000001, note: '' },
+          ],
+        },
+      },
+    }), { headers: JSON_HEADERS })
+    .persist();
+  const r = await pass1Verdict(
+    '@article{roe2019,\n  title = {Tidal Heating in Icy Moons},\n  author = {Roe, Jane},\n  journal = {Icarus},\n  year = {2019},\n  pmid = {31000001}\n}\n',
+  );
+  assert.equal(r.verdict, 'EXPRESSION_OF_CONCERN', r.reason);
+  assert.match(r.reason, /expression of concern in Icarus\. 2021 Mar;350:114001/);
+  assert.match(r.reason, /per PubMed/);
+  assert.doesNotMatch(r.reason, /Comment in|113001/, 'a comment is not a concern');
+  assert.equal(isBlockingVerdict(r.verdict), false);
+});
