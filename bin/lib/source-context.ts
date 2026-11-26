@@ -43,12 +43,39 @@ function yearOf(item: LibraryItem): number | undefined {
 /**
  * A markup tag: `<` then a letter or `/` (`<jats:p>`, `</i>`, `<br/>`). A `<`
  * before a space or a digit is a comparison ("p < 0.05", "x<0.5") and stays.
+ * The tag's name, without a namespace prefix, is captured.
  */
-const TAG = /<\/?[A-Za-z][\w.:-]*(?:\s[^<>]*)?\/?>/g;
+const TAG = /<\/?(?:[A-Za-z][\w.-]*:)*([A-Za-z][\w.-]*)(?:\s[^<>]*)?\/?>/g;
 
-/** An abstract as plain text: registry markup (JATS tags) and runs of space removed, cut to `max` characters. */
+/**
+ * Tags that mark up words inside a sentence (italics, superscripts, links,
+ * inline maths). They are removed with nothing in their place, so
+ * "<i>in vivo</i>, with" reads "in vivo, with", as the source has it, and a
+ * quotation copied from the abstract matches the source. Any other tag (a
+ * paragraph, a section title, a line break) ends a run of text and leaves a
+ * space, so two paragraphs never run together.
+ */
+const INLINE_TAGS: ReadonlySet<string> = new Set([
+  'a', 'abbr', 'b', 'bold', 'code', 'em', 'ext-link', 'font', 'i', 'inline-formula', 'italic', 'mi', 'mn', 'mo',
+  'monospace', 'mrow', 'msub', 'msup', 'mtext', 'math', 'named-content', 'sc', 'small', 'span', 'strong',
+  'styled-content', 'sub', 'sup', 'tex-math', 'tt', 'u', 'underline', 'xref',
+]);
+
+/** The character entities registries leave in abstracts. */
+const ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+function decodeEntities(text: string): string {
+  return text.replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (whole, dec?: string, hex?: string, name?: string) => {
+    const code = dec !== undefined ? Number(dec) : hex !== undefined ? parseInt(hex, 16) : null;
+    if (code !== null) return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    return ENTITIES[name!.toLowerCase()] ?? whole;
+  });
+}
+
+/** An abstract as plain text: registry markup (JATS tags) and entities resolved, runs of space removed, cut to `max` characters. */
 export function plainAbstract(raw: string, max: number): string {
-  const text = raw.replace(TAG, ' ').replace(/\s+/g, ' ').trim();
+  const untagged = raw.replace(TAG, (_tag, name: string) => (INLINE_TAGS.has(name.toLowerCase()) ? '' : ' '));
+  const text = decodeEntities(untagged).replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
 }
 

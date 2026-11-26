@@ -25,9 +25,23 @@ const LIBRARY: Library = {
 test('an abstract loses its registry markup and keeps every comparison and number', () => {
   assert.equal(
     plainAbstract(LIBRARY.entries[0]!.abstract!, 2000),
-    'Effects were significant (p < 0.05) for scores >10 and in vivo , with x<0.5.',
+    'Effects were significant (p < 0.05) for scores >10 and in vivo, with x<0.5.',
   );
   assert.equal(plainAbstract('one two three four', 7), 'one two…');
+});
+
+test('an inline tag leaves no space where it was; a paragraph or title tag leaves one; entities are read', () => {
+  // The drafter may quote only words the abstract, as shown, contains, so the
+  // text shown must be the source's own: no space inserted before a comma.
+  assert.equal(
+    plainAbstract('<jats:title>Abstract</jats:title><jats:p>The <jats:italic>E. coli</jats:italic> strain grew (R<sup>2</sup> = 0.9).</jats:p><jats:p>Next.</jats:p>', 2000),
+    'Abstract The E. coli strain grew (R2 = 0.9). Next.',
+  );
+  assert.equal(plainAbstract('Line one<br/>line two', 2000), 'Line one line two');
+  assert.equal(
+    plainAbstract('Costs &amp; benefits: p &lt; 0.05, x &gt; 1, &quot;quoted&quot;, &#8220;curly&#8221;, &#x2013; dash, &unknown; kept', 2000),
+    'Costs & benefits: p < 0.05, x > 1, "quoted", \u201ccurly\u201d, \u2013 dash, &unknown; kept',
+  );
 });
 
 test('the works are given in the order asked, each once, with the keys the library lacks named', () => {
