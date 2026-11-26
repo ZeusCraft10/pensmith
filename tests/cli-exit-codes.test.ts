@@ -9,10 +9,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { pensmithGlobalLibraryIndexPath } from '../bin/lib/paths.js';
 import { writeVerificationFixture, type CitationSpec } from './lib/verification-fixture.js';
@@ -267,4 +268,29 @@ test('exit codes: the --yolo cost-cap refusal exits 2', () => {
   const r = runCli(['write', '--yolo'], root, { PENSMITH_COST_CAP_USD: '0.0001' });
   assert.match(r.stderr, /REFUSED/, r.stdout + r.stderr);
   assert.equal(r.status, 2);
+});
+
+test('exit codes: a missing required argument exits 2, with the usage on stderr', () => {
+  // citty used to print the usage on stdout and exit 1, as if pensmith had
+  // crashed, while an unknown verb exits 2.
+  const dir = mkdtempSync(join(tmpdir(), 'pensmith-exit-usage-'));
+  for (const [args, missing] of [[['ack', '1'], 'CITEKEY'], [['add'], 'SOURCE']] as const) {
+    const r = runCli([...args], dir);
+    const err = stripVTControlCharacters(r.stderr);
+    assert.equal(r.status, 2, `pensmith ${args.join(' ')} must exit 2; stdout=${r.stdout} stderr=${r.stderr}`);
+    assert.match(err, new RegExp(`Missing required positional argument: ${missing}`));
+    assert.match(err, new RegExp(`USAGE pensmith ${args[0]} \\[OPTIONS\\]`), 'the usage of the verb typed goes with the error');
+    assert.equal(r.stdout, '', 'a usage error writes nothing on stdout');
+  }
+});
+
+test('exit codes: a dry run with a missing required argument exits 2, not with a stack trace', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pensmith-exit-usage-'));
+  const r = runCli(['--dry-run', 'ack', '1'], dir);
+  const err = stripVTControlCharacters(r.stderr);
+  assert.equal(r.status, 2, `stdout=${r.stdout} stderr=${r.stderr}`);
+  assert.match(err, /Missing required positional argument: CITEKEY/);
+  assert.match(err, /USAGE pensmith ack \[OPTIONS\]/);
+  assert.doesNotMatch(err, /at parseArgs|node_modules/, 'no stack trace');
+  assert.deepEqual(readdirSync(dir), [], 'a refused dry run writes nothing');
 });

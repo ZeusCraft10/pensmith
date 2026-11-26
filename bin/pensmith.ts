@@ -42,14 +42,15 @@
 //     (C3-HIGH-2), wrapped in an OUTER try/catch backstop so the bare/next/
 //     resume umbrella NEVER crashes with an uncaught exception (C6-HIGH).
 //   - Four global flags (--dry-run/--estimate/--yolo/--show-prompts) are applied
-//     in a PRE-DISPATCH argv pre-parse BEFORE runMain (NOT a root run() — citty
+//     in a PRE-DISPATCH argv pre-parse BEFORE citty runs (NOT a root run() — citty
 //     falls through to a root run() after every verb, H2). The root command
 //     keeps subCommands ONLY and NO run().
 
 import { realpathSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineCommand, parseArgs, runMain, type ArgsDef, type CommandDef } from 'citty';
+import { inspect } from 'node:util';
+import { defineCommand, parseArgs, renderUsage, runCommand, runMain, type ArgsDef, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
 import { VERSION } from './lib/version.generated.js';
 import { UX02_VERBS, canonicalVerb, unknownOptionMessage, unknownVerbMessage, type Ux02Verb } from './lib/verbs.js';
@@ -143,7 +144,7 @@ export interface GlobalFlags {
  * exception regardless of which verb it dispatches or what on-disk state exists.
  * Any throw becomes a one-line stderr diagnostic + a non-zero exit. SCOPE: this
  * backstop is specifically for the bare/next/resume umbrella dispatch — explicit
- * verbs run via runMain(command) and surface their errors normally.
+ * verbs run via citty's runCommand and surface their errors through dispatch.
  */
 export async function dispatchVerb(
   verb: Ux02Verb,
@@ -282,7 +283,7 @@ function firstVerb(argv: string[]): Ux02Verb | null {
 // single-command UX, UX-01) rather than failing citty's required-positional gate.
 // NOTE: `write` is deliberately EXCLUDED — its `n` is OPTIONAL (omit to write
 // ALL sections wave-by-wave, the tier-contract write-wave surface), so a bare
-// `pensmith write` must reach citty/runMain, not the single-section router path.
+// `pensmith write` must reach citty, not the single-section router path.
 const SECTION_SCOPED_VERBS: readonly Ux02Verb[] = ['plan', 'verify'];
 
 /** True if `verb` is section-scoped AND no numeric positional follows it in argv. */
@@ -363,12 +364,47 @@ async function runDryRun(argv: string[], verb: Ux02Verb | null): Promise<number>
   return EXIT_OK;
 }
 
+/** citty's error for a usage mistake: a required argument missing, a value it does not take. */
+function isUsageError(e: unknown): e is Error {
+  return e instanceof Error && e.name === 'CLIError';
+}
+
 /**
- * The pre-dispatch entrypoint: applies global-flag setup, the yolo cap
- * pre-flight, and the --estimate preview BEFORE any verb runs, then dispatches
- * exactly once (explicit verb → runMain; bare → resolveNextAction + dispatchVerb).
+ * A usage mistake is a refusal, as an unknown verb is: the usage of the command
+ * typed and the error go to stderr, and the exit is 2. citty's runMain printed
+ * the usage on stdout and exited 1, the code for a crash.
+ */
+async function refuseUsage(argv: string[], e: Error): Promise<void> {
+  const verb = firstVerb(argv);
+  const usage = verb === null ? await renderUsage(command) : await renderUsage(await loadVerbCommand(verb), command);
+  process.stderr.write(`${usage}\n\n${e.message}\n`);
+  process.exitCode = EXIT_REFUSED;
+}
+
+/**
+ * The CLI entrypoint. Every usage error, whichever path parsed the arguments
+ * (an explicit verb, a dry run), is reported here; anything else is an
+ * unexpected error and exits 1.
  */
 export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<void> {
+  try {
+    await dispatchArgv(argv);
+  } catch (e) {
+    if (isUsageError(e)) {
+      await refuseUsage(argv, e);
+      return;
+    }
+    process.stderr.write(`${inspect(e)}\n`);
+    process.exit(EXIT_ERROR);
+  }
+}
+
+/**
+ * Applies global-flag setup, the yolo cap pre-flight, and the --estimate
+ * preview BEFORE any verb runs, then dispatches exactly once (explicit verb →
+ * citty's runCommand; bare → resolveNextAction + dispatchVerb).
+ */
+async function dispatchArgv(argv: string[]): Promise<void> {
   // The first word that is not a flag must name a verb. Anything else used to
   // fall through to the router and run a different step with the flags dropped.
   // Only an argv with no command word at all is a bare `pensmith`.
@@ -443,11 +479,16 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   }
 
   // (e) Dispatch exactly once.
-  // Root meta flags (--version / --help / -h) are owned by citty's runMain even
-  // with no subcommand — delegate them so `pensmith --version` prints the semver
-  // (preflight contract) instead of falling into the bare router path.
-  if (argv.includes('--version') || argv.includes('--help') || argv.includes('-h')) {
+  // --help and a lone --version are citty's: they print the usage or the semver
+  // (preflight contract) and parse nothing, so they never raise a usage error.
+  // --version with anything else is parsed like any command line, so it never
+  // falls into the bare router path.
+  if (argv.includes('--help') || argv.includes('-h') || (argv.length === 1 && argv[0] === '--version')) {
     await runMain(command, { rawArgs: argv });
+    return;
+  }
+  if (argv.includes('--version')) {
+    await runCommand(command, { rawArgs: argv });
     return;
   }
 
@@ -462,15 +503,16 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   if (verb && !isSectionVerbWithoutNumber(argv, verb)) {
     // Explicit verb (with its required positional, if any) → citty parses
     // --yolo into the subcommand args itself; no manual forwarding needed. NO
-    // root run() to fall through into (H2).
-    await runMain(command, { rawArgs: argv });
+    // root run() to fall through into (H2). A usage error propagates to
+    // dispatch, which reports it.
+    await runCommand(command, { rawArgs: argv });
     return;
   }
 
   // Either a bare invocation OR a section-scoped verb invoked without its
   // section number (UX-01). Resolve via resolveNextAction (NEVER throws,
   // C4/C5-HIGH) and dispatch via the shared helper, forwarding the parsed
-  // global flags (C3-HIGH-2). Do NOT also call runMain (citty would throw
+  // global flags (C3-HIGH-2). Do NOT also call runCommand (citty would throw
   // 'No command specified' on bare, or reject the missing required positional).
   //
   // Goal-aware tier: map goal → the router's goal-AGNOSTIC stopAfterResearch.
@@ -481,7 +523,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   // number must default to the next section that needs THAT verb — it must NEVER
   // silently run whatever DIFFERENT verb the router happens to pick. `verb` is
   // non-null ONLY on the section-verb-without-number path here (an explicit verb
-  // with its number returned via runMain above; a bare invocation has
+  // with its number returned via runCommand above; a bare invocation has
   // verb === null and is unaffected). When the router's next action is not the
   // requested verb, no section is ready for it — tell the user the real next step
   // instead of running a command they did not ask for.
