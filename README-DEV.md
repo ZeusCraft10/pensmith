@@ -30,15 +30,28 @@ gitignored `bin/lib/version.generated.ts` from package.json.
 
 ## Test runner
 
-`npm test` runs `node scripts/run-tests.mjs`, which programmatically discovers `tests/**/*.test.ts` (no shell glob — works identically on linux, macos, and windows) and executes them via `node --import tsx --test`. The runner exits 1 if zero test files are found (avoids vacuous CI pass on Windows).
+`npm test` runs `node scripts/run-tests.mjs`. It finds `tests/**/*.test.ts`
+itself (no shell glob, so Linux, macOS and Windows run the same files) and
+fails when it finds none. What else it does:
 
-Run the suite with isolated global state, so it never reads your real
-`~/.claude` or pensmith data folders:
-
-```bash
-export HOME=$(mktemp -d) XDG_DATA_HOME=$(mktemp -d) XDG_CONFIG_HOME=$(mktemp -d) XDG_CACHE_HOME=$(mktemp -d) LOCALAPPDATA=$(mktemp -d)
-npm test
-```
+- **Isolation.** Each run gets one temp folder holding HOME, the XDG folders,
+  LOCALAPPDATA/APPDATA, `CLAUDE_CONFIG_DIR` and the temp folder (TMPDIR, TMP,
+  TEMP). Nothing reads or writes your real `~/.claude`, pensmith data folder
+  or global paper registry, and the folder is removed after the run with
+  whatever the tests left in it (`PENSMITH_KEEP_TEST_RUN=1` keeps it).
+- **Cassettes.** It sets `PENSMITH_TEST_CASSETTES=1` (see CONTRIBUTING).
+- **No `.paper` in the repository.** The tests run with the repository as
+  their cwd. A test that writes a paper's files where the cwd is would put a
+  `.paper/` folder there; the run fails when one appears and names the files
+  that were running. A `.paper/` left from before stops the run at the start.
+- **Counts you can trust.** Each file runs in its own process with
+  `scripts/test-reporter.mjs`, which writes that file's results as JSON from
+  the test events. The summary line (`# pensmith tests: N files, M tests: …`),
+  the `# FAILED:` and `# skipped:` lines and the exit status come from those
+  results, not from TAP, so a test that prints TAP-looking text cannot add a
+  pass or hide a failure. A file that crashes before reporting, exits
+  non-zero, or runs no test fails the run. A file that runs longer than 10
+  minutes (`PENSMITH_TEST_FILE_TIMEOUT_MS`) is stopped and fails.
 
 ## OneDrive / iCloud / Dropbox / Google Drive
 

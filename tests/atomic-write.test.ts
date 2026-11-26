@@ -111,13 +111,16 @@ test('atomicWriteFile uses a 12-hex nonce in the tmp path', async () => {
 
 // ---- atomicWriteFile: crash simulation (POSIX only) ----
 
-test('atomicWriteFile preserves OLD content on rename/write failure', async () => {
-  // Skip on win32: chmod 0o500 on a directory is largely a no-op on NTFS,
-  // so we cannot reliably force atomicWriteFile to fail mid-write on
-  // Windows. CI's Linux + macOS runners cover this branch (per VALIDATION
-  // task 01-02-01).
-  if (process.platform === 'win32') return;
+// The failure is forced by making the folder read-only, which only works
+// where permissions bind: chmod 0o500 on a folder is largely a no-op on NTFS,
+// and root writes into a read-only folder anyway. CI's Linux and macOS
+// runners, which do not run as root, cover it.
+const cannotForceWriteFailure =
+  process.platform === 'win32' ? 'a read-only folder does not stop writes on Windows'
+    : process.getuid?.() === 0 ? 'root writes into a read-only folder, so the failure cannot be forced'
+      : false;
 
+test('atomicWriteFile preserves OLD content on rename/write failure', { skip: cannotForceWriteFailure }, async () => {
   await withTmp(async (dir) => {
     const target = path.join(dir, 'a.json');
     // Pre-write OLD content via the same chokepoint (round-trip).

@@ -10,7 +10,8 @@
 // Not a test file (the runner collects only *.test.ts).
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { after } from 'node:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { citedKeys, findCitations } from '../../bin/lib/citation-grammar.js';
@@ -25,9 +26,16 @@ export function bibForDrafts(...drafts: string[]): string {
     .join('\n');
 }
 
+// The temporary roots bibFile made, removed when the test file that made them ends.
+const roots: string[] = [];
+after(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
 /** `bib` written as `.paper/CITATIONS.bib` under a fresh temporary root; its path. */
 export function bibFile(bib: string): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-bib-fixture-'));
+  roots.push(root);
   mkdirSync(join(root, '.paper'), { recursive: true });
   const p = join(root, '.paper', 'CITATIONS.bib');
   writeFileSync(p, bib);
