@@ -150,18 +150,10 @@ export async function projectEstimate(args: {
       finished: existsSync(path.join(pDir, 'FINAL.md')),
     });
 
-    // A row's price depends only on its step, so each step is priced once
-    // (one runtime.json read per step, not per section). Sequential on
-    // purpose: concurrent reads would contend for runtime.json's lock.
-    const usdByStep = new Map<Step, number>();
     const rows: EstimateRow[] = [];
     for (const [step, label] of steps) {
       const heur = STEP_HEURISTICS[step];
-      let usd = usdByStep.get(step);
-      if (usd === undefined) {
-        usd = callCost(await resolveCall({ role: STEP_ROLE[step] }), heur);
-        usdByStep.set(step, usd);
-      }
+      const usd = callCost(await resolveCall({ role: STEP_ROLE[step] }), heur);
       rows.push({ step: label, inputTokens: heur.inputTokens, outputTokens: heur.outputTokens, usd });
     }
     const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);

@@ -17,7 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -284,4 +284,38 @@ test('`pensmith done --yolo` on a finished seven-section paper is not refused by
     timeout: 60_000,
   });
   assert.doesNotMatch(r.stderr, /--yolo estimate exceeds/, `stderr=${r.stderr}`);
+});
+
+// === Each planned row is priced from its own runtime.json read ===
+//
+// projectEstimate resolves the configured model once for every row it prices,
+// so `--estimate` (and the --yolo pre-flight) leaves one runtime.load record in
+// the paper's session log per row. A behaviour-preserving cleanup once cached
+// the price per step, which cut a ten-section estimate's 33 records to 6.
+test('`pensmith --estimate` reads runtime.json once for every row it prices', { skip: !built }, () => {
+  const root = freshRoot();
+  writeState(root, Array.from({ length: 10 }, (_, i) => ({ n: i + 1, slug: `sec-${i + 1}` })));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  try {
+    const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url)), '--estimate'], {
+      cwd: root,
+      env: isolatedCliEnv({
+        ANTHROPIC_API_KEY: undefined,
+        PENSMITH_COST_CAP_USD: undefined,
+        PENSMITH_DRY_RUN: undefined,
+        PENSMITH_TEST_CASSETTES: undefined,
+      }),
+      encoding: 'utf8',
+      timeout: 60_000,
+    });
+    assert.equal(r.status, 0, `stdout=${r.stdout} stderr=${r.stderr}`);
+    const rows = r.stdout.split('\n').filter((l) => / in=\d+ out=\d+ → \$/.test(l));
+    // research, outline, plan/write/verify for each of the ten sections, done.
+    assert.equal(rows.length, 33, r.stdout);
+    const log = readFileSync(join(root, '.paper', 'SESSION.log'), 'utf8');
+    const loads = log.split('\n').filter((l) => l.includes('"event":"runtime.load"'));
+    assert.equal(loads.length, rows.length, `one runtime.load per priced row\n${log}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
