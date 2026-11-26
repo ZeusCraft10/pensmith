@@ -1,19 +1,13 @@
-// bin/lib/intake-parse.ts — Parse INTAKE.md into structured research inputs.
+// bin/lib/intake-parse.ts — read topic and discipline out of free text.
 //
-// INTAKE.md is the clarifier output (intake-clarifier.md prompt): a numbered
-// list of questions and answers. It is NOT a structured markdown document with
-// ## Topic / ## Discipline headings. This module applies a heuristic fallback
-// path by default; structured headings are supported defensively for future
-// intake formats.
+// Intake now stores its answers as data (.paper/INTAKE.json, read through
+// bin/lib/intake-record.ts). This parser is the fallback for a paper whose
+// INTAKE.md an older intake wrote, and it gives the suggested topic when no
+// model ran. It never throws; anything it cannot read falls back to safe
+// defaults (discipline 'other').
 //
-// Exported: parseIntakeMd(text: string): { topic, discipline, assignment }
-//   - topic:      first non-empty line/heading extracted from the text, or
-//                 a reasonable phrase from the first question/answer pair.
-//   - discipline: extracted from a "Discipline" answer if present; defaults
-//                 to 'other' (the INTK-03 fallback slug).
-//   - assignment: the full INTAKE.md text (the entire clarifier output serves
-//                 as assignment context for the topic-disambiguator prompt).
-//   - Never throws — all parse errors → silent fallback to safe defaults.
+// Exported: parseIntakeMd(text) → { topic, discipline, assignment }, and
+// escapeTemplateTokens, the shared sanitizer for interpolated user text.
 
 /**
  * Structured output of parseIntakeMd. Feeds directly into the

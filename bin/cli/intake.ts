@@ -1,42 +1,70 @@
-// bin/cli/intake.ts — `pensmith new` / `pensmith intake` verb entrypoint
-// (INTK-01, ARCH-02; CYCLE-2 M-1 canonical filename).
+// bin/cli/intake.ts — `pensmith new`: start a paper.
 //
-// Plan 03-07 Task 7.2 — Tier-2 thin orchestrator. The Tier-1 (plugin)
-// path delegates to the model via the workflow body's <capability_check>
-// branch; the Tier-2 (portable Node CLI) path calls complete() via the
-// Tier-2 LLM transport (GEN-02, Phase 11).
-//
-// Phase 11 wiring: complete() handles isNoLlmMode() short-circuit before
-// key resolution, so verbs do NOT check PENSMITH_NO_LLM themselves.
-//   - With PENSMITH_NO_LLM=1: complete() returns offline mock (no key needed).
-//   - With ANTHROPIC_API_KEY set: complete() makes real API call.
-//   - With no key: getProviderApiKey() throws MissingApiKeyError → fail-loud.
-//
-// D-12 LOCKED prompt slug: `intake-clarifier` (registered in
-// bin/lib/prompt-loader.ts EXPECTED_PROMPT_HASHES).
+// Intake keeps the assignment and the user's answers (bin/lib/intake-record.ts):
+//   1. The assignment comes from --from <file> (`-` for stdin), else an
+//      assignment.txt / .md / .pdf in the folder, else --thesis (from `sketch`),
+//      else the one kept from an earlier run, else it is asked for. It is kept
+//      word for word in .paper/PROJECT.md before any model sees it.
+//   2. The intake clarifier suggests answers to six questions (topic,
+//      discipline, length, citation style, audience, counterargument) as
+//      structured JSON. It is asked only when an answer is still missing.
+//   3. The answers come from --answers <file|json> and --citation-style, and on
+//      a terminal from the user. Without a terminal, intake stops with exit 3
+//      and prints the questions as one JSON line; nothing is guessed.
+//   4. The checked answers are written to .paper/INTAKE.json (and readable in
+//      INTAKE.md); the citation style goes to [project] citation_style in
+//      .paper/config.toml, edited in place, together with --goal and
+//      --pii-redact when those were given.
+// With PII redaction on, the assignment and the free-text answers are redacted
+// before they are stored in .paper/ or sent to a model; the raw text goes only
+// to .paper/INTAKE.raw.local, which .paper/.gitignore keeps out of git.
 
 import { defineCommand } from 'citty';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
+import { createHash } from 'node:crypto';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { atomicWriteFile } from '../lib/atomic-write.js';
+import { ask, PromptAbortedError } from '../lib/prompts.js';
+import { atomicWriteFile, removePath } from '../lib/atomic-write.js';
 import { redactPii, diffPii } from '../lib/pii.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
-import { normalizeStyleName, SUPPORTED_STYLES } from '../lib/citations.js';
-import { EXIT_REFUSED } from '../lib/exit-codes.js';
+import { SUPPORTED_STYLES } from '../lib/citations.js';
+import { EXIT_NEEDS_ANSWER, EXIT_REFUSED } from '../lib/exit-codes.js';
+import { paperConfigFile, paperDir, paperIntakeFile } from '../lib/paths.js';
+import { ensurePaperGitignore } from '../lib/paper-gitignore.js';
+import { readProjectConfig } from '../lib/project-config.js';
+import { setConfigValues } from '../lib/config-edit.js';
+import { initState, loadState, StateAlreadyExistsError } from '../lib/state.js';
+import { registerPaperInGlobalLibrary } from '../lib/global-library.js';
+import { extractPdfText } from '../lib/pdf-text.js';
+import { checkModelJson, modelJsonSchema } from '../lib/schemas/model-json.js';
+import {
+  buildQuestions,
+  checkAnswer,
+  ClarifierSchema,
+  intakeFromAnswers,
+  presetCounterargument,
+  QUESTION_IDS,
+  readAssignment,
+  renderIntakeMd,
+  renderProjectMd,
+  type ClarifierAnswer,
+  type Question,
+  type QuestionId,
+} from '../lib/intake-record.js';
+import {
+  buildStyleProfile,
+  checkAndRegisterFingerprint,
+  writeStyleProfile,
+} from '../lib/style-match.js';
 
-// EGRESS SEAM (H3 — test-observable model-bound payload). intake calls the
-// model-bound interpolate THROUGH this module-local indirection so the egress
-// assertion (tests/intake-pii-egress.test.ts) can intercept the exact payload
-// that crosses the LLM boundary. Native ESM module namespaces are SEALED under
-// Node 24 (the prompt-loader export cannot be monkeypatched from outside), so a
-// replaceable seam in THIS module is the only runtime-portable interception
-// point. Defaults to the real interpolate; production behavior is unchanged.
+// Every model-bound interpolate goes through this seam, so a test can see the
+// exact text that leaves for the model (tests/intake-pii-egress.test.ts). An
+// ES module's exports cannot be replaced from outside, so the seam is here.
 let _interpolate: (template: string, vars: Record<string, string>) => string = interpolate;
 
-/** Test-only seam: override the model-bound interpolate to capture egress (H3). */
+/** Test-only seam: override the model-bound interpolate to capture egress. */
 export function __setInterpolateForTest(
   fn: (template: string, vars: Record<string, string>) => string,
 ): () => void {
@@ -46,30 +74,45 @@ export function __setInterpolateForTest(
     _interpolate = prev;
   };
 }
-import { paperConfigFile, paperDir } from '../lib/paths.js';
-import { ensurePaperGitignore } from '../lib/paper-gitignore.js';
-import { readProjectConfig } from '../lib/project-config.js';
-import { initState, loadState, StateAlreadyExistsError } from '../lib/state.js';
-import { registerPaperInGlobalLibrary } from '../lib/global-library.js';
-import { artifactText } from '../lib/placeholder.js';
-import {
-  buildStyleProfile,
-  checkAndRegisterFingerprint,
-  writeStyleProfile,
-} from '../lib/style-match.js';
 
-// Phase 11 — the intake placeholder constant has been removed. intake now calls
-// complete() for real generation (GEN-02). With no key configured: fail-loud
-// (GEN-06). With PENSMITH_NO_LLM=1: complete() returns offline mock transparently.
+/** Ask one question; null when the user cancels. */
+type Asker = (q: Question, invalid?: string) => Promise<string | null>;
+let _ask: Asker | null = null;
+
+/** Test-only seam: answer the questions as a terminal user would. */
+export function __setAskForTest(fn: Asker | null): () => void {
+  const prev = _ask;
+  _ask = fn;
+  return () => {
+    _ask = prev;
+  };
+}
+
+function canAskInTerminal(): boolean {
+  return Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY);
+}
+
+async function askInTerminal(q: Question, invalid?: string): Promise<string | null> {
+  try {
+    const a = await ask({
+      id: q.id,
+      kind: 'text',
+      label: invalid ? `${q.question} (${invalid})` : q.question,
+      ...(q.suggested ? { default: q.suggested } : {}),
+    });
+    return typeof a.value === 'string' ? a.value : null;
+  } catch (e) {
+    if (e instanceof PromptAbortedError) return null;
+    throw e;
+  }
+}
 
 /**
- * Resolve the paper's display name + class. `name` falls back to the project
- * folder basename; `class` reads config.toml `[project] class` when present,
- * defaulting to 'Unfiled'. Both reads are best-effort — never throw.
+ * Resolve the paper's display name + class: [project] title and class in
+ * .paper/config.toml, else the folder's name and 'Unfiled'. Never throws.
  */
 function resolvePaperMeta(cwd: string): { name: string; class: string } {
   const name = path.basename(cwd) || 'Untitled paper';
-  // best-effort: a malformed config.toml must not break intake.
   const project = readProjectConfig(cwd);
   const c = project['class'];
   const klass = typeof c === 'string' && c.trim() ? c.trim() : 'Unfiled';
@@ -77,101 +120,27 @@ function resolvePaperMeta(cwd: string): { name: string; class: string } {
   return { name: typeof t === 'string' && t.trim() ? t.trim() : name, class: klass };
 }
 
-/**
- * The educator-mode goal enum (ERGO-07 / resolved Open-Q2): a SHORT enum, NOT a
- * verb. Coerce any unrecognized value to the default 'draft'. GOAL logic
- * is confined to the CLI tier (intake/goal.ts) — Foundation never sees it (H1).
- */
-function coerceGoal(v: unknown): 'draft' | 'learning' | 'both' {
-  return v === 'learning' || v === 'both' ? v : 'draft';
+const GOALS = ['draft', 'learning', 'both'] as const;
+
+/** PII redaction is opt-in: the --pii-redact argument, else [project] pii_redaction. */
+function resolvePiiRedact(cwd: string, argValue: boolean | undefined): boolean {
+  if (typeof argValue === 'boolean') return argValue;
+  return readProjectConfig(cwd)['pii_redaction'] === true;
 }
 
-/**
- * Persist `project.goal` (and `project.pii_redaction` when set via the CLI arg)
- * into config.toml. config.toml is the CANONICAL store (RESEARCH A2 + PRD §10);
- * we do NOT add a STATE.json field. The read+merge+write is best-effort: a
- * malformed config.toml must NOT break intake (mirrors resolvePaperMeta's
- * try/catch). On any persist failure we emit a VISIBLE stderr WARN AND keep the
- * selected goal in memory for THIS session (M1 — a silent persist failure must
- * not strand the learning goal). Written via atomicWriteFile (D-07 chokepoint).
- */
-async function persistProjectConfig(
-  cwd: string,
-  goal: 'draft' | 'learning' | 'both',
-  piiRedactArg: boolean | undefined,
-  citationStyle?: string,
-): Promise<void> {
-  try {
-    const cfgPath = paperConfigFile(cwd);
-    let cfg: { project?: Record<string, unknown> } = {};
-    if (existsSync(cfgPath)) {
-      try {
-        cfg = parseToml(readFileSync(cfgPath, 'utf8')) as typeof cfg;
-      } catch {
-        cfg = {}; // malformed config.toml → start from a clean object (best-effort).
-      }
-    }
-    const project = { ...(cfg.project ?? {}) };
-    project.goal = goal;
-    // Only persist pii_redaction when the user set it explicitly via the CLI arg
-    // (the arg WINS over config — see precedence comment at the call site).
-    if (piiRedactArg !== undefined) project.pii_redaction = piiRedactArg;
-    // The citation style the user chose; done reads it back (citation-style.ts).
-    if (citationStyle !== undefined) project.citation_style = citationStyle;
-    const next = { ...cfg, project };
-    await atomicWriteFile(cfgPath, stringifyToml(next));
-  } catch (e) {
-    process.stderr.write(
-      `pensmith new: WARN — could not persist goal to config.toml (non-fatal; goal kept in-memory for this session): ${(e as Error).message}\n`,
-    );
-  }
-}
-
-/**
- * Resolve the PII opt-in. PII redaction is OPT-IN per the non-negotiables. The
- * CLI `--pii-redact` arg WINS over the config.toml `[project] pii_redaction`
- * value when BOTH are present (L6 precedence). Returns `{ on, argSet }` so the
- * caller can persist the arg value only when it was explicitly provided.
- */
-function resolvePiiRedact(
-  cwd: string,
-  argValue: unknown,
-): { on: boolean; argSet: boolean } {
-  // CLI arg WINS (explicit user intent for this run).
-  if (typeof argValue === 'boolean') return { on: argValue, argSet: true };
-  // Else fall back to config.toml [project] pii_redaction (best-effort: a
-  // malformed config.toml defaults PII OFF, since it is opt-in).
-  const fromConfig = readProjectConfig(cwd)['pii_redaction'] === true;
-  return { on: fromConfig, argSet: false };
-}
-
-/**
- * Best-effort paperId from STATE.json (loadState). Returns null when STATE.json
- * is not yet present (the Tier-2 placeholder path runs before init in some
- * flows) — callers then WARN-skip registration but the producer can still build
- * the per-paper STYLE.json using a folder-derived synthetic identity.
- */
+/** The paperId in .paper/STATE.json, or null when there is none yet. */
 async function resolvePaperId(cwd: string): Promise<string | null> {
   try {
-    const state = await loadState(cwd);
-    return state.paperId;
+    return (await loadState(cwd)).paperId;
   } catch {
     return null;
   }
 }
 
 /**
- * LIB-04 — register the paper in the GLOBAL PAPER registry as a NON-FATAL side
- * effect (Open-Q4): id (paperId), name, folderPath (REQUIRED — `open` switches
- * to it and `list` derives status from this paper's STATE.json), class, and a
- * SEEDED status:'intake'.
- *
- * The hardcoded status:'intake' is INTENTIONAL and SUFFICIENT: per DERIVE-AT-
- * DISPLAY (08-01), `list` computes the LIVE lifecycle status from each paper's
- * own STATE.json at display time. intake SEEDS the entry — it does NOT, and must
- * NOT, chase status across later verbs (research/outline/…); doing so would
- * reintroduce the staleness the derive-at-display model removes. NO other verb
- * UPSERTs status. (T-08-05-07.)
+ * Add the paper to the global list of papers (`list`, `open`). Its status
+ * there is worked out from the paper's own files whenever it is shown, so
+ * intake records only 'intake'. Never fails the verb.
  */
 async function registerPaperNonFatal(
   cwd: string,
@@ -180,9 +149,7 @@ async function registerPaperNonFatal(
 ): Promise<void> {
   try {
     if (!paperId) {
-      process.stderr.write(
-        'pensmith new: WARN — no paperId yet (STATE.json absent); skipping global-library registration (non-fatal).\n',
-      );
+      process.stderr.write('pensmith new: WARN — no paperId yet (STATE.json absent); not added to the list of papers.\n');
       return;
     }
     const now = new Date().toISOString();
@@ -196,24 +163,14 @@ async function registerPaperNonFatal(
       updatedAt: now,
     });
   } catch (e) {
-    process.stderr.write(
-      `pensmith new: WARN — global-library registration failed (non-fatal): ${(e as Error).message}\n`,
-    );
+    process.stderr.write(`pensmith new: WARN — could not add the paper to the list of papers: ${(e as Error).message}\n`);
   }
 }
 
 /**
- * STYL-01/02 PRODUCER (08-05) — the live caller of buildStyleProfile /
- * checkAndRegisterFingerprint / writeStyleProfile. This is the producer end of
- * the style-match loop; write.ts (Task 1) is the consumer.
- *
- * Order is LOAD-BEARING: build → check → PRINT NOTICE → write, so a
- * writeStyleProfile failure can never SUPPRESS an already-printed reuse notice
- * (T-08-05-06). The cross-paper-reuse notice is UNCONDITIONAL — it surfaces on
- * stdout whenever a prior paper shares the fingerprint, is NOT --yolo-gated, and
- * is NOT suppressible (STYL-02 / Anti-Pattern). The whole producer is wrapped in
- * try/catch that WARNs and never fails the verb (T-08-05-04) — a bad samples dir
- * must not break intake.
+ * The opt-in style match: build .paper/STYLE.json from the user's writing
+ * samples. Reuse of the same samples for another paper is always reported,
+ * before the profile is written. Never fails the verb.
  */
 async function runStyleProducerNonFatal(
   cwd: string,
@@ -222,280 +179,391 @@ async function runStyleProducerNonFatal(
   name: string,
 ): Promise<void> {
   try {
-    // A synthetic, folder-derived identity is used for the fingerprint registry
-    // only when STATE.json has no paperId yet — the STYLE.json still gets built
-    // and the reuse detection still works.
     const fpPaperId = paperId ?? `unregistered:${path.resolve(cwd)}`;
-
-    const profile = await buildStyleProfile(samplesDir); // build
-    const { priorPapers } = await checkAndRegisterFingerprint( // check
-      profile.fingerprint,
-      fpPaperId,
-      name,
-    );
-
-    // PRINT the unconditional cross-paper-reuse notice BEFORE the write.
+    const profile = await buildStyleProfile(samplesDir);
+    const { priorPapers } = await checkAndRegisterFingerprint(profile.fingerprint, fpPaperId, name);
     if (priorPapers.length > 0) {
-      const names = priorPapers
-        .map((p) => p.paperName || p.paperId)
-        .join(', ');
+      const names = priorPapers.map((p) => p.paperName || p.paperId).join(', ');
       process.stdout.write(
         `pensmith new: NOTICE — these writing samples were already used to style a prior paper: ${names}. ` +
           `Style Match mirrors your own voice; reuse across papers is surfaced here for transparency.\n`,
       );
     }
-
-    await writeStyleProfile(paperDir(cwd), profile); // write .paper/STYLE.json
-    process.stdout.write(
-      `pensmith new: wrote style profile to ${path.join(paperDir(cwd), 'STYLE.json')}\n`,
-    );
+    await writeStyleProfile(paperDir(cwd), profile);
+    process.stdout.write(`pensmith new: wrote style profile to ${path.join(paperDir(cwd), 'STYLE.json')}\n`);
   } catch (e) {
-    process.stderr.write(
-      `pensmith new: WARN — style-match producer failed (non-fatal): ${(e as Error).message}\n`,
-    );
+    process.stderr.write(`pensmith new: WARN — style-match producer failed (non-fatal): ${(e as Error).message}\n`);
   }
 }
+
+const ASSIGNMENT_FILE = /^assignment\.(txt|md|markdown|pdf)$/i;
+
+/** An assignment.* file in `cwd`, text before PDF, or null. */
+function findAssignmentFile(cwd: string): string | null {
+  let names: string[];
+  try {
+    names = readdirSync(cwd).filter((n) => ASSIGNMENT_FILE.test(n));
+  } catch {
+    return null;
+  }
+  names.sort((a, b) => Number(a.toLowerCase().endsWith('.pdf')) - Number(b.toLowerCase().endsWith('.pdf')) || a.localeCompare(b));
+  return names[0] ? path.join(cwd, names[0]) : null;
+}
+
+async function readAssignmentFile(file: string): Promise<string> {
+  if (file === '-') return readFileSync(0, 'utf8');
+  const bytes = readFileSync(file);
+  return file.toLowerCase().endsWith('.pdf') ? extractPdfText(bytes) : bytes.toString('utf8');
+}
+
+class IntakeInputError extends Error {}
+
+/** The --answers argument (a JSON object, or the path of a file holding one) as id → answer. */
+function parseAnswersArg(raw: unknown): Record<string, unknown> {
+  if (raw === undefined || raw === null || raw === '') return {};
+  let text: string;
+  if (typeof raw === 'object' && !Array.isArray(raw)) text = JSON.stringify(raw); // a dispatched verb's own args
+  else if (typeof raw === 'string') text = raw.trim();
+  else throw new IntakeInputError('--answers takes a JSON object or the path of a JSON file');
+  if (!text.startsWith('{')) {
+    if (!existsSync(text)) throw new IntakeInputError(`--answers: no such file ${JSON.stringify(text)}, and it is not a JSON object`);
+    text = readFileSync(text, 'utf8');
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch (e) {
+    throw new IntakeInputError(`--answers is not valid JSON (${(e as Error).message})`);
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new IntakeInputError('--answers must be a JSON object of question id to answer');
+  }
+  const known = new Set<string>([...QUESTION_IDS, 'assignment']);
+  const unknown = Object.keys(value).filter((k) => !known.has(k));
+  if (unknown.length > 0) {
+    throw new IntakeInputError(`--answers has unknown question id(s): ${unknown.join(', ')}. Known: ${[...known].join(', ')}`);
+  }
+  return value as Record<string, unknown>;
+}
+
+/** Where intake keeps the questions it is waiting on, so the answering run asks the model nothing. */
+function pendingFile(cwd: string): string {
+  return path.join(paperDir(cwd), 'INTAKE.pending.json');
+}
+
+function sha256(s: string): string {
+  return createHash('sha256').update(s).digest('hex');
+}
+
+function readPendingQuestions(cwd: string, assignment: string): Question[] | null {
+  try {
+    const v = JSON.parse(readFileSync(pendingFile(cwd), 'utf8')) as { assignment_sha256?: unknown; questions?: unknown };
+    return v.assignment_sha256 === sha256(assignment) && Array.isArray(v.questions) ? (v.questions as Question[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The clarifier's answer for `assignment`, or null when no model ran. */
+async function askClarifier(assignment: string): Promise<ClarifierAnswer | null> {
+  const prompt = loadPrompt('intake-clarifier');
+  // The assignment (redacted when PII redaction is on) is the user turn.
+  const system = _interpolate(prompt, { assignment });
+  const result = await complete({
+    system,
+    messages: [{ role: 'user', content: assignment }],
+    role: 'intake',
+    scope: 'task',
+    scopeId: 'intake',
+    jsonSchema: modelJsonSchema(ClarifierSchema),
+  });
+  if (result.placeholder) return null;
+  const checked = checkModelJson(ClarifierSchema, result.json);
+  if (!checked.ok) {
+    process.stderr.write(`pensmith new: WARN — the clarifier's suggestions were not usable (${checked.problems.join('; ')}); asking without them.\n`);
+    return null;
+  }
+  return checked.value;
+}
+
+function refuse(message: string): { ok: false; mode: 'invalid-input' } {
+  process.stderr.write(`pensmith new: ${message}\n`);
+  process.exitCode = EXIT_REFUSED;
+  return { ok: false, mode: 'invalid-input' };
+}
+
+const DISCLAIMER = [
+  'pensmith is a structured research-and-drafting assistant for academic writing.',
+  'It helps you turn an assignment prompt into a sourced outline or, optionally, a full draft,',
+  'using only verifiable peer-reviewed and configurable academic sources. It includes a citation',
+  'verifier that re-fetches every cited DOI and flags unsupported claims for human review,',
+  'and a humanizer pass that improves readability.',
+  '',
+  'This tool is for your own writing, research, and learning. It is not a guarantee against AI detectors',
+  'and it is not a substitute for doing the reading. Submitting fully tool-generated',
+  'work as your own is, in many institutions, a violation of academic integrity policy.',
+  'You are responsible for the work you submit.',
+].join('\n');
 
 export const intakeCommand = defineCommand({
   meta: {
     name: 'new',
-    description: 'Start a new paper — clarify topic + assignment (intake step).',
+    description: 'Start a new paper: keep the assignment and answer the clarifying questions.',
   },
   args: {
     from: {
       type: 'string',
-      description: 'Path to an assignment file to seed the intake (optional).',
+      description: 'The assignment file (.txt, .md or .pdf; - for stdin). Default: assignment.* in this folder.',
     },
-    // Phase 8 ERGO-05 / Open-Q2: an OPTIONAL thesis seed (NOT a new verb). The
-    // `sketch` verb dispatches `new` with this pre-filled after the user
-    // confirms a candidate thesis; a manual `pensmith new --thesis "…"` works
-    // identically. When set, it pre-fills the intake placeholder.
+    answers: {
+      type: 'string',
+      description: `Answers to the intake questions: a JSON object of ${QUESTION_IDS.join(', ')}, or the path of a JSON file.`,
+    },
+    // `sketch` dispatches `new` with the thesis the user confirmed.
     thesis: {
       type: 'string',
-      description: 'A candidate thesis to pre-fill the intake (optional; supplied by `sketch`).',
+      description: 'A candidate thesis to start from (optional; supplied by `sketch`).',
     },
-    // Phase 8 STYL-01/02 (08-05) — OPT-IN style-match producer. NOT a verb:
-    // an absent flag means NO profiling. When provided, intake builds the paper's
-    // .paper/STYLE.json from these writing samples and surfaces cross-paper reuse
-    // UNCONDITIONALLY. The Tier-1 workflow body may surface this as an interactive
-    // prompt; this CLI flag is the deterministic Tier-2 path.
+    // Opt-in: no flag, no profiling.
     styleSamples: {
       type: 'string',
-      description:
-        'Opt-in: path to a folder of your writing samples to match your voice (.md/.txt/.docx).',
+      description: 'Opt-in: path to a folder of your writing samples to match your voice (.md/.txt/.docx).',
     },
-    // Phase 9 ERGO-07 / resolved Open-Q2 — the educator-mode workflow goal. A
-    // SHORT enum (draft|learning|both), NOT a verb. Persisted to config.toml [project] goal; the goal-aware CLI
-    // callers (next/resume/status/bare) read it and map learning ⇒ a hard-stop
-    // after research. Anything outside the enum coerces to 'draft'.
+    // Saved only when given (no default), so a rerun never resets it.
     goal: {
       type: 'string',
-      description: 'Workflow goal: draft (default), learning, or both.',
-      default: 'draft',
+      description: 'Workflow goal: draft (the default), learning, or both.',
     },
-    // Phase 9 ERGO-07 / SC-3 — OPT-IN PII redaction. When on, intake redacts the
-    // raw answers, writes a reviewable diff, persists redacted text to INTAKE.md
-    // and raw text to .paper/INTAKE.raw.local (gitignored), and feeds the model
-    // the REDACTED text. The CLI arg WINS over config.toml [project] pii_redaction
-    // when both are present. PII is OPT-IN per the non-negotiables.
     'pii-redact': {
       type: 'boolean',
-      description: 'Opt-in: redact PII from your answers before they reach the model (H3).',
+      description: 'Opt-in: redact PII from the assignment and your answers before they are stored or sent to a model.',
     },
     'citation-style': {
       type: 'string',
-      description: `Citation style for the export: ${SUPPORTED_STYLES.join(', ')} (default: the discipline's).`,
+      description: `Citation style for the export (answers that question): ${SUPPORTED_STYLES.join(', ')}.`,
     },
     yolo: {
       type: 'boolean',
-      description: 'Skip the approval gate (auto-accept the intake).',
+      description: 'Has no effect on intake: the questions are always answered by you.',
       default: false,
     },
   },
   async run({ args }) {
     const cwd = process.cwd();
 
-    // Refuse an unknown style before anything is written.
-    const styleArg = typeof args['citation-style'] === 'string' ? args['citation-style'].trim() : '';
-    const citationStyle = styleArg ? normalizeStyleName(styleArg) : undefined;
-    if (citationStyle === null) {
-      process.stderr.write(
-        `pensmith new: unknown citation style '${styleArg}'. Supported: ${SUPPORTED_STYLES.join(', ')}.\n`,
-      );
-      process.exitCode = EXIT_REFUSED;
-      return { ok: false, mode: 'invalid-input' };
+    // ── Check the arguments before anything is written. ──
+    let given: Record<string, unknown>;
+    try {
+      given = parseAnswersArg(args.answers);
+    } catch (e) {
+      if (e instanceof IntakeInputError) return refuse(e.message);
+      throw e;
     }
-
-    // DOCS-01: PRD §3 disclaimer — print at intake start so CLI-only users see it.
-    // Static copy — sourced verbatim from PRD §3 (non-negotiable per CLAUDE.md).
-    // Must appear before any ask() or model call (PATTERNS.md placement constraint).
-    const DISCLAIMER = [
-      'pensmith is a structured research-and-drafting assistant for academic writing.',
-      'It helps you turn an assignment prompt into a sourced outline or, optionally, a full draft,',
-      'using only verifiable peer-reviewed and configurable academic sources. It includes a citation',
-      'verifier that re-fetches every cited DOI and flags unsupported claims for human review,',
-      'and a humanizer pass that improves readability.',
-      '',
-      'This tool is for your own writing, research, and learning. It is not a guarantee against AI detectors',
-      'and it is not a substitute for doing the reading. Submitting fully tool-generated',
-      'work as your own is, in many institutions, a violation of academic integrity policy.',
-      'You are responsible for the work you submit.',
-    ].join('\n');
-    process.stdout.write(DISCLAIMER + '\n\n');
-
-    // Audit #13: protect the raw-PII file BEFORE anything could write it.
-    await ensurePaperGitignore(cwd);
-
-    const targetPath = path.join(paperDir(), 'INTAKE.md');
-    const rawLocalPath = path.join(paperDir(), 'INTAKE.raw.local');
-    const thesisSeed = typeof args.thesis === 'string' && args.thesis.trim()
-      ? args.thesis.trim()
-      : '';
-    const styleSamples =
-      typeof args.styleSamples === 'string' && args.styleSamples.trim()
-        ? args.styleSamples.trim()
-        : '';
-
-    // --- Educator goal (ERGO-07) — coerce + PERSIST to config.toml (canonical). ---
-    // The goal arg is the SHORT enum draft|learning|both (default draft); the
-    // persisted value is what the goal-aware CLI callers read to drive the
-    // learning hard-stop. Persist is best-effort/non-fatal (M1).
-    const goal = coerceGoal(args.goal);
-
-    // --- PII opt-in resolution (SC-3). The CLI arg WINS over config.toml. ---
-    // The arg is `--pii-redact` (citty key `pii-redact`); the test seam also
-    // passes `redactPii`. Honor either spelling. Falls back to config.toml
-    // [project] pii_redaction when no arg is given.
-    const piiRedactArg =
+    if (typeof args['citation-style'] === 'string' && args['citation-style'].trim()) {
+      given['citation_style'] = args['citation-style'].trim();
+    }
+    const answers: Partial<Record<QuestionId, string | number>> = {};
+    for (const id of QUESTION_IDS) {
+      if (given[id] === undefined) continue;
+      const c = checkAnswer(id, given[id]);
+      if (!c.ok) return refuse(`the ${id} answer cannot be used: ${c.why}.`);
+      answers[id] = c.value;
+    }
+    const goalArg = typeof args.goal === 'string' && args.goal.trim() ? args.goal.trim().toLowerCase() : undefined;
+    if (goalArg !== undefined && !(GOALS as readonly string[]).includes(goalArg)) {
+      return refuse(`unknown goal '${args.goal}'. Use one of: ${GOALS.join(', ')}.`);
+    }
+    const piiArg =
       typeof args['pii-redact'] === 'boolean'
         ? (args['pii-redact'] as boolean)
         : typeof (args as Record<string, unknown>)['redactPii'] === 'boolean'
           ? ((args as Record<string, unknown>)['redactPii'] as boolean)
           : undefined;
-    const { on: piiRedact } = resolvePiiRedact(cwd, piiRedactArg);
-
-    // Persist goal (and pii_redaction when set via arg). Done EARLY so a later
-    // failure path still leaves the canonical config in place.
-    await persistProjectConfig(cwd, goal, piiRedactArg, citationStyle);
-
-    // --- PII BLOCK — STRUCTURALLY BEFORE loadPrompt/interpolate (T-09-PII-EGRESS). ---
-    // Collect the raw ANSWERS (the user's --from seed + thesis seed — NEVER the
-    // prompt template). When PII opt-in is on, compute the redaction + a
-    // reviewable diff HERE, persist raw → INTAKE.raw.local (gitignored) and
-    // redacted → INTAKE.md, and bind egressSeed = redacted. The egress variable
-    // (the value interpolated into the model payload) is the REDACTED text — the
-    // raw answers never cross the LLM boundary (H3). When opt-in is OFF, raw
-    // answers go to INTAKE.md and egressSeed = rawAnswers (today's behavior).
-    const fromText = args.from && existsSync(args.from) ? readFileSync(args.from, 'utf8') : '';
-    const rawAnswers = [fromText, thesisSeed].filter((s) => s.length > 0).join('\n\n');
-
-    let egressSeed = rawAnswers;
-    if (piiRedact) {
-      const redacted = redactPii(rawAnswers);
-      const diff = diffPii(rawAnswers, redacted);
-      // Print the reviewable diff: one line per detected PII span.
-      for (const d of diff) {
-        process.stdout.write(`pensmith new: [${d.kind}] "${d.raw}" → ${d.tag}\n`);
-      }
-      // Raw answers → INTAKE.raw.local (gitignored); redacted text is what flows
-      // to the model AND to INTAKE.md.
-      await atomicWriteFile(rawLocalPath, rawAnswers.endsWith('\n') ? rawAnswers : rawAnswers + '\n');
-      egressSeed = redacted;
+    const fromArg = typeof args.from === 'string' && args.from.trim() ? args.from.trim() : undefined;
+    if (fromArg !== undefined && fromArg !== '-' && !existsSync(fromArg)) {
+      return refuse(`no such assignment file: ${fromArg}`);
     }
 
-    // NON-FATAL side effects run at the END of a successful intake (before each
-    // return). registerPaperNonFatal SEEDS the global-library entry (LIB-04);
-    // runStyleProducerNonFatal is the OPT-IN style-match producer (STYL-01/02) —
-    // it runs ONLY when --style-samples is provided. Both never fail the verb.
-    const meta = resolvePaperMeta(cwd);
-    const runSideEffects = async (): Promise<void> => {
-      const paperId = await resolvePaperId(cwd);
-      await registerPaperNonFatal(cwd, paperId, meta);
-      if (styleSamples) {
-        await runStyleProducerNonFatal(cwd, styleSamples, paperId, meta.name);
-      }
-    };
+    // PRD §3 disclaimer, before any question or model call.
+    process.stdout.write(DISCLAIMER + '\n\n');
 
-    // ── Phase 11: GEN-06 fail-loud probe (BEFORE any prompt/complete() work) ──
-    // getProviderApiKey() is used here as a PRESENCE PROBE only — the resolved
-    // key value is never bound to a variable used outside this block (T-01-07).
-    // complete() re-resolves the key internally when it makes the HTTP call.
-    // NOTE: complete() calls isNoLlmMode() BEFORE getProviderApiKey(), so when
-    // PENSMITH_NO_LLM=1 is set, the probe below throws MissingApiKeyError but
-    // complete() never reaches key resolution — the offline mock fires first.
-    // To preserve this ordering, we call getProviderApiKey ONLY when NOT in
-    // offline mode (isNoLlmMode is checked inside complete()). We let complete()
-    // handle the offline path transparently. We call the probe for fail-loud only.
-    {
-      // Only probe for key presence when we are NOT in offline mode.
-      // complete() handles PENSMITH_NO_LLM=1 internally (before key resolution).
-      const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-      if (!noLlm) {
-        try {
-          // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
-          // false-positive with "no config for 'anthropic'". resolveProviderId()
-          // is the single source of truth (shared with complete()).
-          const providerId = await resolveProviderId();
-          await getProviderApiKey(providerId);
-        } catch (e) {
-          if (e instanceof MissingApiKeyError) {
-            process.stderr.write(
-              'pensmith new: ERROR — no LLM key configured.\n' +
-              'Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n' +
-              'Run inside Claude Code (Tier 1) for key-free operation.\n',
-            );
-            process.exitCode = 1;
-            return { ok: false, mode: 'no-key-configured' };
+    // The raw-PII file and the source texts are kept out of git before anything is written.
+    await ensurePaperGitignore(cwd);
+
+    // ── 1. The assignment. ──
+    const thesis = typeof args.thesis === 'string' ? args.thesis.trim() : '';
+    let rawAssignment = '';
+    const file = fromArg ?? findAssignmentFile(cwd);
+    if (file !== null) {
+      try {
+        rawAssignment = (await readAssignmentFile(file)).trim();
+      } catch (e) {
+        return refuse(`could not read the assignment from ${file}: ${(e as Error).message}`);
+      }
+      if (fromArg === undefined) process.stdout.write(`pensmith new: using the assignment in ${path.basename(file)}\n`);
+    }
+    if (typeof given['assignment'] === 'string' && given['assignment'].trim()) {
+      rawAssignment = [rawAssignment, given['assignment'].trim()].filter(Boolean).join('\n\n');
+    }
+    if (thesis) rawAssignment = [rawAssignment, `Thesis: ${thesis}`].filter(Boolean).join('\n\n');
+
+    const piiRedact = resolvePiiRedact(cwd, piiArg);
+    let assignment: string;
+    if (rawAssignment) {
+      assignment = rawAssignment;
+      if (piiRedact) {
+        // The raw text goes only to INTAKE.raw.local; everything else sees the redacted text.
+        const redacted = redactPii(rawAssignment);
+        for (const d of diffPii(rawAssignment, redacted)) {
+          process.stdout.write(`pensmith new: [${d.kind}] "${d.raw}" → ${d.tag}\n`);
+        }
+        await atomicWriteFile(path.join(paperDir(cwd), 'INTAKE.raw.local'), rawAssignment + '\n');
+        assignment = redacted;
+      }
+    } else {
+      const kept = readAssignment(cwd);
+      if (kept) {
+        assignment = kept;
+      } else if (_ask || canAskInTerminal()) {
+        const typed = await (_ask ?? askInTerminal)({
+          id: 'assignment',
+          question: 'Paste the assignment prompt (or rerun with --from <file>):',
+          suggested: '',
+        });
+        if (!typed?.trim()) return refuse('no assignment was given; nothing was saved.');
+        assignment = piiRedact ? redactPii(typed.trim()) : typed.trim();
+        if (piiRedact) await atomicWriteFile(path.join(paperDir(cwd), 'INTAKE.raw.local'), typed.trim() + '\n');
+      } else {
+        process.stderr.write(
+          'pensmith new: there is no assignment to start from. Pass --from <file>, put an assignment.txt, .md or .pdf in this folder, ' +
+            'or answer "assignment" with --answers.\n',
+        );
+        process.stdout.write(
+          `${JSON.stringify({
+            pending: 'intake-questions',
+            gate: 'intake',
+            summary: 'pensmith needs the assignment prompt to start the paper.',
+            questions: [{ id: 'assignment', question: 'What is the assignment prompt? (paste it in full)', suggested: '' }],
+            how_to_answer: "Run `pensmith new --from <file>`, or `pensmith new --answers '{\"assignment\": \"...\"}'`.",
+          })}\n`,
+        );
+        process.exitCode = EXIT_NEEDS_ANSWER;
+        return { ok: false, mode: 'pending', pending: ['assignment'] };
+      }
+    }
+    const projectMd = path.join(paperDir(cwd), 'PROJECT.md');
+    const meta = resolvePaperMeta(cwd);
+    if (readAssignment(cwd) !== assignment) {
+      await atomicWriteFile(projectMd, renderProjectMd(meta.name, assignment));
+      process.stdout.write(`pensmith new: kept the assignment in ${projectMd}\n`);
+    }
+
+    // ── 2. The questions still to answer, with the clarifier's suggestions. ──
+    let missing = QUESTION_IDS.filter((id) => answers[id] === undefined);
+    let questions: Question[] = [];
+    if (missing.length > 0) {
+      const pending = readPendingQuestions(cwd, assignment);
+      if (pending) {
+        questions = pending;
+      } else {
+        // Without a key there is no model to ask, and intake says so.
+        if (process.env['PENSMITH_NO_LLM'] !== '1') {
+          try {
+            await getProviderApiKey(await resolveProviderId());
+          } catch (e) {
+            if (e instanceof MissingApiKeyError) {
+              process.stderr.write(
+                'pensmith new: ERROR — no LLM key configured.\n' +
+                  'Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation,\n' +
+                  `or give every answer with --answers (${QUESTION_IDS.join(', ')}).\n`,
+              );
+              process.exitCode = 1;
+              return { ok: false, mode: 'no-key-configured' };
+            }
+            throw e;
           }
-          throw e;
+        }
+        questions = buildQuestions(assignment, await askClarifier(assignment));
+      }
+      // The counterargument default is the discipline's, once the discipline is known.
+      const discipline = answers['discipline'];
+      questions = questions.map((q) =>
+        q.id === 'counterargument' && !q.suggested && typeof discipline === 'string' ? { ...q, suggested: presetCounterargument(discipline) } : q,
+      );
+    }
+
+    // ── 3. The answers: asked on a terminal, else reported and left pending. ──
+    const ask = _ask ?? (canAskInTerminal() ? askInTerminal : null);
+    if (missing.length > 0 && ask) {
+      for (const q of questions.filter((x) => missing.includes(x.id as QuestionId))) {
+        let why: string | undefined;
+        for (;;) {
+          const typed = await ask(q, why);
+          if (typed === null) return refuse('intake was cancelled; nothing more was saved.');
+          const c = checkAnswer(q.id as QuestionId, typed);
+          if (c.ok) {
+            answers[q.id as QuestionId] = c.value;
+            break;
+          }
+          why = c.why;
         }
       }
+      missing = [];
+    }
+    if (missing.length > 0) {
+      const waiting = questions.filter((q) => missing.includes(q.id as QuestionId));
+      await atomicWriteFile(pendingFile(cwd), JSON.stringify({ assignment_sha256: sha256(assignment), questions }, null, 2) + '\n');
+      process.stderr.write(
+        `pensmith new: ${waiting.length} intake question(s) need your answers and there is no terminal to ask in. The assignment is kept; nothing else was saved.\n`,
+      );
+      process.stdout.write(
+        `${JSON.stringify({
+          pending: 'intake-questions',
+          gate: 'intake',
+          summary: `Answer ${waiting.length} question(s) about the paper.`,
+          questions: waiting,
+          how_to_answer: "Ask the user each question, then run `pensmith new --answers '<JSON object of question id to answer>'` (or the path of a JSON file).",
+        })}\n`,
+      );
+      process.exitCode = EXIT_NEEDS_ANSWER;
+      return { ok: false, mode: 'pending', pending: waiting.map((q) => q.id) };
     }
 
-    // ── CRITICAL (H3 / Pitfall 3): the value interpolated into the model-bound ──
-    // payload is `egressSeed` — the REDACTED text when PII opt-in is on (never
-    // the raw --from contents). The PII block above already ran, so redaction is
-    // by CONTENT here, not merely ordered before this call.
-    //
-    // egressSeed (REDACTED when piiRedact=true) flows into the prompt via
-    // _interpolate seam (test-observable) AND into complete() as the user message.
-    // rawAnswers MUST NEVER appear in the complete() call args (T-11-06 / GEN-06).
-    const prompt = loadPrompt('intake-clarifier');
-    // The intake-clarifier template interpolates {{assignment}} (D-12 LOCKED).
-    // Routed through the _interpolate seam so the egress is test-observable (H3).
-    const interpolatedPrompt = _interpolate(prompt, { assignment: egressSeed });
+    // ── 4. Save. ──
+    if (piiRedact) {
+      for (const id of ['topic', 'audience'] as const) answers[id] = redactPii(String(answers[id]));
+    }
+    const intake = intakeFromAnswers(answers as Record<QuestionId, string | number>);
+    await atomicWriteFile(paperIntakeFile(cwd), JSON.stringify(intake, null, 2) + '\n');
+    const intakeMd = path.join(paperDir(cwd), 'INTAKE.md');
+    await atomicWriteFile(intakeMd, renderIntakeMd(intake));
+    await removePath(pendingFile(cwd));
 
-    // content is egressSeed (redacted when piiRedact=true) — never rawAnswers (Pitfall 3).
-    const result = await complete({
-      system: interpolatedPrompt,
-      messages: [{ role: 'user', content: egressSeed }],
-      role: 'intake',
-      scope: 'task',
-      scopeId: 'intake',
-    });
-
-    // GEN-04 — Bootstrap STATE.json BEFORE writing INTAKE.md and running
-    // side effects, so resolvePaperId() returns a non-null paperId and the
-    // global-library registration + style-match producer proceed (not WARN-skip).
-    // initState(cwd) writes <cwd>/STATE.json (same path loadState(cwd) reads).
-    // StateAlreadyExistsError is caught and silently skipped — idempotent.
-    // Any other error re-throws (fail-loud: bootstrap failure is real).
     try {
       await initState(cwd);
     } catch (e) {
-      // WR-04: use instanceof (canonical Pensmith pattern per state.ts:177) rather
-      // than raw .code check, which could swallow unrelated errors that happen to
-      // carry a matching .code field (e.g. mocks or future migration paths).
       if (!(e instanceof StateAlreadyExistsError)) throw e;
-      // else: STATE.json already present — paperId is unchanged (idempotent skip)
     }
 
-    // INTAKE.md carries the redacted text via the model result when PII opt-in
-    // is on (raw → .raw.local). The model output is the artifact; no placeholder.
-    await atomicWriteFile(targetPath, artifactText(result));
-    process.stdout.write(`pensmith new: wrote INTAKE.md to ${targetPath}\n`);
-    await runSideEffects();
-    return { ok: true, path: targetPath, mode: 'real' };
+    // Only the settings given here are written, and the file is edited in place.
+    const settings: Record<string, string | boolean> = { citation_style: intake.citation_style };
+    if (goalArg !== undefined) settings['goal'] = goalArg;
+    if (piiArg !== undefined) settings['pii_redaction'] = piiArg;
+    const configFile = paperConfigFile(cwd);
+    const notWritten = await setConfigValues(configFile, 'project', settings);
+    if (notWritten) {
+      process.stderr.write(
+        `pensmith new: WARN — ${configFile} was left as it is because ${notWritten}. ` +
+          `Set these under [project] yourself: ${Object.entries(settings).map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(', ')}.\n`,
+      );
+    }
+
+    process.stdout.write(`pensmith new: wrote ${paperIntakeFile(cwd)} and ${intakeMd}\n`);
+    const paperId = await resolvePaperId(cwd);
+    await registerPaperNonFatal(cwd, paperId, meta);
+    const styleSamples = typeof args.styleSamples === 'string' ? args.styleSamples.trim() : '';
+    if (styleSamples) await runStyleProducerNonFatal(cwd, styleSamples, paperId, meta.name);
+    return { ok: true, path: paperIntakeFile(cwd), mode: 'real', intake };
   },
 });
 

@@ -13,6 +13,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { INTAKE_ANSWERS } from './lib/intake-answers.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -24,7 +25,7 @@ function runNew(cwd: string): { status: number | null; stdout: string; stderr: s
   env['PENSMITH_TEST_CASSETTES'] = '1';
   const r = spawnSync(
     process.execPath,
-    ['--import', TSX_LOADER, PENSMITH_TS, 'new', '--yolo'],
+    ['--import', TSX_LOADER, PENSMITH_TS, 'new', '--answers', JSON.stringify({ assignment: 'Write about tidal energy.', ...INTAKE_ANSWERS })],
     { cwd, env, encoding: 'utf8' },
   );
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };

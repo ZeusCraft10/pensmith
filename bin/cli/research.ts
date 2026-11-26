@@ -25,7 +25,6 @@
 
 import { defineCommand } from 'citty';
 import path from 'node:path';
-import { readFileSync, existsSync } from 'node:fs';
 import { z } from 'zod';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { mergeCandidates, updateLibrary } from '../lib/library.js';
@@ -34,7 +33,8 @@ import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { ask } from '../lib/prompts.js';
-import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
+import { escapeTemplateTokens } from '../lib/intake-parse.js';
+import { readIntake } from '../lib/intake-record.js';
 import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
 import { isOfflineMode, OFFLINE_SKIP_NOTE } from '../lib/network-mode.js';
 
@@ -133,26 +133,14 @@ export const researchCommand = defineCommand({
       }
     }
 
-    // ── Step 1: Read INTAKE.md and parse → topic/discipline/assignment ──
-    // D-07: read via readFileSync; WARN + empty string if absent.
-    const intakePath = path.join(paperDir(), 'INTAKE.md');
-    let intakeText = '';
-    if (existsSync(intakePath)) {
-      try {
-        intakeText = readFileSync(intakePath, 'utf8');
-      } catch (err) {
-        process.stderr.write(
-          `pensmith research: WARN — could not read INTAKE.md (${String(err)}); ` +
-          `continuing with empty assignment context.\n`,
-        );
-      }
-    } else {
+    // ── Step 1: the topic, discipline and assignment intake kept. ──
+    const intake = readIntake(process.cwd());
+    if (!intake) {
       process.stderr.write(
-        `pensmith research: WARN — INTAKE.md not found at ${intakePath}; ` +
-        `continuing with empty assignment context (run \`pensmith intake\` first).\n`,
+        'pensmith research: WARN — no intake found in .paper/; continuing with no assignment context (run `pensmith new` first).\n',
       );
     }
-    const { topic, discipline, assignment } = parseIntakeMd(intakeText);
+    const { topic, discipline, assignment } = intake ?? { topic: '', discipline: 'other', assignment: '' };
 
     // ── Step 2: topic-disambiguator complete() (D-12 LOCKED slug) ──
     // CR-01: sanitize user-controlled strings before interpolation so that

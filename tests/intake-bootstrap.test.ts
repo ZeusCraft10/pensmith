@@ -33,6 +33,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { INTAKE_ANSWERS_JSON } from './lib/intake-answers.js';
 
 // ---- Offline gate (T-12-W0-02) -------------------------------------------------
 // Set BEFORE any dynamic import. PENSMITH_NETWORK_TESTS is deliberately NOT set
@@ -134,7 +135,7 @@ test(
     const assignPath = writeFixtureAssignment(root);
 
     // Run intake with --from (no interactive questions), --yolo (no approval gate).
-    await runIntake(root, { from: assignPath, yolo: true });
+    await runIntake(root, { from: assignPath, yolo: true, answers: INTAKE_ANSWERS_JSON });
 
     // STATE.json lives in .paper/, never in the user's project root.
     const statePath = path.join(root, '.paper', 'STATE.json');
@@ -179,7 +180,7 @@ test(
     const assignPath = writeFixtureAssignment(root);
 
     // First run: seeds STATE.json.
-    await runIntake(root, { from: assignPath, yolo: true });
+    await runIntake(root, { from: assignPath, yolo: true, answers: INTAKE_ANSWERS_JSON });
 
     const statePath = path.join(root, '.paper', 'STATE.json');
     assert.ok(fs.existsSync(statePath), 'STATE.json must exist after first intake run');
@@ -197,7 +198,7 @@ test(
     // Second run: must NOT throw; paperId must be unchanged.
     let secondRunThrew = false;
     try {
-      await runIntake(root, { from: assignPath, yolo: true });
+      await runIntake(root, { from: assignPath, yolo: true, answers: INTAKE_ANSWERS_JSON });
     } catch {
       secondRunThrew = true;
     }
@@ -243,7 +244,7 @@ test(
     };
 
     try {
-      await runIntake(root, { from: assignPath, yolo: true });
+      await runIntake(root, { from: assignPath, yolo: true, answers: INTAKE_ANSWERS_JSON });
     } finally {
       (process.stderr as unknown as { write: typeof origStderrWrite }).write = origStderrWrite;
     }
@@ -251,8 +252,8 @@ test(
     // The WARN-skip message must NOT appear: registration proceeded.
     const stderrText = stderrLines.join('');
     assert.ok(
-      !stderrText.includes('skipping global-library registration'),
-      `After initState() wiring, the WARN "skipping global-library registration" must NOT appear. ` +
+      !stderrText.includes('not added to the list of papers'),
+      `After initState() wiring, the WARN "not added to the list of papers" must NOT appear. ` +
         `Got stderr: ${stderrText.slice(0, 400)}`,
     );
 

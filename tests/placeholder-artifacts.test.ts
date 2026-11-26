@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { INTAKE_ANSWERS_JSON } from './lib/intake-answers.js';
 import { complete } from '../bin/lib/anthropic.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
@@ -104,11 +105,15 @@ test('placeholder: write, plan, new and outline flag their placeholder output in
   assert.equal(p.status, 0, p.stdout + p.stderr);
   assert.equal(parseFrontmatter(readFileSync(sectionFile(root, 'PLAN.md'), 'utf8')).frontmatter['placeholder'], true, 'PLAN.md');
 
+  // intake saves the user's answers, which no model wrote, so nothing it
+  // saves is a placeholder; with no answers it waits for them (exit 3).
   const fresh = mkdtempSync(join(tmpdir(), 'pensmith-placeholder-new-'));
   writeFileSync(join(fresh, 'assignment.txt'), 'Write about tidal energy.\n');
-  const n = runCli(['new', '--from', 'assignment.txt'], fresh);
+  const pending = runCli(['new', '--from', 'assignment.txt'], fresh);
+  assert.equal(pending.status, 3, pending.stdout + pending.stderr);
+  const n = runCli(['new', '--answers', INTAKE_ANSWERS_JSON], fresh);
   assert.equal(n.status, 0, n.stdout + n.stderr);
-  assert.equal(parseFrontmatter(readFileSync(join(fresh, '.paper', 'INTAKE.md'), 'utf8')).frontmatter['placeholder'], true, 'INTAKE.md');
+  assert.ok(!readFileSync(join(fresh, '.paper', 'INTAKE.md'), 'utf8').includes('PENSMITH_NO_LLM'), 'INTAKE.md');
 
   const o = runCli(['outline', '--yolo'], fresh);
   assert.equal(o.status, 0, o.stdout + o.stderr);

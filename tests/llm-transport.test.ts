@@ -40,6 +40,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { pensmithDataDir } from '../bin/lib/paths.js';
+import { INTAKE_ANSWERS } from './lib/intake-answers.js';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
 
 // ---------------------------------------------------------------------------
@@ -763,7 +764,9 @@ const VERB_RAN: Record<GenerativeVerb, RegExp> = {
 
 // Minimal args needed to make each verb not crash on missing args before reaching the key check
 const VERB_REQUIRED_ARGS: Record<GenerativeVerb, string[]> = {
-  intake: [],
+  // intake needs an assignment before it calls the clarifier, which is what
+  // needs the key.
+  intake: ['--answers', JSON.stringify({ assignment: 'Write a 2000-word essay on tidal energy policy.' })],
   // research has a default-on approval gate (CLAUDE.md non-negotiable) that exits 3
   // in a non-TTY spawn. PENSMITH_NO_LLM mocks the LLM, NOT the approval gate, so the
   // non-interactive integration spawn must pass --yolo to reach the artifact-write path.
@@ -776,6 +779,12 @@ const VERB_REQUIRED_ARGS: Record<GenerativeVerb, string[]> = {
   plan: ['1'],
   write: ['1'],
   revise: [],
+};
+
+// T-11-06 runs each verb through to its artifact. With every answer given,
+// intake asks the model nothing, so it saves the user's answers.
+const VERB_NO_LLM_ARGS: Partial<Record<GenerativeVerb, string[]>> = {
+  intake: ['--answers', JSON.stringify({ assignment: 'Write a 2000-word essay on tidal energy policy.', ...INTAKE_ANSWERS })],
 };
 
 for (const verb of VERBS_FOR_INTEGRATION) {
@@ -872,7 +881,7 @@ for (const verb of VERBS_FOR_INTEGRATION) {
     try {
       const result = spawnSync(
         process.execPath,
-        [bin, ...VERB_COMMAND[verb], ...VERB_REQUIRED_ARGS[verb]],
+        [bin, ...VERB_COMMAND[verb], ...(VERB_NO_LLM_ARGS[verb] ?? VERB_REQUIRED_ARGS[verb])],
         {
           cwd: tmpRoot,
           env: {

@@ -13,6 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { INTAKE_ANSWERS_JSON } from './lib/intake-answers.js';
 import { fileURLToPath } from 'node:url';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
@@ -96,11 +97,11 @@ test('alias: `intake --from <file>` runs `new` and keeps --from', () => {
   const dir = emptyDir();
   const assignment = join(dir, 'assignment.txt');
   writeFileSync(assignment, 'Write a 2000-word essay on tidal energy policy in coastal towns.\n');
-  const r = runCli(['intake', '--from', assignment], dir, { PENSMITH_NO_LLM: '1' });
+  const r = runCli(['intake', '--from', assignment, '--answers', INTAKE_ANSWERS_JSON], dir, { PENSMITH_NO_LLM: '1' });
   assert.equal(r.status, 0, `stdout=${r.stdout} stderr=${r.stderr}`);
-  assert.match(r.stdout, /pensmith new: wrote INTAKE\.md/, 'the intake verb itself must run');
-  const intake = readFileSync(join(dir, '.paper', 'INTAKE.md'), 'utf8');
-  assert.match(intake, /tidal energy policy/, '--from must reach the intake verb');
+  assert.match(r.stdout, /pensmith new: wrote .*INTAKE\.json/, 'the intake verb itself must run');
+  const project = readFileSync(join(dir, '.paper', 'PROJECT.md'), 'utf8');
+  assert.match(project, /tidal energy policy/, '--from must reach the intake verb');
 });
 
 test('alias: `export` runs `done`, not the router', () => {
@@ -114,9 +115,9 @@ test('alias: `export` runs `done`, not the router', () => {
 test('no positional: bare `pensmith` with only flags still asks the router', () => {
   const dir = emptyDir();
   const r = runCli(['--yolo'], dir, { PENSMITH_NO_LLM: '1' });
-  // An empty folder routes to `new`, which writes INTAKE.md.
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /pensmith new: wrote INTAKE\.md/);
+  // An empty folder routes to `new`, which asks for the assignment (exit 3).
+  assert.equal(r.status, 3, r.stderr);
+  assert.match(r.stdout, /"pending":"intake-questions"/);
 });
 
 test('unknown option: a flag pensmith does not have exits 2 instead of starting a paper', () => {

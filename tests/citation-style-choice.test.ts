@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { INTAKE_ANSWERS } from './lib/intake-answers.js';
 import { parse as parseToml } from 'smol-toml';
 import { normalizeStyleName, resolveStyleName, SUPPORTED_STYLES } from '../bin/lib/citations.js';
 import { compiledPaper, runCli } from './lib/export-fixture.js';
@@ -97,9 +98,11 @@ test('a style name with an edition, "style" or "referencing" maps too; Chicago\'
   assert.equal(normalizeStyleName('style'), null);
 });
 
-test('pensmith new --citation-style persists the choice to config.toml; an unknown style is refused', () => {
+test('pensmith new --citation-style answers the style question and persists it to .paper/config.toml; an unknown style is refused', () => {
   const dir = mkdtempSync(join(tmpdir(), 'pensmith-style-new-'));
-  const r = runCli(['new', '--citation-style', 'AMA'], dir);
+  const { citation_style: _given, ...rest } = INTAKE_ANSWERS;
+  void _given;
+  const r = runCli(['new', '--citation-style', 'AMA', '--answers', JSON.stringify({ assignment: 'Write about tidal energy.', ...rest })], dir);
   assert.equal(r.status, 0, `stdout=${r.stdout}\nstderr=${r.stderr}`);
   const cfg = parseToml(readFileSync(join(dir, '.paper', 'config.toml'), 'utf8')) as { project?: { citation_style?: string } };
   assert.equal(cfg.project?.citation_style, 'ama');

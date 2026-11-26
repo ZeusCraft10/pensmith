@@ -1,16 +1,17 @@
 // bin/lib/citation-style.ts — which citation style a paper uses.
 //
 // The user's choice wins. In order:
-//   1. config.toml `[project] citation_style` (set by `pensmith new
-//      --citation-style`, or edited by hand as PRD §8 allows);
-//   2. a "Citation style: …" answer line in .paper/INTAKE.md;
+//   1. .paper/config.toml `[project] citation_style` (written by intake from
+//      the user's answer, or edited by hand as PRD §8 allows);
+//   2. the answer stored in .paper/INTAKE.json, or a "Citation style: …" line
+//      in an INTAKE.md an older intake wrote;
 //   3. the discipline's preset in templates/presets/disciplines.json.
 // A choice pensmith has no CSL file for is reported and the preset is used.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { normalizeStyleName, resolveStyleName, SUPPORTED_STYLES } from './citations.js';
-import { parseIntakeMd } from './intake-parse.js';
+import { readIntake } from './intake-record.js';
 import { paperDir } from './paths.js';
 import { readProjectConfig } from './project-config.js';
 
@@ -18,7 +19,7 @@ export interface ResolvedStyle {
   /** A style key with a bundled CSL file. */
   style: string;
   /** Where it came from. */
-  source: 'config.toml' | 'INTAKE.md' | 'discipline preset';
+  source: 'config.toml' | 'INTAKE.json' | 'INTAKE.md' | 'discipline preset';
   /** Set when the user's choice could not be used. */
   warning?: string;
 }
@@ -43,9 +44,11 @@ export function resolveCitationStyle(paperRoot: string): ResolvedStyle {
   } catch {
     // no intake yet
   }
+  const stored = readIntake(paperRoot);
   const warnings: string[] = [];
   const choices: Array<[string | null, ResolvedStyle['source']]> = [
     [configuredStyle(paperRoot), 'config.toml'],
+    [stored?.intake?.citation_style ?? null, 'INTAKE.json'],
     [intakeStyleAnswer(intake), 'INTAKE.md'],
   ];
   for (const [choice, source] of choices) {
@@ -57,7 +60,7 @@ export function resolveCitationStyle(paperRoot: string): ResolvedStyle {
     );
   }
   // Only when no usable choice was made is the discipline preset looked up.
-  const preset = resolveStyleName(parseIntakeMd(intake).discipline);
+  const preset = resolveStyleName(stored?.discipline ?? 'other');
   return {
     style: preset,
     source: 'discipline preset',

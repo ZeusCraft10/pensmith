@@ -227,8 +227,9 @@ test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT cra
     // write don't fail-loud on missing key. This tests StateNotFoundError handling,
     // not LLM key behavior — see 11-PATTERNS.md §Fail-Loud Pitfall 6.
     const a = runCli(['--yolo'], root, { PENSMITH_NO_LLM: '1' });
-    assert.equal(a.status, 0,
-      `C2-H1: bare \`--yolo\` in a fresh dir must exit 0 (empty projection, under-cap); stderr=${a.stderr}`);
+    // An empty folder routes to `new`, which asks for the assignment (exit 3).
+    assert.equal(a.status, 3,
+      `C2-H1: bare \`--yolo\` in a fresh dir must reach intake (empty projection, under-cap); stderr=${a.stderr}`);
     assert.ok(!/StateNotFoundError/.test(a.stderr), 'C2-H1: must not surface StateNotFoundError');
     const b = runCli(['write', '--yolo'], root, { PENSMITH_NO_LLM: '1' });
     assert.ok(!/StateNotFoundError/.test(b.stderr),

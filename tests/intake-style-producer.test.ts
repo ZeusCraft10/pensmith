@@ -26,6 +26,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { INTAKE_ANSWERS } from './lib/intake-answers.js';
+
+// The style producer runs once intake has the assignment and every answer.
+const ANSWERS = JSON.stringify({ assignment: 'Write about attention in transformers.', ...INTAKE_ANSWERS });
 
 function repoPath(rel: string): string {
   return fileURLToPath(new URL('../' + rel, import.meta.url));
@@ -103,7 +107,7 @@ async function runIntake(cwd: string, args: Record<string, unknown>): Promise<st
 
 test('PRODUCER (1): `intake --style-samples <dir>` writes .paper/STYLE.json', { skip: !READY }, async () => {
   const root = mkProjectRoot();
-  await runIntake(root, { styleSamples: PAPER_A, yolo: true });
+  await runIntake(root, { styleSamples: PAPER_A, yolo: true, answers: ANSWERS });
 
   const stylePath = path.join(root, '.paper', 'STYLE.json');
   assert.ok(fs.existsSync(stylePath), 'opt-in run must produce .paper/STYLE.json');
@@ -123,7 +127,7 @@ test('PRODUCER (2): cross-paper-reuse notice fires UNCONDITIONALLY when a prior 
 
   // Now run intake with the opt-in but WITHOUT --yolo. The reuse notice must
   // still surface (it is a transparency signal, NOT a gate that --yolo skips).
-  const out = await runIntake(root, { styleSamples: PAPER_A, yolo: false });
+  const out = await runIntake(root, { styleSamples: PAPER_A, yolo: false, answers: ANSWERS });
 
   assert.match(
     out,
@@ -134,7 +138,7 @@ test('PRODUCER (2): cross-paper-reuse notice fires UNCONDITIONALLY when a prior 
 
 test('PRODUCER (3): WITHOUT the opt-in flag, NO .paper/STYLE.json is produced (opt-in is explicit)', { skip: !READY }, async () => {
   const root = mkProjectRoot();
-  await runIntake(root, { yolo: true });
+  await runIntake(root, { yolo: true, answers: ANSWERS });
 
   const stylePath = path.join(root, '.paper', 'STYLE.json');
   assert.ok(!fs.existsSync(stylePath), 'no opt-in flag → no STYLE.json (style-match is opt-in only)');

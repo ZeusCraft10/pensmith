@@ -1,7 +1,7 @@
 # pensmith new
 
-> Start a new paper project — capture the assignment, run the clarifying battery,
-> detect the discipline, and persist a structured `INTAKE.md` for downstream verbs.
+> Start a new paper project: keep the assignment word for word, ask the six intake
+> questions, and store the answers as data (`.paper/INTAKE.json`) for the later verbs.
 >
 > CYCLE-3 NAMING NOTE: per Plan 06 REVIEWS CONVERGENCE, the canonical user-facing verb is
 > `pensmith intake`; `pensmith new` is a friendly alias mapped by the bin/cli/index.ts
@@ -36,36 +36,23 @@ equivalence.
 
 ## Outputs
 
-- `.paper/INTAKE.md` — clarified assignment + discipline + tone + citation style (committed)
-- `.paper/INTAKE.raw.local` — raw answers before PII redaction (gitignored, never committed)
+- `.paper/PROJECT.md`: the assignment, word for word, under `## Assignment` (redacted when PII redaction is on)
+- `.paper/INTAKE.json`: the answers: `topic`, `discipline`, `length_words`, `citation_style`, `audience`, `counterargument`; `INTAKE.md` is a readable copy
+- `.paper/config.toml`: `[project] citation_style` (and the other settings whose flags are given), edited in place
+- `.paper/INTAKE.raw.local`: the unredacted assignment when PII redaction is on (kept out of git by `.paper/.gitignore`)
 
 ## Body
 
-1. **Print §3 disclaimer** (DOCS-01): at the top of the run, before any prompts or model calls, print the PRD §3 dual-use disclaimer verbatim to stdout. This ensures CLI-only users who never read the README still see the disclosure. Static copy — no user input needed. Implemented via `process.stdout.write` in `bin/cli/intake.ts` immediately after `const cwd = process.cwd()`.
+1. **Print the §3 disclaimer** before any question or model call.
 
-2. **Read inputs**:
-   - Assignment text from `.paper/INTAKE.md` if present, else prompt user (or read `--from <file>`).
-   - `templates/presets/disciplines.json` (the 9 INTK-03 keys: 8 disciplines + explicit `other` fallback per Plan 05 Task 5.3).
-   - `templates/prompts/intake-clarifier.md` (D-12 LOCKED slug — the prompt template; interpolate `{{assignment}}`).
+2. **Find the assignment**: `--from <file>` (`-` reads stdin), else `assignment.txt`, `.md` or `.pdf` in the folder, else `--thesis` (from `sketch`), else the one an earlier run kept in `.paper/PROJECT.md`, else ask for it. With no terminal and no assignment, the CLI exits 3 and prints the pending question as one JSON line.
 
-3. **Detect discipline** (heuristic match assignment keywords against the 9 disciplines.json keys; fall back to `"other"` → which itself maps to `tone: "academic-formal"` + `citation_style: "apa"` for unrecognized inputs).
+3. **Keep it**: write `.paper/PROJECT.md` before any model sees the text. With PII redaction on, the raw text goes only to `.paper/INTAKE.raw.local` and everything else, the model included, gets the redacted text.
 
-4. **Run clarifying battery** (INTK-02):
-   - If Task/MCP available (Tier 1): delegate to model with `templates/prompts/intake-clarifier.md` (D-12 LOCKED slug — the canonical slug per Plan 03 CONTEXT D-12).
-   - If `AskUserQuestion` available (Tier 1): present 3–5 questions via that tool.
-   - Tier 2 fallback: write questions to stdout, read answers from stdin via `@clack/prompts` (`bin/lib/prompts.ts` from Phase 2).
+4. **Get the questions**: one structured call to the `intake-clarifier` prompt returns `{topic, questions: [{id, question, suggested}]}`. It is made only when an answer is still missing, and its questions are kept for the answering run, so that run calls no model.
 
-5. **Apply PII redaction** (INTK-05): before persisting answers, run the user's RAW ANSWERS through `bin/lib/pii.ts redactPII(answer)`.
+5. **Ask them**: every one of the six questions is asked; a suggestion is only a default. Tier 1: ask the user with AskUserQuestion, then run `pensmith new --answers '<JSON object of id to answer>'`. Tier 2 on a terminal: the CLI asks. With no terminal, the CLI exits 3 and prints `{pending: "intake-questions", questions, how_to_answer}`; nothing is guessed. An answer pensmith cannot use (an unknown style, a length that is not a number) is refused with exit 2, or asked again on a terminal.
 
-   PII redaction ordering (Codex MEDIUM consensus #18 — locked):
-   - PII redaction operates on the **user's answers only**, NEVER on the prompt template or the LLM-generated questions (those are pensmith-controlled strings with no user PII).
-   - Sequence: (a) prompt user, (b) collect raw answer string, (c) `redactPII(answer)`, (d) persist redacted answer to `.paper/INTAKE.md` AND a separate `.paper/INTAKE.raw.local` file (gitignored — never committed) for the user's own forensics.
-   - The redactor processes input in this **deterministic order**:
-     ```
-     EMAIL → PHONE → SSN-LIKE → CREDIT-CARD-LIKE → URL_WITH_QUERY → IP_ADDRESS → IBAN_LIKE
-     ```
-     Multi-pattern coverage matters: redacting EMAIL last would cause `foo@bar.com` in a URL to slip through PHONE-shaped regex; processing EMAIL first ensures clean tokenization. `tests/pii.test.ts` asserts ordering by feeding `foo@bar.com (+1-555-555-5555)` and asserting the result is `[REDACTED-EMAIL] (+[REDACTED-PHONE])` (NOT `[REDACTED-PHONE]` swallowing the email).
+6. **Save**: `.paper/INTAKE.json` and `INTAKE.md`, then `.paper/STATE.json`, then `[project] citation_style` in `.paper/config.toml`. Only settings given in this run are written; a file that does not parse is left as it is, with a warning.
 
-6. **Write `.paper/INTAKE.md`** (atomic via `bin/lib/atomic-write.ts`, the D-07 chokepoint) with the clarified assignment + discipline + tone + citation style. Persist the un-redacted RAW answers to `.paper/INTAKE.raw.local` (gitignored).
-
-7. **Shell fallback** (TIER-06 equivalence path): `pensmith intake [--from <file>] [--yolo]` (alias: `pensmith new [--from <file>] [--yolo]` — both invocations dispatch to the same `bin/cli/intake.ts` handler).
+7. **Shell fallback (TIER-06)**: `pensmith new [--from <file>] [--answers <file|json>] [--citation-style <style>] [--pii-redact]` (alias `pensmith intake`).

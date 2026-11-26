@@ -60,17 +60,21 @@ export function describeStep(target: DryRunTarget, paperRoot: string): DryRunSte
     case 'new':
       return {
         command,
-        summary: 'Start a paper: read the assignment, ask clarifying questions, save the intake.',
-        reads: [typeof args['from'] === 'string' ? args['from'] : 'the assignment (asked for)'],
-        writes: [paper('STATE.json'), paper('INTAKE.md'), paper('.gitignore'), 'the global list of papers'],
-        model: '1 call (intake clarifier)',
+        summary: 'Start a paper: keep the assignment, ask the intake questions, save the answers.',
+        reads: [typeof args['from'] === 'string' ? args['from'] : 'the assignment (assignment.* in this folder, or asked for)'],
+        writes: [
+          paper('PROJECT.md'), paper('INTAKE.json'), paper('INTAKE.md'), paper('STATE.json'),
+          paper('config.toml'), paper('.gitignore'), 'the global list of papers',
+        ],
+        model: '1 call (intake clarifier), unless every answer is given',
         network: MODEL_PROVIDER,
+        asks: 'the intake questions (topic, discipline, length, citation style, audience, counterargument)',
       };
     case 'research':
       return {
         command,
         summary: 'Find sources for the topic and screen them into the library.',
-        reads: [paper('INTAKE.md'), paper('LIBRARY.json'), paper('CITATIONS.bib')],
+        reads: [paper('INTAKE.json'), paper('PROJECT.md'), paper('LIBRARY.json'), paper('CITATIONS.bib')],
         writes: [paper('LIBRARY.json'), paper('CITATIONS.bib'), paper('CITATIONS.ris')],
         model: 'topic scoping and source screening calls',
         network: `${MODEL_PROVIDER}; OpenAlex, Crossref, arXiv, PubMed and Semantic Scholar`,

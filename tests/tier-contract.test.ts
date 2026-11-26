@@ -21,6 +21,7 @@ import { writeCompileManifestFixture, writeVerificationFixture } from './lib/ver
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 import { pensmithDataDir } from '../bin/lib/paths.js';
 import { sources } from '../bin/lib/sources/index.js';
+import { INTAKE_ANSWERS_JSON } from './lib/intake-answers.js';
 
 const CLI_BIN = 'dist/bin/pensmith.js';
 
@@ -61,9 +62,9 @@ interface Phase3Case {
 const PHASE_3_CASES: Phase3Case[] = [
   {
     name: 'intake',
-    cliArgs: ['new', '--from', 'tests/fixtures/assignment.txt', '--yolo'],
+    cliArgs: ['new', '--from', 'tests/fixtures/assignment.txt', '--answers', INTAKE_ANSWERS_JSON],
     verbFile: 'bin/cli/intake.ts',
-    expectedArtifact: '.paper/INTAKE.md',
+    expectedArtifact: '.paper/INTAKE.json',
   },
   {
     name: 'research',

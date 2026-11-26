@@ -100,6 +100,9 @@ async function runIntakeCapturingEgress(
   } finally {
     process.chdir(prevCwd);
     restore();
+    // With no answers given, intake reports its questions and exits 3; the
+    // payload is what this test is about.
+    process.exitCode = 0;
   }
   return captured;
 }
