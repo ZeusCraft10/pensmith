@@ -82,3 +82,24 @@ test('a work keeps the year its LIBRARY.json entry holds, however early', () => 
   assert.match(text, /"year": 1265/);
   assert.match(text, /"year": -350/);
 });
+
+test('any integer year is shown, a year written as a string is read, and a non-integer year is dropped without throwing', () => {
+  // Zotero writes date-parts as strings; a hand-edited 2019.5 used to make
+  // the drafter's input fail its schema check, so `write` exited 1.
+  const item = (id: string, parts: unknown[]): Library['entries'][number] =>
+    ({ id, type: 'book', title: id, issued: { 'date-parts': [parts] }, custom } as unknown as Library['entries'][number]);
+  const lib: Library = {
+    ...LIBRARY,
+    entries: [
+      item('aquinas', [1265]), item('aristotle', [-350]), item('zotero', ['2019', '3']), item('ancient', ['-350']),
+      item('fraction', [2019.5]), item('word', ['circa 1900']), item('long', ['12345']), item('nan', [Number.NaN]),
+    ],
+  };
+  const { sources } = sourceContext(lib, lib.entries.map((e) => e.id));
+  assert.deepEqual(
+    sources.map((s) => [s.citekey, s.year]),
+    [['aquinas', 1265], ['aristotle', -350], ['zotero', 2019], ['ancient', -350], ['fraction', undefined], ['word', undefined], ['long', undefined], ['nan', undefined]],
+  );
+  for (const s of sources) if (s.year === undefined) assert.ok(!('year' in s), `${s.citekey} has no year field`);
+  assert.doesNotThrow(() => renderLibraryContext(lib));
+});

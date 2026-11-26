@@ -36,14 +36,19 @@ const AUTHORS_SHOWN = 6;
 export const ABSTRACT_CHARS = 2000;
 
 /**
- * The work's year as LIBRARY.json holds it, a number however early or late,
- * so a prompt shows 1265 for Aquinas and -350 for Aristotle. (work-record's
+ * The work's year as LIBRARY.json holds it, however early or late, so a
+ * prompt shows 1265 for Aquinas and -350 for Aristotle. (work-record's
  * cslDateYear keeps only 1500 to 2100, the range Pass 1 compares with
- * registry records.)
+ * registry records.) A year written as a string, as Zotero writes
+ * date-parts, is read from its leading digits; a number that is not a whole
+ * year, or a string that does not start with one, gives no year.
  */
 function yearOf(item: LibraryItem): number | undefined {
-  const y = (item.issued as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
-  return typeof y === 'number' ? y : undefined;
+  const y: unknown = (item.issued as { 'date-parts'?: unknown[][] } | undefined)?.['date-parts']?.[0]?.[0];
+  if (typeof y === 'number') return Number.isInteger(y) ? y : undefined;
+  if (typeof y !== 'string') return undefined;
+  const m = /^\s*(-?\d{1,4})(?!\d)/.exec(y);
+  return m ? Number(m[1]) : undefined;
 }
 
 /**
