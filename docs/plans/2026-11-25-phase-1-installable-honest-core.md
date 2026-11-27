@@ -67,7 +67,7 @@ Defaults (the owner may revise these later):
 
 ## Tasks
 
-Order: T01 → T13 and T15 run sequentially on the branch, with the controller follow-ups A2F (after T09), A3F (after T13) and A4F (after T15). T14 (packaging) runs in a parallel worktree and is merged before T15.
+Order: T01 → T13 and T15 run sequentially on the branch, with the controller follow-ups A2F (after T09), A3F (after T13) and A4F (after T15), then the hardening tasks H1–H10 from the whole-branch review. T14 (packaging) runs in a parallel worktree and is merged before T15.
 
 ### T01 — Live network by default; cassettes are test-only
 **Issues:** `cassette-replay-production-default`, `http-ignores-proxy-env`, `cassette-committed-personal-email`
@@ -426,6 +426,128 @@ Order: T01 → T13 and T15 run sequentially on the branch, with the controller f
   - Share one Messages-API SSE helper (`tests/lib/messages-stream.ts`) across `write-truncated` and the other hand-built SSE fixtures.
   - Share one `outlineTable()` helper across the estimator and section-status-stub tests.
 - Carry-over from T12: one full-suite gate lost a TAP line from a passing file (the "PRODUCER (2)" line; the file passed 3/3 when run alone). Make the runner's pass and fail counts and its exit status independent of interleaved TAP output, so that a lost line can never hide a failing test.
+
+## Phase 1 hardening (whole-branch review, 2026-11-27)
+
+The controller ran an independent whole-branch review at 2d5817f. Sixteen finders covered eight areas, each under two lenses: correctness, and security/privacy/truthfulness. Every finding was then reproduced by one to three verifiers, and a completeness critic ran a second round. 76 findings were confirmed: 9 critical, 33 important and 34 minor.
+
+The canonical list is `/tmp/claude-0/-home-user-pensmith/d215d403-59ed-5fd5-8322-103c08c7e93a/scratchpad/phase1/review-findings.md`. For each finding `R<n>` it gives the failure scenario, the repro, a suggested fix and the verifiers' notes. The repros use the frozen worktree at 2d5817f.
+
+The controller's own live probes add C1–C4 (`scratchpad/phase1/controller-findings.md`). A4F's review adds V1: `LABEL_WORDS` lacks common venue and publisher acronyms such as SAGE, FEBS, AIAA, MIT Press, CMAJ, TMLR, TPAMI and CHI, so real PDFs are refused.
+
+Rules for every H task:
+- Re-check each finding against HEAD first, because A4F changed source-hydrate, source-text, revise and the estimator after the review. If a finding does not reproduce at HEAD, record the evidence and move on.
+- Each fix starts with a regression test that reproduces the finding's failure scenario.
+- Where a finding's suggested fix conflicts with a non-negotiable or an owner decision, the non-negotiable wins; record it as a Ruling.
+- Integrity holes fail closed. If pensmith cannot tell, it blocks or refuses with advice. It never passes.
+
+### H1 — Citation grammar parity with Pandoc
+**Findings:** R1, R2, R3, R8, R30.
+- R1: `codeRanges()` must match Pandoc markdown. An inline code span ends at a blank line, an escaped backtick opens nothing, and an unclosed fence is text. A stray backtick or a TeX ``quote'' must not hide later citations or quotations.
+- R2: `findQuotes` must find a quotation however it is wrapped:
+  - in emphasis: `*"…"*`, `**"…"**`;
+  - after a colon or other punctuation;
+  - in guillemets `«…»` or low-high quotes `„…“` and `‚…‘`;
+  - as a block quote inside a list item.
+- R3: raw citations and quotations inside a cluster's prefix or suffix (`[see "…" p. 4; @k]`) are checked like any other text.
+- R8: a typed reference list (a "References" section of entries written as text) and numeric markers (`[1]`, `[2-4]`) in a draft are RAW_CITATION and block.
+- R30: an `@` inside an indented code block or a URL is not a citation.
+- Extend `tests/citation-grammar-pandoc-parity.test.ts`, and its generator, with every case above. Where Pandoc is present (the export lane), assert that the grammar and `pandoc -t json` find the same citations.
+
+### H2 — Quote matcher and the Pass 3 source
+**Findings:** R4, R9, R13, R57.
+- R4: the word-spacing allowance must never accept a changed word. "atypical" against "a typical", or "maybe" against "may be", is NOT_FOUND.
+- R13: a bracketed insertion at the start or end of a quotation (`"[Not] all …"`) is checked like one in the middle, so a meaning-reversing insertion fails.
+- R9: Pass 3 uses a fetched open-access PDF only when it is the cited work. Check the work's title, its authors, or both against the PDF's opening. Another work's PDF, a supplement or a neighbouring letter gives PDF_UNAVAILABLE with a reason, never OK and never NOT_FOUND.
+- R57: the FINAL.md re-check fails when the humanized text drops a citation occurrence, including a trailing occurrence of a key that is cited earlier.
+
+### H3 — Identifiers and the resolver chain
+**Findings:** R10, R12, R14, R16, R17, R43, R47, R49, C1.
+- R10: real old-style arXiv IDs (legacy archives, subclasses, version suffixes) normalise and resolve.
+- R14: a DOI ending in a balanced `)`, such as legacy ASCE DOIs, keeps it.
+- R47: a DOI with dot segments must not verify OK through doi.org's URL normalisation to a different DOI.
+- R12: a DOI whose registration agency offers no content negotiation is not a retryable UNRESOLVED, so the router does not send verify again forever. Say what the user can do.
+- R16: a chapter's book ISBN is not an identity key for the chapter, so different chapters of one volume do not merge.
+- R17: Pass 1 does not compare an @incollection or @inbook chapter against its book's ISBN record. Resolve the chapter by its own identifier, or give UNRESOLVED with advice.
+- R43: `pensmith ack` binds the acknowledgement to the work that verify found RETRACTED (its identifier as resolved), not to whatever the bibliography entry says now.
+- R49 and C1: `pensmith add <doi>` uses verify's resolver chain (Crossref, DataCite, doi.org). It adds Zenodo and other DataCite DOIs, accepts Crossref records with editors but no authors, and tells an unreachable registry apart from "no record".
+
+### H4 — Work matching and registry adapters
+**Findings:** R5, R11, R18, R21, R36, R38, R46.
+- R5 and R18 together. An arXiv record keeps the journal version's DOI as a related identifier, used for the retraction check (OpenAlex). It is never printed as the preprint's own `doi`, so a source pensmith adds itself is not MIS-CITED. A retracted work cited by its arXiv ID is checked through its journal DOI.
+- R11: `<sub>`/`<sup>` markup and TeX `$_2$` compare equal to plain text (CO<sub>2</sub> = CO2 = CO$_2$).
+- R21: for PubMed articles not in English, the original title is stored and matched, not the bracketed English translation.
+- R36: a DataCite concept DOI, whose year is that of its latest release, is not a false MIS-CITED. Fix the tests that hide this by using the record's own year.
+- R38: a corporate or collaboration first author matches when the registry lists only the people.
+- R46: a Crossref chapter's booktitle is the volume's title, not the series name.
+
+### H5 — Compile and export integrity
+**Findings:** R7, R25, R29, R42 with R56, R44, R45, R53, R58, R59, R60, R61, R72.
+- R7: a YAML metadata block in a section draft (`references:`, `nocite:`, `bibliography:` and the like) can never add to or override CITATIONS.bib in an export. Refuse such a block in a draft, or strip it, and test it through real Pandoc in the export lane.
+- R25: the trace scan never excuses a match because it appears in the model-written text. "pensmith" and the fence marker in the manuscript block the export.
+- R29: Pandoc runs with `--sandbox` (or the equivalent), and raw TeX or HTML in a draft cannot embed local files or fetch URLs outside http.ts.
+- R42 and R56: a re-export writes into a staging folder and swaps it in only on success. A locked file never leaves the export half-deleted, and files the user added to `.paper/export` are not deleted silently.
+- R44: an unparseable CITATIONS.bib gives a clear refusal (exit 2) and marks the earlier "verified" record stale. It never crashes.
+- R45: verify fails a draft that cites none of its assigned sources, even when it cites some other key. Fix the comments too.
+- R53: a draft that opens with a subheading keeps its section title.
+- R58: the humanizer does not run in production in Phase 1. Help text, the README table, the intake disclaimer and the honesty report must say so plainly, and `--raw` must not blame a missing humanizer.
+- R59: citation density uses the paper's discipline, with keys that match the intake discipline names.
+- R60: when Pass 2 judged no claim (all UNCLEAR), the export confirmation says that. It never says "No advisory issues were found".
+- R61: `done --format pdf` with no TeX engine is refused before the audit, any egress and the confirmation.
+- R72: citation-js's network input plugins are not bundled or reachable. A CSL item with `entities` never fetches Wikidata.
+
+### H6 — Drafting, revise and the router
+**Findings:** R6, R24, R26, R27, R28, R39, R51, R52 with R65, R54, R55, R63, R76.
+- R6: a revise swap changes only the occurrence the gate showed, or the gate shows every occurrence it will change.
+- R24: the router never sends a failed section with no blocking verdict to `write N --force`, and never loops. Bare `pensmith` must not replace a user's draft. Give attention with the reason.
+- R26: the drafter's no-URL rule is enforced. A web link used as a source is sent back, then refused.
+- R27: re-outlining keeps every existing section's folder. A section matched by slug keeps its id and folder, and an inserted section gets a letter-suffixed id (`03b-…`) as the owner decided. Written and verified sections are never orphaned.
+- R28: `new --pii-redact` never prints the raw redacted values to stdout, which in Tier 1 goes to the model. Print the kinds and counts.
+- R39: `pensmith new` on an existing paper refuses (exit 2) unless the user explicitly asks to start over. It never silently replaces the assignment, the answers or the style.
+- R51: `plan N --research` either runs research or is refused. It never says it applied research it did not run, and never writes a RESEARCH.md the router reads as done.
+- R52 and R65: usage errors in plan, write, scheduler and section-slug (`plan 0`, `plan abc`, a bad wave override, `new --answers <dir>`, an invalid `--slug`) exit 2 with a message and no stack trace. One bad PLAN.md does not abort the other sections of a wave.
+- R54 and R55: the `write --max-parallel` help and `--show-prompts` describe what the code does, or the option is removed.
+- R63: the SessionStart hook routes as the CLI does, `stopAfterResearch` for goal=learning included.
+- R76: an image-only assignment.pdf gives one clear message.
+
+### H7 — CLI dispatch, the paper root and local safety
+**Findings:** R31, R32, R33, R37, R40, R41, R64, R71, C2, C3, C4.
+- R41: verbs find the paper root by searching upward for a `.paper/` that holds pensmith's STATE.json, as git does. The search stops at the filesystem root and never crosses into HOME's parent. A verb run from a subfolder works on that paper and never starts a nested one; one that starts a new paper says where.
+- R40: running any verb from inside `.paper/` never migrates the paper's own STATE.json and config.toml into `.paper/.paper/`.
+- R33: no pensmith write follows a symlink out of `.paper/`. This covers SESSION.log, COSTS.jsonl, the lock files and every atomic write and append. A symlinked target refuses and is logged nowhere else.
+- R37: the PyMuPDF fallback runs Python isolated (`-I`) from a neutral cwd, so a `fitz.py` in the paper folder never runs.
+- R31: a cost-cap refusal or a model failure reached through bare `pensmith`, `next`, `resume` or `gate answer` exits 2 (refused) or 1 (error) with the same message the verb gives, not "dispatch failed".
+- R32: global flags are honoured in every form citty accepts (`--dry-run=true`, `--dryRun`, before or after the verb), and an explicit verb refuses an unknown flag (exit 2). `--dry-run` and `--offline` can never be silently ignored.
+- R64 and C2: doctor's probes and fix texts describe what the code does. Delete the http-crossref-ping stub, and do not let PENSMITH_PAPER_ROOT silence the sync-folder probe with a false PASS.
+- C3: no user-facing message carries a decision or plan ID, for example "(D-16)". Grep `bin/` for the pattern and fix every one.
+- C4: under PENSMITH_NO_LLM, research says no model ran; it does not say a response "is not valid JSON".
+- R71: the no-key error does not promise key-free operation inside Claude Code, which Phase 1 does not have.
+
+### H8 — Network, privacy and cost
+**Findings:** R15, R34, R35, R66, R67, R68, R69.
+- R15: PENSMITH_CONTACT_EMAIL goes only to the registries whose polite pools ask for it (Crossref, OpenAlex, Unpaywall, NCBI), never to DuckDuckGo, GPTZero, publisher or PDF hosts, or `add <url>` pages. PRIVACY.md lists exactly where it goes, and a test pins it host by host.
+- R35: the SSRF check and the connection use the same DNS answer. Pin the checked address in the connect lookup, so a rebinding host cannot reach loopback, link-local or private addresses.
+- R69: on a proxy-only network, the SSRF pre-flight does not block every untrusted fetch. Literal and well-known local hosts are still refused. Pass 3 never reports a private address it did not see.
+- R34: the cost cap reserves each in-flight call's expected cost, so a parallel wave cannot all pass against the same total and spend past the cap.
+- R66: http.ts never re-sends a non-idempotent model POST. The SDK's own retry is the only one, and every attempt the provider bills is in the cost ledger.
+- R67: a stream that fails partway is charged its real usage so far, and its error says what happened.
+- R68: a config.toml that cannot be parsed refuses with the parse error. It never silently falls back to the $5 default cap.
+
+### H9 — Library, add and research
+**Findings:** R19, R20, R22, R23, R48, R50, V1.
+- R20 (security): a citekey is validated before it is used in any path. `sources/<key>.txt` can never leave `.paper/sources/`. Also check every other place that builds a path from a key or slug.
+- R19 and R48: `add <url>` follows redirects through http.ts, with SSRF checks at each hop. It takes a DOI only when the page's own metadata names it (`citation_doi`, `dc.identifier` or JSON-LD), never the first DOI-shaped string, and refuses when it is unsure.
+- R22: when every registry is unreachable, research says so, exits non-zero and is not recorded as done. Adapters report a transport error as an error, not as "found none".
+- R23: importing a .bib whose `@string` macro is already defined with another value refuses or renames it. It never silently changes existing entries.
+- R50: `research --queries` is read, or it is removed from the help.
+- V1: add the common venue and publisher acronyms to `LABEL_WORDS`, each pinned by a header case in tests/source-hydrate.test.ts.
+
+### H10 — Packaging and test honesty
+**Findings:** R70, R73, R74, R75. R62 (`open`'s unread pointer and `resume`'s HANDOFF.json) is deferred to Phase 6 with the rest of the breadth restore; the README must not advertise them as working.
+- R70: the release bundle carries every third-party licence notice. Generate THIRD-PARTY-NOTICES from the bundle's inputs, ship it in plugin/, and test that every inlined package is listed.
+- R73: the SessionStart hook works on the Claude Code versions the README says it supports. Do not rely on a hooks.json field older versions strip, and test the hook command as Claude Code would run it.
+- R74: Pass 2 and Pass 4 use the shared fence stripper (untrusted-fence.ts), and the injection test checks the production function, not a copy of it.
+- R75: the weekly cassette-refresh workflow either really re-records, through the recorder, with contact emails scrubbed, or it is removed.
 
 ## Phase 1 exit criteria (controller verifies before declaring done)
 
